@@ -1,14 +1,18 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
+import 'package:reebaplus_pos/features/invite/services/invite_api_service.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
+import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/role_guard.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
@@ -128,6 +132,7 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
             children: [
               _buildProfileHeader(avatarColor, warehouseName),
               SizedBox(height: rSize(context, 24)),
+              _buildVerificationSection(),
               _buildPerformanceMetrics(isWide),
               SizedBox(height: rSize(context, 24)),
               _buildSystemInfo(),
@@ -302,6 +307,342 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
     );
   }
 
+  Widget _buildVerificationSection() {
+    final members = ref.watch(currentBusinessMembersProvider).valueOrNull;
+    if (members == null) return const SizedBox.shrink();
+    final member =
+        members.where((m) => m.userId == widget.user.id).firstOrNull;
+    if (member == null) return const SizedBox.shrink();
+    if (member.role == 'ceo') return const SizedBox.shrink();
+
+    final status = member.verificationStatus;
+    final dueAt = member.verificationDueAt;
+
+    Color tint;
+    IconData icon;
+    String headline;
+    String subline;
+    bool showInfoIcon = false;
+    bool showExtendButton = false;
+
+    if (status == 'approved') {
+      tint = AppColors.success;
+      icon = FontAwesomeIcons.circleCheck;
+      headline = 'Verified';
+      subline = 'Identity confirmed.';
+    } else if (status == 'pending_review') {
+      tint = Colors.amber.shade700;
+      icon = FontAwesomeIcons.clock;
+      headline = 'Under review';
+      subline = 'Documents are awaiting admin review.';
+    } else if (status == 'rejected') {
+      tint = Colors.red;
+      icon = FontAwesomeIcons.circleXmark;
+      headline = 'Documents rejected';
+      subline = 'Re-upload required.';
+    } else if (status == 'not_started') {
+      if (dueAt == null) return const SizedBox.shrink();
+      final daysRemaining = dueAt.difference(DateTime.now()).inDays;
+      if (daysRemaining > 0) {
+        tint = Colors.amber.shade700;
+        icon = FontAwesomeIcons.hourglassHalf;
+        headline = '$daysRemaining day${daysRemaining == 1 ? '' : 's'} remaining';
+        subline = 'Staff has yet to upload verification documents.';
+      } else {
+        tint = Colors.red;
+        icon = FontAwesomeIcons.triangleExclamation;
+        headline = 'Verification overdue';
+        subline = 'Staff has yet to upload verification documents.';
+        showInfoIcon = true;
+      }
+      showExtendButton = true;
+    } else {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: rSize(context, 24)),
+      child: Container(
+        padding: EdgeInsets.all(rSize(context, 20)),
+        decoration: BoxDecoration(
+          color: _surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: _border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: tint.withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, size: 16, color: tint),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              headline,
+                              style: TextStyle(
+                                fontSize: rFontSize(context, 16),
+                                fontWeight: FontWeight.bold,
+                                color: tint,
+                              ),
+                            ),
+                          ),
+                          if (showInfoIcon) ...[
+                            const SizedBox(width: 6),
+                            InkWell(
+                              onTap: _showOverdueInfo,
+                              borderRadius: BorderRadius.circular(20),
+                              child: Padding(
+                                padding: const EdgeInsets.all(2),
+                                child: Icon(
+                                  Icons.info_outline_rounded,
+                                  size: 16,
+                                  color: _subtext,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        subline,
+                        style: TextStyle(
+                          fontSize: rFontSize(context, 12),
+                          color: _subtext,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (showExtendButton) ...[
+              SizedBox(height: rSize(context, 16)),
+              RoleGuard(
+                minTier: 4,
+                fallback: const SizedBox.shrink(),
+                child: _buildExtendButton(member),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildExtendButton(BusinessMemberData member) {
+    final capReached = member.verificationExtensionsUsed >= 2;
+    final button = AppButton(
+      text: 'Extend deadline',
+      size: AppButtonSize.small,
+      variant: AppButtonVariant.secondary,
+      onPressed: capReached ? null : () => _showExtendDialog(member),
+    );
+    if (!capReached) return button;
+    return Tooltip(
+      message: 'Maximum extensions reached for this staff',
+      child: button,
+    );
+  }
+
+  void _showOverdueInfo() {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: _surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          'About verification',
+          style: TextStyle(color: _text, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          'Unverified staff are not yet identity-confirmed. They can still use the app.',
+          style: TextStyle(color: _subtext),
+        ),
+        actions: [
+          AppButton(
+            text: 'Got it',
+            size: AppButtonSize.small,
+            onPressed: () => Navigator.pop(ctx),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showExtendDialog(BusinessMemberData member) async {
+    final customCtrl = TextEditingController();
+    final reasonCtrl = TextEditingController();
+    _ExtendDeadlineChoice choice = _ExtendDeadlineChoice.sevenDays;
+    bool busy = false;
+    String? errorText;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setStateDialog) {
+          int? resolveExtraDays() {
+            switch (choice) {
+              case _ExtendDeadlineChoice.sevenDays:
+                return 7;
+              case _ExtendDeadlineChoice.fourteenDays:
+                return 14;
+              case _ExtendDeadlineChoice.custom:
+                final parsed = int.tryParse(customCtrl.text.trim());
+                if (parsed == null || parsed < 1 || parsed > 60) return null;
+                return parsed;
+            }
+          }
+
+          Future<void> submit() async {
+            final days = resolveExtraDays();
+            final reason = reasonCtrl.text.trim();
+            if (days == null) {
+              setStateDialog(() =>
+                  errorText = 'Enter a number of days between 1 and 60.');
+              return;
+            }
+            if (reason.isEmpty) {
+              setStateDialog(
+                  () => errorText = 'Add a short reason for the extension.');
+              return;
+            }
+            setStateDialog(() {
+              busy = true;
+              errorText = null;
+            });
+            final api = ref.read(inviteApiServiceProvider);
+            final result = await api.extendVerification(
+              membershipId: member.id,
+              extraDays: days,
+              reason: reason,
+            );
+            if (!ctx.mounted) return;
+            Navigator.pop(ctx);
+            if (!mounted) return;
+            if (result is InviteApiErr<Map<String, dynamic>>) {
+              AppNotification.showError(context, result.message);
+              return;
+            }
+            AppNotification.showSuccess(
+              context,
+              'Deadline extended by $days day${days == 1 ? '' : 's'}.',
+            );
+          }
+
+          return AlertDialog(
+            backgroundColor: _surface,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20)),
+            title: Text(
+              'Extend verification deadline',
+              style: TextStyle(color: _text, fontWeight: FontWeight.bold),
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      _extendChoiceChip(
+                        _ExtendDeadlineChoice.sevenDays,
+                        '+7 days',
+                        choice,
+                        (c) => setStateDialog(() => choice = c),
+                      ),
+                      _extendChoiceChip(
+                        _ExtendDeadlineChoice.fourteenDays,
+                        '+14 days',
+                        choice,
+                        (c) => setStateDialog(() => choice = c),
+                      ),
+                      _extendChoiceChip(
+                        _ExtendDeadlineChoice.custom,
+                        'Custom',
+                        choice,
+                        (c) => setStateDialog(() => choice = c),
+                      ),
+                    ],
+                  ),
+                  if (choice == _ExtendDeadlineChoice.custom) ...[
+                    const SizedBox(height: 12),
+                    AppInput(
+                      controller: customCtrl,
+                      labelText: 'Days (1–60)',
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  AppInput(
+                    controller: reasonCtrl,
+                    labelText: 'Reason',
+                    hintText: 'Why are you extending?',
+                  ),
+                  if (errorText != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      errorText!,
+                      style: TextStyle(
+                        color: Theme.of(ctx).colorScheme.error,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              AppButton(
+                text: 'Cancel',
+                variant: AppButtonVariant.ghost,
+                size: AppButtonSize.small,
+                onPressed: busy ? null : () => Navigator.pop(ctx),
+              ),
+              AppButton(
+                text: busy ? 'Extending…' : 'Extend',
+                size: AppButtonSize.small,
+                onPressed: busy ? null : submit,
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    customCtrl.dispose();
+    reasonCtrl.dispose();
+  }
+
+  Widget _extendChoiceChip(
+    _ExtendDeadlineChoice value,
+    String label,
+    _ExtendDeadlineChoice current,
+    ValueChanged<_ExtendDeadlineChoice> onSelect,
+  ) {
+    return ChoiceChip(
+      label: Text(label),
+      selected: value == current,
+      onSelected: (_) => onSelect(value),
+    );
+  }
+
   Widget _buildPerformanceMetrics(bool isWide) {
     final orders = _staffOrders;
     final completed = orders.where((o) => o.status == 'completed').toList();
@@ -460,3 +801,5 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
     }
   }
 }
+
+enum _ExtendDeadlineChoice { sevenDays, fourteenDays, custom }

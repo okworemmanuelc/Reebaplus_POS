@@ -30,6 +30,10 @@ enum InviteErrorCode {
   revoked,
   alreadyUsed,
   emailMismatch,
+  extensionCapReached,
+  memberNotFound,
+  invalidExtraDays,
+  reasonRequired,
   internal,
   networkError;
 
@@ -65,6 +69,14 @@ enum InviteErrorCode {
           'This invite has already been used.',
         InviteErrorCode.emailMismatch =>
           'This invite was sent to a different email.',
+        InviteErrorCode.extensionCapReached =>
+          "This staff member has already had two extensions — they can't get another.",
+        InviteErrorCode.memberNotFound =>
+          "We couldn't find that staff member.",
+        InviteErrorCode.invalidExtraDays =>
+          'Pick a number of days between 1 and 30.',
+        InviteErrorCode.reasonRequired =>
+          'Add a short reason for the extension.',
         InviteErrorCode.internal => 'Something went wrong. Please try again.',
         InviteErrorCode.networkError =>
           "Couldn't reach the server. Check your connection.",
@@ -90,6 +102,10 @@ enum InviteErrorCode {
       'revoked' => InviteErrorCode.revoked,
       'already_used' => InviteErrorCode.alreadyUsed,
       'email_mismatch' => InviteErrorCode.emailMismatch,
+      'extension_cap_reached' => InviteErrorCode.extensionCapReached,
+      'member_not_found' => InviteErrorCode.memberNotFound,
+      'invalid_extra_days' => InviteErrorCode.invalidExtraDays,
+      'reason_required' => InviteErrorCode.reasonRequired,
       'internal' => InviteErrorCode.internal,
       _ => null,
     };
@@ -179,27 +195,35 @@ class InviteApiService {
     return _invoke('check-invite-email', {'email': email});
   }
 
-  // ── Step-2 modal: create the invite, returns deep-link URL for share ───
-  // Phase 2: optionally accepts a phone number; when present, the Edge
-  // Function dispatches an SMS in addition to the email. Response shape
-  // includes `human_code` (6-char), `email_sent`, `sms_sent`.
+  // ── Step-2 modal: create the invite. Returns {invite_id, human_code,
+  //    expires_at}. Admin shares the code via WhatsApp / SMS / Email /
+  //    paper from the modal success screen — no server-side dispatch.
   Future<InviteApiResult<Map<String, dynamic>>> sendInvite({
     required String email,
     required String role,
     String? warehouseId,
-    String? phone,
   }) {
     return _invoke('send-invite', {
       'email': email,
       'role': role,
       'warehouse_id': warehouseId,
-      'phone': phone,
     });
   }
 
-  // ── Resend an existing invite (revokes old + issues fresh) ─────────────
-  Future<InviteApiResult<Map<String, dynamic>>> resendInvite(String inviteId) {
+  // ── Regenerate the human_code on an unredeemed invite. Revokes the old
+  //    row and mints a fresh code with regenerated_from set. Wraps the
+  //    resend-invite Edge Function (which is now a thin wrapper around
+  //    the regenerate_invite_code RPC). Returns {invite_id, human_code,
+  //    expires_at} for the new row.
+  Future<InviteApiResult<Map<String, dynamic>>> regenerateInvite(
+    String inviteId,
+  ) {
     return _invoke('resend-invite', {'invite_id': inviteId});
+  }
+
+  /// Backwards-compatible alias for callers still on the old name.
+  Future<InviteApiResult<Map<String, dynamic>>> resendInvite(String inviteId) {
+    return regenerateInvite(inviteId);
   }
 
   // ── Preview before redemption (deep-link landing screen) ───────────────
@@ -244,11 +268,89 @@ class InviteApiService {
   Future<InviteApiResult<Map<String, dynamic>>> redeemByHumanCode({
     required String humanCode,
     required String userName,
+    required String staffPhone,
+    required String nextOfKinName,
+    required String nextOfKinPhone,
+    required String nextOfKinRelation,
+    String? guarantorName,
+    String? guarantorPhone,
+    String? guarantorRelation,
   }) {
     return _invoke('redeem-invite', {
       'human_code': humanCode,
       'user_name': userName,
+      'staff_phone': staffPhone,
+      'next_of_kin_name': nextOfKinName,
+      'next_of_kin_phone': nextOfKinPhone,
+      'next_of_kin_relation': nextOfKinRelation,
+      'guarantor_name': guarantorName,
+      'guarantor_phone': guarantorPhone,
+      'guarantor_relation': guarantorRelation,
     });
+  }
+
+  // ── Extend a staff member's verification deadline. Direct RPC (no Edge
+  //    Function) — `extend_verification` is SECURITY DEFINER and validates
+  //    the caller. Capped at 2 prior extensions; raises
+  //    `extension_cap_reached` past that.
+  Future<InviteApiResult<Map<String, dynamic>>> extendVerification({
+    required String membershipId,
+    required int extraDays,
+    required String reason,
+  }) async {
+    try {
+      final res = await _supabase.rpc('extend_verification', params: {
+        'p_membership_id': membershipId,
+        'p_extra_days': extraDays,
+        'p_reason': reason,
+      });
+      if (res is Map) {
+        return InviteApiOk(Map<String, dynamic>.from(res));
+      }
+      return const InviteApiOk(<String, dynamic>{});
+    } on PostgrestException catch (e, st) {
+      AppLogger.error('extend_verification RPC failed: ${e.message}', e, st);
+      final code = _mapRpcExceptionToCode(e.message);
+      return InviteApiErr(code, code.defaultMessage);
+    } on SocketException catch (e, st) {
+      AppLogger.error('extend_verification: socket error', e, st);
+      return InviteApiErr(
+        InviteErrorCode.networkError,
+        InviteErrorCode.networkError.defaultMessage,
+      );
+    } on TimeoutException catch (e, st) {
+      AppLogger.error('extend_verification: timeout', e, st);
+      return InviteApiErr(
+        InviteErrorCode.networkError,
+        InviteErrorCode.networkError.defaultMessage,
+      );
+    } catch (e, st) {
+      AppLogger.error('extend_verification: unexpected error', e, st);
+      return InviteApiErr(
+        InviteErrorCode.internal,
+        InviteErrorCode.internal.defaultMessage,
+        {'exception': e.toString()},
+      );
+    }
+  }
+
+  // PostgrestException.message contains the RAISE EXCEPTION text. Map the
+  // few we care about; everything else is `internal`.
+  InviteErrorCode _mapRpcExceptionToCode(String message) {
+    final m = message.toLowerCase();
+    if (m.contains('extension_cap_reached')) {
+      return InviteErrorCode.extensionCapReached;
+    }
+    if (m.contains('member_not_found')) return InviteErrorCode.memberNotFound;
+    if (m.contains('invalid_extra_days')) {
+      return InviteErrorCode.invalidExtraDays;
+    }
+    if (m.contains('reason_required')) return InviteErrorCode.reasonRequired;
+    if (m.contains('forbidden')) return InviteErrorCode.forbidden;
+    if (m.contains('unauthenticated')) {
+      return InviteErrorCode.unauthenticated;
+    }
+    return InviteErrorCode.internal;
   }
 
   // ── Cancel a pending invite. Wraps the revoke-invite Edge Function which
@@ -257,22 +359,6 @@ class InviteApiService {
   //    an `invite.revoked` activity_logs entry. Returns the updated row.
   Future<InviteApiResult<Map<String, dynamic>>> revokeInvite(String inviteId) {
     return _invoke('revoke-invite', {'invite_id': inviteId});
-  }
-
-  /// Direct UPDATE — RLS policy `invites_inviter_revoke` allows it for any
-  /// caller in the same business. Superseded by [revokeInvite]; remaining
-  /// call sites migrate in the staff-list rewrite, after which this can
-  /// be deleted.
-  Future<bool> revoke(String inviteId) async {
-    try {
-      await _supabase.from('invites').update({
-        'status': 'revoked',
-        'last_updated_at': DateTime.now().toUtc().toIso8601String(),
-      }).eq('id', inviteId);
-      return true;
-    } catch (_) {
-      return false;
-    }
   }
 }
 

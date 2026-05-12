@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
+import 'package:reebaplus_pos/core/utils/logger.dart';
 
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/app_drawer.dart';
@@ -16,17 +17,27 @@ import 'package:reebaplus_pos/shared/widgets/menu_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
 import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
 import 'package:reebaplus_pos/shared/widgets/role_guard.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:reebaplus_pos/features/invite/services/invite_api_service.dart';
+import 'package:reebaplus_pos/features/invite/widgets/code_share_card.dart';
 import 'package:reebaplus_pos/features/invite/widgets/invite_modal.dart';
 import 'package:reebaplus_pos/features/staff/screens/staff_constants.dart';
 import 'package:reebaplus_pos/features/staff/screens/staff_details_screen.dart';
+import 'package:reebaplus_pos/features/staff/widgets/invite_pending_sheet.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 
 const String _kAllWarehouses = '__all__';
+
+// Pending invites carry the legacy `inviteeName = 'Unknown'` sentinel until
+// the staff member completes redemption (the wizard writes the real name).
+// Surface the email instead so the row is identifiable in the meantime.
+String _displayNameForInvite(InviteData invite) {
+  final n = invite.inviteeName.trim();
+  if (n.isEmpty || n.toLowerCase() == 'unknown') return invite.email;
+  return n;
+}
 
 class StaffListItem {
   final UserData? user;
@@ -51,7 +62,7 @@ class StaffListItem {
     : user = null,
       status = invite!.status,
       tier = roleInfo.tier,
-      name = invite.inviteeName,
+      name = _displayNameForInvite(invite),
       roleLabel = roleInfo.label,
       avatarColor = null,
       warehouseId = invite.warehouseId ?? _kAllWarehouses;
@@ -346,18 +357,21 @@ class _StaffScreenState extends ConsumerState<StaffScreen> {
           onTap: isDisabled
               ? null
               : () {
-                  if (item.status != 'active' || item.user == null) return;
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => StaffDetailsScreen(
-                        user: item.user!,
-                        warehouses: _warehouses,
+                  if (item.status == 'active' && item.user != null) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => StaffDetailsScreen(
+                          user: item.user!,
+                          warehouses: _warehouses,
+                        ),
                       ),
-                    ),
-                  );
+                    );
+                  } else if (item.status == 'pending' && item.invite != null) {
+                    _showInvitePendingSheet(item.invite!);
+                  }
                 },
-          onLongPress: isDisabled
+          onLongPress: (isDisabled || item.status != 'active')
               ? null
               : () => _showStaffActions(context, item),
           borderRadius: BorderRadius.circular(16),
@@ -423,37 +437,14 @@ class _StaffScreenState extends ConsumerState<StaffScreen> {
                           ),
                           if (item.status != 'active') ...[
                             SizedBox(width: context.getRSize(8)),
-                            Container(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: context.getRSize(8),
-                                vertical: context.getRSize(2),
-                              ),
-                              decoration: BoxDecoration(
-                                color:
-                                    (item.status == 'pending'
-                                            ? Colors.orange
-                                            : Colors.red)
-                                        .withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                item.status.toUpperCase(),
-                                style: TextStyle(
-                                  color: item.status == 'pending'
-                                      ? Colors.orange
-                                      : Colors.red,
-                                  fontSize: context.getRFontSize(10),
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
+                            _InviteStatusBadge(status: item.status),
                           ],
                         ],
                       ),
                     ],
                   ),
                 ),
-                if (!isDisabled)
+                if (!isDisabled && item.status == 'active')
                   RoleGuard(
                     minTier: 4,
                     fallback: const SizedBox.shrink(),
@@ -526,6 +517,234 @@ class _StaffScreenState extends ConsumerState<StaffScreen> {
         },
       ),
     );
+  }
+
+  Future<void> _showInvitePendingSheet(InviteData invite) async {
+    final db = ref.read(databaseProvider);
+    final bizId = ref.read(authProvider).currentUser?.businessId;
+    String businessName = 'your business';
+    if (bizId != null) {
+      final biz = await (db.select(db.businesses)
+            ..where((b) => b.id.equals(bizId))
+            ..limit(1))
+          .getSingleOrNull();
+      if (biz != null) businessName = biz.name;
+    }
+    if (!mounted) return;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => InvitePendingSheet(
+        invite: invite,
+        warehouses: _warehouses,
+        businessName: businessName,
+        onRegenerate: () {
+          Navigator.pop(ctx);
+          _handleRegenerateInvite(invite);
+        },
+        onRevoke: () {
+          Navigator.pop(ctx);
+          _handleRevokeInvite(invite);
+        },
+      ),
+    );
+  }
+
+  Future<void> _handleRegenerateInvite(InviteData invite) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: _surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          'Generate a new code?',
+          style: TextStyle(color: _text, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          'The old code will stop working immediately. Share the new code '
+          'with the staff member to invite.',
+          style: TextStyle(color: _subtext),
+        ),
+        actions: [
+          AppButton(
+            text: 'Cancel',
+            variant: AppButtonVariant.ghost,
+            size: AppButtonSize.small,
+            onPressed: () => Navigator.pop(ctx, false),
+          ),
+          AppButton(
+            text: 'Generate',
+            size: AppButtonSize.small,
+            onPressed: () => Navigator.pop(ctx, true),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    // Non-dismissible loader so the user gets feedback during the network
+    // round-trip instead of staring at a blank screen.
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        backgroundColor: _surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        content: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(width: 16),
+            Text(
+              'Generating new code…',
+              style: TextStyle(color: _text),
+            ),
+          ],
+        ),
+      ),
+    );
+    var loaderOpen = true;
+    void closeLoader() {
+      if (loaderOpen && mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        loaderOpen = false;
+      }
+    }
+
+    final api = ref.read(inviteApiServiceProvider);
+    final result = await api.regenerateInvite(invite.id);
+    if (!mounted) {
+      loaderOpen = false;
+      return;
+    }
+    closeLoader();
+
+    if (result is InviteApiErr<Map<String, dynamic>>) {
+      if (result.details != null) {
+        AppLogger.error(
+          'regenerate_invite_code failed: ${result.code.name} ${result.details}',
+        );
+      }
+      AppNotification.showError(context, result.message);
+      return;
+    }
+    final ok = result as InviteApiOk<Map<String, dynamic>>;
+    final newHumanCode = ok.data['human_code']?.toString();
+    if (newHumanCode == null || newHumanCode.isEmpty) {
+      AppNotification.showError(
+        context,
+        'Code regenerated, but the response was empty. Reload to see the latest.',
+      );
+      return;
+    }
+
+    // Seed the freshly minted invite row into local Drift via the same
+    // canonical-restore seam redeem-invite uses, so the staff list reflects
+    // it without waiting for the next sync pull.
+    final inviteRow = ok.data['invite'];
+    if (inviteRow is Map) {
+      try {
+        await ref.read(supabaseSyncServiceProvider).applyServerResponse(
+              'regenerate_invite',
+              {'invite': Map<String, dynamic>.from(inviteRow)},
+            );
+      } catch (_) {
+        // Best-effort — next pull catches up.
+      }
+      if (!mounted) return;
+    }
+
+    final db = ref.read(databaseProvider);
+    final bizId = ref.read(authProvider).currentUser?.businessId;
+    String businessName = 'your business';
+    if (bizId != null) {
+      final biz = await (db.select(db.businesses)
+            ..where((b) => b.id.equals(bizId))
+            ..limit(1))
+          .getSingleOrNull();
+      if (biz != null) businessName = biz.name;
+    }
+    if (!mounted) return;
+
+    final inviteeName = invite.inviteeName.trim();
+    final recipientName =
+        (inviteeName.isNotEmpty && inviteeName != 'Unknown') ? inviteeName : null;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          20,
+          20,
+          MediaQuery.of(ctx).viewInsets.bottom + 20,
+        ),
+        child: CodeShareCard(
+          humanCode: newHumanCode,
+          businessName: businessName,
+          recipientName: recipientName,
+          title: 'New code generated',
+          subtitle: 'The previous code is no longer valid.',
+          onDone: () => Navigator.pop(ctx),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleRevokeInvite(InviteData invite) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: _surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          'Revoke this invitation?',
+          style: TextStyle(color: _text, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          'The staff member will no longer be able to use the code.',
+          style: TextStyle(color: _subtext),
+        ),
+        actions: [
+          AppButton(
+            text: 'Cancel',
+            variant: AppButtonVariant.ghost,
+            size: AppButtonSize.small,
+            onPressed: () => Navigator.pop(ctx, false),
+          ),
+          AppButton(
+            text: 'Revoke',
+            variant: AppButtonVariant.danger,
+            size: AppButtonSize.small,
+            onPressed: () => Navigator.pop(ctx, true),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final api = ref.read(inviteApiServiceProvider);
+    final result = await api.revokeInvite(invite.id);
+    if (!mounted) return;
+    if (result is InviteApiErr<Map<String, dynamic>>) {
+      AppNotification.showError(context, result.message);
+      return;
+    }
+    AppNotification.showSuccess(context, 'Invite revoked.');
   }
 
   void _confirmDelete(BuildContext context, UserData user) {
@@ -921,7 +1140,6 @@ class _StaffActionSheet extends ConsumerWidget {
     final avatarColor = item.avatarColor != null
         ? _parseColor(item.avatarColor!) ?? roleInfo.color
         : roleInfo.color;
-    final isInvite = item.invite != null;
 
     return Container(
       decoration: BoxDecoration(
@@ -1018,85 +1236,10 @@ class _StaffActionSheet extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 16),
-          if (isInvite) ...[
-            _actionTile(
-              context,
-              icon: FontAwesomeIcons.copy,
-              label: 'Copy Code',
-              subtitle: 'The full link was sent on creation',
-              color: Theme.of(context).colorScheme.primary,
-              onTap: () {
-                Navigator.pop(context);
-                Clipboard.setData(ClipboardData(text: item.invite!.code));
-                AppNotification.showSuccess(
-                  context,
-                  'Manual code copied — recipients can enter it in the app.',
-                );
-              },
-              isDark: Theme.of(context).brightness == Brightness.dark,
-              bg: bgColor,
-              text: textColor,
-              subtext: subtextColor,
-            ),
-            const SizedBox(height: 12),
-            _actionTile(
-              context,
-              icon: FontAwesomeIcons.rotateRight,
-              label: 'Resend / Extend',
-              subtitle: 'Issues a fresh 48hr invite & re-shares',
-              color: Colors.orange,
-              onTap: () async {
-                Navigator.pop(context);
-                final api = ref.read(inviteApiServiceProvider);
-                final result = await api.resendInvite(item.invite!.id);
-                if (!context.mounted) return;
-                if (result is InviteApiErr<Map<String, dynamic>>) {
-                  AppNotification.showError(context, result.message);
-                  return;
-                }
-                final ok = result as InviteApiOk<Map<String, dynamic>>;
-                final url = ok.data['url']?.toString();
-                if (url != null) {
-                  await Share.share(
-                    "You've been invited to join the team on Reebaplus POS.\n\n"
-                    'Tap to accept: $url',
-                    subject: 'Reebaplus POS invite',
-                  );
-                }
-              },
-              isDark: Theme.of(context).brightness == Brightness.dark,
-              bg: bgColor,
-              text: textColor,
-              subtext: subtextColor,
-            ),
-            const SizedBox(height: 12),
-            _actionTile(
-              context,
-              icon: FontAwesomeIcons.trashCan,
-              label: 'Revoke Invite',
-              subtitle: 'Cancel this pending invite',
-              color: Theme.of(context).colorScheme.error,
-              onTap: () async {
-                Navigator.pop(context);
-                final api = ref.read(inviteApiServiceProvider);
-                final ok = await api.revoke(item.invite!.id);
-                if (!context.mounted) return;
-                if (ok) {
-                  AppNotification.showSuccess(context, 'Invite revoked.');
-                } else {
-                  AppNotification.showError(
-                    context,
-                    'Could not revoke invite. Please retry.',
-                  );
-                }
-              },
-              isDark: Theme.of(context).brightness == Brightness.dark,
-              bg: bgColor,
-              text: textColor,
-              subtext: subtextColor,
-              isDanger: true,
-            ),
-          ] else ...[
+          // Pending invites have their own dedicated bottom sheet
+          // (InvitePendingSheet); the action sheet here only runs for
+          // active staff. See _showInvitePendingSheet in _StaffScreenState.
+          ...[
             _actionTile(
               context,
               icon: FontAwesomeIcons.userPen,
@@ -1226,5 +1369,36 @@ class _StaffActionSheet extends ConsumerWidget {
     } catch (_) {
       return null;
     }
+  }
+}
+
+class _InviteStatusBadge extends StatelessWidget {
+  final String status;
+
+  const _InviteStatusBadge({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    final isPending = status == 'pending';
+    final color = isPending ? Colors.amber.shade700 : Colors.red;
+    final label = isPending ? 'Invitation Pending' : status.toUpperCase();
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: context.getRSize(8),
+        vertical: context.getRSize(2),
+      ),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: context.getRFontSize(10),
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
   }
 }
