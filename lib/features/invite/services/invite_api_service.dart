@@ -251,8 +251,18 @@ class InviteApiService {
     });
   }
 
+  // ── Cancel a pending invite. Wraps the revoke-invite Edge Function which
+  //    validates role_tier ≥ 4, guards against revoking accepted invites
+  //    (`already_used`), is idempotent on already-revoked rows, and writes
+  //    an `invite.revoked` activity_logs entry. Returns the updated row.
+  Future<InviteApiResult<Map<String, dynamic>>> revokeInvite(String inviteId) {
+    return _invoke('revoke-invite', {'invite_id': inviteId});
+  }
+
   /// Direct UPDATE — RLS policy `invites_inviter_revoke` allows it for any
-  /// caller in the same business. No Edge Function needed.
+  /// caller in the same business. Superseded by [revokeInvite]; remaining
+  /// call sites migrate in the staff-list rewrite, after which this can
+  /// be deleted.
   Future<bool> revoke(String inviteId) async {
     try {
       await _supabase.from('invites').update({
