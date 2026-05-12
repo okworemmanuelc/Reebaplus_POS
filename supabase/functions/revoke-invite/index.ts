@@ -70,10 +70,12 @@ Deno.serve(async (req) => {
   // pending bucket, which is the desired admin outcome.
 
   const nowIso = new Date().toISOString();
-  const { error: updErr } = await service
+  const { data: updatedRow, error: updErr } = await service
     .from("invites")
     .update({ status: "revoked", last_updated_at: nowIso })
-    .eq("id", invite.id);
+    .eq("id", invite.id)
+    .select("*")
+    .single();
   if (updErr) {
     console.warn(`[revoke-invite] update failed: ${updErr.message}`);
     return errorResponse("internal");
@@ -96,5 +98,9 @@ Deno.serve(async (req) => {
     );
   }
 
-  return okResponse({ invite_id: invite.id, status: "revoked" });
+  return okResponse({
+    invite_id: invite.id,
+    status: "revoked",
+    invite: updatedRow,
+  });
 });

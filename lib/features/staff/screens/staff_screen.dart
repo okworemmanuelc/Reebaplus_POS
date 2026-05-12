@@ -744,6 +744,24 @@ class _StaffScreenState extends ConsumerState<StaffScreen> {
       AppNotification.showError(context, result.message);
       return;
     }
+
+    // Seed the revoked status into local Drift via the same canonical-
+    // restore seam regenerate/redeem use, so _updateItems's
+    // `status != 'revoked'` filter drops the row without waiting for
+    // the next sync pull.
+    final ok = result as InviteApiOk<Map<String, dynamic>>;
+    final inviteRow = ok.data['invite'];
+    if (inviteRow is Map) {
+      try {
+        await ref.read(supabaseSyncServiceProvider).applyServerResponse(
+              'revoke_invite',
+              {'invite': Map<String, dynamic>.from(inviteRow)},
+            );
+      } catch (_) {
+        // Best-effort — next pull catches up.
+      }
+      if (!mounted) return;
+    }
     AppNotification.showSuccess(context, 'Invite revoked.');
   }
 
