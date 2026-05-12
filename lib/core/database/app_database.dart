@@ -884,6 +884,11 @@ class Notifications extends Table {
   TextColumn get message => text()();
   BoolColumn get isRead => boolean().withDefault(const Constant(false))();
   TextColumn get linkedRecordId => text().nullable()();
+  // NULL = broadcast (visible to every member); set = targeted at one user
+  // (only visible to that user via NotificationsDao). Mirror of the cloud
+  // column added in 0026_accept_invite_v3.sql.
+  TextColumn get recipientUserId =>
+      text().nullable().references(Users, #id)();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
       dateTime().withDefault(currentDateAndTime)();
@@ -1106,8 +1111,14 @@ class AppDatabase extends _$AppDatabase {
   String? Function() businessIdResolver = () => null;
   String? get currentBusinessId => businessIdResolver();
 
+  /// Set alongside [businessIdResolver] by AuthService. DAOs that need to
+  /// scope queries to the current user (e.g. notifications with a
+  /// `recipient_user_id` filter) read through this for the same reasons.
+  String? Function() userIdResolver = () => null;
+  String? get currentUserId => userIdResolver();
+
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1278,6 +1289,14 @@ class AppDatabase extends _$AppDatabase {
         await m.addColumn(businessMembers, businessMembers.guarantorName);
         await m.addColumn(businessMembers, businessMembers.guarantorPhone);
         await m.addColumn(businessMembers, businessMembers.guarantorRelation);
+      }
+      if (from < 8) {
+        // v8 (Task #18): mirror notifications.recipient_user_id from the
+        // cloud (added in 0026_accept_invite_v3.sql). NULL = broadcast,
+        // visible to every member; set = targeted at one user. Existing
+        // local rows get NULL, which is the right default — pre-rev-3
+        // notifications were effectively broadcasts.
+        await m.addColumn(notifications, notifications.recipientUserId);
       }
     },
     beforeOpen: (details) async {

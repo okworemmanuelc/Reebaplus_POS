@@ -2933,10 +2933,21 @@ class NotificationsDao extends DatabaseAccessor<AppDatabase>
     with _$NotificationsDaoMixin, BusinessScopedDao<AppDatabase> {
   NotificationsDao(super.db);
 
+  /// Recipient-scope filter: a row is visible to the current user when
+  /// `recipient_user_id` is NULL (broadcast) OR equals the current user's
+  /// id. If no user is resolved (logged out), only broadcasts surface —
+  /// safer default than leaking targeted rows.
+  Expression<bool> _whereForCurrentUser($NotificationsTable t) {
+    final uid = currentUserId;
+    if (uid == null) return t.recipientUserId.isNull();
+    return t.recipientUserId.isNull() | t.recipientUserId.equals(uid);
+  }
+
   Future<void> create(
     String type,
     String message, {
     String? linkedRecordId,
+    String? recipientUserId,
   }) async {
     final id = UuidV7.generate();
     final row = NotificationsCompanion.insert(
@@ -2945,6 +2956,7 @@ class NotificationsDao extends DatabaseAccessor<AppDatabase>
       type: type,
       message: message,
       linkedRecordId: Value(linkedRecordId),
+      recipientUserId: Value(recipientUserId),
       lastUpdatedAt: Value(DateTime.now()),
     );
     await into(notifications).insert(row);
@@ -2953,7 +2965,7 @@ class NotificationsDao extends DatabaseAccessor<AppDatabase>
 
   Stream<List<NotificationData>> watchAll() {
     return (select(notifications)
-          ..where((t) => whereBusiness(t))
+          ..where((t) => whereBusiness(t) & _whereForCurrentUser(t))
           ..orderBy([
             (t) =>
                 OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc),
@@ -2966,7 +2978,9 @@ class NotificationsDao extends DatabaseAccessor<AppDatabase>
     return (selectOnly(notifications)
           ..addColumns([count])
           ..where(
-            whereBusiness(notifications) & notifications.isRead.equals(false),
+            whereBusiness(notifications) &
+                _whereForCurrentUser(notifications) &
+                notifications.isRead.equals(false),
           ))
         .watchSingle()
         .map((row) => row.read(count) ?? 0);
@@ -2979,25 +2993,35 @@ class NotificationsDao extends DatabaseAccessor<AppDatabase>
       isRead: const Value(true),
       lastUpdatedAt: Value(now),
     );
-    await (update(
-      notifications,
-    )..where((t) => t.id.equals(id) & whereBusiness(t))).write(comp);
+    // Recipient guard prevents marking-read on another user's targeted row
+    // (e.g. a staff dismissing a notification scoped to the CEO).
+    await (update(notifications)..where(
+          (t) => t.id.equals(id) & whereBusiness(t) & _whereForCurrentUser(t),
+        ))
+        .write(comp);
     await db.syncDao.enqueueUpsert('notifications', comp);
   }
 
   Future<void> markAllRead() async {
     final now = DateTime.now();
-    final unread = await (select(
-      notifications,
-    )..where((t) => whereBusiness(t) & t.isRead.equals(false))).get();
+    final unread = await (select(notifications)..where(
+          (t) =>
+              whereBusiness(t) &
+              _whereForCurrentUser(t) &
+              t.isRead.equals(false),
+        ))
+        .get();
     if (unread.isEmpty) return;
 
-    await (update(notifications)..where((t) => whereBusiness(t))).write(
-      NotificationsCompanion(
-        isRead: const Value(true),
-        lastUpdatedAt: Value(now),
-      ),
-    );
+    await (update(notifications)..where(
+          (t) => whereBusiness(t) & _whereForCurrentUser(t),
+        ))
+        .write(
+          NotificationsCompanion(
+            isRead: const Value(true),
+            lastUpdatedAt: Value(now),
+          ),
+        );
 
     for (final notif in unread) {
       final comp = NotificationsCompanion(
@@ -3010,17 +3034,22 @@ class NotificationsDao extends DatabaseAccessor<AppDatabase>
   }
 
   Future<void> deleteSingle(String id) async {
-    await (delete(
-      notifications,
-    )..where((t) => t.id.equals(id) & whereBusiness(t))).go();
+    await (delete(notifications)..where(
+          (t) => t.id.equals(id) & whereBusiness(t) & _whereForCurrentUser(t),
+        ))
+        .go();
     await db.syncDao.enqueueDelete('notifications', id);
   }
 
   Future<void> clearAll() async {
-    final allNotifs = await (select(
-      notifications,
-    )..where((t) => whereBusiness(t))).get();
-    await (delete(notifications)..where((t) => whereBusiness(t))).go();
+    final allNotifs = await (select(notifications)..where(
+          (t) => whereBusiness(t) & _whereForCurrentUser(t),
+        ))
+        .get();
+    await (delete(notifications)..where(
+          (t) => whereBusiness(t) & _whereForCurrentUser(t),
+        ))
+        .go();
     for (final n in allNotifs) {
       await db.syncDao.enqueueDelete('notifications', n.id);
     }

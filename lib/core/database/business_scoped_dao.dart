@@ -14,6 +14,12 @@ mixin BusinessScopedDao<DB extends GeneratedDatabase> on DatabaseAccessor<DB> {
   AppDatabase get _appDb => attachedDatabase as AppDatabase;
   String? get currentBusinessId => _appDb.currentBusinessId;
 
+  /// Current session's user id, or null when logged out. Used by DAOs
+  /// that need to scope queries to a specific user (e.g. recipient
+  /// filtering in NotificationsDao). Source of truth lives on
+  /// [AppDatabase.userIdResolver], wired by AuthService.
+  String? get currentUserId => _appDb.currentUserId;
+
   /// Returns the current businessId, throwing if no session is active.
   /// Use at every tenant-scoped query site so cross-tenant leaks become
   /// loud failures instead of silent data bleed.

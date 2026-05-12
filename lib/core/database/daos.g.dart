@@ -515,6 +515,8 @@ class BusinessMembersDaoManager {
 
 mixin _$NotificationsDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
+  $WarehousesTable get warehouses => attachedDatabase.warehouses;
+  $UsersTable get users => attachedDatabase.users;
   $NotificationsTable get notifications => attachedDatabase.notifications;
   NotificationsDaoManager get managers => NotificationsDaoManager(this);
 }
@@ -524,6 +526,10 @@ class NotificationsDaoManager {
   NotificationsDaoManager(this._db);
   $$BusinessesTableTableManager get businesses =>
       $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$WarehousesTableTableManager get warehouses =>
+      $$WarehousesTableTableManager(_db.attachedDatabase, _db.warehouses);
+  $$UsersTableTableManager get users =>
+      $$UsersTableTableManager(_db.attachedDatabase, _db.users);
   $$NotificationsTableTableManager get notifications =>
       $$NotificationsTableTableManager(_db.attachedDatabase, _db.notifications);
 }

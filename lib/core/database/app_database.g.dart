@@ -23729,6 +23729,20 @@ class $NotificationsTable extends Notifications
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _recipientUserIdMeta = const VerificationMeta(
+    'recipientUserId',
+  );
+  @override
+  late final GeneratedColumn<String> recipientUserId = GeneratedColumn<String>(
+    'recipient_user_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -23762,6 +23776,7 @@ class $NotificationsTable extends Notifications
     message,
     isRead,
     linkedRecordId,
+    recipientUserId,
     createdAt,
     lastUpdatedAt,
   ];
@@ -23819,6 +23834,15 @@ class $NotificationsTable extends Notifications
         ),
       );
     }
+    if (data.containsKey('recipient_user_id')) {
+      context.handle(
+        _recipientUserIdMeta,
+        recipientUserId.isAcceptableOrUnknown(
+          data['recipient_user_id']!,
+          _recipientUserIdMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -23867,6 +23891,10 @@ class $NotificationsTable extends Notifications
         DriftSqlType.string,
         data['${effectivePrefix}linked_record_id'],
       ),
+      recipientUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}recipient_user_id'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -23892,6 +23920,7 @@ class NotificationData extends DataClass
   final String message;
   final bool isRead;
   final String? linkedRecordId;
+  final String? recipientUserId;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
   const NotificationData({
@@ -23901,6 +23930,7 @@ class NotificationData extends DataClass
     required this.message,
     required this.isRead,
     this.linkedRecordId,
+    this.recipientUserId,
     required this.createdAt,
     required this.lastUpdatedAt,
   });
@@ -23914,6 +23944,9 @@ class NotificationData extends DataClass
     map['is_read'] = Variable<bool>(isRead);
     if (!nullToAbsent || linkedRecordId != null) {
       map['linked_record_id'] = Variable<String>(linkedRecordId);
+    }
+    if (!nullToAbsent || recipientUserId != null) {
+      map['recipient_user_id'] = Variable<String>(recipientUserId);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
@@ -23930,6 +23963,9 @@ class NotificationData extends DataClass
       linkedRecordId: linkedRecordId == null && nullToAbsent
           ? const Value.absent()
           : Value(linkedRecordId),
+      recipientUserId: recipientUserId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(recipientUserId),
       createdAt: Value(createdAt),
       lastUpdatedAt: Value(lastUpdatedAt),
     );
@@ -23947,6 +23983,7 @@ class NotificationData extends DataClass
       message: serializer.fromJson<String>(json['message']),
       isRead: serializer.fromJson<bool>(json['isRead']),
       linkedRecordId: serializer.fromJson<String?>(json['linkedRecordId']),
+      recipientUserId: serializer.fromJson<String?>(json['recipientUserId']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
     );
@@ -23961,6 +23998,7 @@ class NotificationData extends DataClass
       'message': serializer.toJson<String>(message),
       'isRead': serializer.toJson<bool>(isRead),
       'linkedRecordId': serializer.toJson<String?>(linkedRecordId),
+      'recipientUserId': serializer.toJson<String?>(recipientUserId),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
     };
@@ -23973,6 +24011,7 @@ class NotificationData extends DataClass
     String? message,
     bool? isRead,
     Value<String?> linkedRecordId = const Value.absent(),
+    Value<String?> recipientUserId = const Value.absent(),
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
   }) => NotificationData(
@@ -23984,6 +24023,9 @@ class NotificationData extends DataClass
     linkedRecordId: linkedRecordId.present
         ? linkedRecordId.value
         : this.linkedRecordId,
+    recipientUserId: recipientUserId.present
+        ? recipientUserId.value
+        : this.recipientUserId,
     createdAt: createdAt ?? this.createdAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
   );
@@ -23999,6 +24041,9 @@ class NotificationData extends DataClass
       linkedRecordId: data.linkedRecordId.present
           ? data.linkedRecordId.value
           : this.linkedRecordId,
+      recipientUserId: data.recipientUserId.present
+          ? data.recipientUserId.value
+          : this.recipientUserId,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       lastUpdatedAt: data.lastUpdatedAt.present
           ? data.lastUpdatedAt.value
@@ -24015,6 +24060,7 @@ class NotificationData extends DataClass
           ..write('message: $message, ')
           ..write('isRead: $isRead, ')
           ..write('linkedRecordId: $linkedRecordId, ')
+          ..write('recipientUserId: $recipientUserId, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt')
           ..write(')'))
@@ -24029,6 +24075,7 @@ class NotificationData extends DataClass
     message,
     isRead,
     linkedRecordId,
+    recipientUserId,
     createdAt,
     lastUpdatedAt,
   );
@@ -24042,6 +24089,7 @@ class NotificationData extends DataClass
           other.message == this.message &&
           other.isRead == this.isRead &&
           other.linkedRecordId == this.linkedRecordId &&
+          other.recipientUserId == this.recipientUserId &&
           other.createdAt == this.createdAt &&
           other.lastUpdatedAt == this.lastUpdatedAt);
 }
@@ -24053,6 +24101,7 @@ class NotificationsCompanion extends UpdateCompanion<NotificationData> {
   final Value<String> message;
   final Value<bool> isRead;
   final Value<String?> linkedRecordId;
+  final Value<String?> recipientUserId;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
   final Value<int> rowid;
@@ -24063,6 +24112,7 @@ class NotificationsCompanion extends UpdateCompanion<NotificationData> {
     this.message = const Value.absent(),
     this.isRead = const Value.absent(),
     this.linkedRecordId = const Value.absent(),
+    this.recipientUserId = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -24074,6 +24124,7 @@ class NotificationsCompanion extends UpdateCompanion<NotificationData> {
     required String message,
     this.isRead = const Value.absent(),
     this.linkedRecordId = const Value.absent(),
+    this.recipientUserId = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -24087,6 +24138,7 @@ class NotificationsCompanion extends UpdateCompanion<NotificationData> {
     Expression<String>? message,
     Expression<bool>? isRead,
     Expression<String>? linkedRecordId,
+    Expression<String>? recipientUserId,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
     Expression<int>? rowid,
@@ -24098,6 +24150,7 @@ class NotificationsCompanion extends UpdateCompanion<NotificationData> {
       if (message != null) 'message': message,
       if (isRead != null) 'is_read': isRead,
       if (linkedRecordId != null) 'linked_record_id': linkedRecordId,
+      if (recipientUserId != null) 'recipient_user_id': recipientUserId,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -24111,6 +24164,7 @@ class NotificationsCompanion extends UpdateCompanion<NotificationData> {
     Value<String>? message,
     Value<bool>? isRead,
     Value<String?>? linkedRecordId,
+    Value<String?>? recipientUserId,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
     Value<int>? rowid,
@@ -24122,6 +24176,7 @@ class NotificationsCompanion extends UpdateCompanion<NotificationData> {
       message: message ?? this.message,
       isRead: isRead ?? this.isRead,
       linkedRecordId: linkedRecordId ?? this.linkedRecordId,
+      recipientUserId: recipientUserId ?? this.recipientUserId,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
       rowid: rowid ?? this.rowid,
@@ -24149,6 +24204,9 @@ class NotificationsCompanion extends UpdateCompanion<NotificationData> {
     if (linkedRecordId.present) {
       map['linked_record_id'] = Variable<String>(linkedRecordId.value);
     }
+    if (recipientUserId.present) {
+      map['recipient_user_id'] = Variable<String>(recipientUserId.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -24170,6 +24228,7 @@ class NotificationsCompanion extends UpdateCompanion<NotificationData> {
           ..write('message: $message, ')
           ..write('isRead: $isRead, ')
           ..write('linkedRecordId: $linkedRecordId, ')
+          ..write('recipientUserId: $recipientUserId, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
           ..write('rowid: $rowid')
@@ -35050,6 +35109,27 @@ final class $$UsersTableReferences
     );
   }
 
+  static MultiTypedResultKey<$NotificationsTable, List<NotificationData>>
+  _notificationsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.notifications,
+    aliasName: $_aliasNameGenerator(
+      db.users.id,
+      db.notifications.recipientUserId,
+    ),
+  );
+
+  $$NotificationsTableProcessedTableManager get notificationsRefs {
+    final manager = $$NotificationsTableTableManager($_db, $_db.notifications)
+        .filter(
+          (f) => f.recipientUserId.id.sqlEquals($_itemColumn<String>('id')!),
+        );
+
+    final cache = $_typedResult.readTableOrNull(_notificationsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
   static MultiTypedResultKey<$SessionsTable, List<SessionData>>
   _sessionsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.sessions,
@@ -35293,6 +35373,31 @@ class $$UsersTableFilterComposer extends Composer<_$AppDatabase, $UsersTable> {
           }) => $$ExpensesTableFilterComposer(
             $db: $db,
             $table: $db.expenses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> notificationsRefs(
+    Expression<bool> Function($$NotificationsTableFilterComposer f) f,
+  ) {
+    final $$NotificationsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.notifications,
+      getReferencedColumn: (t) => t.recipientUserId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$NotificationsTableFilterComposer(
+            $db: $db,
+            $table: $db.notifications,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -35689,6 +35794,31 @@ class $$UsersTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> notificationsRefs<T extends Object>(
+    Expression<T> Function($$NotificationsTableAnnotationComposer a) f,
+  ) {
+    final $$NotificationsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.notifications,
+      getReferencedColumn: (t) => t.recipientUserId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$NotificationsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.notifications,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<T> sessionsRefs<T extends Object>(
     Expression<T> Function($$SessionsTableAnnotationComposer a) f,
   ) {
@@ -35759,6 +35889,7 @@ class $$UsersTableTableManager
             bool ordersRefs,
             bool stockAdjustmentsRefs,
             bool expensesRefs,
+            bool notificationsRefs,
             bool sessionsRefs,
             bool invitesRefs,
           })
@@ -35875,6 +36006,7 @@ class $$UsersTableTableManager
                 ordersRefs = false,
                 stockAdjustmentsRefs = false,
                 expensesRefs = false,
+                notificationsRefs = false,
                 sessionsRefs = false,
                 invitesRefs = false,
               }) {
@@ -35884,6 +36016,7 @@ class $$UsersTableTableManager
                     if (ordersRefs) db.orders,
                     if (stockAdjustmentsRefs) db.stockAdjustments,
                     if (expensesRefs) db.expenses,
+                    if (notificationsRefs) db.notifications,
                     if (sessionsRefs) db.sessions,
                     if (invitesRefs) db.invites,
                   ],
@@ -35993,6 +36126,27 @@ class $$UsersTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (notificationsRefs)
+                        await $_getPrefetchedData<
+                          UserData,
+                          $UsersTable,
+                          NotificationData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$UsersTableReferences
+                              ._notificationsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$UsersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).notificationsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.recipientUserId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (sessionsRefs)
                         await $_getPrefetchedData<
                           UserData,
@@ -36057,6 +36211,7 @@ typedef $$UsersTableProcessedTableManager =
         bool ordersRefs,
         bool stockAdjustmentsRefs,
         bool expensesRefs,
+        bool notificationsRefs,
         bool sessionsRefs,
         bool invitesRefs,
       })
@@ -60721,6 +60876,7 @@ typedef $$NotificationsTableCreateCompanionBuilder =
       required String message,
       Value<bool> isRead,
       Value<String?> linkedRecordId,
+      Value<String?> recipientUserId,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
       Value<int> rowid,
@@ -60733,6 +60889,7 @@ typedef $$NotificationsTableUpdateCompanionBuilder =
       Value<String> message,
       Value<bool> isRead,
       Value<String?> linkedRecordId,
+      Value<String?> recipientUserId,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
       Value<int> rowid,
@@ -60760,6 +60917,25 @@ final class $$NotificationsTableReferences
       $_db.businesses,
     ).filter((f) => f.id.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_businessIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UsersTable _recipientUserIdTable(_$AppDatabase db) =>
+      db.users.createAlias(
+        $_aliasNameGenerator(db.notifications.recipientUserId, db.users.id),
+      );
+
+  $$UsersTableProcessedTableManager? get recipientUserId {
+    final $_column = $_itemColumn<String>('recipient_user_id');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_recipientUserIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -60825,6 +61001,29 @@ class $$NotificationsTableFilterComposer
           }) => $$BusinessesTableFilterComposer(
             $db: $db,
             $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableFilterComposer get recipientUserId {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.recipientUserId,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -60901,6 +61100,29 @@ class $$NotificationsTableOrderingComposer
     );
     return composer;
   }
+
+  $$UsersTableOrderingComposer get recipientUserId {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.recipientUserId,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$NotificationsTableAnnotationComposer
@@ -60959,6 +61181,29 @@ class $$NotificationsTableAnnotationComposer
     );
     return composer;
   }
+
+  $$UsersTableAnnotationComposer get recipientUserId {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.recipientUserId,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$NotificationsTableTableManager
@@ -60974,7 +61219,7 @@ class $$NotificationsTableTableManager
           $$NotificationsTableUpdateCompanionBuilder,
           (NotificationData, $$NotificationsTableReferences),
           NotificationData,
-          PrefetchHooks Function({bool businessId})
+          PrefetchHooks Function({bool businessId, bool recipientUserId})
         > {
   $$NotificationsTableTableManager(_$AppDatabase db, $NotificationsTable table)
     : super(
@@ -60995,6 +61240,7 @@ class $$NotificationsTableTableManager
                 Value<String> message = const Value.absent(),
                 Value<bool> isRead = const Value.absent(),
                 Value<String?> linkedRecordId = const Value.absent(),
+                Value<String?> recipientUserId = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -61005,6 +61251,7 @@ class $$NotificationsTableTableManager
                 message: message,
                 isRead: isRead,
                 linkedRecordId: linkedRecordId,
+                recipientUserId: recipientUserId,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
                 rowid: rowid,
@@ -61017,6 +61264,7 @@ class $$NotificationsTableTableManager
                 required String message,
                 Value<bool> isRead = const Value.absent(),
                 Value<String?> linkedRecordId = const Value.absent(),
+                Value<String?> recipientUserId = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -61027,6 +61275,7 @@ class $$NotificationsTableTableManager
                 message: message,
                 isRead: isRead,
                 linkedRecordId: linkedRecordId,
+                recipientUserId: recipientUserId,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
                 rowid: rowid,
@@ -61039,47 +61288,65 @@ class $$NotificationsTableTableManager
                 ),
               )
               .toList(),
-          prefetchHooksCallback: ({businessId = false}) {
-            return PrefetchHooks(
-              db: db,
-              explicitlyWatchedTables: [],
-              addJoins:
-                  <
-                    T extends TableManagerState<
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic
-                    >
-                  >(state) {
-                    if (businessId) {
-                      state =
-                          state.withJoin(
-                                currentTable: table,
-                                currentColumn: table.businessId,
-                                referencedTable: $$NotificationsTableReferences
-                                    ._businessIdTable(db),
-                                referencedColumn: $$NotificationsTableReferences
-                                    ._businessIdTable(db)
-                                    .id,
-                              )
-                              as T;
-                    }
+          prefetchHooksCallback:
+              ({businessId = false, recipientUserId = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (businessId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.businessId,
+                                    referencedTable:
+                                        $$NotificationsTableReferences
+                                            ._businessIdTable(db),
+                                    referencedColumn:
+                                        $$NotificationsTableReferences
+                                            ._businessIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (recipientUserId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.recipientUserId,
+                                    referencedTable:
+                                        $$NotificationsTableReferences
+                                            ._recipientUserIdTable(db),
+                                    referencedColumn:
+                                        $$NotificationsTableReferences
+                                            ._recipientUserIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
 
-                    return state;
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [];
                   },
-              getPrefetchedDataCallback: (items) async {
-                return [];
+                );
               },
-            );
-          },
         ),
       );
 }
@@ -61096,7 +61363,7 @@ typedef $$NotificationsTableProcessedTableManager =
       $$NotificationsTableUpdateCompanionBuilder,
       (NotificationData, $$NotificationsTableReferences),
       NotificationData,
-      PrefetchHooks Function({bool businessId})
+      PrefetchHooks Function({bool businessId, bool recipientUserId})
     >;
 typedef $$SettingsTableCreateCompanionBuilder =
     SettingsCompanion Function({

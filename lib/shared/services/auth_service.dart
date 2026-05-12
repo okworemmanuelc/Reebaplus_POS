@@ -30,6 +30,7 @@ class AuthService extends ValueNotifier<UserData?> {
     // BusinessScopedDao always read the current session's businessId
     // (auto-tracks login/logout through the ValueNotifier).
     _db.businessIdResolver = () => value?.businessId;
+    _db.userIdResolver = () => value?.id;
 
     // Wire single-active-device sign-in: SyncService notifies us when the
     // sessions row matching our currentSessionId has its revoked_at flipped
