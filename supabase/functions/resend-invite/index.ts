@@ -59,10 +59,21 @@ Deno.serve(async (req) => {
     if (msg.includes("unauthenticated")) {
       return errorResponse("unauthenticated");
     }
+    const rpcErr = error as {
+      message?: string;
+      code?: string;
+      details?: string;
+      hint?: string;
+    };
     console.warn(
-      `[resend-invite] regenerate_invite_code RPC failed: ${error.message}`,
+      `[resend-invite] regenerate_invite_code RPC failed: ${rpcErr.message} (code=${rpcErr.code})`,
     );
-    return errorResponse("internal");
+    return errorResponse("internal", {
+      rpc_error: rpcErr.message ?? "(no message)",
+      rpc_code: rpcErr.code ?? null,
+      rpc_details: rpcErr.details ?? null,
+      rpc_hint: rpcErr.hint ?? null,
+    });
   }
 
   // RPC returns the full new invite row as jsonb. Surface the bits the
