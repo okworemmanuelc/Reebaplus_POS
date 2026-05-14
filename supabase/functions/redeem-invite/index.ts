@@ -82,15 +82,36 @@ Deno.serve(async (req) => {
   if (!userResp?.user) return errorResponse("unauthenticated");
 
   // Resolve human_code → invite_id (service client, RLS-bypass).
+  //
+  // Widened to (pending, accepted) so a replay after a successful first
+  // attempt still finds the row — needed when the client errored on the
+  // local-Drift seed AFTER the server already accepted. Without this the
+  // user gets "invalid_token" on retry and is permanently locked out of
+  // their own invite until an admin regenerates it.
+  //
+  // ordered/limited because the partial unique index
+  // uq_invites_pending_human_code only enforces uniqueness on pending;
+  // an old accepted row in another business could theoretically share
+  // the same human_code over the long run. Prefer the most recent —
+  // and the accept_invite RPC's email-match guard rejects any
+  // cross-business mismatch anyway.
   const { data: invRow, error: invErr } = await service
     .from("invites")
     .select("id, status, expires_at")
     .eq("human_code", humanCode)
-    .eq("status", "pending")
+    .in("status", ["pending", "accepted"])
+    .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
   if (invErr) return errorResponse("internal");
   if (!invRow) return errorResponse("invalid_token");
-  if (new Date(invRow.expires_at).getTime() < Date.now()) {
+  // Expiry only matters for the first acceptance. An invite that already
+  // flipped to 'accepted' is settled — replaying it shouldn't fail on
+  // an expiry that's now in the past.
+  if (
+    invRow.status === "pending" &&
+    new Date(invRow.expires_at).getTime() < Date.now()
+  ) {
     return errorResponse("expired");
   }
 

@@ -54,8 +54,26 @@ class _ExistingAccountScreenState extends ConsumerState<ExistingAccountScreen> {
         );
         return;
       }
+      // A staff member whose business_members row has no pin_hash hasn't
+      // finished onboarding yet (most common cause: the wizard's
+      // post-redeem local-seed failed last time and the orchestrator
+      // bounced them here). Frame the PIN screen as "set up", not "reset"
+      // — same screen, different copy via isJoinFlow.
+      final db = ref.read(databaseProvider);
+      final member = await (db.select(db.businessMembers)
+            ..where((m) => m.userId.equals(user.id))
+            ..limit(1))
+          .getSingleOrNull();
+      final needsInitialSetup =
+          member == null || member.pinHash == null;
+      if (!mounted) return;
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => CreatePinScreen(user: user)),
+        MaterialPageRoute(
+          builder: (_) => CreatePinScreen(
+            user: user,
+            isJoinFlow: needsInitialSetup,
+          ),
+        ),
       );
     } catch (e, stack) {
       debugPrint('[ExistingAccountScreen] syncOnLogin failed: $e\n$stack');
