@@ -64,5 +64,16 @@
 				</array>
 			</dict>
 		</array>
+		<!-- Schemes the app probes via url_launcher.canLaunchUrl(...) and
+		     opens via launchUrl(...). Required on iOS 9+ for outbound
+		     URL handoff to external apps. https / http are implicitly
+		     allowed and need not be listed. -->
+		<key>LSApplicationQueriesSchemes</key>
+		<array>
+			<string>whatsapp</string>
+			<string>sms</string>
+			<string>mailto</string>
+			<string>tel</string>
+		</array>
 	</dict>
 </plist>
