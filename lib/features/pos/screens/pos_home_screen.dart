@@ -52,7 +52,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
 
   Future<void> _initWarehouse() async {
     final user = ref.read(authProvider).currentUser;
-    if (user != null && user.roleTier >= 5) {
+    if (user != null && user.roleTier >= 6) {
       if (ref.read(navigationProvider).lockedWarehouseId.value == null) {
         // Stream-based first read: yields as soon as the warehouses table
         // has at least one row, including after a fresh-login pull. The
@@ -208,7 +208,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
             if (!_controller!.isSearching) _searchController.clear();
           },
         ),
-        if (ref.read(authProvider).currentUser?.roleTier == 5)
+        if (ref.read(authProvider).currentUser?.roleTier == 6)
           IconButton(
             icon: Icon(
               FontAwesomeIcons.warehouse,

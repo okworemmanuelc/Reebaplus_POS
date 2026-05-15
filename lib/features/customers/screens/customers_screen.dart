@@ -51,14 +51,14 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
       // "Customers" card). Consume immediately so it only applies once.
       defaultId = oneShot;
       nav.customersInitialWarehouseId.value = null;
-    } else if (roleTier >= 5) {
+    } else if (roleTier >= 6) {
       // CEO: default to the warehouse currently selected on the POS screen
       defaultId = nav.lockedWarehouseId.value;
-    } else if (roleTier >= 4) {
+    } else if (roleTier >= 5) {
       // Manager: default to their own warehouse
       defaultId = user?.warehouseId;
     }
-    // Staff (< 4): no dropdown — always their warehouse (handled in filter)
+    // Below manager (< 5): no dropdown — always their warehouse (handled in filter)
 
     if (mounted) {
       setState(() {
@@ -82,7 +82,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
 
         final user = ref.read(authProvider).currentUser;
         final roleTier = user?.roleTier ?? 0;
-        final isManagerOrAbove = roleTier >= 4;
+        final isManagerOrAbove = roleTier >= 5;
 
         return Scaffold(
           backgroundColor: bgCol,
@@ -114,8 +114,8 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
 
                     List<Customer> filtered;
 
-                    if (roleTier < 4) {
-                      // Staff: always see only their own warehouse
+                    if (roleTier < 5) {
+                      // Below manager: always see only their own warehouse
                       filtered = customers
                           .where((c) => c.warehouseId == user?.warehouseId)
                           .toList();

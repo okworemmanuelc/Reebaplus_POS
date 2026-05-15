@@ -1036,7 +1036,7 @@ class _StaffFormSheetState extends ConsumerState<_StaffFormSheet> {
       final otherManagers = staffInWarehouse
           .where(
             (u) =>
-                u.roleTier >= 4 &&
+                u.roleTier >= 5 &&
                 (widget.user == null || u.id != widget.user!.id),
           )
           .toList();

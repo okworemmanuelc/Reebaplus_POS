@@ -47,7 +47,7 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authProvider).currentUser;
-    final isCeo = (user?.roleTier ?? 0) >= 5;
+    final isCeo = (user?.roleTier ?? 0) >= 6;
 
     return SharedScaffold(
       activeRoute: 'dashboard',

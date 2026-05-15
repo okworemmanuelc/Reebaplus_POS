@@ -294,11 +294,11 @@ class _CartScreenState extends ConsumerState<CartScreen>
   void _showChangeCustomerModal() {
     final user = ref.read(authProvider).currentUser;
     final roleTier = user?.roleTier ?? 0;
-    final isManagerOrAbove = roleTier >= 4;
+    final isManagerOrAbove = roleTier >= 5;
 
     // Default picker warehouse based on role
     String? defaultPickerWarehouseId;
-    if (roleTier >= 5) {
+    if (roleTier >= 6) {
       defaultPickerWarehouseId = ref
           .read(navigationProvider)
           .lockedWarehouseId

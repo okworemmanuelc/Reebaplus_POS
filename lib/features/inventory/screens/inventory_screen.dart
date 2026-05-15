@@ -113,8 +113,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
             _initialWarehouseSelectionDone = true;
             final locked = _nav.warehouseLocked.value;
             final lockedId = _nav.lockedWarehouseId.value;
-            final userTier = auth.currentUser?.roleTier ?? 5;
-            if (locked && lockedId != null && userTier < 4) {
+            final userTier = auth.currentUser?.roleTier ?? 6;
+            if (locked && lockedId != null && userTier < 5) {
               _selectedWarehouseId = lockedId.toString();
             } else {
               final mainStore = list
@@ -1433,7 +1433,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     );
     final depositCtrl = TextEditingController();
     final crateValueCtrl = TextEditingController();
-    final isCEO = (ref.read(authProvider).currentUser?.roleTier ?? 1) >= 5;
+    final isCEO = (ref.read(authProvider).currentUser?.roleTier ?? 2) >= 6;
 
     // Default modes
     String depositMode = 'change'; // 'add' | 'change'

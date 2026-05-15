@@ -90,7 +90,7 @@ class _WarehouseDetailsScreenState
               p.totalStock > 0 && p.totalStock <= p.product.lowStockThreshold,
         )
         .length;
-    final managers = _staff.where((u) => u.roleTier >= 4).length;
+    final managers = _staff.where((u) => u.roleTier >= 5).length;
     final riders = _staff
         .where(
           (u) =>

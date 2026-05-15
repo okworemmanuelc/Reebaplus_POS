@@ -87,9 +87,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       if (mounted) setState(() => _showProTips = count <= 1);
     });
 
-    // Lock managers (tier 4) and staff (tier < 4) to their own warehouse
+    // Lock managers (tier 5) and below to their own warehouse; only CEO (tier 6)
+    // sees cross-warehouse data.
     final currentUser = ref.read(authProvider).currentUser;
-    final userTier = currentUser?.roleTier ?? 5;
+    final userTier = currentUser?.roleTier ?? 6;
     if (userTier < 5 && currentUser?.warehouseId != null) {
       if (mounted) {
         setState(() {
@@ -617,7 +618,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     required List<OrderWithItems> filteredOrders,
     required List<MapEntry<String, double>> staffSalesList,
   }) {
-    final userTier = ref.read(authProvider).currentUser?.roleTier ?? 1;
+    final userTier = ref.read(authProvider).currentUser?.roleTier ?? 2;
     final canDrill = userTier >= 4;
 
     return Column(

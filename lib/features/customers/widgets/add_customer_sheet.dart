@@ -39,7 +39,7 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
   // Warehouse selection (CEO only)
   List<WarehouseData> _warehouses = [];
   String? _selectedWarehouseId;
-  bool get _isCeo => (ref.read(authProvider).currentUser?.roleTier ?? 0) >= 5;
+  bool get _isCeo => (ref.read(authProvider).currentUser?.roleTier ?? 0) >= 6;
 
   @override
   void initState() {

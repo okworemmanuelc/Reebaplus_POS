@@ -134,7 +134,7 @@ class _StockAuditScreenState extends ConsumerState<StockAuditScreen> {
     final user = ref.watch(authProvider).currentUser;
 
     // CEO guard
-    if (user == null || user.roleTier < 5) {
+    if (user == null || user.roleTier < 6) {
       return Scaffold(
         appBar: AppBar(
           title: const Text('Stock Audit'),
