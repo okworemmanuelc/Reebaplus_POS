@@ -157,3 +157,57 @@ the wizard on a fresh device in production. Block 5 of Step 14 (wizard
 E2E ×3) cannot run cleanly until this lands. Recommend new branch
 `fix/invitee-rls-principal` (or similar), starting with the call-site
 audit.
+
+## Terminate Access is a stub
+
+**Status:** deferred (pre-existing technical debt; not a refactor
+regression). Surfaced during Step 14 Block 3 manual testing of the role
+refactor.
+
+**Problem.** Tapping "Terminate Access" on a staff profile opens a
+"Delete Staff" confirmation dialog, but the dialog's Delete button is a
+no-op. No DB write, no sync enqueue, no error toast — the dialog just
+dismisses and the staff member stays active.
+
+**Trace.**
+
+- [staff_screen.dart:1290](screens/staff_screen.dart#L1290) — "Terminate
+  Access" tile → `onTap: onDelete`.
+- [staff_screen.dart:503-506](screens/staff_screen.dart#L503-L506) —
+  `onDelete: () { Navigator.pop(ctx); if (item.user != null)
+  _confirmDelete(context, item.user!); }`.
+- [staff_screen.dart:768-800](screens/staff_screen.dart#L768-L800) —
+  `_confirmDelete` shows an `AlertDialog`. The Delete button at
+  L789-796 has `onPressed: () async { Navigator.pop(context); // Stub
+  — no DB delete in this version }`.
+
+**Origin.** Commit `4122b55` (2026-03-21, "feat: move update product
+button & update CLAUDE.md summary"). Predates every v9 refactor commit
+(`2bc8395`, `f80030f`, `c3b177c`, `f114e56`, `a6077f3`, `4345c5e`,
+`f143a31`). Pre-existing technical debt.
+
+**Proposed fix.** Replace the stub with a soft-delete that respects
+CLAUDE.md §5 sync invariants — `is_deleted = true` on the
+`business_members` row via a DAO method that calls
+`SyncDao.enqueueUpsert`, NOT `enqueueDelete` (cloud needs to retain
+the audit trail of who was on the team and when they left).
+
+Suggested touch points:
+
+- New `BusinessMembersDao.terminateMember(memberId)` method that
+  flips `is_deleted = true` and updates `terminated_at` (column add
+  may be required — audit the cloud schema first).
+- Replace the stub `// Stub — no DB delete in this version` block with
+  a call to the new DAO and an `AppNotification.showSuccess` toast.
+- Verify the staff list provider (Riverpod) filters `is_deleted = true`
+  rows out so terminated members disappear from the list immediately
+  via realtime / local stream propagation.
+- Cloud side: confirm RLS allows CEO/manager to update `is_deleted`
+  on subordinate `business_members` rows.
+
+**Trigger to unblock.** No production blocker — the affordance has been
+non-functional for months and no support tickets exist. Pick when
+either (a) the CEO needs to remove a real terminated staff member, or
+(b) the next staff-management cleanup pass happens. Suggested new
+branch: `feat/terminate-staff-access` (or fold into the
+`fix/invitee-rls-principal` follow-up if both are tackled together).

@@ -13,15 +13,18 @@ PROGRESS.md if you need the full commit ladder.
 
 **Branch:** `feat/staff-onboarding-phase-1`
 
-**Last commit:** `bab70bd docs(progress): track in-flight refactor state + post-deploy invitee caveat`
+**Last commit:** `<this commit> docs(deferred,checkpoint): close Block 3 issue triage`
 
 Commit ladder added since the previous CHECKPOINT (rev 1):
 
 ```
-bab70bd docs(progress): track in-flight refactor state + post-deploy invitee caveat
-0dfddef docs(deferred): catalogue the non-CEO invitee profiles/RLS gap
-68d1e8b chore(signup-wizard): log invite-redeem failures before the toast
-8c55dcf chore: remove sync/dao diagnostic prints from 2026-05-10 triage
+<this>   docs(deferred,checkpoint): close Block 3 issue triage
+607c9bb  fix(ui): bucket CEO rows in staff list
+fdd2745  chore(auth): swallow auth-stream errors on offline / DNS hiccups
+bab70bd  docs(progress): track in-flight refactor state + post-deploy invitee caveat
+0dfddef  docs(deferred): catalogue the non-CEO invitee profiles/RLS gap
+68d1e8b  chore(signup-wizard): log invite-redeem failures before the toast
+8c55dcf  chore: remove sync/dao diagnostic prints from 2026-05-10 triage
 ```
 
 (See [PROGRESS.md](PROGRESS.md) for the full role-refactor ladder
@@ -29,87 +32,75 @@ back to `2bc8395`.)
 
 ## Step just finished
 
-**Step 14 Block 3 — manual invite-permission matrix** (user-run). Three
-issues surfaced during the manual matrix; details + resolution status
-in §Block 3 issue triage below.
+**Step 14 Block 4 (sync resilience, CEO-only) and the runnable parts
+of Block 5 (PIN ×5 / relogin ×5 / biometric ×5, CEO)** are both green
+per user 2026-05-15. Wizard E2E ×3 stays deferred alongside the
+profiles/RLS gap.
 
-Adjacent to Block 3, four doc / diagnostic commits landed:
+Adjacent commits since rev 1 of this CHECKPOINT:
 
-- `8c55dcf` — Block 2 cleanup (sync/dao diagnostic prints removed per
-  the diagnostic-prints tracker).
+- `8c55dcf` — Block 2 cleanup (sync/dao diagnostic prints removed).
 - `68d1e8b` — Issue 3 diagnostic improvement (log invite-redeem
   failures before the toast).
 - `0dfddef` — DEFERRED.md gets the new profiles/RLS-gap entry from
   Issues 4/5.
-- `bab70bd` — PROGRESS.md committed durably (was prior scratch state);
-  deploy-sequence section now includes the non-CEO invitee caveat.
+- `bab70bd` — PROGRESS.md committed durably with deploy caveats.
+- `fdd2745` — Sub-phase D `onError` handlers (auth_service.dart +
+  supabase_sync_service.dart) committed via surgical staging; the
+  6 v9 regressions that had been entangled in the working tree
+  were reverted to match HEAD before staging.
+- `607c9bb` — Issue 1 fix at staff_screen.dart:226.
+- `<this>` — DEFERRED.md gains "Terminate Access is a stub" entry;
+  CHECKPOINT.md reflects all Block 3 issues closed.
 
 ## Step about to start
 
-**Step 14 Block 4 — sync resilience matrix (CEO-only flows).** Per the
-plan's Step 14 outline:
+**Cloud + edge function + app deploy.** Per the plan's
+"Pre-Deploy Cleanup & Execution" addendum (2026-05-15) and the
+deploy sequence later in this file:
 
-- Existing-account-screen flow: log out as CEO, log back in → confirm
-  `syncOnLogin` completes without abort. No `CHECK constraint failed:
-  role_tier IN (...)` errors.
-- Bad-row tolerance: temporarily inject a cloud row with
-  `role='gibberish'` (or use existing one if available) → pull →
-  confirm logs show `[sync] dropping <table> row id=... due to invalid
-  role=gibberish/...`; pull completes; rest of rows land.
-
-**Constraint:** all Block 4 testing is **CEO-only**. Non-CEO invitee
-flows are blocked pending the deferred profiles/RLS fix (see §Block 3
-Issues 4/5 and DEFERRED.md). User has explicitly stated they will run
-Block 4 manually.
-
-**Step 14 Block 5 — rev-3 5/5 protocol — partially deferred.** Of the
-five sub-flows:
-
-- PIN login ×5 (CEO) — runnable now.
-- Logout / relogin ×5 (CEO) — runnable now.
-- Biometric ×5 (CEO, if hardware available) — runnable now.
-- **Wizard E2E ×3 — DEFERRED post-merge** alongside the profiles/RLS
-  fix. The wizard is broken on fresh device for any non-CEO role
-  (Issues 4/5); there's no clean way to test it until the gap fix
-  lands.
-
-After Block 4 + the runnable parts of Block 5 are green, deploy can
-proceed per §Deploy sequence below.
+1. `flutter analyze` clean + `flutter test` 97+ green re-check.
+2. Build new app (`flutter build apk --release` or iOS equivalent,
+   per test device).
+3. `source ~/.zshrc && supabase db push` — applies only 0030.
+4. `source ~/.zshrc && supabase functions deploy send-invite
+   revoke-invite check-invite-email accept-invite resend-invite
+   redeem-invite` (six functions, one call).
+5. Install new app build IMMEDIATELY (do NOT open old build between
+   steps 3 and 5).
+6. Post-install CEO smoke test (PIN login → dashboard → re-run
+   Block 4 sync-resilience matrix → confirm Issue 1 fix renders a
+   CEO section).
 
 ## Block 3 issue triage
 
 Three issues surfaced during manual testing. Status snapshot:
 
-### Issue 1 — CEO missing from staff list (UNRESOLVED)
+### Issue 1 — CEO missing from staff list (RESOLVED 2026-05-15)
 
-When logged in as CEO, the CEO's own profile does not appear in the
-staff management list. The user routed this issue to a **parallel
-fresh-agent investigation** (a separate Claude session running in
-parallel for triage). The investigation is expected to deliver a
-read-only cloud SQL check that confirms whether this is:
-(a) intentional (screen excludes self by design — likely),
-(b) a pre-existing bug, or
-(c) a refactor regression.
+When logged in as CEO, the CEO's own profile did not appear in the
+staff management list. **Root cause:** the per-tier render-order list
+at [staff_screen.dart:226](../../../lib/features/staff/screens/staff_screen.dart#L226)
+predated the v9 tier bump and never included tier 6, so CEO rows fell
+off the render loop entirely. **Fix:** single-line change in commit
+`607c9bb` — `[5, 4, 3, 2, 1]` → `[6, 5, 4, 3, 2, 1]`. CEO now renders
+in its own section above Managers. Verify on device post-deploy.
 
-**Action for next session:** check the parallel-agent output before
-deciding. If (a): note in PROGRESS.md and move on. If (b): move to
-DEFERRED.md. If (c): scope a fix on this branch.
+### Issue 2 — "Terminate Access" does nothing (DEFERRED — pre-existing stub)
 
-### Issue 2 — "Terminate access" on a Manager profile does nothing (PENDING — parallel agent)
+Tapping "Terminate Access" opens a "Delete Staff" confirmation dialog
+whose Delete button is a literal stub
+([staff_screen.dart:768-800](../../../lib/features/staff/screens/staff_screen.dart#L768-L800),
+specifically the `// Stub — no DB delete in this version` comment at
+line 794). Pre-existing since commit `4122b55` (2026-03-21,
+"feat: move update product button & update CLAUDE.md summary") — predates
+every v9 refactor commit.
 
-Tapping the button produced no visible effect — manager stayed active,
-no error toast, no log. User routed to the **parallel fresh-agent
-investigation** for a git-blame check on whether this is pre-existing
-(button is a stub from a prior commit) or refactor-caused. Expected
-outcome from the parallel agent:
-
-- If pre-existing (button has been a stub since some commit before
-  the role refactor): move to DEFERRED.md and out of scope for this
-  branch.
-- If refactor-caused: investigate further on this branch.
-
-**Action for next session:** check the parallel-agent output before
-deciding scope.
+**Out of scope for this branch.** Catalogued in
+[DEFERRED.md](DEFERRED.md) → "Terminate Access is a stub" with full
+fix proposal (soft-delete via DAO + sync-queue enqueue, per CLAUDE.md
+§5 sync invariants). No production blocker — the affordance has been
+non-functional for months and no support tickets exist.
 
 ### Issue 3 — Cashier invite half-success (CLOSED)
 
@@ -211,34 +202,13 @@ branches or post-merge cleanups.
    it was not in the plan's gap-analysis table. Documented in
    [PROGRESS.md](PROGRESS.md) §Follow-ups.
 
-3. **Uncommitted onError hunks in two service files** — pre-existing
-   Sub-phase D work in the working tree alongside the role-refactor
-   commits via surgical staging.
-   - `lib/core/services/supabase_sync_service.dart` — adds onError
-     handler to `_supabase.auth.onAuthStateChange.listen` to swallow
-     `AuthRetryableFetchException` from token-refresh failures
-     (offline / DNS hiccups).
-   - `lib/shared/services/auth_service.dart` — same onError pattern
-     applied at 4 listener sites.
-
-   ⚠ **CRITICAL TRAP in auth_service.dart working tree** (still
-   uncommitted, verified at checkpoint write: `git diff --stat HEAD`
-   shows 35+/21- across the file). Alongside the onError additions,
-   the working tree has *regressed* the v9 vocabulary fixes that
-   Step 6 (commit `f114e56`) and Step 8b (commit `f143a31`)
-   committed. All 6 sites are reverted to v8:
-   - L271 / L320: `?? 'cashier'` → `?? 'Staff'`
-   - L272 / L321: `?? 3` → `?? 1`
-   - L709 docstring: v9 5-role list → v8 3-role list
-   - L789 / L898: CEO seed `Value(6)` → `Value(5)`
-
-   When the next session commits the Sub-phase D onError work, it
-   MUST surgically stage only the onError hunks and NOT the role/tier
-   regressions. The cleanest path is to first revert the regressions
-   in the working tree (re-applying the v9 values), then commit the
-   onError work cleanly. Otherwise the v9 refactor will silently
-   reverse mid-branch and the deploy will ship a half-rolled-back
-   CEO-seeding path.
+3. ~~**Uncommitted onError hunks in two service files**~~
+   **RESOLVED 2026-05-15** — committed in `fdd2745`. The 6 v9
+   regressions that had been entangled in the working tree (auth
+   service defaults / docstring / CEO seed) were reverted to HEAD
+   before staging; `git diff --staged` confirmed only the onError
+   hunks at `auth_service.dart:993-1006` and
+   `supabase_sync_service.dart:1391-1413` made it into the commit.
 
 4. ~~**`PROGRESS.md` itself.** Uncommitted scratch state.~~
    **RESOLVED 2026-05-15** — PROGRESS.md was committed in `bab70bd`
