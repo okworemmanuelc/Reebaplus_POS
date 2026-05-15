@@ -2,7 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/shared/services/auth_service.dart';
 
 class AutoLockWrapper extends ConsumerStatefulWidget {
   final Widget child;
@@ -22,10 +24,19 @@ class _AutoLockWrapperState extends ConsumerState<AutoLockWrapper>
   static const String _pausedTimeKey = 'app_paused_time';
   static const int _shiftExpirationHours = 12;
 
+  // Captured at initState — the lifecycle handler runs across `await`s and
+  // must NOT touch `ref` after them (riverpod invalidates `ref` the moment
+  // the element is unmounted, BEFORE State.mounted flips). See plan
+  // §"Bug fix" Pattern 1.
+  late final AppDatabase _db;
+  late final AuthService _auth;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _db = ref.read(databaseProvider);
+    _auth = ref.read(authProvider);
   }
 
   @override
@@ -37,7 +48,6 @@ class _AutoLockWrapperState extends ConsumerState<AutoLockWrapper>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) async {
     final prefs = await SharedPreferences.getInstance();
-    final db = ref.read(databaseProvider);
 
     // iOS fires `inactive` for brief interruptions the user perceives as
     // still using the app (Notification Center, Control Center, system
@@ -62,25 +72,24 @@ class _AutoLockWrapperState extends ConsumerState<AutoLockWrapper>
       // the kick may have missed the realtime UPDATE. Once realtime catches
       // up post-resume, the local sessions row reflects revoked_at — this
       // verifies and triggers fullLogout with the kick snackbar if so.
-      unawaited(ref.read(authProvider).verifyLocalSessionStillActive());
+      unawaited(_auth.verifyLocalSessionStillActive());
       final pausedMs = prefs.getInt(_pausedTimeKey);
       if (pausedMs != null) {
         final pausedTime = DateTime.fromMillisecondsSinceEpoch(pausedMs);
         final difference = DateTime.now().difference(pausedTime);
-        final auth = ref.read(authProvider);
 
         if (difference.inHours >= _shiftExpirationHours) {
-          if (auth.currentUser != null) {
-            auth.fullLogout();
+          if (_auth.currentUser != null) {
+            _auth.fullLogout();
           }
         } else {
           final intervalStr =
-              await db.settingsDao.get('auto_lock_interval_seconds');
+              await _db.settingsDao.get('auto_lock_interval_seconds');
           final autoLockSeconds = int.tryParse(intervalStr ?? '') ?? 1800;
 
           if (autoLockSeconds > 0 && difference.inSeconds >= autoLockSeconds) {
-            if (auth.currentUser != null) {
-              auth.logout();
+            if (_auth.currentUser != null) {
+              _auth.logout();
             }
           }
         }
