@@ -1,5 +1,4 @@
 import 'package:drift/drift.dart';
-import 'package:flutter/foundation.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 
@@ -26,9 +25,6 @@ mixin BusinessScopedDao<DB extends GeneratedDatabase> on DatabaseAccessor<DB> {
   String requireBusinessId() {
     final id = currentBusinessId;
     if (id == null) {
-      debugPrintStack(
-        label: '[BusinessScopedDao] requireBusinessId called with no session',
-      );
       throw StateError(
         'No current business — DAO query attempted outside an authenticated session',
       );

@@ -988,8 +988,8 @@ class SupabaseSyncService {
       await pushPending();
       await pullChanges(businessId);
       debugPrint('[SyncService] Two-way sync completed successfully.');
-    } catch (e, st) {
-      debugPrint('[SyncService] Sync failed: $e\n$st');
+    } catch (e) {
+      debugPrint('[SyncService] Sync failed: $e');
       rethrow;
     }
   }
