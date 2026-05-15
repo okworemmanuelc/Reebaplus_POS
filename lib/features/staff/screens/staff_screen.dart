@@ -223,7 +223,7 @@ class _StaffScreenState extends ConsumerState<StaffScreen> {
               : ListView(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
                   children: [
-                    for (final tier in [5, 4, 3, 2, 1]) ...[
+                    for (final tier in [6, 5, 4, 3, 2, 1]) ...[
                       if (list.any((u) => u.tier == tier)) ...[
                         _buildSectionHeader(
                           tier,
