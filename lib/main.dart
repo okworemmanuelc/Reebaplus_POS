@@ -245,7 +245,7 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
               }
             }
  
-            if (user.roleTier < 5 && user.warehouseId == null) {
+            if (user.roleTier < 6 && user.warehouseId == null) {
               return WarehouseAssignmentScreen(user: user);
             }
             return const MainLayout();

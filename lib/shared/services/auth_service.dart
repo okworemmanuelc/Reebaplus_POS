@@ -429,7 +429,7 @@ class AuthService extends ValueNotifier<UserData?> {
     try {
       // Side-effects first — navigationService fully ready before any rebuild
       _nav.applyUserWarehouseLock(user.roleTier, user.warehouseId);
-      if (user.roleTier >= 4) {
+      if (user.roleTier >= 5) {
         _nav.setIndex(0);
       } else {
         _nav.setIndex(1);
@@ -452,7 +452,7 @@ class AuthService extends ValueNotifier<UserData?> {
       _sync.startRealtimeSync(user.businessId);
       _sync.startAutoPush();
 
-      if (user.roleTier < 5 && user.warehouseId == null) {
+      if (user.roleTier < 6 && user.warehouseId == null) {
         scheduleMicrotask(() => _handleOnboardingAlerts(user));
       }
 

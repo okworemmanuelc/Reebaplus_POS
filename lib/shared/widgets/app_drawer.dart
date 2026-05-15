@@ -209,7 +209,7 @@ class AppDrawer extends ConsumerWidget {
   Widget _buildNavList(BuildContext context, WidgetRef ref) {
     final t = Theme.of(context);
     final roleTier = ref.read(authProvider).currentUser?.roleTier ?? 1;
-    final isCashier = roleTier < 4;
+    final isBelowManager = roleTier < 5;
 
     return ListView(
       padding: EdgeInsets.symmetric(
@@ -218,7 +218,7 @@ class AppDrawer extends ConsumerWidget {
       ),
       children: [
         // Dashboard — managers and above only
-        if (!isCashier)
+        if (!isBelowManager)
           _navItem(
             context,
             FontAwesomeIcons.chartLine,
@@ -255,7 +255,7 @@ class AppDrawer extends ConsumerWidget {
           onTap: () => _navigateTo(context, ref, 'customers'),
         ),
         // Items below are for managers and above only
-        if (!isCashier) ...[
+        if (!isBelowManager) ...[
           _navItem(
             context,
             FontAwesomeIcons.moneyBillWave,
@@ -290,7 +290,7 @@ class AppDrawer extends ConsumerWidget {
         Divider(color: t.dividerColor),
         SizedBox(height: context.getRSize(12)),
         // Activity Logs and Deliveries — managers and above only
-        if (!isCashier) ...[
+        if (!isBelowManager) ...[
           _navItem(
             context,
             FontAwesomeIcons.clockRotateLeft,

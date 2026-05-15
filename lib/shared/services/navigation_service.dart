@@ -135,7 +135,7 @@ class NavigationService {
     }
 
     // Step 3: go to role-based home tab if not already there
-    final homeTab = roleTier >= 4 ? 0 : 1;
+    final homeTab = roleTier >= 5 ? 0 : 1;
     if (currentIndex.value != homeTab) {
       debugPrint(
         '[NavigationService] Not on home tab ($homeTab). Redirecting...',
@@ -172,7 +172,7 @@ class NavigationService {
   /// Called right after login. Locks non-CEO users to their assigned warehouse.
   /// [roleTier] and [warehouseId] come from the UserData that just logged in.
   void applyUserWarehouseLock(int roleTier, String? warehouseId) {
-    if (roleTier >= 5) {
+    if (roleTier >= 6) {
       // CEO — no restrictions, clear any previous lock
       warehouseLocked.value = false;
       lockedWarehouseId.value = null;
