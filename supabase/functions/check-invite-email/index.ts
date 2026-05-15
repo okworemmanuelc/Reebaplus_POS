@@ -46,7 +46,7 @@ Deno.serve(async (req) => {
   const caller = getCallerClient(req);
   const ctx = await loadCaller(caller, service);
   if (!ctx) return errorResponse("unauthenticated");
-  if (ctx.roleTier < 4) return errorResponse("forbidden");
+  if (ctx.roleTier < 5) return errorResponse("forbidden");
 
   if (!isValidEmail(email)) return errorResponse("invalid_email");
   if (isDisposableEmail(email)) return errorResponse("disposable_email");

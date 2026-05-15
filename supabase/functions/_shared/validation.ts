@@ -67,7 +67,6 @@ const VALID_GRANULAR_ROLES = new Set<string>([
   "stock_keeper",
   "cashier",
   "rider",
-  "cleaner",
 ]);
 
 export function isValidGranularRole(role: string): boolean {

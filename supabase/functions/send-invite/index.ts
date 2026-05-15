@@ -36,7 +36,7 @@ Deno.serve(async (req) => {
   const caller = getCallerClient(req);
   const ctx = await loadCaller(caller, service);
   if (!ctx) return errorResponse("unauthenticated");
-  if (ctx.roleTier < 4) return errorResponse("forbidden");
+  if (ctx.roleTier < 5) return errorResponse("forbidden");
 
   const result = await issueInvite(service, ctx, {
     email: body.email ?? "",
