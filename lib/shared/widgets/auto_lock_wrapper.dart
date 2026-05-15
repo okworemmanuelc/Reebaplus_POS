@@ -73,6 +73,15 @@ class _AutoLockWrapperState extends ConsumerState<AutoLockWrapper>
       // up post-resume, the local sessions row reflects revoked_at — this
       // verifies and triggers fullLogout with the kick snackbar if so.
       unawaited(_auth.verifyLocalSessionStillActive());
+
+      // No active session — auto-lock doesn't apply (and the timeout read
+      // below is tenant-scoped, so it would throw on the unauth flow).
+      // Drop any stale pause marker so it can't fire after eventual login.
+      if (_auth.currentUser == null) {
+        await prefs.remove(_pausedTimeKey);
+        return;
+      }
+
       final pausedMs = prefs.getInt(_pausedTimeKey);
       if (pausedMs != null) {
         final pausedTime = DateTime.fromMillisecondsSinceEpoch(pausedMs);
