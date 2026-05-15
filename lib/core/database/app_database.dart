@@ -134,8 +134,8 @@ class Users extends Table {
   List<String> get customConstraints => [
     'UNIQUE (business_id, email)',
     'UNIQUE (auth_user_id)',
-    "CHECK (role IN ('admin','staff','ceo','manager'))",
-    'CHECK (role_tier IN (1,4,5))',
+    "CHECK (role IN ('ceo','manager','stock_keeper','cashier','rider'))",
+    'CHECK (role_tier IN (2,3,4,5,6))',
   ];
 }
 
@@ -194,8 +194,8 @@ class BusinessMembers extends Table {
   @override
   List<String> get customConstraints => [
     'UNIQUE (business_id, user_id)',
-    "CHECK (role IN ('admin','staff','ceo','manager'))",
-    'CHECK (role_tier IN (1,4,5))',
+    "CHECK (role IN ('ceo','manager','stock_keeper','cashier','rider'))",
+    'CHECK (role_tier IN (2,3,4,5,6))',
     "CHECK (status IN ('active','suspended','removed'))",
     "CHECK (verification_status IN ('not_started','pending_review','approved','rejected'))",
     'CHECK (verification_extensions_used >= 0 AND verification_extensions_used <= 2)',
@@ -955,7 +955,7 @@ class Invites extends Table {
 
   @override
   List<String> get customConstraints => [
-    "CHECK (role IN ('admin','staff','ceo','manager'))",
+    "CHECK (role IN ('ceo','manager','stock_keeper','cashier','rider'))",
     "CHECK (status IN ('pending','accepted','expired','revoked'))",
   ];
 }
@@ -1118,7 +1118,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentUserId => userIdResolver();
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1297,6 +1297,48 @@ class AppDatabase extends _$AppDatabase {
         // local rows get NULL, which is the right default — pre-rev-3
         // notifications were effectively broadcasts.
         await m.addColumn(notifications, notifications.recipientUserId);
+      }
+      if (from < 9) {
+        // v9 (role vocabulary refactor): mirror supabase/migrations/0030.
+        //
+        //   admin → ceo / tier 6
+        //   staff → cashier / tier 3
+        //   ceo:     tier 5 → 6
+        //   manager: tier 4 → 5
+        //   stock_keeper: new at tier 4
+        //   rider: new app-user role at tier 2
+        //
+        // Data backfill runs BEFORE the table rebuild so the new CHECK
+        // constraints don't reject the old-vocabulary rows during the
+        // copy step. SQLite can't ALTER TABLE … DROP CONSTRAINT, so we
+        // use Drift's TableMigration which does the new-table/copy/drop/
+        // rename dance using the current Dart customConstraints lists
+        // (which after this commit hold the new vocabulary).
+        for (final tbl in const ['users', 'business_members']) {
+          await customStatement(
+            "UPDATE $tbl SET role = 'ceo',     role_tier = 6 WHERE role = 'admin'",
+          );
+          await customStatement(
+            "UPDATE $tbl SET role = 'cashier', role_tier = 3 WHERE role = 'staff'",
+          );
+          await customStatement(
+            "UPDATE $tbl SET role_tier = 6 WHERE role = 'ceo'     AND role_tier <> 6",
+          );
+          await customStatement(
+            "UPDATE $tbl SET role_tier = 5 WHERE role = 'manager' AND role_tier <> 5",
+          );
+        }
+        // invites — no role_tier column.
+        await customStatement(
+          "UPDATE invites SET role = 'ceo'     WHERE role = 'admin'",
+        );
+        await customStatement(
+          "UPDATE invites SET role = 'cashier' WHERE role = 'staff'",
+        );
+
+        await m.alterTable(TableMigration(users));
+        await m.alterTable(TableMigration(businessMembers));
+        await m.alterTable(TableMigration(invites));
       }
     },
     beforeOpen: (details) async {
