@@ -1391,17 +1391,24 @@ class SupabaseSyncService {
         }
       });
 
-      _authStateSub ??= _supabase.auth.onAuthStateChange.listen((state) async {
-        if (state.event == AuthChangeEvent.signedIn ||
-            state.event == AuthChangeEvent.tokenRefreshed ||
-            state.event == AuthChangeEvent.initialSession) {
-          _loggedJwtClaimsThisSession = false;
-          await _db.syncDao.clearFailureBackoff();
-          _scheduleDebouncedPush();
-        } else if (state.event == AuthChangeEvent.signedOut) {
-          _loggedJwtClaimsThisSession = false;
-        }
-      });
+      _authStateSub ??= _supabase.auth.onAuthStateChange.listen(
+        (state) async {
+          if (state.event == AuthChangeEvent.signedIn ||
+              state.event == AuthChangeEvent.tokenRefreshed ||
+              state.event == AuthChangeEvent.initialSession) {
+            _loggedJwtClaimsThisSession = false;
+            await _db.syncDao.clearFailureBackoff();
+            _scheduleDebouncedPush();
+          } else if (state.event == AuthChangeEvent.signedOut) {
+            _loggedJwtClaimsThisSession = false;
+          }
+        },
+        // Token-refresh failures (offline, DNS lookup errors) surface on
+        // this stream as AuthRetryableFetchException. Swallow them — the
+        // SDK retries on reconnect; without onError they bubble up as
+        // uncaught exceptions.
+        onError: (e) => debugPrint('[SupabaseSync] auth stream error: $e'),
+      );
 
       _connectivitySub ??= Connectivity().onConnectivityChanged.listen(
         _handleConnectivityTransition,

@@ -990,13 +990,20 @@ class AuthService extends ValueNotifier<UserData?> {
       final completer = Completer<String?>();
       late final StreamSubscription<AuthState> sub;
 
-      sub = supabase.auth.onAuthStateChange.listen((data) {
-        if (data.event == AuthChangeEvent.signedIn) {
-          final email = data.session?.user.email;
-          sub.cancel();
-          completer.complete(email?.toLowerCase());
-        }
-      });
+      sub = supabase.auth.onAuthStateChange.listen(
+        (data) {
+          if (data.event == AuthChangeEvent.signedIn) {
+            final email = data.session?.user.email;
+            sub.cancel();
+            completer.complete(email?.toLowerCase());
+          }
+        },
+        // Offline / DNS errors during refresh surface here; swallow so the
+        // OAuth flow keeps waiting for the real signedIn event instead of
+        // crashing on an uncaught stream error.
+        onError: (e) =>
+            debugPrint('[AuthService] onAuthStateChange error during OAuth: $e'),
+      );
 
       // Timeout after 2 minutes if the user doesn't complete the flow.
       final email = await completer.future.timeout(
