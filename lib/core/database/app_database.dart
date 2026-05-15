@@ -116,7 +116,7 @@ class Users extends Table {
   TextColumn get pinSalt => text().nullable()();
   IntColumn get pinIterations => integer().nullable()();
   TextColumn get role => text()();
-  IntColumn get roleTier => integer().withDefault(const Constant(1))();
+  IntColumn get roleTier => integer().withDefault(const Constant(3))();
   TextColumn get avatarColor => text().withDefault(const Constant('#3B82F6'))();
   BoolColumn get biometricEnabled =>
       boolean().withDefault(const Constant(false))();
@@ -151,7 +151,7 @@ class BusinessMembers extends Table {
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get userId => text().references(Users, #id)();
   TextColumn get role => text()();
-  IntColumn get roleTier => integer().withDefault(const Constant(1))();
+  IntColumn get roleTier => integer().withDefault(const Constant(3))();
   TextColumn get warehouseId => text().nullable().references(Warehouses, #id)();
   TextColumn get pinHash => text().nullable()();
   TextColumn get pinSalt => text().nullable()();

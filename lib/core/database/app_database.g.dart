@@ -2298,7 +2298,7 @@ class $UsersTable extends Users with TableInfo<$UsersTable, UserData> {
     false,
     type: DriftSqlType.int,
     requiredDuringInsert: false,
-    defaultValue: const Constant(1),
+    defaultValue: const Constant(3),
   );
   static const VerificationMeta _avatarColorMeta = const VerificationMeta(
     'avatarColor',
@@ -3323,7 +3323,7 @@ class $BusinessMembersTable extends BusinessMembers
     false,
     type: DriftSqlType.int,
     requiredDuringInsert: false,
-    defaultValue: const Constant(1),
+    defaultValue: const Constant(3),
   );
   static const VerificationMeta _warehouseIdMeta = const VerificationMeta(
     'warehouseId',
