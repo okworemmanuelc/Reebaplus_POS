@@ -36,3 +36,124 @@ cases (extremely rare given LWW + realtime).
 **Trigger to unblock.** Once the role refactor is merged and stable on
 production for 1–2 weeks, revisit. Earlier if a returning-login UX
 complaint surfaces.
+
+## Non-CEO invitee acceptance blocked by missing profiles row
+
+**Status:** deferred (pre-existing structural gap, ~2 months old; surfaced
+during Step 14 Block 3 manual testing of the role refactor, **not caused
+by it**). Blocks non-CEO invitee fresh-device flow in production; CEO
+accounts are unaffected.
+
+**Diagnosis chain.** Reproduction was a manager invite redeemed end-to-end
+on a fresh emulator. Wizard completed server-side, then punted to the
+Welcome-back recovery screen, which then failed to load the account. Trace:
+
+1. Wizard's `_runRedeem` calls `redeem-invite` → cloud's `accept_invite`
+   RPC succeeds, creates `public.users` and `public.business_members`
+   rows for the invitee. **Does NOT create a `public.profiles` row** —
+   no migration in history ever has for non-CEO invitees.
+2. Client calls `applyServerResponse('accept_invite', data)` to seed
+   local Drift. The user-insert into Drift's `users` table fails with
+   `FOREIGN KEY constraint failed` because `users.business_id` references
+   `businesses.id` and `users.warehouse_id` references `warehouses.id` —
+   neither row exists on a fresh device.
+3. Orchestrator's `localUser == null` recovery path pivots to
+   `ExistingAccountScreen` (intended for cloud-has-account /
+   local-doesn't), which retries `syncOnLogin` behind clean UI.
+4. `syncOnLogin` calls `pullChanges` → cloud RLS denies every tenant
+   table because `public.business_id()` returns NULL: that function is
+   `SELECT business_id FROM public.profiles WHERE id = auth.uid()`, and
+   the invitee has no profiles row. Every tenant policy gates on
+   `business_id = public.business_id()`, so every SELECT returns zero
+   rows. The pull warning log says exactly this: `WARN pull returned 0
+   businesses rows — likely RLS denial (missing profiles row for
+   auth.uid()=...)`.
+5. Local Drift never receives the businesses / warehouses / users rows.
+   ExistingAccountScreen's "tap business" retry loops forever on the
+   same wall. The user is stuck.
+
+**Why this is pre-existing, not a refactor regression.** Grep across
+every migration in the repo:
+
+- `public.profiles` INSERTs exist in exactly 3 places: `0004_onboarding_resume.sql:106`,
+  `0018_complete_onboarding_rpc.sql:79`, `0023_complete_onboarding_seeds_membership.sql:75`.
+  All three are in the CEO owner-creation path, all three are hardcoded
+  `'ceo', 5`.
+- `accept_invite` (the canonical invitee-finalisation RPC) has never
+  written to `profiles` in any of its versions: `0022_accept_invite_rpc.sql`,
+  `0026_accept_invite_v3.sql`, or `0030_role_vocabulary_expansion.sql`.
+
+So the bug is as old as the multi-role system itself (~0020 in March 2026).
+It went unnoticed because every prior verification ran against a CEO
+test account, which trivially has a profiles row from the owner-onboarding
+RPC. The first non-CEO fresh-device wizard run is the first time the
+gap surfaces.
+
+**Proposed fix paths.** Audit required before picking.
+
+- **Path B — fix in 0030's `accept_invite` RPC.** Add `INSERT INTO
+  public.profiles (id, business_id, name, role, role_tier) VALUES
+  (v_auth_uid, v_invite.business_id, v_clean_name, v_invite.role,
+  v_role_tier) ON CONFLICT (id) DO UPDATE ...` adjacent to the existing
+  users/business_members inserts. Smallest code change, but expands
+  0030's scope from "role-vocabulary refactor" to "role-vocabulary
+  refactor plus invitee-RLS-principal fix". Also requires the Drift
+  side to start seeding a `profiles` table — verify whether Drift even
+  has a `profiles` table (almost certainly not, since the client has
+  never needed one). Adding a local `profiles` table is a schema bump
+  on its own.
+
+- **Path C — fix in `public.business_id()` helper.** Rewrite the
+  RLS principal-lookup function to fall back to `business_members` if
+  no profiles row exists:
+
+  ```sql
+  CREATE OR REPLACE FUNCTION public.business_id()
+  RETURNS uuid LANGUAGE sql STABLE AS $$
+    SELECT COALESCE(
+      (SELECT business_id FROM public.profiles       WHERE id        = auth.uid()),
+      (SELECT business_id FROM public.business_members
+       WHERE user_id = (SELECT id FROM public.users WHERE auth_user_id = auth.uid())
+       LIMIT 1)
+    )
+  $$;
+  ```
+
+  Smaller surface, no schema changes, no client work. **But** it admits
+  the semantic truth that `business_members` is the canonical
+  per-business state for everyone — which has implications for the
+  `profiles` table's role going forward (vestigial for non-CEOs? owner-
+  only intentionally? becomes a perma-CEO-flag?). Carries unknown
+  blast radius until someone audits every call site of
+  `public.business_id()` and every tenant RLS policy that depends on
+  it. The audit is the real cost here.
+
+- **Path D — sync-after-login redesign (see earlier entry in this file).**
+  If reads go local-first, the cloud-pull RLS denial stops being on the
+  critical path. But that work is bigger and explicitly parked. Not a
+  near-term option.
+
+**Recommendation.** Path C is technically cleanest and has the smallest
+diff. Pick Path C **after** an audit confirming:
+
+1. Every call site of `public.business_id()` is comfortable with the
+   COALESCE semantics (no caller assumes profiles-only).
+2. Every tenant RLS policy that uses `public.business_id()` still
+   produces correct results when the invitee's business_member row is
+   the source of truth.
+3. The `STABLE` function classification still holds with the COALESCE +
+   join (it should — both branches are read-only, deterministic for a
+   given `auth.uid()`).
+
+If the audit surfaces a non-trivial blast radius, fall back to Path B
+plus a parallel Drift `profiles` table addition.
+
+**Not in scope yet.** Backfill for any existing non-CEO members in
+production who currently lack a profiles row — depends on path chosen.
+Path B + a one-off backfill migration; Path C needs no backfill at all.
+
+**Trigger to unblock.** Required before any non-CEO invitee can complete
+the wizard on a fresh device in production. Block 5 of Step 14 (wizard
+E2E ×3) cannot run cleanly until this lands. Recommend new branch
+`fix/invitee-rls-principal` (or similar), starting with the call-site
+audit.
