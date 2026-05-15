@@ -284,8 +284,6 @@ class _InviteLandingScreenState extends ConsumerState<InviteLandingScreen> {
         return 'Cashier';
       case 'rider':
         return 'Rider';
-      case 'cleaner':
-        return 'Cleaner';
       default:
         return role.replaceAll('_', ' ').toUpperCase();
     }

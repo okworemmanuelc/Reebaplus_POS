@@ -1,7 +1,7 @@
 class Staff {
   final String id;
   final String name;
-  final String role; // CEO, Manager, Storekeeper, Cashier, Rider, Cleaner
+  final String role; // ceo, manager, stock_keeper, cashier, rider
 
   Staff({
     required this.id,
@@ -15,7 +15,7 @@ class StaffService {
 
   List<Staff> getAll() => _staffList;
 
-  List<Staff> getRiders() => _staffList.where((s) => s.role == 'Rider').toList();
+  List<Staff> getRiders() => _staffList.where((s) => s.role == 'rider').toList();
 }
 
 final staffService = StaffService();

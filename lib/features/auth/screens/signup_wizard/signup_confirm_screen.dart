@@ -26,19 +26,18 @@ class SignupConfirmScreen extends StatelessWidget {
 
   String _roleLabel(String role) {
     switch (role) {
-      case 'admin':
-        return 'Admin';
+      case 'ceo':
+        return 'CEO';
       case 'manager':
         return 'Manager';
+      case 'stock_keeper':
+        return 'Stock Keeper';
       case 'cashier':
         return 'Cashier';
-      case 'driver':
-        return 'Driver';
-      case 'warehouse':
-        return 'Warehouse';
-      case 'staff':
+      case 'rider':
+        return 'Rider';
       default:
-        return 'Staff';
+        return role;
     }
   }
 

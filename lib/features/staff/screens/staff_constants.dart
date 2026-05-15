@@ -2,12 +2,11 @@ import 'package:flutter/material.dart';
 
 // ── Role config ──────────────────────────────────────────────────────────────
 const roleOptions = [
-  RoleOption('CEO',         'ceo',         5, Color(0xFFFEF08A)),
-  RoleOption('Manager',     'manager',     4, Color(0xFFA855F7)),
-  RoleOption('Stock Keeper', 'stock_keeper', 3, Color(0xFF34D399)),
-  RoleOption('Cashier',     'cashier',     2, Color(0xFF3B82F6)),
-  RoleOption('Rider',       'rider',       1, Color(0xFFF97316)),
-  RoleOption('Cleaner',     'cleaner',     1, Color(0xFF94A3B8)),
+  RoleOption('CEO',          'ceo',          6, Color(0xFFFEF08A)),
+  RoleOption('Manager',      'manager',      5, Color(0xFFA855F7)),
+  RoleOption('Stock Keeper', 'stock_keeper', 4, Color(0xFF34D399)),
+  RoleOption('Cashier',      'cashier',      3, Color(0xFF3B82F6)),
+  RoleOption('Rider',        'rider',        2, Color(0xFFF97316)),
 ];
 
 class RoleOption {
