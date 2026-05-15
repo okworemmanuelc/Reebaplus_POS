@@ -1887,38 +1887,36 @@ class SupabaseSyncService {
                 : parseTs(r['lastNotificationSentAt']);
 
             // CHECK-constraint guard: local Users has
-            //   role IN ('admin','staff','ceo','manager') and
-            //   role_tier IN (1,4,5).
+            //   role IN ('ceo','manager','stock_keeper','cashier','rider')
+            //   role_tier IN (2,3,4,5,6)
+            // (v9 granular vocabulary — see migration 0030 / Drift v8→v9.)
             // A cloud row outside these sets would crash the whole pull at
-            // insert time. Coerce to the safe defaults and log so the data
-            // anomaly is investigable instead of silently locking the user
-            // out of the app.
-            const allowedRoles = {'admin', 'staff', 'ceo', 'manager'};
-            const allowedRoleTiers = {1, 4, 5};
+            // insert time. We log loudly and SKIP the row entirely. Silent
+            // coercion (the pre-v9 policy) masked data anomalies AND could
+            // demote a legit user — never again.
+            const allowedRoles = {
+              'ceo',
+              'manager',
+              'stock_keeper',
+              'cashier',
+              'rider',
+            };
+            const allowedRoleTiers = {2, 3, 4, 5, 6};
             final rawRole = r['role'] as String?;
-            String role;
-            if (rawRole != null && allowedRoles.contains(rawRole)) {
-              role = rawRole;
-            } else {
-              role = 'staff';
-              debugPrint(
-                '[SyncService] users restore: coerced invalid role '
-                '"${rawRole ?? "<null>"}" to "staff" for id=$id',
-              );
-            }
             final rawTier = (r['roleTier'] as num?)?.toInt();
-            int roleTier;
-            if (rawTier != null && allowedRoleTiers.contains(rawTier)) {
-              roleTier = rawTier;
-            } else {
-              roleTier = 1;
-              if (rawTier != null) {
-                debugPrint(
-                  '[SyncService] users restore: coerced invalid role_tier '
-                  '$rawTier to 1 for id=$id',
-                );
-              }
+            if (rawRole == null ||
+                !allowedRoles.contains(rawRole) ||
+                rawTier == null ||
+                !allowedRoleTiers.contains(rawTier)) {
+              debugPrint(
+                '[SyncService] users restore: dropping row id=$id '
+                'due to invalid role=${rawRole ?? "<null>"}/'
+                'tier=${rawTier ?? "<null>"}',
+              );
+              continue;
             }
+            final role = rawRole;
+            final roleTier = rawTier;
 
             if (existing != null) {
               await (_db.update(_db.users)
@@ -1962,11 +1960,24 @@ class SupabaseSyncService {
         case 'business_members':
           // PIN columns (pin_hash, pin_salt, pin_iterations) sync normally
           // per the staff-onboarding plan §2 — no device-local preservation.
-          // The CHECK-constraint guard mirrors the users case above: a cloud
-          // row with an out-of-range role / role_tier / status / verification
-          // would crash the whole pull at insert time. Coerce + log.
-          const allowedRoles = {'admin', 'staff', 'ceo', 'manager'};
-          const allowedRoleTiers = {1, 4, 5};
+          //
+          // Role / tier guard (v9 granular vocabulary): local Drift has
+          //   CHECK (role IN ('ceo','manager','stock_keeper','cashier','rider'))
+          //   CHECK (role_tier IN (2,3,4,5,6))
+          // A cloud row outside these sets would crash the whole pull at
+          // insert time. We log loudly and SKIP the row entirely — never
+          // silently coerce, which would mask data anomalies and could
+          // demote a legit user. Status / verification_status coercion
+          // below stays in the coerce-to-default form: those aren't
+          // permission-bearing and a stale/bogus value there is benign.
+          const allowedRoles = {
+            'ceo',
+            'manager',
+            'stock_keeper',
+            'cashier',
+            'rider',
+          };
+          const allowedRoleTiers = {2, 3, 4, 5, 6};
           const allowedStatuses = {'active', 'suspended', 'removed'};
           const allowedVerificationStatuses = {
             'not_started',
@@ -1977,20 +1988,17 @@ class SupabaseSyncService {
           for (var r in rows) {
             final id = r['id'] as String?;
             final rawRole = r['role'] as String?;
-            if (rawRole != null && !allowedRoles.contains(rawRole)) {
-              debugPrint(
-                '[SyncService] business_members restore: coerced invalid '
-                'role "$rawRole" to "staff" for id=$id',
-              );
-              r['role'] = 'staff';
-            }
             final rawTier = (r['roleTier'] as num?)?.toInt();
-            if (rawTier != null && !allowedRoleTiers.contains(rawTier)) {
+            if (rawRole == null ||
+                !allowedRoles.contains(rawRole) ||
+                rawTier == null ||
+                !allowedRoleTiers.contains(rawTier)) {
               debugPrint(
-                '[SyncService] business_members restore: coerced invalid '
-                'role_tier $rawTier to 1 for id=$id',
+                '[SyncService] business_members restore: dropping row id=$id '
+                'due to invalid role=${rawRole ?? "<null>"}/'
+                'tier=${rawTier ?? "<null>"}',
               );
-              r['roleTier'] = 1;
+              continue;
             }
             final rawStatus = r['status'] as String?;
             if (rawStatus != null &&
