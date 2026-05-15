@@ -24,7 +24,7 @@ Future<({String warehouseId, String staffId})> _seedCreateProductFixtures(
           id: Value(staffId),
           businessId: businessId,
           name: 'Stockkeeper',
-          role: 'admin',
+          role: 'ceo',
           pin: '0000',
         ),
       );

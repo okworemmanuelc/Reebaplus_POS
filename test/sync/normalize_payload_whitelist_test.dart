@@ -12,7 +12,7 @@ void main() {
         'id': 'abc',
         'business_id': 'biz',
         'name': 'Alice',
-        'role': 'admin',
+        'role': 'ceo',
         'pin': '0000',
         'password_hash': 'hash',
         'pin_salt': 'salt',
@@ -23,7 +23,7 @@ void main() {
       expect(scrubbed.containsKey('pin_salt'), isFalse);
       expect(scrubbed.containsKey('pin_iterations'), isFalse);
       expect(scrubbed['name'], 'Alice');
-      expect(scrubbed['role'], 'admin');
+      expect(scrubbed['role'], 'ceo');
     });
 
     test('sessions: token / ip_address / user_agent dropped', () {

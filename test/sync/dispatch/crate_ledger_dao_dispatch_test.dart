@@ -29,7 +29,7 @@ Future<
           id: Value(staffId),
           businessId: businessId,
           name: 'Crate Staff',
-          role: 'admin',
+          role: 'ceo',
           pin: '0000',
         ),
       );

@@ -20,7 +20,7 @@ Future<({String staffId, String warehouseId})> _seedExpenseFixtures(
           id: Value(staffId),
           businessId: businessId,
           name: 'Expense Staff',
-          role: 'admin',
+          role: 'ceo',
           pin: '0000',
         ),
       );
