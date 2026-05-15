@@ -268,8 +268,8 @@ class AuthService extends ValueNotifier<UserData?> {
       return SupabaseAccountInfo(
         businessId: businessId,
         businessName: businessName,
-        role: profile['role'] as String? ?? 'Staff',
-        roleTier: (profile['role_tier'] as num?)?.toInt() ?? 1,
+        role: profile['role'] as String? ?? 'cashier',
+        roleTier: (profile['role_tier'] as num?)?.toInt() ?? 3,
       );
     } catch (e) {
       debugPrint('[AuthService] fetchSupabaseAccount error: $e');
@@ -317,8 +317,8 @@ class AuthService extends ValueNotifier<UserData?> {
     if (profile == null) return null;
 
     final name = profile['name'] as String? ?? '';
-    final role = profile['role'] as String? ?? 'Staff';
-    final roleTier = (profile['role_tier'] as num?)?.toInt() ?? 1;
+    final role = profile['role'] as String? ?? 'cashier';
+    final roleTier = (profile['role_tier'] as num?)?.toInt() ?? 3;
     final businessId = profile['business_id'] as String?;
     final email = authUser.email!;
 
@@ -706,7 +706,7 @@ class AuthService extends ValueNotifier<UserData?> {
   /// Used by the PIN confirmation dialog and by refund / crate-return
   /// features that need a manager or CEO to approve.
   ///
-  /// Role tiers: 1 = Staff, 4 = Manager, 5 = CEO
+  /// Role tiers: 2=Rider, 3=Cashier, 4=Stock Keeper, 5=Manager, 6=CEO
   Future<bool> verifyPinForTier(String pin, int minimumTier) async {
     final matches = await getUsersByPin(pin);
     return matches.any((u) => u.roleTier >= minimumTier);
@@ -786,7 +786,7 @@ class AuthService extends ValueNotifier<UserData?> {
         email: Value(email),
         pin: setupRequiredPin,
         role: 'ceo',
-        roleTier: const Value(5),
+        roleTier: const Value(6),
         lastUpdatedAt: Value(now),
       );
       await _db.into(_db.users).insert(userComp);
@@ -895,7 +895,7 @@ class AuthService extends ValueNotifier<UserData?> {
                 email: Value(draft.email),
                 pin: setupRequiredPin,
                 role: 'ceo',
-                roleTier: const Value(5),
+                roleTier: const Value(6),
                 warehouseId: Value(draft.warehouseId),
                 lastUpdatedAt: Value(now),
               ),
