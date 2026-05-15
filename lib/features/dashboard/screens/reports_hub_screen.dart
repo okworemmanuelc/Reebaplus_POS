@@ -13,6 +13,7 @@ import 'package:reebaplus_pos/features/dashboard/screens/sales_detail_screen.dar
 import 'package:reebaplus_pos/features/expenses/screens/expenses_screen.dart';
 import 'package:reebaplus_pos/features/customers/screens/customers_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
+import 'package:reebaplus_pos/shared/widgets/role_guard.dart';
 
 class ReportsHubScreen extends ConsumerStatefulWidget {
   const ReportsHubScreen({super.key});
@@ -92,73 +93,100 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
                 MaterialPageRoute(builder: (_) => const ApprovalsScreen()),
               ),
             ),
-            _buildReportCard(
-              context,
-              title: 'Sales Report',
-              subtitle: 'Revenue & Volume',
-              icon: FontAwesomeIcons.chartLine,
-              color: context.primaryColor,
-              locked: !isCeo,
-              onTap: () {
-                if (!isCeo) {
-                  AppNotification.showInfo(context, 'CEO access required');
-                  return;
-                }
-                final ordersAsync = ref.read(allOrdersProvider);
-                ordersAsync.whenData((allOrders) {
-                  final filtered = allOrders
-                      .where((o) =>
-                          o.order.status == 'completed' &&
-                          _isDateInPeriod(o.order.createdAt, _selectedPeriod))
-                      .toList();
+            RoleGuard(
+              minTier: 6,
+              fallback: _buildReportCard(
+                context,
+                title: 'Sales Report',
+                subtitle: 'Revenue & Volume',
+                icon: FontAwesomeIcons.chartLine,
+                color: context.primaryColor,
+                locked: true,
+                onTap: () =>
+                    AppNotification.showInfo(context, 'CEO access required'),
+              ),
+              child: _buildReportCard(
+                context,
+                title: 'Sales Report',
+                subtitle: 'Revenue & Volume',
+                icon: FontAwesomeIcons.chartLine,
+                color: context.primaryColor,
+                locked: false,
+                onTap: () {
+                  final ordersAsync = ref.read(allOrdersProvider);
+                  ordersAsync.whenData((allOrders) {
+                    final filtered = allOrders
+                        .where((o) =>
+                            o.order.status == 'completed' &&
+                            _isDateInPeriod(o.order.createdAt, _selectedPeriod))
+                        .toList();
+                    Navigator.push(
+                      context,
+                      slideDownRoute(
+                        SalesDetailScreen(
+                          orders: filtered,
+                          mode: 'sales',
+                          period: _selectedPeriod,
+                        ),
+                      ),
+                    );
+                  });
+                },
+              ),
+            ),
+            RoleGuard(
+              minTier: 6,
+              fallback: _buildReportCard(
+                context,
+                title: 'Expense Tracker',
+                subtitle: 'Outflow Analysis',
+                icon: FontAwesomeIcons.fileInvoiceDollar,
+                color: Colors.redAccent,
+                locked: true,
+                onTap: () =>
+                    AppNotification.showInfo(context, 'CEO access required'),
+              ),
+              child: _buildReportCard(
+                context,
+                title: 'Expense Tracker',
+                subtitle: 'Outflow Analysis',
+                icon: FontAwesomeIcons.fileInvoiceDollar,
+                color: Colors.redAccent,
+                locked: false,
+                onTap: () {
                   Navigator.push(
                     context,
-                    slideDownRoute(
-                      SalesDetailScreen(
-                        orders: filtered,
-                        mode: 'sales',
-                        period: _selectedPeriod,
-                      ),
-                    ),
+                    MaterialPageRoute(builder: (_) => const ExpensesScreen()),
                   );
-                });
-              },
+                },
+              ),
             ),
-            _buildReportCard(
-              context,
-              title: 'Expense Tracker',
-              subtitle: 'Outflow Analysis',
-              icon: FontAwesomeIcons.fileInvoiceDollar,
-              color: Colors.redAccent,
-              locked: !isCeo,
-              onTap: () {
-                if (!isCeo) {
-                  AppNotification.showInfo(context, 'CEO access required');
-                  return;
-                }
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const ExpensesScreen()),
-                );
-              },
-            ),
-            _buildReportCard(
-              context,
-              title: 'Stock Audit',
-              subtitle: 'Inventory Health',
-              icon: FontAwesomeIcons.boxesStacked,
-              color: Colors.blueAccent,
-              locked: !isCeo,
-              onTap: () {
-                if (!isCeo) {
-                  AppNotification.showInfo(context, 'CEO access required');
-                  return;
-                }
-                Navigator.push(
-                  context,
-                  slideDownRoute(const StockAuditScreen()),
-                );
-              },
+            RoleGuard(
+              minTier: 6,
+              fallback: _buildReportCard(
+                context,
+                title: 'Stock Audit',
+                subtitle: 'Inventory Health',
+                icon: FontAwesomeIcons.boxesStacked,
+                color: Colors.blueAccent,
+                locked: true,
+                onTap: () =>
+                    AppNotification.showInfo(context, 'CEO access required'),
+              ),
+              child: _buildReportCard(
+                context,
+                title: 'Stock Audit',
+                subtitle: 'Inventory Health',
+                icon: FontAwesomeIcons.boxesStacked,
+                color: Colors.blueAccent,
+                locked: false,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    slideDownRoute(const StockAuditScreen()),
+                  );
+                },
+              ),
             ),
             _buildReportCard(
               context,

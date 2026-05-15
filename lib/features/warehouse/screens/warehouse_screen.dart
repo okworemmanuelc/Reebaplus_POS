@@ -11,6 +11,7 @@ import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
 import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
+import 'package:reebaplus_pos/shared/widgets/role_guard.dart';
 
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -530,10 +531,13 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
           SizedBox(width: rSize(context, 8)),
         ],
       ),
-      floatingActionButton: AppFAB(
-        onPressed: () => _showAddSheet(context),
-        icon: Icons.add_rounded,
-        label: 'Add Warehouse',
+      floatingActionButton: RoleGuard(
+        minTier: 6,
+        child: AppFAB(
+          onPressed: () => _showAddSheet(context),
+          icon: Icons.add_rounded,
+          label: 'Add Warehouse',
+        ),
       ),
       body: Builder(
         builder: (context) {

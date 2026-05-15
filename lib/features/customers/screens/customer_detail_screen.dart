@@ -23,6 +23,7 @@ import 'package:reebaplus_pos/core/widgets/status_badge.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_builder.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/shared/widgets/role_guard.dart';
 import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
 import 'package:reebaplus_pos/shared/widgets/printer_picker.dart';
 import 'package:reebaplus_pos/shared/widgets/receipt_widget.dart';
@@ -949,43 +950,46 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
               ],
             ),
             SizedBox(height: context.getRSize(14)),
-            Row(
-              children: [
-                Expanded(
-                  child: AmberButton(
-                    label: 'Add Funds',
-                    icon: FontAwesomeIcons.plus,
-                    height: 42,
-                    onPressed: _showAddFundsSheet,
-                  ),
-                ),
-                SizedBox(width: context.getRSize(10)),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _showSetLimitSheet,
-                    icon: Icon(
-                      FontAwesomeIcons.penToSquare,
-                      size: 14,
-                      color: theme.colorScheme.onSurface,
+            RoleGuard(
+              minTier: 5,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: AmberButton(
+                      label: 'Add Funds',
+                      icon: FontAwesomeIcons.plus,
+                      height: 42,
+                      onPressed: _showAddFundsSheet,
                     ),
-                    label: Text(
-                      'Set Limit',
-                      style: TextStyle(
-                        fontSize: context.getRFontSize(14),
-                        fontWeight: FontWeight.w600,
+                  ),
+                  SizedBox(width: context.getRSize(10)),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _showSetLimitSheet,
+                      icon: Icon(
+                        FontAwesomeIcons.penToSquare,
+                        size: 14,
                         color: theme.colorScheme.onSurface,
                       ),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: Size(0, context.getRSize(42)),
-                      side: BorderSide(color: theme.dividerColor),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                      label: Text(
+                        'Set Limit',
+                        style: TextStyle(
+                          fontSize: context.getRFontSize(14),
+                          fontWeight: FontWeight.w600,
+                          color: theme.colorScheme.onSurface,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: Size(0, context.getRSize(42)),
+                        side: BorderSide(color: theme.dividerColor),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ],
         ),

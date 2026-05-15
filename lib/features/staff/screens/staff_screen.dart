@@ -168,7 +168,7 @@ class _StaffScreenState extends ConsumerState<StaffScreen> {
       drawer: const AppDrawer(activeRoute: 'staff'),
       body: _buildBody(currentUser),
       floatingActionButton: RoleGuard(
-        minTier: 4,
+        minTier: 5,
         fallback: const SizedBox.shrink(),
         child: AppFAB(
           onPressed: () => _showStaffSheet(context),
@@ -446,7 +446,7 @@ class _StaffScreenState extends ConsumerState<StaffScreen> {
                 ),
                 if (!isDisabled && item.status == 'active')
                   RoleGuard(
-                    minTier: 4,
+                    minTier: 5,
                     fallback: const SizedBox.shrink(),
                     child: IconButton(
                       onPressed: () => _showStaffActions(context, item),

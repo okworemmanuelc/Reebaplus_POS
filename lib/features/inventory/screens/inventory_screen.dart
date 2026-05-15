@@ -33,6 +33,7 @@ import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
+import 'package:reebaplus_pos/shared/widgets/role_guard.dart';
 
 class InventoryScreen extends ConsumerStatefulWidget {
   const InventoryScreen({super.key});
@@ -219,10 +220,13 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       backgroundColor: _bg,
       appBar: _buildAppBar(context),
       floatingActionButton: _currentTab == 0
-          ? AppFAB(
-              onPressed: _showAddProductSheet,
-              icon: FontAwesomeIcons.plus,
-              label: 'Add Product',
+          ? RoleGuard(
+              minTier: 5,
+              child: AppFAB(
+                onPressed: _showAddProductSheet,
+                icon: FontAwesomeIcons.plus,
+                label: 'Add Product',
+              ),
             )
           : null,
       body: SafeArea(

@@ -183,7 +183,7 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
             ),
           ),
           RoleGuard(
-            minTier: 4,
+            minTier: 5,
             fallback: _buildRoleTag(roleFor(widget.user.role)),
             child: InkWell(
               onTap: () => _showRolePicker(context),
@@ -433,7 +433,7 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
             if (showExtendButton) ...[
               SizedBox(height: rSize(context, 16)),
               RoleGuard(
-                minTier: 4,
+                minTier: 5,
                 fallback: const SizedBox.shrink(),
                 child: _buildExtendButton(member),
               ),

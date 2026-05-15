@@ -16,6 +16,7 @@ import 'package:reebaplus_pos/features/customers/screens/customer_detail_screen.
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
+import 'package:reebaplus_pos/shared/widgets/role_guard.dart';
 
 class CustomersScreen extends ConsumerStatefulWidget {
   const CustomersScreen({super.key});
@@ -82,7 +83,6 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
 
         final user = ref.read(authProvider).currentUser;
         final roleTier = user?.roleTier ?? 0;
-        final isManagerOrAbove = roleTier >= 5;
 
         return Scaffold(
           backgroundColor: bgCol,
@@ -91,14 +91,16 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
           body: Column(
             children: [
               // ── Warehouse filter dropdown (managers and CEO only) ──
-              if (isManagerOrAbove)
-                _buildWarehouseFilter(
+              RoleGuard(
+                minTier: 5,
+                child: _buildWarehouseFilter(
                   context,
                   surfaceCol,
                   textCol,
                   subtextCol,
                   borderCol,
                 ),
+              ),
 
               Expanded(
                 child: Builder(
@@ -169,11 +171,14 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
               ),
             ],
           ),
-          floatingActionButton: AppFAB(
-            heroTag: 'customers_fab',
-            onPressed: () => AddCustomerSheet.show(context),
-            icon: FontAwesomeIcons.userPlus,
-            label: 'Add Customer',
+          floatingActionButton: RoleGuard(
+            minTier: 5,
+            child: AppFAB(
+              heroTag: 'customers_fab',
+              onPressed: () => AddCustomerSheet.show(context),
+              icon: FontAwesomeIcons.userPlus,
+              label: 'Add Customer',
+            ),
           ),
         );
   }

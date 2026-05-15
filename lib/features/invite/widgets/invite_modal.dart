@@ -31,6 +31,7 @@ import 'package:reebaplus_pos/features/invite/services/invite_api_service.dart';
 import 'package:reebaplus_pos/features/staff/screens/staff_constants.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
+import 'package:reebaplus_pos/shared/widgets/role_guard.dart';
 
 class InviteModal extends ConsumerStatefulWidget {
   final List<WarehouseData> warehouses;
@@ -386,10 +387,13 @@ This invitation expires in 7 days.""";
         _inlineErrorBanner(),
       ],
       const SizedBox(height: 24),
-      AppButton(
-        text: 'Send Invitation',
-        isLoading: _busy && _pendingInviteId == null,
-        onPressed: _busy ? null : _onSendFromDetails,
+      RoleGuard(
+        minTier: 5,
+        child: AppButton(
+          text: 'Send Invitation',
+          isLoading: _busy && _pendingInviteId == null,
+          onPressed: _busy ? null : _onSendFromDetails,
+        ),
       ),
     ];
   }

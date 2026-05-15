@@ -16,6 +16,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/features/invite/widgets/code_share_card.dart';
 import 'package:reebaplus_pos/features/staff/screens/staff_constants.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/shared/widgets/role_guard.dart';
 
 class InvitePendingSheet extends StatelessWidget {
   final InviteData invite;
@@ -113,18 +114,26 @@ class InvitePendingSheet extends StatelessWidget {
             const SizedBox(height: 16),
             Divider(color: subtleColor.withValues(alpha: 0.2), height: 1),
             const SizedBox(height: 16),
-            AppButton(
-              text: 'Regenerate code',
-              variant: AppButtonVariant.secondary,
-              onPressed: onRegenerate,
+            RoleGuard(
+              minTier: 5,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AppButton(
+                    text: 'Regenerate code',
+                    variant: AppButtonVariant.secondary,
+                    onPressed: onRegenerate,
+                  ),
+                  const SizedBox(height: 8),
+                  AppButton(
+                    text: 'Revoke invite',
+                    variant: AppButtonVariant.danger,
+                    onPressed: onRevoke,
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
             ),
-            const SizedBox(height: 8),
-            AppButton(
-              text: 'Revoke invite',
-              variant: AppButtonVariant.danger,
-              onPressed: onRevoke,
-            ),
-            const SizedBox(height: 8),
             AppButton(
               text: 'Close',
               variant: AppButtonVariant.ghost,
