@@ -56,6 +56,14 @@ class _InviteModalState extends ConsumerState<InviteModal> {
       roleOptions.firstWhere((r) => r.value == 'cashier');
   String? _selectedWarehouseId;
 
+  // Runtime-filtered invite options based on the inviter's role. Computed
+  // once in initState from authProvider.currentUser.role:
+  //   ceo     → manager, stock_keeper, cashier, rider
+  //   manager → stock_keeper, cashier, rider
+  //   other   → empty list, _canInvite = false
+  List<RoleOption> _inviteRoles = const [];
+  bool _canInvite = false;
+
   // Filled after successful send-invite / resend-invite.
   String? _resultCode; // 8-char legacy code
   String? _resultHumanCode; // 6-char in-person code (Phase 2)
@@ -72,7 +80,30 @@ class _InviteModalState extends ConsumerState<InviteModal> {
     if (widget.warehouses.isNotEmpty) {
       _selectedWarehouseId = widget.warehouses.first.id;
     }
+    _initInviteRoles();
     _loadBusinessName();
+  }
+
+  void _initInviteRoles() {
+    final inviterRole = ref.read(authProvider).currentUser?.role;
+    final List<String> allowed;
+    switch (inviterRole) {
+      case 'ceo':
+        allowed = const ['manager', 'stock_keeper', 'cashier', 'rider'];
+      case 'manager':
+        allowed = const ['stock_keeper', 'cashier', 'rider'];
+      default:
+        allowed = const [];
+    }
+    _inviteRoles =
+        roleOptions.where((r) => allowed.contains(r.value)).toList();
+    _canInvite = _inviteRoles.isNotEmpty;
+    if (_canInvite) {
+      _selectedRole = _inviteRoles.firstWhere(
+        (r) => r.value == 'cashier',
+        orElse: () => _inviteRoles.first,
+      );
+    }
   }
 
   Future<void> _loadBusinessName() async {
@@ -246,13 +277,29 @@ This invitation expires in 7 days.""";
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: switch (_phase) {
-          _Phase.email => _emailStep(),
-          _Phase.details => _detailsStep(),
-          _Phase.success => _successStep(),
-        },
+        children: _canInvite
+            ? switch (_phase) {
+                _Phase.email => _emailStep(),
+                _Phase.details => _detailsStep(),
+                _Phase.success => _successStep(),
+              }
+            : _noPermissionStep(),
       ),
     );
+  }
+
+  List<Widget> _noPermissionStep() {
+    return [
+      _header(
+        'No permission',
+        "You don't have permission to invite staff.",
+      ),
+      const SizedBox(height: 24),
+      AppButton(
+        text: 'Close',
+        onPressed: () => Navigator.of(context).maybePop(),
+      ),
+    ];
   }
 
   List<Widget> _emailStep() {
@@ -294,8 +341,7 @@ This invitation expires in 7 days.""";
   List<Widget> _detailsStep() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : Colors.black;
-    final inviteRoles =
-        roleOptions.where((r) => r.value != 'ceo').toList();
+    final inviteRoles = _inviteRoles;
     return [
       _header('Invite Staff', 'Pick role and warehouse, then send.'),
       const SizedBox(height: 16),
@@ -330,7 +376,7 @@ This invitation expires in 7 days.""";
       const SizedBox(height: 16),
       AppDropdown<RoleOption>(
         labelText: 'Role & Access Level',
-        value: _selectedRole.value == 'ceo' ? inviteRoles.last : _selectedRole,
+        value: _selectedRole,
         items: inviteRoles
             .map((r) => DropdownMenuItem<RoleOption>(
                   value: r,
