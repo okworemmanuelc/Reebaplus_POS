@@ -122,6 +122,10 @@ class _SignupOrchestratorState extends ConsumerState<SignupOrchestrator> {
     if (!mounted) return;
 
     if (result is InviteApiErr<Map<String, dynamic>>) {
+      debugPrint(
+        '[SignupOrchestrator] redeem failed: code=${result.code} '
+        'message=${result.message} details=${result.details}',
+      );
       AppNotification.showError(context, result.message);
       return;
     }
@@ -130,6 +134,12 @@ class _SignupOrchestratorState extends ConsumerState<SignupOrchestrator> {
     final membership = data['membership'] as Map?;
     final businessId = membership?['business_id']?.toString();
     if (businessId == null || businessId.isEmpty) {
+      debugPrint(
+        '[SignupOrchestrator] redeem returned unexpected shape: '
+        'keys=${data.keys.toList()} '
+        'membershipKeys=${membership?.keys.toList()} '
+        'businessId=$businessId',
+      );
       AppNotification.showError(
         context,
         'Server returned an unexpected response. Please retry.',
