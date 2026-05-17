@@ -94,6 +94,16 @@ class AuthService extends ValueNotifier<UserData?> {
   /// The currently logged-in user, or null if nobody is logged in.
   UserData? get currentUser => value;
 
+  /// Whether Supabase currently has an active auth session. Reading this is
+  /// cheap and does not force a network refresh — supabase-flutter refreshes
+  /// the JWT lazily on the next cloud call. A `false` result means there is
+  /// no persisted session at all (signed out, refresh-token rotation gave up,
+  /// SDK storage wiped, or this device never authenticated). PIN unlock and
+  /// the post-auth shell must gate on this so we never mount tenant-scoped UI
+  /// without a JWT — every cloud write would otherwise pile up in the queue
+  /// with `pushPending` skipping on "no auth session".
+  bool get hasSupabaseSession => _supabase.auth.currentUser != null;
+
   /// Active membership for [currentUser] in the current business. Loaded
   /// lazily by [_refreshActiveMember] in [setCurrentUser] and cleared on
   /// logout. New screens (verification badge, member list, etc.) read this

@@ -75,25 +75,26 @@ so the app build and cloud changes ship in one tight window.
 ## Deploy sequence (when ready)
 
 ⚠ **Critical timing window.** Between cloud migration landing and the new
-app build being installed on the device, the old app binary will crash
+app build being installed on the emulator, the old app binary will crash
 on `syncOnLogin` because its v8 Drift CHECK rejects the now-tier-6 CEO
-row coming back from cloud. Minimize the window:
+row coming back from cloud. Minimize the window (emulator workflow):
 
-1. **Build the new app first.** Have APK/IPA staged and ready before
-   touching cloud.
-2. **Deploy cloud migration:** `supabase db push` (applies 0030).
-3. **Deploy edge functions:** `supabase functions deploy send-invite
+1. **Deploy cloud migration:** `supabase db push` (applies 0030).
+2. **Deploy edge functions:** `supabase functions deploy send-invite
    revoke-invite check-invite-email accept-invite resend-invite
    redeem-invite`.
-4. **Install the new app build IMMEDIATELY.** Do NOT open the existing
-   app build between steps 2 and 4.
+3. **`flutter run` against the emulator IMMEDIATELY.** Compiles +
+   installs + launches in one step. Stop any prior `flutter run`
+   process first so the install replaces the binary (hot-restart
+   on the old process is not enough — the v8 Drift CHECK is baked
+   into the installed APK).
 
-**User instruction:** do not use the app between cloud deploy and app
-rebuild. If you accidentally open the old build, `syncOnLogin` will
-fail with a `CHECK constraint failed: role_tier IN (1,4,5)` error —
-recovery is to close the app and install the new build. No data loss
-because the failure is purely client-side validation; cloud state is
-already consistent.
+**User instruction:** do not tap the existing emulator binary between
+cloud deploy and `flutter run`. If you accidentally open the old build,
+`syncOnLogin` will fail with a `CHECK constraint failed: role_tier IN
+(1,4,5)` error — recovery is to stop the process and `flutter run`
+again. No data loss because the failure is purely client-side
+validation; cloud state is already consistent.
 
 ### ⚠ Known broken flow post-deploy: non-CEO invitee acceptance
 

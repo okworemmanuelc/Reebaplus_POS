@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/dashboard_screen.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/add_product_sheet.dart';
 import 'package:reebaplus_pos/features/pos/screens/pos_home_screen.dart';
 import 'package:reebaplus_pos/features/inventory/screens/inventory_screen.dart';
 import 'package:reebaplus_pos/features/orders/screens/orders_screen.dart';
@@ -15,6 +16,7 @@ import 'package:reebaplus_pos/features/deliveries/screens/deliveries_screen.dart
 import 'package:reebaplus_pos/shared/widgets/activity_log_screen.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/shared/models/order.dart';
+import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/widgets/tab_navigator.dart';
 
@@ -40,6 +42,15 @@ class _MainLayoutState extends ConsumerState<MainLayout>
 
   // One pop-observer per tab; created in initState once `nav` is available.
   late final List<_TabPopObserver> _observers;
+
+  // Captured at initState — the tab-index listener and the WidgetsBindingObserver
+  // didPopRoute callback both fire across navigator-key regeneration windows
+  // (AuthService.setCurrentUser → nav.setIndex(...) → fires listener; back-press
+  // → didPopRoute) where this State could already be element-unmounted. Touching
+  // `ref` from those callbacks would race the riverpod invalidation, so capture
+  // the providers up front. See plan §"Bug fix" Pattern 2.
+  late final NavigationService _nav;
+  late final AuthService _auth;
 
   // Track which tabs have ever been visited
   final Set<int> _initializedTabs = {};
@@ -79,14 +90,15 @@ class _MainLayoutState extends ConsumerState<MainLayout>
     WidgetsBinding.instance.addObserver(this);
 
     // Link shared keys
-    final nav = ref.read(navigationProvider);
-    nav.tabNavigatorKeys = _navigatorKeys;
+    _nav = ref.read(navigationProvider);
+    _auth = ref.read(authProvider);
+    _nav.tabNavigatorKeys = _navigatorKeys;
 
-    _observers = List.generate(12, (i) => _TabPopObserver(tabIndex: i, nav: nav));
+    _observers = List.generate(12, (i) => _TabPopObserver(tabIndex: i, nav: _nav));
 
     // Only pre-load the landing tab
-    _initializedTabs.add(nav.currentIndex.value);
-    _previousTabIndex = nav.currentIndex.value;
+    _initializedTabs.add(_nav.currentIndex.value);
+    _previousTabIndex = _nav.currentIndex.value;
 
     _tabSwitchController = AnimationController(
       vsync: this,
@@ -98,7 +110,7 @@ class _MainLayoutState extends ConsumerState<MainLayout>
       curve: Curves.easeOut,
     );
 
-    nav.currentIndex.addListener(_onTabIndexChanged);
+    _nav.currentIndex.addListener(_onTabIndexChanged);
 
     _pendingOrdersSub = ref
         .read(orderServiceProvider)
@@ -106,19 +118,36 @@ class _MainLayoutState extends ConsumerState<MainLayout>
         .listen((orders) {
           if (mounted) setState(() => _pendingOrderCount = orders.length);
         });
+
+    // Consume the one-shot AddProductSheet flag set by SuccessDashboardEntryScreen.
+    // Defer to first post-frame so mainScaffoldKey is wired before showing.
+    if (_nav.consumeAutoShowAddProductSheet()) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final scaffoldCtx = _nav.mainScaffoldKey.currentContext;
+        if (scaffoldCtx != null && scaffoldCtx.mounted) {
+          showModalBottomSheet(
+            context: scaffoldCtx,
+            isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            builder: (_) => const AddProductSheet(),
+          );
+        }
+      });
+    }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    ref.read(navigationProvider).currentIndex.removeListener(_onTabIndexChanged);
+    _nav.currentIndex.removeListener(_onTabIndexChanged);
     _tabSwitchController.dispose();
     _pendingOrdersSub?.cancel();
     super.dispose();
   }
 
   void _onTabIndexChanged() {
-    final newIndex = ref.read(navigationProvider).currentIndex.value;
+    final newIndex = _nav.currentIndex.value;
     if (newIndex == _previousTabIndex) return;
     _previousTabIndex = newIndex;
     _tabSwitchController.forward(from: 0);
@@ -126,11 +155,14 @@ class _MainLayoutState extends ConsumerState<MainLayout>
 
   /// Intercepts the system back button at the highest level, before any
   /// nested Navigator (TabNavigator) can consume it.
+  ///
+  /// Reads `currentUser` directly off the captured AuthService — `ref` is
+  /// not safe here because back-press can fire during navigator-key
+  /// regeneration. See plan §"Bug fix" Pattern 2.
   @override
   Future<bool> didPopRoute() async {
-    final nav = ref.read(navigationProvider);
-    final user = ref.read(authProvider).currentUser;
-    nav.handleBackPress(context, user?.roleTier ?? 1);
+    final user = _auth.currentUser;
+    _nav.handleBackPress(context, user?.roleTier ?? 1);
     return true; // Always consume — we handle everything ourselves.
   }
 

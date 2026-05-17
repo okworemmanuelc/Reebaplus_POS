@@ -185,14 +185,8 @@ class _InviteModalState extends ConsumerState<InviteModal> {
 
   Future<void> _onSendFromDetails() async {
     final email = _emailCtrl.text.trim().toLowerCase();
-    final phone = _phoneCtrl.text.trim();
     if (_selectedWarehouseId == null) {
       setState(() => _inlineError = 'Pick a warehouse first.');
-      return;
-    }
-    if (phone.isEmpty) {
-      setState(() => _inlineError =
-          "Enter a phone number — we'll send an SMS with the join code.");
       return;
     }
     setState(() {
@@ -204,16 +198,15 @@ class _InviteModalState extends ConsumerState<InviteModal> {
       email: email,
       role: _selectedRole.value,
       warehouseId: _selectedWarehouseId,
-      phone: phone,
     );
     if (!mounted) return;
     _consumeIssueResult(result, email);
   }
 
-  void _consumeIssueResult(
+  Future<void> _consumeIssueResult(
     InviteApiResult<Map<String, dynamic>> result,
     String email,
-  ) {
+  ) async {
     if (result is InviteApiErr<Map<String, dynamic>>) {
       final pendingId = _extractPendingInviteId(result);
       setState(() {
@@ -224,6 +217,21 @@ class _InviteModalState extends ConsumerState<InviteModal> {
       return;
     }
     final data = (result as InviteApiOk<Map<String, dynamic>>).data;
+    // Seed the freshly issued invite into local Drift via the canonical
+    // restore path so the staff list shows the row immediately without
+    // waiting for the next sync pull. Same seam redeem-invite uses.
+    final inviteRow = data['invite'];
+    if (inviteRow is Map) {
+      try {
+        await ref.read(supabaseSyncServiceProvider).applyServerResponse(
+              'send_invite',
+              {'invite': Map<String, dynamic>.from(inviteRow)},
+            );
+      } catch (_) {
+        // Seeding is best-effort — the next pull will catch up.
+      }
+    }
+    if (!mounted) return;
     setState(() {
       _busy = false;
       _phase = _Phase.success;

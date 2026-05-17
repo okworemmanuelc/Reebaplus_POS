@@ -145,7 +145,13 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
       _errorMessage = null;
     });
 
-    final error = await ref.read(authProvider).verifyOtp(widget.email, otp);
+    // Capture provider up front — `ref` is invalidated the moment this widget's
+    // element is unmounted (BEFORE State.mounted flips), and this method
+    // crosses several `await`s that race that window. See plan §"Bug fix"
+    // Pattern 1.
+    final auth = ref.read(authProvider);
+
+    final error = await auth.verifyOtp(widget.email, otp);
 
     if (!mounted) return;
 
@@ -188,9 +194,7 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
     if (!mounted) return;
 
     // Mark this session as email-authenticated (triggers second OTP after PIN).
-    await ref.read(authProvider).saveAuthMethod('email');
-
-    final auth = ref.read(authProvider);
+    await auth.saveAuthMethod('email');
 
     // Deep-link invite path: a pending token short-circuits the regular
     // post-OTP routing. The redeem RPC creates profiles + users atomically;

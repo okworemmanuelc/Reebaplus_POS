@@ -26,6 +26,10 @@ class NotificationsModal extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final db = ref.read(databaseProvider);
     final notifService = ref.read(notificationProvider);
+    // Watch (not read) so the modal rebuilds when AuthService.value flips
+    // to null mid-logout; the sync stream below would otherwise re-build a
+    // tenant-scoped query and trip requireBusinessId().
+    final loggedIn = ref.watch(authProvider).currentUser != null;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => Navigator.pop(context),
@@ -62,8 +66,12 @@ class NotificationsModal extends ConsumerWidget {
                   // Header
                   _buildHeader(context, ref: ref),
 
-                  // Sync Status Banner
-                  StreamBuilder<int>(
+                  // Sync Status Banner — gated on auth: the inline DAO stream
+                  // builds a fresh tenant-scoped query on every rebuild and
+                  // would otherwise hit requireBusinessId() during logout.
+                  if (!loggedIn)
+                    const SizedBox.shrink()
+                  else StreamBuilder<int>(
                     stream: db.syncDao.watchPendingCount(),
                     builder: (context, snap) {
                       final count = snap.data ?? 0;

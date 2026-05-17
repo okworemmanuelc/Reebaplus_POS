@@ -334,6 +334,44 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   Future<void> _enterApp(UserData user) async {
     if (!mounted) return;
 
+    // Capture provider up front. setCurrentUser triggers navigator-key
+    // regeneration which disposes this screen — by then the post-await
+    // `ref` would be invalidated. See plan §"Bug fix" Pattern 1.
+    final auth = ref.read(authProvider);
+
+    // PIN matched a local row, but RLS + sync push need a Supabase JWT too.
+    // If the SDK has no current session (refresh token gave up, signed out
+    // by another path, SDK storage wiped), bounce the user through OTP to
+    // re-establish the JWT before mounting MainLayout. Without this guard
+    // every cloud write piles up in the queue with `pushPending` skipping
+    // on "no auth session", and the Sync Issues screen reports
+    // "no profiles row for current auth.uid()" / "no active Supabase
+    // session" with no path to recovery.
+    if (!auth.hasSupabaseSession && (user.email ?? '').isNotEmpty) {
+      setState(() {
+        _checking = false;
+        _loginSuccess = false;
+      });
+      _pinNotifier.value = '';
+      AppNotification.showError(
+        context,
+        'Your session expired. Please verify your email to continue.',
+      );
+      final error = await auth.sendOtp(user.email!);
+      if (!mounted) return;
+      if (error != null) {
+        AppNotification.showError(context, error);
+        return;
+      }
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) =>
+              OtpVerificationScreen(user: user, email: user.email!),
+        ),
+      );
+      return;
+    }
+
     // Brief pause so the user sees all 6 dots filled before the overlay swap.
     await Future.delayed(const Duration(milliseconds: 100));
     if (!mounted) return;
@@ -350,7 +388,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     if (!mounted) return;
 
     // Users proceed directly to the app using PIN.
-    ref.read(authProvider).setCurrentUser(user);
+    auth.setCurrentUser(user);
     // Navigator key regeneration in main.dart handles routing automatically.
   }
 

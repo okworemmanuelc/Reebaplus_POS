@@ -44,22 +44,31 @@ class BusinessTypeSelectionScreen extends ConsumerWidget {
   }
 
   Future<void> _onRegister(BuildContext context, WidgetRef ref) async {
+    // Capture providers up front — `ref` (from the build-call's WidgetRef
+    // closure) is invalidated when this stateless ConsumerWidget's element
+    // is unmounted, which can race with `_ensureOnline` showing a dialog
+    // and the user navigating away. See plan §"Bug fix" Pattern 1.
+    final db = ref.read(databaseProvider);
+    final draftNotifier = ref.read(onboardingDraftProvider.notifier);
     if (!await _ensureOnline(context)) return;
     if (!context.mounted) return;
     // Ensure the database is completely empty before starting a new business
-    await ref.read(databaseProvider).clearAllData();
+    await db.clearAllData();
     // Seed a fresh draft for the wizard. Overwrites any prior draft so an
     // abandoned-then-restarted onboarding doesn't inherit stale fields.
-    ref.read(onboardingDraftProvider.notifier).start(email);
+    draftNotifier.start(email);
     if (!context.mounted) return;
     Navigator.of(context).push(SmoothRoute(page: NewOwnerNameScreen(email: email)));
   }
 
   Future<void> _onJoin(BuildContext context, WidgetRef ref) async {
+    // Capture provider up front — same race as `_onRegister`. See plan
+    // §"Bug fix" Pattern 1.
+    final db = ref.read(databaseProvider);
     if (!await _ensureOnline(context)) return;
     if (!context.mounted) return;
     // Ensure the database is completely empty before joining a business
-    await ref.read(databaseProvider).clearAllData();
+    await db.clearAllData();
     if (!context.mounted) return;
     Navigator.of(context).push(SmoothRoute(page: InviteCodeScreen(email: email)));
   }

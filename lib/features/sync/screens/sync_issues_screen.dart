@@ -89,9 +89,17 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
   final _serviceKeyCtl = TextEditingController();
   final _projectUrlCtl = TextEditingController();
 
+  // Captured at initState — the per-item retry callbacks await first then
+  // schedule a `pushPending`; touching `ref` after the await would race the
+  // riverpod element-unmount invalidation. See plan §"Bug fix" Pattern 1.
+  late final SupabaseSyncService _sync;
+  late final AppDatabase _db;
+
   @override
   void initState() {
     super.initState();
+    _sync = ref.read(supabaseSyncServiceProvider);
+    _db = ref.read(databaseProvider);
     unawaited(_probeProfile());
   }
 
@@ -398,7 +406,7 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
       );
 
   Future<void> _retryAllOrphans() async {
-    final dao = ref.read(databaseProvider).syncDao;
+    final dao = _db.syncDao;
     final orphans = await dao.watchOrphans().first;
     var ok = 0;
     var failed = 0;
@@ -410,7 +418,7 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
         failed++;
       }
     }
-    unawaited(ref.read(supabaseSyncServiceProvider).pushPending());
+    unawaited(_sync.pushPending());
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -498,12 +506,8 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
               TextButton(
                 onPressed: () async {
                   try {
-                    await ref
-                        .read(databaseProvider)
-                        .syncDao
-                        .retryOrphan(item.id);
-                    unawaited(
-                        ref.read(supabaseSyncServiceProvider).pushPending());
+                    await _db.syncDao.retryOrphan(item.id);
+                    unawaited(_sync.pushPending());
                     if (!mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
@@ -636,11 +640,8 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
                 const Spacer(),
               TextButton(
                 onPressed: () async {
-                  await ref
-                      .read(databaseProvider)
-                      .syncDao
-                      .clearFailureBackoffById(item.id);
-                  unawaited(ref.read(supabaseSyncServiceProvider).pushPending());
+                  await _db.syncDao.clearFailureBackoffById(item.id);
+                  unawaited(_sync.pushPending());
                 },
                 child: const Text('Retry now'),
               ),

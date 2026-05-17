@@ -33,6 +33,11 @@ class AppDrawer extends ConsumerWidget {
 
   Widget _buildHeader(BuildContext context, WidgetRef ref) {
     final primary = Theme.of(context).colorScheme.primary;
+    // Watch (not read) so this widget rebuilds the moment AuthService.value
+    // flips to null during fullLogout. Drawer may still be mounted (popping
+    // animation) when the sync streams below would otherwise be re-built and
+    // trip requireBusinessId(). See plan: curried-tinkering-hinton.md.
+    final user = ref.watch(authProvider).currentUser;
     return Container(
       width: double.infinity,
       padding: EdgeInsets.fromLTRB(
@@ -90,7 +95,12 @@ class AppDrawer extends ConsumerWidget {
           SizedBox(height: context.getRSize(16)),
           // Sync status indicator. Three signals nested so the badge reflects
           // pending, failed, and online state; tap opens Sync Issues.
-          StreamBuilder<int>(
+          // Skip while logged out — the inline DAO streams below build a fresh
+          // tenant-scoped query on every rebuild and would otherwise hit
+          // requireBusinessId() with no current business.
+          if (user == null)
+            const SizedBox.shrink()
+          else StreamBuilder<int>(
             stream: ref.read(databaseProvider).syncDao.watchPendingCount(),
             builder: (context, pendingSnap) {
               return StreamBuilder<int>(
@@ -171,7 +181,7 @@ class AppDrawer extends ConsumerWidget {
             },
           ),
           Text(
-            ref.read(authProvider).currentUser?.name ?? '',
+            user?.name ?? '',
             style: TextStyle(
               color: Theme.of(context).colorScheme.onSurface,
               fontSize: context.getRFontSize(18),

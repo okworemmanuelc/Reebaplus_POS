@@ -33,12 +33,13 @@ class OnboardingStepIndicator extends StatefulWidget {
     'Security',
   ];
 
-  /// Path B — Join Existing Business (6 steps)
+  /// Path B — Join Existing Business (7 steps)
   static const pathBLabels = [
     'Type',
     'Invite',
     'Role',
-    'Name',
+    'Details',
+    'Contacts',
     'PIN',
     'Security',
   ];

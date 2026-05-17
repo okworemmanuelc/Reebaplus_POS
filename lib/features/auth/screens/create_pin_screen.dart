@@ -115,14 +115,19 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
     // PINs match — show success state, then commit + save PIN.
     setState(() => _saving = true);
 
+    // Capture providers up front — this method crosses several `await`s and
+    // ends in a navigator-key regenerating push. Touching `ref` after any
+    // of those awaits would race the riverpod element-unmount invalidation.
+    // See plan §"Bug fix" Pattern 1.
+    final auth = ref.read(authProvider);
+    final db = ref.read(databaseProvider);
+    final draftNotifier = ref.read(onboardingDraftProvider.notifier);
+
     // Allow AnimatedSwitcher to begin its cross-fade before heavy work.
     await Future.delayed(const Duration(milliseconds: 150));
     if (!mounted) return;
 
     try {
-      final auth = ref.read(authProvider);
-      final db = ref.read(databaseProvider);
-
       // New-business path: commit the wizard draft atomically NOW. The
       // complete_onboarding RPC creates businesses + profiles + warehouses
       // + settings server-side with onboarding_complete=true, then mirrors
@@ -131,11 +136,11 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
       // Join/reset paths: widget.user is already the persisted row.
       final UserData persistedUser;
       if (widget.user == null) {
-        final draft = ref.read(onboardingDraftProvider.notifier).require();
+        final draft = draftNotifier.require();
         persistedUser = await auth.completeOnboarding(draft);
         // Wizard is done — drop the draft so a future onboarding starts
         // fresh and so abandoned drafts don't leak across sessions.
-        ref.read(onboardingDraftProvider.notifier).clear();
+        draftNotifier.clear();
       } else {
         persistedUser = widget.user!;
       }
@@ -253,8 +258,8 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
       children: [
         if (_isOnboarding)
           OnboardingStepIndicator(
-            currentStep: widget.isNewBusinessSetup ? 6 : 5,
-            totalSteps: widget.isNewBusinessSetup ? 7 : 6,
+            currentStep: widget.isNewBusinessSetup ? 6 : 6,
+            totalSteps: widget.isNewBusinessSetup ? 7 : 7,
             stepLabels: widget.isNewBusinessSetup
                 ? OnboardingStepIndicator.pathALabels
                 : OnboardingStepIndicator.pathBLabels,

@@ -32,6 +32,18 @@ class _BiometricSetupScreenState extends ConsumerState<BiometricSetupScreen> {
   bool _loading = false;
   String? _errorMessage;
 
+  // Captured at initState — `_done` runs after `await prefs.setBool(...)`
+  // and `setCurrentUser` schedules navigator-key regeneration which
+  // disposes this screen. Touching `ref` post-await would race the
+  // riverpod invalidation. See plan §"Bug fix" Pattern 1.
+  late final AuthService _auth;
+
+  @override
+  void initState() {
+    super.initState();
+    _auth = ref.read(authProvider);
+  }
+
   Future<void> _enableBiometrics() async {
     setState(() {
       _loading = true;
@@ -85,14 +97,13 @@ class _BiometricSetupScreenState extends ConsumerState<BiometricSetupScreen> {
   }
 
   void _done() {
-    final auth = ref.read(authProvider);
     if (widget.isNewBusinessSetup) {
-      auth.pendingPostLoginRoute = PostLoginRoute.successDashboard;
+      _auth.pendingPostLoginRoute = PostLoginRoute.successDashboard;
     } else if (widget.isJoinFlow) {
-      auth.pendingPostLoginRoute = PostLoginRoute.accessGranted;
-      auth.pendingPostLoginUser = widget.user;
+      _auth.pendingPostLoginRoute = PostLoginRoute.accessGranted;
+      _auth.pendingPostLoginUser = widget.user;
     }
-    auth.setCurrentUser(widget.user, freshSignIn: true);
+    _auth.setCurrentUser(widget.user, freshSignIn: true);
     // Navigator key regeneration in main.dart handles routing automatically.
   }
 
@@ -113,8 +124,8 @@ class _BiometricSetupScreenState extends ConsumerState<BiometricSetupScreen> {
             children: [
               if (widget.isNewBusinessSetup || widget.isJoinFlow)
                 OnboardingStepIndicator(
-                  currentStep: widget.isNewBusinessSetup ? 7 : 6,
-                  totalSteps: widget.isNewBusinessSetup ? 7 : 6,
+                  currentStep: widget.isNewBusinessSetup ? 7 : 7,
+                  totalSteps: widget.isNewBusinessSetup ? 7 : 7,
                   stepLabels: widget.isNewBusinessSetup
                       ? OnboardingStepIndicator.pathALabels
                       : OnboardingStepIndicator.pathBLabels,

@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
-import 'package:reebaplus_pos/features/auth/screens/invite_join_name_screen.dart';
+import 'package:reebaplus_pos/features/auth/screens/signup_wizard/signup_orchestrator.dart';
 import 'package:reebaplus_pos/features/auth/widgets/onboarding_step_indicator.dart';
 import 'package:reebaplus_pos/features/invite/services/invite_api_service.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_background.dart';
@@ -31,13 +31,12 @@ class _InviteCodeScreenState extends ConsumerState<InviteCodeScreen> {
       if (_errorMessage != null) {
         setState(() => _errorMessage = null);
       }
-      // Auto-submit on a complete code. Phase 2 supports two formats:
-      //   • 6-char human_code (preferred — what's in the email/SMS)
-      //   • 8-char legacy code
-      // Length 6 OR 8, alphanumeric only (Crockford-ish alphabet).
-      final raw = _codeController.text.trim();
-      final isComplete = (raw.length == 6 || raw.length == 8) &&
-          RegExp(r'^[A-Z0-9]+$').hasMatch(raw.toUpperCase());
+      // Auto-submit on a complete code. Rev 3: only 8-char human_code is
+      // accepted; the legacy 6-char form was revoked in migration 0025
+      // and the 8-char `code` column is no longer user-facing.
+      final raw = _codeController.text.trim().toUpperCase();
+      final isComplete =
+          raw.length == 8 && RegExp(r'^[A-Z0-9]+$').hasMatch(raw);
       if (isComplete && !_loading) {
         _submit();
       }
@@ -77,11 +76,7 @@ class _InviteCodeScreenState extends ConsumerState<InviteCodeScreen> {
     });
 
     final api = ref.read(inviteApiServiceProvider);
-    // Route by length: 6-char → human_code (Phase 2), 8-char → legacy code.
-    final isHumanCode = code.length == 6;
-    final result = isHumanCode
-        ? await api.previewByHumanCode(code)
-        : await api.previewByCode(code);
+    final result = await api.previewByHumanCode(code);
 
     if (!mounted) return;
 
@@ -95,14 +90,16 @@ class _InviteCodeScreenState extends ConsumerState<InviteCodeScreen> {
 
     setState(() => _loading = false);
 
-    // Manual-code path skips the separate role-confirmation screen — the
-    // user already chose to join via the InviteCodeScreen, and the redeem
-    // RPC will reject if anything's off (mismatch / revoked / expired).
+    final preview = InvitePreview.fromMap(
+      (result as InviteApiOk<Map<String, dynamic>>).data,
+    );
+
+    if (!mounted) return;
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => InviteJoinNameScreen(
-          code: isHumanCode ? null : code,
-          humanCode: isHumanCode ? code : null,
+        builder: (_) => SignupOrchestrator(
+          preview: preview,
+          humanCode: code,
           email: widget.email,
         ),
       ),
@@ -125,7 +122,7 @@ class _InviteCodeScreenState extends ConsumerState<InviteCodeScreen> {
               children: [
                 const OnboardingStepIndicator(
                   currentStep: 2,
-                  totalSteps: 6,
+                  totalSteps: 7,
                   stepLabels: OnboardingStepIndicator.pathBLabels,
                 ),
                 const SizedBox(height: 16),
@@ -180,7 +177,7 @@ class _InviteCodeScreenState extends ConsumerState<InviteCodeScreen> {
                           },
                           onSubmitted: (_) => _submit(),
                           decoration: InputDecoration(
-                            hintText: 'CODE-XXX-XXX',
+                            hintText: '8-char code',
                             hintStyle: TextStyle(
                               color: textColor.withValues(alpha: 0.3),
                               letterSpacing: 2.0,

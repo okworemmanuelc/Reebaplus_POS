@@ -50,6 +50,7 @@ export type IssueResult =
     inviteId: string;
     humanCode: string;
     expiresAt: string;
+    row: Record<string, unknown>;
   }
   | {
     ok: false;
@@ -181,7 +182,7 @@ export async function issueInvite(
         status: "pending",
         expires_at: expiresAt,
       })
-      .select("id, human_code, expires_at")
+      .select("*")
       .single();
 
     if (error) {
@@ -191,9 +192,10 @@ export async function issueInvite(
 
     return {
       ok: true,
-      inviteId: data.id,
-      humanCode: data.human_code,
-      expiresAt: data.expires_at,
+      inviteId: data.id as string,
+      humanCode: data.human_code as string,
+      expiresAt: data.expires_at as string,
+      row: data as Record<string, unknown>,
     };
   }
 

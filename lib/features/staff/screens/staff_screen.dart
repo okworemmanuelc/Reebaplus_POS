@@ -209,19 +209,25 @@ class _StaffScreenState extends ConsumerState<StaffScreen> {
                     children: [
                       Icon(
                         FontAwesomeIcons.usersSlash,
-                        size: 48,
+                        size: context.getRSize(48),
                         color: _subtext.withValues(alpha: 0.5),
                       ),
-                      const SizedBox(height: 16),
+                      SizedBox(height: context.getRSize(16)),
                       Text(
                         'No staff found',
-                        style: TextStyle(color: _subtext, fontSize: 16),
+                        style: TextStyle(
+                          color: _subtext,
+                          fontSize: context.getRFontSize(16),
+                        ),
                       ),
                     ],
                   ),
                 )
               : ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+                  padding: context.rPadding(16).copyWith(
+                    top: 0,
+                    bottom: context.getRSize(100) + context.bottomInset,
+                  ),
                   children: [
                     for (final tier in [6, 5, 4, 3, 2, 1]) ...[
                       if (list.any((u) => u.tier == tier)) ...[
@@ -247,10 +253,10 @@ class _StaffScreenState extends ConsumerState<StaffScreen> {
 
   Widget _buildWarehouseFilters() {
     return SizedBox(
-      height: 50,
+      height: context.getRSize(50),
       child: ListView(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: context.rPaddingSymmetric(horizontal: 16, vertical: 8),
         children: [
           _filterChip('All', _kAllWarehouses),
           for (final w in _warehouses) _filterChip(w.name, w.id),
@@ -265,11 +271,11 @@ class _StaffScreenState extends ConsumerState<StaffScreen> {
       onTap: () => setState(() => _selectedWarehouseFilter = id),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        margin: const EdgeInsets.only(right: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        margin: context.rPaddingOnly(right: 8),
+        padding: context.rPaddingSymmetric(horizontal: 16),
         decoration: BoxDecoration(
           color: active ? blueMain : _surface,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(context.getRSize(20)),
           border: Border.all(color: active ? blueMain : _border),
         ),
         child: Center(
@@ -277,7 +283,7 @@ class _StaffScreenState extends ConsumerState<StaffScreen> {
             label,
             style: TextStyle(
               color: active ? Colors.white : _text,
-              fontSize: 13,
+              fontSize: context.getRFontSize(13),
               fontWeight: active ? FontWeight.bold : FontWeight.normal,
             ),
           ),
@@ -294,11 +300,11 @@ class _StaffScreenState extends ConsumerState<StaffScreen> {
     return Row(
       children: [
         Container(
-          width: 4,
-          height: 16,
+          width: context.getRSize(4),
+          height: context.getRSize(16),
           decoration: BoxDecoration(
             color: roleInfo.color,
-            borderRadius: BorderRadius.circular(2),
+            borderRadius: BorderRadius.circular(context.getRSize(2)),
           ),
         ),
         const SizedBox(height: 8),
@@ -306,7 +312,7 @@ class _StaffScreenState extends ConsumerState<StaffScreen> {
           '  ${roleInfo.label.toUpperCase()}S',
           style: TextStyle(
             color: _subtext,
-            fontSize: 12,
+            fontSize: context.getRFontSize(12),
             fontWeight: FontWeight.bold,
             letterSpacing: 1,
           ),
@@ -316,7 +322,7 @@ class _StaffScreenState extends ConsumerState<StaffScreen> {
           '$count members',
           style: TextStyle(
             color: _subtext.withValues(alpha: 0.5),
-            fontSize: 11,
+            fontSize: context.getRFontSize(11),
           ),
         ),
       ],

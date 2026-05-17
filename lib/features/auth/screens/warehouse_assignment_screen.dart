@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_background.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
@@ -24,9 +25,17 @@ class _WarehouseAssignmentScreenState
   late DateTime _expiry;
   late Timer _assignmentCheckTimer;
 
+  // Captured at initState — Timer.periodic fires `_checkAssignment` across
+  // dispose windows; touching `ref` from a fired callback would race the
+  // riverpod element-unmount invalidation. See plan §"Bug fix" Pattern 1.
+  late final AppDatabase _db;
+  late final AuthService _auth;
+
   @override
   void initState() {
     super.initState();
+    _db = ref.read(databaseProvider);
+    _auth = ref.read(authProvider);
     _expiry = widget.user.createdAt.add(
       const Duration(hours: 48),
     );
@@ -44,14 +53,13 @@ class _WarehouseAssignmentScreenState
   }
 
   Future<void> _checkAssignment() async {
-    final db = ref.read(databaseProvider);
-    final updatedUser = await (db.select(
-      db.users,
+    final updatedUser = await (_db.select(
+      _db.users,
     )..where((u) => u.id.equals(widget.user.id))).getSingleOrNull();
 
     if (updatedUser != null && updatedUser.warehouseId != null) {
       // Assignment detected!
-      ref.read(authProvider).setCurrentUser(updatedUser, freshSignIn: true);
+      _auth.setCurrentUser(updatedUser, freshSignIn: true);
     }
   }
 
@@ -205,7 +213,7 @@ class _WarehouseAssignmentScreenState
                   icon: FontAwesomeIcons.rightFromBracket,
                   variant: AppButtonVariant.ghost,
                   isFullWidth: false,
-                  onPressed: () => ref.read(authProvider).fullLogout(),
+                  onPressed: () => _auth.fullLogout(),
                 ),
               ],
             ),

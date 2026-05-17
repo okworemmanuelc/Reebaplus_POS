@@ -60,15 +60,16 @@ Adjacent commits since rev 1 of this CHECKPOINT:
 deploy sequence later in this file:
 
 1. `flutter analyze` clean + `flutter test` 97+ green re-check.
-2. Build new app (`flutter build apk --release` or iOS equivalent,
-   per test device).
-3. `source ~/.zshrc && supabase db push` — applies only 0030.
-4. `source ~/.zshrc && supabase functions deploy send-invite
+2. `source ~/.zshrc && supabase db push` — applies only 0030.
+3. `source ~/.zshrc && supabase functions deploy send-invite
    revoke-invite check-invite-email accept-invite resend-invite
    redeem-invite` (six functions, one call).
-5. Install new app build IMMEDIATELY (do NOT open old build between
-   steps 3 and 5).
-6. Post-install CEO smoke test (PIN login → dashboard → re-run
+4. `flutter run` against the connected emulator — this builds and
+   installs the new binary in one step. Run IMMEDIATELY after step 3
+   (do NOT keep the old binary running on the emulator between
+   steps 2 and 4 — hot-restart on the existing process is not enough,
+   the Drift CHECK constraints are baked into the installed APK).
+5. Post-install CEO smoke test (PIN login → dashboard → re-run
    Block 4 sync-resilience matrix → confirm Issue 1 fix renders a
    CEO section).
 
@@ -249,29 +250,30 @@ acceptable for the short deploy window; rotate + remove after deploy).
 ## Reminder — deploy sequence (per PROGRESS.md, with Issues-4/5 caveat)
 
 ⚠ **There is a critical timing window** between cloud migration 0030
-landing and the new app build being installed on the user's device.
+landing and the new app build being installed on the emulator.
 During that window the old app binary will crash on `syncOnLogin`
 because its pre-Step-4 Drift CHECK (`role_tier IN (1,4,5)`) rejects
 the now-tier-6 CEO row coming back from cloud.
 
-Strict order, no skipping:
+Strict order, no skipping (emulator workflow — no APK staging needed):
 
-1. **Build the new app first.** Have APK / IPA staged and ready
-   *before* touching cloud.
-2. **Deploy cloud migration:** `source ~/.zshrc && supabase db push`
+1. **Deploy cloud migration:** `source ~/.zshrc && supabase db push`
    (will apply only 0030).
-3. **Deploy edge functions:** `supabase functions deploy send-invite
+2. **Deploy edge functions:** `supabase functions deploy send-invite
    revoke-invite check-invite-email accept-invite resend-invite
    redeem-invite`.
-4. **Install the new app build IMMEDIATELY.** Do NOT open the
-   existing app build between steps 2 and 4.
+3. **`flutter run` against the connected emulator IMMEDIATELY.** This
+   compiles + installs + launches in one step. Stop any prior
+   `flutter run` process first so the install replaces the binary
+   (hot-restart on the old process is not enough — the v8 Drift CHECK
+   is baked into the installed APK).
 
-User instruction: do not use the app between cloud deploy and app
-rebuild. If you accidentally open the old build, `syncOnLogin` will
-fail with `CHECK constraint failed: role_tier IN (1,4,5)` — recovery
-is to close the app and install the new build. No data loss because
-the failure is purely client-side validation; cloud state is already
-consistent.
+User instruction: do not interact with the existing emulator binary
+between cloud deploy and `flutter run`. If you accidentally tap the
+old build, `syncOnLogin` will fail with `CHECK constraint failed:
+role_tier IN (1,4,5)` — recovery is to stop the process and
+`flutter run` again. No data loss because the failure is purely
+client-side validation; cloud state is already consistent.
 
 ### Post-deploy operational caveat — Issues 4/5
 

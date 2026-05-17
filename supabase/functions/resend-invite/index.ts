@@ -85,5 +85,6 @@ Deno.serve(async (req) => {
     invite_id: row.id,
     human_code: row.human_code,
     expires_at: row.expires_at,
+    invite: row,
   });
 });

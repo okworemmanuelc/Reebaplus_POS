@@ -79,8 +79,18 @@ class _InviteJoinNameScreenState
     if (widget.token != null) {
       result = await api.redeemByToken(token: widget.token!, userName: name);
     } else if (widget.humanCode != null) {
+      // STUB — full wizard rewrite (signup_wizard/) supplies the real
+      // staff_phone / next_of_kin / guarantor fields. This single-screen
+      // path is being deleted; the empty values exist only to keep the
+      // tree compiling during the transition.
       result = await api.redeemByHumanCode(
-          humanCode: widget.humanCode!, userName: name);
+        humanCode: widget.humanCode!,
+        userName: name,
+        staffPhone: '',
+        nextOfKinName: '',
+        nextOfKinPhone: '',
+        nextOfKinRelation: '',
+      );
     } else {
       result = await api.redeemByCode(code: widget.code!, userName: name);
     }

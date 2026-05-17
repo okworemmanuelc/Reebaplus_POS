@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,7 +14,11 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
 import 'package:reebaplus_pos/features/auth/screens/login_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/email_entry_screen.dart';
+import 'package:reebaplus_pos/features/auth/screens/otp_verification_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/warehouse_assignment_screen.dart';
+import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/features/auth/widgets/auth_background.dart';
+import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/shared/widgets/main_layout.dart';
 import 'package:reebaplus_pos/shared/widgets/auto_lock_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/force_update_wrapper.dart';
@@ -21,6 +27,7 @@ import 'package:reebaplus_pos/features/auth/screens/success_dashboard_entry_scre
 import 'package:reebaplus_pos/features/auth/screens/access_granted_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/invite_landing_screen.dart';
 import 'package:reebaplus_pos/features/diagnostics/screens/schema_error_screen.dart';
+import 'package:reebaplus_pos/features/invite/services/invite_link_router.dart';
 import 'package:reebaplus_pos/features/sync/screens/first_sync_screen.dart';
 
 import 'package:timezone/data/latest.dart' as tz;
@@ -97,32 +104,50 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
   /// Navigator to rebuild its route stack (clears stale MainLayout).
   GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
 
+  // Captured at initState — the listeners below fire across element
+  // lifecycle boundaries (auth notifier ticks during navigator-key
+  // regeneration, deep-link router ticks before/after the splash→home
+  // swap). Reading `ref` from a listener body would race the riverpod
+  // invalidation. See plan §"Bug fix" Pattern 2.
+  late final AuthService _auth;
+  late final InviteLinkRouter _router;
+
+  /// Tracks whether Supabase currently has an active JWT. Seeded `true`
+  /// because Supabase.initialize is fire-and-forget and we'd otherwise
+  /// false-positive during the cold-start restore window; the auth-state
+  /// stream below flips it on the first `initialSession` / `signedIn` /
+  /// `signedOut` event. Gates MainLayout — we never mount the logged-in
+  /// shell when this is false.
+  bool _supabaseHasSession = true;
+  StreamSubscription<AuthState>? _supabaseAuthSub;
+
   @override
   void initState() {
     super.initState();
+    _auth = ref.read(authProvider);
+    _router = ref.read(inviteLinkRouterProvider);
+
     _checkDeviceUser();
-    ref.read(authProvider).deviceUserIdNotifier.addListener(_onDeviceUserChanged);
-    ref.read(authProvider).addListener(_onAuthChanged);
+    _auth.deviceUserIdNotifier.addListener(_onDeviceUserChanged);
+    _auth.addListener(_onAuthChanged);
 
     // Deep-link router. Buffers any cold-start URI on the notifier; if the
     // navigator isn't mounted yet, the listener fires once it is (the
     // notifier survives across the splash → home transition).
-    final router = ref.read(inviteLinkRouterProvider);
-    router.start();
-    router.handleColdStart();
-    router.pendingUri.addListener(_onInviteLink);
+    _router.start();
+    _router.handleColdStart();
+    _router.pendingUri.addListener(_onInviteLink);
   }
 
   void _onInviteLink() {
-    final router = ref.read(inviteLinkRouterProvider);
-    final uri = router.consume();
+    final uri = _router.consume();
     if (uri == null) return;
     final token = uri.queryParameters['token'];
     if (token == null || token.isEmpty) return;
     final navState = _navigatorKey.currentState;
     if (navState == null) {
       // Not mounted yet — re-buffer for the next listener tick.
-      router.pendingUri.value = uri;
+      _router.pendingUri.value = uri;
       return;
     }
     navState.push(
@@ -144,7 +169,7 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
   void _onDeviceUserChanged() {
     if (mounted) {
       setState(() {
-        _hasDeviceUser = ref.read(authProvider).deviceUserIdNotifier.value != null;
+        _hasDeviceUser = _auth.deviceUserIdNotifier.value != null;
         // Force MaterialApp's Navigator to rebuild its route stack so stale
         // screens (MainLayout) are replaced by the correct auth screen.
         _navigatorKey = GlobalKey<NavigatorState>();
@@ -153,10 +178,9 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
   }
 
   Future<void> _checkDeviceUser() async {
-    final auth = ref.read(authProvider);
-    final userId = await auth.getDeviceUserId();
+    final userId = await _auth.getDeviceUserId();
     if (mounted) {
-      auth.deviceUserIdNotifier.value = userId;
+      _auth.deviceUserIdNotifier.value = userId;
       setState(() {
         _hasDeviceUser = userId != null;
       });
@@ -165,9 +189,9 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
 
   @override
   void dispose() {
-    ref.read(authProvider).deviceUserIdNotifier.removeListener(_onDeviceUserChanged);
-    ref.read(authProvider).removeListener(_onAuthChanged);
-    ref.read(inviteLinkRouterProvider).pendingUri.removeListener(_onInviteLink);
+    _auth.deviceUserIdNotifier.removeListener(_onDeviceUserChanged);
+    _auth.removeListener(_onAuthChanged);
+    _router.pendingUri.removeListener(_onInviteLink);
     super.dispose();
   }
 

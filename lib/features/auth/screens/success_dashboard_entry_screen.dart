@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/shared/widgets/main_layout.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_background.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
-import 'package:reebaplus_pos/features/inventory/widgets/add_product_sheet.dart';
+import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/widgets/smooth_route.dart';
 
 class SuccessDashboardEntryScreen extends ConsumerStatefulWidget {
@@ -17,35 +17,31 @@ class SuccessDashboardEntryScreen extends ConsumerStatefulWidget {
 
 class _SuccessDashboardEntryScreenState
     extends ConsumerState<SuccessDashboardEntryScreen> {
+  // Capture providers up front so the post-pushAndRemoveUntil work doesn't
+  // touch `ref` from a soon-to-be-disposed element. See plan §"Bug fix"
+  // Pattern 3.
+  late final NavigationService _nav;
+
   @override
   void initState() {
     super.initState();
+    _nav = ref.read(navigationProvider);
     _startAutoForward();
   }
 
   void _startAutoForward() {
     Future.delayed(const Duration(milliseconds: 1500), () {
       if (!mounted) return;
-      
-      // Navigate to the Dashboard instantly
+
+      // Set the one-shot flag BEFORE pushing — MainLayout consumes it on
+      // its first frame and opens AddProductSheet from a context that's
+      // guaranteed alive (its own).
+      _nav.requestAutoShowAddProductSheet();
+
       Navigator.of(context).pushAndRemoveUntil(
         SmoothRoute(page: const MainLayout()),
         (route) => false,
       );
-
-      // Wait a fraction of a second for MainLayout to build, then trigger the Add Product sheet
-      Future.delayed(const Duration(milliseconds: 400), () {
-        if (!mounted) return;
-        final mainContext = ref.read(navigationProvider).mainScaffoldKey.currentContext;
-        if (mainContext != null && mainContext.mounted) {
-          showModalBottomSheet(
-            context: mainContext,
-            isScrollControlled: true,
-            backgroundColor: Colors.transparent,
-            builder: (_) => const AddProductSheet(),
-          );
-        }
-      });
     });
   }
 

@@ -95,6 +95,11 @@ class _ExistingAccountScreenState extends ConsumerState<ExistingAccountScreen> {
 
   Future<void> _onCreateNew() async {
     if (_loading) return;
+    // Capture provider up front — this method awaits a dialog then a
+    // fullLogout, and `ref` is invalidated the moment the element is
+    // unmounted (BEFORE State.mounted flips). See plan §"Bug fix"
+    // Pattern 1.
+    final auth = ref.read(authProvider);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -119,7 +124,7 @@ class _ExistingAccountScreenState extends ConsumerState<ExistingAccountScreen> {
     if (confirmed != true || !mounted) return;
 
     setState(() => _loading = true);
-    await ref.read(authProvider).fullLogout();
+    await auth.fullLogout();
     if (!mounted) return;
     Navigator.of(context).popUntil((r) => r.isFirst);
   }
