@@ -131,12 +131,42 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
     _auth.deviceUserIdNotifier.addListener(_onDeviceUserChanged);
     _auth.addListener(_onAuthChanged);
 
+    // Watch Supabase auth state so the home() gate flips when the JWT
+    // appears (initialSession / signedIn / tokenRefreshed) or disappears
+    // (signedOut, refresh-token rotation failure). Subscribed after
+    // supabaseReady so we don't race the SDK's storage restore.
+    supabaseReady.whenComplete(_subscribeToSupabaseAuth);
+
     // Deep-link router. Buffers any cold-start URI on the notifier; if the
     // navigator isn't mounted yet, the listener fires once it is (the
     // notifier survives across the splash → home transition).
     _router.start();
     _router.handleColdStart();
     _router.pendingUri.addListener(_onInviteLink);
+  }
+
+  void _subscribeToSupabaseAuth() {
+    if (!mounted) return;
+    final client = Supabase.instance.client;
+    // Seed from the current state — initialSession also fires post-subscribe
+    // but seeding here avoids one frame of stale UI if it has already fired.
+    final has = client.auth.currentUser != null;
+    if (has != _supabaseHasSession) {
+      setState(() => _supabaseHasSession = has);
+    }
+    _supabaseAuthSub = client.auth.onAuthStateChange.listen(
+      (state) {
+        if (!mounted) return;
+        final next = state.session != null;
+        if (next != _supabaseHasSession) {
+          setState(() => _supabaseHasSession = next);
+        }
+      },
+      // Token-refresh failures surface here as AuthRetryableFetchException
+      // (offline, DNS hiccup). Swallow — supabase-flutter retries on
+      // reconnect; bubbling would crash the app on transient blips.
+      onError: (e) => debugPrint('[main] supabase auth stream error: $e'),
+    );
   }
 
   void _onInviteLink() {
@@ -192,6 +222,7 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
     _auth.deviceUserIdNotifier.removeListener(_onDeviceUserChanged);
     _auth.removeListener(_onAuthChanged);
     _router.pendingUri.removeListener(_onInviteLink);
+    _supabaseAuthSub?.cancel();
     super.dispose();
   }
 
@@ -243,6 +274,17 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
               return _hasDeviceUser!
                   ? const LoginScreen()
                   : const EmailEntryScreen();
+            }
+
+            // Session-gate. Local user is set but Supabase has no JWT —
+            // mounting MainLayout here would render a logged-in shell that
+            // can't reach the cloud: every write would pile up in the queue
+            // with `pushPending` skipping on "no auth session" and the Sync
+            // Issues screen reporting "no profiles row for current
+            // auth.uid()". Bounce through OTP instead so the JWT is
+            // re-established before any tenant-scoped UI renders.
+            if (!_supabaseHasSession) {
+              return _SessionExpiredScreen(user: user);
             }
 
             // Gating the Business Reveal UX for brand-new logins on fresh devices:
@@ -317,6 +359,111 @@ class _BrandedSplash extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Shown when a local user is loaded but the Supabase JWT is missing. Triggers
+/// a fresh OTP to the user's email so the session can be re-established without
+/// destroying the device session (PIN, biometrics, local data all preserved).
+class _SessionExpiredScreen extends ConsumerStatefulWidget {
+  final UserData user;
+  const _SessionExpiredScreen({required this.user});
+
+  @override
+  ConsumerState<_SessionExpiredScreen> createState() =>
+      _SessionExpiredScreenState();
+}
+
+class _SessionExpiredScreenState extends ConsumerState<_SessionExpiredScreen> {
+  bool _sending = false;
+
+  Future<void> _resendOtp() async {
+    final email = widget.user.email;
+    if (email == null || email.isEmpty) {
+      AppNotification.showError(
+        context,
+        'No email on file for this account. Please sign out and start over.',
+      );
+      return;
+    }
+    setState(() => _sending = true);
+    final auth = ref.read(authProvider);
+    final error = await auth.sendOtp(email);
+    if (!mounted) return;
+    setState(() => _sending = false);
+    if (error != null) {
+      AppNotification.showError(context, error);
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) =>
+            OtpVerificationScreen(user: widget.user, email: email),
+      ),
+    );
+  }
+
+  Future<void> _signOut() async {
+    await ref.read(authProvider).fullLogout();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : Colors.black;
+    final email = widget.user.email ?? '';
+
+    return AuthBackground(
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Spacer(),
+              Icon(Icons.lock_clock_outlined,
+                  size: 72, color: theme.colorScheme.primary),
+              const SizedBox(height: 20),
+              Text(
+                'Session expired',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w700,
+                  color: textColor,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                email.isEmpty
+                    ? "Your sign-in has expired. Verify your email to keep your changes syncing."
+                    : "Your sign-in has expired. We'll send a code to $email to restore your session — your PIN and local data stay intact.",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  height: 1.4,
+                  color: textColor.withValues(alpha: 0.75),
+                ),
+              ),
+              const Spacer(),
+              AppButton(
+                text: _sending ? 'Sending…' : 'Verify email',
+                onPressed: _sending ? null : _resendOtp,
+              ),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: _sending ? null : _signOut,
+                child: Text(
+                  'Sign out instead',
+                  style: TextStyle(color: textColor.withValues(alpha: 0.65)),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
