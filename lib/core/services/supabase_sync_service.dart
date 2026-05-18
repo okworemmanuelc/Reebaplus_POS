@@ -393,7 +393,8 @@ class SupabaseSyncService {
     // Without an authenticated session the server sees auth.uid() as NULL,
     // so RLS denies every insert. Skip rather than burn `attempts` and rack
     // up false negatives — startAutoPush retriggers as soon as sign-in lands.
-    if (_supabase.auth.currentUser == null) {
+    final currentAuthUid = _supabase.auth.currentUser?.id;
+    if (currentAuthUid == null) {
       debugPrint('[SyncService] Skipping push: no auth session.');
       return;
     }
@@ -536,9 +537,13 @@ class SupabaseSyncService {
 
       // Validate every payload's tenant. Any tenant-mismatch in the group
       // is a programming error; hard-fail just those items and continue.
+      // Also reject rows whose stamped auth_user_id (L5) does not match
+      // the current session — those were queued by a different signed-in
+      // user on this device and would push under the wrong JWT.
       final validPayloads = <Map<String, dynamic>>[];
       final validIds = <String>[];
       final mismatchedIds = <String>[];
+      final authMismatched = <SyncQueueData>[];
       for (final item in items) {
         try {
           final raw = jsonDecode(item.payload) as Map<String, dynamic>;
@@ -547,6 +552,14 @@ class SupabaseSyncService {
               pid == null ||
               (pid is String && pid != sessionBusinessId)) {
             mismatchedIds.add(item.id);
+            continue;
+          }
+          // auth_user_id is nullable: pre-v10 rows and bootstrap-window
+          // enqueues both store null and are trusted to the current user.
+          // Only a NON-null tag that disagrees with the current auth.uid()
+          // is a mismatch.
+          if (item.authUserId != null && item.authUserId != currentAuthUid) {
+            authMismatched.add(item);
             continue;
           }
           validPayloads.add(_normalizePayloadForCloud(group.table, raw));
@@ -559,6 +572,16 @@ class SupabaseSyncService {
         for (final id in mismatchedIds) {
           await _db.syncDao
               .markFailed(id, 'missing_business_id', permanent: true);
+        }
+      }
+      if (authMismatched.isNotEmpty) {
+        for (final item in authMismatched) {
+          await _db.syncDao.markFailed(
+            item.id,
+            'auth_user_mismatch: queued by ${item.authUserId}, '
+                'current is $currentAuthUid',
+            permanent: true,
+          );
         }
       }
       if (validPayloads.isEmpty) continue;
@@ -613,7 +636,7 @@ class SupabaseSyncService {
     // Their server-side RPCs FK-reference rows we just pushed (e.g.
     // pos_create_product → stock_adjustments.performed_by → users.id).
     if (domainItems.isNotEmpty) {
-      await _pushDomainItems(domainItems, sessionBusinessId);
+      await _pushDomainItems(domainItems, sessionBusinessId, currentAuthUid);
     }
 
     // If the raw select hit the page limit, more is waiting — drain in the
@@ -635,6 +658,7 @@ class SupabaseSyncService {
   Future<void> _pushDomainItems(
     List<SyncQueueData> items,
     String sessionBusinessId,
+    String currentAuthUid,
   ) async {
     for (final item in items) {
       await _db.syncDao.markInProgressBatch([item.id]);
@@ -657,6 +681,20 @@ class SupabaseSyncService {
           payloadBiz != sessionBusinessId) {
         await _db.syncDao
             .markFailed(item.id, 'missing_business_id', permanent: true);
+        continue;
+      }
+
+      // L5: auth_user_id mismatch — row was queued by a different signed-in
+      // user on this device. Pushing under the current JWT would attribute
+      // the sale / inventory delta / product creation to the wrong staff.
+      // Null tag (pre-v10 / bootstrap) is trusted to the current user.
+      if (item.authUserId != null && item.authUserId != currentAuthUid) {
+        await _db.syncDao.markFailed(
+          item.id,
+          'auth_user_mismatch: queued by ${item.authUserId}, '
+              'current is $currentAuthUid',
+          permanent: true,
+        );
         continue;
       }
 
@@ -1049,7 +1087,8 @@ class SupabaseSyncService {
   ///   - the device is offline (the row stays pending and will drain later), OR
   ///   - the RPC fails with a transient error (queued for backoff retry).
   Future<void> flushSale(String orderId) async {
-    if (_supabase.auth.currentUser == null) return;
+    final currentAuthUid = _supabase.auth.currentUser?.id;
+    if (currentAuthUid == null) return;
     if (!isOnline.value) return;
     final sessionBusinessId = _db.currentBusinessId;
     if (sessionBusinessId == null) return;
@@ -1072,7 +1111,7 @@ class SupabaseSyncService {
     );
     if (item == null) return;
 
-    await _pushDomainItems([item], sessionBusinessId);
+    await _pushDomainItems([item], sessionBusinessId, currentAuthUid);
 
     // §6.8 auto-archive moves permanent failures (P0001 / 23xxx) into
     // `sync_queue_orphans` and deletes them from `sync_queue`. Check
@@ -1782,7 +1821,14 @@ class SupabaseSyncService {
               state.event == AuthChangeEvent.tokenRefreshed ||
               state.event == AuthChangeEvent.initialSession) {
             _loggedJwtClaimsThisSession = false;
-            await _db.syncDao.clearFailureBackoff();
+            // Supabase fires signedIn before AuthService.setCurrentUser
+            // restores the Drift _currentBusinessId, so clearFailureBackoff
+            // (whereBusiness → requireBusinessId) would throw on a
+            // logout → re-login. _scheduleDebouncedPush is safe — pushPending
+            // self-guards on session businessId.
+            if (_db.currentBusinessId != null) {
+              await _db.syncDao.clearFailureBackoff();
+            }
             _scheduleDebouncedPush();
           } else if (state.event == AuthChangeEvent.signedOut) {
             _loggedJwtClaimsThisSession = false;
@@ -1902,7 +1948,12 @@ class SupabaseSyncService {
       debugPrint(
         '[SyncService] Usable network connected, flushing and pulling...',
       );
-      await _db.syncDao.clearFailureBackoff();
+      // Same guard as the auth-state listener: a connectivity flip can land
+      // before AuthService.setCurrentUser has restored the businessId on
+      // app start, and clearFailureBackoff would throw via requireBusinessId.
+      if (_db.currentBusinessId != null) {
+        await _db.syncDao.clearFailureBackoff();
+      }
       _scheduleDebouncedPush();
 
       final businessId = _db.businessIdResolver.call();
@@ -2187,6 +2238,33 @@ class SupabaseSyncService {
       if (incoming == null) return true; // can't compare; let it through
       return incoming >= local;
     }).toList();
+  }
+
+  /// Restore rows into an append-only ledger table (`_ledgerTables` in
+  /// app_database.dart). Pull is catch-up only: a full upsert would trip the
+  /// BEFORE UPDATE trigger because domain RPCs stamp `created_at` server-side,
+  /// so the cloud row always disagrees with the locally-written row on an
+  /// immutable column. Void columns (`voidedAt/voidedBy/voidReason` plus
+  /// `lastUpdatedAt`) are explicitly mutable, so they ride in a separate
+  /// targeted update gated by `t.voidedAt.isNull()` — a local-then-newer void
+  /// isn't clobbered by a stale cloud snapshot.
+  Future<void> _restoreLedgerTable<TableT extends Table,
+      RowT extends Insertable<RowT>>(
+    List<dynamic> rows, {
+    required TableInfo<TableT, RowT> table,
+    required RowT Function(Map<String, dynamic>) fromJson,
+    required DateTime? Function(RowT data) voidedAtOf,
+    required Expression<bool> Function(TableT t, RowT data) whereNotYetVoided,
+    required UpdateCompanion<RowT> Function(RowT data) buildVoidCompanion,
+  }) async {
+    for (var r in rows) {
+      final data = fromJson(r as Map<String, dynamic>);
+      await _db.into(table).insert(data, mode: InsertMode.insertOrIgnore);
+      if (voidedAtOf(data) != null) {
+        await (_db.update(table)..where((t) => whereNotYetVoided(t, data)))
+            .write(buildVoidCompanion(data));
+      }
+    }
   }
 
   Future<void> _restoreTableData(String table, List<dynamic> data) async {
@@ -2501,11 +2579,20 @@ class SupabaseSyncService {
           }
           break;
         case 'crate_ledger':
-          for (var r in rows) {
-            await _db
-                .into(_db.crateLedger)
-                .insertOnConflictUpdate(CrateLedgerData.fromJson(r));
-          }
+          await _restoreLedgerTable(
+            rows,
+            table: _db.crateLedger,
+            fromJson: CrateLedgerData.fromJson,
+            voidedAtOf: (d) => d.voidedAt,
+            whereNotYetVoided: (t, d) =>
+                t.id.equals(d.id) & t.voidedAt.isNull(),
+            buildVoidCompanion: (d) => CrateLedgerCompanion(
+              voidedAt: Value(d.voidedAt),
+              voidedBy: Value(d.voidedBy),
+              voidReason: Value(d.voidReason),
+              lastUpdatedAt: Value(d.lastUpdatedAt),
+            ),
+          );
           break;
         case 'system_config':
           for (var r in rows) {
@@ -2558,11 +2645,20 @@ class SupabaseSyncService {
           }
           break;
         case 'payment_transactions':
-          for (var r in rows) {
-            await _db
-                .into(_db.paymentTransactions)
-                .insertOnConflictUpdate(PaymentTransactionData.fromJson(r));
-          }
+          await _restoreLedgerTable(
+            rows,
+            table: _db.paymentTransactions,
+            fromJson: PaymentTransactionData.fromJson,
+            voidedAtOf: (d) => d.voidedAt,
+            whereNotYetVoided: (t, d) =>
+                t.id.equals(d.id) & t.voidedAt.isNull(),
+            buildVoidCompanion: (d) => PaymentTransactionsCompanion(
+              voidedAt: Value(d.voidedAt),
+              voidedBy: Value(d.voidedBy),
+              voidReason: Value(d.voidReason),
+              lastUpdatedAt: Value(d.lastUpdatedAt),
+            ),
+          );
           break;
         case 'stock_transfers':
           for (var r in rows) {
@@ -2579,11 +2675,20 @@ class SupabaseSyncService {
           }
           break;
         case 'activity_logs':
-          for (var r in rows) {
-            await _db
-                .into(_db.activityLogs)
-                .insertOnConflictUpdate(ActivityLogData.fromJson(r));
-          }
+          await _restoreLedgerTable(
+            rows,
+            table: _db.activityLogs,
+            fromJson: ActivityLogData.fromJson,
+            voidedAtOf: (d) => d.voidedAt,
+            whereNotYetVoided: (t, d) =>
+                t.id.equals(d.id) & t.voidedAt.isNull(),
+            buildVoidCompanion: (d) => ActivityLogsCompanion(
+              voidedAt: Value(d.voidedAt),
+              voidedBy: Value(d.voidedBy),
+              voidReason: Value(d.voidReason),
+              lastUpdatedAt: Value(d.lastUpdatedAt),
+            ),
+          );
           break;
         case 'notifications':
           for (var r in rows) {
@@ -2607,11 +2712,20 @@ class SupabaseSyncService {
           }
           break;
         case 'stock_transactions':
-          for (var r in rows) {
-            await _db
-                .into(_db.stockTransactions)
-                .insertOnConflictUpdate(StockTransactionData.fromJson(r));
-          }
+          await _restoreLedgerTable(
+            rows,
+            table: _db.stockTransactions,
+            fromJson: StockTransactionData.fromJson,
+            voidedAtOf: (d) => d.voidedAt,
+            whereNotYetVoided: (t, d) =>
+                t.id.equals(d.id) & t.voidedAt.isNull(),
+            buildVoidCompanion: (d) => StockTransactionsCompanion(
+              voidedAt: Value(d.voidedAt),
+              voidedBy: Value(d.voidedBy),
+              voidReason: Value(d.voidReason),
+              lastUpdatedAt: Value(d.lastUpdatedAt),
+            ),
+          );
           break;
         case 'customer_wallets':
           for (var r in rows) {
@@ -2621,11 +2735,20 @@ class SupabaseSyncService {
           }
           break;
         case 'wallet_transactions':
-          for (var r in rows) {
-            await _db
-                .into(_db.walletTransactions)
-                .insertOnConflictUpdate(WalletTransactionData.fromJson(r));
-          }
+          await _restoreLedgerTable(
+            rows,
+            table: _db.walletTransactions,
+            fromJson: WalletTransactionData.fromJson,
+            voidedAtOf: (d) => d.voidedAt,
+            whereNotYetVoided: (t, d) =>
+                t.id.equals(d.id) & t.voidedAt.isNull(),
+            buildVoidCompanion: (d) => WalletTransactionsCompanion(
+              voidedAt: Value(d.voidedAt),
+              voidedBy: Value(d.voidedBy),
+              voidReason: Value(d.voidReason),
+              lastUpdatedAt: Value(d.lastUpdatedAt),
+            ),
+          );
           break;
         case 'saved_carts':
           for (var r in rows) {

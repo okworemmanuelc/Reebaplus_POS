@@ -202,6 +202,9 @@ final failedQueueCountProvider = StreamProvider.autoDispose<int>((ref) {
 final pendingQueueCountProvider = StreamProvider.autoDispose<int>((ref) {
   return ref.read(databaseProvider).syncDao.watchPendingCount();
 });
+final pendingQueueItemsProvider = StreamProvider.autoDispose((ref) {
+  return ref.read(databaseProvider).syncDao.watchPendingItems();
+});
 final orphanQueueItemsProvider = StreamProvider.autoDispose((ref) {
   return ref.read(databaseProvider).syncDao.watchOrphans();
 });

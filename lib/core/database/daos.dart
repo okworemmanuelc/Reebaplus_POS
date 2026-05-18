@@ -2247,6 +2247,23 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
         .watch();
   }
 
+  /// Every row in transient-retry / never-pushed state, oldest first. The
+  /// `markFailed` state machine keeps every transiently-failed row at
+  /// `status='pending'` with a future `nextAttemptAt` — `'failed'` itself
+  /// is unused by the current code paths. Without this surface, a row
+  /// that has retried for hours looks identical to one enqueued a second
+  /// ago, and the only signal is the bare "Pending in queue: N" counter.
+  Stream<List<SyncQueueData>> watchPendingItems({int limit = 100}) {
+    return (select(syncQueue)
+          ..where((t) =>
+              t.status.equals('pending') &
+              t.isSynced.not() &
+              whereBusiness(t))
+          ..orderBy([(t) => OrderingTerm.asc(t.createdAt)])
+          ..limit(limit))
+        .watch();
+  }
+
   Stream<int> watchFailedCount() {
     return (selectOnly(syncQueue)
           ..addColumns([syncQueue.id.count()])
@@ -2285,6 +2302,10 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
         businessId: requireBusinessId(),
         actionType: actionType,
         payload: payload,
+        // Stamp auth.uid() at enqueue time so dispatch can reject the row
+        // after an account switch. Null when the SDK has no session yet
+        // (bootstrap) — dispatch treats null as "trust the current user".
+        authUserId: Value(db.currentAuthUserId),
       ),
     );
   }
@@ -2418,6 +2439,11 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
           businessId: bid,
           actionType: orphan.actionType,
           payload: orphan.payload,
+          // Retry re-tags to whoever is signed in now. The orphans table
+          // does not carry an auth_user_id (orphans pre-date L5), and the
+          // user pressing Retry on the Sync Issues screen is explicitly
+          // taking ownership of the push.
+          authUserId: Value(db.currentAuthUserId),
         ),
       );
       await (delete(syncQueueOrphans)..where((t) => t.id.equals(orphanId))).go();
@@ -2467,6 +2493,11 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
     await transaction(() async {
       final existingId = await _findPendingDuplicateId(actionType, rowId);
       if (existingId != null) {
+        // Refresh the auth tag too: a coalesced row carries the new
+        // payload's intent, so it should be tagged with whoever is
+        // signed in now. If user A enqueued an upsert, logged out, and
+        // user B then edits the same row, the coalesced row pushes
+        // under user B (the JWT that will sign the request anyway).
         await (update(syncQueue)..where((t) => t.id.equals(existingId)))
             .write(SyncQueueCompanion(
           payload: Value(payloadJson),
@@ -2474,6 +2505,7 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
           attempts: const Value(0),
           nextAttemptAt: const Value(null),
           errorMessage: const Value(null),
+          authUserId: Value(db.currentAuthUserId),
         ));
       } else {
         await into(syncQueue).insert(
@@ -2482,6 +2514,7 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
             businessId: bid,
             actionType: actionType,
             payload: payloadJson,
+            authUserId: Value(db.currentAuthUserId),
           ),
         );
       }
@@ -2550,6 +2583,8 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
       final existingDeleteId =
           await _findPendingDuplicateId(deleteActionType, rowId);
       if (existingDeleteId != null) {
+        // Coalesced delete retags to current user — same rationale as
+        // the upsert coalesce branch above.
         await (update(syncQueue)..where((t) => t.id.equals(existingDeleteId)))
             .write(SyncQueueCompanion(
           payload: Value(payloadJson),
@@ -2557,6 +2592,7 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
           attempts: const Value(0),
           nextAttemptAt: const Value(null),
           errorMessage: const Value(null),
+          authUserId: Value(db.currentAuthUserId),
         ));
       } else {
         await into(syncQueue).insert(
@@ -2565,6 +2601,7 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
             businessId: bid,
             actionType: deleteActionType,
             payload: payloadJson,
+            authUserId: Value(db.currentAuthUserId),
           ),
         );
       }

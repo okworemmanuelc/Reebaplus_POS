@@ -32,6 +32,16 @@ class AuthService extends ValueNotifier<UserData?> {
     _db.businessIdResolver = () => value?.businessId;
     _db.userIdResolver = () => value?.id;
 
+    // Tag every enqueued sync_queue row with the Supabase auth.uid() that
+    // was active when the row was created. Read straight from the SDK
+    // (not `value.authUserId`) because Supabase's auth state hydrates
+    // independently of our Drift `users` row — currentUser is the source
+    // of truth for what auth.uid() the server will see. The dispatch path
+    // refuses to push rows whose tag does not match the current uid, so
+    // an account switch on this device cannot flush the previous user's
+    // queued writes under the new user's JWT.
+    _db.authUserIdResolver = () => _supabase.auth.currentUser?.id;
+
     // Wire single-active-device sign-in: SyncService notifies us when the
     // sessions row matching our currentSessionId has its revoked_at flipped
     // by another device, so we can fullLogout in response.
@@ -665,6 +675,11 @@ class AuthService extends ValueNotifier<UserData?> {
 
   /// Clears the active user, removes the warehouse lock, but retains the
   /// device-level session so the next launch shows the personalized PIN screen.
+  ///
+  /// The Supabase refresh token for THIS device is revoked
+  /// ([SignOutScope.local]) so the on-device JWT cannot be silently
+  /// re-issued after logout. The user's tokens on other devices stay alive —
+  /// use [fullLogout] for an account-wide sign-out.
   void logout() {
     final sid = currentSessionId;
     if (sid != null) {
@@ -677,6 +692,11 @@ class AuthService extends ValueNotifier<UserData?> {
       });
       currentSessionId = null;
     }
+    _supabase.auth
+        .signOut(scope: SignOutScope.local)
+        .catchError(
+          (e) => debugPrint('[AuthService] Supabase signOut(local) error: $e'),
+        );
     value = null;
     _activeMember = null;
     bypassNextBiometric = true;
@@ -701,10 +721,12 @@ class AuthService extends ValueNotifier<UserData?> {
     await _secure.clearAll();
     deviceUserIdNotifier.value = null;
 
-    // 2. Terminate all sessions globally via Supabase (fire-and-forget —
-    //    network failures should not prevent local logout).
+    // 2. Revoke THIS device's Supabase refresh token (fire-and-forget —
+    //    network failures should not prevent local logout). Scoped local
+    //    so the user's tokens on other devices stay alive; a deliberate
+    //    "Sign out of all devices" CTA can pass SignOutScope.global later.
     _supabase.auth
-        .signOut(scope: SignOutScope.global)
+        .signOut(scope: SignOutScope.local)
         .catchError(
           (e) => debugPrint('[AuthService] Supabase signOut error: $e'),
         );

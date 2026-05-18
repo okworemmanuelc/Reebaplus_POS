@@ -26514,6 +26514,17 @@ class $SyncQueueTable extends SyncQueue
     requiredDuringInsert: false,
     defaultValue: currentDateAndTime,
   );
+  static const VerificationMeta _authUserIdMeta = const VerificationMeta(
+    'authUserId',
+  );
+  @override
+  late final GeneratedColumn<String> authUserId = GeneratedColumn<String>(
+    'auth_user_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -26526,6 +26537,7 @@ class $SyncQueueTable extends SyncQueue
     attempts,
     nextAttemptAt,
     createdAt,
+    authUserId,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -26608,6 +26620,15 @@ class $SyncQueueTable extends SyncQueue
         createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
       );
     }
+    if (data.containsKey('auth_user_id')) {
+      context.handle(
+        _authUserIdMeta,
+        authUserId.isAcceptableOrUnknown(
+          data['auth_user_id']!,
+          _authUserIdMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -26657,6 +26678,10 @@ class $SyncQueueTable extends SyncQueue
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      authUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}auth_user_id'],
+      ),
     );
   }
 
@@ -26677,6 +26702,7 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
   final int attempts;
   final DateTime? nextAttemptAt;
   final DateTime createdAt;
+  final String? authUserId;
   const SyncQueueData({
     required this.id,
     required this.businessId,
@@ -26688,6 +26714,7 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
     required this.attempts,
     this.nextAttemptAt,
     required this.createdAt,
+    this.authUserId,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -26706,6 +26733,9 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
       map['next_attempt_at'] = Variable<DateTime>(nextAttemptAt);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || authUserId != null) {
+      map['auth_user_id'] = Variable<String>(authUserId);
+    }
     return map;
   }
 
@@ -26725,6 +26755,9 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
           ? const Value.absent()
           : Value(nextAttemptAt),
       createdAt: Value(createdAt),
+      authUserId: authUserId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(authUserId),
     );
   }
 
@@ -26744,6 +26777,7 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
       attempts: serializer.fromJson<int>(json['attempts']),
       nextAttemptAt: serializer.fromJson<DateTime?>(json['nextAttemptAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      authUserId: serializer.fromJson<String?>(json['authUserId']),
     );
   }
   @override
@@ -26760,6 +26794,7 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
       'attempts': serializer.toJson<int>(attempts),
       'nextAttemptAt': serializer.toJson<DateTime?>(nextAttemptAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'authUserId': serializer.toJson<String?>(authUserId),
     };
   }
 
@@ -26774,6 +26809,7 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
     int? attempts,
     Value<DateTime?> nextAttemptAt = const Value.absent(),
     DateTime? createdAt,
+    Value<String?> authUserId = const Value.absent(),
   }) => SyncQueueData(
     id: id ?? this.id,
     businessId: businessId ?? this.businessId,
@@ -26787,6 +26823,7 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
         ? nextAttemptAt.value
         : this.nextAttemptAt,
     createdAt: createdAt ?? this.createdAt,
+    authUserId: authUserId.present ? authUserId.value : this.authUserId,
   );
   SyncQueueData copyWithCompanion(SyncQueueCompanion data) {
     return SyncQueueData(
@@ -26808,6 +26845,9 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
           ? data.nextAttemptAt.value
           : this.nextAttemptAt,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      authUserId: data.authUserId.present
+          ? data.authUserId.value
+          : this.authUserId,
     );
   }
 
@@ -26823,7 +26863,8 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
           ..write('errorMessage: $errorMessage, ')
           ..write('attempts: $attempts, ')
           ..write('nextAttemptAt: $nextAttemptAt, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('authUserId: $authUserId')
           ..write(')'))
         .toString();
   }
@@ -26840,6 +26881,7 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
     attempts,
     nextAttemptAt,
     createdAt,
+    authUserId,
   );
   @override
   bool operator ==(Object other) =>
@@ -26854,7 +26896,8 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
           other.errorMessage == this.errorMessage &&
           other.attempts == this.attempts &&
           other.nextAttemptAt == this.nextAttemptAt &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.authUserId == this.authUserId);
 }
 
 class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
@@ -26868,6 +26911,7 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
   final Value<int> attempts;
   final Value<DateTime?> nextAttemptAt;
   final Value<DateTime> createdAt;
+  final Value<String?> authUserId;
   final Value<int> rowid;
   const SyncQueueCompanion({
     this.id = const Value.absent(),
@@ -26880,6 +26924,7 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
     this.attempts = const Value.absent(),
     this.nextAttemptAt = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.authUserId = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   SyncQueueCompanion.insert({
@@ -26893,6 +26938,7 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
     this.attempts = const Value.absent(),
     this.nextAttemptAt = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.authUserId = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : businessId = Value(businessId),
        actionType = Value(actionType),
@@ -26908,6 +26954,7 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
     Expression<int>? attempts,
     Expression<DateTime>? nextAttemptAt,
     Expression<DateTime>? createdAt,
+    Expression<String>? authUserId,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -26921,6 +26968,7 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
       if (attempts != null) 'attempts': attempts,
       if (nextAttemptAt != null) 'next_attempt_at': nextAttemptAt,
       if (createdAt != null) 'created_at': createdAt,
+      if (authUserId != null) 'auth_user_id': authUserId,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -26936,6 +26984,7 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
     Value<int>? attempts,
     Value<DateTime?>? nextAttemptAt,
     Value<DateTime>? createdAt,
+    Value<String?>? authUserId,
     Value<int>? rowid,
   }) {
     return SyncQueueCompanion(
@@ -26949,6 +26998,7 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
       attempts: attempts ?? this.attempts,
       nextAttemptAt: nextAttemptAt ?? this.nextAttemptAt,
       createdAt: createdAt ?? this.createdAt,
+      authUserId: authUserId ?? this.authUserId,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -26986,6 +27036,9 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (authUserId.present) {
+      map['auth_user_id'] = Variable<String>(authUserId.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -27005,6 +27058,7 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
           ..write('attempts: $attempts, ')
           ..write('nextAttemptAt: $nextAttemptAt, ')
           ..write('createdAt: $createdAt, ')
+          ..write('authUserId: $authUserId, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -63081,6 +63135,7 @@ typedef $$SyncQueueTableCreateCompanionBuilder =
       Value<int> attempts,
       Value<DateTime?> nextAttemptAt,
       Value<DateTime> createdAt,
+      Value<String?> authUserId,
       Value<int> rowid,
     });
 typedef $$SyncQueueTableUpdateCompanionBuilder =
@@ -63095,6 +63150,7 @@ typedef $$SyncQueueTableUpdateCompanionBuilder =
       Value<int> attempts,
       Value<DateTime?> nextAttemptAt,
       Value<DateTime> createdAt,
+      Value<String?> authUserId,
       Value<int> rowid,
     });
 
@@ -63176,6 +63232,11 @@ class $$SyncQueueTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get authUserId => $composableBuilder(
+    column: $table.authUserId,
+    builder: (column) => ColumnFilters(column),
+  );
+
   $$BusinessesTableFilterComposer get businessId {
     final $$BusinessesTableFilterComposer composer = $composerBuilder(
       composer: this,
@@ -63254,6 +63315,11 @@ class $$SyncQueueTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get authUserId => $composableBuilder(
+    column: $table.authUserId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$BusinessesTableOrderingComposer get businessId {
     final $$BusinessesTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -63320,6 +63386,11 @@ class $$SyncQueueTableAnnotationComposer
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
+  GeneratedColumn<String> get authUserId => $composableBuilder(
+    column: $table.authUserId,
+    builder: (column) => column,
+  );
+
   $$BusinessesTableAnnotationComposer get businessId {
     final $$BusinessesTableAnnotationComposer composer = $composerBuilder(
       composer: this,
@@ -63382,6 +63453,7 @@ class $$SyncQueueTableTableManager
                 Value<int> attempts = const Value.absent(),
                 Value<DateTime?> nextAttemptAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<String?> authUserId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SyncQueueCompanion(
                 id: id,
@@ -63394,6 +63466,7 @@ class $$SyncQueueTableTableManager
                 attempts: attempts,
                 nextAttemptAt: nextAttemptAt,
                 createdAt: createdAt,
+                authUserId: authUserId,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -63408,6 +63481,7 @@ class $$SyncQueueTableTableManager
                 Value<int> attempts = const Value.absent(),
                 Value<DateTime?> nextAttemptAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<String?> authUserId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SyncQueueCompanion.insert(
                 id: id,
@@ -63420,6 +63494,7 @@ class $$SyncQueueTableTableManager
                 attempts: attempts,
                 nextAttemptAt: nextAttemptAt,
                 createdAt: createdAt,
+                authUserId: authUserId,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
