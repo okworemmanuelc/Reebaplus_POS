@@ -737,6 +737,11 @@ class AuthService extends ValueNotifier<UserData?> {
       });
       currentSessionId = null;
     }
+    // Clear nav state BEFORE nulling value. lockedWarehouseId listeners
+    // (e.g. PosController._subscribeToProducts) fire synchronously; if
+    // value is already null, requireBusinessId throws.
+    _nav.clearWarehouseLock();
+    _nav.resetNavigation();
     _supabase.auth
         .signOut(scope: SignOutScope.local)
         .catchError(
@@ -745,8 +750,6 @@ class AuthService extends ValueNotifier<UserData?> {
     value = null;
     _activeMember = null;
     bypassNextBiometric = true;
-    _nav.clearWarehouseLock();
-    _nav.resetNavigation();
   }
 
   /// UI-only lock: drops the in-memory user so the PIN screen takes over,
@@ -755,11 +758,12 @@ class AuthService extends ValueNotifier<UserData?> {
   /// avoids verifyLocalSessionStillActive treating us as a remote kick
   /// on the next resume (it early-returns when value == null).
   void lockApp() {
+    // See logout() — same ordering rule.
+    _nav.clearWarehouseLock();
+    _nav.resetNavigation();
     value = null;
     _activeMember = null;
     bypassNextBiometric = true;
-    _nav.clearWarehouseLock();
-    _nav.resetNavigation();
   }
 
   /// Completely wipes the session, reverting the device to a fresh state.
@@ -798,10 +802,12 @@ class AuthService extends ValueNotifier<UserData?> {
 
     // 4. Clear local state — triggers the ValueListenableBuilder to rebuild.
     //    At this point _hasDeviceUser is already false → routes to EmailEntryScreen.
-    value = null;
-    _activeMember = null;
+    //    Order matters: clear nav first so warehouse-listeners fire while
+    //    the businessId resolver still returns a valid id (see logout()).
     _nav.clearWarehouseLock();
     _nav.resetNavigation();
+    value = null;
+    _activeMember = null;
   }
 
   /// Returns true if [pin] belongs to at least one user whose
