@@ -15,6 +15,14 @@ import 'package:reebaplus_pos/shared/services/pin_hasher.dart';
 /// Route to show after login instead of the default MainLayout.
 enum PostLoginRoute { none, successDashboard, accessGranted }
 
+/// Outcome of a silent JWT refresh attempt.
+///
+/// Callers use this to decide whether to proceed (refreshed/alreadyValid/
+/// offline) or fall back to OTP (failedAuth). Offline is deliberately
+/// tolerated — the SDK auto-retries on reconnect and sync push already
+/// gates on auth, so cloud writes queue safely until the JWT is back.
+enum SessionRefreshResult { refreshed, alreadyValid, offline, failedAuth }
+
 /// Holds the currently logged-in user.
 /// `value` is null when nobody is logged in.
 class AuthService extends ValueNotifier<UserData?> {
@@ -413,6 +421,43 @@ class AuthService extends ValueNotifier<UserData?> {
     }
   }
 
+  /// Attempts a one-shot JWT refresh without bouncing the user to OTP.
+  ///
+  /// Used by PIN unlock to recover an expired access token silently when
+  /// the refresh token is still valid (typical case: device was idle long
+  /// enough for the access token to expire but the refresh token hasn't).
+  Future<SessionRefreshResult> tryRefreshSupabaseSession() async {
+    if (_supabase.auth.currentSession != null) {
+      return SessionRefreshResult.alreadyValid;
+    }
+    try {
+      final response = await _supabase.auth
+          .refreshSession()
+          .timeout(const Duration(seconds: 8));
+      return response.session != null
+          ? SessionRefreshResult.refreshed
+          : SessionRefreshResult.failedAuth;
+    } on AuthRetryableFetchException catch (e) {
+      debugPrint('[AuthService] refreshSession offline: $e');
+      return SessionRefreshResult.offline;
+    } on TimeoutException catch (_) {
+      return SessionRefreshResult.offline;
+    } on AuthException catch (e) {
+      // "No current session" / refresh-token rejected — genuine auth fail.
+      debugPrint('[AuthService] refreshSession auth failure: $e');
+      return SessionRefreshResult.failedAuth;
+    } catch (e) {
+      final msg = e.toString().toLowerCase();
+      if (msg.contains('socketexception') ||
+          msg.contains('failed host lookup') ||
+          msg.contains('clientexception')) {
+        return SessionRefreshResult.offline;
+      }
+      debugPrint('[AuthService] refreshSession unknown error: $e');
+      return SessionRefreshResult.failedAuth;
+    }
+  }
+
   /// Verifies the [otp] code for [email].
   /// Returns null on success, or an error string on failure.
   Future<String?> verifyOtp(String email, String otp) async {
@@ -697,6 +742,19 @@ class AuthService extends ValueNotifier<UserData?> {
         .catchError(
           (e) => debugPrint('[AuthService] Supabase signOut(local) error: $e'),
         );
+    value = null;
+    _activeMember = null;
+    bypassNextBiometric = true;
+    _nav.clearWarehouseLock();
+    _nav.resetNavigation();
+  }
+
+  /// UI-only lock: drops the in-memory user so the PIN screen takes over,
+  /// but does NOT revoke the sessions row or sign out of Supabase. The
+  /// same device session continues across the lock — keeps RLS happy and
+  /// avoids verifyLocalSessionStillActive treating us as a remote kick
+  /// on the next resume (it early-returns when value == null).
+  void lockApp() {
     value = null;
     _activeMember = null;
     bypassNextBiometric = true;
