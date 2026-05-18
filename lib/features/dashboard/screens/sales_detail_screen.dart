@@ -138,6 +138,7 @@ class _SalesDetailScreenState extends State<SalesDetailScreen> {
                 // ── Rows ─────────────────────────────────────────────────
                 Expanded(
                   child: ListView.separated(
+                    padding: EdgeInsets.only(bottom: context.bottomInset),
                     itemCount: rows.length,
                     separatorBuilder: (_, __) =>
                         Divider(height: 1, color: theme.dividerColor),

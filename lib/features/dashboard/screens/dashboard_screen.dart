@@ -322,7 +322,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         ),
         body: AppRefreshWrapper(
           child: ListView(
-            padding: EdgeInsets.all(context.spacingM),
+            padding: EdgeInsets.all(context.spacingM).copyWith(
+              bottom: context.spacingM + context.bottomInset,
+            ),
             children: [
               if (_showProTips) ...[
                 _buildQuickStartHero(),

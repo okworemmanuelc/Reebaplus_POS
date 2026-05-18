@@ -354,7 +354,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
 
     return AppRefreshWrapper(
       child: ListView.builder(
-        padding: EdgeInsets.only(bottom: context.getRSize(100)),
+        padding: EdgeInsets.only(bottom: context.getRSize(100) + context.bottomInset),
         itemCount: sortedCategories.length,
         itemBuilder: (context, cIndex) {
         final cat = sortedCategories[cIndex];
@@ -432,7 +432,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
       child: ListView(
         padding: EdgeInsets.all(
           context.getRSize(16),
-        ).copyWith(bottom: context.getRSize(100)),
+        ).copyWith(bottom: context.getRSize(100) + context.bottomInset),
         children: [
           // Annual Projection Card
           _buildAnnualProjectionCard(context),

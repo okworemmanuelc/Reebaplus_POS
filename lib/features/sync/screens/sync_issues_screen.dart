@@ -11,6 +11,7 @@ import 'package:reebaplus_pos/core/diagnostics/sync_diagnostic.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
 
 /// Result of asking the cloud for the `profiles` row backing the current
 /// session. This is what `get_user_business_id()` will resolve to and thus
@@ -183,7 +184,7 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
         centerTitle: true,
       ),
       body: ListView(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + context.bottomInset),
         children: [
           _sectionHeader(t, 'Health'),
           const SizedBox(height: 12),

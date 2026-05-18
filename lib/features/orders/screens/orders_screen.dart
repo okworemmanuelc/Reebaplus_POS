@@ -581,7 +581,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
           context.getRSize(16),
           context.getRSize(16),
           context.getRSize(16),
-          context.getRSize(100),
+          context.getRSize(100) + context.bottomInset,
         ),
         sliver: SliverList(
           delegate: SliverChildBuilderDelegate(

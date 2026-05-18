@@ -552,7 +552,7 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
               rSize(context, 16),
               rSize(context, 16),
               rSize(context, 16),
-              rSize(context, 100),
+              rSize(context, 100) + context.bottomInset,
             ),
             itemCount: warehouses.length,
             itemBuilder: (context, index) =>

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
@@ -74,7 +75,9 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
         ),
         child: GridView.count(
           crossAxisCount: 2,
-          padding: EdgeInsets.all(context.spacingM),
+          padding: EdgeInsets.all(context.spacingM).copyWith(
+            bottom: context.spacingM + context.bottomInset,
+          ),
           mainAxisSpacing: context.spacingM,
           crossAxisSpacing: context.spacingM,
           children: [

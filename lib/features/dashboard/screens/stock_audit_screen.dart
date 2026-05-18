@@ -609,7 +609,12 @@ class _StockAuditScreenState extends ConsumerState<StockAuditScreen> {
     final runningBalances = <String, int>{}; // productId → running balance
 
     return ListView.builder(
-      padding: EdgeInsets.symmetric(horizontal: context.spacingM),
+      padding: EdgeInsets.fromLTRB(
+        context.spacingM,
+        0,
+        context.spacingM,
+        context.bottomInset,
+      ),
       itemCount: _transactions.length,
       itemBuilder: (context, index) {
         // Process in reverse for running balance (list is DESC, process ASC)

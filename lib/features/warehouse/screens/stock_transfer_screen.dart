@@ -185,10 +185,13 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
               ),
             ),
           ),
-          AppButton(
-            text: 'Confirm Transfer',
-            icon: FontAwesomeIcons.rightLeft,
-            onPressed: _submit,
+          Padding(
+            padding: EdgeInsets.only(bottom: context.bottomInset),
+            child: AppButton(
+              text: 'Confirm Transfer',
+              icon: FontAwesomeIcons.rightLeft,
+              onPressed: _submit,
+            ),
           ),
         ],
       ),

@@ -481,9 +481,11 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         : 'N/A';
 
     return Padding(
-      padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(20),
-        vertical: context.getRSize(16),
+      padding: EdgeInsets.fromLTRB(
+        context.getRSize(20),
+        context.getRSize(16),
+        context.getRSize(20),
+        context.getRSize(16) + context.bottomInset,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -122,7 +122,9 @@ class _WarehouseDetailsScreenState
         builder: (context, constraints) {
           final isWide = constraints.maxWidth > 600;
           return ListView(
-            padding: EdgeInsets.all(rSize(context, 16)),
+            padding: EdgeInsets.all(rSize(context, 16)).copyWith(
+              bottom: rSize(context, 16) + context.bottomInset,
+            ),
             children: [
               _buildMetricOverview(totalStock, totalValue),
               SizedBox(height: rSize(context, 20)),

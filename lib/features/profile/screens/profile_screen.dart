@@ -131,7 +131,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         builder: (context, constraints) {
           final isWide = constraints.maxWidth > 600;
           return ListView(
-            padding: EdgeInsets.all(context.getRSize(20)),
+            padding: EdgeInsets.all(context.getRSize(20)).copyWith(
+              bottom: context.getRSize(20) + context.bottomInset,
+            ),
             children: [
               _buildProfileHeader(user, avatarColor, warehouseName),
               SizedBox(height: context.getRSize(24)),

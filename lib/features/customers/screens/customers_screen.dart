@@ -145,9 +145,9 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                     }
                     return AppRefreshWrapper(
                       child: ListView.separated(
-                        padding: context
-                            .rPadding(16)
-                            .copyWith(bottom: context.getRSize(100)),
+                        padding: context.rPadding(16).copyWith(
+                              bottom: context.getRSize(100) + context.bottomInset,
+                            ),
                         itemCount: filtered.length,
                         separatorBuilder: (context, index) =>
                             SizedBox(height: context.getRSize(12)),

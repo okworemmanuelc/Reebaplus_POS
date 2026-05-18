@@ -128,7 +128,9 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
         builder: (context, constraints) {
           final isWide = constraints.maxWidth > 600;
           return ListView(
-            padding: EdgeInsets.all(rSize(context, 20)),
+            padding: EdgeInsets.all(rSize(context, 20)).copyWith(
+              bottom: rSize(context, 20) + context.bottomInset,
+            ),
             children: [
               _buildProfileHeader(avatarColor, warehouseName),
               SizedBox(height: rSize(context, 24)),

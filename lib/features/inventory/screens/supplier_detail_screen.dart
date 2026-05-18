@@ -55,7 +55,9 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
           ),
         ),
         body: ListView(
-          padding: EdgeInsets.all(context.getRSize(20)),
+          padding: EdgeInsets.all(context.getRSize(20)).copyWith(
+            bottom: context.getRSize(20) + context.bottomInset,
+          ),
           children: [
             _buildHeader(context),
             SizedBox(height: context.getRSize(24)),

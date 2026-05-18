@@ -540,7 +540,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                     context.getRSize(16),
                     context.getRSize(12),
                     context.getRSize(16),
-                    context.getRSize(120),
+                    context.getRSize(120) + context.bottomInset,
                   ),
                   itemCount: list.length,
                   itemBuilder: (_, i) => _buildProductRow(context, list[i]),
@@ -575,7 +575,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                     context.getRSize(16),
                     0,
                     context.getRSize(16),
-                    context.getRSize(120),
+                    context.getRSize(120) + context.bottomInset,
                   ),
                   itemCount: ref.read(supplierServiceProvider).getAll().length,
                   itemBuilder: (_, i) {
@@ -989,7 +989,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         context.getRSize(16),
         context.getRSize(16),
         context.getRSize(16),
-        context.getRSize(120),
+        context.getRSize(120) + context.bottomInset,
       ),
       children: [
         // 1. Stats Overview

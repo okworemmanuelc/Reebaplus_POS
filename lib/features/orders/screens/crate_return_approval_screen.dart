@@ -157,7 +157,12 @@ class _CrateReturnApprovalScreenState
               });
 
             return ListView.builder(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.fromLTRB(
+                16,
+                16,
+                16,
+                16 + context.bottomInset,
+              ),
               itemCount: sortedKeys.length,
               itemBuilder: (context, index) {
                 final group = groups[sortedKeys[index]]!;

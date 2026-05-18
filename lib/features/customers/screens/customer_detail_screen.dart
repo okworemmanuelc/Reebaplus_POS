@@ -1128,7 +1128,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                     context.getRSize(20),
                     context.getRSize(12),
                     context.getRSize(20),
-                    context.getRSize(20),
+                    context.getRSize(20) + context.bottomInset,
                   ),
                   itemCount: filtered.length,
                   itemBuilder: (ctx, i) {
@@ -1218,7 +1218,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
         context.getRSize(20),
         context.getRSize(12),
         context.getRSize(20),
-        context.getRSize(20),
+        context.getRSize(20) + context.bottomInset,
       ),
       itemCount: _orders.length,
       itemBuilder: (ctx, i) {
@@ -1315,7 +1315,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
         context.getRSize(20),
         context.getRSize(12),
         context.getRSize(20),
-        context.getRSize(20),
+        context.getRSize(20) + context.bottomInset,
       ),
       itemCount: _crateBalances.length,
       itemBuilder: (ctx, i) {
