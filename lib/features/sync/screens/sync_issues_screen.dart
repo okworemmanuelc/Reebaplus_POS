@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -87,6 +88,8 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
   bool _auditRunning = false;
   List<TableDiagnosticRow>? _auditResults;
   _ProfileProbe _profile = const _ProfileProbe.loading();
+  List<String> _deferredTables = const [];
+  bool _retryingDeferred = false;
   final _serviceKeyCtl = TextEditingController();
   final _projectUrlCtl = TextEditingController();
 
@@ -102,6 +105,47 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
     _sync = ref.read(supabaseSyncServiceProvider);
     _db = ref.read(databaseProvider);
     unawaited(_probeProfile());
+    unawaited(_loadDeferredTables());
+  }
+
+  Future<void> _loadDeferredTables() async {
+    final businessId = ref.read(authProvider).currentUser?.businessId;
+    if (businessId == null) {
+      if (mounted) setState(() => _deferredTables = const []);
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    final raw =
+        prefs.getString(SupabaseSyncService.pendingDeferredTablesKey(businessId));
+    if (!mounted) return;
+    setState(() {
+      _deferredTables = (raw == null || raw.isEmpty)
+          ? const []
+          : raw.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+    });
+  }
+
+  Future<void> _retryDeferredPull() async {
+    if (_retryingDeferred) return;
+    final businessId = ref.read(authProvider).currentUser?.businessId;
+    if (businessId == null) return;
+    setState(() => _retryingDeferred = true);
+    final sync = ref.read(supabaseSyncServiceProvider);
+    try {
+      await sync.syncAll(businessId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Re-sync complete.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Re-sync failed: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _retryingDeferred = false);
+      await _loadDeferredTables();
+    }
   }
 
   @override
@@ -196,6 +240,12 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
               failed: failedCount,
               orphaned: orphanCount),
           const SizedBox(height: 28),
+          if (_deferredTables.isNotEmpty) ...[
+            _sectionHeader(t, 'Catching up'),
+            const SizedBox(height: 12),
+            _deferredCard(t, _deferredTables),
+            const SizedBox(height: 28),
+          ],
           _sectionHeader(t, 'Failed items'),
           const SizedBox(height: 12),
           failedAsync.when(
@@ -272,6 +322,85 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
           letterSpacing: 1.2,
         ),
       );
+
+  Widget _deferredCard(ThemeData t, List<String> tables) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: AppDecorations.glassCard(context, radius: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                FontAwesomeIcons.cloudArrowDown,
+                size: 16,
+                color: t.colorScheme.primary,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Some history is still catching up',
+                style: t.textTheme.titleSmall
+                    ?.copyWith(fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'The last full pull deferred ${tables.length} '
+            'table${tables.length == 1 ? '' : 's'} because the connection '
+            'was too slow to fetch them. Live activity still syncs '
+            'normally. Tap retry on a stronger connection to catch the '
+            'history up.',
+            style: t.textTheme.bodySmall?.copyWith(
+              color: t.colorScheme.onSurface.withValues(alpha: 0.7),
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final tbl in tables)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: t.colorScheme.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    tbl,
+                    style: t.textTheme.bodySmall?.copyWith(
+                      color: t.colorScheme.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerRight,
+            child: ElevatedButton.icon(
+              onPressed: _retryingDeferred ? null : _retryDeferredPull,
+              icon: _retryingDeferred
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.refresh, size: 16),
+              label: Text(_retryingDeferred ? 'Retrying…' : 'Retry pull'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _healthCard(
     ThemeData t, {

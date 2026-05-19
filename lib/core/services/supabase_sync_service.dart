@@ -23,6 +23,74 @@ class SaleSyncException implements Exception {
   String toString() => 'SaleSyncException(orderId=$orderId): $errorMessage';
 }
 
+/// Thrown by [SupabaseSyncService.pullInitialData] when one or more
+/// tenant-table fetches failed (after retry) during the per-table
+/// fallback path. Restoring an incomplete snapshot would silently
+/// produce a local DB that looks complete but isn't — children would
+/// FK-fail against parents that were never fetched. The caller should
+/// surface this as a "check your connection" message and let the user
+/// retry.
+class PartialPullException implements Exception {
+  final Set<String> failedTables;
+  const PartialPullException(this.failedTables);
+  @override
+  String toString() =>
+      'PartialPullException: ${failedTables.length} table(s) failed: '
+      '${failedTables.join(", ")}';
+}
+
+class _FetchOutcome {
+  final String table;
+  final List<dynamic>? data;
+  final Object? error;
+  const _FetchOutcome(this.table, this.data, this.error);
+}
+
+/// Coarse stage for the data-pull state machine. Drives the MainLayout
+/// catch-up banner and is observed by `pullStatusProvider`.
+///
+/// - [idle]: no pull in flight; local DB is either fresh or last pull
+///   completed successfully.
+/// - [minimum]: the 4-table fast pull that gates MainLayout render
+///   (profiles, businesses, users, warehouses). Never visible in
+///   MainLayout — it only fires before MainLayout mounts.
+/// - [background]: the post-login full pull. Banner is visible.
+/// - [completed]: the most recent pull (minimum or background)
+///   finished cleanly. Banner shows "Caught up." for 2s then transitions
+///   to [idle].
+/// - [failed]: a pull threw `PartialPullException` or another error.
+///   Banner shows graduated copy based on `consecutive_pull_failures`.
+enum PullStage { idle, minimum, background, completed, failed }
+
+class PullStatus {
+  final PullStage stage;
+  final int tablesDone;
+  final int tablesTotal;
+  final String? failedReason;
+
+  const PullStatus({
+    required this.stage,
+    this.tablesDone = 0,
+    this.tablesTotal = 0,
+    this.failedReason,
+  });
+
+  static const idle = PullStatus(stage: PullStage.idle);
+
+  PullStatus copyWith({
+    PullStage? stage,
+    int? tablesDone,
+    int? tablesTotal,
+    String? failedReason,
+  }) =>
+      PullStatus(
+        stage: stage ?? this.stage,
+        tablesDone: tablesDone ?? this.tablesDone,
+        tablesTotal: tablesTotal ?? this.tablesTotal,
+        failedReason: failedReason ?? this.failedReason,
+      );
+}
+
 /// Result of decoding the current Supabase session's access token.
 /// `businessId` is non-null only when the JWT actually carries a
 /// `business_id` claim (top-level or under `app_metadata` /
@@ -63,7 +131,57 @@ class SupabaseSyncService {
   /// event arrives.
   final ValueNotifier<bool> isOnline = ValueNotifier<bool>(true);
 
-  SupabaseSyncService(this._db, this._supabase);
+  /// Stage of the data-pull state machine. Drives the MainLayout catch-up
+  /// banner via `pullStatusProvider`. Mirrors the `isOnline` pattern — public
+  /// field, exposed directly, lifted to Riverpod in app_providers.dart.
+  final ValueNotifier<PullStatus> pullStatus =
+      ValueNotifier<PullStatus>(PullStatus.idle);
+
+  /// Re-entrancy guard for `pullChanges`. setCurrentUser fires it on every
+  /// login boundary; the connectivity-recovery listener may also fire it;
+  /// users can tap retry; FirstSyncScreen-on-error retries. Without a guard
+  /// these can race and double-restore the same row range.
+  bool _fullPullRunning = false;
+
+  /// Last businessId the service is configured for. Used by the
+  /// connectivity-recovery listener to know which tenant to retry against.
+  /// Set inside `pullChanges` / `syncMinimumLogin` whenever they run for a
+  /// given business.
+  String? _currentBusinessId;
+
+  /// Persistent failure-count key. Per-business so multi-tenant device
+  /// switching doesn't conflate counts.
+  static String _consecutiveFailuresKey(String businessId) =>
+      'consecutive_pull_failures::$businessId';
+
+  /// Tracks the previous value of [isOnline] so the listener can detect
+  /// `false → true` transitions. ValueNotifier doesn't surface old values
+  /// in listener callbacks, so we keep our own copy.
+  bool _wasOnline = true;
+
+  /// Listener fired on every [isOnline] change. On a `false → true`
+  /// transition, if the last pull failed and we have a businessId, kicks
+  /// off `pullChanges` once. Single shot, not a retry loop — relying on
+  /// the OS-provided connectivity signal instead of polling.
+  void _onOnlineChanged() {
+    final nowOnline = isOnline.value;
+    if (!_wasOnline &&
+        nowOnline &&
+        pullStatus.value.stage == PullStage.failed &&
+        _currentBusinessId != null &&
+        !_fullPullRunning) {
+      debugPrint(
+        '[SyncService] Connectivity recovered while pull was failed — '
+        'auto-retrying pullChanges($_currentBusinessId)',
+      );
+      unawaited(pullChanges(_currentBusinessId!));
+    }
+    _wasOnline = nowOnline;
+  }
+
+  SupabaseSyncService(this._db, this._supabase) {
+    isOnline.addListener(_onOnlineChanged);
+  }
 
   /// Wired by AuthService to expose this device's active session id so
   /// the Realtime callback can recognise when its own row was revoked.
@@ -994,6 +1112,67 @@ class SupabaseSyncService {
     }
   }
 
+  /// Minimum-login pull: fetches only the tables required for `MainLayout`
+  /// to render. Designed to complete in ~1-6 seconds depending on link
+  /// speed (math in the plan file). Throws [PartialPullException] on
+  /// any failure so the calling screen surfaces "check your connection".
+  ///
+  /// Tables (FK-safe order for restore):
+  ///   profiles → businesses → users → warehouses
+  ///
+  /// Parallel fetch via `Future.wait` of `_fetchOneTable` calls (HTTP/2
+  /// multiplexes the connection; on bandwidth-bound 3G the wins are
+  /// modest, on latency-bound 4G they're substantial). Does NOT advance
+  /// `last_sync_timestamp::<businessId>` — that's the full-pull's job.
+  Future<void> syncMinimumLogin(String businessId) async {
+    _currentBusinessId = businessId;
+    debugPrint(
+      '[SyncService] Minimum-login pull for business $businessId...',
+    );
+    pullStatus.value = const PullStatus(
+      stage: PullStage.minimum,
+      tablesTotal: 4,
+    );
+    // FK-safe restore order:
+    //   businesses  → no inbound deps among this set
+    //   warehouses  → references businesses
+    //   users       → references businesses AND warehouses
+    //   profiles    → cloud-only; no local Drift table so _restoreTableData
+    //                 is a no-op. Kept in the fetch set so the 4-call
+    //                 round-trip count matches the plan; safe to drop later
+    //                 if we want one fewer request on the critical path.
+    // The download is parallel via Future.wait — list ordering only
+    // controls the sequential restore below.
+    const tables = ['profiles', 'businesses', 'warehouses', 'users'];
+    try {
+      final fetched = await Future.wait(
+        tables.map((t) => _fetchOneTable(t, businessId, null)),
+      );
+      for (var i = 0; i < tables.length; i++) {
+        final t = tables[i];
+        final data = fetched[i];
+        if (data.isEmpty) continue;
+        debugPrint(
+          '[SyncService] Minimum-login restore $t: ${data.length} rows',
+        );
+        await _restoreTableData(t, data);
+        pullStatus.value = pullStatus.value.copyWith(tablesDone: i + 1);
+      }
+      // Don't set `completed` here — minimum fires before MainLayout
+      // mounts, so the user never sees the banner. Leaving stage as
+      // `minimum` until the caller transitions on to the background
+      // pull keeps the state machine clean.
+      pullStatus.value = PullStatus.idle;
+    } catch (e, st) {
+      debugPrint('[SyncService] Minimum-login pull failed: $e\n$st');
+      pullStatus.value = PullStatus(
+        stage: PullStage.failed,
+        failedReason: e.toString(),
+      );
+      rethrow;
+    }
+  }
+
   /// Pull-only half of [syncAll]: incremental pull anchored on the per-
   /// business `last_sync_timestamp::<businessId>` cursor in SharedPreferences.
   ///
@@ -1003,7 +1182,22 @@ class SupabaseSyncService {
   /// through `_restoreTableData` (the §5-exempt restoration path). That makes
   /// it the right entry point for [AuthService.syncOnLogin], which runs at
   /// login boundaries where the resolver still returns null.
+  ///
+  /// Re-entrant calls are no-ops (early-return via `_fullPullRunning`).
+  /// setCurrentUser, the connectivity-recovery listener, a manual banner
+  /// retry, and a FirstSyncScreen retry all converge on this single entry
+  /// point and must not race each other.
   Future<void> pullChanges(String businessId) async {
+    if (_fullPullRunning) {
+      debugPrint(
+        '[SyncService] pullChanges already in flight for $businessId — skipping',
+      );
+      return;
+    }
+    _fullPullRunning = true;
+    _currentBusinessId = businessId;
+    pullStatus.value = const PullStatus(stage: PullStage.background);
+
     final prefs = await SharedPreferences.getInstance();
     // Per-business key: a wiped DB or a device that has switched businesses
     // must not inherit the timestamp from a different tenant, otherwise
@@ -1016,9 +1210,46 @@ class SupabaseSyncService {
       since = DateTime.tryParse(lastSyncStr);
     }
 
-    await pullInitialData(businessId, since: since);
+    try {
+      final skipped = await pullInitialData(businessId, since: since);
 
-    await prefs.setString(key, DateTime.now().toUtc().toIso8601String());
+      final deferredKey = pendingDeferredTablesKey(businessId);
+      if (skipped.isEmpty) {
+        // Clean pull — advance the cursor and clear any prior deferred-tables
+        // record so the SyncIssues UI stops surfacing stale "catching up" state.
+        await prefs.setString(key, DateTime.now().toUtc().toIso8601String());
+        await prefs.remove(deferredKey);
+      } else {
+        // Leaf-deferred pull. Holding the cursor forces the next pull to be a
+        // full pull so the deferred slices can catch up. Persist the latest
+        // deferred set so SyncIssues can show what's still pending.
+        debugPrint(
+          '[SyncService] Holding last_sync_timestamp; ${skipped.length} '
+          'deferred table(s): ${skipped.join(", ")}',
+        );
+        await prefs.setString(deferredKey, skipped.join(','));
+      }
+      // Clean run — reset consecutive-failure count and signal completion.
+      // Deferred-only completion still counts as "caught up" for banner
+      // purposes; the deferred set lives in its own pref and the
+      // SyncIssues "Catching up" card surfaces it independently.
+      await prefs.setInt(_consecutiveFailuresKey(businessId), 0);
+      pullStatus.value = pullStatus.value.copyWith(
+        stage: PullStage.completed,
+      );
+    } catch (e, st) {
+      debugPrint('[SyncService] pullChanges failed: $e\n$st');
+      final fails =
+          (prefs.getInt(_consecutiveFailuresKey(businessId)) ?? 0) + 1;
+      await prefs.setInt(_consecutiveFailuresKey(businessId), fails);
+      pullStatus.value = PullStatus(
+        stage: PullStage.failed,
+        failedReason: e.toString(),
+      );
+      rethrow;
+    } finally {
+      _fullPullRunning = false;
+    }
   }
 
   /// Tables fed into `_restoreTableData` after a pull, in FK-safe order.
@@ -1063,6 +1294,36 @@ class SupabaseSyncService {
     'settings',
   ];
 
+  /// Tables we treat as "deferrable" on first-pull: leaf tables that nothing
+  /// FK-references, so a missing slice can't trip restore-time FK violations
+  /// in any other table. If only these fail after retry in the per-table
+  /// fallback, the pull proceeds with what arrived and `pullChanges`
+  /// intentionally does NOT advance `last_sync_timestamp::<businessId>`
+  /// so the next pull is another full pull and catches up the deferred
+  /// slices on a (hopefully) better connection.
+  ///
+  /// Adding a table here is a load-bearing safety claim. Before adding,
+  /// confirm there are no inbound FK references with BOTH:
+  ///   grep -nE "\.references\(<TableName>," lib/core/database/app_database.dart
+  ///   grep -nE "REFERENCES public\.<table_name>\b" supabase/migrations/*.sql
+  /// Both must return zero matches. If anything FK-references the table,
+  /// deferring it would break the dependent restore.
+  static const Set<String> _deferrableTables = {
+    'stock_transactions',
+    'sessions',
+    'activity_logs',
+    'notifications',
+    'payment_transactions',
+    'crate_ledger',
+  };
+
+  /// SharedPreferences key (per-business) carrying the last set of tables
+  /// that were leaf-deferred on an otherwise-successful pull. SyncIssues
+  /// reads this to surface "still catching up" UI. Cleared when a clean
+  /// full pull completes.
+  static String pendingDeferredTablesKey(String businessId) =>
+      'pending_deferred_tables::$businessId';
+
   /// Pulls data for the current business from Supabase and populates the local DB.
   /// If [since] is provided, performs an incremental pull.
   ///
@@ -1070,7 +1331,15 @@ class SupabaseSyncService {
   /// in one round-trip. Falls back to the per-table PostgREST path if the
   /// RPC isn't deployed yet (the migration in 0005_sync_rpcs.sql may not be
   /// applied to every environment).
-  Future<void> pullInitialData(String businessId, {DateTime? since}) async {
+  ///
+  /// Returns the set of tables that were leaf-deferred on this pull (subset
+  /// of [_deferrableTables]). When non-empty, the caller (pullChanges) must
+  /// NOT advance `last_sync_timestamp::<businessId>` so the next pull is a
+  /// fresh full pull that catches up the deferred slices.
+  Future<Set<String>> pullInitialData(
+    String businessId, {
+    DateTime? since,
+  }) async {
     // Force a full sync if the business is not found locally.
     final localBusiness = await (_db.select(
       _db.businesses,
@@ -1087,6 +1356,7 @@ class SupabaseSyncService {
     );
 
     Map<String, List<dynamic>>? snapshot;
+    Set<String> skipped = const <String>{};
     try {
       final result = await _supabase.rpc(
         'pos_pull_snapshot',
@@ -1094,7 +1364,7 @@ class SupabaseSyncService {
           'p_business_id': businessId,
           'p_since': since?.toIso8601String(),
         },
-      ).timeout(const Duration(seconds: 30));
+      ).timeout(const Duration(seconds: 60));
       if (result is Map) {
         snapshot = <String, List<dynamic>>{
           for (final entry in result.entries)
@@ -1113,7 +1383,11 @@ class SupabaseSyncService {
       );
     }
 
-    snapshot ??= await _pullViaPostgRest(businessId, since);
+    if (snapshot == null) {
+      final fallback = await _pullViaPostgRest(businessId, since);
+      snapshot = fallback.data;
+      skipped = fallback.skipped;
+    }
 
     // `pos_pull_snapshot` predates the `users` restore path (see 0005_sync_rpcs
     // v_tenant_tables) and omits the `users` table. Without a backfill,
@@ -1146,7 +1420,11 @@ class SupabaseSyncService {
         }
       } catch (e) {
         debugPrint('[SyncService] Supplementary users fetch failed: $e');
-        snapshot.putIfAbsent('users', () => const <dynamic>[]);
+        // Same loud-fail contract as the per-table fallback: an empty
+        // users slice would FK-fail every restore that references
+        // staff_id. Refuse to proceed rather than silently corrupt
+        // the local DB.
+        throw const PartialPullException({'users'});
       }
     }
 
@@ -1170,53 +1448,160 @@ class SupabaseSyncService {
       }
     }
 
-    for (final table in _pullOrder) {
-      final data = snapshot[table];
-      if (data != null && data.isNotEmpty) {
-        debugPrint('[SyncService] Syncing $table: ${data.length} rows');
-        await _restoreTableData(table, data);
+    // Tables that actually have rows to restore — drives the banner's
+    // "$done / $total" counter. Tables with empty slices are skipped so
+    // the progress bar reflects real work, not iteration over the
+    // full _pullOrder.
+    final restoreList = [
+      for (final t in _pullOrder)
+        if ((snapshot[t]?.isNotEmpty ?? false)) t,
+    ];
+    final restoreTotal = restoreList.length;
+    var restoreDone = 0;
+    // Only update tablesTotal if we're inside an outer stage (background);
+    // the minimum-pull path uses a different stage with a fixed total.
+    if (pullStatus.value.stage == PullStage.background) {
+      pullStatus.value = pullStatus.value.copyWith(tablesTotal: restoreTotal);
+    }
+    for (final table in restoreList) {
+      final data = snapshot[table]!;
+      debugPrint('[SyncService] Syncing $table: ${data.length} rows');
+      await _restoreTableData(table, data);
+      restoreDone++;
+      if (pullStatus.value.stage == PullStage.background) {
+        pullStatus.value = pullStatus.value.copyWith(tablesDone: restoreDone);
       }
     }
+    return skipped;
   }
 
   /// Per-table parallel fetch — the original pull path. Used as a fallback
   /// when the snapshot RPC is unavailable.
-  Future<Map<String, List<dynamic>>> _pullViaPostgRest(
+  ///
+  /// Two-pass design:
+  /// 1. **Parallel first pass.** Fetch every table concurrently for speed.
+  /// 2. **Sequential retry pass.** For any first-pass failure, wait a
+  ///    short backoff then retry once. Sequential not parallel: the
+  ///    first-pass failures are typically timeouts on a congested
+  ///    connection, and a parallel burst tends to reproduce the same
+  ///    condition.
+  ///
+  /// If retries leave **critical** tables failed, throws
+  /// [PartialPullException]. If only [_deferrableTables] are still
+  /// failed, returns them in the record's `skipped` field; the caller
+  /// is responsible for not advancing the per-business sync cursor so
+  /// the next pull catches them up.
+  Future<({Map<String, List<dynamic>> data, Set<String> skipped})>
+      _pullViaPostgRest(
     String businessId,
     DateTime? since,
   ) async {
-    final fetchResults = await Future.wait(
+    final firstPass = await Future.wait(
       _pullOrder.map((table) async {
         try {
-          final isGlobal = table == 'system_config';
-          var query = _supabase.from(table).select();
-
-          if (!isGlobal) {
-            // The cloud `businesses` table has no `business_id` column — its `id`
-            // IS the business id. All other tables filter by `business_id`.
-            final filterColumn = table == 'businesses' ? 'id' : 'business_id';
-            query = query.eq(filterColumn, businessId);
-          }
-
-          // The `businesses` row is the FK target for almost everything
-          // local. Always fetch it unconditionally so a stale `since` can't
-          // produce a sync where children try to insert against a missing
-          // parent.
-          if (since != null && table != 'businesses') {
-            query = query.gt('last_updated_at', since.toIso8601String());
-          }
-
-          final List<dynamic> data = await query.timeout(
-            const Duration(seconds: 15),
+          return _FetchOutcome(
+            table,
+            await _fetchOneTable(table, businessId, since),
+            null,
           );
-          return MapEntry(table, data);
         } catch (e) {
-          debugPrint('[SyncService] Error pulling table $table: $e');
-          return MapEntry(table, const <dynamic>[]);
+          return _FetchOutcome(table, null, e);
         }
       }),
     );
-    return Map.fromEntries(fetchResults);
+
+    final results = <String, List<dynamic>>{};
+    final firstPassFailures = <_FetchOutcome>[];
+    for (final outcome in firstPass) {
+      if (outcome.error == null) {
+        results[outcome.table] = outcome.data!;
+      } else {
+        firstPassFailures.add(outcome);
+      }
+    }
+
+    if (firstPassFailures.isEmpty) {
+      return (data: results, skipped: const <String>{});
+    }
+
+    // Backoff before the sequential retry. Instant retry on a congested
+    // connection tends to fail for the same reason as the first attempt.
+    await Future.delayed(const Duration(milliseconds: 1500));
+
+    final failed = <String>{};
+    for (final outcome in firstPassFailures) {
+      debugPrint(
+        '[SyncService] First-pass fetch failed for ${outcome.table}: '
+        '${outcome.error}. Retrying after backoff...',
+      );
+      try {
+        final data = await _fetchOneTable(outcome.table, businessId, since);
+        results[outcome.table] = data;
+        debugPrint(
+          '[SyncService] Retry succeeded for ${outcome.table}: '
+          '${data.length} rows',
+        );
+      } catch (e) {
+        debugPrint('[SyncService] Retry failed for ${outcome.table}: $e');
+        results[outcome.table] = const <dynamic>[];
+        failed.add(outcome.table);
+      }
+    }
+
+    if (failed.isEmpty) {
+      return (data: results, skipped: const <String>{});
+    }
+
+    // Partition: anything outside the leaf allowlist is a critical
+    // failure that would corrupt the restore. Only-leaf failures are
+    // recoverable (next full pull catches them up) so we return them
+    // for the caller to track and surface.
+    final critical = failed.difference(_deferrableTables);
+    if (critical.isNotEmpty) {
+      throw PartialPullException(critical);
+    }
+    debugPrint(
+      '[SyncService] Continuing past deferrable failures: '
+      '${failed.join(", ")}. last_sync_timestamp will not advance; '
+      'next pull will be a full pull to catch up.',
+    );
+    return (data: results, skipped: failed);
+  }
+
+  /// Single-table PostgREST fetch. Extracted so the parallel first pass
+  /// and the sequential retry pass share one source of truth for the
+  /// query shape + timeout.
+  ///
+  /// 25s client timeout (vs the previous 15s) absorbs response-download
+  /// time on slow cellular without exceeding the Supabase gateway
+  /// window. The harder ceiling is the server-side `statement_timeout`
+  /// for the `authenticated` role (8s on Supabase platform default),
+  /// but that bounds query execution, not the network leg.
+  Future<List<dynamic>> _fetchOneTable(
+    String table,
+    String businessId,
+    DateTime? since,
+  ) async {
+    final isGlobal = table == 'system_config';
+    var query = _supabase.from(table).select();
+
+    if (!isGlobal) {
+      // The cloud `businesses` table has no `business_id` column — its `id`
+      // IS the business id. All other tables filter by `business_id`.
+      final filterColumn = table == 'businesses' ? 'id' : 'business_id';
+      query = query.eq(filterColumn, businessId);
+    }
+
+    // The `businesses` row is the FK target for almost everything local.
+    // Always fetch it unconditionally so a stale `since` can't produce a
+    // sync where children try to insert against a missing parent.
+    if (since != null && table != 'businesses') {
+      query = query.gt('last_updated_at', since.toIso8601String());
+    }
+
+    final List<dynamic> data =
+        await query.timeout(const Duration(seconds: 25));
+    return data;
   }
 
   /// Subscribes to real-time changes from Supabase for this business.

@@ -252,3 +252,12 @@ final localBusinessesProvider = StreamProvider.autoDispose<List<BusinessData>>((
   final db = ref.read(databaseProvider);
   return db.select(db.businesses).watch();
 });
+
+/// Lifts the `SupabaseSyncService.pullStatus` ValueNotifier into Riverpod
+/// so the MainLayout catch-up banner (and SyncIssues) can `ref.watch` it.
+/// Mirrors the pattern used for the `isOnline` ValueNotifier (read directly
+/// from the service in `app_drawer.dart`).
+final pullStatusProvider =
+    ChangeNotifierProvider<ValueNotifier<PullStatus>>((ref) {
+  return ref.watch(supabaseSyncServiceProvider).pullStatus;
+});

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/features/auth/screens/create_pin_screen.dart';
@@ -80,10 +81,11 @@ class _ExistingAccountScreenState extends ConsumerState<ExistingAccountScreen> {
       if (!mounted) return;
       setState(() => _loading = false);
       final msg = e.toString().toLowerCase();
-      final isNetwork =
+      final isNetwork = e is PartialPullException ||
           msg.contains('socketexception') ||
           msg.contains('failed host lookup') ||
-          msg.contains('clientexception');
+          msg.contains('clientexception') ||
+          msg.contains('timeoutexception');
       AppNotification.showError(
         context,
         isNetwork

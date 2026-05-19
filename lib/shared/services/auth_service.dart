@@ -287,15 +287,22 @@ class AuthService extends ValueNotifier<UserData?> {
     }
   }
 
+  /// Fast-path pull at login boundaries. Pulls only the 4 tables required
+  /// for `MainLayout` to render (profiles / businesses / users / warehouses)
+  /// and starts realtime. The heavy full pull fires non-blocking from
+  /// [setCurrentUser] after MainLayout has mounted.
   Future<void> syncOnLogin(String businessId) async {
-    // Pull-only. syncOnLogin runs at login boundaries (returning user fresh
-    // device, invite redeem, etc.) BEFORE setCurrentUser, so
-    // AppDatabase.currentBusinessId is still null and the push half of
-    // syncAll would either no-op (early-return guard) or throw if any DAO
-    // call inside it consulted the resolver. Pending writes are drained by
-    // startAutoPush, started inside setCurrentUser once the user/business
-    // is fully bound.
-    await _sync.pullChanges(businessId);
+    // Minimum pull only — 4 tables (profiles, businesses, users, warehouses)
+    // sufficient to render MainLayout. The whole-tenant snapshot pulled
+    // here previously moved to the background fire-and-forget from
+    // setCurrentUser, cutting blocking sign-in latency from 30-60s to
+    // ~1-6s. See plan file (sign-in split).
+    //
+    // syncOnLogin still runs BEFORE setCurrentUser at the login boundary,
+    // so AppDatabase.currentBusinessId is null. syncMinimumLogin takes
+    // businessId by argument and only touches `_restoreTableData`
+    // (§5-exempt restoration path), so the resolver isn't consulted.
+    await _sync.syncMinimumLogin(businessId);
     _sync.startRealtimeSync(businessId);
   }
 
@@ -461,6 +468,13 @@ class AuthService extends ValueNotifier<UserData?> {
 
       _sync.startRealtimeSync(user.businessId);
       _sync.startAutoPush();
+
+      // Background full pull. Sign-in split: syncOnLogin already fetched
+      // the 4 minimum tables; everything else streams in here while
+      // MainLayout is already rendering. Re-entrancy guarded inside
+      // pullChanges so this can't race the connectivity-recovery
+      // listener or a manual banner retry.
+      unawaited(_sync.pullChanges(user.businessId));
 
       if (user.roleTier < 6 && user.warehouseId == null) {
         scheduleMicrotask(() => _handleOnboardingAlerts(user));

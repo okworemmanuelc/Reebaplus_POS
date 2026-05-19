@@ -1,10 +1,17 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 
+/// Brief loading screen shown only when local DB has no `businesses` row
+/// (fresh device sign-in). Runs `syncMinimumLogin` to fetch the 4 tables
+/// MainLayout needs to render (profiles, businesses, users, warehouses).
+/// Expected wall-clock: ~1-6s depending on link speed. The whole-tenant
+/// pull continues in the background from `setCurrentUser` after MainLayout
+/// mounts. The screen only re-appears in the user-visible flow on a
+/// minimum-pull failure, where it shows the error + retry UI.
 class FirstSyncScreen extends ConsumerStatefulWidget {
   final String businessId;
 
@@ -20,41 +27,11 @@ class FirstSyncScreen extends ConsumerStatefulWidget {
 class _FirstSyncScreenState extends ConsumerState<FirstSyncScreen> {
   bool _syncing = false;
   String? _errorMessage;
-  int _tipIndex = 0;
-  Timer? _tipTimer;
-
-  static const List<String> _syncTips = [
-    'Initializing secure offline database...',
-    'Downloading warehouse registries and configurations...',
-    'Fetching categories and business rules...',
-    'Downloading product catalogs and price lists...',
-    'Syncing customer accounts and ledger balances...',
-    'Establishing secure realtime communication channels...',
-    'Loading historical ledgers and transaction journals...',
-    'Preparing your custom POS workspace...',
-  ];
 
   @override
   void initState() {
     super.initState();
     _startInitialSync();
-    _startTipRotation();
-  }
-
-  @override
-  void dispose() {
-    _tipTimer?.cancel();
-    super.dispose();
-  }
-
-  void _startTipRotation() {
-    _tipTimer = Timer.periodic(const Duration(milliseconds: 3000), (timer) {
-      if (mounted) {
-        setState(() {
-          _tipIndex = (_tipIndex + 1) % _syncTips.length;
-        });
-      }
-    });
   }
 
   Future<void> _startInitialSync() async {
@@ -66,13 +43,16 @@ class _FirstSyncScreenState extends ConsumerState<FirstSyncScreen> {
 
     try {
       final syncService = ref.read(supabaseSyncServiceProvider);
-      // Run the primary full sync!
-      await syncService.syncAll(widget.businessId);
+      // Minimum pull only — 4 tables. The full pull fires non-blocking
+      // from setCurrentUser after MainLayout mounts.
+      await syncService.syncMinimumLogin(widget.businessId);
     } catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = e.toString().contains('SocketException') ||
-                  e.toString().contains('Failed host lookup')
+          _errorMessage = e is PartialPullException ||
+                  e.toString().contains('SocketException') ||
+                  e.toString().contains('Failed host lookup') ||
+                  e.toString().contains('TimeoutException')
               ? 'No internet connection detected. Please verify your connection and try again.'
               : 'Sync failed: $e';
         });
@@ -161,30 +141,16 @@ class _FirstSyncScreenState extends ConsumerState<FirstSyncScreen> {
               SizedBox(
                 height: 44,
                 child: Center(
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 400),
-                    transitionBuilder: (child, animation) => FadeTransition(
-                      opacity: animation,
-                      child: SlideTransition(
-                        position: Tween<Offset>(
-                          begin: const Offset(0.0, 0.2),
-                          end: Offset.zero,
-                        ).animate(animation),
-                        child: child,
-                      ),
-                    ),
-                    child: Text(
-                      _errorMessage != null ? 'Sync Paused' : _syncTips[_tipIndex],
-                      key: ValueKey<String>(_errorMessage != null
-                          ? 'error'
-                          : _syncTips[_tipIndex]),
-                      textAlign: TextAlign.center,
-                      style: t.textTheme.bodyMedium?.copyWith(
-                        color: _errorMessage != null
-                            ? t.colorScheme.error
-                            : t.colorScheme.onSurface.withValues(alpha: 0.7),
-                        height: 1.4,
-                      ),
+                  child: Text(
+                    _errorMessage != null
+                        ? 'Sync Paused'
+                        : 'Setting up your store…',
+                    textAlign: TextAlign.center,
+                    style: t.textTheme.bodyMedium?.copyWith(
+                      color: _errorMessage != null
+                          ? t.colorScheme.error
+                          : t.colorScheme.onSurface.withValues(alpha: 0.7),
+                      height: 1.4,
                     ),
                   ),
                 ),
