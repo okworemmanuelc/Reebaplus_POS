@@ -371,3 +371,196 @@ holey.
 same underlying gap surfaces (PIN reset failing, verification status
 not updating, etc.), or (ii) we sit down to harden sync as a unit. Not
 a near-term production blocker now that Terminate Access compensates.
+
+## Server-side SQL provenance gap — production functions not in any migration
+
+**Status:** deferred (one-time audit task). Surfaced 2026-05-20 during
+diagnosis of the re-invite-after-terminate bug. The Topic 3 fix on this
+branch is unaffected; this entry tracks the underlying hygiene problem
+so it doesn't get forgotten.
+
+**Problem.** Edge functions reference Postgres helpers that exist in the
+live database but have no `CREATE FUNCTION` statement in any migration
+file:
+
+- `public.is_business_member_email(uuid, text)` — called by
+  `check-invite-email` and the shared `issueInvite` helper.
+- `public.is_other_business_owner(text, uuid)` — same two callers.
+
+A grep across every file under `supabase/migrations/` (0001–0030, 29
+migrations) plus every file under `supabase/functions/` and
+`supabase/scripts/` finds zero matches for either function's
+`CREATE FUNCTION` definition. They were presumably applied via the
+Supabase dashboard SQL editor (or a script that never made it into
+version control). Production behaviour depends on definitions git
+cannot reproduce, which means:
+
+- A new dev who runs the migration set against a fresh database gets a
+  broken cluster (edge functions will 500 with "function does not
+  exist").
+- Branch-deploy promotion (dev → staging → prod) can drift undetected.
+- Code review can't reason about server logic — the SQL is opaque.
+
+**What we know about the missing definitions.** Pasted live during the
+Topic 3 diagnosis:
+
+```sql
+CREATE OR REPLACE FUNCTION public.is_business_member_email(p_business_id uuid, p_email text)
+ RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO 'public'
+AS $function$
+  SELECT EXISTS (
+    SELECT 1 FROM public.users
+    WHERE business_id = p_business_id
+      AND lower(email) = lower(p_email)
+      AND COALESCE(is_deleted, false) = false
+  )
+$function$
+
+CREATE OR REPLACE FUNCTION public.is_other_business_owner(p_email text, p_exclude_business_id uuid)
+ RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO 'public'
+AS $function$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.businesses b
+    JOIN auth.users u ON u.id = b.owner_id
+    WHERE lower(u.email) = lower(p_email)
+      AND (p_exclude_business_id IS NULL OR b.id <> p_exclude_business_id)
+  )
+$function$
+```
+
+These two are the only ones we've confirmed missing so far. There are
+almost certainly more — anything added via the dashboard during
+hotfixes over the past few months.
+
+**Proposed audit (one-time task).**
+
+1. Connect to the live database and dump every function, trigger, and
+   policy in the `public` schema:
+   ```sql
+   SELECT n.nspname, p.proname, pg_get_functiondef(p.oid)
+   FROM pg_proc p
+   JOIN pg_namespace n ON n.oid = p.pronamespace
+   WHERE n.nspname = 'public'
+   ORDER BY p.proname;
+   ```
+2. Diff against what's currently captured in `supabase/migrations/`.
+3. For each missing definition, create a "rescue" migration that
+   `CREATE OR REPLACE`s it. Name them
+   `00NN_rescue_<area>_from_dashboard.sql` so the source provenance is
+   in the filename.
+4. Same exercise for triggers (`pg_trigger`) and RLS policies
+   (`pg_policies`).
+5. Establish a process: dashboard SQL edits are forbidden going
+   forward; everything goes through migrations.
+
+**Trigger to unblock.** Best done before the next major schema change.
+Sooner if a CI step lands that validates "migrations rebuild matches
+prod schema" — that validation would fail today.
+
+## Partial-row upserts on tables with NOT NULL non-defaulted columns fail silently
+
+**Status:** OPEN — high priority. **Data loss in production right now.**
+Workaround narrowly applied on `fix/staff-list-own-view-and-terminate`
+for `terminateMember` only; the rest of the call sites listed below
+are still actively silently dropping writes on the floor on every
+device using normal app features. Discovered 2026-05-20 during
+diagnosis of the re-invite-after-terminate bug.
+
+**Problem.** [`SyncDao.enqueueUpsert`](../../core/database/daos.dart)
+accepts any `Insertable` — both full `DataClass` rows and partial
+`Companion`s. The dev comment at
+[supabase_sync_service.dart:383-386](../../core/services/supabase_sync_service.dart#L383-L386)
+claims:
+
+> PostgREST's array-upsert preserves partial-row semantics: only
+> columns present in each payload are updated, so partial Drift
+> Companions … don't NULL-out untouched columns.
+
+**This is wrong for any table with NOT NULL columns lacking DEFAULT.**
+PostgreSQL evaluates NOT NULL constraints during the INSERT phase of
+`INSERT ... ON CONFLICT (...) DO UPDATE`, before the unique-conflict
+check fires. A partial payload missing a NOT NULL column would
+INSERT with that column as NULL, triggering 23502 immediately. The
+ON CONFLICT branch never runs, the statement aborts, PostgREST
+returns an error, sync marks the row failed — and there is no
+user-facing surface for that failure.
+
+**Concrete impact: known broken call sites — all silently dropping
+writes today.**
+
+| Call site | Table | Missing NOT NULL columns |
+|---|---|---|
+| Pre-fix `BusinessMembersDao.terminateMember` (users branch) | `users` | `name`, `role` |
+| `BusinessMembersDao.setPin`, `clearPin` ([daos.dart:2891-2928](../../core/database/daos.dart#L2891-L2928)) | `business_members` | `role`, `user_id` |
+| `UsersDao.assignStaffToWarehouse` ([daos.dart:2790-2804](../../core/database/daos.dart#L2790-L2804)) | `users` | `name`, `role` |
+| `AuthService` notification bumps ([auth_service.dart:606-612](../../shared/services/auth_service.dart#L606-L612), [:625-632](../../shared/services/auth_service.dart#L625-L632)) | `users` | `name`, `role` |
+| `AuthService` partial users writes ([auth_service.dart:366](../../shared/services/auth_service.dart#L366), [:803](../../shared/services/auth_service.dart#L803)) | `users` | `name`, `role` |
+
+PIN changes don't propagate. Warehouse assignments don't propagate.
+Notification-bump state doesn't propagate. Each of these is currently
+writing locally + silently failing to push to cloud on every CEO
+device that uses them. Why nobody noticed: most of these write paths
+aren't followed by a read on a different device that would expose the
+cloud→device desync. Multi-device CEO accounts will see drift on the
+second device; single-device accounts won't surface it until they
+re-install or switch hardware. Terminate surfaced it because the very
+next user action (re-invite) queries the cloud-resident state via
+`is_business_member_email`.
+
+The list above is what surfaced from a 30-minute grep — there are
+likely more in screens that build Companions inline.
+
+**Workaround in place (Topic 3 only).**
+[`BusinessMembersDao.terminateMember`](../../core/database/daos.dart)
+now snapshots the existing `UserData` / `BusinessMemberData`, applies
+the soft-delete fields via `copyWith`, and enqueues the full DataClass.
+Local Drift UPDATEs still use partial Companions — Drift's UPDATE
+path doesn't touch INSERT, so NOT NULL isn't an issue locally. Only
+the cloud serialization path was changed.
+
+**Proposed systemic fixes (sequence matters).**
+
+1. **Per-call-site audit** (cheap, low-risk). Grep every
+   `enqueueUpsert(<table>, <Companion>)` call site. For each, check
+   whether the target table has NOT NULL columns not present in the
+   Companion. Convert offending sites to fetch-then-`copyWith`-then-
+   enqueue, same shape as the Topic 3 workaround.
+2. **Sync layer guard** (medium-risk). In
+   [`_pushPendingItems`](../../core/services/supabase_sync_service.dart),
+   for each `<table>:upsert` payload, intercept the JSON before sending
+   to PostgREST: query local Drift for the existing row by id, merge
+   the partial payload fields on top of it, send the merged full row.
+   Eliminates the bug class without touching individual DAO methods,
+   but adds a read per push.
+3. **Schema-level fix** (low-risk but invasive). Add `DEFAULT ''` to
+   `users.name`, `users.role`, `business_members.role`. Trades silent
+   failures for silent empty-string writes — arguably worse, since
+   downstream code now has to handle `name=''` instead of failing
+   loudly. Probably not worth it.
+
+**Recommendation.** Path 1 first (mechanical, no architectural change),
+then path 2 as a defence-in-depth layer to catch future regressions.
+Path 3 is rejected — silent empty-string writes are a different bug
+class with worse semantics.
+
+**Detection hardening (orthogonal).** Sync should surface failed-push
+counts on the diagnostic screen. Currently
+[`sync_diagnostic.dart`](../../core/diagnostics/sync_diagnostic.dart)
+shows pending count; add failed count + last error message so this
+class of silent failure becomes visible. Cheap to add, separate work.
+
+**Trigger to unblock — schedule immediately after Topic 3 ships.**
+This is not a hypothetical future bug. Five concrete known call sites
+in the table above are silently corrupting cloud state on every
+device using normal app features right now: PIN management,
+warehouse assignment, notification scheduling. The Topic 3 narrow fix
+plugs the terminate-specific symptom but does nothing for the rest.
+
+Do not wait for a user complaint to surface a sixth symptom — go
+look for the data loss proactively. The action item is the per-call-
+site audit (path 1 above), and it is the next investigation
+immediately after Topic 3 lands. Sequence: (1) audit + convert all
+known partial-upsert call sites this branch, (2) re-grep for any new
+inline Companion construction in screens, (3) implement the sync
+layer guard (path 2) as a backstop for the next regression.

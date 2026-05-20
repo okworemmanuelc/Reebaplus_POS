@@ -2931,8 +2931,8 @@ class BusinessMembersDao extends DatabaseAccessor<AppDatabase>
   /// `users.is_deleted=true` (and enqueues the upsert); also marks the
   /// `business_members` row `status='removed'`, `removed_at=now()`,
   /// `removed_by=<caller>`, `is_deleted=true` **if** that membership exists
-  /// locally. All writes go through `enqueueUpsert` per CLAUDE.md §5 sync
-  /// invariants.
+  /// locally. All cloud upserts go through `enqueueUpsert` per CLAUDE.md
+  /// §5 sync invariants.
   ///
   /// `users.is_deleted` is the source of truth the staff-list stream filters
   /// on (`users.isDeleted = false`), so flipping it unconditionally is what
@@ -2941,6 +2941,16 @@ class BusinessMembersDao extends DatabaseAccessor<AppDatabase>
   /// `business_members` row indicates a sync gap (see DEFERRED.md
   /// "business_members rows can go missing locally"), not a reason to
   /// refuse the termination.
+  ///
+  /// Cloud-bound payloads are full DataClass rows (not partial Companions)
+  /// because the cloud `users` and `business_members` tables have NOT NULL
+  /// columns without DEFAULT (`name`, `role`, `user_id`); a partial upsert's
+  /// INSERT phase would 23502 before ON CONFLICT switched to UPDATE, and
+  /// the push would fail silently. See DEFERRED.md "Partial-row upserts
+  /// on tables with NOT NULL non-defaulted columns fail silently."
+  ///
+  /// Local Drift UPDATEs keep their partial Companions — Drift's UPDATE
+  /// doesn't go through the INSERT path, so NOT NULL isn't an issue.
   ///
   /// Single-business model: the global users row exists only for this
   /// tenant, so flipping `users.is_deleted` is functionally equivalent to
@@ -2956,6 +2966,21 @@ class BusinessMembersDao extends DatabaseAccessor<AppDatabase>
     required String removedByUserId,
   }) async {
     final now = DateTime.now();
+
+    // Snapshot the existing users row up front — we need the full
+    // DataClass for the cloud enqueue (see method docstring).
+    final existingUser = await (db.select(db.users)
+          ..where((u) => u.id.equals(userId) & whereBusiness(u)))
+        .getSingleOrNull();
+    if (existingUser == null) {
+      debugPrint(
+        '[BusinessMembersDao.terminateMember] no local users row for '
+        'user_id=$userId in business=${currentBusinessId ?? "<none>"} — '
+        'nothing to terminate.',
+      );
+      return;
+    }
+
     final membership = await getByUserId(userId);
 
     if (membership != null) {
@@ -2971,7 +2996,15 @@ class BusinessMembersDao extends DatabaseAccessor<AppDatabase>
             (t) => t.id.equals(membership.id) & whereBusiness(t),
           ))
           .write(memberComp);
-      await db.syncDao.enqueueUpsert('business_members', memberComp);
+
+      final updatedMember = membership.copyWith(
+        status: 'removed',
+        removedAt: Value(now),
+        removedBy: Value(removedByUserId),
+        isDeleted: true,
+        lastUpdatedAt: now,
+      );
+      await db.syncDao.enqueueUpsert('business_members', updatedMember);
     } else {
       // Sync gap: cloud has the membership but it never landed locally.
       // Loud log so the underlying issue stays visible; proceed with the
@@ -2993,7 +3026,12 @@ class BusinessMembersDao extends DatabaseAccessor<AppDatabase>
           (u) => u.id.equals(userId) & whereBusiness(u),
         ))
         .write(userComp);
-    await db.syncDao.enqueueUpsert('users', userComp);
+
+    final updatedUser = existingUser.copyWith(
+      isDeleted: true,
+      lastUpdatedAt: now,
+    );
+    await db.syncDao.enqueueUpsert('users', updatedUser);
   }
 }
 
