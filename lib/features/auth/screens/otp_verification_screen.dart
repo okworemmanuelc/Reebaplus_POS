@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -211,6 +212,38 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
         ),
       );
       return;
+    }
+
+    // Email-OTP path doesn't set pendingInviteToken, so a re-invited staff
+    // member signing in by email would silently bypass accept_invite — and
+    // the 0032 revive logic never runs. Look up a pending invite by email
+    // and route to the wizard if one exists. Wrapped in try/catch because
+    // invites RLS may deny for a fresh-device user whose profiles row
+    // isn't yet bound; non-fatal — fall through to existing routing.
+    try {
+      final pending = await Supabase.instance.client
+          .from('invites')
+          .select('human_code')
+          .ilike('email', widget.email)
+          .eq('status', 'pending')
+          .gt('expires_at', DateTime.now().toUtc().toIso8601String())
+          .order('created_at', ascending: false)
+          .limit(1)
+          .maybeSingle();
+      final code = pending?['human_code'] as String?;
+      if (code != null && code.isNotEmpty) {
+        auth.setPendingInviteToken(code);
+        if (!mounted) return;
+        Navigator.of(context).pushReplacement(
+          SmoothRoute(
+            page: InviteJoinNameScreen(token: code, email: widget.email),
+          ),
+        );
+        return;
+      }
+    } catch (e) {
+      debugPrint('[OtpVerification] pending-invite lookup failed: $e');
+      // Fall through — better to land in regular routing than block sign-in.
     }
 
     // Look up the cloud account (if any) and the local user. On a fresh
