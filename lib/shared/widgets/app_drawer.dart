@@ -218,7 +218,7 @@ class AppDrawer extends ConsumerWidget {
 
   Widget _buildNavList(BuildContext context, WidgetRef ref) {
     final t = Theme.of(context);
-    final roleTier = ref.read(authProvider).currentUser?.roleTier ?? 1;
+    final roleTier = ref.read(authProvider).currentUser?.roleTier ?? 0;
     final isBelowManager = roleTier < 5;
 
     return ListView(

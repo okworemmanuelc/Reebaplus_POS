@@ -9,6 +9,26 @@ regardless of working-tree drift.
 also now committed. Read this file first, then DEFERRED.md, then
 PROGRESS.md if you need the full commit ladder.
 
+## Status update — 2026-05-20
+
+The rev-2 narrative below describes the **pre-deploy** state as of
+2026-05-15. Since then:
+
+- Cloud migration 0030 is **DEPLOYED**. Verified via `supabase
+  migration list` on 2026-05-20.
+- Edge functions deployed in the same window (on or before 2026-05-18).
+- v9 binary is installed on the emulator; the post-v9-deploy smoke
+  test ran on `feat/auth-uid-pinning-l5`'s `c755c0a`.
+- Both "Open follow-ups" items 1 and 2 are **CLOSED 2026-05-20** on
+  `feat/role-refactor-followups` (see that section below for line
+  references).
+- Status of the three deferred items in [DEFERRED.md](DEFERRED.md)
+  is unchanged — the non-CEO invitee profiles/RLS gap remains the
+  highest-value next branch (`fix/invitee-rls-principal`).
+
+Read the rest of this file as the historical "Block 3 issue triage
++ pre-deploy" snapshot it was written as.
+
 ## Current branch state
 
 **Branch:** `feat/staff-onboarding-phase-1`
@@ -55,23 +75,16 @@ Adjacent commits since rev 1 of this CHECKPOINT:
 
 ## Step about to start
 
-**Cloud + edge function + app deploy.** Per the plan's
-"Pre-Deploy Cleanup & Execution" addendum (2026-05-15) and the
-deploy sequence later in this file:
+~~**Cloud + edge function + app deploy.**~~ ✅ **EXECUTED on or before
+2026-05-18.** Cloud migration 0030 is applied (verified via `supabase
+migration list` on 2026-05-20); edge functions deployed in the same
+window; v9 binary is installed on the emulator. Post-v9-deploy smoke
+test ran on `feat/auth-uid-pinning-l5`'s `c755c0a` (the test surfaced
+the unrelated relogin StateError that l5 is now tracking — not a
+role-refactor regression).
 
-1. `flutter analyze` clean + `flutter test` 97+ green re-check.
-2. `source ~/.zshrc && supabase db push` — applies only 0030.
-3. `source ~/.zshrc && supabase functions deploy send-invite
-   revoke-invite check-invite-email accept-invite resend-invite
-   redeem-invite` (six functions, one call).
-4. `flutter run` against the connected emulator — this builds and
-   installs the new binary in one step. Run IMMEDIATELY after step 3
-   (do NOT keep the old binary running on the emulator between
-   steps 2 and 4 — hot-restart on the existing process is not enough,
-   the Drift CHECK constraints are baked into the installed APK).
-5. Post-install CEO smoke test (PIN login → dashboard → re-run
-   Block 4 sync-resilience matrix → confirm Issue 1 fix renders a
-   CEO section).
+Original deploy sequence preserved in this file's "Reminder — deploy
+sequence" section below for posterity.
 
 ## Block 3 issue triage
 
@@ -190,18 +203,15 @@ These are captured for visibility but should NOT be addressed inside
 the role-refactor branch — they're noise that obscures the diff. New
 branches or post-merge cleanups.
 
-1. **`app_drawer.dart:211` `?? 1` fallback.** Tier 1 is no longer in
-   the canonical set `{2,3,4,5,6}`. Functionally harmless (the
-   fallback only fires when `currentUser` is null, and the drawer
-   isn't rendered pre-login). Also documented in
-   [PROGRESS.md](PROGRESS.md) §Follow-ups.
+1. ~~**`app_drawer.dart:211` `?? 1` fallback.**~~
+   ✅ **CLOSED 2026-05-20** on `feat/role-refactor-followups`. Now
+   `?? 0`, aligning with `role_guard.dart`'s fail-closed convention.
+   Line is now at app_drawer.dart:221.
 
-2. **`reports_hub_screen.dart` Customer Ledger card.** Still uses the
-   `if (!isCeo)` informal gate pattern that the other three cards
-   (Sales Report / Expense Tracker / Stock Audit) migrated to
-   `RoleGuard` in Step 9. Out of scope for the Step-9 sweep because
-   it was not in the plan's gap-analysis table. Documented in
-   [PROGRESS.md](PROGRESS.md) §Follow-ups.
+2. ~~**`reports_hub_screen.dart` Customer Ledger card.**~~
+   ✅ **CLOSED 2026-05-20** on `feat/role-refactor-followups`.
+   Migrated to `RoleGuard(minTier: 6)` with mirrored fallback/child
+   cards, matching the other three cards on the screen.
 
 3. ~~**Uncommitted onError hunks in two service files**~~
    **RESOLVED 2026-05-15** — committed in `fdd2745`. The 6 v9
@@ -226,54 +236,57 @@ branches or post-merge cleanups.
    branch: `fix/invitee-rls-principal`. Pick after auditing
    `public.business_id()` call sites and every tenant RLS policy.
 
-## Reminder — cloud migration 0030 is written, NOT deployed
+## Cloud migration 0030 — DEPLOYED
 
-`supabase/migrations/0030_role_vocabulary_expansion.sql` has been
-committed to git (in commit `f80030f` per PROGRESS.md) but **NOT
-pushed to cloud**. The cloud `profiles` / `users` / `business_members`
-/ `invites` tables still carry the v8 vocabulary and the v8
-`(1, 4, 5)` tier set. The whole refactor's correctness on production
-depends on 0030 being applied with the deploy sequence below.
+✅ **DEPLOYED on or before 2026-05-18.** `supabase migration list` on
+2026-05-20 confirms 0001–0030 all show as applied on remote. Cloud
+`profiles` / `users` / `business_members` / `invites` now carry the v9
+vocabulary (`ceo / manager / stock_keeper / cashier / rider`) and the
+v9 `(2,3,4,5,6)` tier set.
 
-The `supabase_migrations.schema_migrations` table on the remote was
-empty when this branch's Step 14 prep began (historical migrations
-were applied via dashboard SQL editor, not via CLI). `supabase
-migration repair --status applied` was run for versions 0001–0029
-(skipping the absent 0012). Verified via `supabase migration list`:
-0001–0029 now show in both Local and Remote columns; 0030 is the
-only Local-only row. So `supabase db push` at deploy time will push
-exactly one migration.
+Historical context preserved for the next session: the
+`supabase_migrations.schema_migrations` table on the remote was empty
+when Step 14 prep began (historical migrations were applied via
+dashboard SQL editor, not via CLI). `supabase migration repair
+--status applied` was run for versions 0001–0029 (skipping the
+absent 0012) so the local/remote views aligned before the 0030 push.
 
-`SUPABASE_DB_PASSWORD` is exported in `~/.zshrc:9` (plaintext —
-acceptable for the short deploy window; rotate + remove after deploy).
+`SUPABASE_DB_PASSWORD` was exported in `~/.zshrc:9` (plaintext)
+during the deploy window. **Action item:** rotate + remove from
+zshrc now that the deploy is complete, per the original CHECKPOINT
+rev-2 plan. (If not done yet, treat this as the standing reminder.)
 
-## Reminder — deploy sequence (per PROGRESS.md, with Issues-4/5 caveat)
+## Reminder — deploy sequence (historical — executed on or before 2026-05-18)
 
-⚠ **There is a critical timing window** between cloud migration 0030
-landing and the new app build being installed on the emulator.
-During that window the old app binary will crash on `syncOnLogin`
-because its pre-Step-4 Drift CHECK (`role_tier IN (1,4,5)`) rejects
-the now-tier-6 CEO row coming back from cloud.
+The deploy has happened; preserved here for posterity. Useful as a
+re-run template if a fresh emulator or test environment needs to be
+brought to v9 parity.
+
+⚠ **Critical timing window** (historical). Between cloud migration
+0030 landing and the new app build being installed on the emulator,
+the old app binary would crash on `syncOnLogin` because its
+pre-Step-4 Drift CHECK (`role_tier IN (1,4,5)`) rejected the
+now-tier-6 CEO row coming back from cloud.
 
 Strict order, no skipping (emulator workflow — no APK staging needed):
 
 1. **Deploy cloud migration:** `source ~/.zshrc && supabase db push`
-   (will apply only 0030).
+   (applied 0030).
 2. **Deploy edge functions:** `supabase functions deploy send-invite
    revoke-invite check-invite-email accept-invite resend-invite
    redeem-invite`.
 3. **`flutter run` against the connected emulator IMMEDIATELY.** This
-   compiles + installs + launches in one step. Stop any prior
-   `flutter run` process first so the install replaces the binary
-   (hot-restart on the old process is not enough — the v8 Drift CHECK
-   is baked into the installed APK).
+   compiles + installs + launches in one step. Any prior
+   `flutter run` process had to be stopped first so the install
+   replaced the binary (hot-restart on the old process was not enough
+   — the v8 Drift CHECK was baked into the installed APK).
 
-User instruction: do not interact with the existing emulator binary
-between cloud deploy and `flutter run`. If you accidentally tap the
-old build, `syncOnLogin` will fail with `CHECK constraint failed:
-role_tier IN (1,4,5)` — recovery is to stop the process and
-`flutter run` again. No data loss because the failure is purely
-client-side validation; cloud state is already consistent.
+Re-run note for fresh-environment regression testing: don't interact
+with a v8 emulator binary between cloud deploy and `flutter run`. If
+the old build is tapped, `syncOnLogin` fails with `CHECK constraint
+failed: role_tier IN (1,4,5)` — recovery is to stop the process and
+`flutter run` again. No data loss — purely client-side validation;
+cloud state is already consistent.
 
 ### Post-deploy operational caveat — Issues 4/5
 

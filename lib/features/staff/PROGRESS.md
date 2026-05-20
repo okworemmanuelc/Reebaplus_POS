@@ -1,9 +1,20 @@
 # Staff Onboarding — Role Refactor Progress
 
-**Branch:** `feat/staff-onboarding-phase-1`
+**Branch:** `feat/staff-onboarding-phase-1` (canonical refactor branch);
+follow-up consistency items on `feat/role-refactor-followups`.
 
-This file is uncommitted scratch state for the role-vocabulary refactor
-in flight. Delete or convert to a PR description before merge.
+**Status (2026-05-20):** v9 role refactor **SHIPPED**. Cloud migration
+0030 applied; edge functions deployed; emulator running v9 binary
+(deployed on or before 2026-05-18 per `c755c0a`'s post-deploy smoke
+test reference). Steps 1–13 done; Step 14 Block 4 + Block 5 (CEO
+portion) green; Block 5 wizard E2E ×3 parked behind the non-CEO
+invitee profiles/RLS gap (see [DEFERRED.md](DEFERRED.md)). Two
+follow-up consistency items (`app_drawer.dart`, `reports_hub_screen.dart`
+Customer Ledger card) closed on `feat/role-refactor-followups` on
+2026-05-20.
+
+This file was originally uncommitted scratch — it has been committed
+durably per `bab70bd`. Convert to a PR description before final merge.
 
 ## Completed commits
 
@@ -26,75 +37,79 @@ f143a31 feat(ui): apply v9 thresholds to 6 gates surfaced outside features/ scop
 c6dcaed fix(auto-lock): guard resume against unauthenticated state
 ```
 
-## Steps remaining
+## Step status
 
-- **Step 9 — RoleGuard implementation.**
-  - Replace the stub in `lib/shared/widgets/role_guard.dart` with a real
-    `ConsumerWidget` that gates on `currentUser.roleTier >= minTier`.
-  - Retune the 4 existing call sites (all `minTier: 4` → `minTier: 5`):
-    staff_details_screen.dart ×2, staff_screen.dart ×2.
-  - Add 8 new wrappers from the gap-analysis:
-    invite_modal send button, invite_pending_sheet regenerate+revoke,
-    customer_detail_screen Add Funds + Set Limit, customers_screen Add
-    Customer FAB, expenses_screen Add Expense FAB, warehouse_screen Add
-    Warehouse FAB, inventory_screen Add Product FAB.
-  - Migrate 4 informal gates to RoleGuard:
-    reports_hub_screen Sales Report / Expense Tracker / Stock Audit
-    cards (`if (!isCeo)`), customers_screen warehouse filter
-    (`if (isManagerOrAbove)`).
-- **Step 10 — Invite modal runtime inviter-role filtering.**
-  In `lib/features/invite/widgets/invite_modal.dart`: load current user's
-  role in `initState`, filter the role dropdown accordingly (CEO sees
-  manager+stock_keeper+cashier+rider; Manager sees stock_keeper+cashier+rider;
-  everyone else gets a "no permission" early-return).
-- **Step 11 — Test fixture sweep.**
-  16 role-string literals across 18 test files (`role: 'admin'` → `'ceo'`,
-  `role: 'staff'` → `'cashier'`). Triage each match — `admin`/`staff` may
-  appear in non-role contexts (customer_group names, route keys, comments)
-  that should NOT be changed. Document false positives in the commit body.
-- **Step 12 — UBIQUITOUS_LANGUAGE.md.**
-  Populate the (currently empty) repo-root file with the 5-role × tier
-  glossary, removed/renamed log, and gate vocabulary cheat-sheet.
-- **Step 13 — Deferred-work doc.**
-  Commit `lib/features/staff/DEFERRED.md` (created untracked alongside
-  this PROGRESS.md) with the sync-after-login architecture refactor as
-  the first entry.
-- **Step 14 — Final verification.**
-  `flutter analyze` clean, `flutter test` 97+ green (after Step 11 sweep),
-  manual matrix on real device (invite-modal filtering CEO/manager/cashier
-  matrix, existing-account-screen flow, sync-with-bad-row tolerance), plus
-  the rev-3 appendix 5/5 protocol (PIN login ×5, logout-relogin ×5,
-  biometric ×5, wizard E2E ×3).
+- **Step 9 — RoleGuard implementation.** ✅ **DONE** in `8787845
+  feat(ui): implement RoleGuard and apply v9 permission gates`.
+  - Stub replaced with a real `ConsumerWidget` watching `authProvider`;
+    14 call sites across 10 files.
+  - Existing 4 call sites retuned `minTier: 4` → `minTier: 5`
+    (staff_details_screen ×2, staff_screen ×2).
+  - 8 new wrappers landed (invite_modal send, invite_pending_sheet
+    regenerate+revoke, customer_detail_screen Add Funds + Set Limit,
+    customers_screen Add Customer FAB, expenses_screen Add Expense
+    FAB, warehouse_screen Add Warehouse FAB, inventory_screen Add
+    Product FAB).
+  - 3 of 4 informal gates migrated to RoleGuard (reports_hub_screen
+    Sales / Expense / Stock cards, customers_screen warehouse filter).
+    Customer Ledger card was missed in the sweep — closed on
+    `feat/role-refactor-followups` 2026-05-20.
+- **Step 10 — Invite modal runtime inviter-role filtering.** ✅ **DONE**
+  in `6bcfbc1 feat(invite): runtime inviter-role filtering in
+  InviteModal`. Filter implemented in `_initInviteRoles` at
+  [invite_modal.dart:87-107](../invite/widgets/invite_modal.dart#L87-L107).
+- **Step 11 — Test fixture sweep.** ✅ **DONE** in `61c1f04 test: sweep
+  role string fixtures to v9 vocabulary`.
+- **Step 12 — UBIQUITOUS_LANGUAGE.md.** ✅ **DONE** in `917d03c docs:
+  populate UBIQUITOUS_LANGUAGE.md with v9 role glossary`.
+- **Step 13 — Deferred-work doc.** ✅ **DONE** in `390baea docs:
+  commit DEFERRED.md catalogue for the staff feature`.
+- **Step 14 — Final verification.** Partial.
+  - `flutter analyze` clean ✅
+  - `flutter test` 97+ green ✅
+  - Block 4 (sync resilience, CEO): GREEN per user 2026-05-15.
+  - Block 5 PIN ×5 / relogin ×5 / biometric ×5 (CEO): GREEN per user
+    2026-05-15.
+  - Block 5 **wizard E2E ×3**: ⛔ **BLOCKED** on the non-CEO invitee
+    profiles/RLS gap ([DEFERRED.md](DEFERRED.md) → "Non-CEO invitee
+    acceptance blocked by missing profiles row"). Unblock via the
+    `fix/invitee-rls-principal` follow-up branch.
 
 ## Cloud deploy status
 
 Migration `supabase/migrations/0030_role_vocabulary_expansion.sql` is
-**WRITTEN AND COMMITTED but NOT DEPLOYED**. Waiting until Steps 9–14 land
-so the app build and cloud changes ship in one tight window.
+**DEPLOYED**. Verified via `supabase migration list` on 2026-05-20 —
+0001 through 0030 all show as applied on remote. Deploy window was on
+or before 2026-05-18, referenced by the post-v9-deploy smoke test in
+commit `c755c0a` on `feat/auth-uid-pinning-l5`.
 
-## Deploy sequence (when ready)
+## Deploy sequence (historical — executed on or before 2026-05-18)
 
-⚠ **Critical timing window.** Between cloud migration landing and the new
-app build being installed on the emulator, the old app binary will crash
-on `syncOnLogin` because its v8 Drift CHECK rejects the now-tier-6 CEO
-row coming back from cloud. Minimize the window (emulator workflow):
+The original timing-window warning is preserved below for posterity.
+It no longer applies — the v9 binary is installed on the emulator and
+matches the cloud schema.
 
-1. **Deploy cloud migration:** `supabase db push` (applies 0030).
+⚠ **Critical timing window** (historical). Between cloud migration
+landing and the new app build being installed on the emulator, the
+old app binary would crash on `syncOnLogin` because its v8 Drift
+CHECK rejected the now-tier-6 CEO row coming back from cloud. The
+emulator workflow that was followed:
+
+1. **Deploy cloud migration:** `supabase db push` (applied 0030).
 2. **Deploy edge functions:** `supabase functions deploy send-invite
    revoke-invite check-invite-email accept-invite resend-invite
    redeem-invite`.
 3. **`flutter run` against the emulator IMMEDIATELY.** Compiles +
-   installs + launches in one step. Stop any prior `flutter run`
-   process first so the install replaces the binary (hot-restart
-   on the old process is not enough — the v8 Drift CHECK is baked
-   into the installed APK).
+   installs + launches in one step. Any prior `flutter run` process
+   had to be stopped first so the install replaced the binary
+   (hot-restart on the old process was not enough — the v8 Drift
+   CHECK was baked into the installed APK).
 
-**User instruction:** do not tap the existing emulator binary between
-cloud deploy and `flutter run`. If you accidentally open the old build,
-`syncOnLogin` will fail with a `CHECK constraint failed: role_tier IN
-(1,4,5)` error — recovery is to stop the process and `flutter run`
-again. No data loss because the failure is purely client-side
-validation; cloud state is already consistent.
+**Note for re-runs / fresh emulators:** if a v8 binary is ever
+installed on a clean emulator pointing at v9 cloud (e.g. for
+regression testing), `syncOnLogin` will fail with `CHECK constraint
+failed: role_tier IN (1,4,5)` until `flutter run` replaces it. No
+data loss — purely client-side validation.
 
 ### ⚠ Known broken flow post-deploy: non-CEO invitee acceptance
 
@@ -128,18 +143,18 @@ NOT NULL wall).
 
 ## Follow-ups noted but not actioned
 
-- **app_drawer.dart:211** — `final roleTier = ref.read(authProvider).currentUser?.roleTier ?? 1;`
-  uses tier 1 as fallback. Tier 1 is no longer in the canonical set
-  `{2,3,4,5,6}`. Functionally harmless because the fallback only fires
-  when `currentUser` is null (pre-login state, drawer isn't rendered).
-  Surface for follow-up if a strict-vocabulary pass is wanted.
+- ~~**app_drawer.dart:211** — `?? 1` fallback~~
+  ✅ **CLOSED 2026-05-20** on `feat/role-refactor-followups`. Now
+  `?? 0`, aligning with [role_guard.dart:33](../../shared/widgets/role_guard.dart#L33)'s
+  fail-closed convention. Line is now at app_drawer.dart:221.
 
-- **reports_hub_screen.dart Customer Ledger card** — still uses the
-  `if (!isCeo)` informal gate (same pattern as the Sales Report /
-  Expense Tracker / Stock Audit cards migrated to RoleGuard in
-  Step 9). Out of scope for the Step 9 sweep because it was not in
-  the plan's gap-analysis table; revisit if a follow-up consistency
-  pass is wanted.
+- ~~**reports_hub_screen.dart Customer Ledger card** — `if (!isCeo)`
+  informal gate~~ ✅ **CLOSED 2026-05-20** on
+  `feat/role-refactor-followups`. Migrated to
+  `RoleGuard(minTier: 6)` with mirrored fallback/child cards,
+  matching the other three cards on the screen. Removed the
+  now-unused `isCeo` / `user` locals and the `app_providers.dart`
+  import.
 
 ## Pointers
 

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
@@ -47,9 +46,6 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final user = ref.watch(authProvider).currentUser;
-    final isCeo = (user?.roleTier ?? 0) >= 6;
-
     return SharedScaffold(
       activeRoute: 'dashboard',
       appBar: AppBar(
@@ -188,23 +184,32 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
                 },
               ),
             ),
-            _buildReportCard(
-              context,
-              title: 'Customer Ledger',
-              subtitle: 'Wallet & Credit',
-              icon: FontAwesomeIcons.wallet,
-              color: Colors.purpleAccent,
-              locked: !isCeo,
-              onTap: () {
-                if (!isCeo) {
-                  AppNotification.showInfo(context, 'CEO access required');
-                  return;
-                }
-                Navigator.push(
-                  context,
-                  slideLeftRoute(const CustomersScreen()),
-                );
-              },
+            RoleGuard(
+              minTier: 6,
+              fallback: _buildReportCard(
+                context,
+                title: 'Customer Ledger',
+                subtitle: 'Wallet & Credit',
+                icon: FontAwesomeIcons.wallet,
+                color: Colors.purpleAccent,
+                locked: true,
+                onTap: () =>
+                    AppNotification.showInfo(context, 'CEO access required'),
+              ),
+              child: _buildReportCard(
+                context,
+                title: 'Customer Ledger',
+                subtitle: 'Wallet & Credit',
+                icon: FontAwesomeIcons.wallet,
+                color: Colors.purpleAccent,
+                locked: false,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    slideLeftRoute(const CustomersScreen()),
+                  );
+                },
+              ),
             ),
           ],
         ),
