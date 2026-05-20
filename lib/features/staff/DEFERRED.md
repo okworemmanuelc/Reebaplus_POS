@@ -219,6 +219,12 @@ runnable once 0031 is live.
 
 ## Terminate Access is a stub
 
+> ⚠ **Pending fix on a sibling branch.** The soft-delete implementation
+> lives on `fix/staff-list-own-view-and-terminate` (commit `7d9e22a`).
+> When that branch merges to `main`, flip the **Status** line below to
+> **RESOLVED** and note the merge commit. The text below describes the
+> un-fixed state and is accurate only until that merge lands.
+
 **Status:** deferred (pre-existing technical debt; not a refactor
 regression). Surfaced during Step 14 Block 3 manual testing of the role
 refactor.
