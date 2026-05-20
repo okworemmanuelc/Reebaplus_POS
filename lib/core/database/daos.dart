@@ -2926,6 +2926,58 @@ class BusinessMembersDao extends DatabaseAccessor<AppDatabase>
         .write(comp);
     await db.syncDao.enqueueUpsert('business_members', comp);
   }
+
+  /// Soft-delete a staff member from the current business. Sets
+  /// `status='removed'`, `removed_at=now()`, `removed_by=<caller>`,
+  /// `is_deleted=true` on the membership row, and also flips the
+  /// `users.is_deleted=true` flag so the staff-list stream (filtered on
+  /// users.isDeleted = false) drops the row immediately without needing a
+  /// cross-table join. Both writes go through `enqueueUpsert` per CLAUDE.md
+  /// §5 sync invariants.
+  ///
+  /// Single-business model: the global users row exists only for this
+  /// tenant, so flipping `users.is_deleted` is functionally equivalent to
+  /// "remove from this business." Phase 5 (multi-membership) will need to
+  /// revisit this — at that point the staff list should join with
+  /// business_members directly and `users.is_deleted` stops being the right
+  /// hook.
+  ///
+  /// No-op if no active membership exists for [userId] in the current
+  /// business. Caller is responsible for refusing self-termination (a CEO
+  /// terminating themselves would lock the business out).
+  Future<void> terminateMember({
+    required String userId,
+    required String removedByUserId,
+  }) async {
+    final membership = await getByUserId(userId);
+    if (membership == null) return;
+
+    final now = DateTime.now();
+    final memberComp = BusinessMembersCompanion(
+      id: Value(membership.id),
+      status: const Value('removed'),
+      removedAt: Value(now),
+      removedBy: Value(removedByUserId),
+      isDeleted: const Value(true),
+      lastUpdatedAt: Value(now),
+    );
+    await (update(businessMembers)..where(
+          (t) => t.id.equals(membership.id) & whereBusiness(t),
+        ))
+        .write(memberComp);
+    await db.syncDao.enqueueUpsert('business_members', memberComp);
+
+    final userComp = UsersCompanion(
+      id: Value(userId),
+      isDeleted: const Value(true),
+      lastUpdatedAt: Value(now),
+    );
+    await (db.update(db.users)..where(
+          (u) => u.id.equals(userId) & whereBusiness(u),
+        ))
+        .write(userComp);
+    await db.syncDao.enqueueUpsert('users', userComp);
+  }
 }
 
 @DriftAccessor(tables: [Notifications])

@@ -101,12 +101,15 @@ class _StaffScreenState extends ConsumerState<StaffScreen> {
     db.select(db.warehouses).get().then((ws) {
       if (mounted) setState(() => _warehouses = ws);
     });
-    _usersSub = db.select(db.users).watch().listen((data) {
-      if (mounted) {
-        _rawUsers = data;
-        _updateItems();
-      }
-    });
+    _usersSub = (db.select(db.users)
+          ..where((u) => u.isDeleted.equals(false)))
+        .watch()
+        .listen((data) {
+          if (mounted) {
+            _rawUsers = data;
+            _updateItems();
+          }
+        });
     _invitesSub = db.select(db.invites).watch().listen((data) {
       if (mounted) {
         _rawInvites = data;
@@ -340,8 +343,15 @@ class _StaffScreenState extends ConsumerState<StaffScreen> {
         : roleInfo.color;
     final initials = _initials(item.name);
 
-    // Authorization check: Staff below this one in tier cannot view profile
-    final isDisabled = currentUser != null && currentUser.roleTier < item.tier;
+    // Authorization check: Staff below this one in tier cannot view profile.
+    // A user can always view their own row regardless of tier — guards against
+    // local-DB staleness (e.g. a pre-v9 grandfathered roleTier=5 cached in
+    // authProvider.currentUser while roleFor('ceo').tier is 6) and matches the
+    // natural invariant "you can see yourself."
+    final isOwnRow = currentUser != null && item.user?.id == currentUser.id;
+    final isDisabled = !isOwnRow &&
+        currentUser != null &&
+        currentUser.roleTier < item.tier;
 
     return Opacity(
       opacity: isDisabled ? 0.5 : 1.0,
@@ -772,17 +782,29 @@ class _StaffScreenState extends ConsumerState<StaffScreen> {
   }
 
   void _confirmDelete(BuildContext context, UserData user) {
+    final currentUser = ref.read(authProvider).currentUser;
+    if (currentUser != null && currentUser.id == user.id) {
+      // Self-termination would lock the operator (typically the CEO) out of
+      // their own business. Refuse cleanly with a clear message instead of
+      // opening the confirmation dialog.
+      AppNotification.showError(
+        context,
+        "You can't terminate your own access.",
+      );
+      return;
+    }
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: _surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(
-          'Delete Staff',
+          'Terminate Access',
           style: TextStyle(color: _text, fontWeight: FontWeight.bold),
         ),
         content: Text(
-          'Are you sure you want to remove ${user.name} from the system?',
+          'Remove ${user.name} from the staff list? They will lose access '
+          'to this business on their next sign-in.',
           style: TextStyle(color: _subtext),
         ),
         actions: [
@@ -793,11 +815,39 @@ class _StaffScreenState extends ConsumerState<StaffScreen> {
             onPressed: () => Navigator.pop(context),
           ),
           AppButton(
-            text: 'Delete',
+            text: 'Terminate',
             variant: AppButtonVariant.danger,
             onPressed: () async {
               Navigator.pop(context);
-              // Stub — no DB delete in this version
+              final db = ref.read(databaseProvider);
+              final actor = ref.read(authProvider).currentUser;
+              if (actor == null) {
+                AppNotification.showError(
+                  context,
+                  'Session expired. Sign in again to terminate staff.',
+                );
+                return;
+              }
+              try {
+                await db.businessMembersDao.terminateMember(
+                  userId: user.id,
+                  removedByUserId: actor.id,
+                );
+                if (!context.mounted) return;
+                AppNotification.showSuccess(
+                  context,
+                  '${user.name} terminated.',
+                );
+              } catch (e, st) {
+                AppLogger.error(
+                  '[StaffScreen] terminate failed for user=${user.id}: $e\n$st',
+                );
+                if (!context.mounted) return;
+                AppNotification.showError(
+                  context,
+                  'Could not terminate access. Try again.',
+                );
+              }
             },
           ),
         ],
