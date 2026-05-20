@@ -39,10 +39,54 @@ complaint surfaces.
 
 ## Non-CEO invitee acceptance blocked by missing profiles row
 
-**Status:** deferred (pre-existing structural gap, ~2 months old; surfaced
-during Step 14 Block 3 manual testing of the role refactor, **not caused
-by it**). Blocks non-CEO invitee fresh-device flow in production; CEO
-accounts are unaffected.
+**Status (rev 2, 2026-05-20):** ✅ **RESOLVED on
+`fix/invitee-rls-principal`** — migration
+[`0031_seed_profiles_for_invitees.sql`](../../../supabase/migrations/0031_seed_profiles_for_invitees.sql)
+extends `accept_invite` to seed `public.profiles` for every invitee
+(mirroring the CEO owner-creation pattern at [0023:75-81](../../../supabase/migrations/0023_complete_onboarding_seeds_membership.sql#L75-L81))
+and backfills the row(s) for existing non-CEO members. Awaiting deploy
+(`supabase db push` from `fix/invitee-rls-principal` after merge to
+main). The original diagnosis chain + the three candidate fix paths
+are preserved below for posterity.
+
+**Audit-driven recommendation flip (rev 2).** The audit on
+`fix/invitee-rls-principal` (2026-05-20) found that the rev-1
+recommendation — **Path C with the COALESCE in `public.business_id()`**
+— would not have been sufficient on its own. Three distinct
+profiles-authoritative consumers exist, not one:
+
+1. `public.business_id()` — the RLS principal helper.
+2. [`regenerate_invite_code`](../../../supabase/migrations/0030_role_vocabulary_expansion.sql#L395-L398)
+   and [`extend_verification`](../../../supabase/migrations/0030_role_vocabulary_expansion.sql#L520-L523)
+   — both read `role_tier` directly from `profiles` for their
+   manager-tier gate.
+3. [`AuthService.upsertLocalUserFromProfile`](../../../lib/shared/services/auth_service.dart#L312-L368)
+   — client-side seeder for the local Drift `users` row;
+   returns `null` (stranding the orchestrator on
+   `ExistingAccountScreen`) if no profiles row exists.
+
+Additionally, the rev-1 Path C SQL had a **circular RLS dependency**:
+its proposed `(SELECT id FROM public.users WHERE auth_user_id = …)`
+sub-query would trigger `users.tenant_select` which itself calls
+`public.business_id()`, recursing back into the same function. The
+fix would have required two new self-read RLS policies on `users`
+and `business_members` — a permanent dual-source identity model and
+a larger attack surface for future RLS bypasses.
+
+Path B (seed `profiles` for everyone) closes all three consumers in
+one SQL change, requires zero client changes (the sync layer at
+[supabase_sync_service.dart:1807-1816](../../../lib/core/services/supabase_sync_service.dart#L1807-L1816)
+already discards bulk `profiles` rows from `pos_pull_snapshot`), and
+restores the original design intent that `profiles` is the
+authoritative principal record for every authenticated tenant
+member — not just the CEO owner.
+
+---
+
+**Original status (rev 1):** deferred (pre-existing structural gap,
+~2 months old; surfaced during Step 14 Block 3 manual testing of the
+role refactor, **not caused by it**). Blocks non-CEO invitee fresh-device
+flow in production; CEO accounts are unaffected.
 
 **Diagnosis chain.** Reproduction was a manager invite redeemed end-to-end
 on a fresh emulator. Wizard completed server-side, then punted to the
@@ -133,8 +177,8 @@ gap surfaces.
   critical path. But that work is bigger and explicitly parked. Not a
   near-term option.
 
-**Recommendation.** Path C is technically cleanest and has the smallest
-diff. Pick Path C **after** an audit confirming:
+**Recommendation (rev 1, superseded).** Path C is technically cleanest
+and has the smallest diff. Pick Path C **after** an audit confirming:
 
 1. Every call site of `public.business_id()` is comfortable with the
    COALESCE semantics (no caller assumes profiles-only).
@@ -148,15 +192,30 @@ diff. Pick Path C **after** an audit confirming:
 If the audit surfaces a non-trivial blast radius, fall back to Path B
 plus a parallel Drift `profiles` table addition.
 
-**Not in scope yet.** Backfill for any existing non-CEO members in
-production who currently lack a profiles row — depends on path chosen.
-Path B + a one-off backfill migration; Path C needs no backfill at all.
+**Recommendation (rev 2, what actually shipped).** The rev-1 audit
+landed on **Path B**, not Path C. See the "Audit-driven recommendation
+flip" block at the top of this entry for the full rationale. The
+Drift `profiles` table addition called out as the Path-B fallback
+turned out to be unnecessary — the sync layer at
+[supabase_sync_service.dart:1807-1816](../../../lib/core/services/supabase_sync_service.dart#L1807-L1816)
+already discards bulk `profiles` rows from `pos_pull_snapshot`, and
+`AuthService.upsertLocalUserFromProfile` already upserts the
+caller's own row into Drift `users` directly from the cloud
+`profiles` SELECT. Path B was pure SQL.
 
-**Trigger to unblock.** Required before any non-CEO invitee can complete
-the wizard on a fresh device in production. Block 5 of Step 14 (wizard
-E2E ×3) cannot run cleanly until this lands. Recommend new branch
-`fix/invitee-rls-principal` (or similar), starting with the call-site
-audit.
+**Backfill (rev 2).** Bundled into 0031 itself — the migration
+INSERTs a profiles row for every existing `public.users` row with
+`auth_user_id NOT NULL` and an active membership, using
+`ON CONFLICT (id) DO NOTHING` so re-runs are no-ops. The 0030
+pre-flight audit recorded 1× manager and 1× CEO; CEO already has a
+profile (from 0023's CEO-only seed path), so the backfill effectively
+INSERTs the single missing manager profile.
+
+**Trigger to unblock (rev 2).** Done on `fix/invitee-rls-principal`
+(commit pending). Deploy with `supabase db push` after the branch
+merges to main; verify via the queries at the bottom of 0031. Block 5
+wizard E2E ×3 (Step 14 in [PROGRESS.md](PROGRESS.md)) becomes
+runnable once 0031 is live.
 
 ## Terminate Access is a stub
 
