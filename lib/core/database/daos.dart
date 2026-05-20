@@ -2927,13 +2927,20 @@ class BusinessMembersDao extends DatabaseAccessor<AppDatabase>
     await db.syncDao.enqueueUpsert('business_members', comp);
   }
 
-  /// Soft-delete a staff member from the current business. Sets
-  /// `status='removed'`, `removed_at=now()`, `removed_by=<caller>`,
-  /// `is_deleted=true` on the membership row, and also flips the
-  /// `users.is_deleted=true` flag so the staff-list stream (filtered on
-  /// users.isDeleted = false) drops the row immediately without needing a
-  /// cross-table join. Both writes go through `enqueueUpsert` per CLAUDE.md
-  /// §5 sync invariants.
+  /// Soft-delete a staff member from the current business. Always flips
+  /// `users.is_deleted=true` (and enqueues the upsert); also marks the
+  /// `business_members` row `status='removed'`, `removed_at=now()`,
+  /// `removed_by=<caller>`, `is_deleted=true` **if** that membership exists
+  /// locally. All writes go through `enqueueUpsert` per CLAUDE.md §5 sync
+  /// invariants.
+  ///
+  /// `users.is_deleted` is the source of truth the staff-list stream filters
+  /// on (`users.isDeleted = false`), so flipping it unconditionally is what
+  /// removes the row from the UI and blocks cloud-side re-entry on next
+  /// sign-in. The membership write is best-effort: a missing local
+  /// `business_members` row indicates a sync gap (see DEFERRED.md
+  /// "business_members rows can go missing locally"), not a reason to
+  /// refuse the termination.
   ///
   /// Single-business model: the global users row exists only for this
   /// tenant, so flipping `users.is_deleted` is functionally equivalent to
@@ -2942,30 +2949,40 @@ class BusinessMembersDao extends DatabaseAccessor<AppDatabase>
   /// business_members directly and `users.is_deleted` stops being the right
   /// hook.
   ///
-  /// No-op if no active membership exists for [userId] in the current
-  /// business. Caller is responsible for refusing self-termination (a CEO
-  /// terminating themselves would lock the business out).
+  /// Caller is responsible for refusing self-termination (a CEO terminating
+  /// themselves would lock the business out).
   Future<void> terminateMember({
     required String userId,
     required String removedByUserId,
   }) async {
-    final membership = await getByUserId(userId);
-    if (membership == null) return;
-
     final now = DateTime.now();
-    final memberComp = BusinessMembersCompanion(
-      id: Value(membership.id),
-      status: const Value('removed'),
-      removedAt: Value(now),
-      removedBy: Value(removedByUserId),
-      isDeleted: const Value(true),
-      lastUpdatedAt: Value(now),
-    );
-    await (update(businessMembers)..where(
-          (t) => t.id.equals(membership.id) & whereBusiness(t),
-        ))
-        .write(memberComp);
-    await db.syncDao.enqueueUpsert('business_members', memberComp);
+    final membership = await getByUserId(userId);
+
+    if (membership != null) {
+      final memberComp = BusinessMembersCompanion(
+        id: Value(membership.id),
+        status: const Value('removed'),
+        removedAt: Value(now),
+        removedBy: Value(removedByUserId),
+        isDeleted: const Value(true),
+        lastUpdatedAt: Value(now),
+      );
+      await (update(businessMembers)..where(
+            (t) => t.id.equals(membership.id) & whereBusiness(t),
+          ))
+          .write(memberComp);
+      await db.syncDao.enqueueUpsert('business_members', memberComp);
+    } else {
+      // Sync gap: cloud has the membership but it never landed locally.
+      // Loud log so the underlying issue stays visible; proceed with the
+      // users flip below so the user-facing operation still succeeds.
+      debugPrint(
+        '[BusinessMembersDao.terminateMember] no local business_members row '
+        'for user_id=$userId in business=${currentBusinessId ?? "<none>"} — '
+        'flipping users.is_deleted only. See DEFERRED.md '
+        '"business_members rows can go missing locally".',
+      );
+    }
 
     final userComp = UsersCompanion(
       id: Value(userId),

@@ -276,3 +276,98 @@ either (a) the CEO needs to remove a real terminated staff member, or
 (b) the next staff-management cleanup pass happens. Suggested new
 branch: `feat/terminate-staff-access` (or fold into the
 `fix/invitee-rls-principal` follow-up if both are tackled together).
+
+## `business_members` rows can go missing locally — Terminate Access compensates but root cause unknown
+
+**Status:** deferred (workaround in place on
+`fix/staff-list-own-view-and-terminate`; root cause not investigated).
+Surfaced 2026-05-20 during smoke-testing of the Terminate Access fix
+above.
+
+**Symptom.** On the CEO's device, tapping Terminate Access on an active
+staff member produced a success toast but the row did not disappear from
+the staff list, and the cloud `business_members` / `users` rows were not
+updated. `terminateMember` was silently no-op'ing at its
+`getByUserId(userId) == null` early-return because the local Drift
+`business_members` table had no row for the staff user — even though the
+cloud row existed with valid v9 `role='manager'` / `role_tier=5` and
+should have been pulled by sync.
+
+**Evidence captured before the workaround.**
+
+- Cloud `business_members` for the affected `user_id`:
+  `status='active'`, `is_deleted=false`,
+  `last_updated_at=2026-05-12 20:15:42+00`.
+- Cloud `users` row: `is_deleted=false`,
+  `last_updated_at=2026-05-15 14:18:19+00`.
+- Both rows unchanged by the in-app termination attempt → confirms no
+  enqueue happened locally → confirms the early-return path.
+- Cloud row's `role`/`role_tier` are inside the v9 allowed set, so the
+  defensive role-validation filter at
+  [supabase_sync_service.dart:1999-2008](../../core/services/supabase_sync_service.dart#L1999-L2008)
+  would NOT have dropped this row during pull (only legacy / invalid
+  role-tier combos hit that branch). Validation alone isn't the
+  explanation here — the gap is somewhere else.
+
+**Suspected causes (none verified).**
+
+1. The defensive role-validation filter at
+   [supabase_sync_service.dart:1999-2008](../../core/services/supabase_sync_service.dart#L1999-L2008)
+   silently `continue`s past `business_members` rows with an out-of-set
+   role/tier without enqueueing a retry or surfacing the drop anywhere.
+   If the row's role/tier was briefly invalid during the v9 rollout
+   window (before migration 0030 backfilled tiers, or mid-deploy) the
+   CEO's pull would have skipped it and never re-fetched. The row's
+   `last_updated_at=2026-05-12` predates the v9 deploy (commit
+   `ed5733a`, 2026-05-17), so this is plausible.
+2. First-sync race: snapshot fetched before `business_members` rows
+   were committed cloud-side, and no subsequent realtime UPDATE arrived
+   to retry. The pull layer doesn't appear to have a "re-pull
+   business_members on staff-list mount" hedge.
+3. Realtime subscription for `business_members` was wired but missed a
+   range of updates while offline; the next snapshot pull didn't pick
+   them up either. (Hasn't been verified — would require checking the
+   realtime channel subscription list and any reconnect-replay logic.)
+
+**Workaround in place.**
+[`BusinessMembersDao.terminateMember`](../../core/database/daos.dart)
+no longer early-returns when the membership lookup misses. It always
+flips `users.is_deleted=true` + enqueues that upsert (which is what the
+staff-list watcher actually filters on), and only conditionally writes
+the `business_members` soft-delete columns when a local row exists. A
+loud `debugPrint` fires on the missing-membership branch so the gap
+stays visible in logs even when the user-facing operation succeeds.
+
+**Why this is a workaround, not a fix.** The terminate path is the only
+one we've hardened. Every other read that depends on a local
+`business_members` row — PIN management
+([`BusinessMembersDao.setPin`](../../core/database/daos.dart),
+[`BusinessMembersDao.clearPin`](../../core/database/daos.dart)),
+verification-status reads,
+[`AuthService._activeMember`](../../shared/services/auth_service.dart#L124),
+the staff-list role/tier display path,
+and any future flow that joins `users → business_members` — will still
+silently misbehave for any user whose membership row didn't make it
+local. We've patched the symptom on one screen; the substrate is still
+holey.
+
+**Proposed direction.** Sequence the diagnosis before the fix:
+
+1. Add an instrumentation pass to `_restoreTableData('business_members')`
+   that counts dropped rows per pull and surfaces a non-zero count in
+   `sync_diagnostic.dart`. Cheap and ships actionable signal without
+   committing to a fix.
+2. Audit the realtime subscription wiring for `business_members` —
+   confirm it's actually subscribed, confirm reconnect-replay covers
+   the missed-update window, confirm a manual "refresh staff list"
+   action triggers a re-pull of the table.
+3. Once we know which of the three suspected causes is actually firing
+   in production, the fix is either: (a) replace silent `continue` in
+   the role-validation filter with an enqueued retry + warning toast,
+   (b) add a forced re-pull of `business_members` on staff-screen
+   mount, or (c) fix the realtime gap. Likely (a) + (b) together.
+
+**Trigger to unblock.** Pick when either (i) a second symptom of the
+same underlying gap surfaces (PIN reset failing, verification status
+not updating, etc.), or (ii) we sit down to harden sync as a unit. Not
+a near-term production blocker now that Terminate Access compensates.
