@@ -44,12 +44,21 @@ class _ProfileProbe {
         error = e;
 }
 
-enum _SyncErrorKind { rls, missingBusinessId, duplicateKey, fk, network, other }
+enum _SyncErrorKind {
+  rls,
+  missingBusinessId,
+  authUserMismatch,
+  duplicateKey,
+  fk,
+  network,
+  other,
+}
 
 _SyncErrorKind _classify(String? error) {
   if (error == null) return _SyncErrorKind.other;
   final e = error.toLowerCase();
   if (e == 'missing_business_id') return _SyncErrorKind.missingBusinessId;
+  if (e.startsWith('auth_user_mismatch')) return _SyncErrorKind.authUserMismatch;
   if (e.contains('row-level security')) return _SyncErrorKind.rls;
   if (e.contains('duplicate key')) return _SyncErrorKind.duplicateKey;
   if (e.contains('violates foreign key')) return _SyncErrorKind.fk;
@@ -65,6 +74,8 @@ String _labelFor(_SyncErrorKind kind) {
       return 'RLS rejection';
     case _SyncErrorKind.missingBusinessId:
       return 'Missing business_id';
+    case _SyncErrorKind.authUserMismatch:
+      return 'Wrong user';
     case _SyncErrorKind.duplicateKey:
       return 'Duplicate key';
     case _SyncErrorKind.fk:
@@ -208,6 +219,7 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
+    final pendingAsync = ref.watch(pendingQueueItemsProvider);
     final failedAsync = ref.watch(failedQueueItemsProvider);
     final orphanAsync = ref.watch(orphanQueueItemsProvider);
     final pendingCount = ref.watch(pendingQueueCountProvider).valueOrNull ?? 0;
@@ -246,6 +258,35 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
             _deferredCard(t, _deferredTables),
             const SizedBox(height: 28),
           ],
+          _sectionHeader(t, 'Pending items'),
+          const SizedBox(height: 4),
+          Text(
+            'Queued for push. If a row sits here for more than a few minutes, '
+            'tap Retry now to force a fresh attempt or Discard to drop it.',
+            style: TextStyle(
+              fontSize: 12,
+              color: t.colorScheme.onSurface.withValues(alpha: 0.6),
+            ),
+          ),
+          const SizedBox(height: 12),
+          pendingAsync.when(
+            loading: () => const Padding(
+              padding: EdgeInsets.all(24),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+            error: (e, _) => _emptyCard(t, 'Failed to load: $e'),
+            data: (items) {
+              if (items.isEmpty) {
+                return _emptyCard(t, 'No pending items.');
+              }
+              return Column(
+                children: [
+                  for (final item in items) _pendingItemTile(t, item),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 28),
           _sectionHeader(t, 'Failed items'),
           const SizedBox(height: 12),
           failedAsync.when(
@@ -675,11 +716,135 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
     );
   }
 
+  Widget _pendingItemTile(ThemeData t, SyncQueueData item) {
+    final hasError = item.errorMessage != null;
+    final kind = _classify(item.errorMessage);
+    final badgeLabel = hasError ? _labelFor(kind) : 'Pending';
+    final badgeColor = hasError
+        ? switch (kind) {
+            _SyncErrorKind.rls => t.colorScheme.error,
+            _SyncErrorKind.missingBusinessId => Colors.orange,
+            _SyncErrorKind.authUserMismatch => t.colorScheme.error,
+            _SyncErrorKind.duplicateKey => Colors.amber,
+            _SyncErrorKind.fk => Colors.deepOrange,
+            _SyncErrorKind.network => Colors.blueGrey,
+            _SyncErrorKind.other => t.colorScheme.onSurface.withValues(alpha: 0.6),
+          }
+        : t.colorScheme.primary;
+    final payloadPreview = item.payload.length > 200
+        ? '${item.payload.substring(0, 200)}…'
+        : item.payload;
+    final nextAttemptLabel = item.nextAttemptAt == null
+        ? 'Next try: ASAP'
+        : 'Next try: ${item.nextAttemptAt!.toLocal()}';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: AppDecorations.glassCard(context, radius: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: badgeColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  badgeLabel,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: badgeColor,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  item.actionType,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: t.colorScheme.onSurface,
+                  ),
+                ),
+              ),
+              Text(
+                'attempts: ${item.attempts}',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: t.colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+              ),
+            ],
+          ),
+          if (hasError) ...[
+            const SizedBox(height: 8),
+            Text(
+              item.errorMessage!,
+              style: TextStyle(
+                fontSize: 12,
+                color: t.colorScheme.error.withValues(alpha: 0.9),
+              ),
+            ),
+          ],
+          const SizedBox(height: 6),
+          Text(
+            nextAttemptLabel,
+            style: TextStyle(
+              fontSize: 11,
+              color: t.colorScheme.onSurface.withValues(alpha: 0.6),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            payloadPreview,
+            style: TextStyle(
+              fontSize: 11,
+              fontFamily: 'monospace',
+              color: t.colorScheme.onSurface.withValues(alpha: 0.55),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              const Spacer(),
+              TextButton(
+                onPressed: () async {
+                  await _db.syncDao.clearFailureBackoffById(item.id);
+                  unawaited(_sync.pushPending());
+                },
+                child: const Text('Retry now'),
+              ),
+              TextButton(
+                onPressed: () async {
+                  await ref
+                      .read(databaseProvider)
+                      .syncDao
+                      .discardQueueItem(item.id);
+                },
+                style:
+                    TextButton.styleFrom(foregroundColor: t.colorScheme.error),
+                child: const Text('Discard'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _failedItemTile(ThemeData t, SyncQueueData item) {
     final kind = _classify(item.errorMessage);
     final kindColor = switch (kind) {
       _SyncErrorKind.rls => t.colorScheme.error,
       _SyncErrorKind.missingBusinessId => Colors.orange,
+      _SyncErrorKind.authUserMismatch => t.colorScheme.error,
       _SyncErrorKind.duplicateKey => Colors.amber,
       _SyncErrorKind.fk => Colors.deepOrange,
       _SyncErrorKind.network => Colors.blueGrey,

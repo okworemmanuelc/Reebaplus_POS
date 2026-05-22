@@ -988,6 +988,15 @@ class SyncQueue extends Table {
   IntColumn get attempts => integer().withDefault(const Constant(0))();
   DateTimeColumn get nextAttemptAt => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  // Supabase auth.uid() at enqueue time. Dispatch refuses to push a row
+  // whose tag does not match the current session's auth.uid(), so an
+  // account-switch on the same device cannot flush the previous user's
+  // queued writes under the new user's JWT. Nullable for two reasons:
+  // (a) rows enqueued before v10 have no captured value, and (b) some
+  // bootstrap enqueues (very early in onboarding) can race the Supabase
+  // session-restore — null is treated as "trust the current user" by
+  // dispatch, preserving today's behavior for those legacy rows.
+  TextColumn get authUserId => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -1117,8 +1126,20 @@ class AppDatabase extends _$AppDatabase {
   String? Function() userIdResolver = () => null;
   String? get currentUserId => userIdResolver();
 
+  /// Supabase auth.uid() for the active session, read directly from the
+  /// SDK so it tracks the cloud identity independent of any local `users`
+  /// row. SyncDao stamps every enqueued row with this so dispatch can
+  /// reject pushes after an account switch on the same device.
+  ///
+  /// Returns null before AuthService binds the closure (cold start) and
+  /// during the brief window between Supabase init and session restore.
+  /// Null at enqueue time is treated as "trust the current user" at
+  /// dispatch — see [SyncQueue.authUserId] for the full contract.
+  String? Function() authUserIdResolver = () => null;
+  String? get currentAuthUserId => authUserIdResolver();
+
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1339,6 +1360,15 @@ class AppDatabase extends _$AppDatabase {
         await m.alterTable(TableMigration(users));
         await m.alterTable(TableMigration(businessMembers));
         await m.alterTable(TableMigration(invites));
+      }
+      if (from < 10) {
+        // v10 (L5 fix): tag every sync_queue row with the Supabase
+        // auth.uid() that enqueued it so dispatch can refuse to push
+        // another user's queued writes after an account switch. Existing
+        // rows get NULL — dispatch treats null as "trust the current
+        // user" to keep already-queued writes flowing through the upgrade
+        // without losing pending sales.
+        await m.addColumn(syncQueue, syncQueue.authUserId);
       }
     },
     beforeOpen: (details) async {
