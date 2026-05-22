@@ -79,6 +79,14 @@ class PosController extends ChangeNotifier {
   void _subscribeToProducts() {
     _productsSub?.cancel();
 
+    // The lockedWarehouseId listener fires during lockApp/logout. If the
+    // ordering ever regresses (or another teardown path nulls businessId
+    // before clearing the warehouse), bail rather than throw. Mirrors the
+    // currentUser==null guard in auto_lock_wrapper.dart.
+    if (_database.currentBusinessId == null) {
+      return;
+    }
+
     final warehouseId = _navigationService.lockedWarehouseId.value;
 
     final minLoading = Future.delayed(const Duration(seconds: 2));

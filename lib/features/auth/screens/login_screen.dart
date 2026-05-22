@@ -13,6 +13,7 @@ import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_background.dart';
 import 'package:reebaplus_pos/features/staff/screens/staff_constants.dart';
+import 'package:reebaplus_pos/shared/services/auth_service.dart';
 
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 
@@ -340,36 +341,42 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     final auth = ref.read(authProvider);
 
     // PIN matched a local row, but RLS + sync push need a Supabase JWT too.
-    // If the SDK has no current session (refresh token gave up, signed out
-    // by another path, SDK storage wiped), bounce the user through OTP to
-    // re-establish the JWT before mounting MainLayout. Without this guard
-    // every cloud write piles up in the queue with `pushPending` skipping
-    // on "no auth session", and the Sync Issues screen reports
-    // "no profiles row for current auth.uid()" / "no active Supabase
-    // session" with no path to recovery.
+    // If the SDK has no current session, try a silent refresh first — most
+    // of the time the access token has just expired while the refresh token
+    // is still valid, and the user shouldn't be bounced to OTP over that.
+    // Only fall back to OTP when the refresh genuinely fails on an online
+    // device (refresh token rejected / signed out elsewhere). Offline gets
+    // a pass: the SDK auto-retries on reconnect, sync push self-gates on
+    // auth, so cloud writes safely queue until the JWT comes back.
     if (!auth.hasSupabaseSession && (user.email ?? '').isNotEmpty) {
-      setState(() {
-        _checking = false;
-        _loginSuccess = false;
-      });
-      _pinNotifier.value = '';
-      AppNotification.showError(
-        context,
-        'Your session expired. Please verify your email to continue.',
-      );
-      final error = await auth.sendOtp(user.email!);
+      final refreshResult = await auth.tryRefreshSupabaseSession();
       if (!mounted) return;
-      if (error != null) {
-        AppNotification.showError(context, error);
+
+      if (refreshResult == SessionRefreshResult.failedAuth) {
+        setState(() {
+          _checking = false;
+          _loginSuccess = false;
+        });
+        _pinNotifier.value = '';
+        AppNotification.showError(
+          context,
+          'Your session expired. Please verify your email to continue.',
+        );
+        final error = await auth.sendOtp(user.email!);
+        if (!mounted) return;
+        if (error != null) {
+          AppNotification.showError(context, error);
+          return;
+        }
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) =>
+                OtpVerificationScreen(user: user, email: user.email!),
+          ),
+        );
         return;
       }
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) =>
-              OtpVerificationScreen(user: user, email: user.email!),
-        ),
-      );
-      return;
+      // refreshed | alreadyValid | offline → continue into the app.
     }
 
     // Brief pause so the user sees all 6 dots filled before the overlay swap.

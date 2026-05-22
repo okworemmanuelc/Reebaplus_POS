@@ -15,7 +15,7 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  int _autoLockSeconds = 1800; // default 30m
+  int _autoLockSeconds = 0; // default Never — auto-lock is opt-in
   bool _biometricsEnabled = false;
   bool _isLoading = true;
 
@@ -32,7 +32,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     if (mounted) {
       setState(() {
-        _autoLockSeconds = int.tryParse(intervalStr ?? '') ?? 1800;
+        _autoLockSeconds = int.tryParse(intervalStr ?? '') ?? 0;
         _biometricsEnabled = bioStr == 'true';
         _isLoading = false;
       });

@@ -15,6 +15,14 @@ import 'package:reebaplus_pos/shared/services/pin_hasher.dart';
 /// Route to show after login instead of the default MainLayout.
 enum PostLoginRoute { none, successDashboard, accessGranted }
 
+/// Outcome of a silent JWT refresh attempt.
+///
+/// Callers use this to decide whether to proceed (refreshed/alreadyValid/
+/// offline) or fall back to OTP (failedAuth). Offline is deliberately
+/// tolerated — the SDK auto-retries on reconnect and sync push already
+/// gates on auth, so cloud writes queue safely until the JWT is back.
+enum SessionRefreshResult { refreshed, alreadyValid, offline, failedAuth }
+
 /// Holds the currently logged-in user.
 /// `value` is null when nobody is logged in.
 class AuthService extends ValueNotifier<UserData?> {
@@ -413,6 +421,43 @@ class AuthService extends ValueNotifier<UserData?> {
     }
   }
 
+  /// Attempts a one-shot JWT refresh without bouncing the user to OTP.
+  ///
+  /// Used by PIN unlock to recover an expired access token silently when
+  /// the refresh token is still valid (typical case: device was idle long
+  /// enough for the access token to expire but the refresh token hasn't).
+  Future<SessionRefreshResult> tryRefreshSupabaseSession() async {
+    if (_supabase.auth.currentSession != null) {
+      return SessionRefreshResult.alreadyValid;
+    }
+    try {
+      final response = await _supabase.auth
+          .refreshSession()
+          .timeout(const Duration(seconds: 8));
+      return response.session != null
+          ? SessionRefreshResult.refreshed
+          : SessionRefreshResult.failedAuth;
+    } on AuthRetryableFetchException catch (e) {
+      debugPrint('[AuthService] refreshSession offline: $e');
+      return SessionRefreshResult.offline;
+    } on TimeoutException catch (_) {
+      return SessionRefreshResult.offline;
+    } on AuthException catch (e) {
+      // "No current session" / refresh-token rejected — genuine auth fail.
+      debugPrint('[AuthService] refreshSession auth failure: $e');
+      return SessionRefreshResult.failedAuth;
+    } catch (e) {
+      final msg = e.toString().toLowerCase();
+      if (msg.contains('socketexception') ||
+          msg.contains('failed host lookup') ||
+          msg.contains('clientexception')) {
+        return SessionRefreshResult.offline;
+      }
+      debugPrint('[AuthService] refreshSession unknown error: $e');
+      return SessionRefreshResult.failedAuth;
+    }
+  }
+
   /// Verifies the [otp] code for [email].
   /// Returns null on success, or an error string on failure.
   Future<String?> verifyOtp(String email, String otp) async {
@@ -692,6 +737,11 @@ class AuthService extends ValueNotifier<UserData?> {
       });
       currentSessionId = null;
     }
+    // Clear nav state BEFORE nulling value. lockedWarehouseId listeners
+    // (e.g. PosController._subscribeToProducts) fire synchronously; if
+    // value is already null, requireBusinessId throws.
+    _nav.clearWarehouseLock();
+    _nav.resetNavigation();
     _supabase.auth
         .signOut(scope: SignOutScope.local)
         .catchError(
@@ -700,8 +750,20 @@ class AuthService extends ValueNotifier<UserData?> {
     value = null;
     _activeMember = null;
     bypassNextBiometric = true;
+  }
+
+  /// UI-only lock: drops the in-memory user so the PIN screen takes over,
+  /// but does NOT revoke the sessions row or sign out of Supabase. The
+  /// same device session continues across the lock — keeps RLS happy and
+  /// avoids verifyLocalSessionStillActive treating us as a remote kick
+  /// on the next resume (it early-returns when value == null).
+  void lockApp() {
+    // See logout() — same ordering rule.
     _nav.clearWarehouseLock();
     _nav.resetNavigation();
+    value = null;
+    _activeMember = null;
+    bypassNextBiometric = true;
   }
 
   /// Completely wipes the session, reverting the device to a fresh state.
@@ -740,10 +802,12 @@ class AuthService extends ValueNotifier<UserData?> {
 
     // 4. Clear local state — triggers the ValueListenableBuilder to rebuild.
     //    At this point _hasDeviceUser is already false → routes to EmailEntryScreen.
-    value = null;
-    _activeMember = null;
+    //    Order matters: clear nav first so warehouse-listeners fire while
+    //    the businessId resolver still returns a valid id (see logout()).
     _nav.clearWarehouseLock();
     _nav.resetNavigation();
+    value = null;
+    _activeMember = null;
   }
 
   /// Returns true if [pin] belongs to at least one user whose

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:reebaplus_pos/core/theme/theme_settings_screen.dart';
 import 'package:reebaplus_pos/core/settings/settings_screen.dart';
@@ -59,38 +60,64 @@ class AppDrawer extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(14),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const ProfileScreen()),
-                );
-              },
-              child: Container(
-                width: context.getRSize(56),
-                height: context.getRSize(56),
-                decoration: BoxDecoration(
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
                   borderRadius: BorderRadius.circular(14),
-                  boxShadow: [
-                    BoxShadow(
-                      color: primary.withValues(alpha: 0.4),
-                      blurRadius: 16,
-                      spreadRadius: 2,
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                    );
+                  },
+                  child: Container(
+                    width: context.getRSize(56),
+                    height: context.getRSize(56),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [
+                        BoxShadow(
+                          color: primary.withValues(alpha: 0.4),
+                          blurRadius: 16,
+                          spreadRadius: 2,
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(14),
-                  child: SvgPicture.asset(
-                    'assets/images/logo.svg',
-                    fit: BoxFit.contain,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: SvgPicture.asset(
+                        'assets/images/logo.svg',
+                        fit: BoxFit.contain,
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
+              if (user != null)
+                IconButton(
+                  icon: const FaIcon(FontAwesomeIcons.lock, size: 18),
+                  tooltip: 'Lock app',
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.85),
+                  onPressed: () async {
+                    // Pop the drawer first — mirrors the Log Out pattern below
+                    // so the watched currentUser flipping to null doesn't trip
+                    // tenant-scoped widgets while the drawer is still painting.
+                    Navigator.pop(context);
+                    // Drop any stale paused-time marker so a rapid
+                    // background→resume right after lock doesn't double-fire
+                    // the auto-lock branch.
+                    final prefs = await SharedPreferences.getInstance();
+                    await prefs.remove('app_paused_time');
+                    ref.read(authProvider).lockApp();
+                  },
+                ),
+            ],
           ),
           SizedBox(height: context.getRSize(16)),
           // Sync status indicator. Three signals nested so the badge reflects

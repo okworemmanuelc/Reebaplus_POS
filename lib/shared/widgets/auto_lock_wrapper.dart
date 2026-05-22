@@ -94,11 +94,16 @@ class _AutoLockWrapperState extends ConsumerState<AutoLockWrapper>
         } else {
           final intervalStr =
               await _db.settingsDao.get('auto_lock_interval_seconds');
-          final autoLockSeconds = int.tryParse(intervalStr ?? '') ?? 1800;
+          // Default 0 = Never. Auto-lock is opt-in; an inactivity logout
+          // mid-shift is more disruptive than a stale session.
+          final autoLockSeconds = int.tryParse(intervalStr ?? '') ?? 0;
 
           if (autoLockSeconds > 0 && difference.inSeconds >= autoLockSeconds) {
             if (_auth.currentUser != null) {
-              _auth.logout();
+              // lockApp (not logout) so the sessions row isn't revoked —
+              // otherwise verifyLocalSessionStillActive on the next resume
+              // would falsely trip the remote-kick path. See AuthService.
+              _auth.lockApp();
             }
           }
         }
