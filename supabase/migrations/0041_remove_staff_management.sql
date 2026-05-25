@@ -50,6 +50,7 @@ DROP FUNCTION IF EXISTS public.is_business_member_email(uuid, text);
 DROP FUNCTION IF EXISTS public._redeem_invite_row(invites, text);
 DROP FUNCTION IF EXISTS public.regenerate_invite_code(uuid);
 DROP FUNCTION IF EXISTS public.extend_verification(uuid);
+DROP FUNCTION IF EXISTS public.extend_verification(uuid, integer, text);
 DROP FUNCTION IF EXISTS public.seed_profiles_for_invitees();
 
 -- =========================================================================
