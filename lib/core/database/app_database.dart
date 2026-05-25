@@ -115,15 +115,12 @@ class Users extends Table {
   TextColumn get pinHash => text().nullable()();
   TextColumn get pinSalt => text().nullable()();
   IntColumn get pinIterations => integer().nullable()();
-  TextColumn get role => text()();
-  IntColumn get roleTier => integer().withDefault(const Constant(3))();
   TextColumn get avatarColor => text().withDefault(const Constant('#3B82F6'))();
   BoolColumn get biometricEnabled =>
       boolean().withDefault(const Constant(false))();
   TextColumn get warehouseId => text().nullable().references(Warehouses, #id)();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastNotificationSentAt => dateTime().nullable()();
-  BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
   DateTimeColumn get lastUpdatedAt =>
       dateTime().withDefault(currentDateAndTime)();
 
@@ -134,71 +131,6 @@ class Users extends Table {
   List<String> get customConstraints => [
     'UNIQUE (business_id, email)',
     'UNIQUE (auth_user_id)',
-    "CHECK (role IN ('ceo','manager','stock_keeper','cashier','rider'))",
-    'CHECK (role_tier IN (2,3,4,5,6))',
-  ];
-}
-
-// Per-business join. Owns role / role_tier / warehouse_id / PIN /
-// biometric_enabled / verification state. PIN columns sync to cloud per the
-// staff-onboarding plan §2: hashed PIN is opaque, so cloud-replicating it
-// is acceptable and gives consistent PIN behaviour across a member's devices.
-// One row per (business_id, user_id) — supports multi-business membership
-// once Phase 5 drops the legacy unique constraints on `users`.
-@DataClassName('BusinessMemberData')
-class BusinessMembers extends Table {
-  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
-  TextColumn get businessId => text().references(Businesses, #id)();
-  TextColumn get userId => text().references(Users, #id)();
-  TextColumn get role => text()();
-  IntColumn get roleTier => integer().withDefault(const Constant(3))();
-  TextColumn get warehouseId => text().nullable().references(Warehouses, #id)();
-  TextColumn get pinHash => text().nullable()();
-  TextColumn get pinSalt => text().nullable()();
-  IntColumn get pinIterations => integer().nullable()();
-  BoolColumn get biometricEnabled =>
-      boolean().withDefault(const Constant(false))();
-  TextColumn get status => text().withDefault(const Constant('active'))();
-  TextColumn get verificationStatus =>
-      text().withDefault(const Constant('not_started'))();
-  DateTimeColumn get verificationDueAt => dateTime().nullable()();
-  // Capped 0..2 by review_verification (server) and CHECK (local). Prevents
-  // indefinite grace extension via repeat-garbage rejection cycles.
-  IntColumn get verificationExtensionsUsed =>
-      integer().withDefault(const Constant(0))();
-  DateTimeColumn get joinedAt => dateTime().withDefault(currentDateAndTime)();
-  // Inviter. FK is non-cascading — if the inviter is later removed, this row
-  // is preserved for audit. Mirrors invites.created_by semantics.
-  TextColumn get createdBy => text().nullable().references(Users, #id)();
-  DateTimeColumn get removedAt => dateTime().nullable()();
-  TextColumn get removedBy => text().nullable().references(Users, #id)();
-  // Wizard-collected fields (rev 3, schema v7). All nullable — populated
-  // by the four-screen signup wizard via accept_invite RPC, also editable
-  // later from the staff's own profile. CEO and grandfathered memberships
-  // legitimately have NULL here.
-  TextColumn get staffPhone => text().nullable()();
-  TextColumn get nextOfKinName => text().nullable()();
-  TextColumn get nextOfKinPhone => text().nullable()();
-  TextColumn get nextOfKinRelation => text().nullable()();
-  TextColumn get guarantorName => text().nullable()();
-  TextColumn get guarantorPhone => text().nullable()();
-  TextColumn get guarantorRelation => text().nullable()();
-  BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
-  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
-  DateTimeColumn get lastUpdatedAt =>
-      dateTime().withDefault(currentDateAndTime)();
-
-  @override
-  Set<Column> get primaryKey => {id};
-
-  @override
-  List<String> get customConstraints => [
-    'UNIQUE (business_id, user_id)',
-    "CHECK (role IN ('ceo','manager','stock_keeper','cashier','rider'))",
-    'CHECK (role_tier IN (2,3,4,5,6))',
-    "CHECK (status IN ('active','suspended','removed'))",
-    "CHECK (verification_status IN ('not_started','pending_review','approved','rejected'))",
-    'CHECK (verification_extensions_used >= 0 AND verification_extensions_used <= 2)',
   ];
 }
 
@@ -933,33 +865,6 @@ class Sessions extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-@DataClassName('InviteData')
-class Invites extends Table {
-  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
-  TextColumn get businessId => text().references(Businesses, #id)();
-  TextColumn get email => text()();
-  TextColumn get code => text()();
-  TextColumn get role => text()();
-  TextColumn get warehouseId => text().nullable().references(Warehouses, #id)();
-  TextColumn get createdBy => text().references(Users, #id)();
-  TextColumn get inviteeName => text()();
-  TextColumn get status => text().withDefault(const Constant('pending'))();
-  DateTimeColumn get expiresAt => dateTime()();
-  DateTimeColumn get usedAt => dateTime().nullable()();
-  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
-  DateTimeColumn get lastUpdatedAt =>
-      dateTime().withDefault(currentDateAndTime)();
-
-  @override
-  Set<Column> get primaryKey => {id};
-
-  @override
-  List<String> get customConstraints => [
-    "CHECK (role IN ('ceo','manager','stock_keeper','cashier','rider'))",
-    "CHECK (status IN ('pending','accepted','expired','revoked'))",
-  ];
-}
-
 // Global (non-tenant) config — replaces sentinel-business-id pattern.
 class SystemConfig extends Table {
   TextColumn get key => text()();
@@ -1045,7 +950,6 @@ class MigrationEvents extends Table {
     Manufacturers,
     Warehouses,
     Users,
-    BusinessMembers,
     Categories,
     Suppliers,
     Products,
@@ -1075,7 +979,6 @@ class MigrationEvents extends Table {
     Notifications,
     Settings,
     Sessions,
-    Invites,
     SystemConfig,
     SyncQueue,
     SyncQueueOrphans,
@@ -1092,7 +995,6 @@ class MigrationEvents extends Table {
     ActivityLogDao,
     NotificationsDao,
     WarehousesDao,
-    BusinessMembersDao,
     StockLedgerDao,
     StockTransferDao,
     PendingCrateReturnsDao,
@@ -1139,7 +1041,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1228,88 +1130,16 @@ class AppDatabase extends _$AppDatabase {
         );
       }
       if (from < 6) {
-        // v6 (staff onboarding §1): introduce business_members as the
-        // per-business join replacing per-business state on `users`. PIN
-        // columns sync to cloud per the staff-onboarding plan §2 — hashed
-        // PIN is opaque, so cloud-replicating it is acceptable and gives
-        // consistent PIN behaviour across a member's devices.
-        //
-        // Backfill is a one-time grandfather clause: every existing non-
-        // deleted user gets a paired membership with verification_status =
-        // 'approved' and verification_due_at = NULL. Verification applies
-        // only to staff onboarded AFTER this migration runs. Same rule as
-        // the cloud-side 0020_business_members.sql backfill.
-        //
-        // SQLite has no UUIDv7 helper, so backfill IDs are v4-formatted
-        // (random 16 bytes laid out as a UUID string). New rows minted by
-        // BusinessMembers.id.clientDefault use proper UUIDv7. The column
-        // accepts any text — only the format differs for legacy backfill
-        // rows, and the IDs are not user-visible.
-        await m.createTable(businessMembers);
-        await customStatement(
-          'INSERT INTO business_members ('
-          'id, business_id, user_id, role, role_tier, warehouse_id, '
-          'pin_hash, pin_salt, pin_iterations, biometric_enabled, '
-          'status, verification_status, verification_due_at, '
-          'verification_extensions_used, joined_at, '
-          'is_deleted, created_at, last_updated_at'
-          ') SELECT '
-          'lower('
-          '  hex(randomblob(4)) || \'-\' || '
-          '  hex(randomblob(2)) || \'-4\' || '
-          '  substr(hex(randomblob(2)), 2) || \'-\' || '
-          "  substr('89ab', 1 + (abs(random()) % 4), 1) || "
-          '  substr(hex(randomblob(2)), 2) || \'-\' || '
-          '  hex(randomblob(6))'
-          '), '
-          'u.business_id, u.id, u.role, u.role_tier, u.warehouse_id, '
-          'u.pin_hash, u.pin_salt, u.pin_iterations, u.biometric_enabled, '
-          "'active', 'approved', NULL, "
-          '0, u.created_at, '
-          "0, u.created_at, CAST(strftime('%s', 'now') AS INTEGER) "
-          'FROM users u '
-          'WHERE u.is_deleted = 0',
-        );
-        // Indexes — mirror _postCreateStatements so a fresh install and an
-        // upgraded install end up with the same physical schema.
-        await customStatement(
-          'CREATE INDEX idx_business_members_business_lua '
-          'ON business_members (business_id, last_updated_at)',
-        );
-        await customStatement(
-          'CREATE INDEX idx_business_members_business_deleted '
-          'ON business_members (business_id, is_deleted)',
-        );
-        await customStatement(
-          'CREATE INDEX idx_business_members_user '
-          'ON business_members (user_id)',
-        );
-        // Bump trigger.
-        await customStatement(
-          'CREATE TRIGGER bump_business_members_last_updated_at '
-          'AFTER UPDATE ON business_members '
-          'FOR EACH ROW '
-          'WHEN OLD.last_updated_at IS NEW.last_updated_at '
-          'BEGIN '
-          'UPDATE business_members '
-          "SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) "
-          'WHERE id = OLD.id; '
-          'END',
-        );
+        // v6 originally introduced the business_members table as part of
+        // the staff-onboarding work. v12 drops that table entirely with
+        // the removal of staff management, so creating it on the way up
+        // (only to drop it later in the same upgrade) is wasted work.
+        // No-op here. A v5 device upgrading straight to v12 simply never
+        // sees the membership table.
       }
       if (from < 7) {
-        // v7 (staff onboarding rev 3 §B): add the seven wizard-collected
-        // columns to business_members. All nullable — existing rows
-        // (including grandfathered memberships from the v5→v6 backfill)
-        // legitimately have no values for these. Cloud counterpart lives
-        // in 0024_business_members_signup_fields.sql.
-        await m.addColumn(businessMembers, businessMembers.staffPhone);
-        await m.addColumn(businessMembers, businessMembers.nextOfKinName);
-        await m.addColumn(businessMembers, businessMembers.nextOfKinPhone);
-        await m.addColumn(businessMembers, businessMembers.nextOfKinRelation);
-        await m.addColumn(businessMembers, businessMembers.guarantorName);
-        await m.addColumn(businessMembers, businessMembers.guarantorPhone);
-        await m.addColumn(businessMembers, businessMembers.guarantorRelation);
+        // v7 originally added wizard-collected columns to business_members.
+        // No-op since v12 drops the entire table.
       }
       if (from < 8) {
         // v8 (Task #18): mirror notifications.recipient_user_id from the
@@ -1335,31 +1165,33 @@ class AppDatabase extends _$AppDatabase {
         // use Drift's TableMigration which does the new-table/copy/drop/
         // rename dance using the current Dart customConstraints lists
         // (which after this commit hold the new vocabulary).
-        for (final tbl in const ['users', 'business_members']) {
-          await customStatement(
-            "UPDATE $tbl SET role = 'ceo',     role_tier = 6 WHERE role = 'admin'",
-          );
-          await customStatement(
-            "UPDATE $tbl SET role = 'cashier', role_tier = 3 WHERE role = 'staff'",
-          );
-          await customStatement(
-            "UPDATE $tbl SET role_tier = 6 WHERE role = 'ceo'     AND role_tier <> 6",
-          );
-          await customStatement(
-            "UPDATE $tbl SET role_tier = 5 WHERE role = 'manager' AND role_tier <> 5",
-          );
-        }
-        // invites — no role_tier column.
+        // v9 originally also rebuilt users / business_members / invites
+        // via Drift's TableMigration to apply updated CHECK constraints.
+        // Those alterTable calls are no longer issued here: v12 drops
+        // business_members and invites entirely and strips role / role_tier
+        // from users, so any constraint-shape rebuild between v9 and v12
+        // is redundant work that's about to be undone. The data-vocabulary
+        // UPDATEs above still run (they execute against whatever the v8
+        // schema had), keeping any pre-v9 row vocabulary consistent until
+        // v12 drops the columns.
+        await customStatement(
+          "UPDATE users SET role = 'ceo',     role_tier = 6 WHERE role = 'admin'",
+        );
+        await customStatement(
+          "UPDATE users SET role = 'cashier', role_tier = 3 WHERE role = 'staff'",
+        );
+        await customStatement(
+          "UPDATE business_members SET role = 'ceo',     role_tier = 6 WHERE role = 'admin'",
+        );
+        await customStatement(
+          "UPDATE business_members SET role = 'cashier', role_tier = 3 WHERE role = 'staff'",
+        );
         await customStatement(
           "UPDATE invites SET role = 'ceo'     WHERE role = 'admin'",
         );
         await customStatement(
           "UPDATE invites SET role = 'cashier' WHERE role = 'staff'",
         );
-
-        await m.alterTable(TableMigration(users));
-        await m.alterTable(TableMigration(businessMembers));
-        await m.alterTable(TableMigration(invites));
       }
       if (from < 10) {
         // v10 (L5 fix): tag every sync_queue row with the Supabase
@@ -1369,6 +1201,100 @@ class AppDatabase extends _$AppDatabase {
         // user" to keep already-queued writes flowing through the upgrade
         // without losing pending sales.
         await m.addColumn(syncQueue, syncQueue.authUserId);
+      }
+      if (from < 11) {
+        // v11 (staff-lifecycle six-rule refactor): mirror
+        // supabase/migrations/0035_drop_legacy_soft_delete_columns.sql.
+        // Fire is now a hard-delete of the business_members row (handled
+        // by the cloud terminate_member(p_user_id, p_business_id) RPC,
+        // see daos.dart::BusinessMembersDao.terminateMember); the users
+        // row is anonymized in place by the same RPC for historical FK
+        // reference on past orders/activity logs. The soft-delete state
+        // (`users.is_deleted`, `business_members.{is_deleted, status,
+        // removed_at, removed_by}`) and the (business_id, is_deleted)
+        // indexes are removed.
+        //
+        // Order matters:
+        //   1. Hard-delete any rows that were soft-deleted under the old
+        //      regime, so the rebuilt tables don't carry tombstones the
+        //      new code can't recognize. Cloud-side termination already
+        //      hard-deletes; this catches anything that was soft-deleted
+        //      pre-upgrade and never resynced.
+        //   2. Drop pending sync_queue payloads for users / business_members
+        //      that would push the now-gone columns to a cloud that has
+        //      already had them dropped — those upserts would fail with
+        //      "column does not exist". The next pull restores canonical
+        //      state.
+        //   3. Drop the (business_id, is_deleted) indexes so the column
+        //      drop on the table rebuild doesn't hit a dangling reference.
+        //   4. m.alterTable rebuilds the tables to match the current Dart
+        //      definitions — Drift's TableMigration does the new-table /
+        //      copy / drop / rename dance using the updated columns and
+        //      customConstraints lists.
+        // v11 originally cleared soft-delete tombstones and rebuilt the
+        // users / business_members tables to drop the is_deleted / status
+        // columns. Now redundant: the v12 block below drops
+        // business_members + invites and strips role / role_tier from
+        // users wholesale. We still scrub any pending sync queue rows
+        // that referenced the about-to-disappear columns so the next
+        // push doesn't error.
+        try {
+          await customStatement(
+            "DELETE FROM business_members "
+            "WHERE is_deleted = 1 OR status = 'removed'",
+          );
+        } catch (_) {/* table may already be gone or column missing */}
+        try {
+          await customStatement('DELETE FROM users WHERE is_deleted = 1');
+        } catch (_) {/* column already dropped */}
+        await customStatement(
+          "DELETE FROM sync_queue "
+          "WHERE action_type IN ('users:upsert', 'business_members:upsert')",
+        );
+        await customStatement(
+          'DROP INDEX IF EXISTS idx_users_business_deleted',
+        );
+        await customStatement(
+          'DROP INDEX IF EXISTS idx_business_members_business_deleted',
+        );
+      }
+      if (from < 12) {
+        // v12: staff management removed entirely. Drops the
+        // business_members and invites tables, strips role / role_tier
+        // from users (PIN columns kept — the lone owner still needs
+        // PIN unlock). Mirrors supabase/migrations/0041_remove_staff_management.sql.
+        //
+        // Order:
+        //   1. Drop any queued upserts targeting the dropping tables so
+        //      the next push doesn't fail on the now-gone cloud tables.
+        //   2. Drop the (business_id, *) indexes that reference dropped
+        //      columns before alterTable rebuilds users.
+        //   3. Drop the tables.
+        //   4. alterTable(users) to rebuild without role / role_tier
+        //      columns and their CHECK constraints.
+        await customStatement(
+          "DELETE FROM sync_queue "
+          "WHERE action_type IN ('business_members:upsert', "
+          "'invites:upsert', 'business_members:delete', 'invites:delete')",
+        );
+        await customStatement(
+          'DROP INDEX IF EXISTS idx_business_members_business_lua',
+        );
+        await customStatement(
+          'DROP INDEX IF EXISTS idx_business_members_user',
+        );
+        await customStatement(
+          'DROP INDEX IF EXISTS idx_invites_business_lua',
+        );
+        await customStatement(
+          'DROP INDEX IF EXISTS uq_invites_pending_code',
+        );
+        await customStatement(
+          'DROP INDEX IF EXISTS uq_invites_pending_human_code',
+        );
+        await customStatement('DROP TABLE IF EXISTS business_members');
+        await customStatement('DROP TABLE IF EXISTS invites');
+        await m.alterTable(TableMigration(users));
       }
     },
     beforeOpen: (details) async {
@@ -1462,9 +1388,7 @@ LazyDatabase _openConnection() {
 // `crates` is dropped entirely in v5; not in the set going forward.
 const List<String> _syncedTenantTables = [
   'users',
-  'business_members',
   'sessions',
-  'invites',
   'warehouses',
   'manufacturers',
   'crate_groups',
@@ -1495,9 +1419,12 @@ const List<String> _syncedTenantTables = [
   'settings',
 ];
 
+// 0033_staff_lifecycle_hard_delete dropped soft-delete on users and
+// business_members — both the columns and their (business_id, is_deleted)
+// indexes are gone. Fire is now a hard-delete of the membership row; the
+// users row persists for historical FK reference. Keep the other entries
+// intact: products/customers/etc. still soft-delete normally.
 const List<String> _softDeletableTables = [
-  'users',
-  'business_members',
   'warehouses',
   'manufacturers',
   'crate_groups',
@@ -1614,7 +1541,6 @@ List<String> get _postCreateStatements {
   // -- Hot-path indexes (mirror Supabase) --
   stmts.addAll([
     'CREATE INDEX idx_sessions_user_active ON sessions (user_id, revoked_at, expires_at)',
-    'CREATE INDEX idx_business_members_user ON business_members (user_id)',
     'CREATE INDEX idx_products_category ON products (category_id)',
     'CREATE INDEX idx_products_name ON products (business_id, name)',
     'CREATE INDEX idx_price_lists_product ON price_lists (product_id, effective_from)',
@@ -1633,11 +1559,6 @@ List<String> get _postCreateStatements {
     'CREATE INDEX idx_expenses_business_time ON expenses (business_id, created_at)',
     'CREATE INDEX idx_activity_logs_business_time ON activity_logs (business_id, created_at)',
   ]);
-
-  // -- Partial unique on invites.code WHERE status='pending' --
-  stmts.add(
-    "CREATE UNIQUE INDEX uq_invites_pending_code ON invites (code) WHERE status = 'pending'",
-  );
 
   // Enqueue-time coalescing: at most one pending sync_queue row per
   // (action_type, payload.id). The trailing AND clause excludes domain

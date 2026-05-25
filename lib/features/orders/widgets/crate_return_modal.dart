@@ -6,9 +6,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
-import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
-import 'package:reebaplus_pos/shared/widgets/pin_dialog.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 
@@ -156,34 +154,10 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
     final order = widget.orderWithItems.order;
     final db = ref.read(databaseProvider);
     final auth = ref.read(authProvider);
-    final myTier = auth.currentUser?.roleTier ?? 1;
-    bool hasShortReturn = false;
 
-    for (final row in _rows) {
-      final entered = int.tryParse(row.controller.text) ?? row.expectedQty;
-      if (entered < row.expectedQty) {
-        hasShortReturn = true;
-        break;
-      }
-    }
-
-    // Walk-in customer: short returns require manager PIN override
+    // Walk-in customer: just record physical stock returns; lone owner has full
+    // authority so no PIN override is needed.
     if (customer == null) {
-      if (hasShortReturn) {
-        setState(() => _saving = false);
-        if (!mounted) return;
-        AppNotification.showError(
-          context,
-          'Walk-in customers must return all crates. A manager can override this.',
-        );
-        final approver = await PinDialog.show(
-          context,
-          minimumTier: 4,
-          title: 'Manager Override — Short Return',
-        );
-        if (approver == null) return;
-      }
-      // Update physical crate stock for walk-in
       for (final row in _rows) {
         final returned = int.tryParse(row.controller.text) ?? row.expectedQty;
         if (row.manufacturerId.isNotEmpty) {
@@ -197,36 +171,7 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
       return;
     }
 
-    if (hasShortReturn && myTier < 4) {
-      // Record pending returns for manager approval
-      for (final row in _rows) {
-        final returned = int.tryParse(row.controller.text) ?? row.expectedQty;
-        if (returned < row.expectedQty) {
-          await db.pendingCrateReturnsDao.createPendingReturn(
-            orderId: order.id,
-            customerId: customer.id,
-            submittedBy: auth.currentUser?.id ?? '',
-            crateGroupId: row.crateGroupId,
-            quantity: row.expectedQty - returned, // Quantity to be "returned" (the shortfall)
-          );
-        }
-        // Even with a shortfall, the physical crates that WERE returned should
-        // still update stock.
-        if (returned > 0 && row.manufacturerId.isNotEmpty) {
-          await db.inventoryDao.addEmptyCrates(row.manufacturerId, returned);
-        }
-      }
-      if (mounted) {
-        AppNotification.showSuccess(
-          context,
-          'Short return recorded and sent for manager approval.',
-        );
-        Navigator.pop(context, true);
-      }
-      return;
-    }
-
-    // Manager/CEO or no short return — save directly to ledger
+    // Save directly to ledger — lone owner is always authorised.
     await db.transaction(() async {
       for (final row in _rows) {
         final returned = int.tryParse(row.controller.text) ?? row.expectedQty;

@@ -21,7 +21,6 @@ Future<({String staffId, String customerId, String crateGroupId, String pendingI
           id: Value(staffId),
           businessId: businessId,
           name: 'Approve Staff',
-          role: 'ceo',
           pin: '0000',
         ),
       );

@@ -27,7 +27,6 @@ void main() {
           id: const Value('staff1'),
           businessId: businessId,
           name: 'Staff One',
-          role: 'ceo',
           pin: '1234',
         ));
 

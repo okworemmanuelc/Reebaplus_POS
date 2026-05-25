@@ -55,6 +55,8 @@ class AuthService extends ValueNotifier<UserData?> {
     // by another device, so we can fullLogout in response.
     _sync.currentSessionIdResolver = () => currentSessionId;
     _sync.onCurrentSessionRevoked = _handleRemoteKick;
+
+    _sync.currentUserIdResolver = () => value?.id;
   }
 
   /// Notifies listeners whenever the device-level user ID changes.
@@ -70,45 +72,6 @@ class AuthService extends ValueNotifier<UserData?> {
   PostLoginRoute pendingPostLoginRoute = PostLoginRoute.none;
   UserData? pendingPostLoginUser;
 
-  /// Set by [InviteLandingScreen] when an invite-link is being processed.
-  /// Consumed by [InviteJoinNameScreen] post-OTP via [consumePendingInviteToken],
-  /// or expired by the 10-minute TTL below if the user navigates away.
-  /// In-memory only — never persisted.
-  String? _pendingInviteToken;
-  DateTime? _pendingInviteTokenSetAt;
-  static const _pendingInviteTokenTtl = Duration(minutes: 10);
-
-  /// Returns the current pending invite token if it's still within the
-  /// [_pendingInviteTokenTtl] window. Auto-clears stale tokens on read.
-  String? get pendingInviteToken {
-    final at = _pendingInviteTokenSetAt;
-    if (at == null) return null;
-    if (DateTime.now().difference(at) > _pendingInviteTokenTtl) {
-      _pendingInviteToken = null;
-      _pendingInviteTokenSetAt = null;
-      return null;
-    }
-    return _pendingInviteToken;
-  }
-
-  void setPendingInviteToken(String token) {
-    _pendingInviteToken = token;
-    _pendingInviteTokenSetAt = DateTime.now();
-  }
-
-  /// Read-and-clear, used by [InviteJoinNameScreen] before redeeming.
-  String? consumePendingInviteToken() {
-    final v = pendingInviteToken; // applies TTL check
-    _pendingInviteToken = null;
-    _pendingInviteTokenSetAt = null;
-    return v;
-  }
-
-  void _clearPendingInviteToken() {
-    _pendingInviteToken = null;
-    _pendingInviteTokenSetAt = null;
-  }
-
   /// The currently logged-in user, or null if nobody is logged in.
   UserData? get currentUser => value;
 
@@ -121,29 +84,6 @@ class AuthService extends ValueNotifier<UserData?> {
   /// without a JWT — every cloud write would otherwise pile up in the queue
   /// with `pushPending` skipping on "no auth session".
   bool get hasSupabaseSession => _supabase.auth.currentUser != null;
-
-  /// Active membership for [currentUser] in the current business. Loaded
-  /// lazily by [_refreshActiveMember] in [setCurrentUser] and cleared on
-  /// logout. New screens (verification badge, member list, etc.) read this
-  /// instead of [currentUser.roleTier] so the dependency on the legacy
-  /// users.role/role_tier columns can be cut cleanly when Phase 5 drops
-  /// them. During Phase 1 the values mirror exactly — both columns are
-  /// backfilled from the same source — so existing call sites that still
-  /// read `currentUser.roleTier` keep working unchanged.
-  BusinessMemberData? _activeMember;
-  BusinessMemberData? get currentMember => _activeMember;
-
-  Future<void> _refreshActiveMember() async {
-    final user = value;
-    if (user == null) {
-      _activeMember = null;
-      return;
-    }
-    _activeMember = await (_db.select(_db.businessMembers)
-          ..where((t) => t.userId.equals(user.id))
-          ..limit(1))
-        .getSingleOrNull();
-  }
 
   /// Returns every user whose stored PBKDF2 hash matches [pin]. Sentinel /
   /// placeholder rows (no hash yet) never match — they must go through
@@ -167,21 +107,10 @@ class AuthService extends ValueNotifier<UserData?> {
   }
 
   /// Hashes [plaintext] with a fresh per-user salt and writes the PIN to
-  /// BOTH the legacy device-local [Users.pin*] columns AND the cloud-synced
-  /// [BusinessMembers.pin*] columns for the user's membership.
-  ///
-  /// Dual-write rationale: per the staff-onboarding plan §2, PIN now syncs
-  /// per-membership so the same PIN works on every device for that
-  /// membership. Phase 5 drops the legacy users.pin* columns; the dual-
-  /// write here ensures every PIN set during the Phase 1→Phase 5 window
-  /// also lands on the membership row, so the column drop in Phase 5 does
-  /// not silently lose any user's PIN.
-  ///
-  /// Bypasses BusinessMembersDao.setPin because that method requires the
-  /// tenant resolver to be wired (whereBusiness filter), and setUserPin is
-  /// sometimes called during onboarding before setCurrentUser runs. Direct
-  /// write + explicit enqueue keeps the CLAUDE.md §5 contract.
+  /// the users table. PIN unlock is device-local; the hashed PIN columns
+  /// (pin_hash / pin_salt / pin_iterations) live on the users row.
   Future<void> setUserPin(String userId, String plaintext) async {
+    debugPrint('[AuthService] setUserPin: userId=$userId');
     final salt = PinHasher.generateSaltBase64();
     final hash = PinHasher.hashBase64(
       plaintext,
@@ -190,8 +119,9 @@ class AuthService extends ValueNotifier<UserData?> {
     );
     const iterations = PinHasher.defaultIterations;
 
-    // 1. Legacy users.pin* — device-local, never synced.
-    await (_db.update(_db.users)..where((u) => u.id.equals(userId))).write(
+    final usersUpdated = await (_db.update(_db.users)
+          ..where((u) => u.id.equals(userId)))
+        .write(
       UsersCompanion(
         pin: const Value('__HASHED__'),
         pinHash: Value(hash),
@@ -199,29 +129,17 @@ class AuthService extends ValueNotifier<UserData?> {
         pinIterations: const Value(iterations),
       ),
     );
-
-    // 2. business_members.pin_* — canonical going forward, syncs to cloud.
-    //    Lookup is by user_id (globally unique in Phase 1 thanks to the
-    //    auth_user_id UNIQUE on users). Skip silently if no membership row
-    //    exists yet — defensive against a setUserPin call racing the
-    //    membership-creation paths (complete_onboarding RPC, accept_invite
-    //    RPC, or v5→v6 backfill).
-    final member = await (_db.select(_db.businessMembers)
-          ..where((t) => t.userId.equals(userId))
-          ..limit(1))
-        .getSingleOrNull();
-    if (member != null) {
-      final comp = BusinessMembersCompanion(
-        id: Value(member.id),
-        pinHash: Value(hash),
-        pinSalt: Value(salt),
-        pinIterations: const Value(iterations),
-        lastUpdatedAt: Value(DateTime.now()),
+    debugPrint(
+      '[AuthService] setUserPin: users.pin* updated '
+      '(rows affected: $usersUpdated)',
+    );
+    if (usersUpdated == 0) {
+      debugPrint(
+        '[AuthService] setUserPin: WARNING no local users row for '
+        'id=$userId — PIN write landed on zero rows. Caller likely passed '
+        'a userId that was never inserted locally (e.g. complete_onboarding '
+        'local mirror failed silently or was skipped).',
       );
-      await (_db.update(_db.businessMembers)
-            ..where((t) => t.id.equals(member.id)))
-          .write(comp);
-      await _db.syncDao.enqueueUpsert('business_members', comp);
     }
   }
 
@@ -279,7 +197,7 @@ class AuthService extends ValueNotifier<UserData?> {
     try {
       final profile = await _supabase
           .from('profiles')
-          .select('business_id, role, role_tier')
+          .select('business_id')
           .eq('id', authUser.id)
           .maybeSingle();
       final businessId = profile?['business_id'] as String?;
@@ -296,8 +214,6 @@ class AuthService extends ValueNotifier<UserData?> {
       return SupabaseAccountInfo(
         businessId: businessId,
         businessName: businessName,
-        role: profile['role'] as String? ?? 'cashier',
-        roleTier: (profile['role_tier'] as num?)?.toInt() ?? 3,
       );
     } catch (e) {
       debugPrint('[AuthService] fetchSupabaseAccount error: $e');
@@ -328,12 +244,22 @@ class AuthService extends ValueNotifier<UserData?> {
   /// into the local `users` table. On a fresh device this recreates the row
   /// so the existing PIN-entry / device-session flow can pick up.
   ///
-  /// Only profile-owned fields (name, role, roleTier, businessId) are written.
+  /// Only profile-owned fields (name, businessId) are written.
   /// Device-local fields (pin, passwordHash, biometricEnabled, avatarColor,
   /// warehouseId) are never overwritten on existing rows.
   ///
   /// If no local row exists yet, one is inserted with [setupRequiredPin] as a
   /// placeholder so the caller can route to PIN setup.
+  ///
+  /// Identity contract (post-0039): when the local row has to be created
+  /// from cloud, the inserted `users.id` MUST be the cloud's canonical
+  /// `users.id` for this `auth_user_id`, not a fresh client-minted UUIDv7.
+  /// The historical fresh-UuidV7 path was the source of the "third id"
+  /// problem documented in DEFERRED.md "Three-id mismatch on fresh CEO
+  /// onboarding" — `complete_onboarding` mints one id, the local mirror
+  /// uses the draft id, and a fresh UuidV7 here on a recovery path would
+  /// add yet another. We now query cloud `public.users` for the
+  /// canonical id and reuse it locally.
   Future<UserData?> upsertLocalUserFromProfile() async {
     final authUser = _supabase.auth.currentUser;
     if (authUser == null || authUser.email == null) return null;
@@ -342,7 +268,7 @@ class AuthService extends ValueNotifier<UserData?> {
     try {
       profile = await _supabase
           .from('profiles')
-          .select('name, role, role_tier, business_id')
+          .select('name, business_id')
           .eq('id', authUser.id)
           .maybeSingle();
     } catch (e) {
@@ -352,8 +278,6 @@ class AuthService extends ValueNotifier<UserData?> {
     if (profile == null) return null;
 
     final name = profile['name'] as String? ?? '';
-    final role = profile['role'] as String? ?? 'cashier';
-    final roleTier = (profile['role_tier'] as num?)?.toInt() ?? 3;
     final businessId = profile['business_id'] as String?;
     final email = authUser.email!;
 
@@ -365,8 +289,6 @@ class AuthService extends ValueNotifier<UserData?> {
       )..where((u) => u.id.equals(existing.id))).write(
         UsersCompanion(
           name: Value(name),
-          role: Value(role),
-          roleTier: Value(roleTier),
           businessId: Value(businessId),
         ),
       );
@@ -375,20 +297,54 @@ class AuthService extends ValueNotifier<UserData?> {
       )..where((u) => u.id.equals(existing.id))).getSingle();
     }
 
-    final newId = UuidV7.generate();
+    // No local row. Look up the cloud's canonical users.id for this
+    // auth_user_id in this business so the local insert uses the SAME
+    // id — never mint a fresh UUIDv7 here (would be the third id).
+    String? canonicalId;
+    try {
+      final cloudUser = await _supabase
+          .from('users')
+          .select('id')
+          .eq('auth_user_id', authUser.id)
+          .eq('business_id', businessId)
+          .maybeSingle()
+          .timeout(const Duration(seconds: 8));
+      canonicalId = cloudUser?['id'] as String?;
+    } catch (e) {
+      debugPrint(
+        '[AuthService] upsertLocalUserFromProfile: cloud users.id lookup '
+        'failed: $e',
+      );
+    }
+
+    if (canonicalId == null) {
+      // Cloud has a profiles row but no users row — inconsistent. Refuse
+      // to synthesise an id locally because we'd diverge from whatever
+      // the cloud eventually writes. The caller (login flow / completeOnboarding
+      // fallback) should retry on a later sync pull when the cloud
+      // catches up. Loud log so the underlying inconsistency is visible.
+      debugPrint(
+        '[AuthService] upsertLocalUserFromProfile: cloud has profile but '
+        'no users row for auth_user_id=${authUser.id} in business=$businessId. '
+        'Refusing to mint a third id locally — caller must retry after '
+        'cloud catches up. See DEFERRED.md "Three-id mismatch on fresh '
+        'CEO onboarding".',
+      );
+      return null;
+    }
+
     final now = DateTime.now();
     final newComp = UsersCompanion.insert(
-      id: Value(newId),
+      id: Value(canonicalId),
       name: name,
       email: Value(email),
       pin: setupRequiredPin,
-      role: role,
-      roleTier: Value(roleTier),
       businessId: businessId,
       lastUpdatedAt: Value(now),
     );
     final inserted = await _db.into(_db.users).insertReturning(newComp);
-    await _db.syncDao.enqueueUpsert('users', newComp);
+    // No enqueueUpsert here — the cloud already has this users row (we
+    // just read its id from there). Pushing it back is a no-op round-trip.
     return inserted;
   }
 
@@ -500,26 +456,13 @@ class AuthService extends ValueNotifier<UserData?> {
   void setCurrentUser(UserData user, {bool freshSignIn = false}) {
     try {
       // Side-effects first — navigationService fully ready before any rebuild
-      _nav.applyUserWarehouseLock(user.roleTier, user.warehouseId);
-      if (user.roleTier >= 5) {
-        _nav.setIndex(0);
-      } else {
-        _nav.setIndex(1);
-      }
+      _nav.applyUserWarehouseLock(user.warehouseId);
+      _nav.setIndex(0);
       saveDeviceUserId(user.id);
       if (user.email != null) saveLastLoggedInEmail(user.email!);
 
-      // Successful sign-in completes any pending invite redemption (or this
-      // wasn't an invite path); either way, drop the token.
-      _clearPendingInviteToken();
-
       // Set synchronously so VLB listener fires before any route pop cleans up
       value = user;
-
-      // Load the active membership in the background so [currentMember] is
-      // available to new screens. businessIdResolver still reads
-      // value?.businessId so this doesn't gate the post-login render.
-      scheduleMicrotask(_refreshActiveMember);
 
       _sync.startRealtimeSync(user.businessId);
       _sync.startAutoPush();
@@ -531,7 +474,7 @@ class AuthService extends ValueNotifier<UserData?> {
       // listener or a manual banner retry.
       unawaited(_sync.pullChanges(user.businessId));
 
-      if (user.roleTier < 6 && user.warehouseId == null) {
+      if (user.warehouseId == null) {
         scheduleMicrotask(() => _handleOnboardingAlerts(user));
       }
 
@@ -748,7 +691,6 @@ class AuthService extends ValueNotifier<UserData?> {
           (e) => debugPrint('[AuthService] Supabase signOut(local) error: $e'),
         );
     value = null;
-    _activeMember = null;
     bypassNextBiometric = true;
   }
 
@@ -762,22 +704,12 @@ class AuthService extends ValueNotifier<UserData?> {
     _nav.clearWarehouseLock();
     _nav.resetNavigation();
     value = null;
-    _activeMember = null;
     bypassNextBiometric = true;
   }
 
   /// Completely wipes the session, reverting the device to a fresh state.
   /// Next launch will demand Email + OTP.
-  ///
-  /// [preserveInviteToken] keeps any pending invite token across the logout,
-  /// used by [InviteLandingScreen]'s "switch account" path where the user
-  /// must sign out an existing session before redeeming the invite they
-  /// just landed on. Default false — regular sign-out paths drop the token.
-  Future<void> fullLogout({bool preserveInviteToken = false}) async {
-    if (!preserveInviteToken) {
-      _clearPendingInviteToken();
-    }
-
+  Future<void> fullLogout() async {
     // 1. Wipe all encrypted auth data so the notifier fires and _hasDeviceUser
     //    becomes false before the ValueListenableBuilder rebuilds.
     await _secure.clearAll();
@@ -807,19 +739,15 @@ class AuthService extends ValueNotifier<UserData?> {
     _nav.clearWarehouseLock();
     _nav.resetNavigation();
     value = null;
-    _activeMember = null;
   }
 
-  /// Returns true if [pin] belongs to at least one user whose
-  /// `roleTier` is greater than or equal to [minimumTier].
-  ///
-  /// Used by the PIN confirmation dialog and by refund / crate-return
-  /// features that need a manager or CEO to approve.
-  ///
-  /// Role tiers: 2=Rider, 3=Cashier, 4=Stock Keeper, 5=Manager, 6=CEO
+  /// Returns true if [pin] matches at least one local user. The lone
+  /// owner is the only user post-staff-removal, so this collapses to a
+  /// simple PIN-belongs-to-anyone check. Callers that historically passed
+  /// a `minimumTier` argument can drop it.
   Future<bool> verifyPinForTier(String pin, int minimumTier) async {
     final matches = await getUsersByPin(pin);
-    return matches.any((u) => u.roleTier >= minimumTier);
+    return matches.isNotEmpty;
   }
 
   /// Creates a new owner (CEO) account. Online-first: Supabase is the source
@@ -895,8 +823,6 @@ class AuthService extends ValueNotifier<UserData?> {
         name: name,
         email: Value(email),
         pin: setupRequiredPin,
-        role: 'ceo',
-        roleTier: const Value(6),
         lastUpdatedAt: Value(now),
       );
       await _db.into(_db.users).insert(userComp);
@@ -933,29 +859,53 @@ class AuthService extends ValueNotifier<UserData?> {
     // 1. Atomic cloud commit. Idempotent on (businesses.id, warehouses.id,
     //    profiles.id, settings(business_id, key)) so a retry after a
     //    transient network failure converges.
-    await _supabase.rpc(
-      'complete_onboarding',
-      params: {
-        'p_business_id': draft.businessId,
-        'p_warehouse_id': draft.warehouseId,
-        'p_owner_name': draft.ownerName,
-        'p_business_name': draft.businessName,
-        'p_business_type': draft.businessType,
-        'p_business_phone': draft.businessPhone,
-        'p_business_email': draft.businessEmail,
-        'p_location': {
-          'name': draft.locationName,
-          'street': draft.streetAddress,
-          'city': draft.cityState,
-          'country': draft.country,
-        },
-        'p_settings': {
-          'currency': draft.currency,
-          'timezone': draft.timezone,
-          'tax_reg_number': draft.taxRegNumber,
-        },
-      },
+    debugPrint(
+      '[AuthService] completeOnboarding: calling cloud RPC '
+      'complete_onboarding(businessId=${draft.businessId}, '
+      'warehouseId=${draft.warehouseId}, userId=${draft.userId})',
     );
+    try {
+      // p_user_id (migration 0041) makes the cloud's users.id agree with
+      // the local Drift mirror's id. The membership table is gone with
+      // staff management removed; cloud no longer mints/insertsa
+      // business_members row.
+      await _supabase.rpc(
+        'complete_onboarding',
+        params: {
+          'p_business_id': draft.businessId,
+          'p_warehouse_id': draft.warehouseId,
+          'p_owner_name': draft.ownerName,
+          'p_business_name': draft.businessName,
+          'p_business_type': draft.businessType,
+          'p_business_phone': draft.businessPhone,
+          'p_business_email': draft.businessEmail,
+          'p_location': {
+            'name': draft.locationName,
+            'street': draft.streetAddress,
+            'city': draft.cityState,
+            'country': draft.country,
+          },
+          'p_settings': {
+            'currency': draft.currency,
+            'timezone': draft.timezone,
+            'tax_reg_number': draft.taxRegNumber,
+          },
+          'p_user_id': draft.userId,
+        },
+      );
+      debugPrint('[AuthService] completeOnboarding: cloud RPC ok');
+    } catch (e, stack) {
+      // Surface the exact RPC failure (code/message/details for
+      // PostgrestException) before propagating to the caller. The catch
+      // upstream in create_pin_screen converts every exception into a
+      // generic "Failed to save PIN" — this log is the only way to see
+      // the real reason.
+      debugPrint(
+        '[AuthService] completeOnboarding: cloud RPC FAILED: '
+        '${e.runtimeType}: $e\n$stack',
+      );
+      rethrow;
+    }
 
     final now = DateTime.now();
 
@@ -1004,48 +954,31 @@ class AuthService extends ValueNotifier<UserData?> {
                 name: draft.ownerName ?? '',
                 email: Value(draft.email),
                 pin: setupRequiredPin,
-                role: 'ceo',
-                roleTier: const Value(6),
                 warehouseId: Value(draft.warehouseId),
                 lastUpdatedAt: Value(now),
               ),
             );
 
-        await _db.batch((batch) {
-          batch.insert(
-            _db.settings,
-            SettingsCompanion.insert(
-              key: 'default_currency',
-              value: draft.currency ?? 'NGN',
-              businessId: draft.businessId,
-              lastUpdatedAt: Value(now),
-            ),
-            mode: InsertMode.insertOrReplace,
-          );
-          batch.insert(
-            _db.settings,
-            SettingsCompanion.insert(
-              key: 'timezone',
-              value: draft.timezone ?? 'Africa/Lagos',
-              businessId: draft.businessId,
-              lastUpdatedAt: Value(now),
-            ),
-            mode: InsertMode.insertOrReplace,
-          );
-          final tax = draft.taxRegNumber?.trim();
-          if (tax != null && tax.isNotEmpty) {
-            batch.insert(
-              _db.settings,
-              SettingsCompanion.insert(
-                key: 'tax_registration_number',
-                value: tax,
-                businessId: draft.businessId,
-                lastUpdatedAt: Value(now),
-              ),
-              mode: InsertMode.insertOrReplace,
-            );
-          }
-        });
+        // Settings rows intentionally NOT mirrored locally here.
+        //
+        // The cloud `complete_onboarding` RPC inserted default_currency,
+        // timezone, and (optionally) tax_registration_number cloud-side
+        // with server-generated ids. The post-onboarding sync pull
+        // populates them locally with those same cloud ids.
+        //
+        // Mirroring them client-side here would mint a fresh local id
+        // and collide with the cloud's row on the UNIQUE(business_id,
+        // key) constraint when the pull tried to insert — the PK-keyed
+        // ON CONFLICT in `_restoreTableData` doesn't recognise the
+        // local-only id. That conflict (SqliteException 2067) is the
+        // settings half of Bug B. The settings restore path in
+        // SupabaseSyncService now also upserts by (business_id, key)
+        // so even if a divergent row sneaks in via some other path,
+        // the next pull reconciles cleanly.
+        //
+        // Brief window between RPC return and pull completion where
+        // local settings are absent — UI defaults (currency 'NGN',
+        // timezone 'Africa/Lagos') cover that.
       });
 
       return (_db.select(_db.users)
@@ -1163,13 +1096,9 @@ class AuthService extends ValueNotifier<UserData?> {
 class SupabaseAccountInfo {
   final String businessId;
   final String businessName;
-  final String role;
-  final int roleTier;
 
   const SupabaseAccountInfo({
     required this.businessId,
     required this.businessName,
-    required this.role,
-    required this.roleTier,
   });
 }

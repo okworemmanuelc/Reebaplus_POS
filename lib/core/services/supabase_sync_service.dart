@@ -191,6 +191,11 @@ class SupabaseSyncService {
   /// the current session row being revoked by another device.
   VoidCallback? onCurrentSessionRevoked;
 
+  /// Wired by AuthService to expose the current device user's local id
+  /// (`users.id`, not auth.uid). Retained as a generic identity hook for
+  /// future sync paths; no current consumer.
+  String? Function()? currentUserIdResolver;
+
   /// Decodes the current access token's payload (no signature check — this is
   /// purely for local introspection) and reports whether `business_id` is
   /// present. Returns a snapshot the UI can render directly.
@@ -313,26 +318,38 @@ class SupabaseSyncService {
       'id',
       'business_id',
       'role',
+      'role_tier',
       'name',
-      'is_active',
       'created_at',
       'last_updated_at',
+      // NOTE: `is_active` was removed — never existed on cloud profiles.
+      // No local Drift `Profiles` table enqueues profiles today, but if
+      // one ever does, dropping role_tier would trigger CHECK
+      // constraint 23514 (role_tier IN (2,3,4,5,6); cloud DEFAULT 1).
     },
     'users': {
       'id',
       'business_id',
       'auth_user_id',
       'name',
-      'phone',
       'email',
       'role',
+      'role_tier',
+      'avatar_color',
+      'biometric_enabled',
       'warehouse_id',
-      'status',
-      'joined_at',
       'last_notification_sent_at',
-      'is_deleted',
       'created_at',
       'last_updated_at',
+      // NOTE: `phone`, `status`, `joined_at`, `is_deleted` were removed
+      // — `phone`/`status`/`joined_at` never existed on cloud users
+      // (those live on `business_members`), and `is_deleted` was
+      // dropped by migration 0035 in the staff-lifecycle hard-delete
+      // refactor. `role_tier` MUST be present: cloud DEFAULT is 1 and
+      // the CHECK constraint `role_tier IN (2,3,4,5,6)` rejects 1,
+      // so scrubbing it out causes 23514 on every fresh-row insert.
+      // PIN material (pin, pin_hash, pin_salt, pin_iterations,
+      // password_hash) is intentionally absent — local secret material.
     },
     'sessions': {
       'id',
@@ -870,25 +887,6 @@ class SupabaseSyncService {
             'wallet_transactions', List<dynamic>.from(walletCompens));
       }
 
-      // accept_invite (staff onboarding §1): server returns {user, membership,
-      // invite} — three canonical rows the client seeds locally so the freshly
-      // onboarded staff member sees correct state without waiting for a pull.
-      final userRow = map['user'];
-      if (userRow is Map) {
-        await _restoreTableData(
-            'users', [Map<String, dynamic>.from(userRow)]);
-      }
-      final membershipRow = map['membership'];
-      if (membershipRow is Map) {
-        await _restoreTableData(
-            'business_members', [Map<String, dynamic>.from(membershipRow)]);
-      }
-      final inviteRow = map['invite'];
-      if (inviteRow is Map) {
-        await _restoreTableData(
-            'invites', [Map<String, dynamic>.from(inviteRow)]);
-      }
-
       // pos_create_customer (v2): server returns the canonical customer +
       // customer_wallet rows. Mirror their last_updated_at locally so the
       // next pull's incremental cursor doesn't re-fetch them.
@@ -1323,7 +1321,6 @@ class SupabaseSyncService {
     'wallet_transactions',
     'saved_carts',
     'pending_crate_returns',
-    'invites',
     'manufacturer_crate_balances',
     'crate_ledger',
     'system_config',
@@ -1684,12 +1681,6 @@ class SupabaseSyncService {
                         newRecord['revoked_at'] != null &&
                         newRecord['id'] == currentSessionIdResolver?.call()) {
                       onCurrentSessionRevoked?.call();
-                    }
-                  } else if (payload.eventType == PostgresChangeEvent.delete &&
-                      payload.oldRecord.isNotEmpty) {
-                    final id = payload.oldRecord['id'];
-                    if (id != null) {
-                      // For now, soft deletes are handled as updates.
                     }
                   }
                 },
@@ -2081,6 +2072,25 @@ class SupabaseSyncService {
       await prefs.setBool(flagKey, true);
       if (enqueued > 0) {
         debugPrint('[SyncService] Users backfill: enqueued=$enqueued');
+        // Post-0039 (unified identity alignment), fresh CEO onboarding
+        // and invite redemption both produce local `users.id` values
+        // that already match the cloud's. So this backfill should be
+        // a no-op for any device that onboarded after 0039 landed.
+        // If we DO enqueue rows, one of these is true:
+        //   * The device is a pre-0039 install with legacy local rows
+        //     whose ids never matched cloud (one-shot legitimate use).
+        //   * A new code path is creating local users rows without
+        //     going through the aligned RPC — i.e. the third-id source
+        //     has crept back in. Investigate immediately.
+        // The flag is per-business, so this fires at most once per
+        // (device, business) and the log is sticky enough to catch.
+        debugPrint(
+          '[SyncService] Users backfill: NOTE post-0039 this routine '
+          'should be a no-op for freshly-onboarded devices. If you see '
+          'this on a fresh install, the local↔cloud id alignment has '
+          'regressed — investigate. See DEFERRED.md "Three-id mismatch '
+          'on fresh CEO onboarding".',
+        );
       }
     } catch (e) {
       debugPrint('[SyncService] Users backfill failed: $e');
@@ -2328,9 +2338,8 @@ class SupabaseSyncService {
           //
           // Cloud-owned fields mirrored here (keep in sync with app_database
           // `Users` table and `0001_initial.sql public.users`):
-          //   businessId, authUserId, name, email, role, roleTier,
-          //   warehouseId, isDeleted, createdAt, lastNotificationSentAt,
-          //   lastUpdatedAt.
+          //   businessId, authUserId, name, email, warehouseId,
+          //   createdAt, lastNotificationSentAt, lastUpdatedAt.
           // Device-local fields intentionally omitted (never overwrite from
           // cloud):
           //   pin, pinHash, pinSalt, pinIterations, passwordHash,
@@ -2356,38 +2365,6 @@ class SupabaseSyncService {
                 ? null
                 : parseTs(r['lastNotificationSentAt']);
 
-            // CHECK-constraint guard: local Users has
-            //   role IN ('ceo','manager','stock_keeper','cashier','rider')
-            //   role_tier IN (2,3,4,5,6)
-            // (v9 granular vocabulary — see migration 0030 / Drift v8→v9.)
-            // A cloud row outside these sets would crash the whole pull at
-            // insert time. We log loudly and SKIP the row entirely. Silent
-            // coercion (the pre-v9 policy) masked data anomalies AND could
-            // demote a legit user — never again.
-            const allowedRoles = {
-              'ceo',
-              'manager',
-              'stock_keeper',
-              'cashier',
-              'rider',
-            };
-            const allowedRoleTiers = {2, 3, 4, 5, 6};
-            final rawRole = r['role'] as String?;
-            final rawTier = (r['roleTier'] as num?)?.toInt();
-            if (rawRole == null ||
-                !allowedRoles.contains(rawRole) ||
-                rawTier == null ||
-                !allowedRoleTiers.contains(rawTier)) {
-              debugPrint(
-                '[SyncService] users restore: dropping row id=$id '
-                'due to invalid role=${rawRole ?? "<null>"}/'
-                'tier=${rawTier ?? "<null>"}',
-              );
-              continue;
-            }
-            final role = rawRole;
-            final roleTier = rawTier;
-
             if (existing != null) {
               await (_db.update(_db.users)
                 ..where((u) => u.id.equals(id))).write(
@@ -2396,11 +2373,8 @@ class SupabaseSyncService {
                   authUserId: Value(r['authUserId'] as String?),
                   name: Value(r['name'] as String? ?? ''),
                   email: Value(r['email'] as String?),
-                  role: Value(role),
-                  roleTier: Value(roleTier),
                   warehouseId: Value(r['warehouseId'] as String?),
                   lastNotificationSentAt: Value(lastNotificationSentAt),
-                  isDeleted: Value(r['isDeleted'] as bool? ?? false),
                   lastUpdatedAt: Value(lastUpdatedAt),
                 ),
               );
@@ -2415,82 +2389,13 @@ class SupabaseSyncService {
                       name: r['name'] as String? ?? '',
                       email: Value(r['email'] as String?),
                       pin: kSetupRequiredPin,
-                      role: role,
-                      roleTier: Value(roleTier),
                       warehouseId: Value(r['warehouseId'] as String?),
                       createdAt: Value(createdAt),
                       lastNotificationSentAt: Value(lastNotificationSentAt),
-                      isDeleted: Value(r['isDeleted'] as bool? ?? false),
                       lastUpdatedAt: Value(lastUpdatedAt),
                     ),
                   );
             }
-          }
-          break;
-        case 'business_members':
-          // PIN columns (pin_hash, pin_salt, pin_iterations) sync normally
-          // per the staff-onboarding plan §2 — no device-local preservation.
-          //
-          // Role / tier guard (v9 granular vocabulary): local Drift has
-          //   CHECK (role IN ('ceo','manager','stock_keeper','cashier','rider'))
-          //   CHECK (role_tier IN (2,3,4,5,6))
-          // A cloud row outside these sets would crash the whole pull at
-          // insert time. We log loudly and SKIP the row entirely — never
-          // silently coerce, which would mask data anomalies and could
-          // demote a legit user. Status / verification_status coercion
-          // below stays in the coerce-to-default form: those aren't
-          // permission-bearing and a stale/bogus value there is benign.
-          const allowedRoles = {
-            'ceo',
-            'manager',
-            'stock_keeper',
-            'cashier',
-            'rider',
-          };
-          const allowedRoleTiers = {2, 3, 4, 5, 6};
-          const allowedStatuses = {'active', 'suspended', 'removed'};
-          const allowedVerificationStatuses = {
-            'not_started',
-            'pending_review',
-            'approved',
-            'rejected',
-          };
-          for (var r in rows) {
-            final id = r['id'] as String?;
-            final rawRole = r['role'] as String?;
-            final rawTier = (r['roleTier'] as num?)?.toInt();
-            if (rawRole == null ||
-                !allowedRoles.contains(rawRole) ||
-                rawTier == null ||
-                !allowedRoleTiers.contains(rawTier)) {
-              debugPrint(
-                '[SyncService] business_members restore: dropping row id=$id '
-                'due to invalid role=${rawRole ?? "<null>"}/'
-                'tier=${rawTier ?? "<null>"}',
-              );
-              continue;
-            }
-            final rawStatus = r['status'] as String?;
-            if (rawStatus != null &&
-                !allowedStatuses.contains(rawStatus)) {
-              debugPrint(
-                '[SyncService] business_members restore: coerced invalid '
-                'status "$rawStatus" to "active" for id=$id',
-              );
-              r['status'] = 'active';
-            }
-            final rawVerif = r['verificationStatus'] as String?;
-            if (rawVerif != null &&
-                !allowedVerificationStatuses.contains(rawVerif)) {
-              debugPrint(
-                '[SyncService] business_members restore: coerced invalid '
-                'verification_status "$rawVerif" to "not_started" for id=$id',
-              );
-              r['verificationStatus'] = 'not_started';
-            }
-            await _db
-                .into(_db.businessMembers)
-                .insertOnConflictUpdate(BusinessMemberData.fromJson(r));
           }
           break;
         case 'products':
@@ -2698,10 +2603,31 @@ class SupabaseSyncService {
           }
           break;
         case 'settings':
+          // Settings rows are semantically keyed by (business_id, key),
+          // not by id. The cloud's `complete_onboarding` RPC mints its
+          // own gen_random_uuid() ids, and any flow that ever creates a
+          // local settings row with a different id (legacy local
+          // mirror, hypothetical future code) would collide here on the
+          // UNIQUE(business_id, key) constraint if we used the default
+          // PK-keyed ON CONFLICT.
+          //
+          // Upsert by (business_id, key): on conflict, also align the
+          // local row's `id` to the cloud's id so subsequent pushes and
+          // pulls converge on a single canonical row. Safe to overwrite
+          // `id` because nothing else FK-references settings.id.
           for (var r in rows) {
-            await _db
-                .into(_db.settings)
-                .insertOnConflictUpdate(SettingData.fromJson(r));
+            final parsed = SettingData.fromJson(r);
+            await _db.into(_db.settings).insert(
+                  parsed,
+                  onConflict: DoUpdate(
+                    (_) => SettingsCompanion(
+                      id: Value(parsed.id),
+                      value: Value(parsed.value),
+                      lastUpdatedAt: Value(parsed.lastUpdatedAt),
+                    ),
+                    target: [_db.settings.businessId, _db.settings.key],
+                  ),
+                );
           }
           break;
         case 'sessions':
@@ -2763,13 +2689,6 @@ class SupabaseSyncService {
             await _db
                 .into(_db.pendingCrateReturns)
                 .insertOnConflictUpdate(PendingCrateReturnData.fromJson(r));
-          }
-          break;
-        case 'invites':
-          for (var r in rows) {
-            await _db
-                .into(_db.invites)
-                .insertOnConflictUpdate(InviteData.fromJson(r));
           }
           break;
         default:

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:reebaplus_pos/features/auth/onboarding/onboarding_draft.dart';
 import 'package:reebaplus_pos/features/auth/screens/new_owner_name_screen.dart';
-import 'package:reebaplus_pos/features/auth/screens/invite_code_screen.dart';
 import 'package:reebaplus_pos/features/auth/widgets/onboarding_step_indicator.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_background.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
@@ -61,18 +60,6 @@ class BusinessTypeSelectionScreen extends ConsumerWidget {
     Navigator.of(context).push(SmoothRoute(page: NewOwnerNameScreen(email: email)));
   }
 
-  Future<void> _onJoin(BuildContext context, WidgetRef ref) async {
-    // Capture provider up front — same race as `_onRegister`. See plan
-    // §"Bug fix" Pattern 1.
-    final db = ref.read(databaseProvider);
-    if (!await _ensureOnline(context)) return;
-    if (!context.mounted) return;
-    // Ensure the database is completely empty before joining a business
-    await db.clearAllData();
-    if (!context.mounted) return;
-    Navigator.of(context).push(SmoothRoute(page: InviteCodeScreen(email: email)));
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
@@ -123,7 +110,7 @@ class BusinessTypeSelectionScreen extends ConsumerWidget {
               const SizedBox(height: 8),
               Center(
                 child: Text(
-                  'Are you setting up a new business or joining one?',
+                  "Let's set up your business.",
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 15,
@@ -133,7 +120,6 @@ class BusinessTypeSelectionScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 48),
 
-              // Register Option
               _buildOptionCard(
                 context,
                 title: 'Register a new business',
@@ -141,17 +127,6 @@ class BusinessTypeSelectionScreen extends ConsumerWidget {
                     'For owners & founders setting up for the first time.',
                 icon: Icons.add_business_rounded,
                 onTap: () => _onRegister(context, ref),
-              ),
-
-              const SizedBox(height: 20),
-
-              // Join Option
-              _buildOptionCard(
-                context,
-                title: 'Join an existing business',
-                subtitle: 'For employees or partners who have an invite.',
-                icon: Icons.people_alt_rounded,
-                onTap: () => _onJoin(context, ref),
               ),
             ],
           ),

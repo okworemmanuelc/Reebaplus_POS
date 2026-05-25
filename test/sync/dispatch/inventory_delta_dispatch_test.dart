@@ -23,7 +23,6 @@ Future<({String warehouseId, String staffId, String productId})>
           id: Value(staffId),
           businessId: businessId,
           name: 'Stockkeeper',
-          role: 'ceo',
           pin: '0000',
         ),
       );

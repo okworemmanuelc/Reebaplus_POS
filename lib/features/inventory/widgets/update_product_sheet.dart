@@ -82,8 +82,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
     '#64748B',
   ];
 
-  bool get _isStockKeeper =>
-      ref.read(authProvider).currentUser?.role == 'stock_keeper';
+  bool get _isStockKeeper => false;
 
   @override
   void initState() {

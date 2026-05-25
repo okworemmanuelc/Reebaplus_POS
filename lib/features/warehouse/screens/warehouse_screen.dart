@@ -11,7 +11,6 @@ import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
 import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
-import 'package:reebaplus_pos/shared/widgets/role_guard.dart';
 
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -531,13 +530,10 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
           SizedBox(width: rSize(context, 8)),
         ],
       ),
-      floatingActionButton: RoleGuard(
-        minTier: 6,
-        child: AppFAB(
-          onPressed: () => _showAddSheet(context),
-          icon: Icons.add_rounded,
-          label: 'Add Warehouse',
-        ),
+      floatingActionButton: AppFAB(
+        onPressed: () => _showAddSheet(context),
+        icon: Icons.add_rounded,
+        label: 'Add Warehouse',
       ),
       body: Builder(
         builder: (context) {
@@ -615,7 +611,6 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
       warehouse: warehouse,
       onEdit: () => _showEditSheet(context, warehouse),
       onDelete: () => _confirmDelete(context, warehouse),
-      onStaff: () => ref.read(navigationProvider).setIndex(8),
     );
   }
 }
@@ -625,13 +620,11 @@ class _WarehouseCard extends ConsumerStatefulWidget {
   final WarehouseData warehouse;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
-  final VoidCallback onStaff;
 
   const _WarehouseCard({
     required this.warehouse,
     required this.onEdit,
     required this.onDelete,
-    required this.onStaff,
   });
 
   @override
@@ -640,10 +633,8 @@ class _WarehouseCard extends ConsumerStatefulWidget {
 
 class _WarehouseCardState extends ConsumerState<_WarehouseCard> {
   List<ProductDataWithStock> _inventory = [];
-  List<UserData> _staff = [];
 
   StreamSubscription<List<ProductDataWithStock>>? _invSub;
-  StreamSubscription<List<UserData>>? _staffSub;
   Color get _surface => Theme.of(context).colorScheme.surface;
   Color get _text => Theme.of(context).colorScheme.onSurface;
   Color get _subtext =>
@@ -664,15 +655,11 @@ class _WarehouseCardState extends ConsumerState<_WarehouseCard> {
     ) {
       if (mounted) setState(() => _inventory = list);
     });
-    _staffSub = db.warehousesDao.watchStaffByWarehouse(id).listen((list) {
-      if (mounted) setState(() => _staff = list);
-    });
   }
 
   @override
   void dispose() {
     _invSub?.cancel();
-    _staffSub?.cancel();
     super.dispose();
   }
 
@@ -680,7 +667,6 @@ class _WarehouseCardState extends ConsumerState<_WarehouseCard> {
   Widget build(BuildContext context) {
     final totalStock = _inventory.fold<int>(0, (s, p) => s + p.totalStock);
     final productCount = _inventory.where((p) => p.totalStock > 0).length;
-    final staffCount = _staff.length;
 
     return Container(
       margin: EdgeInsets.only(bottom: rSize(context, 14)),
@@ -804,15 +790,6 @@ class _WarehouseCardState extends ConsumerState<_WarehouseCard> {
                     color: AppColors.success,
                   ),
                 ),
-                Container(width: 1, height: 36, color: _strongBorder),
-                Expanded(
-                  child: _statCell(
-                    icon: FontAwesomeIcons.userGroup,
-                    label: 'Staff',
-                    value: staffCount.toString(),
-                    color: const Color(0xFFA855F7),
-                  ),
-                ),
               ],
             ),
           ),
@@ -828,15 +805,6 @@ class _WarehouseCardState extends ConsumerState<_WarehouseCard> {
             ),
             child: Row(
               children: [
-                Expanded(
-                  child: _actionButton(
-                    icon: FontAwesomeIcons.usersGear,
-                    color: const Color(0xFFA855F7),
-                    label: 'Staff',
-                    onTap: widget.onStaff,
-                  ),
-                ),
-                Container(width: 1, height: 36, color: _strongBorder),
                 Expanded(
                   child: _actionButton(
                     icon: FontAwesomeIcons.penToSquare,

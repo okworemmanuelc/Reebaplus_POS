@@ -10,13 +10,11 @@ import 'package:reebaplus_pos/features/customers/screens/customers_screen.dart';
 import 'package:reebaplus_pos/features/payments/screens/payments_screen.dart';
 import 'package:reebaplus_pos/features/expenses/screens/expenses_screen.dart';
 import 'package:reebaplus_pos/features/warehouse/screens/warehouse_screen.dart';
-import 'package:reebaplus_pos/features/staff/screens/staff_screen.dart';
 import 'package:reebaplus_pos/features/pos/screens/cart_screen.dart';
 import 'package:reebaplus_pos/features/deliveries/screens/deliveries_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/activity_log_screen.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/shared/models/order.dart';
-import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/widgets/sync_banner.dart';
 import 'package:reebaplus_pos/shared/widgets/tab_navigator.dart';
@@ -35,9 +33,9 @@ class _MainLayoutState extends ConsumerState<MainLayout>
     with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   static void _voidOnCustomerChanged(dynamic _) {}
 
-  // 12 tabs = 12 Navigators
+  // 11 tabs = 11 Navigators (Staff tab removed with staff management feature)
   final List<GlobalKey<NavigatorState>> _navigatorKeys = List.generate(
-    12,
+    11,
     (_) => GlobalKey<NavigatorState>(),
   );
 
@@ -51,7 +49,6 @@ class _MainLayoutState extends ConsumerState<MainLayout>
   // `ref` from those callbacks would race the riverpod invalidation, so capture
   // the providers up front. See plan §"Bug fix" Pattern 2.
   late final NavigationService _nav;
-  late final AuthService _auth;
 
   // Track which tabs have ever been visited
   final Set<int> _initializedTabs = {};
@@ -65,14 +62,13 @@ class _MainLayoutState extends ConsumerState<MainLayout>
     const PaymentsScreen(), // 5
     const ExpensesScreen(), // 6
     const WarehouseScreen(), // 7
-    const StaffScreen(), // 8
     const CartScreen(
       cart: [],
       crateDeposit: 0.0,
       onCustomerChanged: _voidOnCustomerChanged,
-    ), // 9
-    const DeliveriesScreen(), // 10
-    const ActivityLogScreen(), // 11
+    ), // 8
+    const DeliveriesScreen(), // 9
+    const ActivityLogScreen(), // 10
   ];
 
   // Persistent pending-orders count — subscribed once, never recreated.
@@ -92,10 +88,9 @@ class _MainLayoutState extends ConsumerState<MainLayout>
 
     // Link shared keys
     _nav = ref.read(navigationProvider);
-    _auth = ref.read(authProvider);
     _nav.tabNavigatorKeys = _navigatorKeys;
 
-    _observers = List.generate(12, (i) => _TabPopObserver(tabIndex: i, nav: _nav));
+    _observers = List.generate(11, (i) => _TabPopObserver(tabIndex: i, nav: _nav));
 
     // Only pre-load the landing tab
     _initializedTabs.add(_nav.currentIndex.value);
@@ -156,14 +151,9 @@ class _MainLayoutState extends ConsumerState<MainLayout>
 
   /// Intercepts the system back button at the highest level, before any
   /// nested Navigator (TabNavigator) can consume it.
-  ///
-  /// Reads `currentUser` directly off the captured AuthService — `ref` is
-  /// not safe here because back-press can fire during navigator-key
-  /// regeneration. See plan §"Bug fix" Pattern 2.
   @override
   Future<bool> didPopRoute() async {
-    final user = _auth.currentUser;
-    _nav.handleBackPress(context, user?.roleTier ?? 1);
+    _nav.handleBackPress(context);
     return true; // Always consume — we handle everything ourselves.
   }
 
@@ -192,7 +182,7 @@ class _MainLayoutState extends ConsumerState<MainLayout>
               const SyncBanner(),
               Expanded(
                 child: Stack(
-                  children: List.generate(12, (i) {
+                  children: List.generate(11, (i) {
                     if (!_initializedTabs.contains(i)) {
                       // Not yet visited — render nothing
                       return const SizedBox.shrink();
@@ -216,133 +206,13 @@ class _MainLayoutState extends ConsumerState<MainLayout>
               ),
             ],
           ),
-          bottomNavigationBar: ValueListenableBuilder(
-            valueListenable: ref.read(authProvider),
-            builder: (context, user, _) {
-              final isCashier = (user?.roleTier ?? 1) < 4;
+          bottomNavigationBar: Builder(
+            builder: (context) {
               final iconColor =
                   t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
 
-              if (isCashier) {
-                // Cashier nav: Stock(2), POS(1), Orders(3), Cart(9)
-                final bool isNavTab = [1, 2, 3, 9].contains(currentIndex);
-                final int navIndex = currentIndex == 2
-                    ? 0
-                    : (currentIndex == 1
-                          ? 1
-                          : (currentIndex == 3
-                                ? 2
-                                : (currentIndex == 9 ? 3 : 0)));
-
-                return ValueListenableBuilder<bool>(
-                  valueListenable: nav.currentTabCanPop,
-                  builder: (context, canPop, _) {
-                    if (!isNavTab || canPop) return const SizedBox.shrink();
-                    return BottomNavigationBar(
-                  currentIndex: navIndex,
-                  selectedItemColor: isNavTab
-                      ? t.colorScheme.primary
-                      : iconColor,
-                  unselectedItemColor: iconColor,
-                  onTap: (index) {
-                    int indexToSet = 2;
-                    switch (index) {
-                      case 0:
-                        indexToSet = 2;
-                        break;
-                      case 1:
-                        indexToSet = 1;
-                        break;
-                      case 2:
-                        indexToSet = 3;
-                        break;
-                      case 3:
-                        indexToSet = 9;
-                        break;
-                    }
-
-                    if (currentIndex == indexToSet) {
-                      // Tap current tab: pop all detail screens to root
-                      _navigatorKeys[indexToSet].currentState?.popUntil(
-                        (r) => r.isFirst,
-                      );
-                    } else {
-                      nav.setIndex(indexToSet);
-                    }
-                  },
-                  type: BottomNavigationBarType.fixed,
-                  items: [
-                    BottomNavigationBarItem(
-                      icon: const Icon(Icons.inventory_2_outlined),
-                      activeIcon: Icon(
-                        isNavTab
-                            ? Icons.inventory_2
-                            : Icons.inventory_2_outlined,
-                      ),
-                      label: 'Stock',
-                    ),
-                    BottomNavigationBarItem(
-                      icon: const Icon(Icons.point_of_sale_outlined),
-                      activeIcon: Icon(
-                        isNavTab
-                            ? Icons.point_of_sale
-                            : Icons.point_of_sale_outlined,
-                      ),
-                      label: 'POS',
-                    ),
-                    BottomNavigationBarItem(
-                      icon: Badge(
-                        label: Text(_pendingOrderCount.toString()),
-                        isLabelVisible: _pendingOrderCount > 0,
-                        backgroundColor: t.colorScheme.error,
-                        child: const Icon(Icons.receipt_long_outlined),
-                      ),
-                      activeIcon: Badge(
-                        label: Text(_pendingOrderCount.toString()),
-                        isLabelVisible: _pendingOrderCount > 0,
-                        backgroundColor: t.colorScheme.error,
-                        child: Icon(
-                          isNavTab
-                              ? Icons.receipt_long
-                              : Icons.receipt_long_outlined,
-                        ),
-                      ),
-                      label: 'Orders',
-                    ),
-                    BottomNavigationBarItem(
-                      icon: ValueListenableBuilder<List<Map<String, dynamic>>>(
-                        valueListenable: ref.read(cartProvider),
-                        builder: (_, cart, __) => Badge(
-                          label: Text(cart.length.toString()),
-                          isLabelVisible: cart.isNotEmpty,
-                          backgroundColor: t.colorScheme.error,
-                          child: const Icon(Icons.shopping_cart_outlined),
-                        ),
-                      ),
-                      activeIcon:
-                          ValueListenableBuilder<List<Map<String, dynamic>>>(
-                            valueListenable: ref.read(cartProvider),
-                            builder: (_, cart, __) => Badge(
-                              label: Text(cart.length.toString()),
-                              isLabelVisible: cart.isNotEmpty,
-                              backgroundColor: t.colorScheme.error,
-                              child: Icon(
-                                isNavTab
-                                    ? Icons.shopping_cart
-                                    : Icons.shopping_cart_outlined,
-                              ),
-                            ),
-                          ),
-                      label: 'Cart',
-                    ),
-                  ],
-                );
-                  },
-                );
-              }
-
-              // Manager / CEO nav: Home(0), Stock(2), POS(1), Orders(3), Cart(9)
-              final bool isNavTab = [0, 1, 2, 3, 9].contains(currentIndex);
+              // Lone-owner nav: Home(0), Stock(2), POS(1), Orders(3), Cart(8)
+              final bool isNavTab = [0, 1, 2, 3, 8].contains(currentIndex);
               final int navIndex = currentIndex == 0
                   ? 0
                   : (currentIndex == 2
@@ -351,7 +221,7 @@ class _MainLayoutState extends ConsumerState<MainLayout>
                               ? 2
                               : (currentIndex == 3
                                     ? 3
-                                    : (currentIndex == 9 ? 4 : 0))));
+                                    : (currentIndex == 8 ? 4 : 0))));
 
               return ValueListenableBuilder<bool>(
                 valueListenable: nav.currentTabCanPop,
@@ -377,7 +247,7 @@ class _MainLayoutState extends ConsumerState<MainLayout>
                       indexToSet = 3;
                       break;
                     case 4:
-                      indexToSet = 9;
+                      indexToSet = 8;
                       break;
                   }
 

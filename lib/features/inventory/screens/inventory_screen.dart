@@ -33,7 +33,6 @@ import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
-import 'package:reebaplus_pos/shared/widgets/role_guard.dart';
 
 class InventoryScreen extends ConsumerStatefulWidget {
   const InventoryScreen({super.key});
@@ -100,7 +99,6 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final db = ref.read(databaseProvider);
-      final auth = ref.read(authProvider);
 
       // Stream warehouses so a remote add/rename/soft-delete on another
       // device updates the dropdown without a manual refresh. The first
@@ -112,18 +110,11 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
           _warehouses = list;
           if (!_initialWarehouseSelectionDone) {
             _initialWarehouseSelectionDone = true;
-            final locked = _nav.warehouseLocked.value;
-            final lockedId = _nav.lockedWarehouseId.value;
-            final userTier = auth.currentUser?.roleTier ?? 6;
-            if (locked && lockedId != null && userTier < 5) {
-              _selectedWarehouseId = lockedId.toString();
-            } else {
-              final mainStore = list
-                  .where((w) => w.name.toLowerCase().contains('main store'))
-                  .firstOrNull;
-              if (mainStore != null) {
-                _selectedWarehouseId = mainStore.id.toString();
-              }
+            final mainStore = list
+                .where((w) => w.name.toLowerCase().contains('main store'))
+                .firstOrNull;
+            if (mainStore != null) {
+              _selectedWarehouseId = mainStore.id.toString();
             }
           }
         });
@@ -220,13 +211,10 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       backgroundColor: _bg,
       appBar: _buildAppBar(context),
       floatingActionButton: _currentTab == 0
-          ? RoleGuard(
-              minTier: 5,
-              child: AppFAB(
-                onPressed: _showAddProductSheet,
-                icon: FontAwesomeIcons.plus,
-                label: 'Add Product',
-              ),
+          ? AppFAB(
+              onPressed: _showAddProductSheet,
+              icon: FontAwesomeIcons.plus,
+              label: 'Add Product',
             )
           : null,
       body: SafeArea(
@@ -1437,7 +1425,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     );
     final depositCtrl = TextEditingController();
     final crateValueCtrl = TextEditingController();
-    final isCEO = (ref.read(authProvider).currentUser?.roleTier ?? 2) >= 6;
+    const isCEO = true;
 
     // Default modes
     String depositMode = 'change'; // 'add' | 'change'
@@ -1510,41 +1498,21 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                             color: _subtext,
                           ),
                         ),
-                        if (isCEO)
-                          Row(
-                            children: [
-                              _modeChip(
-                                'Add',
-                                depositMode == 'add',
-                                () => setB(() => depositMode = 'add'),
-                              ),
-                              const SizedBox(width: 4),
-                              _modeChip(
-                                'Change',
-                                depositMode == 'change',
-                                () => setB(() => depositMode = 'change'),
-                              ),
-                            ],
-                          )
-                        else
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 2,
+                        Row(
+                          children: [
+                            _modeChip(
+                              'Add',
+                              depositMode == 'add',
+                              () => setB(() => depositMode = 'add'),
                             ),
-                            decoration: BoxDecoration(
-                              color: _border.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(4),
+                            const SizedBox(width: 4),
+                            _modeChip(
+                              'Change',
+                              depositMode == 'change',
+                              () => setB(() => depositMode = 'change'),
                             ),
-                            child: Text(
-                              '₦${(mfr.depositAmountKobo / 100).toStringAsFixed(0)}',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: _subtext,
-                              ),
-                            ),
-                          ),
+                          ],
+                        ),
                       ],
                     ),
                     const SizedBox(height: 8),

@@ -22,26 +22,7 @@ class ActivityLogScreen extends ConsumerStatefulWidget {
 
 class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
   String? _selectedWarehouseId;
-  // userId → roleTier map, loaded once on init
-  Map<String, int> _userTiers = {};
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadUserTiers();
-    _loading = false;
-  }
-
-  Future<void> _loadUserTiers() async {
-    final db = ref.read(databaseProvider);
-    final users = await (db.select(db.users)).get();
-    if (mounted) {
-      setState(() {
-        _userTiers = {for (final u in users) u.id: u.roleTier};
-      });
-    }
-  }
+  final bool _loading = false;
 
   @override
   Widget build(BuildContext context) {
@@ -244,25 +225,10 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
   }
 
   List<ActivityLog> _filterLogs(List<ActivityLog> logs) {
-    final currentUser = ref.read(authProvider).currentUser;
-    final currentTier = currentUser?.roleTier ?? 5;
+    // Lone owner sees everything. Only warehouse filter remains.
+    if (_selectedWarehouseId == null) return logs;
 
-    // Role-based visibility:
-    // CEO (≥5): sees all
-    // Manager (4): sees tier < 5 (not CEO logs)
-    // Staff (<4): sees tier < 4 (not manager or CEO logs)
-    final roleFiltered = logs.where((log) {
-      if (currentTier >= 5) return true; // CEO sees everything
-      if (log.userId == null) return true; // system/legacy logs visible to all
-      final performerTier = _userTiers[log.userId] ?? 1;
-      // Manager sees up to tier 4; Staff sees up to tier 3
-      final visibleBelow = currentTier >= 4 ? 5 : 4;
-      return performerTier < visibleBelow;
-    }).toList();
-
-    if (_selectedWarehouseId == null) return roleFiltered;
-
-    return roleFiltered.where((log) {
+    return logs.where((log) {
       final isWarehouseScoped =
           log.warehouseId != null ||
           log.productId != null ||

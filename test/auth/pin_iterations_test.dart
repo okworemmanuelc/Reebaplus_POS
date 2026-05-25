@@ -21,7 +21,6 @@ void main() {
           businessId: businessId,
           name: 'Tester',
           pin: '__SETUP_REQUIRED__',
-          role: 'ceo',
         ));
 
     // Mirror auth_service.setUserPin's write path.

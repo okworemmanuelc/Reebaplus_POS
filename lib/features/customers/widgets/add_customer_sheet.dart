@@ -36,20 +36,17 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
   CustomerGroup _selectedGroup = CustomerGroup.retailer;
   final _formKey = GlobalKey<FormState>();
 
-  // Warehouse selection (CEO only)
+  // Warehouse selection
   List<WarehouseData> _warehouses = [];
   String? _selectedWarehouseId;
-  bool get _isCeo => (ref.read(authProvider).currentUser?.roleTier ?? 0) >= 6;
 
   @override
   void initState() {
     super.initState();
-    if (_isCeo) {
-      final db = ref.read(databaseProvider);
-      db.select(db.warehouses).get().then((wh) {
-        if (mounted) setState(() => _warehouses = wh);
-      });
-    }
+    final db = ref.read(databaseProvider);
+    db.select(db.warehouses).get().then((wh) {
+      if (mounted) setState(() => _warehouses = wh);
+    });
   }
   Color get _surface => Theme.of(context).colorScheme.surface;
   Color get _text => Theme.of(context).colorScheme.onSurface;
@@ -202,22 +199,20 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
                             validator: (v) => (v == null || v.trim().isEmpty) ? 'This field is required' : null,
                           ),
                           _groupDropdown(),
-                          if (_isCeo) ...[
-                            AppDropdown<String>(
-                              labelText: 'Assign to Warehouse',
-                              value: _selectedWarehouseId,
-                              hintText: 'Select warehouse',
-                              items: _warehouses.map((wh) {
-                                return DropdownMenuItem<String>(
-                                  value: wh.id,
-                                  child: Text(wh.name),
-                                );
-                              }).toList(),
-                              onChanged: (val) => setState(() => _selectedWarehouseId = val),
-                              validator: (v) => v == null ? 'Please select a warehouse' : null,
-                            ),
-                            SizedBox(height: context.getRSize(16)),
-                          ],
+                          AppDropdown<String>(
+                            labelText: 'Assign to Warehouse',
+                            value: _selectedWarehouseId,
+                            hintText: 'Select warehouse',
+                            items: _warehouses.map((wh) {
+                              return DropdownMenuItem<String>(
+                                value: wh.id,
+                                child: Text(wh.name),
+                              );
+                            }).toList(),
+                            onChanged: (val) => setState(() => _selectedWarehouseId = val),
+                            validator: (v) => v == null ? 'Please select a warehouse' : null,
+                          ),
+                          SizedBox(height: context.getRSize(16)),
                           AppInput(
                             labelText: 'Address',
                             controller: _addressCtrl,
@@ -271,10 +266,8 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
                               return;
                             }
 
-                            // CEO picks warehouse manually; others use their own warehouseId
-                            final warehouseId = _isCeo
-                                ? _selectedWarehouseId
-                                : ref.read(authProvider).currentUser?.warehouseId;
+                            // Lone owner picks warehouse manually
+                            final warehouseId = _selectedWarehouseId;
 
                             final newCustomer = Customer(
                               id: '', // Database will generate this

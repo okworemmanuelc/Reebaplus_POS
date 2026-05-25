@@ -8,7 +8,6 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/settings/settings_screen.dart';
-import 'package:reebaplus_pos/features/staff/screens/staff_constants.dart';
 import 'package:reebaplus_pos/shared/utils/avatar_helpers.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
@@ -100,7 +99,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           title: AppBarHeader(
             icon: FontAwesomeIcons.user,
             title: user.name,
-            subtitle: user.role.toUpperCase(),
+            subtitle: 'OWNER',
           ),
         ),
         body: Center(
@@ -124,7 +123,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         title: AppBarHeader(
           icon: FontAwesomeIcons.user,
           title: user.name,
-          subtitle: user.role.toUpperCase(),
+          subtitle: 'OWNER',
         ),
       ),
       body: LayoutBuilder(
@@ -191,7 +190,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ),
           ),
           SizedBox(height: context.getRSize(8)),
-          _buildRoleTag(user.role),
+          _buildRoleTag('Owner'),
           SizedBox(height: context.getRSize(8)),
           Container(
             padding: EdgeInsets.symmetric(
@@ -225,7 +224,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Widget _buildRoleTag(String role) {
-    final color = _roleColor(role);
+    final color = Theme.of(context).colorScheme.primary;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
@@ -243,11 +242,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       ),
     );
   }
-
-  // Delegates to staff_constants so role colors stay in one source.
-  // The previous parallel switch had drifted (different hex values + a
-  // bogus 'stock keeper' key with a space) — see role-refactor briefing.
-  Color _roleColor(String role) => roleFor(role).color;
 
   Widget _buildPerformanceMetrics(bool isWide) {
     final orders = _staffOrders;
@@ -347,11 +341,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ),
           ),
           SizedBox(height: context.getRSize(16)),
-          _infoRow(
-            'Role Tier',
-            'Tier ${user.roleTier}',
-            FontAwesomeIcons.shieldHalved,
-          ),
           _infoRow(
             'Warehouse',
             warehouse,

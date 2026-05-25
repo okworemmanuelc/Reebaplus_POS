@@ -12,30 +12,26 @@ import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:flutter/services.dart';
 import 'package:reebaplus_pos/shared/widgets/smooth_route.dart';
 
-/// Two-phase PIN entry. Three callers:
+/// Two-phase PIN entry. Two callers:
 ///   * New-business onboarding wizard — [user] is null, [isNewBusinessSetup]
 ///     is true. The draft from [onboardingDraftProvider] is committed atomically
 ///     via [AuthService.completeOnboarding] on PIN confirm; the returned
 ///     persisted user is then assigned a PIN locally.
-///   * Invite/join flow — [user] is the row created by the redeem RPC,
-///     [isJoinFlow] is true. PIN write only.
-///   * Returning user PIN reset — [user] non-null, both flags false. PIN
-///     write only.
+///   * Returning user PIN reset / first-time PIN setup — [user] non-null,
+///     [isNewBusinessSetup] is false. PIN write only.
 class CreatePinScreen extends ConsumerStatefulWidget {
-  /// Required in join/reset paths. Null in the new-business path — the user
-  /// row doesn't exist yet; the draft is committed inside [_advance].
+  /// Required in the reset/setup paths. Null in the new-business path — the
+  /// user row doesn't exist yet; the draft is committed inside [_advance].
   final UserData? user;
   final bool isNewBusinessSetup;
-  final bool isJoinFlow;
 
   const CreatePinScreen({
     super.key,
     this.user,
     this.isNewBusinessSetup = false,
-    this.isJoinFlow = false,
   }) : assert(
           user != null || isNewBusinessSetup,
-          'CreatePinScreen needs either a user (join/reset) or '
+          'CreatePinScreen needs either a user (reset/setup) or '
           'isNewBusinessSetup=true (wizard, draft-driven)',
         );
 
@@ -127,6 +123,11 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
     await Future.delayed(const Duration(milliseconds: 150));
     if (!mounted) return;
 
+    // Step tracker so the catch block below can report exactly which
+    // await threw. Updated immediately before each step starts; the
+    // value left in `step` when an exception bubbles into the catch
+    // names the call that failed.
+    var step = 'start';
     try {
       // New-business path: commit the wizard draft atomically NOW. The
       // complete_onboarding RPC creates businesses + profiles + warehouses
@@ -137,27 +138,51 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
       final UserData persistedUser;
       if (widget.user == null) {
         final draft = draftNotifier.require();
+        step = 'completeOnboarding';
+        debugPrint(
+          '[CreatePinScreen] new-business path: calling '
+          'auth.completeOnboarding(businessId=${draft.businessId}, '
+          'userId=${draft.userId})',
+        );
         persistedUser = await auth.completeOnboarding(draft);
+        debugPrint(
+          '[CreatePinScreen] completeOnboarding ok: '
+          'persistedUser.id=${persistedUser.id}',
+        );
         // Wizard is done — drop the draft so a future onboarding starts
         // fresh and so abandoned drafts don't leak across sessions.
         draftNotifier.clear();
       } else {
         persistedUser = widget.user!;
+        debugPrint(
+          '[CreatePinScreen] join/reset path: '
+          'persistedUser.id=${persistedUser.id}',
+        );
       }
 
+      step = 'setUserPin';
+      debugPrint('[CreatePinScreen] calling auth.setUserPin(${persistedUser.id})');
       await auth.setUserPin(persistedUser.id, _pin);
+      debugPrint('[CreatePinScreen] setUserPin ok');
 
+      step = 'getUserById';
       final updatedUser = await db.warehousesDao.getUserById(persistedUser.id);
 
       if (!mounted) return;
 
       if (updatedUser == null) {
+        debugPrint(
+          '[CreatePinScreen] getUserById returned null for '
+          'id=${persistedUser.id} — local users row missing after PIN save',
+        );
         setState(() {
           _saving = false;
           _errorMessage = 'Unexpected error. Please try again.';
         });
         return;
       }
+
+      debugPrint('[CreatePinScreen] PIN save flow complete');
 
       // Controlled delay (1.2s) to let the user feel the success
       // before transitioning to the main dashboard.
@@ -170,12 +195,18 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
             page: BiometricSetupScreen(
               user: updatedUser,
               isNewBusinessSetup: widget.isNewBusinessSetup,
-              isJoinFlow: widget.isJoinFlow,
             ),
           ),
         );
       }
-    } catch (e) {
+    } catch (e, stack) {
+      // Make the user-visible "Failed to save PIN" error trace back to
+      // the exact step + exception. Without this log the failure is
+      // invisible to anyone reading logs because the catch swallows e.
+      debugPrint(
+        '[CreatePinScreen] PIN save FAILED at step="$step": '
+        '${e.runtimeType}: $e\n$stack',
+      );
       if (mounted) {
         setState(() {
           _saving = false;
@@ -245,7 +276,7 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
     );
   }
 
-  bool get _isOnboarding => widget.isNewBusinessSetup || widget.isJoinFlow;
+  bool get _isOnboarding => widget.isNewBusinessSetup;
 
   Widget _buildInputState(Color primary) {
     final theme = Theme.of(context);
@@ -257,12 +288,10 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         if (_isOnboarding)
-          OnboardingStepIndicator(
-            currentStep: widget.isNewBusinessSetup ? 6 : 6,
-            totalSteps: widget.isNewBusinessSetup ? 7 : 7,
-            stepLabels: widget.isNewBusinessSetup
-                ? OnboardingStepIndicator.pathALabels
-                : OnboardingStepIndicator.pathBLabels,
+          const OnboardingStepIndicator(
+            currentStep: 6,
+            totalSteps: 7,
+            stepLabels: OnboardingStepIndicator.pathALabels,
           ),
         if (_isOnboarding) SizedBox(height: context.getRSize(16)),
         // Logo

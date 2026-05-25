@@ -12,7 +12,6 @@ import 'dart:async';
 import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_background.dart';
-import 'package:reebaplus_pos/features/staff/screens/staff_constants.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
@@ -1135,7 +1134,7 @@ class _UserPickerSheet extends StatelessWidget {
                 style: TextStyle(fontWeight: FontWeight.w600, color: textColor),
               ),
               subtitle: Text(
-                roleFor(u.role).label,
+                'Owner',
                 style: TextStyle(fontSize: 12, color: subtextColor),
               ),
               onTap: () => onSelected(u),

@@ -13,13 +13,11 @@ import 'package:reebaplus_pos/shared/services/auth_service.dart';
 class BiometricSetupScreen extends ConsumerStatefulWidget {
   final UserData user;
   final bool isNewBusinessSetup;
-  final bool isJoinFlow;
 
   const BiometricSetupScreen({
     super.key,
     required this.user,
     this.isNewBusinessSetup = false,
-    this.isJoinFlow = false,
   });
 
   @override
@@ -99,9 +97,6 @@ class _BiometricSetupScreenState extends ConsumerState<BiometricSetupScreen> {
   void _done() {
     if (widget.isNewBusinessSetup) {
       _auth.pendingPostLoginRoute = PostLoginRoute.successDashboard;
-    } else if (widget.isJoinFlow) {
-      _auth.pendingPostLoginRoute = PostLoginRoute.accessGranted;
-      _auth.pendingPostLoginUser = widget.user;
     }
     _auth.setCurrentUser(widget.user, freshSignIn: true);
     // Navigator key regeneration in main.dart handles routing automatically.
@@ -122,16 +117,13 @@ class _BiometricSetupScreenState extends ConsumerState<BiometricSetupScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (widget.isNewBusinessSetup || widget.isJoinFlow)
-                OnboardingStepIndicator(
-                  currentStep: widget.isNewBusinessSetup ? 7 : 7,
-                  totalSteps: widget.isNewBusinessSetup ? 7 : 7,
-                  stepLabels: widget.isNewBusinessSetup
-                      ? OnboardingStepIndicator.pathALabels
-                      : OnboardingStepIndicator.pathBLabels,
+              if (widget.isNewBusinessSetup)
+                const OnboardingStepIndicator(
+                  currentStep: 7,
+                  totalSteps: 7,
+                  stepLabels: OnboardingStepIndicator.pathALabels,
                 ),
-              if (widget.isNewBusinessSetup || widget.isJoinFlow)
-                const SizedBox(height: 16),
+              if (widget.isNewBusinessSetup) const SizedBox(height: 16),
               Icon(Icons.fingerprint, size: 80, color: primary),
               const SizedBox(height: 24),
               Text(

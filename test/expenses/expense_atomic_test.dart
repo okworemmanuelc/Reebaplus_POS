@@ -24,7 +24,6 @@ void main() {
           id: Value(staffId),
           businessId: businessId,
           name: 'Staff One',
-          role: 'ceo',
           pin: '1234',
         ));
   });

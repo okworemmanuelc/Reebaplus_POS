@@ -19,7 +19,7 @@ class NavigationService {
   // Per-tab nested-Navigator pop state, kept in sync by NavigatorObservers
   // attached in MainLayout. `currentTabCanPop` surfaces only the active tab's
   // value so the bottom nav can listen to a single notifier.
-  final List<bool> _tabCanPop = List.filled(12, false);
+  final List<bool> _tabCanPop = List.filled(11, false);
   final ValueNotifier<bool> currentTabCanPop = ValueNotifier<bool>(false);
 
   // One-shot flag set by SuccessDashboardEntryScreen and consumed once by
@@ -82,10 +82,9 @@ class NavigationService {
     5: 'payments',
     6: 'expenses',
     7: 'warehouse',
-    8: 'staff',
-    9: 'cart',
-    10: 'deliveries',
-    11: 'activity',
+    8: 'cart',
+    9: 'deliveries',
+    10: 'activity',
   };
 
   void setIndex(int index) {
@@ -115,9 +114,9 @@ class NavigationService {
 
   /// Returns true if the event was fully consumed (caller should NOT let Flutter
   /// propagate it further). Wire this into PopScope's onPopInvokedWithResult:
-  ///   onPopInvokedWithResult: (didPop, _) { if (!didPop) handleBackPress(ctx, tier); }
+  ///   onPopInvokedWithResult: (didPop, _) { if (!didPop) handleBackPress(ctx); }
   /// Make sure PopScope has canPop: false so Flutter never pops on its own.
-  void handleBackPress(BuildContext context, int roleTier) {
+  void handleBackPress(BuildContext context) {
     final now = DateTime.now();
 
     // Block hardware-level double-fires only (< 500 ms).
@@ -149,8 +148,8 @@ class NavigationService {
       return;
     }
 
-    // Step 3: go to role-based home tab if not already there
-    final homeTab = roleTier >= 5 ? 0 : 1;
+    // Step 3: go to home tab (dashboard) if not already there
+    const homeTab = 0;
     if (currentIndex.value != homeTab) {
       debugPrint(
         '[NavigationService] Not on home tab ($homeTab). Redirecting...',
@@ -184,17 +183,13 @@ class NavigationService {
     }
   }
 
-  /// Called right after login. Locks non-CEO users to their assigned warehouse.
-  /// [roleTier] and [warehouseId] come from the UserData that just logged in.
-  void applyUserWarehouseLock(int roleTier, String? warehouseId) {
-    if (roleTier >= 6) {
-      // CEO — no restrictions, clear any previous lock
-      warehouseLocked.value = false;
-      lockedWarehouseId.value = null;
-    } else {
-      warehouseLocked.value = true;
-      lockedWarehouseId.value = warehouseId;
-    }
+  /// Called right after login. With staff management removed, the lone
+  /// owner has no warehouse lock — they can move freely across all
+  /// warehouses they own. Kept as a no-op for callers that still invoke
+  /// it during login flow.
+  void applyUserWarehouseLock(String? warehouseId) {
+    warehouseLocked.value = false;
+    lockedWarehouseId.value = null;
   }
 
   /// Called on logout — removes all warehouse restrictions.

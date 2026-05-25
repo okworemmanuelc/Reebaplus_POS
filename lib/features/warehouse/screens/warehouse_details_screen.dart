@@ -9,7 +9,6 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
-import 'package:reebaplus_pos/features/staff/screens/staff_constants.dart';
 
 class WarehouseDetailsScreen extends ConsumerStatefulWidget {
   final WarehouseData warehouse;
@@ -25,12 +24,10 @@ class _WarehouseDetailsScreenState
     extends ConsumerState<WarehouseDetailsScreen> {
   WarehouseData? _liveWarehouse;
   List<ProductDataWithStock> _inventory = [];
-  List<UserData> _staff = [];
   List<CustomerData> _customers = [];
 
   StreamSubscription<WarehouseData?>? _warehouseSub;
   StreamSubscription<List<ProductDataWithStock>>? _inventorySub;
-  StreamSubscription<List<UserData>>? _staffSub;
   StreamSubscription<List<CustomerData>>? _customersSub;
 
   Color get _bg => Theme.of(context).scaffoldBackgroundColor;
@@ -57,9 +54,6 @@ class _WarehouseDetailsScreenState
         .listen((list) {
           if (mounted) setState(() => _inventory = list);
         });
-    _staffSub = db.warehousesDao.watchStaffByWarehouse(id).listen((list) {
-      if (mounted) setState(() => _staff = list);
-    });
     _customersSub = db.customersDao.watchCustomersByWarehouse(id).listen((
       list,
     ) {
@@ -71,7 +65,6 @@ class _WarehouseDetailsScreenState
   void dispose() {
     _warehouseSub?.cancel();
     _inventorySub?.cancel();
-    _staffSub?.cancel();
     _customersSub?.cancel();
     super.dispose();
   }
@@ -90,17 +83,7 @@ class _WarehouseDetailsScreenState
               p.totalStock > 0 && p.totalStock <= p.product.lowStockThreshold,
         )
         .length;
-    final managers = _staff.where((u) => u.roleTier >= 5).length;
-    final riders = _staff
-        .where(
-          (u) =>
-              u.role.toLowerCase().contains('rider') ||
-              u.role.toLowerCase().contains('driver'),
-        )
-        .length;
-    final regularStaff = _staff.length - managers;
     final customersCount = _customers.length;
-    final currentUser = ref.watch(authProvider).currentUser;
 
     return SharedScaffold(
       activeRoute: 'warehouse',
@@ -130,17 +113,12 @@ class _WarehouseDetailsScreenState
               SizedBox(height: rSize(context, 20)),
               _buildStatsGrid(
                 isWide,
-                managers,
-                regularStaff,
-                riders,
                 activeProducts,
                 lowStock,
                 customersCount,
               ),
               SizedBox(height: rSize(context, 24)),
               _buildInventoryList(),
-              SizedBox(height: rSize(context, 16)),
-              _buildStaffList(currentUser),
               SizedBox(height: rSize(context, 16)),
               _buildQuickActions(isWide),
               SizedBox(height: rSize(context, 100)),
@@ -234,9 +212,6 @@ class _WarehouseDetailsScreenState
 
   Widget _buildStatsGrid(
     bool isWide,
-    int managers,
-    int regularStaff,
-    int riders,
     int activeProducts,
     int lowStock,
     int customersCount,
@@ -244,29 +219,11 @@ class _WarehouseDetailsScreenState
     return GridView.count(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: isWide ? 4 : 2,
+      crossAxisCount: isWide ? 3 : 2,
       mainAxisSpacing: rSize(context, 12),
       crossAxisSpacing: rSize(context, 12),
       childAspectRatio: 1.1,
       children: [
-        _buildStatCard(
-          'Managers',
-          managers.toString(),
-          FontAwesomeIcons.userTie,
-          const Color(0xFFA855F7),
-        ),
-        _buildStatCard(
-          'Staff',
-          regularStaff.toString(),
-          FontAwesomeIcons.userGroup,
-          Theme.of(context).colorScheme.primary,
-        ),
-        _buildStatCard(
-          'Riders',
-          riders.toString(),
-          FontAwesomeIcons.motorcycle,
-          AppColors.warning,
-        ),
         _buildStatCard(
           'Products',
           activeProducts.toString(),
@@ -479,152 +436,6 @@ class _WarehouseDetailsScreenState
     );
   }
 
-  // ── Staff List ──────────────────────────────────────────────────────────────
-  Widget _buildStaffList(UserData? currentUser) {
-    return Container(
-      decoration: BoxDecoration(
-        color: _surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _border),
-      ),
-      child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          initiallyExpanded: true,
-          tilePadding: EdgeInsets.symmetric(
-            horizontal: rSize(context, 16),
-            vertical: 0,
-          ),
-          leading: Container(
-            padding: EdgeInsets.all(rSize(context, 8)),
-            decoration: BoxDecoration(
-              color: const Color(0xFFA855F7).withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
-              FontAwesomeIcons.userGroup,
-              color: const Color(0xFFA855F7),
-              size: rSize(context, 14),
-            ),
-          ),
-          title: Text(
-            'Assigned Staff',
-            style: TextStyle(
-              fontSize: rFontSize(context, 15),
-              fontWeight: FontWeight.bold,
-              color: _text,
-            ),
-          ),
-          subtitle: Text(
-            '${_staff.length} personnel',
-            style: TextStyle(fontSize: rFontSize(context, 12), color: _subtext),
-          ),
-          children: _staff.isEmpty
-              ? [
-                  Padding(
-                    padding: EdgeInsets.all(rSize(context, 20)),
-                    child: Text(
-                      'No staff assigned to this warehouse.',
-                      style: TextStyle(
-                        color: _subtext,
-                        fontSize: rFontSize(context, 13),
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ]
-              : _staff.map((member) {
-                  final roleInfo = roleFor(member.role);
-
-                  final roleColor = roleInfo.color;
-
-                  final isDisabled =
-                      currentUser != null &&
-                      currentUser.roleTier < member.roleTier;
-
-                  return Opacity(
-                    opacity: isDisabled ? 0.5 : 1.0,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        border: Border(top: BorderSide(color: _border)),
-                      ),
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: rSize(context, 16),
-                          vertical: rSize(context, 12),
-                        ),
-                        child: Row(
-                          children: [
-                            CircleAvatar(
-                              radius: rSize(context, 18),
-                              backgroundColor: roleColor.withValues(
-                                alpha: 0.15,
-                              ),
-                              child: Text(
-                                member.name.isNotEmpty
-                                    ? member.name[0].toUpperCase()
-                                    : '?',
-                                style: TextStyle(
-                                  fontSize: rFontSize(context, 14),
-                                  fontWeight: FontWeight.bold,
-                                  color: roleColor,
-                                ),
-                              ),
-                            ),
-                            SizedBox(width: rSize(context, 12)),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    member.name,
-                                    style: TextStyle(
-                                      fontSize: rFontSize(context, 14),
-                                      fontWeight: FontWeight.w600,
-                                      color: _text,
-                                    ),
-                                  ),
-                                  SizedBox(height: rSize(context, 2)),
-                                  Text(
-                                    member.role,
-                                    style: TextStyle(
-                                      fontSize: rFontSize(context, 11),
-                                      color: _subtext,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Container(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: rSize(context, 8),
-                                vertical: rSize(context, 3),
-                              ),
-                              decoration: BoxDecoration(
-                                color: roleColor.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                roleInfo.label,
-
-                                style: TextStyle(
-                                  fontSize: rFontSize(context, 10),
-                                  fontWeight: FontWeight.bold,
-                                  color: roleColor,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
-        ),
-      ),
-    );
-  }
-
   // ── Quick Actions ───────────────────────────────────────────────────────────
   Widget _buildQuickActions(bool isWide) {
     return Column(
@@ -639,36 +450,16 @@ class _WarehouseDetailsScreenState
           ),
         ),
         SizedBox(height: rSize(context, 12)),
-        Row(
-          children: [
-            Expanded(
-              child: _actionTile(
-                'View Inventory',
-                'Check and manage stock',
-                FontAwesomeIcons.boxesStacked,
-                Theme.of(context).colorScheme.primary,
-                () {
-                  final nav = ref.read(navigationProvider);
-                  nav.selectedWarehouseId.value = widget.warehouse.id
-                      .toString();
-                  nav.setIndex(2);
-                },
-              ),
-            ),
-            SizedBox(width: rSize(context, 12)),
-            Expanded(
-              child: _actionTile(
-                'Manage Staff',
-                'View assigned personnel',
-                FontAwesomeIcons.usersGear,
-                const Color(0xFFA855F7),
-                () {
-                  Navigator.of(context).pop();
-                  ref.read(navigationProvider).setIndex(8);
-                },
-              ),
-            ),
-          ],
+        _actionTile(
+          'View Inventory',
+          'Check and manage stock',
+          FontAwesomeIcons.boxesStacked,
+          Theme.of(context).colorScheme.primary,
+          () {
+            final nav = ref.read(navigationProvider);
+            nav.selectedWarehouseId.value = widget.warehouse.id.toString();
+            nav.setIndex(2);
+          },
         ),
       ],
     );

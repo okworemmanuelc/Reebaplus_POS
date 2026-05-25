@@ -62,14 +62,6 @@ final allManufacturersProvider =
       .watch();
 });
 
-// ── Business members ────────────────────────────────────────────────────────
-/// All non-deleted members of the active business, ordered by joinedAt.
-/// Backs the staff list, manager dashboards, and the verification queue.
-final currentBusinessMembersProvider =
-    StreamProvider<List<BusinessMemberData>>((ref) {
-  return ref.watch(databaseProvider).businessMembersDao.watchAllForBusiness();
-});
-
 // ── Warehouse by id ─────────────────────────────────────────────────────────
 /// Streams a single warehouse row keyed by id. Returns null when the
 /// warehouse hasn't loaded yet or has been (soft-)deleted. Used wherever

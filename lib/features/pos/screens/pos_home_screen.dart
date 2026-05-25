@@ -51,18 +51,15 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
   }
 
   Future<void> _initWarehouse() async {
-    final user = ref.read(authProvider).currentUser;
-    if (user != null && user.roleTier >= 6) {
-      if (ref.read(navigationProvider).lockedWarehouseId.value == null) {
-        // Stream-based first read: yields as soon as the warehouses table
-        // has at least one row, including after a fresh-login pull. The
-        // earlier one-shot `.get()` returned [] on a cold start and left
-        // the warehouse unlocked.
-        final db = ref.read(databaseProvider);
-        final houses = await db.select(db.warehouses).watch().first;
-        if (houses.isNotEmpty && mounted) {
-          ref.read(navigationProvider).setLockedWarehouse(houses.first.id);
-        }
+    if (ref.read(navigationProvider).lockedWarehouseId.value == null) {
+      // Stream-based first read: yields as soon as the warehouses table
+      // has at least one row, including after a fresh-login pull. The
+      // earlier one-shot `.get()` returned [] on a cold start and left
+      // the warehouse unlocked.
+      final db = ref.read(databaseProvider);
+      final houses = await db.select(db.warehouses).watch().first;
+      if (houses.isNotEmpty && mounted) {
+        ref.read(navigationProvider).setLockedWarehouse(houses.first.id);
       }
     }
   }
@@ -208,18 +205,17 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
             if (!_controller!.isSearching) _searchController.clear();
           },
         ),
-        if (ref.read(authProvider).currentUser?.roleTier == 6)
-          IconButton(
-            icon: Icon(
-              FontAwesomeIcons.warehouse,
-              size: 16,
-              color: ref.read(navigationProvider).lockedWarehouseId.value == null
-                  ? subtextCol
-                  : Theme.of(context).colorScheme.primary,
-            ),
-            tooltip: 'Select Warehouse',
-            onPressed: () => _showWarehousePicker(context, subtextCol),
+        IconButton(
+          icon: Icon(
+            FontAwesomeIcons.warehouse,
+            size: 16,
+            color: ref.read(navigationProvider).lockedWarehouseId.value == null
+                ? subtextCol
+                : Theme.of(context).colorScheme.primary,
           ),
+          tooltip: 'Select Warehouse',
+          onPressed: () => _showWarehousePicker(context, subtextCol),
+        ),
         const NotificationBell(),
         SizedBox(width: context.getRSize(16)),
       ],

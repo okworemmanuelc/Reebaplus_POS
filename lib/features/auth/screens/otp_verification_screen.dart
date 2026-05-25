@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -13,7 +12,6 @@ import 'package:reebaplus_pos/features/auth/screens/create_pin_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/existing_account_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/login_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/business_type_selection_screen.dart';
-import 'package:reebaplus_pos/features/auth/screens/invite_join_name_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/smooth_route.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_background.dart';
 import 'package:reebaplus_pos/features/auth/widgets/shake_widget.dart';
@@ -196,55 +194,6 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
 
     // Mark this session as email-authenticated (triggers second OTP after PIN).
     await auth.saveAuthMethod('email');
-
-    // Deep-link invite path: a pending token short-circuits the regular
-    // post-OTP routing. The redeem RPC creates profiles + users atomically;
-    // until that runs the user has no business membership locally.
-    final pendingToken = auth.pendingInviteToken;
-    if (pendingToken != null) {
-      if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        SmoothRoute(
-          page: InviteJoinNameScreen(
-            token: pendingToken,
-            email: widget.email,
-          ),
-        ),
-      );
-      return;
-    }
-
-    // Email-OTP path doesn't set pendingInviteToken, so a re-invited staff
-    // member signing in by email would silently bypass accept_invite — and
-    // the 0032 revive logic never runs. Look up a pending invite by email
-    // and route to the wizard if one exists. Wrapped in try/catch because
-    // invites RLS may deny for a fresh-device user whose profiles row
-    // isn't yet bound; non-fatal — fall through to existing routing.
-    try {
-      final pending = await Supabase.instance.client
-          .from('invites')
-          .select('human_code')
-          .ilike('email', widget.email)
-          .eq('status', 'pending')
-          .gt('expires_at', DateTime.now().toUtc().toIso8601String())
-          .order('created_at', ascending: false)
-          .limit(1)
-          .maybeSingle();
-      final code = pending?['human_code'] as String?;
-      if (code != null && code.isNotEmpty) {
-        auth.setPendingInviteToken(code);
-        if (!mounted) return;
-        Navigator.of(context).pushReplacement(
-          SmoothRoute(
-            page: InviteJoinNameScreen(token: code, email: widget.email),
-          ),
-        );
-        return;
-      }
-    } catch (e) {
-      debugPrint('[OtpVerification] pending-invite lookup failed: $e');
-      // Fall through — better to land in regular routing than block sign-in.
-    }
 
     // Look up the cloud account (if any) and the local user. On a fresh
     // device with an existing cloud account, we let the user confirm the

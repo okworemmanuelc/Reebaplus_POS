@@ -292,21 +292,11 @@ class _CartScreenState extends ConsumerState<CartScreen>
   Color get _border => Theme.of(context).dividerColor;
 
   void _showChangeCustomerModal() {
-    final user = ref.read(authProvider).currentUser;
-    final roleTier = user?.roleTier ?? 0;
-    final isManagerOrAbove = roleTier >= 5;
-
-    // Default picker warehouse based on role
-    String? defaultPickerWarehouseId;
-    if (roleTier >= 6) {
-      defaultPickerWarehouseId = ref
-          .read(navigationProvider)
-          .lockedWarehouseId
-          .value;
-    } else {
-      // Manager or staff: default to their own warehouse
-      defaultPickerWarehouseId = user?.warehouseId;
-    }
+    // Default picker warehouse — lone owner picks from POS lock.
+    final String? defaultPickerWarehouseId = ref
+        .read(navigationProvider)
+        .lockedWarehouseId
+        .value;
 
     showModalBottomSheet(
       context: context,
@@ -411,8 +401,8 @@ class _CartScreenState extends ConsumerState<CartScreen>
                               ],
                             ),
                           ),
-                          // ── Warehouse filter (managers and CEO only) ──
-                          if (isManagerOrAbove && _warehouses.isNotEmpty)
+                          // ── Warehouse filter ──
+                          if (_warehouses.isNotEmpty)
                             Padding(
                               padding: EdgeInsets.fromLTRB(
                                 modalCtx.getRSize(20),

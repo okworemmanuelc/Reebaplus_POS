@@ -299,8 +299,4 @@ class OrderService {
   Future<void> assignRider(String orderId, String riderName) {
     return _ordersDao.assignRider(orderId, riderName);
   }
-
-  Future<List<UserData>> getRiders() {
-    return _db.warehousesDao.getRiders();
-  }
 }

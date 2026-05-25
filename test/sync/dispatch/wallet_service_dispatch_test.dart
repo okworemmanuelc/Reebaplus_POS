@@ -22,7 +22,6 @@ Future<({String customerId, String staffId})> _seedTopupFixtures(
           id: Value(staffId),
           businessId: businessId,
           name: 'Test Staff',
-          role: 'ceo',
           pin: '0000',
         ),
       );

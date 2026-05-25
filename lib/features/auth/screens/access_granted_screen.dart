@@ -9,8 +9,6 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/main_layout.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_background.dart';
 
-import 'package:drift/drift.dart' as drift;
-
 class AccessGrantedScreen extends ConsumerStatefulWidget {
   final UserData user;
 
@@ -147,26 +145,6 @@ class _AccessGrantedScreenState extends ConsumerState<AccessGrantedScreen>
       if (wh != null) res['locationName'] = wh.name;
     }
 
-    if (widget.user.email != null) {
-      final invite =
-          await (db.select(db.invites)
-                ..where((t) => t.email.equals(widget.user.email!))
-                ..orderBy([
-                  (t) => drift.OrderingTerm(
-                    expression: t.usedAt,
-                    mode: drift.OrderingMode.desc,
-                  ),
-                ]))
-              .getSingleOrNull();
-
-      if (invite != null) {
-        final inviter = await (db.select(
-          db.users,
-        )..where((t) => t.id.equals(invite.createdBy))).getSingleOrNull();
-        if (inviter != null) res['inviterName'] = inviter.name;
-      }
-    }
-
     return res;
   }
 
@@ -288,22 +266,6 @@ class _AccessGrantedScreenState extends ConsumerState<AccessGrantedScreen>
                                     icon: Icons.location_on_rounded,
                                     label: 'Location',
                                     value: details['locationName']!,
-                                    textColor: textColor,
-                                  ),
-                                  const SizedBox(height: 12),
-                                  _buildDetailCard(
-                                    context,
-                                    icon: Icons.badge_rounded,
-                                    label: 'Role',
-                                    value: widget.user.role.toUpperCase(),
-                                    textColor: textColor,
-                                  ),
-                                  const SizedBox(height: 12),
-                                  _buildDetailCard(
-                                    context,
-                                    icon: Icons.person_rounded,
-                                    label: 'Invited by',
-                                    value: details['inviterName']!,
                                     textColor: textColor,
                                   ),
                                 ],

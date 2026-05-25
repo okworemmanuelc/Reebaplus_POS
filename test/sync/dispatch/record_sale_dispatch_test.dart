@@ -36,7 +36,6 @@ Future<_SaleSeed> _seedSaleFixtures(AppDatabase db, String businessId) async {
           businessId: businessId,
           name: 'Cashier',
           pin: '0000',
-          role: 'cashier',
         ),
       );
   final productId = UuidV7.generate();

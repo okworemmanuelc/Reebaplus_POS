@@ -489,30 +489,6 @@ class WarehousesDaoManager {
       $$UsersTableTableManager(_db.attachedDatabase, _db.users);
 }
 
-mixin _$BusinessMembersDaoMixin on DatabaseAccessor<AppDatabase> {
-  $BusinessesTable get businesses => attachedDatabase.businesses;
-  $WarehousesTable get warehouses => attachedDatabase.warehouses;
-  $UsersTable get users => attachedDatabase.users;
-  $BusinessMembersTable get businessMembers => attachedDatabase.businessMembers;
-  BusinessMembersDaoManager get managers => BusinessMembersDaoManager(this);
-}
-
-class BusinessMembersDaoManager {
-  final _$BusinessMembersDaoMixin _db;
-  BusinessMembersDaoManager(this._db);
-  $$BusinessesTableTableManager get businesses =>
-      $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
-  $$WarehousesTableTableManager get warehouses =>
-      $$WarehousesTableTableManager(_db.attachedDatabase, _db.warehouses);
-  $$UsersTableTableManager get users =>
-      $$UsersTableTableManager(_db.attachedDatabase, _db.users);
-  $$BusinessMembersTableTableManager get businessMembers =>
-      $$BusinessMembersTableTableManager(
-        _db.attachedDatabase,
-        _db.businessMembers,
-      );
-}
-
 mixin _$NotificationsDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
   $WarehousesTable get warehouses => attachedDatabase.warehouses;

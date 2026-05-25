@@ -85,13 +85,11 @@ class _PinDialogState extends ConsumerState<PinDialog> {
       return;
     }
 
-    // PIN matched — find the specific user to return to the caller
+    // PIN matched — return the first matching user (lone owner setup).
     final matches = await auth.getUsersByPin(_pin);
     if (!mounted) return;
 
-    final approved = matches.firstWhere(
-      (u) => u.roleTier >= widget.minimumTier,
-    );
+    final approved = matches.first;
     Navigator.pop(context, approved);
   }
 

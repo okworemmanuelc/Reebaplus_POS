@@ -25,9 +25,7 @@ import 'package:reebaplus_pos/shared/widgets/force_update_wrapper.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/features/auth/screens/success_dashboard_entry_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/access_granted_screen.dart';
-import 'package:reebaplus_pos/features/auth/screens/invite_landing_screen.dart';
 import 'package:reebaplus_pos/features/diagnostics/screens/schema_error_screen.dart';
-import 'package:reebaplus_pos/features/invite/services/invite_link_router.dart';
 import 'package:reebaplus_pos/features/sync/screens/first_sync_screen.dart';
 
 import 'package:timezone/data/latest.dart' as tz;
@@ -106,11 +104,9 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
 
   // Captured at initState — the listeners below fire across element
   // lifecycle boundaries (auth notifier ticks during navigator-key
-  // regeneration, deep-link router ticks before/after the splash→home
-  // swap). Reading `ref` from a listener body would race the riverpod
-  // invalidation. See plan §"Bug fix" Pattern 2.
+  // regeneration). Reading `ref` from a listener body would race the
+  // riverpod invalidation.
   late final AuthService _auth;
-  late final InviteLinkRouter _router;
 
   /// Tracks whether Supabase currently has an active JWT. Seeded `true`
   /// because Supabase.initialize is fire-and-forget and we'd otherwise
@@ -125,7 +121,6 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
   void initState() {
     super.initState();
     _auth = ref.read(authProvider);
-    _router = ref.read(inviteLinkRouterProvider);
 
     _checkDeviceUser();
     _auth.deviceUserIdNotifier.addListener(_onDeviceUserChanged);
@@ -136,13 +131,6 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
     // (signedOut, refresh-token rotation failure). Subscribed after
     // supabaseReady so we don't race the SDK's storage restore.
     supabaseReady.whenComplete(_subscribeToSupabaseAuth);
-
-    // Deep-link router. Buffers any cold-start URI on the notifier; if the
-    // navigator isn't mounted yet, the listener fires once it is (the
-    // notifier survives across the splash → home transition).
-    _router.start();
-    _router.handleColdStart();
-    _router.pendingUri.addListener(_onInviteLink);
   }
 
   void _subscribeToSupabaseAuth() {
@@ -166,22 +154,6 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
       // (offline, DNS hiccup). Swallow — supabase-flutter retries on
       // reconnect; bubbling would crash the app on transient blips.
       onError: (e) => debugPrint('[main] supabase auth stream error: $e'),
-    );
-  }
-
-  void _onInviteLink() {
-    final uri = _router.consume();
-    if (uri == null) return;
-    final token = uri.queryParameters['token'];
-    if (token == null || token.isEmpty) return;
-    final navState = _navigatorKey.currentState;
-    if (navState == null) {
-      // Not mounted yet — re-buffer for the next listener tick.
-      _router.pendingUri.value = uri;
-      return;
-    }
-    navState.push(
-      MaterialPageRoute(builder: (_) => InviteLandingScreen(token: token)),
     );
   }
 
@@ -221,7 +193,6 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
   void dispose() {
     _auth.deviceUserIdNotifier.removeListener(_onDeviceUserChanged);
     _auth.removeListener(_onAuthChanged);
-    _router.pendingUri.removeListener(_onInviteLink);
     _supabaseAuthSub?.cancel();
     super.dispose();
   }
@@ -311,7 +282,7 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
               }
             }
  
-            if (user.roleTier < 6 && user.warehouseId == null) {
+            if (user.warehouseId == null) {
               return WarehouseAssignmentScreen(user: user);
             }
             return const MainLayout();

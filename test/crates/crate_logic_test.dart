@@ -28,7 +28,6 @@ void main() {
           businessId: businessId,
           name: 'Test User',
           pin: '1234',
-          role: 'ceo',
         ));
     await db.into(db.customers).insert(CustomersCompanion.insert(
         id: const Value(customerId), businessId: businessId, name: 'Test Customer'));

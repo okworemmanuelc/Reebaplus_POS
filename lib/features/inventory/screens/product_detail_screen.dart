@@ -120,35 +120,9 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       return;
     }
 
-    // Determine edit permission based on role (v9 vocabulary).
-    final auth = ref.read(authProvider);
+    // Lone owner: always editable.
     final db = ref.read(databaseProvider);
-    final user = auth.currentUser;
-    final tier = user?.roleTier ?? 2;
-    if (tier >= 6) {
-      // CEO: always editable.
-      if (mounted) setState(() => _canEdit = true);
-    } else if (tier >= 5) {
-      // Manager: editable only if the product has stock in their warehouse.
-      final mgrWarehouseId = user?.warehouseId;
-      if (mgrWarehouseId == null) {
-        if (mounted) setState(() => _canEdit = false);
-      } else {
-        final rows = await (db.select(
-          db.inventory,
-        )..where((t) => t.productId.equals(productId))).get();
-        final hasStock = rows.any((r) => r.warehouseId == mgrWarehouseId);
-        if (mounted) setState(() => _canEdit = hasStock);
-      }
-    } else if (tier >= 4) {
-      // Stock keeper: stock-level edits only (qty / restock). The actual
-      // field-level gating lives further down in the UI; the screen-level
-      // _canEdit flag stays true so the editable fields render at all.
-      if (mounted) setState(() => _canEdit = true);
-    } else {
-      // Cashier / Rider: read-only.
-      if (mounted) setState(() => _canEdit = false);
-    }
+    if (mounted) setState(() => _canEdit = true);
 
     // Load monthly target, categories, manufacturers from DB
     final product = await db.catalogDao.findById(productId);

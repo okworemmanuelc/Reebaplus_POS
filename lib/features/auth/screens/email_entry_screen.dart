@@ -49,8 +49,9 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
     _emailController.addListener(_validateEmail);
     _validateEmail();
 
-    // One-shot snackbar after a remote-kick logout. Read-and-clear so a
-    // later rebuild of this screen doesn't show it again.
+    // One-shot snackbar after a remote-kick logout (another device signed
+    // in and revoked this session). Read-and-clear so a later rebuild of
+    // this screen doesn't show it again.
     final auth = ref.read(authProvider);
     if (auth.kickedByRemoteSignIn) {
       auth.kickedByRemoteSignIn = false;

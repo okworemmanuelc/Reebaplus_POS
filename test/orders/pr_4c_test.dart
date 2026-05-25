@@ -60,7 +60,6 @@ Future<_Seed> _seed(
           businessId: businessId,
           name: 'Cashier',
           pin: '0000',
-          role: 'cashier',
         ),
       );
 

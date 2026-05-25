@@ -32,8 +32,6 @@ import 'package:reebaplus_pos/shared/services/printer_service.dart';
 import 'package:reebaplus_pos/shared/services/reorder_alert_service.dart';
 import 'package:reebaplus_pos/core/diagnostics/sync_diagnostic.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
-import 'package:reebaplus_pos/features/invite/services/invite_api_service.dart';
-import 'package:reebaplus_pos/features/invite/services/invite_link_router.dart';
 
 // ── Crate Return Approval ──────────────────────────────────────────────────
 final crateReturnApprovalServiceProvider =
@@ -174,19 +172,6 @@ final supabaseSyncServiceProvider = Provider<SupabaseSyncService>((ref) {
     ref.read(databaseProvider),
     ref.read(supabaseClientProvider),
   );
-});
-
-// ── Invite API ─────────────────────────────────────────────────────────────
-final inviteApiServiceProvider = Provider<InviteApiService>((ref) {
-  return InviteApiService(ref.read(supabaseClientProvider));
-});
-
-// Singleton — start() is idempotent; main.dart hooks into pendingUri to
-// push InviteLandingScreen on the active navigator key.
-final inviteLinkRouterProvider = Provider<InviteLinkRouter>((ref) {
-  final router = InviteLinkRouter();
-  ref.onDispose(router.dispose);
-  return router;
 });
 
 // ── Sync diagnostics ────────────────────────────────────────────────────────

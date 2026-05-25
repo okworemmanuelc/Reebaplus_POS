@@ -22,7 +22,6 @@ Future<({String staffId, String txnId, String walletId})> _seedVoidFixtures(
           id: Value(staffId),
           businessId: businessId,
           name: 'Void Staff',
-          role: 'ceo',
           pin: '0000',
         ),
       );

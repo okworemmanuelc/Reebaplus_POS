@@ -41,7 +41,6 @@ Future<_CancelSeed> _seedCancelFixtures(
           businessId: businessId,
           name: 'Cashier',
           pin: '0000',
-          role: 'cashier',
         ),
       );
   final productId = UuidV7.generate();

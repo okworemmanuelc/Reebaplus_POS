@@ -68,11 +68,8 @@ void main() {
       businessId: 'test-biz-id',
       name: 'Test Admin',
       pin: '1234',
-      role: 'ceo',
-      roleTier: 6,
       createdAt: DateTime.now(),
       lastUpdatedAt: DateTime.now(),
-      isDeleted: false,
       avatarColor: '#3B82F6',
       biometricEnabled: false,
     );
@@ -133,11 +130,8 @@ void main() {
       businessId: 'test-biz-id',
       name: 'Test Admin',
       pin: '1234',
-      role: 'ceo',
-      roleTier: 6,
       createdAt: DateTime.now(),
       lastUpdatedAt: DateTime.now(),
-      isDeleted: false,
       avatarColor: '#3B82F6',
       biometricEnabled: false,
     );

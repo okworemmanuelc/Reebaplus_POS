@@ -245,8 +245,6 @@ class AppDrawer extends ConsumerWidget {
 
   Widget _buildNavList(BuildContext context, WidgetRef ref) {
     final t = Theme.of(context);
-    final roleTier = ref.read(authProvider).currentUser?.roleTier ?? 0;
-    final isBelowManager = roleTier < 5;
 
     return ListView(
       padding: EdgeInsets.symmetric(
@@ -254,15 +252,13 @@ class AppDrawer extends ConsumerWidget {
         vertical: context.getRSize(16),
       ),
       children: [
-        // Dashboard — managers and above only
-        if (!isBelowManager)
-          _navItem(
-            context,
-            FontAwesomeIcons.chartLine,
-            'Dashboard',
-            active: activeRoute == 'dashboard',
-            onTap: () => _navigateTo(context, ref, 'dashboard'),
-          ),
+        _navItem(
+          context,
+          FontAwesomeIcons.chartLine,
+          'Dashboard',
+          active: activeRoute == 'dashboard',
+          onTap: () => _navigateTo(context, ref, 'dashboard'),
+        ),
         _navItem(
           context,
           FontAwesomeIcons.cashRegister,
@@ -291,58 +287,45 @@ class AppDrawer extends ConsumerWidget {
           active: activeRoute == 'customers',
           onTap: () => _navigateTo(context, ref, 'customers'),
         ),
-        // Items below are for managers and above only
-        if (!isBelowManager) ...[
-          _navItem(
-            context,
-            FontAwesomeIcons.moneyBillWave,
-            'Supplier Accounts',
-            active:
-                activeRoute == 'supplier_accounts' || activeRoute == 'payments',
-            onTap: () => _navigateTo(context, ref, 'supplier_accounts'),
-          ),
-          _navItem(
-            context,
-            FontAwesomeIcons.fileInvoiceDollar,
-            'Expenses',
-            active: activeRoute == 'expenses',
-            onTap: () => _navigateTo(context, ref, 'expenses'),
-          ),
-          _navItem(
-            context,
-            FontAwesomeIcons.warehouse,
-            'Warehouse',
-            active: activeRoute == 'warehouse',
-            onTap: () => _navigateTo(context, ref, 'warehouse'),
-          ),
-          _navItem(
-            context,
-            FontAwesomeIcons.userGroup,
-            'Staff Management',
-            active: activeRoute == 'staff',
-            onTap: () => _navigateTo(context, ref, 'staff'),
-          ),
-        ],
+        _navItem(
+          context,
+          FontAwesomeIcons.moneyBillWave,
+          'Supplier Accounts',
+          active:
+              activeRoute == 'supplier_accounts' || activeRoute == 'payments',
+          onTap: () => _navigateTo(context, ref, 'supplier_accounts'),
+        ),
+        _navItem(
+          context,
+          FontAwesomeIcons.fileInvoiceDollar,
+          'Expenses',
+          active: activeRoute == 'expenses',
+          onTap: () => _navigateTo(context, ref, 'expenses'),
+        ),
+        _navItem(
+          context,
+          FontAwesomeIcons.warehouse,
+          'Warehouse',
+          active: activeRoute == 'warehouse',
+          onTap: () => _navigateTo(context, ref, 'warehouse'),
+        ),
         SizedBox(height: context.getRSize(12)),
         Divider(color: t.dividerColor),
         SizedBox(height: context.getRSize(12)),
-        // Activity Logs and Deliveries — managers and above only
-        if (!isBelowManager) ...[
-          _navItem(
-            context,
-            FontAwesomeIcons.clockRotateLeft,
-            'Activity Logs',
-            active: activeRoute == 'activity_logs',
-            onTap: () => _navigateTo(context, ref, 'activity_logs'),
-          ),
-          _navItem(
-            context,
-            FontAwesomeIcons.truckArrowRight,
-            'Deliveries',
-            active: activeRoute == 'deliveries',
-            onTap: () => _navigateTo(context, ref, 'deliveries'),
-          ),
-        ],
+        _navItem(
+          context,
+          FontAwesomeIcons.clockRotateLeft,
+          'Activity Logs',
+          active: activeRoute == 'activity_logs',
+          onTap: () => _navigateTo(context, ref, 'activity_logs'),
+        ),
+        _navItem(
+          context,
+          FontAwesomeIcons.truckArrowRight,
+          'Deliveries',
+          active: activeRoute == 'deliveries',
+          onTap: () => _navigateTo(context, ref, 'deliveries'),
+        ),
         _navItem(
           context,
           FontAwesomeIcons.cartShopping,
@@ -435,14 +418,12 @@ class AppDrawer extends ConsumerWidget {
       nav.setIndex(6);
     } else if (route == 'warehouse') {
       nav.setIndex(7);
-    } else if (route == 'staff') {
-      nav.setIndex(8);
     } else if (route == 'cart') {
-      nav.setIndex(9);
+      nav.setIndex(8);
     } else if (route == 'deliveries') {
-      nav.setIndex(10);
+      nav.setIndex(9);
     } else if (route == 'activity_logs') {
-      nav.setIndex(11);
+      nav.setIndex(10);
     }
   }
 

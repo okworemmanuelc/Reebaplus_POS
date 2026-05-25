@@ -16,7 +16,6 @@ import 'package:reebaplus_pos/features/customers/screens/customer_detail_screen.
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
-import 'package:reebaplus_pos/shared/widgets/role_guard.dart';
 
 class CustomersScreen extends ConsumerStatefulWidget {
   const CustomersScreen({super.key});
@@ -40,8 +39,6 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
   Future<void> _loadWarehouses() async {
     final db = ref.read(databaseProvider);
     final ws = await db.select(db.warehouses).get();
-    final user = ref.read(authProvider).currentUser;
-    final roleTier = user?.roleTier ?? 0;
 
     final nav = ref.read(navigationProvider);
     final oneShot = nav.customersInitialWarehouseId.value;
@@ -52,14 +49,10 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
       // "Customers" card). Consume immediately so it only applies once.
       defaultId = oneShot;
       nav.customersInitialWarehouseId.value = null;
-    } else if (roleTier >= 6) {
-      // CEO: default to the warehouse currently selected on the POS screen
+    } else {
+      // Lone owner: default to the warehouse currently selected on the POS screen
       defaultId = nav.lockedWarehouseId.value;
-    } else if (roleTier >= 5) {
-      // Manager: default to their own warehouse
-      defaultId = user?.warehouseId;
     }
-    // Below manager (< 5): no dropdown — always their warehouse (handled in filter)
 
     if (mounted) {
       setState(() {
@@ -81,25 +74,18 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
         final borderCol = Theme.of(context).dividerColor;
         final cardCol = Theme.of(context).cardColor;
 
-        final user = ref.read(authProvider).currentUser;
-        final roleTier = user?.roleTier ?? 0;
-
         return Scaffold(
           backgroundColor: bgCol,
           appBar: _buildAppBar(context, surfaceCol, textCol, borderCol),
           drawer: const AppDrawer(activeRoute: 'customers'),
           body: Column(
             children: [
-              // ── Warehouse filter dropdown (managers and CEO only) ──
-              RoleGuard(
-                minTier: 5,
-                child: _buildWarehouseFilter(
-                  context,
-                  surfaceCol,
-                  textCol,
-                  subtextCol,
-                  borderCol,
-                ),
+              _buildWarehouseFilter(
+                context,
+                surfaceCol,
+                textCol,
+                subtextCol,
+                borderCol,
               ),
 
               Expanded(
@@ -116,16 +102,11 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
 
                     List<Customer> filtered;
 
-                    if (roleTier < 5) {
-                      // Below manager: always see only their own warehouse
-                      filtered = customers
-                          .where((c) => c.warehouseId == user?.warehouseId)
-                          .toList();
-                    } else if (_selectedWarehouseId == null) {
-                      // Manager/CEO with "All" selected
+                    if (_selectedWarehouseId == null) {
+                      // "All" selected
                       filtered = customers;
                     } else {
-                      // Manager/CEO with a specific warehouse selected
+                      // A specific warehouse selected
                       filtered = customers
                           .where((c) => c.warehouseId == _selectedWarehouseId)
                           .toList();
@@ -171,14 +152,11 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
               ),
             ],
           ),
-          floatingActionButton: RoleGuard(
-            minTier: 5,
-            child: AppFAB(
-              heroTag: 'customers_fab',
-              onPressed: () => AddCustomerSheet.show(context),
-              icon: FontAwesomeIcons.userPlus,
-              label: 'Add Customer',
-            ),
+          floatingActionButton: AppFAB(
+            heroTag: 'customers_fab',
+            onPressed: () => AddCustomerSheet.show(context),
+            icon: FontAwesomeIcons.userPlus,
+            label: 'Add Customer',
           ),
         );
   }

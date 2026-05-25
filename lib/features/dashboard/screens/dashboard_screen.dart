@@ -42,9 +42,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   List<WarehouseData> _warehouses = [];
   StreamSubscription? _warehousesSub;
 
-  // True when the logged-in user is a manager locked to one warehouse
-  bool _warehouseLocked = false;
-  String _lockedWarehouseName = '';
+  // Locked warehouse view is no longer enforced for the lone owner.
+  final bool _warehouseLocked = false;
+  final String _lockedWarehouseName = '';
 
   // Pro-tips hero visibility
   bool _showProTips = false;
@@ -87,33 +87,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       if (mounted) setState(() => _showProTips = count <= 1);
     });
 
-    // Lock managers (tier 5) and below to their own warehouse; only CEO (tier 6)
-    // sees cross-warehouse data.
-    final currentUser = ref.read(authProvider).currentUser;
-    final userTier = currentUser?.roleTier ?? 6;
-    if (userTier < 5 && currentUser?.warehouseId != null) {
-      if (mounted) {
-        setState(() {
-          _warehouseLocked = true;
-          _selectedWarehouseId = currentUser!.warehouseId;
-        });
-      }
-    }
-
     // Warehouses for the filter dropdown
     final db = ref.read(databaseProvider);
     _warehousesSub = db.select(db.warehouses).watch().listen((wh) {
       if (mounted) {
         setState(() {
           _warehouses = wh;
-          if (_warehouseLocked && _selectedWarehouseId != null) {
-            _lockedWarehouseName =
-                wh
-                    .where((w) => w.id == _selectedWarehouseId)
-                    .map((w) => w.name)
-                    .firstOrNull ??
-                '';
-          }
         });
       }
     });
@@ -620,9 +599,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     required List<OrderWithItems> filteredOrders,
     required List<MapEntry<String, double>> staffSalesList,
   }) {
-    final userTier = ref.read(authProvider).currentUser?.roleTier ?? 2;
-    final canDrill = userTier >= 4;
-
     return Column(
       children: [
         _ordersLoading
@@ -635,33 +611,29 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 color: Theme.of(context).colorScheme.primary,
                 trend: sales > 0 ? 'Active' : 'No sales',
                 isNeutral: true,
-                onTap: canDrill
-                    ? () => _openSalesDetail(filteredOrders, 'sales')
+                onTap: () => _openSalesDetail(filteredOrders, 'sales'),
+              ),
+        SizedBox(height: context.spacingM),
+        _ordersLoading || _expensesLoading
+            ? const SizedBox.shrink()
+            : _robustMetricCard(
+                label: 'Net Profit',
+                value: profit != null ? formatCurrency(profit) : '—',
+                subtitle: profit != null
+                    ? 'Revenue minus cost of goods & expenses'
+                    : 'Add buying prices to products to see profit',
+                icon: FontAwesomeIcons.chartLine,
+                color: profit != null
+                    ? (profit >= 0 ? success : danger)
+                    : Theme.of(context).colorScheme.primary,
+                trend: profit != null
+                    ? (profit >= 0 ? 'Positive' : 'Negative')
+                    : 'N/A',
+                isPositive: profit == null || profit >= 0,
+                onTap: profit != null
+                    ? () => _openSalesDetail(filteredOrders, 'profit')
                     : null,
               ),
-        if (userTier >= 5) ...[
-          SizedBox(height: context.spacingM),
-          _ordersLoading || _expensesLoading
-              ? const SizedBox.shrink()
-              : _robustMetricCard(
-                  label: 'Net Profit',
-                  value: profit != null ? formatCurrency(profit) : '—',
-                  subtitle: profit != null
-                      ? 'Revenue minus cost of goods & expenses'
-                      : 'Add buying prices to products to see profit',
-                  icon: FontAwesomeIcons.chartLine,
-                  color: profit != null
-                      ? (profit >= 0 ? success : danger)
-                      : Theme.of(context).colorScheme.primary,
-                  trend: profit != null
-                      ? (profit >= 0 ? 'Positive' : 'Negative')
-                      : 'N/A',
-                  isPositive: profit == null || profit >= 0,
-                  onTap: profit != null
-                      ? () => _openSalesDetail(filteredOrders, 'profit')
-                      : null,
-                ),
-        ],
         SizedBox(height: context.spacingM),
         _ordersLoading
             ? const SizedBox.shrink()
@@ -748,8 +720,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   );
                 },
               ),
-        if (userTier >= 4)
-          _buildStaffSalesSection(staffSalesList),
+        _buildStaffSalesSection(staffSalesList),
       ],
     );
   }

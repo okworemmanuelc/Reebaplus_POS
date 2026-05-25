@@ -10,10 +10,14 @@ import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 /// [AuthService.completeOnboarding] / `complete_onboarding` RPC. If the user
 /// abandons mid-flow, nothing reaches Supabase.
 ///
-/// Identifiers ([businessId], [warehouseId], [userId]) are generated at draft
-/// init so retries — same physical wizard run, second tap on PIN confirm —
-/// reuse them and the RPC's `ON CONFLICT (id) DO UPDATE` clauses keep the
-/// commit idempotent.
+/// Identifiers ([businessId], [warehouseId], [userId]) are generated at
+/// draft init so retries — same physical wizard run, second tap on PIN
+/// confirm — reuse them and the RPC's `ON CONFLICT (id) DO UPDATE`
+/// clauses keep the commit idempotent.
+///
+/// The cloud's `complete_onboarding` RPC accepts [userId] as `p_user_id`
+/// so the cloud-side `public.users.id` matches the local Drift mirror's
+/// id exactly.
 class OnboardingDraft {
   /// Email is captured at OTP entry and threaded through every screen.
   /// Required at construction time.

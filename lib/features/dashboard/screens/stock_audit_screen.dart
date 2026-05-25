@@ -131,43 +131,6 @@ class _StockAuditScreenState extends ConsumerState<StockAuditScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final user = ref.watch(authProvider).currentUser;
-
-    // CEO guard
-    if (user == null || user.roleTier < 6) {
-      return Scaffold(
-        appBar: AppBar(
-          title: const Text('Stock Audit'),
-          leading: const BackButton(),
-        ),
-        body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.lock_outline_rounded,
-                size: context.getRSize(64),
-                color: colorScheme.onSurface.withValues(alpha: 0.2),
-              ),
-              SizedBox(height: context.spacingM),
-              Text(
-                'CEO Access Required',
-                style: context.h3.copyWith(
-                  color: colorScheme.onSurface.withValues(alpha: 0.5),
-                ),
-              ),
-              SizedBox(height: context.spacingS),
-              Text(
-                'Only the CEO can view stock audit reports.',
-                style: context.bodyMedium.copyWith(
-                  color: colorScheme.onSurface.withValues(alpha: 0.4),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,

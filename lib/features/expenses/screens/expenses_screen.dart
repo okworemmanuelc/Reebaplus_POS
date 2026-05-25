@@ -17,7 +17,6 @@ import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
-import 'package:reebaplus_pos/shared/widgets/role_guard.dart';
 
 class ExpensesScreen extends ConsumerStatefulWidget {
   final String? initialPeriod;
@@ -123,14 +122,11 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
               );
             },
           ),
-          floatingActionButton: RoleGuard(
-            minTier: 5,
-            child: AppFAB(
-              heroTag: 'expenses_fab',
-              onPressed: () => AddExpenseSheet.show(context),
-              icon: FontAwesomeIcons.plus,
-              label: 'Add Expense',
-            ),
+          floatingActionButton: AppFAB(
+            heroTag: 'expenses_fab',
+            onPressed: () => AddExpenseSheet.show(context),
+            icon: FontAwesomeIcons.plus,
+            label: 'Add Expense',
           ),
     );
   }
