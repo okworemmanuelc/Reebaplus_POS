@@ -1267,11 +1267,24 @@ class AppDatabase extends _$AppDatabase {
         // Order:
         //   1. Drop any queued upserts targeting the dropping tables so
         //      the next push doesn't fail on the now-gone cloud tables.
-        //   2. Drop the (business_id, *) indexes that reference dropped
-        //      columns before alterTable rebuilds users.
+        //   2. Drop the (business_id, *) indexes for the about-to-go
+        //      tables / columns.
         //   3. Drop the tables.
-        //   4. alterTable(users) to rebuild without role / role_tier
-        //      columns and their CHECK constraints.
+        //   4. Drop role / role_tier columns from users via raw
+        //      ALTER TABLE … DROP COLUMN.
+        //
+        // The earlier v12 implementation used `m.alterTable(TableMigration(users))`
+        // to rebuild users without role/role_tier. That broke once schema
+        // changes after v12 touched the users table — TableMigration uses
+        // the CURRENT Drift schema to define the rebuilt table, so a
+        // v11 → v14 upgrade tried to SELECT `store_id` (added in v14) from
+        // the pre-rename users table that still had `warehouse_id`. Using
+        // raw DROP COLUMN decouples this block from whatever the current
+        // schema looks like; v14's column rename and any future column
+        // adds/renames run cleanly afterwards.
+        //
+        // SQLite 3.35+ supports DROP COLUMN; bundled via
+        // sqlite3_flutter_libs: ^0.5.15.
         await customStatement(
           "DELETE FROM sync_queue "
           "WHERE action_type IN ('business_members:upsert', "
@@ -1294,7 +1307,16 @@ class AppDatabase extends _$AppDatabase {
         );
         await customStatement('DROP TABLE IF EXISTS business_members');
         await customStatement('DROP TABLE IF EXISTS invites');
-        await m.alterTable(TableMigration(users));
+        // Try/catch wraps make this idempotent — re-running v12 against a
+        // table where the column was already dropped (e.g. a half-completed
+        // earlier attempt that aborted between the two statements) skips
+        // rather than erroring. SQLite has no DROP COLUMN IF EXISTS.
+        try {
+          await customStatement('ALTER TABLE users DROP COLUMN role');
+        } catch (_) {/* already gone */}
+        try {
+          await customStatement('ALTER TABLE users DROP COLUMN role_tier');
+        } catch (_) {/* already gone */}
       }
     },
     beforeOpen: (details) async {
