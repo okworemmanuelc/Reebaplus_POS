@@ -4060,3 +4060,303 @@ class SystemConfigDao extends DatabaseAccessor<AppDatabase>
     );
   }
 }
+
+@DriftAccessor(tables: [Permissions])
+class PermissionsDao extends DatabaseAccessor<AppDatabase>
+    with _$PermissionsDaoMixin {
+  PermissionsDao(super.db);
+
+  Future<List<PermissionData>> getAll() {
+    return (select(permissions)
+          ..orderBy([
+            (t) => OrderingTerm.asc(t.category),
+            (t) => OrderingTerm.asc(t.key),
+          ]))
+        .get();
+  }
+
+  Stream<List<PermissionData>> watchAll() {
+    return (select(permissions)
+          ..orderBy([
+            (t) => OrderingTerm.asc(t.category),
+            (t) => OrderingTerm.asc(t.key),
+          ]))
+        .watch();
+  }
+
+  Future<PermissionData?> getByKey(String key) {
+    return (select(permissions)..where((t) => t.key.equals(key)))
+        .getSingleOrNull();
+  }
+}
+
+@DriftAccessor(tables: [Roles])
+class RolesDao extends DatabaseAccessor<AppDatabase>
+    with _$RolesDaoMixin, BusinessScopedDao<AppDatabase> {
+  RolesDao(super.db);
+
+  /// All non-deleted roles for the current business, ordered for
+  /// display: system defaults first (CEO → Manager → Cashier →
+  /// Stock keeper), then any Phase 2 custom roles.
+  Stream<List<RoleData>> watchAll() {
+    return (select(roles)
+          ..where((t) => whereBusiness(t) & t.isDeleted.not())
+          ..orderBy([
+            (t) => OrderingTerm.desc(t.isSystemDefault),
+            (t) => OrderingTerm.asc(t.name),
+          ]))
+        .watch();
+  }
+
+  Future<List<RoleData>> getAll() {
+    return (select(roles)
+          ..where((t) => whereBusiness(t) & t.isDeleted.not())
+          ..orderBy([
+            (t) => OrderingTerm.desc(t.isSystemDefault),
+            (t) => OrderingTerm.asc(t.name),
+          ]))
+        .get();
+  }
+
+  /// Lookup by slug — the stable machine identifier (`ceo`, `manager`,
+  /// `cashier`, `stock_keeper`). Code that branches on role identity
+  /// uses this, not `name`.
+  Future<RoleData?> getBySlug(String slug) {
+    return (select(roles)
+          ..where((t) => whereBusiness(t) & t.slug.equals(slug))
+          ..limit(1))
+        .getSingleOrNull();
+  }
+
+  /// Insert a role. Used by tests and (future) Phase 2 custom-role UI.
+  /// The four system defaults are seeded server-side by
+  /// `complete_onboarding` and arrive locally via sync pull.
+  Future<void> insertRole(RolesCompanion row) async {
+    await into(roles).insert(row);
+    await db.syncDao.enqueueUpsert('roles', row);
+  }
+}
+
+@DriftAccessor(tables: [RolePermissions])
+class RolePermissionsDao extends DatabaseAccessor<AppDatabase>
+    with _$RolePermissionsDaoMixin, BusinessScopedDao<AppDatabase> {
+  RolePermissionsDao(super.db);
+
+  Stream<List<RolePermissionData>> watchForRole(String roleId) {
+    return (select(rolePermissions)
+          ..where((t) => whereBusiness(t) & t.roleId.equals(roleId))
+          ..orderBy([(t) => OrderingTerm.asc(t.permissionKey)]))
+        .watch();
+  }
+
+  Future<List<RolePermissionData>> getForRole(String roleId) {
+    return (select(rolePermissions)
+          ..where((t) => whereBusiness(t) & t.roleId.equals(roleId))
+          ..orderBy([(t) => OrderingTerm.asc(t.permissionKey)]))
+        .get();
+  }
+
+  /// Count of granted permissions for a role. Used by the verification
+  /// test and by CEO Settings to show "N of M permissions granted".
+  Future<int> countForRole(String roleId) async {
+    final row =
+        await (selectOnly(rolePermissions)
+              ..addColumns([rolePermissions.id.count()])
+              ..where(
+                  whereBusiness(rolePermissions) &
+                      rolePermissions.roleId.equals(roleId)))
+            .getSingle();
+    return row.read(rolePermissions.id.count()) ?? 0;
+  }
+
+  /// Grant a permission to a role. UNIQUE (role_id, permission_key)
+  /// guards against duplicates.
+  Future<void> grant(String roleId, String permissionKey) async {
+    final row = RolePermissionsCompanion.insert(
+      id: Value(UuidV7.generate()),
+      businessId: requireBusinessId(),
+      roleId: roleId,
+      permissionKey: permissionKey,
+      lastUpdatedAt: Value(DateTime.now()),
+    );
+    await into(rolePermissions).insert(row);
+    await db.syncDao.enqueueUpsert('role_permissions', row);
+  }
+
+  /// Revoke a permission. Deletes the row and enqueues the
+  /// tombstone — `role_permissions` is not an append-only ledger, so
+  /// hard-delete via `enqueueDelete` is the right path here.
+  Future<void> revoke(String roleId, String permissionKey) async {
+    final existing = await (select(rolePermissions)
+          ..where((t) =>
+              whereBusiness(t) &
+              t.roleId.equals(roleId) &
+              t.permissionKey.equals(permissionKey))
+          ..limit(1))
+        .getSingleOrNull();
+    if (existing == null) return;
+    await (delete(rolePermissions)..where((t) => t.id.equals(existing.id)))
+        .go();
+    await db.syncDao.enqueueDelete('role_permissions', existing.id);
+  }
+}
+
+@DriftAccessor(tables: [RoleSettings])
+class RoleSettingsDao extends DatabaseAccessor<AppDatabase>
+    with _$RoleSettingsDaoMixin, BusinessScopedDao<AppDatabase> {
+  RoleSettingsDao(super.db);
+
+  Stream<List<RoleSettingData>> watchForRole(String roleId) {
+    return (select(roleSettings)
+          ..where((t) => whereBusiness(t) & t.roleId.equals(roleId))
+          ..orderBy([(t) => OrderingTerm.asc(t.settingKey)]))
+        .watch();
+  }
+
+  Future<List<RoleSettingData>> getForRole(String roleId) {
+    return (select(roleSettings)
+          ..where((t) => whereBusiness(t) & t.roleId.equals(roleId))
+          ..orderBy([(t) => OrderingTerm.asc(t.settingKey)]))
+        .get();
+  }
+
+  Future<String?> getValue(String roleId, String settingKey) async {
+    final row = await (select(roleSettings)
+          ..where((t) =>
+              whereBusiness(t) &
+              t.roleId.equals(roleId) &
+              t.settingKey.equals(settingKey))
+          ..limit(1))
+        .getSingleOrNull();
+    return row?.settingValue;
+  }
+
+  /// Set a setting value. Upserts on (role_id, setting_key).
+  Future<void> set(String roleId, String settingKey, String? value) async {
+    final existing = await (select(roleSettings)
+          ..where((t) =>
+              whereBusiness(t) &
+              t.roleId.equals(roleId) &
+              t.settingKey.equals(settingKey))
+          ..limit(1))
+        .getSingleOrNull();
+    if (existing != null) {
+      final comp = RoleSettingsCompanion(
+        id: Value(existing.id),
+        settingValue: Value(value),
+        lastUpdatedAt: Value(DateTime.now()),
+      );
+      await (update(roleSettings)..where((t) => t.id.equals(existing.id)))
+          .write(comp);
+      // Refresh full row for enqueue (payload carries businessId etc.)
+      final refreshed = await (select(roleSettings)
+            ..where((t) => t.id.equals(existing.id)))
+          .getSingle();
+      await db.syncDao.enqueueUpsert('role_settings', refreshed);
+    } else {
+      final comp = RoleSettingsCompanion.insert(
+        id: Value(UuidV7.generate()),
+        businessId: requireBusinessId(),
+        roleId: roleId,
+        settingKey: settingKey,
+        settingValue: Value(value),
+        lastUpdatedAt: Value(DateTime.now()),
+      );
+      await into(roleSettings).insert(comp);
+      await db.syncDao.enqueueUpsert('role_settings', comp);
+    }
+  }
+}
+
+@DriftAccessor(tables: [UserBusinesses])
+class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
+    with _$UserBusinessesDaoMixin, BusinessScopedDao<AppDatabase> {
+  UserBusinessesDao(super.db);
+
+  /// All active memberships for the current business. Drives the
+  /// Staff Management list and the Who Is Working picker.
+  Stream<List<UserBusinessData>> watchForCurrentBusiness() {
+    return (select(userBusinesses)
+          ..where((t) => whereBusiness(t))
+          ..orderBy([(t) => OrderingTerm.asc(t.status)]))
+        .watch();
+  }
+
+  /// All memberships for a specific user — Phase 1 always returns
+  /// at most one row, but the query supports the Phase 2 multi-
+  /// business model without a schema change.
+  Future<List<UserBusinessData>> getForUser(String userId) {
+    return (select(userBusinesses)..where((t) => t.userId.equals(userId)))
+        .get();
+  }
+
+  Future<UserBusinessData?> getForUserInBusiness(
+    String userId,
+    String businessId,
+  ) {
+    return (select(userBusinesses)
+          ..where((t) =>
+              t.userId.equals(userId) & t.businessId.equals(businessId))
+          ..limit(1))
+        .getSingleOrNull();
+  }
+
+  Future<void> insertMembership(UserBusinessesCompanion row) async {
+    await into(userBusinesses).insert(row);
+    await db.syncDao.enqueueUpsert('user_businesses', row);
+  }
+}
+
+@DriftAccessor(tables: [InviteCodes])
+class InviteCodesDao extends DatabaseAccessor<AppDatabase>
+    with _$InviteCodesDaoMixin, BusinessScopedDao<AppDatabase> {
+  InviteCodesDao(super.db);
+
+  /// Active invite codes (not yet used, not revoked, not soft-
+  /// deleted, not expired). Drives the Invites tab.
+  Stream<List<InviteCodeData>> watchActive() {
+    final now = DateTime.now();
+    return (select(inviteCodes)
+          ..where((t) =>
+              whereBusiness(t) &
+              t.isDeleted.not() &
+              t.usedAt.isNull() &
+              t.revokedAt.isNull() &
+              t.expiresAt.isBiggerThanValue(now))
+          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+        .watch();
+  }
+
+  Future<InviteCodeData?> getByCode(String code) {
+    return (select(inviteCodes)
+          ..where((t) => t.code.equals(code))
+          ..limit(1))
+        .getSingleOrNull();
+  }
+
+  Future<void> insertInvite(InviteCodesCompanion row) async {
+    await into(inviteCodes).insert(row);
+    await db.syncDao.enqueueUpsert('invite_codes', row);
+  }
+}
+
+@DriftAccessor(tables: [UserStores])
+class UserStoresDao extends DatabaseAccessor<AppDatabase>
+    with _$UserStoresDaoMixin, BusinessScopedDao<AppDatabase> {
+  UserStoresDao(super.db);
+
+  Stream<List<UserStoreData>> watchForUser(String userId) {
+    return (select(userStores)..where((t) => t.userId.equals(userId))).watch();
+  }
+
+  Future<List<UserStoreData>> getForUser(String userId) {
+    return (select(userStores)..where((t) => t.userId.equals(userId))).get();
+  }
+
+  /// Assign a user to a store. UNIQUE (user_id, warehouse_id) guards
+  /// against duplicates.
+  Future<void> assign(UserStoresCompanion row) async {
+    await into(userStores).insert(row);
+    await db.syncDao.enqueueUpsert('user_stores', row);
+  }
+}

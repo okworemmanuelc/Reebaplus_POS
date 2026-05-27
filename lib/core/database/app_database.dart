@@ -865,6 +865,161 @@ class Sessions extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// Global static config. One row per permission key. NOT in
+/// `_syncedTenantTables` — the keys are identical on every device and
+/// every business; cloud and local are seeded by migration. The cloud's
+/// `permissions` table mirrors the same rows for RLS / RPC reference.
+@DataClassName('PermissionData')
+class Permissions extends Table {
+  TextColumn get key => text()();
+  TextColumn get description => text()();
+  TextColumn get category => text()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {key};
+}
+
+@DataClassName('RoleData')
+class Roles extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get name => text()();
+  // Lowercase machine identifier. Code branching on role identity uses
+  // this column (`ceo`, `manager`, `cashier`, `stock_keeper`), never
+  // `name`. The four system defaults always carry these four slugs;
+  // Phase 2 custom roles will derive slugs from their names.
+  TextColumn get slug => text()();
+  BoolColumn get isSystemDefault =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => [
+    'UNIQUE (business_id, name)',
+    'UNIQUE (business_id, slug)',
+  ];
+}
+
+@DataClassName('RolePermissionData')
+class RolePermissions extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get roleId => text().references(Roles, #id)();
+  TextColumn get permissionKey => text()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => [
+    'UNIQUE (role_id, permission_key)',
+  ];
+}
+
+@DataClassName('RoleSettingData')
+class RoleSettings extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get roleId => text().references(Roles, #id)();
+  TextColumn get settingKey => text()();
+  // TEXT — string/JSON-encoded value. NULL is meaningful for
+  // unlimited-style settings (e.g. CEO's max_expense_approval_kobo).
+  TextColumn get settingValue => text().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => [
+    'UNIQUE (role_id, setting_key)',
+  ];
+}
+
+@DataClassName('UserBusinessData')
+class UserBusinesses extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get userId => text().references(Users, #id)();
+  TextColumn get roleId => text().references(Roles, #id)();
+  TextColumn get status => text().withDefault(const Constant('active'))();
+  DateTimeColumn get lastLoginAt => dateTime().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => [
+    "CHECK (status IN ('active','suspended'))",
+    'UNIQUE (user_id, business_id)',
+  ];
+}
+
+@DataClassName('InviteCodeData')
+class InviteCodes extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get roleId => text().references(Roles, #id)();
+  // 8-char uppercase alphanumeric, e.g. "K7M2QXP9".
+  TextColumn get code => text().withLength(min: 8, max: 8)();
+  // The email the invite was generated for. Staff Sign Up requires
+  // a match (master plan §6).
+  TextColumn get email => text()();
+  // The store the invitee will be assigned to on acceptance
+  // (master plan §6.2). Will rename to storeId during the
+  // warehouses → stores rename pass (PIVOT_PLAN step 3).
+  TextColumn get warehouseId => text().references(Warehouses, #id)();
+  TextColumn get generatedByUserId => text().references(Users, #id)();
+  DateTimeColumn get expiresAt => dateTime()();
+  TextColumn get usedByUserId => text().nullable().references(Users, #id)();
+  DateTimeColumn get usedAt => dateTime().nullable()();
+  DateTimeColumn get revokedAt => dateTime().nullable()();
+  BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+@DataClassName('UserStoreData')
+class UserStores extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get userId => text().references(Users, #id)();
+  // Will rename to storeId during the warehouses → stores rename pass.
+  TextColumn get warehouseId => text().references(Warehouses, #id)();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => [
+    'UNIQUE (user_id, warehouse_id)',
+  ];
+}
+
 // Global (non-tenant) config — replaces sentinel-business-id pattern.
 class SystemConfig extends Table {
   TextColumn get key => text()();
@@ -979,6 +1134,13 @@ class MigrationEvents extends Table {
     Notifications,
     Settings,
     Sessions,
+    Permissions,
+    Roles,
+    RolePermissions,
+    RoleSettings,
+    UserBusinesses,
+    InviteCodes,
+    UserStores,
     SystemConfig,
     SyncQueue,
     SyncQueueOrphans,
@@ -1007,6 +1169,13 @@ class MigrationEvents extends Table {
     CrateLedgerDao,
     SettingsDao,
     SystemConfigDao,
+    PermissionsDao,
+    RolesDao,
+    RolePermissionsDao,
+    RoleSettingsDao,
+    UserBusinessesDao,
+    InviteCodesDao,
+    UserStoresDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -1041,7 +1210,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 13;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1318,6 +1487,67 @@ class AppDatabase extends _$AppDatabase {
           await customStatement('ALTER TABLE users DROP COLUMN role_tier');
         } catch (_) {/* already gone */}
       }
+      if (from < 13) {
+        // v13 (Reebaplus master plan §2.4): data-driven roles +
+        // permissions + membership. Adds seven tables — six tenant-
+        // scoped synced tables and one global static-config table
+        // (permissions). The cloud's matching migrations
+        // (0042/0043/0044) create the same tables server-side, seed
+        // permission keys, and update the `complete_onboarding` RPC
+        // to seed default roles on every new business. Pre-existing
+        // businesses are backfilled by cloud 0043; this local block
+        // only creates empty tables and seeds the global permissions
+        // rows. Tenant rows arrive via the next sync pull.
+        await m.createTable(permissions);
+        await m.createTable(roles);
+        await m.createTable(rolePermissions);
+        await m.createTable(roleSettings);
+        await m.createTable(userBusinesses);
+        await m.createTable(inviteCodes);
+        await m.createTable(userStores);
+
+        // Sync indexes for the six new synced tenant tables.
+        for (final t in _v13NewSyncedTables) {
+          await customStatement(
+            'CREATE INDEX idx_${t}_business_lua ON $t (business_id, last_updated_at)',
+          );
+        }
+
+        // Soft-delete indexes for the soft-deletable additions.
+        for (final t in const ['roles', 'invite_codes']) {
+          await customStatement(
+            'CREATE INDEX idx_${t}_business_deleted ON $t (business_id, is_deleted)',
+          );
+        }
+
+        // Hot-path indexes specific to the new tables.
+        for (final stmt in _v13HotPathIndexStatements) {
+          await customStatement(stmt);
+        }
+
+        // bump_<table>_last_updated_at triggers for the new synced
+        // tenant tables. Same shape as the loop in
+        // `_postCreateStatements` so fresh installs and upgrades end
+        // up with identical triggers.
+        for (final t in _v13NewSyncedTables) {
+          await customStatement(
+            'CREATE TRIGGER bump_${t}_last_updated_at '
+            'AFTER UPDATE ON $t '
+            'FOR EACH ROW '
+            'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+            'BEGIN '
+            "UPDATE $t SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+            'END',
+          );
+        }
+
+        // Seed the global permissions table. Static config — same on
+        // every device and the cloud (cloud 0043 inserts the same
+        // rows). Never changes at runtime.
+        for (final stmt in _permissionsSeedStatements) {
+          await customStatement(stmt);
+        }
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -1439,7 +1669,104 @@ const List<String> _syncedTenantTables = [
   'activity_logs',
   'notifications',
   'settings',
+  // v13 (master plan §2.4). `permissions` is intentionally absent —
+  // it's global static config, identical on every device and seeded
+  // by migration on both client and cloud.
+  'roles',
+  'role_permissions',
+  'role_settings',
+  'user_businesses',
+  'invite_codes',
+  'user_stores',
 ];
+
+// Subset of `_syncedTenantTables` introduced in schema v13. Used by
+// the v13 upgrade block to create the matching indexes + bump triggers
+// for devices upgrading from v12. Fresh installs get the same shape
+// via the global `_syncedTenantTables` loop in `_postCreateStatements`.
+const List<String> _v13NewSyncedTables = [
+  'roles',
+  'role_permissions',
+  'role_settings',
+  'user_businesses',
+  'invite_codes',
+  'user_stores',
+];
+
+// Hot-path indexes for the v13 tables. Applied during both onCreate
+// (via `_postCreateStatements`) and the v13 upgrade block.
+const List<String> _v13HotPathIndexStatements = [
+  'CREATE INDEX idx_role_permissions_role ON role_permissions (role_id)',
+  'CREATE INDEX idx_role_settings_role ON role_settings (role_id)',
+  'CREATE INDEX idx_user_businesses_user ON user_businesses (user_id)',
+  'CREATE INDEX idx_user_stores_user ON user_stores (user_id)',
+  // Only one active code per `code` value at a time. Used codes and
+  // revoked/deleted codes drop out so the same code value could in
+  // principle be reused (the 8-char alphanumeric keyspace is large
+  // enough that this never matters in practice).
+  'CREATE UNIQUE INDEX uq_invite_codes_active ON invite_codes (code) '
+      'WHERE used_at IS NULL AND revoked_at IS NULL AND is_deleted = 0',
+];
+
+// Default permission keys seeded into the global `permissions` table.
+// Identical on every device and on the cloud (mirror this list in
+// supabase/migrations/0043_seed_permissions_and_backfill_businesses.sql).
+// Each row: (key, description, category). Category groups toggles in
+// the CEO Settings > Roles & Permissions sub-page. 30 keys total.
+const List<List<String>> _defaultPermissionRows = [
+  // Sales
+  ['sales.make', 'Make a sale', 'Sales'],
+  ['sales.cancel', 'Cancel a sale', 'Sales'],
+  ['sales.discount.give', 'Give a discount on a sale', 'Sales'],
+  // Products
+  ['products.add', 'Add a new product', 'Products'],
+  ['products.edit_price', 'Edit product prices', 'Products'],
+  ['products.edit_buying_price', 'Edit product buying price', 'Products'],
+  ['products.delete', 'Delete a product', 'Products'],
+  // Stock
+  ['stock.add', 'Add stock to existing products', 'Stock'],
+  ['stock.view', 'View stock levels', 'Stock'],
+  ['stock.adjust', 'Adjust stock quantities (damages, theft, count)', 'Stock'],
+  // Expenses
+  ['expenses.create', 'Record a new expense', 'Expenses'],
+  ['expenses.approve', 'Approve or reject pending expenses', 'Expenses'],
+  // Reports
+  ['reports.see_sales', 'See sales reports', 'Reports'],
+  ['reports.see_profit', 'See profit reports', 'Reports'],
+  ['reports.see_cost_prices', 'See buying prices in reports', 'Reports'],
+  ['reports.see_expenses', 'See expense reports', 'Reports'],
+  // Customers
+  ['customers.add', 'Add a new customer', 'Customers'],
+  ['customers.update', 'Update customer details', 'Customers'],
+  ['customers.delete', 'Soft-delete a customer', 'Customers'],
+  ['customers.wallet.update', 'Add funds to customer wallets', 'Customers'],
+  // Suppliers / Shipments
+  ['suppliers.manage', 'Manage suppliers and payments', 'Suppliers'],
+  ['shipments.manage', 'Manage incoming shipments', 'Suppliers'],
+  // Staff
+  ['staff.invite', 'Generate staff invite codes', 'Staff'],
+  ['staff.suspend', 'Suspend or reactivate staff', 'Staff'],
+  ['staff.change_role', 'Change a staff member\'s role', 'Staff'],
+  // System
+  ['activity_logs.view', 'View activity logs', 'System'],
+  ['settings.manage', 'Manage business settings', 'System'],
+  // Funds Register
+  ['funds.open_day', 'Open the day in Funds Register', 'Funds'],
+  ['funds.close_day', 'Close the day in Funds Register', 'Funds'],
+  ['funds.view', 'View Funds Register balances', 'Funds'],
+];
+
+// SQL statements that seed the global permissions table. Built once
+// at app start (top-level final). Used by both `_postCreateStatements`
+// (fresh installs) and the v13 upgrade block.
+final List<String> _permissionsSeedStatements = _defaultPermissionRows
+    .map(
+      (row) => "INSERT INTO permissions (key, description, category) "
+          "VALUES ('${_sqlEscape(row[0])}', '${_sqlEscape(row[1])}', '${_sqlEscape(row[2])}')",
+    )
+    .toList(growable: false);
+
+String _sqlEscape(String s) => s.replaceAll("'", "''");
 
 // 0033_staff_lifecycle_hard_delete dropped soft-delete on users and
 // business_members — both the columns and their (business_id, is_deleted)
@@ -1459,6 +1786,9 @@ const List<String> _softDeletableTables = [
   'drivers',
   'expense_categories',
   'expenses',
+  // v13 additions.
+  'roles',
+  'invite_codes',
 ];
 
 class _LedgerImmutability {
@@ -1661,6 +1991,19 @@ List<String> get _postCreateStatements {
       'END',
     );
   }
+
+  // -- v13 (master plan §2.4) hot-path indexes for the new tables.
+  // The (business_id, last_updated_at) and (business_id, is_deleted)
+  // indexes for the v13 synced tables are already created by the
+  // loops above (the tables are in `_syncedTenantTables` and
+  // `_softDeletableTables`). These are the per-feature indexes that
+  // those loops don't cover.
+  stmts.addAll(_v13HotPathIndexStatements);
+
+  // -- v13 seed: global `permissions` table. Static config, identical
+  // on every device and the cloud (cloud 0043 inserts the same rows).
+  // No sync involvement.
+  stmts.addAll(_permissionsSeedStatements);
 
   return stmts;
 }

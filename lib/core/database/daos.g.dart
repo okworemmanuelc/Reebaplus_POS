@@ -941,3 +941,141 @@ class SystemConfigDaoManager {
   $$SystemConfigTableTableManager get systemConfig =>
       $$SystemConfigTableTableManager(_db.attachedDatabase, _db.systemConfig);
 }
+
+mixin _$PermissionsDaoMixin on DatabaseAccessor<AppDatabase> {
+  $PermissionsTable get permissions => attachedDatabase.permissions;
+  PermissionsDaoManager get managers => PermissionsDaoManager(this);
+}
+
+class PermissionsDaoManager {
+  final _$PermissionsDaoMixin _db;
+  PermissionsDaoManager(this._db);
+  $$PermissionsTableTableManager get permissions =>
+      $$PermissionsTableTableManager(_db.attachedDatabase, _db.permissions);
+}
+
+mixin _$RolesDaoMixin on DatabaseAccessor<AppDatabase> {
+  $BusinessesTable get businesses => attachedDatabase.businesses;
+  $RolesTable get roles => attachedDatabase.roles;
+  RolesDaoManager get managers => RolesDaoManager(this);
+}
+
+class RolesDaoManager {
+  final _$RolesDaoMixin _db;
+  RolesDaoManager(this._db);
+  $$BusinessesTableTableManager get businesses =>
+      $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$RolesTableTableManager get roles =>
+      $$RolesTableTableManager(_db.attachedDatabase, _db.roles);
+}
+
+mixin _$RolePermissionsDaoMixin on DatabaseAccessor<AppDatabase> {
+  $BusinessesTable get businesses => attachedDatabase.businesses;
+  $RolesTable get roles => attachedDatabase.roles;
+  $RolePermissionsTable get rolePermissions => attachedDatabase.rolePermissions;
+  RolePermissionsDaoManager get managers => RolePermissionsDaoManager(this);
+}
+
+class RolePermissionsDaoManager {
+  final _$RolePermissionsDaoMixin _db;
+  RolePermissionsDaoManager(this._db);
+  $$BusinessesTableTableManager get businesses =>
+      $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$RolesTableTableManager get roles =>
+      $$RolesTableTableManager(_db.attachedDatabase, _db.roles);
+  $$RolePermissionsTableTableManager get rolePermissions =>
+      $$RolePermissionsTableTableManager(
+        _db.attachedDatabase,
+        _db.rolePermissions,
+      );
+}
+
+mixin _$RoleSettingsDaoMixin on DatabaseAccessor<AppDatabase> {
+  $BusinessesTable get businesses => attachedDatabase.businesses;
+  $RolesTable get roles => attachedDatabase.roles;
+  $RoleSettingsTable get roleSettings => attachedDatabase.roleSettings;
+  RoleSettingsDaoManager get managers => RoleSettingsDaoManager(this);
+}
+
+class RoleSettingsDaoManager {
+  final _$RoleSettingsDaoMixin _db;
+  RoleSettingsDaoManager(this._db);
+  $$BusinessesTableTableManager get businesses =>
+      $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$RolesTableTableManager get roles =>
+      $$RolesTableTableManager(_db.attachedDatabase, _db.roles);
+  $$RoleSettingsTableTableManager get roleSettings =>
+      $$RoleSettingsTableTableManager(_db.attachedDatabase, _db.roleSettings);
+}
+
+mixin _$UserBusinessesDaoMixin on DatabaseAccessor<AppDatabase> {
+  $BusinessesTable get businesses => attachedDatabase.businesses;
+  $WarehousesTable get warehouses => attachedDatabase.warehouses;
+  $UsersTable get users => attachedDatabase.users;
+  $RolesTable get roles => attachedDatabase.roles;
+  $UserBusinessesTable get userBusinesses => attachedDatabase.userBusinesses;
+  UserBusinessesDaoManager get managers => UserBusinessesDaoManager(this);
+}
+
+class UserBusinessesDaoManager {
+  final _$UserBusinessesDaoMixin _db;
+  UserBusinessesDaoManager(this._db);
+  $$BusinessesTableTableManager get businesses =>
+      $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$WarehousesTableTableManager get warehouses =>
+      $$WarehousesTableTableManager(_db.attachedDatabase, _db.warehouses);
+  $$UsersTableTableManager get users =>
+      $$UsersTableTableManager(_db.attachedDatabase, _db.users);
+  $$RolesTableTableManager get roles =>
+      $$RolesTableTableManager(_db.attachedDatabase, _db.roles);
+  $$UserBusinessesTableTableManager get userBusinesses =>
+      $$UserBusinessesTableTableManager(
+        _db.attachedDatabase,
+        _db.userBusinesses,
+      );
+}
+
+mixin _$InviteCodesDaoMixin on DatabaseAccessor<AppDatabase> {
+  $BusinessesTable get businesses => attachedDatabase.businesses;
+  $RolesTable get roles => attachedDatabase.roles;
+  $WarehousesTable get warehouses => attachedDatabase.warehouses;
+  $UsersTable get users => attachedDatabase.users;
+  $InviteCodesTable get inviteCodes => attachedDatabase.inviteCodes;
+  InviteCodesDaoManager get managers => InviteCodesDaoManager(this);
+}
+
+class InviteCodesDaoManager {
+  final _$InviteCodesDaoMixin _db;
+  InviteCodesDaoManager(this._db);
+  $$BusinessesTableTableManager get businesses =>
+      $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$RolesTableTableManager get roles =>
+      $$RolesTableTableManager(_db.attachedDatabase, _db.roles);
+  $$WarehousesTableTableManager get warehouses =>
+      $$WarehousesTableTableManager(_db.attachedDatabase, _db.warehouses);
+  $$UsersTableTableManager get users =>
+      $$UsersTableTableManager(_db.attachedDatabase, _db.users);
+  $$InviteCodesTableTableManager get inviteCodes =>
+      $$InviteCodesTableTableManager(_db.attachedDatabase, _db.inviteCodes);
+}
+
+mixin _$UserStoresDaoMixin on DatabaseAccessor<AppDatabase> {
+  $BusinessesTable get businesses => attachedDatabase.businesses;
+  $WarehousesTable get warehouses => attachedDatabase.warehouses;
+  $UsersTable get users => attachedDatabase.users;
+  $UserStoresTable get userStores => attachedDatabase.userStores;
+  UserStoresDaoManager get managers => UserStoresDaoManager(this);
+}
+
+class UserStoresDaoManager {
+  final _$UserStoresDaoMixin _db;
+  UserStoresDaoManager(this._db);
+  $$BusinessesTableTableManager get businesses =>
+      $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$WarehousesTableTableManager get warehouses =>
+      $$WarehousesTableTableManager(_db.attachedDatabase, _db.warehouses);
+  $$UsersTableTableManager get users =>
+      $$UsersTableTableManager(_db.attachedDatabase, _db.users);
+  $$UserStoresTableTableManager get userStores =>
+      $$UserStoresTableTableManager(_db.attachedDatabase, _db.userStores);
+}
