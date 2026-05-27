@@ -137,11 +137,11 @@ class _AccessGrantedScreenState extends ConsumerState<AccessGrantedScreen>
     )..where((t) => t.id.equals(widget.user.businessId))).getSingleOrNull();
     if (biz != null) res['businessName'] = biz.name;
 
-    final warehouseId = widget.user.warehouseId;
-    if (warehouseId != null) {
+    final storeId = widget.user.storeId;
+    if (storeId != null) {
       final wh = await (db.select(
-        db.warehouses,
-      )..where((t) => t.id.equals(warehouseId))).getSingleOrNull();
+        db.stores,
+      )..where((t) => t.id.equals(storeId))).getSingleOrNull();
       if (wh != null) res['locationName'] = wh.name;
     }
 

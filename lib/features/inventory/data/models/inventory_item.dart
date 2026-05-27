@@ -11,7 +11,7 @@ class InventoryItem {
   bool needsEmptyCrate;
   IconData icon;
   Color color;
-  Map<String, double> warehouseStock; // warehouseId -> quantity
+  Map<String, double> storeStock; // storeId -> quantity
   double lowStockThreshold;
 
   // Pricing fields
@@ -37,7 +37,7 @@ class InventoryItem {
     this.needsEmptyCrate = false,
     required this.icon,
     required this.color,
-    this.warehouseStock = const {},
+    this.storeStock = const {},
     this.lowStockThreshold = 5,
     this.sellingPrice,
     this.buyingPrice,
@@ -53,11 +53,11 @@ class InventoryItem {
   });
 
   double get totalStock =>
-      warehouseStock.values.fold(0.0, (sum, val) => sum + val);
+      storeStock.values.fold(0.0, (sum, val) => sum + val);
 
-  // Helper to get stock for a specific warehouse
-  double getStockForWarehouse(String warehouseId) =>
-      warehouseStock[warehouseId] ?? 0.0;
+  // Helper to get stock for a specific store
+  double getStockForStore(String storeId) =>
+      storeStock[storeId] ?? 0.0;
 
   InventoryItem copyWith({
     String? id,
@@ -68,7 +68,7 @@ class InventoryItem {
     bool? needsEmptyCrate,
     IconData? icon,
     Color? color,
-    Map<String, double>? warehouseStock,
+    Map<String, double>? storeStock,
     double? lowStockThreshold,
     double? sellingPrice,
     double? buyingPrice,
@@ -91,7 +91,7 @@ class InventoryItem {
       needsEmptyCrate: needsEmptyCrate ?? this.needsEmptyCrate,
       icon: icon ?? this.icon,
       color: color ?? this.color,
-      warehouseStock: warehouseStock ?? this.warehouseStock,
+      storeStock: storeStock ?? this.storeStock,
       lowStockThreshold: lowStockThreshold ?? this.lowStockThreshold,
       sellingPrice: sellingPrice ?? this.sellingPrice,
       buyingPrice: buyingPrice ?? this.buyingPrice,

@@ -11,9 +11,9 @@ import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 
 class InventoryHistoryTab extends ConsumerStatefulWidget {
-  final String? warehouseId;
+  final String? storeId;
 
-  const InventoryHistoryTab({super.key, this.warehouseId});
+  const InventoryHistoryTab({super.key, this.storeId});
 
   @override
   ConsumerState<InventoryHistoryTab> createState() =>
@@ -50,7 +50,7 @@ class _InventoryHistoryTabState extends ConsumerState<InventoryHistoryTab> {
   @override
   void didUpdateWidget(InventoryHistoryTab oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.warehouseId != widget.warehouseId) {
+    if (oldWidget.storeId != widget.storeId) {
       _subscribe();
     }
   }
@@ -68,13 +68,13 @@ class _InventoryHistoryTabState extends ConsumerState<InventoryHistoryTab> {
     final db = ref.read(databaseProvider);
     final dates = _getDateRange(_selectedPeriod);
     final wId =
-        widget.warehouseId is String && widget.warehouseId.toString() == 'all'
+        widget.storeId is String && widget.storeId.toString() == 'all'
         ? null
-        : widget.warehouseId;
+        : widget.storeId;
 
     _sub = db.stockLedgerDao
         .watchAllTransactionsFiltered(
-          warehouseId: wId,
+          storeId: wId,
           startDate: dates.$1,
           endDate: dates.$2,
         )

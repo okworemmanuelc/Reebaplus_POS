@@ -19,14 +19,14 @@ import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 class UpdateProductSheet extends ConsumerStatefulWidget {
   final ProductData product;
   final int totalStock;
-  final String? currentWarehouseId;
+  final String? currentStoreId;
   final VoidCallback? onProductUpdated;
 
   const UpdateProductSheet({
     super.key,
     required this.product,
     required this.totalStock,
-    this.currentWarehouseId,
+    this.currentStoreId,
     this.onProductUpdated,
   });
 
@@ -48,12 +48,12 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
   late bool _trackEmpties;
   late String _colorHex;
   late String? _size;
-  WarehouseData? _selectedWarehouse;
+  StoreData? _selectedStore;
   SupplierData? _selectedSupplier;
   CategoryData? _selectedCategory;
   ManufacturerData? _selectedManufacturer;
 
-  List<WarehouseData> _warehouses = [];
+  List<StoreData> _stores = [];
   List<SupplierData> _allSuppliers = [];
   List<CategoryData> _allCategories = [];
   List<SupplierData> _supplierSuggestions = [];
@@ -117,7 +117,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
 
   Future<void> _loadData() async {
     final db = ref.read(databaseProvider);
-    final whs = await db.select(db.warehouses).get();
+    final whs = await db.select(db.stores).get();
     final suppliers = await db.catalogDao.getAllSuppliers();
     final manufacturers = await db.inventoryDao.getAllManufacturers();
     final cats = await db.select(db.categories).get();
@@ -125,21 +125,21 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
 
     if (!mounted) return;
     setState(() {
-      _warehouses = whs;
+      _stores = whs;
       _allSuppliers = suppliers;
       _allManufacturers = manufacturers;
       _allCategories = cats;
       _dynamicUnits = <String>{..._units, _unit, ...uniqueUnits}.toList()
         ..sort();
 
-      // Pre-select warehouse: prefer currentWarehouseId, else first
-      if (widget.currentWarehouseId != null) {
-        _selectedWarehouse = whs.cast<WarehouseData?>().firstWhere(
-          (w) => w?.id == widget.currentWarehouseId,
+      // Pre-select store: prefer currentStoreId, else first
+      if (widget.currentStoreId != null) {
+        _selectedStore = whs.cast<StoreData?>().firstWhere(
+          (w) => w?.id == widget.currentStoreId,
           orElse: () => whs.isNotEmpty ? whs.first : null,
         );
       } else if (whs.isNotEmpty) {
-        _selectedWarehouse = whs.first;
+        _selectedStore = whs.first;
       }
 
       // Pre-select category
@@ -314,8 +314,8 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
       missingField = 'Retail Price';
     } else if (!_isStockKeeper && _buyingPriceCtrl.text.trim().isEmpty) {
       missingField = 'Buying Price';
-    } else if (_selectedWarehouse == null) {
-      missingField = 'Warehouse';
+    } else if (_selectedStore == null) {
+      missingField = 'Store';
     }
 
     if (missingField != null) {
@@ -380,7 +380,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
       if (qtyToAdd > 0) {
         await db.inventoryDao.adjustStock(
           widget.product.id,
-          _selectedWarehouse!.id,
+          _selectedStore!.id,
           qtyToAdd,
           'Restock by ${auth.currentUser?.name ?? 'Unknown'}',
           auth.currentUser?.id,
@@ -927,10 +927,10 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                     ),
                     const SizedBox(height: 14),
 
-                    // ── WAREHOUSE ────────────────────────────────────────────
-                    _sectionLabel('WAREHOUSE *', subtext),
+                    // ── STORE ────────────────────────────────────────────
+                    _sectionLabel('STORE *', subtext),
                     const SizedBox(height: 8),
-                    if (_warehouses.isEmpty)
+                    if (_stores.isEmpty)
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(
@@ -943,16 +943,16 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                           border: Border.all(color: border),
                         ),
                         child: Text(
-                          'No warehouses',
+                          'No stores',
                           style: TextStyle(fontSize: 14, color: subtext),
                         ),
                       )
                     else
-                      AppDropdown<WarehouseData?>(
-                        value: _selectedWarehouse,
-                        items: _warehouses
+                      AppDropdown<StoreData?>(
+                        value: _selectedStore,
+                        items: _stores
                             .map(
-                              (w) => DropdownMenuItem<WarehouseData?>(
+                              (w) => DropdownMenuItem<StoreData?>(
                                 value: w,
                                 child: Text(
                                   w.name,
@@ -962,7 +962,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                             )
                             .toList(),
                         onChanged: (v) =>
-                            setState(() => _selectedWarehouse = v),
+                            setState(() => _selectedStore = v),
                       ),
                     const SizedBox(height: 24),
                   ],

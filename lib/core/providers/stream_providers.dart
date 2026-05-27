@@ -15,10 +15,10 @@ final allOrdersProvider = StreamProvider<List<OrderWithItems>>((ref) {
   return ref.watch(orderServiceProvider).watchAllOrdersWithItems();
 });
 
-// ── Warehouses ──────────────────────────────────────────────────────────────
-final allWarehousesProvider = StreamProvider<List<WarehouseData>>((ref) {
+// ── Stores ──────────────────────────────────────────────────────────────────
+final allStoresProvider = StreamProvider<List<StoreData>>((ref) {
   final db = ref.watch(databaseProvider);
-  return db.select(db.warehouses).watch();
+  return db.select(db.stores).watch();
 });
 
 // ── Expenses ───────────────────────────────────────────────────────────────
@@ -38,13 +38,13 @@ final expenseCategoryNamesProvider =
       .map((cats) => {for (final c in cats) c.id: c.name});
 });
 
-// ── Products by warehouse ───────────────────────────────────────────────────
-final productsByWarehouseProvider =
-    StreamProvider.family<List<ProductDataWithStock>, String>((ref, warehouseId) {
+// ── Products by store ───────────────────────────────────────────────────────
+final productsByStoreProvider =
+    StreamProvider.family<List<ProductDataWithStock>, String>((ref, storeId) {
   return ref
       .watch(databaseProvider)
       .inventoryDao
-      .watchProductDatasWithStockByWarehouse(warehouseId);
+      .watchProductDatasWithStockByStore(storeId);
 });
 
 // ── Categories ──────────────────────────────────────────────────────────────
@@ -62,16 +62,16 @@ final allManufacturersProvider =
       .watch();
 });
 
-// ── Warehouse by id ─────────────────────────────────────────────────────────
-/// Streams a single warehouse row keyed by id. Returns null when the
-/// warehouse hasn't loaded yet or has been (soft-)deleted. Used wherever
-/// a screen needs to display the *active* warehouse and have it auto-update
+// ── Store by id ─────────────────────────────────────────────────────────────
+/// Streams a single store row keyed by id. Returns null when the
+/// store hasn't loaded yet or has been (soft-)deleted. Used wherever
+/// a screen needs to display the *active* store and have it auto-update
 /// when the cloud renames or marks it deleted.
-final warehouseByIdProvider =
-    StreamProvider.family<WarehouseData?, String>((ref, warehouseId) {
+final storeByIdProvider =
+    StreamProvider.family<StoreData?, String>((ref, storeId) {
   final db = ref.watch(databaseProvider);
-  return (db.select(db.warehouses)
-        ..where((t) => t.id.equals(warehouseId))
+  return (db.select(db.stores)
+        ..where((t) => t.id.equals(storeId))
         ..limit(1))
       .watchSingleOrNull();
 });

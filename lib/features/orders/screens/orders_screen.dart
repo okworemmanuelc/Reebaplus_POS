@@ -86,13 +86,13 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     });
   }
 
-  /// Resolves a warehouseId to its branch name.
-  Future<String?> _resolveBranchName(String? warehouseId) async {
-    if (warehouseId == null) return null;
+  /// Resolves a storeId to its branch name.
+  Future<String?> _resolveBranchName(String? storeId) async {
+    if (storeId == null) return null;
     final db = ref.read(databaseProvider);
-    final warehouses = await db.select(db.warehouses).get();
-    return warehouses
-        .where((w) => w.id == warehouseId)
+    final stores = await db.select(db.stores).get();
+    return stores
+        .where((w) => w.id == storeId)
         .map((w) => w.name)
         .firstOrNull;
   }
@@ -820,7 +820,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     DateTime? reshareDate;
     DateTime? reprintDate;
 
-    final branchName = await _resolveBranchName(richOrder.order.warehouseId);
+    final branchName = await _resolveBranchName(richOrder.order.storeId);
 
     if (!context.mounted) return;
 
@@ -1015,7 +1015,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       }
 
       final finalBranchName =
-          branchName ?? await _resolveBranchName(order.warehouseId);
+          branchName ?? await _resolveBranchName(order.storeId);
 
       final walletBalance = richOrder.customer == null
           ? null

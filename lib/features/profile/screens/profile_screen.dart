@@ -30,7 +30,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Color get _border => Theme.of(context).dividerColor;
 
   List<OrderData> _staffOrders = [];
-  List<WarehouseData> _warehouses = [];
+  List<StoreData> _stores = [];
   StreamSubscription<List<OrderData>>? _ordersSub;
   bool _contentReady = false;
 
@@ -44,9 +44,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
       final db = ref.read(databaseProvider);
 
-      // Load warehouses once
-      db.select(db.warehouses).get().then((list) {
-        if (mounted) setState(() => _warehouses = list);
+      // Load stores once
+      db.select(db.stores).get().then((list) {
+        if (mounted) setState(() => _stores = list);
       });
 
       // Watch orders for current user
@@ -79,8 +79,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
     final avatarColor =
         parseHexColor(user.avatarColor) ?? Theme.of(context).colorScheme.primary;
-    final warehouseName = _warehouses
-            .where((w) => w.id == user.warehouseId)
+    final storeName = _stores
+            .where((w) => w.id == user.storeId)
             .firstOrNull
             ?.name ??
         'Unassigned';
@@ -134,11 +134,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               bottom: context.getRSize(20) + context.bottomInset,
             ),
             children: [
-              _buildProfileHeader(user, avatarColor, warehouseName),
+              _buildProfileHeader(user, avatarColor, storeName),
               SizedBox(height: context.getRSize(24)),
               _buildPerformanceMetrics(isWide),
               SizedBox(height: context.getRSize(24)),
-              _buildSystemInfo(user, warehouseName),
+              _buildSystemInfo(user, storeName),
               SizedBox(height: context.getRSize(24)),
               _buildActions(),
               SizedBox(height: context.getRSize(100)),
@@ -150,7 +150,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Widget _buildProfileHeader(
-      UserData user, Color color, String warehouse) {
+      UserData user, Color color, String store) {
     return Container(
       padding: EdgeInsets.all(context.getRSize(24)),
       decoration: BoxDecoration(
@@ -204,11 +204,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(FontAwesomeIcons.warehouse,
+                Icon(FontAwesomeIcons.store,
                     size: context.getRSize(10), color: _subtext),
                 SizedBox(width: context.getRSize(6)),
                 Text(
-                  warehouse,
+                  store,
                   style: TextStyle(
                     fontSize: context.getRFontSize(12),
                     fontWeight: FontWeight.w600,
@@ -321,7 +321,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  Widget _buildSystemInfo(UserData user, String warehouse) {
+  Widget _buildSystemInfo(UserData user, String store) {
     return Container(
       padding: EdgeInsets.all(context.getRSize(20)),
       decoration: BoxDecoration(
@@ -342,9 +342,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ),
           SizedBox(height: context.getRSize(16)),
           _infoRow(
-            'Warehouse',
-            warehouse,
-            FontAwesomeIcons.warehouse,
+            'Store',
+            store,
+            FontAwesomeIcons.store,
           ),
           _infoRow(
             'Email',

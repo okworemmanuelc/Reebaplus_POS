@@ -8,7 +8,7 @@ import 'package:reebaplus_pos/features/inventory/data/inventory_data.dart';
 import 'package:reebaplus_pos/features/inventory/data/models/inventory_item.dart';
 import 'package:reebaplus_pos/features/inventory/data/models/inventory_log.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
-import 'package:reebaplus_pos/features/warehouse/data/models/warehouse.dart';
+import 'package:reebaplus_pos/features/stores/data/models/store.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
@@ -22,8 +22,8 @@ class StockTransferScreen extends ConsumerStatefulWidget {
 }
 
 class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
-  Warehouse? _sourceWarehouse;
-  Warehouse? _destinationWarehouse;
+  Store? _sourceStore;
+  Store? _destinationStore;
   InventoryItem? _selectedProduct;
 
   final TextEditingController _productCtrl = TextEditingController();
@@ -40,10 +40,10 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
   @override
   void initState() {
     super.initState();
-    if (kWarehouses.isNotEmpty) {
-      _sourceWarehouse = kWarehouses.first;
-      if (kWarehouses.length > 1) {
-        _destinationWarehouse = kWarehouses[1];
+    if (kStores.isNotEmpty) {
+      _sourceStore = kStores.first;
+      if (kStores.length > 1) {
+        _destinationStore = kStores[1];
       }
     }
   }
@@ -59,13 +59,13 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
   Future<void> _submit() async {
     final qty = double.tryParse(_qtyCtrl.text) ?? 0;
 
-    if (_sourceWarehouse == null || _destinationWarehouse == null) {
-      _showError('Please select both source and destination warehouses.');
+    if (_sourceStore == null || _destinationStore == null) {
+      _showError('Please select both source and destination stores.');
       return;
     }
 
-    if (_sourceWarehouse!.id == _destinationWarehouse!.id) {
-      _showError('Source and destination warehouses cannot be the same.');
+    if (_sourceStore!.id == _destinationStore!.id) {
+      _showError('Source and destination stores cannot be the same.');
       return;
     }
 
@@ -79,12 +79,12 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
       return;
     }
 
-    final available = _selectedProduct!.getStockForWarehouse(
-      _sourceWarehouse!.id,
+    final available = _selectedProduct!.getStockForStore(
+      _sourceStore!.id,
     );
     if (qty > available) {
       _showError(
-        'Insufficient stock in ${_sourceWarehouse!.name}. Available: ${available.toInt()}',
+        'Insufficient stock in ${_sourceStore!.name}. Available: ${available.toInt()}',
       );
       return;
     }
@@ -92,19 +92,19 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
     // Perform Transfer
     setState(() {
       final newStockMap = Map<String, double>.from(
-        _selectedProduct!.warehouseStock,
+        _selectedProduct!.storeStock,
       );
 
       // Deduct from source
-      newStockMap[_sourceWarehouse!.id] = available - qty;
+      newStockMap[_sourceStore!.id] = available - qty;
 
       // Add to destination
-      final destCurrent = _selectedProduct!.getStockForWarehouse(
-        _destinationWarehouse!.id,
+      final destCurrent = _selectedProduct!.getStockForStore(
+        _destinationStore!.id,
       );
-      newStockMap[_destinationWarehouse!.id] = destCurrent + qty;
+      newStockMap[_destinationStore!.id] = destCurrent + qty;
 
-      _selectedProduct!.warehouseStock = newStockMap;
+      _selectedProduct!.storeStock = newStockMap;
 
       // Log Inventory Movement
       kInventoryLogs.add(
@@ -117,7 +117,7 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
           previousValue: available, // Show source stock before
           newValue: available - qty, // Show source stock after
           note:
-              'Stock Transfer: ${_sourceWarehouse!.name} -> ${_destinationWarehouse!.name}',
+              'Stock Transfer: ${_sourceStore!.name} -> ${_destinationStore!.name}',
         ),
       );
     });
@@ -125,17 +125,17 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
     // Log Activity (Source)
     await ref.read(activityLogProvider).logAction(
       "Stock Transfer (Out)",
-      "Transferred ${qty.toInt()} ${_selectedProduct!.productName} OUT to ${_destinationWarehouse!.name}",
+      "Transferred ${qty.toInt()} ${_selectedProduct!.productName} OUT to ${_destinationStore!.name}",
       productId: _selectedProduct!.id,
-      warehouseId: _sourceWarehouse!.id,
+      storeId: _sourceStore!.id,
     );
 
     // Log Activity (Destination)
     await ref.read(activityLogProvider).logAction(
       "Stock Transfer (In)",
-      "Transferred ${qty.toInt()} ${_selectedProduct!.productName} IN from ${_sourceWarehouse!.name}",
+      "Transferred ${qty.toInt()} ${_selectedProduct!.productName} IN from ${_sourceStore!.name}",
       productId: _selectedProduct!.id,
-      warehouseId: _destinationWarehouse!.id,
+      storeId: _destinationStore!.id,
     );
 
     if (!mounted) return;
@@ -178,7 +178,7 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildWarehouseSection(context),
+                  _buildStoreSection(context),
                   SizedBox(height: context.getRSize(24)),
                   _buildProductSection(context),
                 ],
@@ -198,7 +198,7 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
     );
   }
 
-  Widget _buildWarehouseSection(BuildContext context) {
+  Widget _buildStoreSection(BuildContext context) {
     return Container(
       padding: EdgeInsets.all(context.getRSize(16)),
       decoration: BoxDecoration(
@@ -210,7 +210,7 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Warehouse Details',
+            'Store Details',
             style: TextStyle(
               color: Theme.of(context).colorScheme.primary,
               fontWeight: FontWeight.bold,
@@ -218,17 +218,17 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
             ),
           ),
           SizedBox(height: context.getRSize(16)),
-          AppDropdown<Warehouse>(
-            labelText: 'Source Warehouse',
-            value: _sourceWarehouse,
-            items: kWarehouses.map((w) {
+          AppDropdown<Store>(
+            labelText: 'Source Store',
+            value: _sourceStore,
+            items: kStores.map((w) {
               return DropdownMenuItem(value: w, child: Text(w.name));
             }).toList(),
             onChanged: (val) {
               setState(() {
-                _sourceWarehouse = val;
+                _sourceStore = val;
                 if (_selectedProduct != null && val != null) {
-                  final avail = _selectedProduct!.getStockForWarehouse(val.id);
+                  final avail = _selectedProduct!.getStockForStore(val.id);
                   if (avail <= 0) {
                     _selectedProduct = null;
                     _productCtrl.clear();
@@ -239,13 +239,13 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
             },
           ),
           SizedBox(height: context.getRSize(16)),
-          AppDropdown<Warehouse>(
-            labelText: 'Destination Warehouse',
-            value: _destinationWarehouse,
-            items: kWarehouses.map((w) {
+          AppDropdown<Store>(
+            labelText: 'Destination Store',
+            value: _destinationStore,
+            items: kStores.map((w) {
               return DropdownMenuItem(value: w, child: Text(w.name));
             }).toList(),
-            onChanged: (val) => setState(() => _destinationWarehouse = val),
+            onChanged: (val) => setState(() => _destinationStore = val),
           ),
         ],
       ),
@@ -285,9 +285,9 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
                 );
                 if (!matchesText) return false;
 
-                // 2. Must have stock in selected source warehouse
-                if (_sourceWarehouse == null) return false;
-                final stock = item.getStockForWarehouse(_sourceWarehouse!.id);
+                // 2. Must have stock in selected source store
+                if (_sourceStore == null) return false;
+                final stock = item.getStockForStore(_sourceStore!.id);
                 return stock > 0;
               });
             },
@@ -309,8 +309,8 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
                       itemCount: options.length,
                       itemBuilder: (BuildContext context, int index) {
                         final InventoryItem option = options.elementAt(index);
-                        final stock = option.getStockForWarehouse(
-                          _sourceWarehouse?.id ?? "",
+                        final stock = option.getStockForStore(
+                          _sourceStore?.id ?? "",
                         );
                         return InkWell(
                           onTap: () => onSelected(option),
@@ -388,7 +388,7 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4.0),
               child: Text(
-                'Available in source: ${_selectedProduct!.getStockForWarehouse(_sourceWarehouse?.id ?? "").toInt()}',
+                'Available in source: ${_selectedProduct!.getStockForStore(_sourceStore?.id ?? "").toInt()}',
                 style: TextStyle(
                   color: _subtext,
                   fontSize: rFontSize(context, 12),

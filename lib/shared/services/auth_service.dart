@@ -222,11 +222,11 @@ class AuthService extends ValueNotifier<UserData?> {
   }
 
   /// Fast-path pull at login boundaries. Pulls only the 4 tables required
-  /// for `MainLayout` to render (profiles / businesses / users / warehouses)
+  /// for `MainLayout` to render (profiles / businesses / users / stores)
   /// and starts realtime. The heavy full pull fires non-blocking from
   /// [setCurrentUser] after MainLayout has mounted.
   Future<void> syncOnLogin(String businessId) async {
-    // Minimum pull only — 4 tables (profiles, businesses, users, warehouses)
+    // Minimum pull only — 4 tables (profiles, businesses, users, stores)
     // sufficient to render MainLayout. The whole-tenant snapshot pulled
     // here previously moved to the background fire-and-forget from
     // setCurrentUser, cutting blocking sign-in latency from 30-60s to
@@ -246,7 +246,7 @@ class AuthService extends ValueNotifier<UserData?> {
   ///
   /// Only profile-owned fields (name, businessId) are written.
   /// Device-local fields (pin, passwordHash, biometricEnabled, avatarColor,
-  /// warehouseId) are never overwritten on existing rows.
+  /// storeId) are never overwritten on existing rows.
   ///
   /// If no local row exists yet, one is inserted with [setupRequiredPin] as a
   /// placeholder so the caller can route to PIN setup.
@@ -439,7 +439,7 @@ class AuthService extends ValueNotifier<UserData?> {
   /// Looks up a user in the local database by email.
   Future<UserData?> getUserByEmail(String email) {
     debugPrint('[AuthService] Querying local user for $email...');
-    return _db.warehousesDao.getUserByEmail(email).then((u) {
+    return _db.storesDao.getUserByEmail(email).then((u) {
       debugPrint('[AuthService] Query done for $email. Found: ${u != null}');
       return u;
     });
@@ -447,7 +447,7 @@ class AuthService extends ValueNotifier<UserData?> {
 
   // ── Session management ─────────────────────────────────────────────────────
 
-  /// Marks [user] as the active logged-in user and applies warehouse lock.
+  /// Marks [user] as the active logged-in user and applies store lock.
   ///
   /// Onboarding contract: `value` stays null until this call. _onAuthChanged in
   /// main.dart regenerates the navigator key on every value change, which
@@ -456,7 +456,7 @@ class AuthService extends ValueNotifier<UserData?> {
   void setCurrentUser(UserData user, {bool freshSignIn = false}) {
     try {
       // Side-effects first — navigationService fully ready before any rebuild
-      _nav.applyUserWarehouseLock(user.warehouseId);
+      _nav.applyUserStoreLock(user.storeId);
       _nav.setIndex(0);
       saveDeviceUserId(user.id);
       if (user.email != null) saveLastLoggedInEmail(user.email!);
@@ -474,7 +474,7 @@ class AuthService extends ValueNotifier<UserData?> {
       // listener or a manual banner retry.
       unawaited(_sync.pullChanges(user.businessId));
 
-      if (user.warehouseId == null) {
+      if (user.storeId == null) {
         scheduleMicrotask(() => _handleOnboardingAlerts(user));
       }
 
@@ -608,7 +608,7 @@ class AuthService extends ValueNotifier<UserData?> {
       if (currentUser.lastNotificationSentAt == null) {
         await _db.notificationsDao.create(
           'warning',
-          'Assignment Required: ${currentUser.name} has joined. Please assign a warehouse before the 48h deadline ($deadlineStr).',
+          'Assignment Required: ${currentUser.name} has joined. Please assign a store before the 48h deadline ($deadlineStr).',
           linkedRecordId: currentUser.id.toString(),
         );
 
@@ -630,7 +630,7 @@ class AuthService extends ValueNotifier<UserData?> {
         if (lastSent != null && now.difference(lastSent).inHours >= 24) {
           await _db.notificationsDao.create(
             'danger',
-            'URGENT: 48h Countdown expired for ${currentUser.name} (Deadline: $deadlineStr). Warehouse assignment remains pending.',
+            'URGENT: 48h Countdown expired for ${currentUser.name} (Deadline: $deadlineStr). Store assignment remains pending.',
             linkedRecordId: currentUser.id.toString(),
           );
 
@@ -661,7 +661,7 @@ class AuthService extends ValueNotifier<UserData?> {
   /// so that users who explicitly pressed "Log Out" aren't immediately logged back in.
   bool bypassNextBiometric = false;
 
-  /// Clears the active user, removes the warehouse lock, but retains the
+  /// Clears the active user, removes the store lock, but retains the
   /// device-level session so the next launch shows the personalized PIN screen.
   ///
   /// The Supabase refresh token for THIS device is revoked
@@ -680,10 +680,10 @@ class AuthService extends ValueNotifier<UserData?> {
       });
       currentSessionId = null;
     }
-    // Clear nav state BEFORE nulling value. lockedWarehouseId listeners
+    // Clear nav state BEFORE nulling value. lockedStoreId listeners
     // (e.g. PosController._subscribeToProducts) fire synchronously; if
     // value is already null, requireBusinessId throws.
-    _nav.clearWarehouseLock();
+    _nav.clearStoreLock();
     _nav.resetNavigation();
     _supabase.auth
         .signOut(scope: SignOutScope.local)
@@ -701,7 +701,7 @@ class AuthService extends ValueNotifier<UserData?> {
   /// on the next resume (it early-returns when value == null).
   void lockApp() {
     // See logout() — same ordering rule.
-    _nav.clearWarehouseLock();
+    _nav.clearStoreLock();
     _nav.resetNavigation();
     value = null;
     bypassNextBiometric = true;
@@ -734,9 +734,9 @@ class AuthService extends ValueNotifier<UserData?> {
 
     // 4. Clear local state — triggers the ValueListenableBuilder to rebuild.
     //    At this point _hasDeviceUser is already false → routes to EmailEntryScreen.
-    //    Order matters: clear nav first so warehouse-listeners fire while
+    //    Order matters: clear nav first so store-listeners fire while
     //    the businessId resolver still returns a valid id (see logout()).
-    _nav.clearWarehouseLock();
+    _nav.clearStoreLock();
     _nav.resetNavigation();
     value = null;
   }
@@ -835,7 +835,7 @@ class AuthService extends ValueNotifier<UserData?> {
   }
 
   /// Atomic onboarding commit. Calls the `complete_onboarding` Postgres RPC
-  /// (migration 0018) which inserts businesses + profiles + warehouses +
+  /// (migration 0018) which inserts businesses + profiles + stores +
   /// settings in one server-side transaction with `onboarding_complete=true`,
   /// then mirrors the same rows into local Drift in one client-side
   /// transaction. PIN is NOT part of this — it's device-local and written
@@ -856,13 +856,13 @@ class AuthService extends ValueNotifier<UserData?> {
       );
     }
 
-    // 1. Atomic cloud commit. Idempotent on (businesses.id, warehouses.id,
+    // 1. Atomic cloud commit. Idempotent on (businesses.id, stores.id,
     //    profiles.id, settings(business_id, key)) so a retry after a
     //    transient network failure converges.
     debugPrint(
       '[AuthService] completeOnboarding: calling cloud RPC '
       'complete_onboarding(businessId=${draft.businessId}, '
-      'warehouseId=${draft.warehouseId}, userId=${draft.userId})',
+      'storeId=${draft.storeId}, userId=${draft.userId})',
     );
     try {
       // p_user_id (migration 0041) makes the cloud's users.id agree with
@@ -873,7 +873,7 @@ class AuthService extends ValueNotifier<UserData?> {
         'complete_onboarding',
         params: {
           'p_business_id': draft.businessId,
-          'p_warehouse_id': draft.warehouseId,
+          'p_store_id': draft.storeId,
           'p_owner_name': draft.ownerName,
           'p_business_name': draft.businessName,
           'p_business_type': draft.businessType,
@@ -936,12 +936,12 @@ class AuthService extends ValueNotifier<UserData?> {
             );
 
         await _db
-            .into(_db.warehouses)
+            .into(_db.stores)
             .insertOnConflictUpdate(
-              WarehousesCompanion.insert(
-                id: Value(draft.warehouseId),
+              StoresCompanion.insert(
+                id: Value(draft.storeId),
                 businessId: draft.businessId,
-                name: draft.locationName ?? 'Main Warehouse',
+                name: draft.locationName ?? 'Main Store',
                 location: Value(draft.locationCombined),
                 lastUpdatedAt: Value(now),
               ),
@@ -954,7 +954,7 @@ class AuthService extends ValueNotifier<UserData?> {
                 name: draft.ownerName ?? '',
                 email: Value(draft.email),
                 pin: setupRequiredPin,
-                warehouseId: Value(draft.warehouseId),
+                storeId: Value(draft.storeId),
                 lastUpdatedAt: Value(now),
               ),
             );

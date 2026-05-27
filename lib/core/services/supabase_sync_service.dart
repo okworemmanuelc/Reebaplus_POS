@@ -52,7 +52,7 @@ class _FetchOutcome {
 /// - [idle]: no pull in flight; local DB is either fresh or last pull
 ///   completed successfully.
 /// - [minimum]: the 4-table fast pull that gates MainLayout render
-///   (profiles, businesses, users, warehouses). Never visible in
+///   (profiles, businesses, users, stores). Never visible in
 ///   MainLayout — it only fires before MainLayout mounts.
 /// - [background]: the post-login full pull. Banner is visible.
 /// - [completed]: the most recent pull (minimum or background)
@@ -281,7 +281,7 @@ class SupabaseSyncService {
     // the children created server-side by domain RPCs (pos_create_product,
     // pos_inventory_delta, pos_record_sale).
     'users': 1,
-    'warehouses': 2,
+    'stores': 2,
     'manufacturers': 3,
     'crate_groups': 3,
     'categories': 4,
@@ -337,7 +337,7 @@ class SupabaseSyncService {
       'role_tier',
       'avatar_color',
       'biometric_enabled',
-      'warehouse_id',
+      'store_id',
       'last_notification_sent_at',
       'created_at',
       'last_updated_at',
@@ -532,7 +532,7 @@ class SupabaseSyncService {
       groups.putIfAbsent(group, () => []).add(item);
     }
 
-    // Order groups by FK priority so parent tables (warehouses, businesses,
+    // Order groups by FK priority so parent tables (stores, businesses,
     // …) are pushed before children. Within a priority bucket, order is
     // arbitrary — children share their parent's priority bucket only if
     // they truly don't depend on each other.
@@ -777,7 +777,7 @@ class SupabaseSyncService {
 
     await _db.transaction(() async {
       // Inventory cache: pos_record_sale and pos_inventory_delta both return
-      // an `inventory_after` array of {product_id, warehouse_id, quantity,
+      // an `inventory_after` array of {product_id, store_id, quantity,
       // last_updated_at}. The Drift `bump_inventory_last_updated_at` trigger
       // only fires when OLD.last_updated_at IS NEW.last_updated_at; we
       // explicitly write the server's value, so the trigger is a no-op and
@@ -787,17 +787,17 @@ class SupabaseSyncService {
         for (final raw in invAfter) {
           if (raw is! Map) continue;
           final productId = raw['product_id'] as String?;
-          final warehouseId = raw['warehouse_id'] as String?;
+          final storeId = raw['store_id'] as String?;
           final quantity = raw['quantity'];
           final luaStr = raw['last_updated_at'] as String?;
-          if (productId == null || warehouseId == null || quantity is! int) {
+          if (productId == null || storeId == null || quantity is! int) {
             continue;
           }
           final lua = luaStr != null ? DateTime.tryParse(luaStr) : null;
           await (_db.update(_db.inventory)
                 ..where((t) =>
                     t.productId.equals(productId) &
-                    t.warehouseId.equals(warehouseId)))
+                    t.storeId.equals(storeId)))
               .write(InventoryCompanion(
             quantity: Value(quantity),
             lastUpdatedAt: Value(lua ?? DateTime.now()),
@@ -1155,7 +1155,7 @@ class SupabaseSyncService {
   /// any failure so the calling screen surfaces "check your connection".
   ///
   /// Tables (FK-safe order for restore):
-  ///   profiles → businesses → users → warehouses
+  ///   profiles → businesses → users → stores
   ///
   /// Parallel fetch via `Future.wait` of `_fetchOneTable` calls (HTTP/2
   /// multiplexes the connection; on bandwidth-bound 3G the wins are
@@ -1172,15 +1172,15 @@ class SupabaseSyncService {
     );
     // FK-safe restore order:
     //   businesses  → no inbound deps among this set
-    //   warehouses  → references businesses
-    //   users       → references businesses AND warehouses
+    //   stores  → references businesses
+    //   users       → references businesses AND stores
     //   profiles    → cloud-only; no local Drift table so _restoreTableData
     //                 is a no-op. Kept in the fetch set so the 4-call
     //                 round-trip count matches the plan; safe to drop later
     //                 if we want one fewer request on the critical path.
     // The download is parallel via Future.wait — list ordering only
     // controls the sequential restore below.
-    const tables = ['profiles', 'businesses', 'warehouses', 'users'];
+    const tables = ['profiles', 'businesses', 'stores', 'users'];
     try {
       final fetched = await Future.wait(
         tables.map((t) => _fetchOneTable(t, businessId, null)),
@@ -1295,7 +1295,7 @@ class SupabaseSyncService {
     'businesses',
     'crate_groups',
     'manufacturers',
-    'warehouses',
+    'stores',
     'users',
     'profiles',
     'categories',
@@ -1747,8 +1747,8 @@ class SupabaseSyncService {
   /// Sequential initialization. The previous implementation fired the
   /// backfill, backoff-clear and listener subscription in parallel as
   /// `unawaited` futures, which raced: the first push tick could load the
-  /// queue before the warehouse backfill INSERT had committed, so the
-  /// warehouse was missing and the customer/wallet FK-failed against a
+  /// queue before the store backfill INSERT had committed, so the
+  /// store was missing and the customer/wallet FK-failed against a
   /// cloud row that didn't exist yet. Awaiting the prep work in order
   /// guarantees the queue is in its final state before we subscribe.
   Future<void> _initAutoPush() async {
@@ -1888,15 +1888,15 @@ class SupabaseSyncService {
     }
   }
 
-  /// Enqueues an upsert for any warehouse that has never been synced
-  /// (`lastUpdatedAt IS NULL`). Onboarding originally inserted warehouses
+  /// Enqueues an upsert for any store that has never been synced
+  /// (`lastUpdatedAt IS NULL`). Onboarding originally inserted stores
   /// without going through the sync queue, leaving customer/product FKs
   /// dangling in the cloud. Idempotent: marking `lastUpdatedAt` after
   /// enqueueing prevents re-queueing on subsequent startups.
-  Future<void> _backfillUnsyncedWarehouses() async {
+  Future<void> _backfillUnsyncedStores() async {
     try {
       final whs = await (_db.select(
-        _db.warehouses,
+        _db.stores,
       )..where((t) => t.lastUpdatedAt.isNull())).get();
       if (whs.isEmpty) return;
 
@@ -1905,7 +1905,7 @@ class SupabaseSyncService {
       for (final w in whs) {
         final businessId = w.businessId;
         await _db.syncDao.enqueue(
-          'warehouses:upsert',
+          'stores:upsert',
           jsonEncode({
             'id': w.id,
             'business_id': businessId,
@@ -1915,16 +1915,16 @@ class SupabaseSyncService {
             'is_deleted': w.isDeleted,
           }),
         );
-        await (_db.update(_db.warehouses)..where((t) => t.id.equals(w.id)))
-            .write(WarehousesCompanion(lastUpdatedAt: Value(now)));
+        await (_db.update(_db.stores)..where((t) => t.id.equals(w.id)))
+            .write(StoresCompanion(lastUpdatedAt: Value(now)));
         enqueued++;
       }
 
       if (enqueued > 0) {
-        debugPrint('[SyncService] Warehouse backfill: enqueued=$enqueued');
+        debugPrint('[SyncService] Store backfill: enqueued=$enqueued');
       }
     } catch (e) {
-      debugPrint('[SyncService] Warehouse backfill failed: $e');
+      debugPrint('[SyncService] Store backfill failed: $e');
     }
   }
 
@@ -2099,7 +2099,7 @@ class SupabaseSyncService {
 
   Future<void> _backfillAllUnsyncedTables() async {
     try {
-      await _backfillUnsyncedWarehouses();
+      await _backfillUnsyncedStores();
       await _backfillUnsyncedUsers();
       await _backfillUnsyncedCategories();
       await _backfillTable(_db.products, 'products', (row) => row.id);
@@ -2319,11 +2319,11 @@ class SupabaseSyncService {
                 .insertOnConflictUpdate(BusinessData.fromJson(r));
           }
           break;
-        case 'warehouses':
+        case 'stores':
           for (var r in rows) {
             await _db
-                .into(_db.warehouses)
-                .insertOnConflictUpdate(WarehouseData.fromJson(r));
+                .into(_db.stores)
+                .insertOnConflictUpdate(StoreData.fromJson(r));
           }
           break;
         case 'users':
@@ -2338,7 +2338,7 @@ class SupabaseSyncService {
           //
           // Cloud-owned fields mirrored here (keep in sync with app_database
           // `Users` table and `0001_initial.sql public.users`):
-          //   businessId, authUserId, name, email, warehouseId,
+          //   businessId, authUserId, name, email, storeId,
           //   createdAt, lastNotificationSentAt, lastUpdatedAt.
           // Device-local fields intentionally omitted (never overwrite from
           // cloud):
@@ -2373,7 +2373,7 @@ class SupabaseSyncService {
                   authUserId: Value(r['authUserId'] as String?),
                   name: Value(r['name'] as String? ?? ''),
                   email: Value(r['email'] as String?),
-                  warehouseId: Value(r['warehouseId'] as String?),
+                  storeId: Value(r['storeId'] as String?),
                   lastNotificationSentAt: Value(lastNotificationSentAt),
                   lastUpdatedAt: Value(lastUpdatedAt),
                 ),
@@ -2389,7 +2389,7 @@ class SupabaseSyncService {
                       name: r['name'] as String? ?? '',
                       email: Value(r['email'] as String?),
                       pin: kSetupRequiredPin,
-                      warehouseId: Value(r['warehouseId'] as String?),
+                      storeId: Value(r['storeId'] as String?),
                       createdAt: Value(createdAt),
                       lastNotificationSentAt: Value(lastNotificationSentAt),
                       lastUpdatedAt: Value(lastUpdatedAt),

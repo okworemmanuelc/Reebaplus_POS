@@ -29,8 +29,8 @@ void main() {
   late TestClients clients;
   late TestBusinessFixture fixture;
 
-  // Reusable warehouse + product across tests (admin-inserted in setUpAll).
-  late String warehouseId;
+  // Reusable store + product across tests (admin-inserted in setUpAll).
+  late String storeId;
   late String productId;
 
   setUpAll(() async {
@@ -38,11 +38,11 @@ void main() {
     clients = await TestClients.setUp();
     fixture = TestBusinessFixture(clients.adminClient, clients.env.businessId);
 
-    warehouseId = UuidV7.generate();
-    await clients.adminClient.from('warehouses').insert({
-      'id': warehouseId,
+    storeId = UuidV7.generate();
+    await clients.adminClient.from('stores').insert({
+      'id': storeId,
       'business_id': clients.env.businessId,
-      'name': 'Inventory Delta Warehouse',
+      'name': 'Inventory Delta Store',
     });
 
     productId = UuidV7.generate();
@@ -58,7 +58,7 @@ void main() {
     await clients.adminClient.from('inventory').insert({
       'business_id': clients.env.businessId,
       'product_id': productId,
-      'warehouse_id': warehouseId,
+      'store_id': storeId,
       'quantity': 100,
     });
   });
@@ -83,7 +83,7 @@ void main() {
             {
               'movement_id': movementId,
               'product_id': productId,
-              'warehouse_id': warehouseId,
+              'store_id': storeId,
               'quantity_delta': 10,
               'movement_type': 'adjustment',
               'reason': 'restock',
@@ -138,7 +138,7 @@ void main() {
               {
                 'movement_id': movementId,
                 'product_id': productId,
-                'warehouse_id': warehouseId,
+                'store_id': storeId,
                 'quantity_delta': 5,
                 'movement_type': 'adjustment',
                 'reason': 'replay test',
@@ -183,7 +183,7 @@ void main() {
             {
               'movement_id': movementId,
               'product_id': productId,
-              'warehouse_id': warehouseId,
+              'store_id': storeId,
               'quantity_delta': 1,
               'movement_type': 'adjustment',
             },
@@ -205,7 +205,7 @@ void main() {
           .select('quantity')
           .eq('business_id', clients.env.businessId)
           .eq('product_id', productId)
-          .eq('warehouse_id', warehouseId)
+          .eq('store_id', storeId)
           .single();
       final preQty = preInv['quantity'] as int;
 
@@ -222,7 +222,7 @@ void main() {
               // Movement 1: succeeds — small positive delta.
               'movement_id': goodMovementId,
               'product_id': productId,
-              'warehouse_id': warehouseId,
+              'store_id': storeId,
               'quantity_delta': 3,
               'movement_type': 'adjustment',
               'reason': 'first ok',
@@ -231,7 +231,7 @@ void main() {
               // Movement 2: fails — tries to debit more than the cap.
               'movement_id': badMovementId,
               'product_id': productId,
-              'warehouse_id': warehouseId,
+              'store_id': storeId,
               'quantity_delta': -100000,
               'movement_type': 'adjustment',
               'reason': 'second blows up',
@@ -254,7 +254,7 @@ void main() {
           .select('quantity')
           .eq('business_id', clients.env.businessId)
           .eq('product_id', productId)
-          .eq('warehouse_id', warehouseId)
+          .eq('store_id', storeId)
           .single();
       expect(postInv['quantity'], preQty,
           reason: 'inventory must be unchanged after a mid-flight rollback');
@@ -273,7 +273,7 @@ void main() {
             {
               'movement_id': movementId,
               'product_id': productId,
-              'warehouse_id': warehouseId,
+              'store_id': storeId,
               'quantity_delta': -1,
               'movement_type': 'sale', // forbidden — sales must use record_sale
             },

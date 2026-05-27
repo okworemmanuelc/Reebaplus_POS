@@ -181,7 +181,7 @@ class _ProductPreviewModalState extends ConsumerState<ProductPreviewModal>
                   // Details Grid
                   _buildDetailRow(
                     context,
-                    FontAwesomeIcons.warehouse,
+                    FontAwesomeIcons.store,
                     'Current Stock',
                     '${widget.totalStock} ${product.unit}',
                     primaryColor,

@@ -12,30 +12,30 @@ import 'package:reebaplus_pos/core/widgets/app_fab.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 
-// Flat display-list item: either a warehouse section header or a row index.
+// Flat display-list item: either a store section header or a row index.
 class _DisplayItem {
-  final String? warehouseName;
+  final String? storeName;
   final int? rowIndex;
-  bool get isHeader => warehouseName != null;
+  bool get isHeader => storeName != null;
   const _DisplayItem.header(String name)
-    : warehouseName = name,
+    : storeName = name,
       rowIndex = null;
-  const _DisplayItem.row(int idx) : warehouseName = null, rowIndex = idx;
+  const _DisplayItem.row(int idx) : storeName = null, rowIndex = idx;
 }
 
 class StockCountScreen extends ConsumerStatefulWidget {
-  /// If provided, only products in this warehouse are loaded and adjustments
-  /// are written to this warehouse. Null means all warehouses (grouped view).
-  final String? warehouseId;
+  /// If provided, only products in this store are loaded and adjustments
+  /// are written to this store. Null means all stores (grouped view).
+  final String? storeId;
 
-  const StockCountScreen({super.key, this.warehouseId});
+  const StockCountScreen({super.key, this.storeId});
 
   @override
   ConsumerState<StockCountScreen> createState() => _StockCountScreenState();
 }
 
 class _StockCountScreenState extends ConsumerState<StockCountScreen> {
-  List<ProductStockWithWarehouse> _items = [];
+  List<ProductStockWithStore> _items = [];
   final List<TextEditingController> _controllers = [];
   bool _loading = true;
   bool _saving = false;
@@ -63,8 +63,8 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
   }
 
   Future<void> _loadProducts() async {
-    final items = await ref.read(databaseProvider).inventoryDao.getProductsStockPerWarehouse(
-      warehouseId: widget.warehouseId,
+    final items = await ref.read(databaseProvider).inventoryDao.getProductsStockPerStore(
+      storeId: widget.storeId,
     );
     if (!mounted) return;
     setState(() {
@@ -98,7 +98,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
       final item = _items[i];
       await db.inventoryDao.adjustStock(
         item.product.id,
-        item.warehouseId,
+        item.storeId,
         diff,
         'Daily stock count adjustment',
         null,
@@ -510,9 +510,9 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                   fontWeight: FontWeight.w800,
                 ),
               ),
-              if (widget.warehouseId != null)
+              if (widget.storeId != null)
                 Text(
-                  'Warehouse #${widget.warehouseId}',
+                  'Store #${widget.storeId}',
                   style: TextStyle(
                     color: _subtext,
                     fontSize: context.getRFontSize(11),
@@ -583,14 +583,14 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
   }
 
   Widget _buildTable(BuildContext context) {
-    // Build flat display list: warehouse headers interleaved with row indices
+    // Build flat display list: store headers interleaved with row indices
     final displayItems = <_DisplayItem>[];
-    String? lastWarehouse;
+    String? lastStore;
     for (int i = 0; i < _items.length; i++) {
-      final name = _items[i].warehouseName;
-      if (name != lastWarehouse) {
+      final name = _items[i].storeName;
+      if (name != lastStore) {
         displayItems.add(_DisplayItem.header(name));
-        lastWarehouse = name;
+        lastStore = name;
       }
       displayItems.add(_DisplayItem.row(i));
     }
@@ -608,7 +608,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
             itemBuilder: (_, idx) {
               final di = displayItems[idx];
               return di.isHeader
-                  ? _buildWarehouseHeader(context, di.warehouseName!)
+                  ? _buildStoreHeader(context, di.storeName!)
                   : _buildRow(context, di.rowIndex!);
             },
           ),
@@ -650,7 +650,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
     );
   }
 
-  Widget _buildWarehouseHeader(BuildContext context, String name) {
+  Widget _buildStoreHeader(BuildContext context, String name) {
     return Container(
       padding: EdgeInsets.fromLTRB(
         context.getRSize(16),
@@ -670,7 +670,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
-              FontAwesomeIcons.warehouse,
+              FontAwesomeIcons.store,
               size: context.getRSize(11),
               color: Theme.of(context).colorScheme.primary,
             ),

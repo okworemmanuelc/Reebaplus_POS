@@ -13,7 +13,7 @@ import '../../helpers/test_business_fixture.dart';
 ///
 /// Note on cleanup: products are soft-deletable but `stock_transactions`
 /// and `stock_adjustments` are append-only and FK back to products /
-/// warehouses, so the parent rows leak per run. Acceptable for
+/// stores, so the parent rows leak per run. Acceptable for
 /// dev-machine integration runs; reset the test business periodically.
 
 final String? _skipReason = (() {
@@ -29,18 +29,18 @@ void main() {
   late TestClients clients;
   late TestBusinessFixture fixture;
 
-  late String warehouseId;
+  late String storeId;
 
   setUpAll(() async {
     if (_skipReason != null) return;
     clients = await TestClients.setUp();
     fixture = TestBusinessFixture(clients.adminClient, clients.env.businessId);
 
-    warehouseId = UuidV7.generate();
-    await clients.adminClient.from('warehouses').insert({
-      'id': warehouseId,
+    storeId = UuidV7.generate();
+    await clients.adminClient.from('stores').insert({
+      'id': storeId,
       'business_id': clients.env.businessId,
-      'name': 'Create-Product Test Warehouse',
+      'name': 'Create-Product Test Store',
     });
   });
 
@@ -112,7 +112,7 @@ void main() {
           'p_name': 'Stocked Beer V2',
           'p_selling_price_kobo': 100000,
           'p_initial_stock': {
-            'warehouse_id': warehouseId,
+            'store_id': storeId,
             'quantity': 24,
           },
         },
@@ -150,7 +150,7 @@ void main() {
             'p_name': 'Replay Beer',
             'p_selling_price_kobo': 60000,
             'p_initial_stock': {
-              'warehouse_id': warehouseId,
+              'store_id': storeId,
               'quantity': 10,
             },
           };
@@ -180,7 +180,7 @@ void main() {
           .select('quantity')
           .eq('business_id', clients.env.businessId)
           .eq('product_id', productId)
-          .eq('warehouse_id', warehouseId)
+          .eq('store_id', storeId)
           .single();
       expect(cloudInv['quantity'], 10,
           reason: 'replay must not double the inventory cache');

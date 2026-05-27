@@ -21,7 +21,7 @@ class ActivityLogService extends ValueNotifier<List<ActivityLog>> {
     String action,
     String description, {
     String? staffId,
-    String? warehouseId,
+    String? storeId,
     String? orderId,
     String? productId,
     String? customerId,
@@ -39,7 +39,7 @@ class ActivityLogService extends ValueNotifier<List<ActivityLog>> {
       expenseId: expenseId,
       deliveryId: deliveryId,
       walletTxnId: walletTxnId,
-      warehouseId: warehouseId,
+      storeId: storeId,
     );
   }
 

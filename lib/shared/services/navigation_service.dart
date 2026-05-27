@@ -58,18 +58,18 @@ class NavigationService {
     mainScaffoldKey.currentState?.closeDrawer();
   }
 
-  final ValueNotifier<bool> warehouseLocked = ValueNotifier<bool>(false);
-  final ValueNotifier<String?> lockedWarehouseId = ValueNotifier<String?>(null);
+  final ValueNotifier<bool> storeLocked = ValueNotifier<bool>(false);
+  final ValueNotifier<String?> lockedStoreId = ValueNotifier<String?>(null);
 
-  /// Used by InventoryScreen to react to warehouse changes from other screens.
-  final ValueNotifier<String?> selectedWarehouseId = ValueNotifier<String?>(
+  /// Used by InventoryScreen to react to store changes from other screens.
+  final ValueNotifier<String?> selectedStoreId = ValueNotifier<String?>(
     null,
   );
 
-  /// One-shot warehouse pre-filter for CustomersScreen. Set by the warehouse
+  /// One-shot store pre-filter for CustomersScreen. Set by the store
   /// details "Customers" card before switching to the customers tab. The
   /// customers screen reads this once on init and clears it.
-  final ValueNotifier<String?> customersInitialWarehouseId = ValueNotifier<String?>(
+  final ValueNotifier<String?> customersInitialStoreId = ValueNotifier<String?>(
     null,
   );
 
@@ -81,7 +81,7 @@ class NavigationService {
     4: 'customers',
     5: 'payments',
     6: 'expenses',
-    7: 'warehouse',
+    7: 'stores',
     8: 'cart',
     9: 'deliveries',
     10: 'activity',
@@ -184,18 +184,18 @@ class NavigationService {
   }
 
   /// Called right after login. With staff management removed, the lone
-  /// owner has no warehouse lock — they can move freely across all
-  /// warehouses they own. Kept as a no-op for callers that still invoke
+  /// owner has no store lock — they can move freely across all
+  /// stores they own. Kept as a no-op for callers that still invoke
   /// it during login flow.
-  void applyUserWarehouseLock(String? warehouseId) {
-    warehouseLocked.value = false;
-    lockedWarehouseId.value = null;
+  void applyUserStoreLock(String? storeId) {
+    storeLocked.value = false;
+    lockedStoreId.value = null;
   }
 
-  /// Called on logout — removes all warehouse restrictions.
-  void clearWarehouseLock() {
-    warehouseLocked.value = false;
-    lockedWarehouseId.value = null;
+  /// Called on logout — removes all store restrictions.
+  void clearStoreLock() {
+    storeLocked.value = false;
+    lockedStoreId.value = null;
   }
 
   /// Resets navigation state to defaults. Call on logout so the next session
@@ -211,8 +211,8 @@ class NavigationService {
     currentTabCanPop.value = false;
   }
 
-  /// Manually update the warehouse lock (e.g. for CEO switching locations in POS)
-  void setLockedWarehouse(String? id) {
-    lockedWarehouseId.value = id;
+  /// Manually update the store lock (e.g. for CEO switching locations in POS)
+  void setLockedStore(String? id) {
+    lockedStoreId.value = id;
   }
 }

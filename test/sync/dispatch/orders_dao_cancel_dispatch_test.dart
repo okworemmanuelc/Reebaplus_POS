@@ -7,29 +7,29 @@ import 'package:timezone/data/latest_all.dart' as tzdata;
 import '../../helpers/dispatch_test_utils.dart';
 
 class _CancelSeed {
-  final String warehouseId;
+  final String storeId;
   final String staffId;
   final String productId;
   final String customerId;
   _CancelSeed({
-    required this.warehouseId,
+    required this.storeId,
     required this.staffId,
     required this.productId,
     required this.customerId,
   });
 }
 
-/// Seeds: warehouse, staff, product (+10 inventory), customer (+wallet
+/// Seeds: store, staff, product (+10 inventory), customer (+wallet
 /// auto-created by addCustomer). The bootstrapTestDb() fixture supplies
 /// the business row, so the test only owns sub-entities.
 Future<_CancelSeed> _seedCancelFixtures(
   AppDatabase db,
   String businessId,
 ) async {
-  final warehouseId = UuidV7.generate();
-  await db.into(db.warehouses).insert(
-        WarehousesCompanion.insert(
-          id: Value(warehouseId),
+  final storeId = UuidV7.generate();
+  await db.into(db.stores).insert(
+        StoresCompanion.insert(
+          id: Value(storeId),
           businessId: businessId,
           name: 'Main',
         ),
@@ -56,7 +56,7 @@ Future<_CancelSeed> _seedCancelFixtures(
         InventoryCompanion.insert(
           businessId: businessId,
           productId: productId,
-          warehouseId: warehouseId,
+          storeId: storeId,
           quantity: const Value(10),
         ),
       );
@@ -64,7 +64,7 @@ Future<_CancelSeed> _seedCancelFixtures(
     CustomersCompanion.insert(businessId: businessId, name: 'Buyer'),
   );
   return _CancelSeed(
-    warehouseId: warehouseId,
+    storeId: storeId,
     staffId: staffId,
     productId: productId,
     customerId: customerId,
@@ -88,7 +88,7 @@ OrdersCompanion _orderCompanion(
     paymentType: 'cash',
     status: 'completed',
     staffId: Value(s.staffId),
-    warehouseId: Value(s.warehouseId),
+    storeId: Value(s.storeId),
   );
 }
 
@@ -97,7 +97,7 @@ OrderItemsCompanion _itemCompanion(_CancelSeed s, String businessId) {
     businessId: businessId,
     orderId: 'placeholder', // overwritten by createOrder
     productId: s.productId,
-    warehouseId: s.warehouseId,
+    storeId: s.storeId,
     quantity: 2,
     unitPriceKobo: 100000,
     totalKobo: 200000,
@@ -119,7 +119,7 @@ Future<String> _createSaleAndDrainQueue(
     amountPaidKobo: 200000,
     totalAmountKobo: 200000,
     staffId: s.staffId,
-    warehouseId: s.warehouseId,
+    storeId: s.storeId,
   );
   final orderId = (await db.select(db.orders).getSingle()).id;
 

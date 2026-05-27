@@ -7,7 +7,7 @@ import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 
 /// Brief loading screen shown only when local DB has no `businesses` row
 /// (fresh device sign-in). Runs `syncMinimumLogin` to fetch the 4 tables
-/// MainLayout needs to render (profiles, businesses, users, warehouses).
+/// MainLayout needs to render (profiles, businesses, users, stores).
 /// Expected wall-clock: ~1-6s depending on link speed. The whole-tenant
 /// pull continues in the background from `setCurrentUser` after MainLayout
 /// mounts. The screen only re-appears in the user-visible flow on a

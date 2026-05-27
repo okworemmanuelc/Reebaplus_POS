@@ -30,13 +30,13 @@ class ProductDetailScreen extends ConsumerStatefulWidget {
   final InventoryItem item;
   final VoidCallback onUpdateStock;
   final String?
-  selectedWarehouseId; // null = "All Warehouses" — quantity editing blocked
+  selectedStoreId; // null = "All Stores" — quantity editing blocked
 
   const ProductDetailScreen({
     super.key,
     required this.item,
     required this.onUpdateStock,
-    this.selectedWarehouseId,
+    this.selectedStoreId,
   });
 
   @override
@@ -72,7 +72,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   bool _deliveryLoaded = false;
   bool _contentReady = false; // deferred load flag
   bool _canEdit =
-      true; // false for managers viewing other-warehouse products, and for staff
+      true; // false for managers viewing other-store products, and for staff
   String? _imagePath;
 
   @override
@@ -486,15 +486,15 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                   border: Border.all(color: _border),
                 ),
                 child: GestureDetector(
-                  onTap: widget.selectedWarehouseId == null && _canEdit
+                  onTap: widget.selectedStoreId == null && _canEdit
                       ? () => AppNotification.showError(
                           context,
-                          'Select a specific warehouse to edit stock quantity.',
+                          'Select a specific store to edit stock quantity.',
                         )
                       : null,
                   child: AppInput(
                     controller: _quantityController,
-                    readOnly: !_canEdit || widget.selectedWarehouseId == null,
+                    readOnly: !_canEdit || widget.selectedStoreId == null,
                     keyboardType: TextInputType.number,
                     textAlign: TextAlign.center,
                     onChanged: (v) => setState(() {}),
@@ -751,7 +751,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                       builder: (_) => UpdateProductSheet(
                         product: _productData!,
                         totalStock: widget.item.totalStock.toInt(),
-                        currentWarehouseId: widget.selectedWarehouseId,
+                        currentStoreId: widget.selectedStoreId,
                         onProductUpdated: () {
                           widget.onUpdateStock();
                           if (mounted) Navigator.pop(context);
@@ -780,7 +780,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                   SizedBox(width: context.getRSize(8)),
                   Flexible(
                     child: Text(
-                      'View only — this product is not in your warehouse',
+                      'View only — this product is not in your store',
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: context.getRFontSize(13),

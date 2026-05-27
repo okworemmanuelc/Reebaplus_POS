@@ -27,7 +27,7 @@ class ReceiptWidget extends StatelessWidget {
   /// manufacturerId → name — used to label crate deposit rows by manufacturer.
   final Map<String, String>? manufacturerNames;
 
-  /// Name of the warehouse / branch that processed this sale.
+  /// Name of the store / branch that processed this sale.
   final String? branchName;
 
   const ReceiptWidget({

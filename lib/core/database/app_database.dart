@@ -85,8 +85,8 @@ class Manufacturers extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-@DataClassName('WarehouseData')
-class Warehouses extends Table {
+@DataClassName('StoreData')
+class Stores extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get name => text()();
@@ -118,7 +118,7 @@ class Users extends Table {
   TextColumn get avatarColor => text().withDefault(const Constant('#3B82F6'))();
   BoolColumn get biometricEnabled =>
       boolean().withDefault(const Constant(false))();
-  TextColumn get warehouseId => text().nullable().references(Warehouses, #id)();
+  TextColumn get storeId => text().nullable().references(Stores, #id)();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastNotificationSentAt => dateTime().nullable()();
   DateTimeColumn get lastUpdatedAt =>
@@ -239,7 +239,7 @@ class PriceLists extends Table {
 class Customers extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
   TextColumn get businessId => text().references(Businesses, #id)();
-  TextColumn get warehouseId => text().nullable().references(Warehouses, #id)();
+  TextColumn get storeId => text().nullable().references(Stores, #id)();
   TextColumn get name => text()();
   TextColumn get phone => text().nullable()();
   TextColumn get email => text().nullable()();
@@ -394,7 +394,7 @@ class Inventory extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get productId => text().references(Products, #id)();
-  TextColumn get warehouseId => text().references(Warehouses, #id)();
+  TextColumn get storeId => text().references(Stores, #id)();
   IntColumn get quantity => integer().withDefault(const Constant(0))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
@@ -405,7 +405,7 @@ class Inventory extends Table {
 
   @override
   List<String> get customConstraints => [
-    'UNIQUE (business_id, product_id, warehouse_id)',
+    'UNIQUE (business_id, product_id, store_id)',
   ];
 }
 
@@ -419,8 +419,8 @@ class Inventory extends Table {
 class StockTransfers extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
   TextColumn get businessId => text().references(Businesses, #id)();
-  TextColumn get fromLocationId => text().references(Warehouses, #id)();
-  TextColumn get toLocationId => text().references(Warehouses, #id)();
+  TextColumn get fromLocationId => text().references(Stores, #id)();
+  TextColumn get toLocationId => text().references(Stores, #id)();
   TextColumn get productId => text().references(Products, #id)();
   IntColumn get quantity => integer()();
   TextColumn get status => text().withDefault(const Constant('pending'))();
@@ -447,7 +447,7 @@ class StockAdjustments extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get productId => text().references(Products, #id)();
-  TextColumn get warehouseId => text().references(Warehouses, #id)();
+  TextColumn get storeId => text().references(Stores, #id)();
   IntColumn get quantityDiff => integer()();
   TextColumn get reason => text()();
   TextColumn get performedBy => text().nullable().references(Users, #id)();
@@ -465,7 +465,7 @@ class StockTransactions extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get productId => text().references(Products, #id)();
-  TextColumn get locationId => text().references(Warehouses, #id)();
+  TextColumn get locationId => text().references(Stores, #id)();
   IntColumn get quantityDelta => integer()();
   TextColumn get movementType => text()();
   TextColumn get orderId => text().nullable().references(Orders, #id)();
@@ -514,7 +514,7 @@ class Orders extends Table {
   TextColumn get cancellationReason => text().nullable()();
   TextColumn get barcode => text().nullable()();
   TextColumn get staffId => text().nullable().references(Users, #id)();
-  TextColumn get warehouseId => text().nullable().references(Warehouses, #id)();
+  TextColumn get storeId => text().nullable().references(Stores, #id)();
   IntColumn get crateDepositPaidKobo =>
       integer().withDefault(const Constant(0))();
   DateTimeColumn get completedAt => dateTime().nullable()();
@@ -540,7 +540,7 @@ class OrderItems extends Table {
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get orderId => text().references(Orders, #id)();
   TextColumn get productId => text().references(Products, #id)();
-  TextColumn get warehouseId => text().references(Warehouses, #id)();
+  TextColumn get storeId => text().references(Stores, #id)();
   IntColumn get quantity => integer()();
   IntColumn get unitPriceKobo => integer()();
   IntColumn get buyingPriceKobo => integer().withDefault(const Constant(0))();
@@ -628,7 +628,7 @@ class Expenses extends Table {
   TextColumn get paymentMethod => text().nullable()();
   TextColumn get recordedBy => text().nullable().references(Users, #id)();
   TextColumn get reference => text().nullable()();
-  TextColumn get warehouseId => text().nullable().references(Warehouses, #id)();
+  TextColumn get storeId => text().nullable().references(Stores, #id)();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
@@ -784,7 +784,7 @@ class ActivityLogs extends Table {
       text().nullable().references(DeliveryReceipts, #id)();
   TextColumn get walletTxnId =>
       text().nullable().references(WalletTransactions, #id)();
-  TextColumn get warehouseId => text().nullable().references(Warehouses, #id)();
+  TextColumn get storeId => text().nullable().references(Stores, #id)();
   DateTimeColumn get voidedAt => dateTime().nullable()();
   TextColumn get voidedBy => text().nullable().references(Users, #id)();
   TextColumn get voidReason => text().nullable()();
@@ -864,6 +864,19 @@ class Sessions extends Table {
   @override
   Set<Column> get primaryKey => {id};
 }
+
+// ---------------------------------------------------------------------------
+// Master plan §2.4 — roles, permissions, and membership (schema v13)
+// ---------------------------------------------------------------------------
+//
+// Six tenant-scoped synced tables (roles, role_permissions, role_settings,
+// user_businesses, invite_codes, user_stores) plus one global static-config
+// table (permissions). The cloud's `complete_onboarding` RPC seeds the four
+// default roles + 63 role_permissions + 8 role_settings + the CEO's
+// membership on new business creation; pre-existing businesses are
+// backfilled by cloud migration 0043. Local devices receive the seeded rows
+// via the next sync pull. Local seeding happens only for the global
+// `permissions` table (identical on every device).
 
 /// Global static config. One row per permission key. NOT in
 /// `_syncedTenantTables` — the keys are identical on every device and
@@ -983,9 +996,8 @@ class InviteCodes extends Table {
   // a match (master plan §6).
   TextColumn get email => text()();
   // The store the invitee will be assigned to on acceptance
-  // (master plan §6.2). Will rename to storeId during the
-  // warehouses → stores rename pass (PIVOT_PLAN step 3).
-  TextColumn get warehouseId => text().references(Warehouses, #id)();
+  // (master plan §6.2).
+  TextColumn get storeId => text().references(Stores, #id)();
   TextColumn get generatedByUserId => text().references(Users, #id)();
   DateTimeColumn get expiresAt => dateTime()();
   TextColumn get usedByUserId => text().nullable().references(Users, #id)();
@@ -1005,8 +1017,7 @@ class UserStores extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get userId => text().references(Users, #id)();
-  // Will rename to storeId during the warehouses → stores rename pass.
-  TextColumn get warehouseId => text().references(Warehouses, #id)();
+  TextColumn get storeId => text().references(Stores, #id)();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
       dateTime().withDefault(currentDateAndTime)();
@@ -1016,7 +1027,7 @@ class UserStores extends Table {
 
   @override
   List<String> get customConstraints => [
-    'UNIQUE (user_id, warehouse_id)',
+    'UNIQUE (user_id, store_id)',
   ];
 }
 
@@ -1103,7 +1114,7 @@ class MigrationEvents extends Table {
     Businesses,
     CrateGroups,
     Manufacturers,
-    Warehouses,
+    Stores,
     Users,
     Categories,
     Suppliers,
@@ -1156,7 +1167,7 @@ class MigrationEvents extends Table {
     SyncDao,
     ActivityLogDao,
     NotificationsDao,
-    WarehousesDao,
+    StoresDao,
     StockLedgerDao,
     StockTransferDao,
     PendingCrateReturnsDao,
@@ -1210,7 +1221,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 13;
+  int get schemaVersion => 14;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1548,6 +1559,132 @@ class AppDatabase extends _$AppDatabase {
           await customStatement(stmt);
         }
       }
+      if (from < 14) {
+        // v14 (Reebaplus pivot step 3): rename warehouses → stores
+        // throughout the schema. Mirrors supabase/migrations/
+        // 0045_rename_warehouses_to_stores.sql.
+        //
+        // SQLite ≥ 3.25 auto-updates FK definitions, trigger bodies,
+        // and index column references through ALTER TABLE ... RENAME TO
+        // and RENAME COLUMN. Index NAMES and trigger NAMES that embed
+        // the old name (idx_warehouses_*, bump_warehouses_*,
+        // idx_inventory_business_pw) must still be rebuilt explicitly.
+        //
+        // The v13-era `invite_codes.warehouse_id` and
+        // `user_stores.warehouse_id` placeholder columns are renamed
+        // here in the same pass.
+
+        // 1. Rename the table.
+        await customStatement('ALTER TABLE warehouses RENAME TO stores');
+
+        // 2. Rename warehouse_id columns to store_id everywhere.
+        for (final t in const [
+          'users',
+          'customers',
+          'inventory',
+          'stock_adjustments',
+          'orders',
+          'order_items',
+          'expenses',
+          'activity_logs',
+          'invite_codes',
+          'user_stores',
+        ]) {
+          await customStatement(
+            'ALTER TABLE $t RENAME COLUMN warehouse_id TO store_id',
+          );
+        }
+
+        // 3. Rename the sync + soft-delete indexes on the renamed table.
+        await customStatement(
+          'DROP INDEX IF EXISTS idx_warehouses_business_lua',
+        );
+        await customStatement(
+          'DROP INDEX IF EXISTS idx_warehouses_business_deleted',
+        );
+        await customStatement(
+          'CREATE INDEX idx_stores_business_lua '
+          'ON stores (business_id, last_updated_at)',
+        );
+        await customStatement(
+          'CREATE INDEX idx_stores_business_deleted '
+          'ON stores (business_id, is_deleted)',
+        );
+
+        // 4. Rebuild the inventory hot-path index with the new name.
+        await customStatement('DROP INDEX IF EXISTS idx_inventory_business_pw');
+        await customStatement(
+          'CREATE INDEX idx_inventory_business_ps '
+          'ON inventory (business_id, product_id, store_id)',
+        );
+
+        // 5. Rename the bump trigger on the renamed table.
+        await customStatement(
+          'DROP TRIGGER IF EXISTS bump_warehouses_last_updated_at',
+        );
+        await customStatement(
+          'CREATE TRIGGER bump_stores_last_updated_at '
+          'AFTER UPDATE ON stores '
+          'FOR EACH ROW '
+          'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+          'BEGIN '
+          "UPDATE stores SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+          'END',
+        );
+
+        // 6. Forward any pending sync_queue rows that target the old
+        //    table name. (Writes to the renamed table itself.)
+        await customStatement(
+          "UPDATE sync_queue SET action_type = 'stores:upsert' "
+          "WHERE action_type = 'warehouses:upsert' AND status = 'pending'",
+        );
+        await customStatement(
+          "UPDATE sync_queue SET action_type = 'stores:delete' "
+          "WHERE action_type = 'warehouses:delete' AND status = 'pending'",
+        );
+
+        // 7. Rewrite pending sync_queue payload keys. Pre-v14 enqueued
+        //    writes for tables that reference the renamed table carry
+        //    `warehouse_id` in their JSON payload (e.g. users:upsert,
+        //    customers:upsert, inventory:upsert, …). After cloud 0045
+        //    deploys, those keys either get silently stripped by the
+        //    push-time column whitelist (users) or hard-fail with
+        //    PostgREST 42703 "column warehouse_id does not exist"
+        //    (every other table). Same problem at the domain RPC layer:
+        //    envelopes enqueued before v14 pass `p_warehouse_id` at the
+        //    top of their payload, and the cloud's renamed RPCs expect
+        //    `p_store_id`. Rewrite both shapes in place.
+        //
+        //    LIMITATION: this rewrites only TOP-LEVEL keys. Domain RPC
+        //    envelopes for pos_record_sale_v2 / pos_inventory_delta_v2
+        //    embed `warehouse_id` / `location_id` inside nested arrays
+        //    (`p_items`, `p_movements`). Those nested keys are NOT
+        //    rewritten — SQLite's json_set can't recurse, and the
+        //    nested shape is RPC-specific. If a v13 device upgrades
+        //    with pending domain envelopes that have nested
+        //    `warehouse_id` keys, those envelopes will fail loudly on
+        //    push and need to be replayed (or sync_queue cleared).
+        //    Practical risk: low — domain envelopes drain quickly and
+        //    are typically empty at app-restart time.
+        await customStatement(
+          "UPDATE sync_queue "
+          "SET payload = json_remove("
+          "  json_set(payload, '\$.store_id', json_extract(payload, '\$.warehouse_id')), "
+          "  '\$.warehouse_id'"
+          ") "
+          "WHERE status = 'pending' "
+          "  AND json_extract(payload, '\$.warehouse_id') IS NOT NULL",
+        );
+        await customStatement(
+          "UPDATE sync_queue "
+          "SET payload = json_remove("
+          "  json_set(payload, '\$.p_store_id', json_extract(payload, '\$.p_warehouse_id')), "
+          "  '\$.p_warehouse_id'"
+          ") "
+          "WHERE status = 'pending' "
+          "  AND json_extract(payload, '\$.p_warehouse_id') IS NOT NULL",
+        );
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -1641,7 +1778,7 @@ LazyDatabase _openConnection() {
 const List<String> _syncedTenantTables = [
   'users',
   'sessions',
-  'warehouses',
+  'stores',
   'manufacturers',
   'crate_groups',
   'categories',
@@ -1774,7 +1911,7 @@ String _sqlEscape(String s) => s.replaceAll("'", "''");
 // users row persists for historical FK reference. Keep the other entries
 // intact: products/customers/etc. still soft-delete normally.
 const List<String> _softDeletableTables = [
-  'warehouses',
+  'stores',
   'manufacturers',
   'crate_groups',
   'categories',
@@ -1852,7 +1989,7 @@ const List<_LedgerImmutability> _ledgerTables = [
     'expense_id',
     'delivery_id',
     'wallet_txn_id',
-    'warehouse_id',
+    'store_id',
     'created_at',
   ]),
   _LedgerImmutability('crate_ledger', [
@@ -1899,7 +2036,7 @@ List<String> get _postCreateStatements {
     'CREATE INDEX idx_customers_business_phone ON customers (business_id, phone)',
     'CREATE INDEX idx_wallet_txn_business_cust_time ON wallet_transactions (business_id, customer_id, created_at)',
     'CREATE INDEX idx_crate_ledger_owner_group ON crate_ledger (business_id, customer_id, manufacturer_id, crate_group_id, created_at)',
-    'CREATE INDEX idx_inventory_business_pw ON inventory (business_id, product_id, warehouse_id)',
+    'CREATE INDEX idx_inventory_business_ps ON inventory (business_id, product_id, store_id)',
     'CREATE INDEX idx_stock_txn_prod_loc_time ON stock_transactions (product_id, location_id, created_at)',
     'CREATE INDEX idx_orders_business_time ON orders (business_id, created_at)',
     'CREATE INDEX idx_orders_business_status ON orders (business_id, status)',

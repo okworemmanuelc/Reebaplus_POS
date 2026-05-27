@@ -177,7 +177,7 @@ void main() {
 class _SeedReport {
   final String businessId;
   final String userId;
-  final String warehouseId;
+  final String storeId;
   final List<RoleData> roles;
   final List<RolePermissionData> permissions;
   final List<RoleSettingData> settings;
@@ -187,7 +187,7 @@ class _SeedReport {
   _SeedReport({
     required this.businessId,
     required this.userId,
-    required this.warehouseId,
+    required this.storeId,
     required this.roles,
     required this.permissions,
     required this.settings,
@@ -207,7 +207,7 @@ Future<_SeedReport> _seedAndReport(
 }) async {
   final businessId = UuidV7.generate();
   final userId = UuidV7.generate();
-  final warehouseId = UuidV7.generate();
+  final storeId = UuidV7.generate();
   db.businessIdResolver = () => businessId;
   db.userIdResolver = () => userId;
 
@@ -217,9 +217,9 @@ Future<_SeedReport> _seedAndReport(
           name: businessName,
         ),
       );
-  await db.into(db.warehouses).insert(
-        WarehousesCompanion.insert(
-          id: Value(warehouseId),
+  await db.into(db.stores).insert(
+        StoresCompanion.insert(
+          id: Value(storeId),
           businessId: businessId,
           name: '$businessName Store',
         ),
@@ -238,13 +238,13 @@ Future<_SeedReport> _seedAndReport(
     db,
     businessId: businessId,
     userId: userId,
-    warehouseId: warehouseId,
+    storeId: storeId,
   );
 
   return _SeedReport(
     businessId: businessId,
     userId: userId,
-    warehouseId: warehouseId,
+    storeId: storeId,
     roles: await db.rolesDao.getAll(),
     permissions: await (db.select(db.rolePermissions)
           ..where((t) => t.businessId.equals(businessId)))
@@ -302,7 +302,7 @@ Future<void> _seedDefaultRolesForBusiness(
   AppDatabase db, {
   required String businessId,
   required String userId,
-  required String warehouseId,
+  required String storeId,
 }) async {
   await db.transaction(() async {
     // 4 roles.
@@ -421,7 +421,7 @@ Future<void> _seedDefaultRolesForBusiness(
             id: Value(UuidV7.generate()),
             businessId: businessId,
             userId: userId,
-            warehouseId: warehouseId,
+            storeId: storeId,
           ),
         );
   });

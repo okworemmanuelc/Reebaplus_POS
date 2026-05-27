@@ -68,7 +68,7 @@ void main() {
     }
 
     for (final bid in createdBusinessIds) {
-      // CASCADE on businesses → settings, warehouses, etc. all drop.
+      // CASCADE on businesses → settings, stores, etc. all drop.
       await clients.adminClient.from('businesses').delete().eq('id', bid);
     }
     createdBusinessIds.clear();
@@ -81,21 +81,21 @@ void main() {
   });
 
   group('complete_onboarding (Tier 2)', () {
-    test('round-trip: businesses + profile + warehouse + settings all land', () async {
+    test('round-trip: businesses + profile + store + settings all land', () async {
       final businessId = UuidV7.generate();
-      final warehouseId = UuidV7.generate();
+      final storeId = UuidV7.generate();
       createdBusinessIds.add(businessId);
 
       await clients.userClient.rpc('complete_onboarding', params: {
         'p_business_id': businessId,
-        'p_warehouse_id': warehouseId,
+        'p_store_id': storeId,
         'p_owner_name': 'Round Trip Owner',
         'p_business_name': 'Reeba Round Trip',
         'p_business_type': 'Liquor Store',
         'p_business_phone': '+2348000000999',
         'p_business_email': 'rt@example.test',
         'p_location': {
-          'name': 'Main Warehouse',
+          'name': 'Main Store',
           'street': '12 Test Street',
           'city': 'Lagos',
           'state': 'Lagos',
@@ -130,14 +130,14 @@ void main() {
       expect(profile['role_tier'], 5);
       expect(profile['name'], 'Round Trip Owner');
 
-      final warehouses = await clients.adminClient
-          .from('warehouses')
+      final stores = await clients.adminClient
+          .from('stores')
           .select()
           .eq('business_id', businessId);
-      expect(warehouses, hasLength(1));
-      final wh = (warehouses[0] as Map);
-      expect(wh['id'], warehouseId);
-      expect(wh['name'], 'Main Warehouse');
+      expect(stores, hasLength(1));
+      final wh = (stores[0] as Map);
+      expect(wh['id'], storeId);
+      expect(wh['name'], 'Main Store');
       expect(wh['location'], '12 Test Street, Lagos, Nigeria');
 
       final settings = await clients.adminClient
@@ -155,12 +155,12 @@ void main() {
     test('idempotent retry: second call with same ids overwrites, no duplicates',
         () async {
       final businessId = UuidV7.generate();
-      final warehouseId = UuidV7.generate();
+      final storeId = UuidV7.generate();
       createdBusinessIds.add(businessId);
 
       Map<String, dynamic> params({required String name}) => {
             'p_business_id': businessId,
-            'p_warehouse_id': warehouseId,
+            'p_store_id': storeId,
             'p_owner_name': 'Retry Owner',
             'p_business_name': name,
             'p_business_type': 'Restaurant',
@@ -183,7 +183,7 @@ void main() {
       await clients.userClient
           .rpc('complete_onboarding', params: params(name: 'Renamed'));
 
-      // Exactly one business, one warehouse, two settings.
+      // Exactly one business, one store, two settings.
       final biz = await clients.adminClient
           .from('businesses')
           .select()
@@ -193,11 +193,11 @@ void main() {
           reason: 'second call should overwrite the business name');
 
       final wh = await clients.adminClient
-          .from('warehouses')
+          .from('stores')
           .select('id')
           .eq('business_id', businessId);
       expect(wh, hasLength(1),
-          reason: 'warehouse upsert must not duplicate on retry');
+          reason: 'store upsert must not duplicate on retry');
 
       final settings = await clients.adminClient
           .from('settings')
@@ -209,13 +209,13 @@ void main() {
 
     test('atomicity: empty owner name raises and creates nothing', () async {
       final businessId = UuidV7.generate();
-      final warehouseId = UuidV7.generate();
+      final storeId = UuidV7.generate();
 
       Object? caught;
       try {
         await clients.userClient.rpc('complete_onboarding', params: {
           'p_business_id': businessId,
-          'p_warehouse_id': warehouseId,
+          'p_store_id': storeId,
           'p_owner_name': '   ', // whitespace-only — function must reject
           'p_business_name': 'Should Not Land',
           'p_business_type': 'Other',
@@ -237,9 +237,9 @@ void main() {
           .eq('id', businessId);
       expect(biz, isEmpty);
       final wh = await clients.adminClient
-          .from('warehouses')
+          .from('stores')
           .select('id')
-          .eq('id', warehouseId);
+          .eq('id', storeId);
       expect(wh, isEmpty);
     }, skip: _skipReason);
   });

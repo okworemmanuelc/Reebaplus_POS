@@ -7,14 +7,14 @@ import 'package:timezone/data/latest_all.dart' as tzdata;
 
 class _Seed {
   final String businessId;
-  final String warehouseId;
+  final String storeId;
   final String staffId;
   final String productId;
   final String customerId;
   final String walletId;
   _Seed({
     required this.businessId,
-    required this.warehouseId,
+    required this.storeId,
     required this.staffId,
     required this.productId,
     required this.customerId,
@@ -40,12 +40,12 @@ Future<_Seed> _seed(
         ),
       );
 
-  final warehouseId = UuidV7.generate();
+  final storeId = UuidV7.generate();
   await db
-      .into(db.warehouses)
+      .into(db.stores)
       .insert(
-        WarehousesCompanion.insert(
-          id: Value(warehouseId),
+        StoresCompanion.insert(
+          id: Value(storeId),
           businessId: businessId,
           name: 'Main',
         ),
@@ -81,7 +81,7 @@ Future<_Seed> _seed(
         InventoryCompanion.insert(
           businessId: businessId,
           productId: productId,
-          warehouseId: warehouseId,
+          storeId: storeId,
           quantity: Value(initialStock),
         ),
       );
@@ -95,7 +95,7 @@ Future<_Seed> _seed(
 
   return _Seed(
     businessId: businessId,
-    warehouseId: warehouseId,
+    storeId: storeId,
     staffId: staffId,
     productId: productId,
     customerId: customerId,
@@ -121,7 +121,7 @@ OrdersCompanion _orderCompanion(
     paymentType: paymentType,
     status: status,
     staffId: Value(s.staffId),
-    warehouseId: Value(s.warehouseId),
+    storeId: Value(s.storeId),
   );
 }
 
@@ -134,7 +134,7 @@ OrderItemsCompanion _itemCompanion(
     businessId: s.businessId,
     orderId: 'placeholder', // overwritten by createOrder
     productId: s.productId,
-    warehouseId: s.warehouseId,
+    storeId: s.storeId,
     quantity: qty,
     unitPriceKobo: unitPriceKobo,
     totalKobo: qty * unitPriceKobo,
@@ -165,7 +165,7 @@ void main() {
           amountPaidKobo: 100000,
           totalAmountKobo: 100000,
           staffId: s.staffId,
-          warehouseId: s.warehouseId,
+          storeId: s.storeId,
         ),
         throwsA(isA<InsufficientStockException>()),
       );
@@ -178,7 +178,7 @@ void main() {
 
       final inv = await (db.select(
         db.inventory,
-      )..where((i) => i.warehouseId.equals(s.warehouseId))).getSingle();
+      )..where((i) => i.storeId.equals(s.storeId))).getSingle();
       expect(
         inv.quantity,
         equals(3),
@@ -202,7 +202,7 @@ void main() {
         amountPaidKobo: 0,
         totalAmountKobo: 100000,
         staffId: s.staffId,
-        warehouseId: s.warehouseId,
+        storeId: s.storeId,
         walletDebitKobo: 100000,
       );
 
@@ -231,7 +231,7 @@ void main() {
         amountPaidKobo: 100000,
         totalAmountKobo: 100000,
         staffId: s.staffId,
-        warehouseId: s.warehouseId,
+        storeId: s.storeId,
       );
       expect(await db.select(db.walletTransactions).get(), isEmpty);
       expect(await db.select(db.paymentTransactions).get(), hasLength(1));
@@ -253,7 +253,7 @@ void main() {
         amountPaidKobo: 100000,
         totalAmountKobo: 100000,
         staffId: s.staffId,
-        warehouseId: s.warehouseId,
+        storeId: s.storeId,
       );
       final row = await db.select(db.stockTransactions).getSingle();
 
@@ -286,7 +286,7 @@ void main() {
         amountPaidKobo: 200000,
         totalAmountKobo: 200000,
         staffId: s.staffId,
-        warehouseId: s.warehouseId,
+        storeId: s.storeId,
       );
       final orderId = (await db.select(db.orders).getSingle()).id;
       final originalSale = await db.select(db.stockTransactions).getSingle();
@@ -311,7 +311,7 @@ void main() {
       // Inventory restored
       final inv = await (db.select(
         db.inventory,
-      )..where((i) => i.warehouseId.equals(s.warehouseId))).getSingle();
+      )..where((i) => i.storeId.equals(s.storeId))).getSingle();
       expect(inv.quantity, equals(10));
 
       // Payment voided in place (not a new row)
@@ -345,7 +345,7 @@ void main() {
         amountPaidKobo: 100000,
         totalAmountKobo: 100000,
         staffId: s.staffId,
-        warehouseId: s.warehouseId,
+        storeId: s.storeId,
       );
 
       // The DAO uses TZDateTime.now(), so we can't pin "today" — instead we

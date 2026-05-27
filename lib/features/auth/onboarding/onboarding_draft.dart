@@ -10,7 +10,7 @@ import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 /// [AuthService.completeOnboarding] / `complete_onboarding` RPC. If the user
 /// abandons mid-flow, nothing reaches Supabase.
 ///
-/// Identifiers ([businessId], [warehouseId], [userId]) are generated at
+/// Identifiers ([businessId], [storeId], [userId]) are generated at
 /// draft init so retries — same physical wizard run, second tap on PIN
 /// confirm — reuse them and the RPC's `ON CONFLICT (id) DO UPDATE`
 /// clauses keep the commit idempotent.
@@ -25,7 +25,7 @@ class OnboardingDraft {
 
   /// Generated client-side at construction so retries reuse the same id.
   final String businessId;
-  final String warehouseId;
+  final String storeId;
   final String userId;
 
   String? ownerName;
@@ -46,14 +46,14 @@ class OnboardingDraft {
   OnboardingDraft({
     required this.email,
     String? businessId,
-    String? warehouseId,
+    String? storeId,
     String? userId,
   })  : businessId = businessId ?? UuidV7.generate(),
-        warehouseId = warehouseId ?? UuidV7.generate(),
+        storeId = storeId ?? UuidV7.generate(),
         userId = userId ?? UuidV7.generate();
 
   /// Combines the structured location parts the same way the legacy
-  /// LocationDetailsScreen formed `warehouses.location` ("street, city, country")
+  /// LocationDetailsScreen formed `stores.location` ("street, city, country")
   /// — kept identical so existing UI that reads this field still parses.
   String? get locationCombined {
     final parts = [

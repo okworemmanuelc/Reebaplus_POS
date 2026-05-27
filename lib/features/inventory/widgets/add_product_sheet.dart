@@ -35,12 +35,12 @@ class _AddProductSheetState extends ConsumerState<AddProductSheet> {
   bool _trackEmpties = true; // defaults true when unit is Bottle
   String _colorHex = '#3B82F6';
   String? _size; // null = not a crate-based product
-  WarehouseData? _selectedWarehouse;
+  StoreData? _selectedStore;
   SupplierData? _selectedSupplier;
   CategoryData? _selectedCategory;
   ManufacturerData? _selectedManufacturer;
 
-  List<WarehouseData> _warehouses = [];
+  List<StoreData> _stores = [];
   List<SupplierData> _allSuppliers = [];
   List<CategoryData> _allCategories = [];
   List<SupplierData> _supplierSuggestions = [];
@@ -80,7 +80,7 @@ class _AddProductSheetState extends ConsumerState<AddProductSheet> {
 
   Future<void> _loadData() async {
     final db = ref.read(databaseProvider);
-    final whs = await db.select(db.warehouses).get();
+    final whs = await db.select(db.stores).get();
     final suppliers = await db.catalogDao.getAllSuppliers();
     final manufacturers = await db.inventoryDao.getAllManufacturers();
     var cats = await db.select(db.categories).get();
@@ -110,7 +110,7 @@ class _AddProductSheetState extends ConsumerState<AddProductSheet> {
 
     if (mounted) {
       setState(() {
-        _warehouses = whs;
+        _stores = whs;
         _allSuppliers = suppliers;
         _allManufacturers = manufacturers;
         _allCategories = cats;
@@ -122,7 +122,7 @@ class _AddProductSheetState extends ConsumerState<AddProductSheet> {
         }.toList()..sort();
         _dynamicUnits = mergedUnits;
 
-        if (whs.isNotEmpty) _selectedWarehouse = whs.first;
+        if (whs.isNotEmpty) _selectedStore = whs.first;
         if (cats.isNotEmpty) _selectedCategory = cats.first;
       });
     }
@@ -338,8 +338,8 @@ class _AddProductSheetState extends ConsumerState<AddProductSheet> {
     // ── EXISTING PRODUCT: update details + add stock ───────────────────────
     if (_selectedExistingProduct != null) {
       final existingName = _nameCtrl.text.trim();
-      if (_selectedWarehouse == null) {
-        AppNotification.showError(context, 'Warehouse is required.');
+      if (_selectedStore == null) {
+        AppNotification.showError(context, 'Store is required.');
         return;
       }
       final qty = int.tryParse(_initialStockCtrl.text) ?? 0;
@@ -407,7 +407,7 @@ class _AddProductSheetState extends ConsumerState<AddProductSheet> {
         // 2. Add stock
         await db.inventoryDao.adjustStock(
           productId,
-          _selectedWarehouse!.id,
+          _selectedStore!.id,
           qty,
           'Restock by ${auth.currentUser?.name ?? 'Unknown'}',
           auth.currentUser?.id,
@@ -445,7 +445,7 @@ class _AddProductSheetState extends ConsumerState<AddProductSheet> {
       '│ buyingPrice: "${_buyingPriceCtrl.text.trim()}"  (isStockKeeper=$_isStockKeeper)',
     );
     debugPrint('│ lowStock: "${_lowStockCtrl.text.trim()}"');
-    debugPrint('│ warehouse: ${_selectedWarehouse?.name ?? 'NULL'}');
+    debugPrint('│ store: ${_selectedStore?.name ?? 'NULL'}');
     debugPrint('│ initialStock: "${_initialStockCtrl.text.trim()}"');
     debugPrint(
       '│ manufacturer: "${_manufacturerCtrl.text.trim()}" (selected=${_selectedManufacturer?.name})',
@@ -468,8 +468,8 @@ class _AddProductSheetState extends ConsumerState<AddProductSheet> {
       missingField = 'Buying Price';
     } else if (_lowStockCtrl.text.trim().isEmpty) {
       missingField = 'Low Stock Alert';
-    } else if (_selectedWarehouse == null) {
-      missingField = 'Warehouse';
+    } else if (_selectedStore == null) {
+      missingField = 'Store';
     } else if (_initialStockCtrl.text.trim().isEmpty) {
       missingField = 'Initial Quantity';
     }
@@ -563,7 +563,7 @@ class _AddProductSheetState extends ConsumerState<AddProductSheet> {
           categoryId: drift.Value(_selectedCategory?.id),
         ),
         initialStock: initialStock > 0 ? initialStock : null,
-        warehouseId: _selectedWarehouse?.id,
+        storeId: _selectedStore?.id,
         performedBy: auth.currentUser?.id,
       );
 
@@ -1118,7 +1118,7 @@ class _AddProductSheetState extends ConsumerState<AddProductSheet> {
                         ),
                       const SizedBox(height: 16),
                     ], // end of new-product-only fields
-                    // ── QUANTITY & WAREHOUSE (always visible) ───────────────
+                    // ── QUANTITY & STORE (always visible) ───────────────
                     AppInput(
                       controller: _initialStockCtrl,
                       labelText: _selectedExistingProduct != null
@@ -1131,9 +1131,9 @@ class _AddProductSheetState extends ConsumerState<AddProductSheet> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _sectionLabel('WAREHOUSE *', subtext),
+                        _sectionLabel('STORE *', subtext),
                         const SizedBox(height: 8),
-                        if (_warehouses.isEmpty)
+                        if (_stores.isEmpty)
                           Container(
                             width: double.infinity,
                             padding: const EdgeInsets.symmetric(
@@ -1146,16 +1146,16 @@ class _AddProductSheetState extends ConsumerState<AddProductSheet> {
                               border: Border.all(color: border),
                             ),
                             child: Text(
-                              'No warehouses',
+                              'No stores',
                               style: TextStyle(fontSize: 14, color: subtext),
                             ),
                           )
                         else
-                          AppDropdown<WarehouseData?>(
-                            value: _selectedWarehouse,
-                            items: _warehouses
+                          AppDropdown<StoreData?>(
+                            value: _selectedStore,
+                            items: _stores
                                 .map(
-                                  (w) => DropdownMenuItem<WarehouseData?>(
+                                  (w) => DropdownMenuItem<StoreData?>(
                                     value: w,
                                     child: Text(
                                       w.name,
@@ -1165,7 +1165,7 @@ class _AddProductSheetState extends ConsumerState<AddProductSheet> {
                                 )
                                 .toList(),
                             onChanged: (v) =>
-                                setState(() => _selectedWarehouse = v),
+                                setState(() => _selectedStore = v),
                           ),
                       ],
                     ),

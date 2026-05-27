@@ -5,14 +5,14 @@ import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 
 import '../../helpers/dispatch_test_utils.dart';
 
-/// Seeds: warehouse, staff, product, an inventory row at qty=10 so a
+/// Seeds: store, staff, product, an inventory row at qty=10 so a
 /// negative-delta path has stock to debit.
-Future<({String warehouseId, String staffId, String productId})>
+Future<({String storeId, String staffId, String productId})>
     _seedInventoryFixtures(AppDatabase db, String businessId) async {
-  final warehouseId = UuidV7.generate();
-  await db.into(db.warehouses).insert(
-        WarehousesCompanion.insert(
-          id: Value(warehouseId),
+  final storeId = UuidV7.generate();
+  await db.into(db.stores).insert(
+        StoresCompanion.insert(
+          id: Value(storeId),
           businessId: businessId,
           name: 'Main',
         ),
@@ -39,11 +39,11 @@ Future<({String warehouseId, String staffId, String productId})>
         InventoryCompanion.insert(
           businessId: businessId,
           productId: productId,
-          warehouseId: warehouseId,
+          storeId: storeId,
           quantity: const Value(10),
         ),
       );
-  return (warehouseId: warehouseId, staffId: staffId, productId: productId);
+  return (storeId: storeId, staffId: staffId, productId: productId);
 }
 
 void main() {
@@ -67,7 +67,7 @@ void main() {
 
       await db.inventoryDao.adjustStock(
         fx.productId,
-        fx.warehouseId,
+        fx.storeId,
         5,
         'restock',
         fx.staffId,
@@ -96,7 +96,7 @@ void main() {
 
       await db.inventoryDao.adjustStock(
         fx.productId,
-        fx.warehouseId,
+        fx.storeId,
         -3,
         'damage',
         fx.staffId,
@@ -127,7 +127,7 @@ void main() {
       // earlier audit lands here.
       expect(mv['movement_id'], isA<String>());
       expect(mv['product_id'], fx.productId);
-      expect(mv['warehouse_id'], fx.warehouseId);
+      expect(mv['store_id'], fx.storeId);
       expect(mv['quantity_delta'], -3);
       expect(mv['movement_type'], 'adjustment');
       expect(mv['reason'], 'damage');
@@ -149,7 +149,7 @@ void main() {
         // Inventory only has 10 units; -100 must fail the stock guard.
         await db.inventoryDao.adjustStock(
           fx.productId,
-          fx.warehouseId,
+          fx.storeId,
           -100,
           'overdraw',
           fx.staffId,

@@ -37,14 +37,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   String _selectedPeriod = 'Day';
   final List<String> _periods = ['Day', 'Week', 'Month', 'Year', 'To Date'];
 
-  // Warehouse filter (null = All)
-  String? _selectedWarehouseId;
-  List<WarehouseData> _warehouses = [];
-  StreamSubscription? _warehousesSub;
+  // Store filter (null = All)
+  String? _selectedStoreId;
+  List<StoreData> _stores = [];
+  StreamSubscription? _storesSub;
 
-  // Locked warehouse view is no longer enforced for the lone owner.
-  final bool _warehouseLocked = false;
-  final String _lockedWarehouseName = '';
+  // Locked store view is no longer enforced for the lone owner.
+  final bool _storeLocked = false;
+  final String _lockedStoreName = '';
 
   // Pro-tips hero visibility
   bool _showProTips = false;
@@ -87,12 +87,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       if (mounted) setState(() => _showProTips = count <= 1);
     });
 
-    // Warehouses for the filter dropdown
+    // Stores for the filter dropdown
     final db = ref.read(databaseProvider);
-    _warehousesSub = db.select(db.warehouses).watch().listen((wh) {
+    _storesSub = db.select(db.stores).watch().listen((wh) {
       if (mounted) {
         setState(() {
-          _warehouses = wh;
+          _stores = wh;
         });
       }
     });
@@ -106,7 +106,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       }
     });
 
-    _subscribeExpenses(_selectedWarehouseId);
+    _subscribeExpenses(_selectedStoreId);
 
     _customersSub = db.customersDao.watchAllCustomers().listen((
       customers,
@@ -119,20 +119,20 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       }
     });
 
-    _subscribeInventory(_selectedWarehouseId);
+    _subscribeInventory(_selectedStoreId);
 
     // Load staff list once (for staff sales breakdown)
     final staff = await db.select(db.users).get();
     if (mounted) setState(() => _staffList = staff);
   }
 
-  /// Re-subscribable inventory stream — call on warehouse change.
-  void _subscribeInventory(String? warehouseId) {
+  /// Re-subscribable inventory stream — call on store change.
+  void _subscribeInventory(String? storeId) {
     _inventorySub?.cancel();
     if (mounted) setState(() => _inventoryLoading = true);
     final db = ref.read(databaseProvider);
-    final stream = warehouseId != null
-        ? db.inventoryDao.watchProductsByWarehouse(warehouseId)
+    final stream = storeId != null
+        ? db.inventoryDao.watchProductsByStore(storeId)
         : db.inventoryDao.watchAllProductDatasWithStock();
     _inventorySub = stream.listen((items) {
       if (mounted) {
@@ -148,12 +148,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     });
   }
 
-  /// Re-subscribable expenses stream — call on warehouse change.
-  void _subscribeExpenses(String? warehouseId) {
+  /// Re-subscribable expenses stream — call on store change.
+  void _subscribeExpenses(String? storeId) {
     _expensesSub?.cancel();
     if (mounted) setState(() => _expensesLoading = true);
     final db = ref.read(databaseProvider);
-    _expensesSub = db.expensesDao.watchAll(warehouseId: warehouseId).listen((expenses) {
+    _expensesSub = db.expensesDao.watchAll(storeId: storeId).listen((expenses) {
       if (mounted) {
         setState(() {
           _allExpenses = expenses;
@@ -165,7 +165,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   @override
   void dispose() {
-    _warehousesSub?.cancel();
+    _storesSub?.cancel();
     _ordersSub?.cancel();
     _expensesSub?.cancel();
     _customersSub?.cancel();
@@ -194,29 +194,29 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Filter by selected period and warehouse
+    // Filter by selected period and store
     final filteredOrdersWithItems = _allOrdersWithItems
         .where(
           (o) =>
               _isDateInPeriod(o.order.createdAt, _selectedPeriod) &&
               o.order.status == 'completed' &&
-              (_selectedWarehouseId == null ||
-                  o.order.warehouseId == _selectedWarehouseId),
+              (_selectedStoreId == null ||
+                  o.order.storeId == _selectedStoreId),
         )
         .toList();
 
-    // Warehouse filtering is handled at the SQL level by _subscribeExpenses;
+    // Store filtering is handled at the SQL level by _subscribeExpenses;
     // here we only need the period filter.
     final filteredExpenses = _allExpenses
         .where((e) => _isDateInPeriod(e.expense.createdAt, _selectedPeriod))
         .toList();
 
 
-    // Filter customers by warehouse for credit/debt metrics
-    final filteredCustomers = _selectedWarehouseId == null
+    // Filter customers by store for credit/debt metrics
+    final filteredCustomers = _selectedStoreId == null
         ? _customers
         : _customers
-              .where((c) => c.warehouseId == _selectedWarehouseId)
+              .where((c) => c.storeId == _selectedStoreId)
               .toList();
 
     // Metrics
@@ -254,8 +254,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         .where(
           (o) =>
               o.order.status == 'pending' &&
-              (_selectedWarehouseId == null ||
-                  o.order.warehouseId == _selectedWarehouseId),
+              (_selectedStoreId == null ||
+                  o.order.storeId == _selectedStoreId),
         )
         .length;
 
@@ -434,11 +434,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         SizedBox(height: context.getRSize(12)),
         Row(
           children: [
-            if (_warehouseLocked) ...[
-              Flexible(child: _buildLockedWarehouseChip()),
+            if (_storeLocked) ...[
+              Flexible(child: _buildLockedStoreChip()),
               SizedBox(width: context.getRSize(8)),
-            ] else if (_warehouses.isNotEmpty) ...[
-              Flexible(child: _buildWarehouseDropdown()),
+            ] else if (_stores.isNotEmpty) ...[
+              Flexible(child: _buildStoreDropdown()),
               SizedBox(width: context.getRSize(8)),
             ],
             Flexible(child: _buildPeriodDropdown()),
@@ -502,7 +502,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  Widget _buildLockedWarehouseChip() {
+  Widget _buildLockedStoreChip() {
     return Container(
       height: 48,
       padding: EdgeInsets.symmetric(horizontal: context.getRSize(12)),
@@ -515,16 +515,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            Icons.warehouse_outlined,
+            Icons.store_outlined,
             size: context.getRSize(14),
             color: Theme.of(context).colorScheme.primary,
           ),
           SizedBox(width: context.getRSize(6)),
           Flexible(
             child: Text(
-              _lockedWarehouseName.isEmpty
-                  ? 'My Warehouse'
-                  : _lockedWarehouseName,
+              _lockedStoreName.isEmpty
+                  ? 'My Store'
+                  : _lockedStoreName,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: context.getRFontSize(13),
@@ -540,23 +540,23 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  Widget _buildWarehouseDropdown() {
+  Widget _buildStoreDropdown() {
     return SizedBox(
       width: context.getRSize(160),
       child: AppDropdown<String?>(
-        value: _selectedWarehouseId,
+        value: _selectedStoreId,
         items: [
           const DropdownMenuItem<String?>(
             value: null,
-            child: Text('All Warehouses'),
+            child: Text('All Stores'),
           ),
-          ..._warehouses.map(
+          ..._stores.map(
             (wh) => DropdownMenuItem<String?>(
                 value: wh.id, child: Text(wh.name)),
           ),
         ],
         onChanged: (v) {
-          setState(() => _selectedWarehouseId = v);
+          setState(() => _selectedStoreId = v);
           _subscribeInventory(v);
           _subscribeExpenses(v);
         },

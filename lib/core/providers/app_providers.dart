@@ -54,9 +54,9 @@ final navigationProvider = Provider<NavigationService>((ref) {
 final currentIndexProvider = ChangeNotifierProvider<ValueNotifier<int>>((ref) {
   return ref.watch(navigationProvider).currentIndex;
 });
-final lockedWarehouseProvider =
+final lockedStoreProvider =
     ChangeNotifierProvider<ValueNotifier<String?>>((ref) {
-  return ref.watch(navigationProvider).lockedWarehouseId;
+  return ref.watch(navigationProvider).lockedStoreId;
 });
 
 // ── Secure Storage ─────────────────────────────────────────────────────────

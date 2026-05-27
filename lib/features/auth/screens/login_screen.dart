@@ -84,7 +84,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     final db = ref.read(databaseProvider);
     final userId = await auth.getDeviceUserId();
     if (userId != null) {
-      final user = await db.warehousesDao.getUserById(userId);
+      final user = await db.storesDao.getUserById(userId);
       if (mounted && user != null) {
         setState(() {
           _identifiedUser = user;
@@ -177,7 +177,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         if (userId != null) {
           final user = await ref
               .read(databaseProvider)
-              .warehousesDao
+              .storesDao
               .getUserById(userId);
           if (user != null) {
             _enterApp(user);

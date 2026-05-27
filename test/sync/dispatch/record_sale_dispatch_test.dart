@@ -6,25 +6,25 @@ import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import '../../helpers/dispatch_test_utils.dart';
 
 class _SaleSeed {
-  final String warehouseId;
+  final String storeId;
   final String staffId;
   final String productId;
   final String customerId;
   _SaleSeed({
-    required this.warehouseId,
+    required this.storeId,
     required this.staffId,
     required this.productId,
     required this.customerId,
   });
 }
 
-/// Seeds the fixtures createOrder needs: warehouse, staff, product (+10
+/// Seeds the fixtures createOrder needs: store, staff, product (+10
 /// inventory), customer (wallet auto-created by addCustomer).
 Future<_SaleSeed> _seedSaleFixtures(AppDatabase db, String businessId) async {
-  final warehouseId = UuidV7.generate();
-  await db.into(db.warehouses).insert(
-        WarehousesCompanion.insert(
-          id: Value(warehouseId),
+  final storeId = UuidV7.generate();
+  await db.into(db.stores).insert(
+        StoresCompanion.insert(
+          id: Value(storeId),
           businessId: businessId,
           name: 'Main',
         ),
@@ -51,7 +51,7 @@ Future<_SaleSeed> _seedSaleFixtures(AppDatabase db, String businessId) async {
         InventoryCompanion.insert(
           businessId: businessId,
           productId: productId,
-          warehouseId: warehouseId,
+          storeId: storeId,
           quantity: const Value(10),
         ),
       );
@@ -59,7 +59,7 @@ Future<_SaleSeed> _seedSaleFixtures(AppDatabase db, String businessId) async {
     CustomersCompanion.insert(businessId: businessId, name: 'Buyer'),
   );
   return _SaleSeed(
-    warehouseId: warehouseId,
+    storeId: storeId,
     staffId: staffId,
     productId: productId,
     customerId: customerId,
@@ -83,7 +83,7 @@ OrdersCompanion _orderCompanion(
       paymentType: 'cash',
       status: 'completed',
       staffId: Value(s.staffId),
-      warehouseId: Value(s.warehouseId),
+      storeId: Value(s.storeId),
     );
 
 OrderItemsCompanion _itemCompanion(_SaleSeed s, String businessId) =>
@@ -91,7 +91,7 @@ OrderItemsCompanion _itemCompanion(_SaleSeed s, String businessId) =>
       businessId: businessId,
       orderId: 'placeholder', // overwritten by createOrder
       productId: s.productId,
-      warehouseId: s.warehouseId,
+      storeId: s.storeId,
       quantity: 2,
       unitPriceKobo: 100000,
       totalKobo: 200000,
@@ -123,7 +123,7 @@ void main() {
         amountPaidKobo: 200000,
         totalAmountKobo: 200000,
         staffId: s.staffId,
-        warehouseId: s.warehouseId,
+        storeId: s.storeId,
       );
 
       // Local mirror.
@@ -160,7 +160,7 @@ void main() {
         amountPaidKobo: 200000,
         totalAmountKobo: 200000,
         staffId: s.staffId,
-        warehouseId: s.warehouseId,
+        storeId: s.storeId,
         paymentMethod: 'cash',
       );
 
@@ -183,7 +183,7 @@ void main() {
       expect(payload['p_actor_id'], s.staffId);
       expect(payload['p_order_id'], orderId);
       expect(payload['p_order_number'], 'ORD-V2-1');
-      expect(payload['p_warehouse_id'], s.warehouseId);
+      expect(payload['p_store_id'], s.storeId);
       expect(payload['p_payment_type'], 'cash');
       expect(payload['p_payment_method'], 'cash');
       expect(payload['p_amount_paid_kobo'], 200000);
@@ -222,7 +222,7 @@ void main() {
               businessId: businessId,
               orderId: 'placeholder',
               productId: s.productId,
-              warehouseId: s.warehouseId,
+              storeId: s.storeId,
               quantity: 50,
               unitPriceKobo: 100000,
               totalKobo: 5000000,
@@ -232,7 +232,7 @@ void main() {
           amountPaidKobo: 5000000,
           totalAmountKobo: 5000000,
           staffId: s.staffId,
-          warehouseId: s.warehouseId,
+          storeId: s.storeId,
         );
       } catch (e) {
         caught = e;
@@ -271,7 +271,7 @@ void main() {
         amountPaidKobo: 200000,
         totalAmountKobo: 200000,
         staffId: s.staffId,
-        warehouseId: s.warehouseId,
+        storeId: s.storeId,
         walletDebitKobo: 50000,
         paymentMethod: 'cash',
       );

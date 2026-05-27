@@ -1699,12 +1699,11 @@ class ManufacturersCompanion extends UpdateCompanion<ManufacturerData> {
   }
 }
 
-class $WarehousesTable extends Warehouses
-    with TableInfo<$WarehousesTable, WarehouseData> {
+class $StoresTable extends Stores with TableInfo<$StoresTable, StoreData> {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
-  $WarehousesTable(this.attachedDatabase, [this._alias]);
+  $StoresTable(this.attachedDatabase, [this._alias]);
   static const VerificationMeta _idMeta = const VerificationMeta('id');
   @override
   late final GeneratedColumn<String> id = GeneratedColumn<String>(
@@ -1803,10 +1802,10 @@ class $WarehousesTable extends Warehouses
   String get aliasedName => _alias ?? actualTableName;
   @override
   String get actualTableName => $name;
-  static const String $name = 'warehouses';
+  static const String $name = 'stores';
   @override
   VerificationContext validateIntegrity(
-    Insertable<WarehouseData> instance, {
+    Insertable<StoreData> instance, {
     bool isInserting = false,
   }) {
     final context = VerificationContext();
@@ -1863,9 +1862,9 @@ class $WarehousesTable extends Warehouses
   @override
   Set<GeneratedColumn> get $primaryKey => {id};
   @override
-  WarehouseData map(Map<String, dynamic> data, {String? tablePrefix}) {
+  StoreData map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return WarehouseData(
+    return StoreData(
       id: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}id'],
@@ -1898,12 +1897,12 @@ class $WarehousesTable extends Warehouses
   }
 
   @override
-  $WarehousesTable createAlias(String alias) {
-    return $WarehousesTable(attachedDatabase, alias);
+  $StoresTable createAlias(String alias) {
+    return $StoresTable(attachedDatabase, alias);
   }
 }
 
-class WarehouseData extends DataClass implements Insertable<WarehouseData> {
+class StoreData extends DataClass implements Insertable<StoreData> {
   final String id;
   final String businessId;
   final String name;
@@ -1911,7 +1910,7 @@ class WarehouseData extends DataClass implements Insertable<WarehouseData> {
   final bool isDeleted;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
-  const WarehouseData({
+  const StoreData({
     required this.id,
     required this.businessId,
     required this.name,
@@ -1935,8 +1934,8 @@ class WarehouseData extends DataClass implements Insertable<WarehouseData> {
     return map;
   }
 
-  WarehousesCompanion toCompanion(bool nullToAbsent) {
-    return WarehousesCompanion(
+  StoresCompanion toCompanion(bool nullToAbsent) {
+    return StoresCompanion(
       id: Value(id),
       businessId: Value(businessId),
       name: Value(name),
@@ -1949,12 +1948,12 @@ class WarehouseData extends DataClass implements Insertable<WarehouseData> {
     );
   }
 
-  factory WarehouseData.fromJson(
+  factory StoreData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
-    return WarehouseData(
+    return StoreData(
       id: serializer.fromJson<String>(json['id']),
       businessId: serializer.fromJson<String>(json['businessId']),
       name: serializer.fromJson<String>(json['name']),
@@ -1978,7 +1977,7 @@ class WarehouseData extends DataClass implements Insertable<WarehouseData> {
     };
   }
 
-  WarehouseData copyWith({
+  StoreData copyWith({
     String? id,
     String? businessId,
     String? name,
@@ -1986,7 +1985,7 @@ class WarehouseData extends DataClass implements Insertable<WarehouseData> {
     bool? isDeleted,
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
-  }) => WarehouseData(
+  }) => StoreData(
     id: id ?? this.id,
     businessId: businessId ?? this.businessId,
     name: name ?? this.name,
@@ -1995,8 +1994,8 @@ class WarehouseData extends DataClass implements Insertable<WarehouseData> {
     createdAt: createdAt ?? this.createdAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
   );
-  WarehouseData copyWithCompanion(WarehousesCompanion data) {
-    return WarehouseData(
+  StoreData copyWithCompanion(StoresCompanion data) {
+    return StoreData(
       id: data.id.present ? data.id.value : this.id,
       businessId: data.businessId.present
           ? data.businessId.value
@@ -2013,7 +2012,7 @@ class WarehouseData extends DataClass implements Insertable<WarehouseData> {
 
   @override
   String toString() {
-    return (StringBuffer('WarehouseData(')
+    return (StringBuffer('StoreData(')
           ..write('id: $id, ')
           ..write('businessId: $businessId, ')
           ..write('name: $name, ')
@@ -2038,7 +2037,7 @@ class WarehouseData extends DataClass implements Insertable<WarehouseData> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is WarehouseData &&
+      (other is StoreData &&
           other.id == this.id &&
           other.businessId == this.businessId &&
           other.name == this.name &&
@@ -2048,7 +2047,7 @@ class WarehouseData extends DataClass implements Insertable<WarehouseData> {
           other.lastUpdatedAt == this.lastUpdatedAt);
 }
 
-class WarehousesCompanion extends UpdateCompanion<WarehouseData> {
+class StoresCompanion extends UpdateCompanion<StoreData> {
   final Value<String> id;
   final Value<String> businessId;
   final Value<String> name;
@@ -2057,7 +2056,7 @@ class WarehousesCompanion extends UpdateCompanion<WarehouseData> {
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
   final Value<int> rowid;
-  const WarehousesCompanion({
+  const StoresCompanion({
     this.id = const Value.absent(),
     this.businessId = const Value.absent(),
     this.name = const Value.absent(),
@@ -2067,7 +2066,7 @@ class WarehousesCompanion extends UpdateCompanion<WarehouseData> {
     this.lastUpdatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
-  WarehousesCompanion.insert({
+  StoresCompanion.insert({
     this.id = const Value.absent(),
     required String businessId,
     required String name,
@@ -2078,7 +2077,7 @@ class WarehousesCompanion extends UpdateCompanion<WarehouseData> {
     this.rowid = const Value.absent(),
   }) : businessId = Value(businessId),
        name = Value(name);
-  static Insertable<WarehouseData> custom({
+  static Insertable<StoreData> custom({
     Expression<String>? id,
     Expression<String>? businessId,
     Expression<String>? name,
@@ -2100,7 +2099,7 @@ class WarehousesCompanion extends UpdateCompanion<WarehouseData> {
     });
   }
 
-  WarehousesCompanion copyWith({
+  StoresCompanion copyWith({
     Value<String>? id,
     Value<String>? businessId,
     Value<String>? name,
@@ -2110,7 +2109,7 @@ class WarehousesCompanion extends UpdateCompanion<WarehouseData> {
     Value<DateTime>? lastUpdatedAt,
     Value<int>? rowid,
   }) {
-    return WarehousesCompanion(
+    return StoresCompanion(
       id: id ?? this.id,
       businessId: businessId ?? this.businessId,
       name: name ?? this.name,
@@ -2154,7 +2153,7 @@ class WarehousesCompanion extends UpdateCompanion<WarehouseData> {
 
   @override
   String toString() {
-    return (StringBuffer('WarehousesCompanion(')
+    return (StringBuffer('StoresCompanion(')
           ..write('id: $id, ')
           ..write('businessId: $businessId, ')
           ..write('name: $name, ')
@@ -2306,18 +2305,18 @@ class $UsersTable extends Users with TableInfo<$UsersTable, UserData> {
     ),
     defaultValue: const Constant(false),
   );
-  static const VerificationMeta _warehouseIdMeta = const VerificationMeta(
-    'warehouseId',
+  static const VerificationMeta _storeIdMeta = const VerificationMeta(
+    'storeId',
   );
   @override
-  late final GeneratedColumn<String> warehouseId = GeneratedColumn<String>(
-    'warehouse_id',
+  late final GeneratedColumn<String> storeId = GeneratedColumn<String>(
+    'store_id',
     aliasedName,
     true,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
     defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'REFERENCES warehouses (id)',
+      'REFERENCES stores (id)',
     ),
   );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
@@ -2370,7 +2369,7 @@ class $UsersTable extends Users with TableInfo<$UsersTable, UserData> {
     pinIterations,
     avatarColor,
     biometricEnabled,
-    warehouseId,
+    storeId,
     createdAt,
     lastNotificationSentAt,
     lastUpdatedAt,
@@ -2477,13 +2476,10 @@ class $UsersTable extends Users with TableInfo<$UsersTable, UserData> {
         ),
       );
     }
-    if (data.containsKey('warehouse_id')) {
+    if (data.containsKey('store_id')) {
       context.handle(
-        _warehouseIdMeta,
-        warehouseId.isAcceptableOrUnknown(
-          data['warehouse_id']!,
-          _warehouseIdMeta,
-        ),
+        _storeIdMeta,
+        storeId.isAcceptableOrUnknown(data['store_id']!, _storeIdMeta),
       );
     }
     if (data.containsKey('created_at')) {
@@ -2567,9 +2563,9 @@ class $UsersTable extends Users with TableInfo<$UsersTable, UserData> {
         DriftSqlType.bool,
         data['${effectivePrefix}biometric_enabled'],
       )!,
-      warehouseId: attachedDatabase.typeMapping.read(
+      storeId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
-        data['${effectivePrefix}warehouse_id'],
+        data['${effectivePrefix}store_id'],
       ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
@@ -2605,7 +2601,7 @@ class UserData extends DataClass implements Insertable<UserData> {
   final int? pinIterations;
   final String avatarColor;
   final bool biometricEnabled;
-  final String? warehouseId;
+  final String? storeId;
   final DateTime createdAt;
   final DateTime? lastNotificationSentAt;
   final DateTime lastUpdatedAt;
@@ -2622,7 +2618,7 @@ class UserData extends DataClass implements Insertable<UserData> {
     this.pinIterations,
     required this.avatarColor,
     required this.biometricEnabled,
-    this.warehouseId,
+    this.storeId,
     required this.createdAt,
     this.lastNotificationSentAt,
     required this.lastUpdatedAt,
@@ -2654,8 +2650,8 @@ class UserData extends DataClass implements Insertable<UserData> {
     }
     map['avatar_color'] = Variable<String>(avatarColor);
     map['biometric_enabled'] = Variable<bool>(biometricEnabled);
-    if (!nullToAbsent || warehouseId != null) {
-      map['warehouse_id'] = Variable<String>(warehouseId);
+    if (!nullToAbsent || storeId != null) {
+      map['store_id'] = Variable<String>(storeId);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     if (!nullToAbsent || lastNotificationSentAt != null) {
@@ -2693,9 +2689,9 @@ class UserData extends DataClass implements Insertable<UserData> {
           : Value(pinIterations),
       avatarColor: Value(avatarColor),
       biometricEnabled: Value(biometricEnabled),
-      warehouseId: warehouseId == null && nullToAbsent
+      storeId: storeId == null && nullToAbsent
           ? const Value.absent()
-          : Value(warehouseId),
+          : Value(storeId),
       createdAt: Value(createdAt),
       lastNotificationSentAt: lastNotificationSentAt == null && nullToAbsent
           ? const Value.absent()
@@ -2722,7 +2718,7 @@ class UserData extends DataClass implements Insertable<UserData> {
       pinIterations: serializer.fromJson<int?>(json['pinIterations']),
       avatarColor: serializer.fromJson<String>(json['avatarColor']),
       biometricEnabled: serializer.fromJson<bool>(json['biometricEnabled']),
-      warehouseId: serializer.fromJson<String?>(json['warehouseId']),
+      storeId: serializer.fromJson<String?>(json['storeId']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastNotificationSentAt: serializer.fromJson<DateTime?>(
         json['lastNotificationSentAt'],
@@ -2746,7 +2742,7 @@ class UserData extends DataClass implements Insertable<UserData> {
       'pinIterations': serializer.toJson<int?>(pinIterations),
       'avatarColor': serializer.toJson<String>(avatarColor),
       'biometricEnabled': serializer.toJson<bool>(biometricEnabled),
-      'warehouseId': serializer.toJson<String?>(warehouseId),
+      'storeId': serializer.toJson<String?>(storeId),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastNotificationSentAt': serializer.toJson<DateTime?>(
         lastNotificationSentAt,
@@ -2768,7 +2764,7 @@ class UserData extends DataClass implements Insertable<UserData> {
     Value<int?> pinIterations = const Value.absent(),
     String? avatarColor,
     bool? biometricEnabled,
-    Value<String?> warehouseId = const Value.absent(),
+    Value<String?> storeId = const Value.absent(),
     DateTime? createdAt,
     Value<DateTime?> lastNotificationSentAt = const Value.absent(),
     DateTime? lastUpdatedAt,
@@ -2787,7 +2783,7 @@ class UserData extends DataClass implements Insertable<UserData> {
         : this.pinIterations,
     avatarColor: avatarColor ?? this.avatarColor,
     biometricEnabled: biometricEnabled ?? this.biometricEnabled,
-    warehouseId: warehouseId.present ? warehouseId.value : this.warehouseId,
+    storeId: storeId.present ? storeId.value : this.storeId,
     createdAt: createdAt ?? this.createdAt,
     lastNotificationSentAt: lastNotificationSentAt.present
         ? lastNotificationSentAt.value
@@ -2820,9 +2816,7 @@ class UserData extends DataClass implements Insertable<UserData> {
       biometricEnabled: data.biometricEnabled.present
           ? data.biometricEnabled.value
           : this.biometricEnabled,
-      warehouseId: data.warehouseId.present
-          ? data.warehouseId.value
-          : this.warehouseId,
+      storeId: data.storeId.present ? data.storeId.value : this.storeId,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       lastNotificationSentAt: data.lastNotificationSentAt.present
           ? data.lastNotificationSentAt.value
@@ -2848,7 +2842,7 @@ class UserData extends DataClass implements Insertable<UserData> {
           ..write('pinIterations: $pinIterations, ')
           ..write('avatarColor: $avatarColor, ')
           ..write('biometricEnabled: $biometricEnabled, ')
-          ..write('warehouseId: $warehouseId, ')
+          ..write('storeId: $storeId, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastNotificationSentAt: $lastNotificationSentAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt')
@@ -2870,7 +2864,7 @@ class UserData extends DataClass implements Insertable<UserData> {
     pinIterations,
     avatarColor,
     biometricEnabled,
-    warehouseId,
+    storeId,
     createdAt,
     lastNotificationSentAt,
     lastUpdatedAt,
@@ -2891,7 +2885,7 @@ class UserData extends DataClass implements Insertable<UserData> {
           other.pinIterations == this.pinIterations &&
           other.avatarColor == this.avatarColor &&
           other.biometricEnabled == this.biometricEnabled &&
-          other.warehouseId == this.warehouseId &&
+          other.storeId == this.storeId &&
           other.createdAt == this.createdAt &&
           other.lastNotificationSentAt == this.lastNotificationSentAt &&
           other.lastUpdatedAt == this.lastUpdatedAt);
@@ -2910,7 +2904,7 @@ class UsersCompanion extends UpdateCompanion<UserData> {
   final Value<int?> pinIterations;
   final Value<String> avatarColor;
   final Value<bool> biometricEnabled;
-  final Value<String?> warehouseId;
+  final Value<String?> storeId;
   final Value<DateTime> createdAt;
   final Value<DateTime?> lastNotificationSentAt;
   final Value<DateTime> lastUpdatedAt;
@@ -2928,7 +2922,7 @@ class UsersCompanion extends UpdateCompanion<UserData> {
     this.pinIterations = const Value.absent(),
     this.avatarColor = const Value.absent(),
     this.biometricEnabled = const Value.absent(),
-    this.warehouseId = const Value.absent(),
+    this.storeId = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastNotificationSentAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -2947,7 +2941,7 @@ class UsersCompanion extends UpdateCompanion<UserData> {
     this.pinIterations = const Value.absent(),
     this.avatarColor = const Value.absent(),
     this.biometricEnabled = const Value.absent(),
-    this.warehouseId = const Value.absent(),
+    this.storeId = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastNotificationSentAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -2968,7 +2962,7 @@ class UsersCompanion extends UpdateCompanion<UserData> {
     Expression<int>? pinIterations,
     Expression<String>? avatarColor,
     Expression<bool>? biometricEnabled,
-    Expression<String>? warehouseId,
+    Expression<String>? storeId,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastNotificationSentAt,
     Expression<DateTime>? lastUpdatedAt,
@@ -2987,7 +2981,7 @@ class UsersCompanion extends UpdateCompanion<UserData> {
       if (pinIterations != null) 'pin_iterations': pinIterations,
       if (avatarColor != null) 'avatar_color': avatarColor,
       if (biometricEnabled != null) 'biometric_enabled': biometricEnabled,
-      if (warehouseId != null) 'warehouse_id': warehouseId,
+      if (storeId != null) 'store_id': storeId,
       if (createdAt != null) 'created_at': createdAt,
       if (lastNotificationSentAt != null)
         'last_notification_sent_at': lastNotificationSentAt,
@@ -3009,7 +3003,7 @@ class UsersCompanion extends UpdateCompanion<UserData> {
     Value<int?>? pinIterations,
     Value<String>? avatarColor,
     Value<bool>? biometricEnabled,
-    Value<String?>? warehouseId,
+    Value<String?>? storeId,
     Value<DateTime>? createdAt,
     Value<DateTime?>? lastNotificationSentAt,
     Value<DateTime>? lastUpdatedAt,
@@ -3028,7 +3022,7 @@ class UsersCompanion extends UpdateCompanion<UserData> {
       pinIterations: pinIterations ?? this.pinIterations,
       avatarColor: avatarColor ?? this.avatarColor,
       biometricEnabled: biometricEnabled ?? this.biometricEnabled,
-      warehouseId: warehouseId ?? this.warehouseId,
+      storeId: storeId ?? this.storeId,
       createdAt: createdAt ?? this.createdAt,
       lastNotificationSentAt:
           lastNotificationSentAt ?? this.lastNotificationSentAt,
@@ -3076,8 +3070,8 @@ class UsersCompanion extends UpdateCompanion<UserData> {
     if (biometricEnabled.present) {
       map['biometric_enabled'] = Variable<bool>(biometricEnabled.value);
     }
-    if (warehouseId.present) {
-      map['warehouse_id'] = Variable<String>(warehouseId.value);
+    if (storeId.present) {
+      map['store_id'] = Variable<String>(storeId.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -3111,7 +3105,7 @@ class UsersCompanion extends UpdateCompanion<UserData> {
           ..write('pinIterations: $pinIterations, ')
           ..write('avatarColor: $avatarColor, ')
           ..write('biometricEnabled: $biometricEnabled, ')
-          ..write('warehouseId: $warehouseId, ')
+          ..write('storeId: $storeId, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastNotificationSentAt: $lastNotificationSentAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
@@ -6530,18 +6524,18 @@ class $CustomersTable extends Customers
       'REFERENCES businesses (id)',
     ),
   );
-  static const VerificationMeta _warehouseIdMeta = const VerificationMeta(
-    'warehouseId',
+  static const VerificationMeta _storeIdMeta = const VerificationMeta(
+    'storeId',
   );
   @override
-  late final GeneratedColumn<String> warehouseId = GeneratedColumn<String>(
-    'warehouse_id',
+  late final GeneratedColumn<String> storeId = GeneratedColumn<String>(
+    'store_id',
     aliasedName,
     true,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
     defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'REFERENCES warehouses (id)',
+      'REFERENCES stores (id)',
     ),
   );
   static const VerificationMeta _nameMeta = const VerificationMeta('name');
@@ -6661,7 +6655,7 @@ class $CustomersTable extends Customers
   List<GeneratedColumn> get $columns => [
     id,
     businessId,
-    warehouseId,
+    storeId,
     name,
     phone,
     email,
@@ -6696,13 +6690,10 @@ class $CustomersTable extends Customers
     } else if (isInserting) {
       context.missing(_businessIdMeta);
     }
-    if (data.containsKey('warehouse_id')) {
+    if (data.containsKey('store_id')) {
       context.handle(
-        _warehouseIdMeta,
-        warehouseId.isAcceptableOrUnknown(
-          data['warehouse_id']!,
-          _warehouseIdMeta,
-        ),
+        _storeIdMeta,
+        storeId.isAcceptableOrUnknown(data['store_id']!, _storeIdMeta),
       );
     }
     if (data.containsKey('name')) {
@@ -6796,9 +6787,9 @@ class $CustomersTable extends Customers
         DriftSqlType.string,
         data['${effectivePrefix}business_id'],
       )!,
-      warehouseId: attachedDatabase.typeMapping.read(
+      storeId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
-        data['${effectivePrefix}warehouse_id'],
+        data['${effectivePrefix}store_id'],
       ),
       name: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
@@ -6852,7 +6843,7 @@ class $CustomersTable extends Customers
 class CustomerData extends DataClass implements Insertable<CustomerData> {
   final String id;
   final String businessId;
-  final String? warehouseId;
+  final String? storeId;
   final String name;
   final String? phone;
   final String? email;
@@ -6866,7 +6857,7 @@ class CustomerData extends DataClass implements Insertable<CustomerData> {
   const CustomerData({
     required this.id,
     required this.businessId,
-    this.warehouseId,
+    this.storeId,
     required this.name,
     this.phone,
     this.email,
@@ -6883,8 +6874,8 @@ class CustomerData extends DataClass implements Insertable<CustomerData> {
     final map = <String, Expression>{};
     map['id'] = Variable<String>(id);
     map['business_id'] = Variable<String>(businessId);
-    if (!nullToAbsent || warehouseId != null) {
-      map['warehouse_id'] = Variable<String>(warehouseId);
+    if (!nullToAbsent || storeId != null) {
+      map['store_id'] = Variable<String>(storeId);
     }
     map['name'] = Variable<String>(name);
     if (!nullToAbsent || phone != null) {
@@ -6911,9 +6902,9 @@ class CustomerData extends DataClass implements Insertable<CustomerData> {
     return CustomersCompanion(
       id: Value(id),
       businessId: Value(businessId),
-      warehouseId: warehouseId == null && nullToAbsent
+      storeId: storeId == null && nullToAbsent
           ? const Value.absent()
-          : Value(warehouseId),
+          : Value(storeId),
       name: Value(name),
       phone: phone == null && nullToAbsent
           ? const Value.absent()
@@ -6943,7 +6934,7 @@ class CustomerData extends DataClass implements Insertable<CustomerData> {
     return CustomerData(
       id: serializer.fromJson<String>(json['id']),
       businessId: serializer.fromJson<String>(json['businessId']),
-      warehouseId: serializer.fromJson<String?>(json['warehouseId']),
+      storeId: serializer.fromJson<String?>(json['storeId']),
       name: serializer.fromJson<String>(json['name']),
       phone: serializer.fromJson<String?>(json['phone']),
       email: serializer.fromJson<String?>(json['email']),
@@ -6964,7 +6955,7 @@ class CustomerData extends DataClass implements Insertable<CustomerData> {
     return <String, dynamic>{
       'id': serializer.toJson<String>(id),
       'businessId': serializer.toJson<String>(businessId),
-      'warehouseId': serializer.toJson<String?>(warehouseId),
+      'storeId': serializer.toJson<String?>(storeId),
       'name': serializer.toJson<String>(name),
       'phone': serializer.toJson<String?>(phone),
       'email': serializer.toJson<String?>(email),
@@ -6981,7 +6972,7 @@ class CustomerData extends DataClass implements Insertable<CustomerData> {
   CustomerData copyWith({
     String? id,
     String? businessId,
-    Value<String?> warehouseId = const Value.absent(),
+    Value<String?> storeId = const Value.absent(),
     String? name,
     Value<String?> phone = const Value.absent(),
     Value<String?> email = const Value.absent(),
@@ -6995,7 +6986,7 @@ class CustomerData extends DataClass implements Insertable<CustomerData> {
   }) => CustomerData(
     id: id ?? this.id,
     businessId: businessId ?? this.businessId,
-    warehouseId: warehouseId.present ? warehouseId.value : this.warehouseId,
+    storeId: storeId.present ? storeId.value : this.storeId,
     name: name ?? this.name,
     phone: phone.present ? phone.value : this.phone,
     email: email.present ? email.value : this.email,
@@ -7015,9 +7006,7 @@ class CustomerData extends DataClass implements Insertable<CustomerData> {
       businessId: data.businessId.present
           ? data.businessId.value
           : this.businessId,
-      warehouseId: data.warehouseId.present
-          ? data.warehouseId.value
-          : this.warehouseId,
+      storeId: data.storeId.present ? data.storeId.value : this.storeId,
       name: data.name.present ? data.name.value : this.name,
       phone: data.phone.present ? data.phone.value : this.phone,
       email: data.email.present ? data.email.value : this.email,
@@ -7044,7 +7033,7 @@ class CustomerData extends DataClass implements Insertable<CustomerData> {
     return (StringBuffer('CustomerData(')
           ..write('id: $id, ')
           ..write('businessId: $businessId, ')
-          ..write('warehouseId: $warehouseId, ')
+          ..write('storeId: $storeId, ')
           ..write('name: $name, ')
           ..write('phone: $phone, ')
           ..write('email: $email, ')
@@ -7063,7 +7052,7 @@ class CustomerData extends DataClass implements Insertable<CustomerData> {
   int get hashCode => Object.hash(
     id,
     businessId,
-    warehouseId,
+    storeId,
     name,
     phone,
     email,
@@ -7081,7 +7070,7 @@ class CustomerData extends DataClass implements Insertable<CustomerData> {
       (other is CustomerData &&
           other.id == this.id &&
           other.businessId == this.businessId &&
-          other.warehouseId == this.warehouseId &&
+          other.storeId == this.storeId &&
           other.name == this.name &&
           other.phone == this.phone &&
           other.email == this.email &&
@@ -7097,7 +7086,7 @@ class CustomerData extends DataClass implements Insertable<CustomerData> {
 class CustomersCompanion extends UpdateCompanion<CustomerData> {
   final Value<String> id;
   final Value<String> businessId;
-  final Value<String?> warehouseId;
+  final Value<String?> storeId;
   final Value<String> name;
   final Value<String?> phone;
   final Value<String?> email;
@@ -7112,7 +7101,7 @@ class CustomersCompanion extends UpdateCompanion<CustomerData> {
   const CustomersCompanion({
     this.id = const Value.absent(),
     this.businessId = const Value.absent(),
-    this.warehouseId = const Value.absent(),
+    this.storeId = const Value.absent(),
     this.name = const Value.absent(),
     this.phone = const Value.absent(),
     this.email = const Value.absent(),
@@ -7128,7 +7117,7 @@ class CustomersCompanion extends UpdateCompanion<CustomerData> {
   CustomersCompanion.insert({
     this.id = const Value.absent(),
     required String businessId,
-    this.warehouseId = const Value.absent(),
+    this.storeId = const Value.absent(),
     required String name,
     this.phone = const Value.absent(),
     this.email = const Value.absent(),
@@ -7145,7 +7134,7 @@ class CustomersCompanion extends UpdateCompanion<CustomerData> {
   static Insertable<CustomerData> custom({
     Expression<String>? id,
     Expression<String>? businessId,
-    Expression<String>? warehouseId,
+    Expression<String>? storeId,
     Expression<String>? name,
     Expression<String>? phone,
     Expression<String>? email,
@@ -7161,7 +7150,7 @@ class CustomersCompanion extends UpdateCompanion<CustomerData> {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (businessId != null) 'business_id': businessId,
-      if (warehouseId != null) 'warehouse_id': warehouseId,
+      if (storeId != null) 'store_id': storeId,
       if (name != null) 'name': name,
       if (phone != null) 'phone': phone,
       if (email != null) 'email': email,
@@ -7180,7 +7169,7 @@ class CustomersCompanion extends UpdateCompanion<CustomerData> {
   CustomersCompanion copyWith({
     Value<String>? id,
     Value<String>? businessId,
-    Value<String?>? warehouseId,
+    Value<String?>? storeId,
     Value<String>? name,
     Value<String?>? phone,
     Value<String?>? email,
@@ -7196,7 +7185,7 @@ class CustomersCompanion extends UpdateCompanion<CustomerData> {
     return CustomersCompanion(
       id: id ?? this.id,
       businessId: businessId ?? this.businessId,
-      warehouseId: warehouseId ?? this.warehouseId,
+      storeId: storeId ?? this.storeId,
       name: name ?? this.name,
       phone: phone ?? this.phone,
       email: email ?? this.email,
@@ -7220,8 +7209,8 @@ class CustomersCompanion extends UpdateCompanion<CustomerData> {
     if (businessId.present) {
       map['business_id'] = Variable<String>(businessId.value);
     }
-    if (warehouseId.present) {
-      map['warehouse_id'] = Variable<String>(warehouseId.value);
+    if (storeId.present) {
+      map['store_id'] = Variable<String>(storeId.value);
     }
     if (name.present) {
       map['name'] = Variable<String>(name.value);
@@ -7264,7 +7253,7 @@ class CustomersCompanion extends UpdateCompanion<CustomerData> {
     return (StringBuffer('CustomersCompanion(')
           ..write('id: $id, ')
           ..write('businessId: $businessId, ')
-          ..write('warehouseId: $warehouseId, ')
+          ..write('storeId: $storeId, ')
           ..write('name: $name, ')
           ..write('phone: $phone, ')
           ..write('email: $email, ')
@@ -7972,18 +7961,18 @@ class $OrdersTable extends Orders with TableInfo<$OrdersTable, OrderData> {
       'REFERENCES users (id)',
     ),
   );
-  static const VerificationMeta _warehouseIdMeta = const VerificationMeta(
-    'warehouseId',
+  static const VerificationMeta _storeIdMeta = const VerificationMeta(
+    'storeId',
   );
   @override
-  late final GeneratedColumn<String> warehouseId = GeneratedColumn<String>(
-    'warehouse_id',
+  late final GeneratedColumn<String> storeId = GeneratedColumn<String>(
+    'store_id',
     aliasedName,
     true,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
     defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'REFERENCES warehouses (id)',
+      'REFERENCES stores (id)',
     ),
   );
   static const VerificationMeta _crateDepositPaidKoboMeta =
@@ -8060,7 +8049,7 @@ class $OrdersTable extends Orders with TableInfo<$OrdersTable, OrderData> {
     cancellationReason,
     barcode,
     staffId,
-    warehouseId,
+    storeId,
     crateDepositPaidKobo,
     completedAt,
     cancelledAt,
@@ -8193,13 +8182,10 @@ class $OrdersTable extends Orders with TableInfo<$OrdersTable, OrderData> {
         staffId.isAcceptableOrUnknown(data['staff_id']!, _staffIdMeta),
       );
     }
-    if (data.containsKey('warehouse_id')) {
+    if (data.containsKey('store_id')) {
       context.handle(
-        _warehouseIdMeta,
-        warehouseId.isAcceptableOrUnknown(
-          data['warehouse_id']!,
-          _warehouseIdMeta,
-        ),
+        _storeIdMeta,
+        storeId.isAcceptableOrUnknown(data['store_id']!, _storeIdMeta),
       );
     }
     if (data.containsKey('crate_deposit_paid_kobo')) {
@@ -8309,9 +8295,9 @@ class $OrdersTable extends Orders with TableInfo<$OrdersTable, OrderData> {
         DriftSqlType.string,
         data['${effectivePrefix}staff_id'],
       ),
-      warehouseId: attachedDatabase.typeMapping.read(
+      storeId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
-        data['${effectivePrefix}warehouse_id'],
+        data['${effectivePrefix}store_id'],
       ),
       crateDepositPaidKobo: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
@@ -8357,7 +8343,7 @@ class OrderData extends DataClass implements Insertable<OrderData> {
   final String? cancellationReason;
   final String? barcode;
   final String? staffId;
-  final String? warehouseId;
+  final String? storeId;
   final int crateDepositPaidKobo;
   final DateTime? completedAt;
   final DateTime? cancelledAt;
@@ -8378,7 +8364,7 @@ class OrderData extends DataClass implements Insertable<OrderData> {
     this.cancellationReason,
     this.barcode,
     this.staffId,
-    this.warehouseId,
+    this.storeId,
     required this.crateDepositPaidKobo,
     this.completedAt,
     this.cancelledAt,
@@ -8410,8 +8396,8 @@ class OrderData extends DataClass implements Insertable<OrderData> {
     if (!nullToAbsent || staffId != null) {
       map['staff_id'] = Variable<String>(staffId);
     }
-    if (!nullToAbsent || warehouseId != null) {
-      map['warehouse_id'] = Variable<String>(warehouseId);
+    if (!nullToAbsent || storeId != null) {
+      map['store_id'] = Variable<String>(storeId);
     }
     map['crate_deposit_paid_kobo'] = Variable<int>(crateDepositPaidKobo);
     if (!nullToAbsent || completedAt != null) {
@@ -8449,9 +8435,9 @@ class OrderData extends DataClass implements Insertable<OrderData> {
       staffId: staffId == null && nullToAbsent
           ? const Value.absent()
           : Value(staffId),
-      warehouseId: warehouseId == null && nullToAbsent
+      storeId: storeId == null && nullToAbsent
           ? const Value.absent()
-          : Value(warehouseId),
+          : Value(storeId),
       crateDepositPaidKobo: Value(crateDepositPaidKobo),
       completedAt: completedAt == null && nullToAbsent
           ? const Value.absent()
@@ -8486,7 +8472,7 @@ class OrderData extends DataClass implements Insertable<OrderData> {
       ),
       barcode: serializer.fromJson<String?>(json['barcode']),
       staffId: serializer.fromJson<String?>(json['staffId']),
-      warehouseId: serializer.fromJson<String?>(json['warehouseId']),
+      storeId: serializer.fromJson<String?>(json['storeId']),
       crateDepositPaidKobo: serializer.fromJson<int>(
         json['crateDepositPaidKobo'],
       ),
@@ -8514,7 +8500,7 @@ class OrderData extends DataClass implements Insertable<OrderData> {
       'cancellationReason': serializer.toJson<String?>(cancellationReason),
       'barcode': serializer.toJson<String?>(barcode),
       'staffId': serializer.toJson<String?>(staffId),
-      'warehouseId': serializer.toJson<String?>(warehouseId),
+      'storeId': serializer.toJson<String?>(storeId),
       'crateDepositPaidKobo': serializer.toJson<int>(crateDepositPaidKobo),
       'completedAt': serializer.toJson<DateTime?>(completedAt),
       'cancelledAt': serializer.toJson<DateTime?>(cancelledAt),
@@ -8538,7 +8524,7 @@ class OrderData extends DataClass implements Insertable<OrderData> {
     Value<String?> cancellationReason = const Value.absent(),
     Value<String?> barcode = const Value.absent(),
     Value<String?> staffId = const Value.absent(),
-    Value<String?> warehouseId = const Value.absent(),
+    Value<String?> storeId = const Value.absent(),
     int? crateDepositPaidKobo,
     Value<DateTime?> completedAt = const Value.absent(),
     Value<DateTime?> cancelledAt = const Value.absent(),
@@ -8561,7 +8547,7 @@ class OrderData extends DataClass implements Insertable<OrderData> {
         : this.cancellationReason,
     barcode: barcode.present ? barcode.value : this.barcode,
     staffId: staffId.present ? staffId.value : this.staffId,
-    warehouseId: warehouseId.present ? warehouseId.value : this.warehouseId,
+    storeId: storeId.present ? storeId.value : this.storeId,
     crateDepositPaidKobo: crateDepositPaidKobo ?? this.crateDepositPaidKobo,
     completedAt: completedAt.present ? completedAt.value : this.completedAt,
     cancelledAt: cancelledAt.present ? cancelledAt.value : this.cancelledAt,
@@ -8602,9 +8588,7 @@ class OrderData extends DataClass implements Insertable<OrderData> {
           : this.cancellationReason,
       barcode: data.barcode.present ? data.barcode.value : this.barcode,
       staffId: data.staffId.present ? data.staffId.value : this.staffId,
-      warehouseId: data.warehouseId.present
-          ? data.warehouseId.value
-          : this.warehouseId,
+      storeId: data.storeId.present ? data.storeId.value : this.storeId,
       crateDepositPaidKobo: data.crateDepositPaidKobo.present
           ? data.crateDepositPaidKobo.value
           : this.crateDepositPaidKobo,
@@ -8638,7 +8622,7 @@ class OrderData extends DataClass implements Insertable<OrderData> {
           ..write('cancellationReason: $cancellationReason, ')
           ..write('barcode: $barcode, ')
           ..write('staffId: $staffId, ')
-          ..write('warehouseId: $warehouseId, ')
+          ..write('storeId: $storeId, ')
           ..write('crateDepositPaidKobo: $crateDepositPaidKobo, ')
           ..write('completedAt: $completedAt, ')
           ..write('cancelledAt: $cancelledAt, ')
@@ -8664,7 +8648,7 @@ class OrderData extends DataClass implements Insertable<OrderData> {
     cancellationReason,
     barcode,
     staffId,
-    warehouseId,
+    storeId,
     crateDepositPaidKobo,
     completedAt,
     cancelledAt,
@@ -8689,7 +8673,7 @@ class OrderData extends DataClass implements Insertable<OrderData> {
           other.cancellationReason == this.cancellationReason &&
           other.barcode == this.barcode &&
           other.staffId == this.staffId &&
-          other.warehouseId == this.warehouseId &&
+          other.storeId == this.storeId &&
           other.crateDepositPaidKobo == this.crateDepositPaidKobo &&
           other.completedAt == this.completedAt &&
           other.cancelledAt == this.cancelledAt &&
@@ -8712,7 +8696,7 @@ class OrdersCompanion extends UpdateCompanion<OrderData> {
   final Value<String?> cancellationReason;
   final Value<String?> barcode;
   final Value<String?> staffId;
-  final Value<String?> warehouseId;
+  final Value<String?> storeId;
   final Value<int> crateDepositPaidKobo;
   final Value<DateTime?> completedAt;
   final Value<DateTime?> cancelledAt;
@@ -8734,7 +8718,7 @@ class OrdersCompanion extends UpdateCompanion<OrderData> {
     this.cancellationReason = const Value.absent(),
     this.barcode = const Value.absent(),
     this.staffId = const Value.absent(),
-    this.warehouseId = const Value.absent(),
+    this.storeId = const Value.absent(),
     this.crateDepositPaidKobo = const Value.absent(),
     this.completedAt = const Value.absent(),
     this.cancelledAt = const Value.absent(),
@@ -8757,7 +8741,7 @@ class OrdersCompanion extends UpdateCompanion<OrderData> {
     this.cancellationReason = const Value.absent(),
     this.barcode = const Value.absent(),
     this.staffId = const Value.absent(),
-    this.warehouseId = const Value.absent(),
+    this.storeId = const Value.absent(),
     this.crateDepositPaidKobo = const Value.absent(),
     this.completedAt = const Value.absent(),
     this.cancelledAt = const Value.absent(),
@@ -8785,7 +8769,7 @@ class OrdersCompanion extends UpdateCompanion<OrderData> {
     Expression<String>? cancellationReason,
     Expression<String>? barcode,
     Expression<String>? staffId,
-    Expression<String>? warehouseId,
+    Expression<String>? storeId,
     Expression<int>? crateDepositPaidKobo,
     Expression<DateTime>? completedAt,
     Expression<DateTime>? cancelledAt,
@@ -8808,7 +8792,7 @@ class OrdersCompanion extends UpdateCompanion<OrderData> {
       if (cancellationReason != null) 'cancellation_reason': cancellationReason,
       if (barcode != null) 'barcode': barcode,
       if (staffId != null) 'staff_id': staffId,
-      if (warehouseId != null) 'warehouse_id': warehouseId,
+      if (storeId != null) 'store_id': storeId,
       if (crateDepositPaidKobo != null)
         'crate_deposit_paid_kobo': crateDepositPaidKobo,
       if (completedAt != null) 'completed_at': completedAt,
@@ -8834,7 +8818,7 @@ class OrdersCompanion extends UpdateCompanion<OrderData> {
     Value<String?>? cancellationReason,
     Value<String?>? barcode,
     Value<String?>? staffId,
-    Value<String?>? warehouseId,
+    Value<String?>? storeId,
     Value<int>? crateDepositPaidKobo,
     Value<DateTime?>? completedAt,
     Value<DateTime?>? cancelledAt,
@@ -8857,7 +8841,7 @@ class OrdersCompanion extends UpdateCompanion<OrderData> {
       cancellationReason: cancellationReason ?? this.cancellationReason,
       barcode: barcode ?? this.barcode,
       staffId: staffId ?? this.staffId,
-      warehouseId: warehouseId ?? this.warehouseId,
+      storeId: storeId ?? this.storeId,
       crateDepositPaidKobo: crateDepositPaidKobo ?? this.crateDepositPaidKobo,
       completedAt: completedAt ?? this.completedAt,
       cancelledAt: cancelledAt ?? this.cancelledAt,
@@ -8912,8 +8896,8 @@ class OrdersCompanion extends UpdateCompanion<OrderData> {
     if (staffId.present) {
       map['staff_id'] = Variable<String>(staffId.value);
     }
-    if (warehouseId.present) {
-      map['warehouse_id'] = Variable<String>(warehouseId.value);
+    if (storeId.present) {
+      map['store_id'] = Variable<String>(storeId.value);
     }
     if (crateDepositPaidKobo.present) {
       map['crate_deposit_paid_kobo'] = Variable<int>(
@@ -8955,7 +8939,7 @@ class OrdersCompanion extends UpdateCompanion<OrderData> {
           ..write('cancellationReason: $cancellationReason, ')
           ..write('barcode: $barcode, ')
           ..write('staffId: $staffId, ')
-          ..write('warehouseId: $warehouseId, ')
+          ..write('storeId: $storeId, ')
           ..write('crateDepositPaidKobo: $crateDepositPaidKobo, ')
           ..write('completedAt: $completedAt, ')
           ..write('cancelledAt: $cancelledAt, ')
@@ -12713,18 +12697,18 @@ class $InventoryTable extends Inventory
       'REFERENCES products (id)',
     ),
   );
-  static const VerificationMeta _warehouseIdMeta = const VerificationMeta(
-    'warehouseId',
+  static const VerificationMeta _storeIdMeta = const VerificationMeta(
+    'storeId',
   );
   @override
-  late final GeneratedColumn<String> warehouseId = GeneratedColumn<String>(
-    'warehouse_id',
+  late final GeneratedColumn<String> storeId = GeneratedColumn<String>(
+    'store_id',
     aliasedName,
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: true,
     defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'REFERENCES warehouses (id)',
+      'REFERENCES stores (id)',
     ),
   );
   static const VerificationMeta _quantityMeta = const VerificationMeta(
@@ -12769,7 +12753,7 @@ class $InventoryTable extends Inventory
     id,
     businessId,
     productId,
-    warehouseId,
+    storeId,
     quantity,
     createdAt,
     lastUpdatedAt,
@@ -12805,16 +12789,13 @@ class $InventoryTable extends Inventory
     } else if (isInserting) {
       context.missing(_productIdMeta);
     }
-    if (data.containsKey('warehouse_id')) {
+    if (data.containsKey('store_id')) {
       context.handle(
-        _warehouseIdMeta,
-        warehouseId.isAcceptableOrUnknown(
-          data['warehouse_id']!,
-          _warehouseIdMeta,
-        ),
+        _storeIdMeta,
+        storeId.isAcceptableOrUnknown(data['store_id']!, _storeIdMeta),
       );
     } else if (isInserting) {
-      context.missing(_warehouseIdMeta);
+      context.missing(_storeIdMeta);
     }
     if (data.containsKey('quantity')) {
       context.handle(
@@ -12858,9 +12839,9 @@ class $InventoryTable extends Inventory
         DriftSqlType.string,
         data['${effectivePrefix}product_id'],
       )!,
-      warehouseId: attachedDatabase.typeMapping.read(
+      storeId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
-        data['${effectivePrefix}warehouse_id'],
+        data['${effectivePrefix}store_id'],
       )!,
       quantity: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
@@ -12887,7 +12868,7 @@ class InventoryData extends DataClass implements Insertable<InventoryData> {
   final String id;
   final String businessId;
   final String productId;
-  final String warehouseId;
+  final String storeId;
   final int quantity;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
@@ -12895,7 +12876,7 @@ class InventoryData extends DataClass implements Insertable<InventoryData> {
     required this.id,
     required this.businessId,
     required this.productId,
-    required this.warehouseId,
+    required this.storeId,
     required this.quantity,
     required this.createdAt,
     required this.lastUpdatedAt,
@@ -12906,7 +12887,7 @@ class InventoryData extends DataClass implements Insertable<InventoryData> {
     map['id'] = Variable<String>(id);
     map['business_id'] = Variable<String>(businessId);
     map['product_id'] = Variable<String>(productId);
-    map['warehouse_id'] = Variable<String>(warehouseId);
+    map['store_id'] = Variable<String>(storeId);
     map['quantity'] = Variable<int>(quantity);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
@@ -12918,7 +12899,7 @@ class InventoryData extends DataClass implements Insertable<InventoryData> {
       id: Value(id),
       businessId: Value(businessId),
       productId: Value(productId),
-      warehouseId: Value(warehouseId),
+      storeId: Value(storeId),
       quantity: Value(quantity),
       createdAt: Value(createdAt),
       lastUpdatedAt: Value(lastUpdatedAt),
@@ -12934,7 +12915,7 @@ class InventoryData extends DataClass implements Insertable<InventoryData> {
       id: serializer.fromJson<String>(json['id']),
       businessId: serializer.fromJson<String>(json['businessId']),
       productId: serializer.fromJson<String>(json['productId']),
-      warehouseId: serializer.fromJson<String>(json['warehouseId']),
+      storeId: serializer.fromJson<String>(json['storeId']),
       quantity: serializer.fromJson<int>(json['quantity']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
@@ -12947,7 +12928,7 @@ class InventoryData extends DataClass implements Insertable<InventoryData> {
       'id': serializer.toJson<String>(id),
       'businessId': serializer.toJson<String>(businessId),
       'productId': serializer.toJson<String>(productId),
-      'warehouseId': serializer.toJson<String>(warehouseId),
+      'storeId': serializer.toJson<String>(storeId),
       'quantity': serializer.toJson<int>(quantity),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
@@ -12958,7 +12939,7 @@ class InventoryData extends DataClass implements Insertable<InventoryData> {
     String? id,
     String? businessId,
     String? productId,
-    String? warehouseId,
+    String? storeId,
     int? quantity,
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
@@ -12966,7 +12947,7 @@ class InventoryData extends DataClass implements Insertable<InventoryData> {
     id: id ?? this.id,
     businessId: businessId ?? this.businessId,
     productId: productId ?? this.productId,
-    warehouseId: warehouseId ?? this.warehouseId,
+    storeId: storeId ?? this.storeId,
     quantity: quantity ?? this.quantity,
     createdAt: createdAt ?? this.createdAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -12978,9 +12959,7 @@ class InventoryData extends DataClass implements Insertable<InventoryData> {
           ? data.businessId.value
           : this.businessId,
       productId: data.productId.present ? data.productId.value : this.productId,
-      warehouseId: data.warehouseId.present
-          ? data.warehouseId.value
-          : this.warehouseId,
+      storeId: data.storeId.present ? data.storeId.value : this.storeId,
       quantity: data.quantity.present ? data.quantity.value : this.quantity,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       lastUpdatedAt: data.lastUpdatedAt.present
@@ -12995,7 +12974,7 @@ class InventoryData extends DataClass implements Insertable<InventoryData> {
           ..write('id: $id, ')
           ..write('businessId: $businessId, ')
           ..write('productId: $productId, ')
-          ..write('warehouseId: $warehouseId, ')
+          ..write('storeId: $storeId, ')
           ..write('quantity: $quantity, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt')
@@ -13008,7 +12987,7 @@ class InventoryData extends DataClass implements Insertable<InventoryData> {
     id,
     businessId,
     productId,
-    warehouseId,
+    storeId,
     quantity,
     createdAt,
     lastUpdatedAt,
@@ -13020,7 +12999,7 @@ class InventoryData extends DataClass implements Insertable<InventoryData> {
           other.id == this.id &&
           other.businessId == this.businessId &&
           other.productId == this.productId &&
-          other.warehouseId == this.warehouseId &&
+          other.storeId == this.storeId &&
           other.quantity == this.quantity &&
           other.createdAt == this.createdAt &&
           other.lastUpdatedAt == this.lastUpdatedAt);
@@ -13030,7 +13009,7 @@ class InventoryCompanion extends UpdateCompanion<InventoryData> {
   final Value<String> id;
   final Value<String> businessId;
   final Value<String> productId;
-  final Value<String> warehouseId;
+  final Value<String> storeId;
   final Value<int> quantity;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
@@ -13039,7 +13018,7 @@ class InventoryCompanion extends UpdateCompanion<InventoryData> {
     this.id = const Value.absent(),
     this.businessId = const Value.absent(),
     this.productId = const Value.absent(),
-    this.warehouseId = const Value.absent(),
+    this.storeId = const Value.absent(),
     this.quantity = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -13049,19 +13028,19 @@ class InventoryCompanion extends UpdateCompanion<InventoryData> {
     this.id = const Value.absent(),
     required String businessId,
     required String productId,
-    required String warehouseId,
+    required String storeId,
     this.quantity = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : businessId = Value(businessId),
        productId = Value(productId),
-       warehouseId = Value(warehouseId);
+       storeId = Value(storeId);
   static Insertable<InventoryData> custom({
     Expression<String>? id,
     Expression<String>? businessId,
     Expression<String>? productId,
-    Expression<String>? warehouseId,
+    Expression<String>? storeId,
     Expression<int>? quantity,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
@@ -13071,7 +13050,7 @@ class InventoryCompanion extends UpdateCompanion<InventoryData> {
       if (id != null) 'id': id,
       if (businessId != null) 'business_id': businessId,
       if (productId != null) 'product_id': productId,
-      if (warehouseId != null) 'warehouse_id': warehouseId,
+      if (storeId != null) 'store_id': storeId,
       if (quantity != null) 'quantity': quantity,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
@@ -13083,7 +13062,7 @@ class InventoryCompanion extends UpdateCompanion<InventoryData> {
     Value<String>? id,
     Value<String>? businessId,
     Value<String>? productId,
-    Value<String>? warehouseId,
+    Value<String>? storeId,
     Value<int>? quantity,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
@@ -13093,7 +13072,7 @@ class InventoryCompanion extends UpdateCompanion<InventoryData> {
       id: id ?? this.id,
       businessId: businessId ?? this.businessId,
       productId: productId ?? this.productId,
-      warehouseId: warehouseId ?? this.warehouseId,
+      storeId: storeId ?? this.storeId,
       quantity: quantity ?? this.quantity,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -13113,8 +13092,8 @@ class InventoryCompanion extends UpdateCompanion<InventoryData> {
     if (productId.present) {
       map['product_id'] = Variable<String>(productId.value);
     }
-    if (warehouseId.present) {
-      map['warehouse_id'] = Variable<String>(warehouseId.value);
+    if (storeId.present) {
+      map['store_id'] = Variable<String>(storeId.value);
     }
     if (quantity.present) {
       map['quantity'] = Variable<int>(quantity.value);
@@ -13137,7 +13116,7 @@ class InventoryCompanion extends UpdateCompanion<InventoryData> {
           ..write('id: $id, ')
           ..write('businessId: $businessId, ')
           ..write('productId: $productId, ')
-          ..write('warehouseId: $warehouseId, ')
+          ..write('storeId: $storeId, ')
           ..write('quantity: $quantity, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
@@ -13188,7 +13167,7 @@ class $StockTransfersTable extends StockTransfers
     type: DriftSqlType.string,
     requiredDuringInsert: true,
     defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'REFERENCES warehouses (id)',
+      'REFERENCES stores (id)',
     ),
   );
   static const VerificationMeta _toLocationIdMeta = const VerificationMeta(
@@ -13202,7 +13181,7 @@ class $StockTransfersTable extends StockTransfers
     type: DriftSqlType.string,
     requiredDuringInsert: true,
     defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'REFERENCES warehouses (id)',
+      'REFERENCES stores (id)',
     ),
   );
   static const VerificationMeta _productIdMeta = const VerificationMeta(
@@ -13984,18 +13963,18 @@ class $StockAdjustmentsTable extends StockAdjustments
       'REFERENCES products (id)',
     ),
   );
-  static const VerificationMeta _warehouseIdMeta = const VerificationMeta(
-    'warehouseId',
+  static const VerificationMeta _storeIdMeta = const VerificationMeta(
+    'storeId',
   );
   @override
-  late final GeneratedColumn<String> warehouseId = GeneratedColumn<String>(
-    'warehouse_id',
+  late final GeneratedColumn<String> storeId = GeneratedColumn<String>(
+    'store_id',
     aliasedName,
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: true,
     defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'REFERENCES warehouses (id)',
+      'REFERENCES stores (id)',
     ),
   );
   static const VerificationMeta _quantityDiffMeta = const VerificationMeta(
@@ -14062,7 +14041,7 @@ class $StockAdjustmentsTable extends StockAdjustments
     id,
     businessId,
     productId,
-    warehouseId,
+    storeId,
     quantityDiff,
     reason,
     performedBy,
@@ -14100,16 +14079,13 @@ class $StockAdjustmentsTable extends StockAdjustments
     } else if (isInserting) {
       context.missing(_productIdMeta);
     }
-    if (data.containsKey('warehouse_id')) {
+    if (data.containsKey('store_id')) {
       context.handle(
-        _warehouseIdMeta,
-        warehouseId.isAcceptableOrUnknown(
-          data['warehouse_id']!,
-          _warehouseIdMeta,
-        ),
+        _storeIdMeta,
+        storeId.isAcceptableOrUnknown(data['store_id']!, _storeIdMeta),
       );
     } else if (isInserting) {
-      context.missing(_warehouseIdMeta);
+      context.missing(_storeIdMeta);
     }
     if (data.containsKey('quantity_diff')) {
       context.handle(
@@ -14175,9 +14151,9 @@ class $StockAdjustmentsTable extends StockAdjustments
         DriftSqlType.string,
         data['${effectivePrefix}product_id'],
       )!,
-      warehouseId: attachedDatabase.typeMapping.read(
+      storeId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
-        data['${effectivePrefix}warehouse_id'],
+        data['${effectivePrefix}store_id'],
       )!,
       quantityDiff: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
@@ -14213,7 +14189,7 @@ class StockAdjustmentData extends DataClass
   final String id;
   final String businessId;
   final String productId;
-  final String warehouseId;
+  final String storeId;
   final int quantityDiff;
   final String reason;
   final String? performedBy;
@@ -14223,7 +14199,7 @@ class StockAdjustmentData extends DataClass
     required this.id,
     required this.businessId,
     required this.productId,
-    required this.warehouseId,
+    required this.storeId,
     required this.quantityDiff,
     required this.reason,
     this.performedBy,
@@ -14236,7 +14212,7 @@ class StockAdjustmentData extends DataClass
     map['id'] = Variable<String>(id);
     map['business_id'] = Variable<String>(businessId);
     map['product_id'] = Variable<String>(productId);
-    map['warehouse_id'] = Variable<String>(warehouseId);
+    map['store_id'] = Variable<String>(storeId);
     map['quantity_diff'] = Variable<int>(quantityDiff);
     map['reason'] = Variable<String>(reason);
     if (!nullToAbsent || performedBy != null) {
@@ -14252,7 +14228,7 @@ class StockAdjustmentData extends DataClass
       id: Value(id),
       businessId: Value(businessId),
       productId: Value(productId),
-      warehouseId: Value(warehouseId),
+      storeId: Value(storeId),
       quantityDiff: Value(quantityDiff),
       reason: Value(reason),
       performedBy: performedBy == null && nullToAbsent
@@ -14272,7 +14248,7 @@ class StockAdjustmentData extends DataClass
       id: serializer.fromJson<String>(json['id']),
       businessId: serializer.fromJson<String>(json['businessId']),
       productId: serializer.fromJson<String>(json['productId']),
-      warehouseId: serializer.fromJson<String>(json['warehouseId']),
+      storeId: serializer.fromJson<String>(json['storeId']),
       quantityDiff: serializer.fromJson<int>(json['quantityDiff']),
       reason: serializer.fromJson<String>(json['reason']),
       performedBy: serializer.fromJson<String?>(json['performedBy']),
@@ -14287,7 +14263,7 @@ class StockAdjustmentData extends DataClass
       'id': serializer.toJson<String>(id),
       'businessId': serializer.toJson<String>(businessId),
       'productId': serializer.toJson<String>(productId),
-      'warehouseId': serializer.toJson<String>(warehouseId),
+      'storeId': serializer.toJson<String>(storeId),
       'quantityDiff': serializer.toJson<int>(quantityDiff),
       'reason': serializer.toJson<String>(reason),
       'performedBy': serializer.toJson<String?>(performedBy),
@@ -14300,7 +14276,7 @@ class StockAdjustmentData extends DataClass
     String? id,
     String? businessId,
     String? productId,
-    String? warehouseId,
+    String? storeId,
     int? quantityDiff,
     String? reason,
     Value<String?> performedBy = const Value.absent(),
@@ -14310,7 +14286,7 @@ class StockAdjustmentData extends DataClass
     id: id ?? this.id,
     businessId: businessId ?? this.businessId,
     productId: productId ?? this.productId,
-    warehouseId: warehouseId ?? this.warehouseId,
+    storeId: storeId ?? this.storeId,
     quantityDiff: quantityDiff ?? this.quantityDiff,
     reason: reason ?? this.reason,
     performedBy: performedBy.present ? performedBy.value : this.performedBy,
@@ -14324,9 +14300,7 @@ class StockAdjustmentData extends DataClass
           ? data.businessId.value
           : this.businessId,
       productId: data.productId.present ? data.productId.value : this.productId,
-      warehouseId: data.warehouseId.present
-          ? data.warehouseId.value
-          : this.warehouseId,
+      storeId: data.storeId.present ? data.storeId.value : this.storeId,
       quantityDiff: data.quantityDiff.present
           ? data.quantityDiff.value
           : this.quantityDiff,
@@ -14347,7 +14321,7 @@ class StockAdjustmentData extends DataClass
           ..write('id: $id, ')
           ..write('businessId: $businessId, ')
           ..write('productId: $productId, ')
-          ..write('warehouseId: $warehouseId, ')
+          ..write('storeId: $storeId, ')
           ..write('quantityDiff: $quantityDiff, ')
           ..write('reason: $reason, ')
           ..write('performedBy: $performedBy, ')
@@ -14362,7 +14336,7 @@ class StockAdjustmentData extends DataClass
     id,
     businessId,
     productId,
-    warehouseId,
+    storeId,
     quantityDiff,
     reason,
     performedBy,
@@ -14376,7 +14350,7 @@ class StockAdjustmentData extends DataClass
           other.id == this.id &&
           other.businessId == this.businessId &&
           other.productId == this.productId &&
-          other.warehouseId == this.warehouseId &&
+          other.storeId == this.storeId &&
           other.quantityDiff == this.quantityDiff &&
           other.reason == this.reason &&
           other.performedBy == this.performedBy &&
@@ -14388,7 +14362,7 @@ class StockAdjustmentsCompanion extends UpdateCompanion<StockAdjustmentData> {
   final Value<String> id;
   final Value<String> businessId;
   final Value<String> productId;
-  final Value<String> warehouseId;
+  final Value<String> storeId;
   final Value<int> quantityDiff;
   final Value<String> reason;
   final Value<String?> performedBy;
@@ -14399,7 +14373,7 @@ class StockAdjustmentsCompanion extends UpdateCompanion<StockAdjustmentData> {
     this.id = const Value.absent(),
     this.businessId = const Value.absent(),
     this.productId = const Value.absent(),
-    this.warehouseId = const Value.absent(),
+    this.storeId = const Value.absent(),
     this.quantityDiff = const Value.absent(),
     this.reason = const Value.absent(),
     this.performedBy = const Value.absent(),
@@ -14411,7 +14385,7 @@ class StockAdjustmentsCompanion extends UpdateCompanion<StockAdjustmentData> {
     this.id = const Value.absent(),
     required String businessId,
     required String productId,
-    required String warehouseId,
+    required String storeId,
     required int quantityDiff,
     required String reason,
     this.performedBy = const Value.absent(),
@@ -14420,14 +14394,14 @@ class StockAdjustmentsCompanion extends UpdateCompanion<StockAdjustmentData> {
     this.rowid = const Value.absent(),
   }) : businessId = Value(businessId),
        productId = Value(productId),
-       warehouseId = Value(warehouseId),
+       storeId = Value(storeId),
        quantityDiff = Value(quantityDiff),
        reason = Value(reason);
   static Insertable<StockAdjustmentData> custom({
     Expression<String>? id,
     Expression<String>? businessId,
     Expression<String>? productId,
-    Expression<String>? warehouseId,
+    Expression<String>? storeId,
     Expression<int>? quantityDiff,
     Expression<String>? reason,
     Expression<String>? performedBy,
@@ -14439,7 +14413,7 @@ class StockAdjustmentsCompanion extends UpdateCompanion<StockAdjustmentData> {
       if (id != null) 'id': id,
       if (businessId != null) 'business_id': businessId,
       if (productId != null) 'product_id': productId,
-      if (warehouseId != null) 'warehouse_id': warehouseId,
+      if (storeId != null) 'store_id': storeId,
       if (quantityDiff != null) 'quantity_diff': quantityDiff,
       if (reason != null) 'reason': reason,
       if (performedBy != null) 'performed_by': performedBy,
@@ -14453,7 +14427,7 @@ class StockAdjustmentsCompanion extends UpdateCompanion<StockAdjustmentData> {
     Value<String>? id,
     Value<String>? businessId,
     Value<String>? productId,
-    Value<String>? warehouseId,
+    Value<String>? storeId,
     Value<int>? quantityDiff,
     Value<String>? reason,
     Value<String?>? performedBy,
@@ -14465,7 +14439,7 @@ class StockAdjustmentsCompanion extends UpdateCompanion<StockAdjustmentData> {
       id: id ?? this.id,
       businessId: businessId ?? this.businessId,
       productId: productId ?? this.productId,
-      warehouseId: warehouseId ?? this.warehouseId,
+      storeId: storeId ?? this.storeId,
       quantityDiff: quantityDiff ?? this.quantityDiff,
       reason: reason ?? this.reason,
       performedBy: performedBy ?? this.performedBy,
@@ -14487,8 +14461,8 @@ class StockAdjustmentsCompanion extends UpdateCompanion<StockAdjustmentData> {
     if (productId.present) {
       map['product_id'] = Variable<String>(productId.value);
     }
-    if (warehouseId.present) {
-      map['warehouse_id'] = Variable<String>(warehouseId.value);
+    if (storeId.present) {
+      map['store_id'] = Variable<String>(storeId.value);
     }
     if (quantityDiff.present) {
       map['quantity_diff'] = Variable<int>(quantityDiff.value);
@@ -14517,7 +14491,7 @@ class StockAdjustmentsCompanion extends UpdateCompanion<StockAdjustmentData> {
           ..write('id: $id, ')
           ..write('businessId: $businessId, ')
           ..write('productId: $productId, ')
-          ..write('warehouseId: $warehouseId, ')
+          ..write('storeId: $storeId, ')
           ..write('quantityDiff: $quantityDiff, ')
           ..write('reason: $reason, ')
           ..write('performedBy: $performedBy, ')
@@ -15061,7 +15035,7 @@ class $StockTransactionsTable extends StockTransactions
     type: DriftSqlType.string,
     requiredDuringInsert: true,
     defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'REFERENCES warehouses (id)',
+      'REFERENCES stores (id)',
     ),
   );
   static const VerificationMeta _quantityDeltaMeta = const VerificationMeta(
@@ -16026,18 +16000,18 @@ class $OrderItemsTable extends OrderItems
       'REFERENCES products (id)',
     ),
   );
-  static const VerificationMeta _warehouseIdMeta = const VerificationMeta(
-    'warehouseId',
+  static const VerificationMeta _storeIdMeta = const VerificationMeta(
+    'storeId',
   );
   @override
-  late final GeneratedColumn<String> warehouseId = GeneratedColumn<String>(
-    'warehouse_id',
+  late final GeneratedColumn<String> storeId = GeneratedColumn<String>(
+    'store_id',
     aliasedName,
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: true,
     defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'REFERENCES warehouses (id)',
+      'REFERENCES stores (id)',
     ),
   );
   static const VerificationMeta _quantityMeta = const VerificationMeta(
@@ -16127,7 +16101,7 @@ class $OrderItemsTable extends OrderItems
     businessId,
     orderId,
     productId,
-    warehouseId,
+    storeId,
     quantity,
     unitPriceKobo,
     buyingPriceKobo,
@@ -16175,16 +16149,13 @@ class $OrderItemsTable extends OrderItems
     } else if (isInserting) {
       context.missing(_productIdMeta);
     }
-    if (data.containsKey('warehouse_id')) {
+    if (data.containsKey('store_id')) {
       context.handle(
-        _warehouseIdMeta,
-        warehouseId.isAcceptableOrUnknown(
-          data['warehouse_id']!,
-          _warehouseIdMeta,
-        ),
+        _storeIdMeta,
+        storeId.isAcceptableOrUnknown(data['store_id']!, _storeIdMeta),
       );
     } else if (isInserting) {
-      context.missing(_warehouseIdMeta);
+      context.missing(_storeIdMeta);
     }
     if (data.containsKey('quantity')) {
       context.handle(
@@ -16271,9 +16242,9 @@ class $OrderItemsTable extends OrderItems
         DriftSqlType.string,
         data['${effectivePrefix}product_id'],
       )!,
-      warehouseId: attachedDatabase.typeMapping.read(
+      storeId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
-        data['${effectivePrefix}warehouse_id'],
+        data['${effectivePrefix}store_id'],
       )!,
       quantity: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
@@ -16317,7 +16288,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
   final String businessId;
   final String orderId;
   final String productId;
-  final String warehouseId;
+  final String storeId;
   final int quantity;
   final int unitPriceKobo;
   final int buyingPriceKobo;
@@ -16330,7 +16301,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
     required this.businessId,
     required this.orderId,
     required this.productId,
-    required this.warehouseId,
+    required this.storeId,
     required this.quantity,
     required this.unitPriceKobo,
     required this.buyingPriceKobo,
@@ -16346,7 +16317,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
     map['business_id'] = Variable<String>(businessId);
     map['order_id'] = Variable<String>(orderId);
     map['product_id'] = Variable<String>(productId);
-    map['warehouse_id'] = Variable<String>(warehouseId);
+    map['store_id'] = Variable<String>(storeId);
     map['quantity'] = Variable<int>(quantity);
     map['unit_price_kobo'] = Variable<int>(unitPriceKobo);
     map['buying_price_kobo'] = Variable<int>(buyingPriceKobo);
@@ -16365,7 +16336,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
       businessId: Value(businessId),
       orderId: Value(orderId),
       productId: Value(productId),
-      warehouseId: Value(warehouseId),
+      storeId: Value(storeId),
       quantity: Value(quantity),
       unitPriceKobo: Value(unitPriceKobo),
       buyingPriceKobo: Value(buyingPriceKobo),
@@ -16388,7 +16359,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
       businessId: serializer.fromJson<String>(json['businessId']),
       orderId: serializer.fromJson<String>(json['orderId']),
       productId: serializer.fromJson<String>(json['productId']),
-      warehouseId: serializer.fromJson<String>(json['warehouseId']),
+      storeId: serializer.fromJson<String>(json['storeId']),
       quantity: serializer.fromJson<int>(json['quantity']),
       unitPriceKobo: serializer.fromJson<int>(json['unitPriceKobo']),
       buyingPriceKobo: serializer.fromJson<int>(json['buyingPriceKobo']),
@@ -16406,7 +16377,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
       'businessId': serializer.toJson<String>(businessId),
       'orderId': serializer.toJson<String>(orderId),
       'productId': serializer.toJson<String>(productId),
-      'warehouseId': serializer.toJson<String>(warehouseId),
+      'storeId': serializer.toJson<String>(storeId),
       'quantity': serializer.toJson<int>(quantity),
       'unitPriceKobo': serializer.toJson<int>(unitPriceKobo),
       'buyingPriceKobo': serializer.toJson<int>(buyingPriceKobo),
@@ -16422,7 +16393,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
     String? businessId,
     String? orderId,
     String? productId,
-    String? warehouseId,
+    String? storeId,
     int? quantity,
     int? unitPriceKobo,
     int? buyingPriceKobo,
@@ -16435,7 +16406,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
     businessId: businessId ?? this.businessId,
     orderId: orderId ?? this.orderId,
     productId: productId ?? this.productId,
-    warehouseId: warehouseId ?? this.warehouseId,
+    storeId: storeId ?? this.storeId,
     quantity: quantity ?? this.quantity,
     unitPriceKobo: unitPriceKobo ?? this.unitPriceKobo,
     buyingPriceKobo: buyingPriceKobo ?? this.buyingPriceKobo,
@@ -16454,9 +16425,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
           : this.businessId,
       orderId: data.orderId.present ? data.orderId.value : this.orderId,
       productId: data.productId.present ? data.productId.value : this.productId,
-      warehouseId: data.warehouseId.present
-          ? data.warehouseId.value
-          : this.warehouseId,
+      storeId: data.storeId.present ? data.storeId.value : this.storeId,
       quantity: data.quantity.present ? data.quantity.value : this.quantity,
       unitPriceKobo: data.unitPriceKobo.present
           ? data.unitPriceKobo.value
@@ -16482,7 +16451,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
           ..write('businessId: $businessId, ')
           ..write('orderId: $orderId, ')
           ..write('productId: $productId, ')
-          ..write('warehouseId: $warehouseId, ')
+          ..write('storeId: $storeId, ')
           ..write('quantity: $quantity, ')
           ..write('unitPriceKobo: $unitPriceKobo, ')
           ..write('buyingPriceKobo: $buyingPriceKobo, ')
@@ -16500,7 +16469,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
     businessId,
     orderId,
     productId,
-    warehouseId,
+    storeId,
     quantity,
     unitPriceKobo,
     buyingPriceKobo,
@@ -16517,7 +16486,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
           other.businessId == this.businessId &&
           other.orderId == this.orderId &&
           other.productId == this.productId &&
-          other.warehouseId == this.warehouseId &&
+          other.storeId == this.storeId &&
           other.quantity == this.quantity &&
           other.unitPriceKobo == this.unitPriceKobo &&
           other.buyingPriceKobo == this.buyingPriceKobo &&
@@ -16532,7 +16501,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
   final Value<String> businessId;
   final Value<String> orderId;
   final Value<String> productId;
-  final Value<String> warehouseId;
+  final Value<String> storeId;
   final Value<int> quantity;
   final Value<int> unitPriceKobo;
   final Value<int> buyingPriceKobo;
@@ -16546,7 +16515,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
     this.businessId = const Value.absent(),
     this.orderId = const Value.absent(),
     this.productId = const Value.absent(),
-    this.warehouseId = const Value.absent(),
+    this.storeId = const Value.absent(),
     this.quantity = const Value.absent(),
     this.unitPriceKobo = const Value.absent(),
     this.buyingPriceKobo = const Value.absent(),
@@ -16561,7 +16530,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
     required String businessId,
     required String orderId,
     required String productId,
-    required String warehouseId,
+    required String storeId,
     required int quantity,
     required int unitPriceKobo,
     this.buyingPriceKobo = const Value.absent(),
@@ -16573,7 +16542,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
   }) : businessId = Value(businessId),
        orderId = Value(orderId),
        productId = Value(productId),
-       warehouseId = Value(warehouseId),
+       storeId = Value(storeId),
        quantity = Value(quantity),
        unitPriceKobo = Value(unitPriceKobo),
        totalKobo = Value(totalKobo);
@@ -16582,7 +16551,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
     Expression<String>? businessId,
     Expression<String>? orderId,
     Expression<String>? productId,
-    Expression<String>? warehouseId,
+    Expression<String>? storeId,
     Expression<int>? quantity,
     Expression<int>? unitPriceKobo,
     Expression<int>? buyingPriceKobo,
@@ -16597,7 +16566,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
       if (businessId != null) 'business_id': businessId,
       if (orderId != null) 'order_id': orderId,
       if (productId != null) 'product_id': productId,
-      if (warehouseId != null) 'warehouse_id': warehouseId,
+      if (storeId != null) 'store_id': storeId,
       if (quantity != null) 'quantity': quantity,
       if (unitPriceKobo != null) 'unit_price_kobo': unitPriceKobo,
       if (buyingPriceKobo != null) 'buying_price_kobo': buyingPriceKobo,
@@ -16614,7 +16583,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
     Value<String>? businessId,
     Value<String>? orderId,
     Value<String>? productId,
-    Value<String>? warehouseId,
+    Value<String>? storeId,
     Value<int>? quantity,
     Value<int>? unitPriceKobo,
     Value<int>? buyingPriceKobo,
@@ -16629,7 +16598,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
       businessId: businessId ?? this.businessId,
       orderId: orderId ?? this.orderId,
       productId: productId ?? this.productId,
-      warehouseId: warehouseId ?? this.warehouseId,
+      storeId: storeId ?? this.storeId,
       quantity: quantity ?? this.quantity,
       unitPriceKobo: unitPriceKobo ?? this.unitPriceKobo,
       buyingPriceKobo: buyingPriceKobo ?? this.buyingPriceKobo,
@@ -16656,8 +16625,8 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
     if (productId.present) {
       map['product_id'] = Variable<String>(productId.value);
     }
-    if (warehouseId.present) {
-      map['warehouse_id'] = Variable<String>(warehouseId.value);
+    if (storeId.present) {
+      map['store_id'] = Variable<String>(storeId.value);
     }
     if (quantity.present) {
       map['quantity'] = Variable<int>(quantity.value);
@@ -16693,7 +16662,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
           ..write('businessId: $businessId, ')
           ..write('orderId: $orderId, ')
           ..write('productId: $productId, ')
-          ..write('warehouseId: $warehouseId, ')
+          ..write('storeId: $storeId, ')
           ..write('quantity: $quantity, ')
           ..write('unitPriceKobo: $unitPriceKobo, ')
           ..write('buyingPriceKobo: $buyingPriceKobo, ')
@@ -17803,18 +17772,18 @@ class $ExpensesTable extends Expenses
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
-  static const VerificationMeta _warehouseIdMeta = const VerificationMeta(
-    'warehouseId',
+  static const VerificationMeta _storeIdMeta = const VerificationMeta(
+    'storeId',
   );
   @override
-  late final GeneratedColumn<String> warehouseId = GeneratedColumn<String>(
-    'warehouse_id',
+  late final GeneratedColumn<String> storeId = GeneratedColumn<String>(
+    'store_id',
     aliasedName,
     true,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
     defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'REFERENCES warehouses (id)',
+      'REFERENCES stores (id)',
     ),
   );
   static const VerificationMeta _isDeletedMeta = const VerificationMeta(
@@ -17867,7 +17836,7 @@ class $ExpensesTable extends Expenses
     paymentMethod,
     recordedBy,
     reference,
-    warehouseId,
+    storeId,
     isDeleted,
     createdAt,
     lastUpdatedAt,
@@ -17941,13 +17910,10 @@ class $ExpensesTable extends Expenses
         reference.isAcceptableOrUnknown(data['reference']!, _referenceMeta),
       );
     }
-    if (data.containsKey('warehouse_id')) {
+    if (data.containsKey('store_id')) {
       context.handle(
-        _warehouseIdMeta,
-        warehouseId.isAcceptableOrUnknown(
-          data['warehouse_id']!,
-          _warehouseIdMeta,
-        ),
+        _storeIdMeta,
+        storeId.isAcceptableOrUnknown(data['store_id']!, _storeIdMeta),
       );
     }
     if (data.containsKey('is_deleted')) {
@@ -18012,9 +17978,9 @@ class $ExpensesTable extends Expenses
         DriftSqlType.string,
         data['${effectivePrefix}reference'],
       ),
-      warehouseId: attachedDatabase.typeMapping.read(
+      storeId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
-        data['${effectivePrefix}warehouse_id'],
+        data['${effectivePrefix}store_id'],
       ),
       isDeleted: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
@@ -18046,7 +18012,7 @@ class ExpenseData extends DataClass implements Insertable<ExpenseData> {
   final String? paymentMethod;
   final String? recordedBy;
   final String? reference;
-  final String? warehouseId;
+  final String? storeId;
   final bool isDeleted;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
@@ -18059,7 +18025,7 @@ class ExpenseData extends DataClass implements Insertable<ExpenseData> {
     this.paymentMethod,
     this.recordedBy,
     this.reference,
-    this.warehouseId,
+    this.storeId,
     required this.isDeleted,
     required this.createdAt,
     required this.lastUpdatedAt,
@@ -18083,8 +18049,8 @@ class ExpenseData extends DataClass implements Insertable<ExpenseData> {
     if (!nullToAbsent || reference != null) {
       map['reference'] = Variable<String>(reference);
     }
-    if (!nullToAbsent || warehouseId != null) {
-      map['warehouse_id'] = Variable<String>(warehouseId);
+    if (!nullToAbsent || storeId != null) {
+      map['store_id'] = Variable<String>(storeId);
     }
     map['is_deleted'] = Variable<bool>(isDeleted);
     map['created_at'] = Variable<DateTime>(createdAt);
@@ -18110,9 +18076,9 @@ class ExpenseData extends DataClass implements Insertable<ExpenseData> {
       reference: reference == null && nullToAbsent
           ? const Value.absent()
           : Value(reference),
-      warehouseId: warehouseId == null && nullToAbsent
+      storeId: storeId == null && nullToAbsent
           ? const Value.absent()
-          : Value(warehouseId),
+          : Value(storeId),
       isDeleted: Value(isDeleted),
       createdAt: Value(createdAt),
       lastUpdatedAt: Value(lastUpdatedAt),
@@ -18133,7 +18099,7 @@ class ExpenseData extends DataClass implements Insertable<ExpenseData> {
       paymentMethod: serializer.fromJson<String?>(json['paymentMethod']),
       recordedBy: serializer.fromJson<String?>(json['recordedBy']),
       reference: serializer.fromJson<String?>(json['reference']),
-      warehouseId: serializer.fromJson<String?>(json['warehouseId']),
+      storeId: serializer.fromJson<String?>(json['storeId']),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
@@ -18151,7 +18117,7 @@ class ExpenseData extends DataClass implements Insertable<ExpenseData> {
       'paymentMethod': serializer.toJson<String?>(paymentMethod),
       'recordedBy': serializer.toJson<String?>(recordedBy),
       'reference': serializer.toJson<String?>(reference),
-      'warehouseId': serializer.toJson<String?>(warehouseId),
+      'storeId': serializer.toJson<String?>(storeId),
       'isDeleted': serializer.toJson<bool>(isDeleted),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
@@ -18167,7 +18133,7 @@ class ExpenseData extends DataClass implements Insertable<ExpenseData> {
     Value<String?> paymentMethod = const Value.absent(),
     Value<String?> recordedBy = const Value.absent(),
     Value<String?> reference = const Value.absent(),
-    Value<String?> warehouseId = const Value.absent(),
+    Value<String?> storeId = const Value.absent(),
     bool? isDeleted,
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
@@ -18182,7 +18148,7 @@ class ExpenseData extends DataClass implements Insertable<ExpenseData> {
         : this.paymentMethod,
     recordedBy: recordedBy.present ? recordedBy.value : this.recordedBy,
     reference: reference.present ? reference.value : this.reference,
-    warehouseId: warehouseId.present ? warehouseId.value : this.warehouseId,
+    storeId: storeId.present ? storeId.value : this.storeId,
     isDeleted: isDeleted ?? this.isDeleted,
     createdAt: createdAt ?? this.createdAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -18209,9 +18175,7 @@ class ExpenseData extends DataClass implements Insertable<ExpenseData> {
           ? data.recordedBy.value
           : this.recordedBy,
       reference: data.reference.present ? data.reference.value : this.reference,
-      warehouseId: data.warehouseId.present
-          ? data.warehouseId.value
-          : this.warehouseId,
+      storeId: data.storeId.present ? data.storeId.value : this.storeId,
       isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       lastUpdatedAt: data.lastUpdatedAt.present
@@ -18231,7 +18195,7 @@ class ExpenseData extends DataClass implements Insertable<ExpenseData> {
           ..write('paymentMethod: $paymentMethod, ')
           ..write('recordedBy: $recordedBy, ')
           ..write('reference: $reference, ')
-          ..write('warehouseId: $warehouseId, ')
+          ..write('storeId: $storeId, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt')
@@ -18249,7 +18213,7 @@ class ExpenseData extends DataClass implements Insertable<ExpenseData> {
     paymentMethod,
     recordedBy,
     reference,
-    warehouseId,
+    storeId,
     isDeleted,
     createdAt,
     lastUpdatedAt,
@@ -18266,7 +18230,7 @@ class ExpenseData extends DataClass implements Insertable<ExpenseData> {
           other.paymentMethod == this.paymentMethod &&
           other.recordedBy == this.recordedBy &&
           other.reference == this.reference &&
-          other.warehouseId == this.warehouseId &&
+          other.storeId == this.storeId &&
           other.isDeleted == this.isDeleted &&
           other.createdAt == this.createdAt &&
           other.lastUpdatedAt == this.lastUpdatedAt);
@@ -18281,7 +18245,7 @@ class ExpensesCompanion extends UpdateCompanion<ExpenseData> {
   final Value<String?> paymentMethod;
   final Value<String?> recordedBy;
   final Value<String?> reference;
-  final Value<String?> warehouseId;
+  final Value<String?> storeId;
   final Value<bool> isDeleted;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
@@ -18295,7 +18259,7 @@ class ExpensesCompanion extends UpdateCompanion<ExpenseData> {
     this.paymentMethod = const Value.absent(),
     this.recordedBy = const Value.absent(),
     this.reference = const Value.absent(),
-    this.warehouseId = const Value.absent(),
+    this.storeId = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -18310,7 +18274,7 @@ class ExpensesCompanion extends UpdateCompanion<ExpenseData> {
     this.paymentMethod = const Value.absent(),
     this.recordedBy = const Value.absent(),
     this.reference = const Value.absent(),
-    this.warehouseId = const Value.absent(),
+    this.storeId = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -18327,7 +18291,7 @@ class ExpensesCompanion extends UpdateCompanion<ExpenseData> {
     Expression<String>? paymentMethod,
     Expression<String>? recordedBy,
     Expression<String>? reference,
-    Expression<String>? warehouseId,
+    Expression<String>? storeId,
     Expression<bool>? isDeleted,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
@@ -18342,7 +18306,7 @@ class ExpensesCompanion extends UpdateCompanion<ExpenseData> {
       if (paymentMethod != null) 'payment_method': paymentMethod,
       if (recordedBy != null) 'recorded_by': recordedBy,
       if (reference != null) 'reference': reference,
-      if (warehouseId != null) 'warehouse_id': warehouseId,
+      if (storeId != null) 'store_id': storeId,
       if (isDeleted != null) 'is_deleted': isDeleted,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
@@ -18359,7 +18323,7 @@ class ExpensesCompanion extends UpdateCompanion<ExpenseData> {
     Value<String?>? paymentMethod,
     Value<String?>? recordedBy,
     Value<String?>? reference,
-    Value<String?>? warehouseId,
+    Value<String?>? storeId,
     Value<bool>? isDeleted,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
@@ -18374,7 +18338,7 @@ class ExpensesCompanion extends UpdateCompanion<ExpenseData> {
       paymentMethod: paymentMethod ?? this.paymentMethod,
       recordedBy: recordedBy ?? this.recordedBy,
       reference: reference ?? this.reference,
-      warehouseId: warehouseId ?? this.warehouseId,
+      storeId: storeId ?? this.storeId,
       isDeleted: isDeleted ?? this.isDeleted,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -18409,8 +18373,8 @@ class ExpensesCompanion extends UpdateCompanion<ExpenseData> {
     if (reference.present) {
       map['reference'] = Variable<String>(reference.value);
     }
-    if (warehouseId.present) {
-      map['warehouse_id'] = Variable<String>(warehouseId.value);
+    if (storeId.present) {
+      map['store_id'] = Variable<String>(storeId.value);
     }
     if (isDeleted.present) {
       map['is_deleted'] = Variable<bool>(isDeleted.value);
@@ -18438,7 +18402,7 @@ class ExpensesCompanion extends UpdateCompanion<ExpenseData> {
           ..write('paymentMethod: $paymentMethod, ')
           ..write('recordedBy: $recordedBy, ')
           ..write('reference: $reference, ')
-          ..write('warehouseId: $warehouseId, ')
+          ..write('storeId: $storeId, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
@@ -21065,18 +21029,18 @@ class $ActivityLogsTable extends ActivityLogs
       'REFERENCES wallet_transactions (id)',
     ),
   );
-  static const VerificationMeta _warehouseIdMeta = const VerificationMeta(
-    'warehouseId',
+  static const VerificationMeta _storeIdMeta = const VerificationMeta(
+    'storeId',
   );
   @override
-  late final GeneratedColumn<String> warehouseId = GeneratedColumn<String>(
-    'warehouse_id',
+  late final GeneratedColumn<String> storeId = GeneratedColumn<String>(
+    'store_id',
     aliasedName,
     true,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
     defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'REFERENCES warehouses (id)',
+      'REFERENCES stores (id)',
     ),
   );
   static const VerificationMeta _voidedAtMeta = const VerificationMeta(
@@ -21153,7 +21117,7 @@ class $ActivityLogsTable extends ActivityLogs
     expenseId,
     deliveryId,
     walletTxnId,
-    warehouseId,
+    storeId,
     voidedAt,
     voidedBy,
     voidReason,
@@ -21247,13 +21211,10 @@ class $ActivityLogsTable extends ActivityLogs
         ),
       );
     }
-    if (data.containsKey('warehouse_id')) {
+    if (data.containsKey('store_id')) {
       context.handle(
-        _warehouseIdMeta,
-        warehouseId.isAcceptableOrUnknown(
-          data['warehouse_id']!,
-          _warehouseIdMeta,
-        ),
+        _storeIdMeta,
+        storeId.isAcceptableOrUnknown(data['store_id']!, _storeIdMeta),
       );
     }
     if (data.containsKey('voided_at')) {
@@ -21342,9 +21303,9 @@ class $ActivityLogsTable extends ActivityLogs
         DriftSqlType.string,
         data['${effectivePrefix}wallet_txn_id'],
       ),
-      warehouseId: attachedDatabase.typeMapping.read(
+      storeId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
-        data['${effectivePrefix}warehouse_id'],
+        data['${effectivePrefix}store_id'],
       ),
       voidedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
@@ -21387,7 +21348,7 @@ class ActivityLogData extends DataClass implements Insertable<ActivityLogData> {
   final String? expenseId;
   final String? deliveryId;
   final String? walletTxnId;
-  final String? warehouseId;
+  final String? storeId;
   final DateTime? voidedAt;
   final String? voidedBy;
   final String? voidReason;
@@ -21405,7 +21366,7 @@ class ActivityLogData extends DataClass implements Insertable<ActivityLogData> {
     this.expenseId,
     this.deliveryId,
     this.walletTxnId,
-    this.warehouseId,
+    this.storeId,
     this.voidedAt,
     this.voidedBy,
     this.voidReason,
@@ -21440,8 +21401,8 @@ class ActivityLogData extends DataClass implements Insertable<ActivityLogData> {
     if (!nullToAbsent || walletTxnId != null) {
       map['wallet_txn_id'] = Variable<String>(walletTxnId);
     }
-    if (!nullToAbsent || warehouseId != null) {
-      map['warehouse_id'] = Variable<String>(warehouseId);
+    if (!nullToAbsent || storeId != null) {
+      map['store_id'] = Variable<String>(storeId);
     }
     if (!nullToAbsent || voidedAt != null) {
       map['voided_at'] = Variable<DateTime>(voidedAt);
@@ -21484,9 +21445,9 @@ class ActivityLogData extends DataClass implements Insertable<ActivityLogData> {
       walletTxnId: walletTxnId == null && nullToAbsent
           ? const Value.absent()
           : Value(walletTxnId),
-      warehouseId: warehouseId == null && nullToAbsent
+      storeId: storeId == null && nullToAbsent
           ? const Value.absent()
-          : Value(warehouseId),
+          : Value(storeId),
       voidedAt: voidedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(voidedAt),
@@ -21518,7 +21479,7 @@ class ActivityLogData extends DataClass implements Insertable<ActivityLogData> {
       expenseId: serializer.fromJson<String?>(json['expenseId']),
       deliveryId: serializer.fromJson<String?>(json['deliveryId']),
       walletTxnId: serializer.fromJson<String?>(json['walletTxnId']),
-      warehouseId: serializer.fromJson<String?>(json['warehouseId']),
+      storeId: serializer.fromJson<String?>(json['storeId']),
       voidedAt: serializer.fromJson<DateTime?>(json['voidedAt']),
       voidedBy: serializer.fromJson<String?>(json['voidedBy']),
       voidReason: serializer.fromJson<String?>(json['voidReason']),
@@ -21541,7 +21502,7 @@ class ActivityLogData extends DataClass implements Insertable<ActivityLogData> {
       'expenseId': serializer.toJson<String?>(expenseId),
       'deliveryId': serializer.toJson<String?>(deliveryId),
       'walletTxnId': serializer.toJson<String?>(walletTxnId),
-      'warehouseId': serializer.toJson<String?>(warehouseId),
+      'storeId': serializer.toJson<String?>(storeId),
       'voidedAt': serializer.toJson<DateTime?>(voidedAt),
       'voidedBy': serializer.toJson<String?>(voidedBy),
       'voidReason': serializer.toJson<String?>(voidReason),
@@ -21562,7 +21523,7 @@ class ActivityLogData extends DataClass implements Insertable<ActivityLogData> {
     Value<String?> expenseId = const Value.absent(),
     Value<String?> deliveryId = const Value.absent(),
     Value<String?> walletTxnId = const Value.absent(),
-    Value<String?> warehouseId = const Value.absent(),
+    Value<String?> storeId = const Value.absent(),
     Value<DateTime?> voidedAt = const Value.absent(),
     Value<String?> voidedBy = const Value.absent(),
     Value<String?> voidReason = const Value.absent(),
@@ -21580,7 +21541,7 @@ class ActivityLogData extends DataClass implements Insertable<ActivityLogData> {
     expenseId: expenseId.present ? expenseId.value : this.expenseId,
     deliveryId: deliveryId.present ? deliveryId.value : this.deliveryId,
     walletTxnId: walletTxnId.present ? walletTxnId.value : this.walletTxnId,
-    warehouseId: warehouseId.present ? warehouseId.value : this.warehouseId,
+    storeId: storeId.present ? storeId.value : this.storeId,
     voidedAt: voidedAt.present ? voidedAt.value : this.voidedAt,
     voidedBy: voidedBy.present ? voidedBy.value : this.voidedBy,
     voidReason: voidReason.present ? voidReason.value : this.voidReason,
@@ -21610,9 +21571,7 @@ class ActivityLogData extends DataClass implements Insertable<ActivityLogData> {
       walletTxnId: data.walletTxnId.present
           ? data.walletTxnId.value
           : this.walletTxnId,
-      warehouseId: data.warehouseId.present
-          ? data.warehouseId.value
-          : this.warehouseId,
+      storeId: data.storeId.present ? data.storeId.value : this.storeId,
       voidedAt: data.voidedAt.present ? data.voidedAt.value : this.voidedAt,
       voidedBy: data.voidedBy.present ? data.voidedBy.value : this.voidedBy,
       voidReason: data.voidReason.present
@@ -21639,7 +21598,7 @@ class ActivityLogData extends DataClass implements Insertable<ActivityLogData> {
           ..write('expenseId: $expenseId, ')
           ..write('deliveryId: $deliveryId, ')
           ..write('walletTxnId: $walletTxnId, ')
-          ..write('warehouseId: $warehouseId, ')
+          ..write('storeId: $storeId, ')
           ..write('voidedAt: $voidedAt, ')
           ..write('voidedBy: $voidedBy, ')
           ..write('voidReason: $voidReason, ')
@@ -21662,7 +21621,7 @@ class ActivityLogData extends DataClass implements Insertable<ActivityLogData> {
     expenseId,
     deliveryId,
     walletTxnId,
-    warehouseId,
+    storeId,
     voidedAt,
     voidedBy,
     voidReason,
@@ -21684,7 +21643,7 @@ class ActivityLogData extends DataClass implements Insertable<ActivityLogData> {
           other.expenseId == this.expenseId &&
           other.deliveryId == this.deliveryId &&
           other.walletTxnId == this.walletTxnId &&
-          other.warehouseId == this.warehouseId &&
+          other.storeId == this.storeId &&
           other.voidedAt == this.voidedAt &&
           other.voidedBy == this.voidedBy &&
           other.voidReason == this.voidReason &&
@@ -21704,7 +21663,7 @@ class ActivityLogsCompanion extends UpdateCompanion<ActivityLogData> {
   final Value<String?> expenseId;
   final Value<String?> deliveryId;
   final Value<String?> walletTxnId;
-  final Value<String?> warehouseId;
+  final Value<String?> storeId;
   final Value<DateTime?> voidedAt;
   final Value<String?> voidedBy;
   final Value<String?> voidReason;
@@ -21723,7 +21682,7 @@ class ActivityLogsCompanion extends UpdateCompanion<ActivityLogData> {
     this.expenseId = const Value.absent(),
     this.deliveryId = const Value.absent(),
     this.walletTxnId = const Value.absent(),
-    this.warehouseId = const Value.absent(),
+    this.storeId = const Value.absent(),
     this.voidedAt = const Value.absent(),
     this.voidedBy = const Value.absent(),
     this.voidReason = const Value.absent(),
@@ -21743,7 +21702,7 @@ class ActivityLogsCompanion extends UpdateCompanion<ActivityLogData> {
     this.expenseId = const Value.absent(),
     this.deliveryId = const Value.absent(),
     this.walletTxnId = const Value.absent(),
-    this.warehouseId = const Value.absent(),
+    this.storeId = const Value.absent(),
     this.voidedAt = const Value.absent(),
     this.voidedBy = const Value.absent(),
     this.voidReason = const Value.absent(),
@@ -21765,7 +21724,7 @@ class ActivityLogsCompanion extends UpdateCompanion<ActivityLogData> {
     Expression<String>? expenseId,
     Expression<String>? deliveryId,
     Expression<String>? walletTxnId,
-    Expression<String>? warehouseId,
+    Expression<String>? storeId,
     Expression<DateTime>? voidedAt,
     Expression<String>? voidedBy,
     Expression<String>? voidReason,
@@ -21785,7 +21744,7 @@ class ActivityLogsCompanion extends UpdateCompanion<ActivityLogData> {
       if (expenseId != null) 'expense_id': expenseId,
       if (deliveryId != null) 'delivery_id': deliveryId,
       if (walletTxnId != null) 'wallet_txn_id': walletTxnId,
-      if (warehouseId != null) 'warehouse_id': warehouseId,
+      if (storeId != null) 'store_id': storeId,
       if (voidedAt != null) 'voided_at': voidedAt,
       if (voidedBy != null) 'voided_by': voidedBy,
       if (voidReason != null) 'void_reason': voidReason,
@@ -21807,7 +21766,7 @@ class ActivityLogsCompanion extends UpdateCompanion<ActivityLogData> {
     Value<String?>? expenseId,
     Value<String?>? deliveryId,
     Value<String?>? walletTxnId,
-    Value<String?>? warehouseId,
+    Value<String?>? storeId,
     Value<DateTime?>? voidedAt,
     Value<String?>? voidedBy,
     Value<String?>? voidReason,
@@ -21827,7 +21786,7 @@ class ActivityLogsCompanion extends UpdateCompanion<ActivityLogData> {
       expenseId: expenseId ?? this.expenseId,
       deliveryId: deliveryId ?? this.deliveryId,
       walletTxnId: walletTxnId ?? this.walletTxnId,
-      warehouseId: warehouseId ?? this.warehouseId,
+      storeId: storeId ?? this.storeId,
       voidedAt: voidedAt ?? this.voidedAt,
       voidedBy: voidedBy ?? this.voidedBy,
       voidReason: voidReason ?? this.voidReason,
@@ -21873,8 +21832,8 @@ class ActivityLogsCompanion extends UpdateCompanion<ActivityLogData> {
     if (walletTxnId.present) {
       map['wallet_txn_id'] = Variable<String>(walletTxnId.value);
     }
-    if (warehouseId.present) {
-      map['warehouse_id'] = Variable<String>(warehouseId.value);
+    if (storeId.present) {
+      map['store_id'] = Variable<String>(storeId.value);
     }
     if (voidedAt.present) {
       map['voided_at'] = Variable<DateTime>(voidedAt.value);
@@ -21911,7 +21870,7 @@ class ActivityLogsCompanion extends UpdateCompanion<ActivityLogData> {
           ..write('expenseId: $expenseId, ')
           ..write('deliveryId: $deliveryId, ')
           ..write('walletTxnId: $walletTxnId, ')
-          ..write('warehouseId: $warehouseId, ')
+          ..write('storeId: $storeId, ')
           ..write('voidedAt: $voidedAt, ')
           ..write('voidedBy: $voidedBy, ')
           ..write('voidReason: $voidReason, ')
@@ -25965,18 +25924,18 @@ class $InviteCodesTable extends InviteCodes
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
-  static const VerificationMeta _warehouseIdMeta = const VerificationMeta(
-    'warehouseId',
+  static const VerificationMeta _storeIdMeta = const VerificationMeta(
+    'storeId',
   );
   @override
-  late final GeneratedColumn<String> warehouseId = GeneratedColumn<String>(
-    'warehouse_id',
+  late final GeneratedColumn<String> storeId = GeneratedColumn<String>(
+    'store_id',
     aliasedName,
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: true,
     defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'REFERENCES warehouses (id)',
+      'REFERENCES stores (id)',
     ),
   );
   static const VerificationMeta _generatedByUserIdMeta = const VerificationMeta(
@@ -26086,7 +26045,7 @@ class $InviteCodesTable extends InviteCodes
     roleId,
     code,
     email,
-    warehouseId,
+    storeId,
     generatedByUserId,
     expiresAt,
     usedByUserId,
@@ -26143,16 +26102,13 @@ class $InviteCodesTable extends InviteCodes
     } else if (isInserting) {
       context.missing(_emailMeta);
     }
-    if (data.containsKey('warehouse_id')) {
+    if (data.containsKey('store_id')) {
       context.handle(
-        _warehouseIdMeta,
-        warehouseId.isAcceptableOrUnknown(
-          data['warehouse_id']!,
-          _warehouseIdMeta,
-        ),
+        _storeIdMeta,
+        storeId.isAcceptableOrUnknown(data['store_id']!, _storeIdMeta),
       );
     } else if (isInserting) {
-      context.missing(_warehouseIdMeta);
+      context.missing(_storeIdMeta);
     }
     if (data.containsKey('generated_by_user_id')) {
       context.handle(
@@ -26244,9 +26200,9 @@ class $InviteCodesTable extends InviteCodes
         DriftSqlType.string,
         data['${effectivePrefix}email'],
       )!,
-      warehouseId: attachedDatabase.typeMapping.read(
+      storeId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
-        data['${effectivePrefix}warehouse_id'],
+        data['${effectivePrefix}store_id'],
       )!,
       generatedByUserId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
@@ -26295,7 +26251,7 @@ class InviteCodeData extends DataClass implements Insertable<InviteCodeData> {
   final String roleId;
   final String code;
   final String email;
-  final String warehouseId;
+  final String storeId;
   final String generatedByUserId;
   final DateTime expiresAt;
   final String? usedByUserId;
@@ -26310,7 +26266,7 @@ class InviteCodeData extends DataClass implements Insertable<InviteCodeData> {
     required this.roleId,
     required this.code,
     required this.email,
-    required this.warehouseId,
+    required this.storeId,
     required this.generatedByUserId,
     required this.expiresAt,
     this.usedByUserId,
@@ -26328,7 +26284,7 @@ class InviteCodeData extends DataClass implements Insertable<InviteCodeData> {
     map['role_id'] = Variable<String>(roleId);
     map['code'] = Variable<String>(code);
     map['email'] = Variable<String>(email);
-    map['warehouse_id'] = Variable<String>(warehouseId);
+    map['store_id'] = Variable<String>(storeId);
     map['generated_by_user_id'] = Variable<String>(generatedByUserId);
     map['expires_at'] = Variable<DateTime>(expiresAt);
     if (!nullToAbsent || usedByUserId != null) {
@@ -26353,7 +26309,7 @@ class InviteCodeData extends DataClass implements Insertable<InviteCodeData> {
       roleId: Value(roleId),
       code: Value(code),
       email: Value(email),
-      warehouseId: Value(warehouseId),
+      storeId: Value(storeId),
       generatedByUserId: Value(generatedByUserId),
       expiresAt: Value(expiresAt),
       usedByUserId: usedByUserId == null && nullToAbsent
@@ -26382,7 +26338,7 @@ class InviteCodeData extends DataClass implements Insertable<InviteCodeData> {
       roleId: serializer.fromJson<String>(json['roleId']),
       code: serializer.fromJson<String>(json['code']),
       email: serializer.fromJson<String>(json['email']),
-      warehouseId: serializer.fromJson<String>(json['warehouseId']),
+      storeId: serializer.fromJson<String>(json['storeId']),
       generatedByUserId: serializer.fromJson<String>(json['generatedByUserId']),
       expiresAt: serializer.fromJson<DateTime>(json['expiresAt']),
       usedByUserId: serializer.fromJson<String?>(json['usedByUserId']),
@@ -26402,7 +26358,7 @@ class InviteCodeData extends DataClass implements Insertable<InviteCodeData> {
       'roleId': serializer.toJson<String>(roleId),
       'code': serializer.toJson<String>(code),
       'email': serializer.toJson<String>(email),
-      'warehouseId': serializer.toJson<String>(warehouseId),
+      'storeId': serializer.toJson<String>(storeId),
       'generatedByUserId': serializer.toJson<String>(generatedByUserId),
       'expiresAt': serializer.toJson<DateTime>(expiresAt),
       'usedByUserId': serializer.toJson<String?>(usedByUserId),
@@ -26420,7 +26376,7 @@ class InviteCodeData extends DataClass implements Insertable<InviteCodeData> {
     String? roleId,
     String? code,
     String? email,
-    String? warehouseId,
+    String? storeId,
     String? generatedByUserId,
     DateTime? expiresAt,
     Value<String?> usedByUserId = const Value.absent(),
@@ -26435,7 +26391,7 @@ class InviteCodeData extends DataClass implements Insertable<InviteCodeData> {
     roleId: roleId ?? this.roleId,
     code: code ?? this.code,
     email: email ?? this.email,
-    warehouseId: warehouseId ?? this.warehouseId,
+    storeId: storeId ?? this.storeId,
     generatedByUserId: generatedByUserId ?? this.generatedByUserId,
     expiresAt: expiresAt ?? this.expiresAt,
     usedByUserId: usedByUserId.present ? usedByUserId.value : this.usedByUserId,
@@ -26454,9 +26410,7 @@ class InviteCodeData extends DataClass implements Insertable<InviteCodeData> {
       roleId: data.roleId.present ? data.roleId.value : this.roleId,
       code: data.code.present ? data.code.value : this.code,
       email: data.email.present ? data.email.value : this.email,
-      warehouseId: data.warehouseId.present
-          ? data.warehouseId.value
-          : this.warehouseId,
+      storeId: data.storeId.present ? data.storeId.value : this.storeId,
       generatedByUserId: data.generatedByUserId.present
           ? data.generatedByUserId.value
           : this.generatedByUserId,
@@ -26482,7 +26436,7 @@ class InviteCodeData extends DataClass implements Insertable<InviteCodeData> {
           ..write('roleId: $roleId, ')
           ..write('code: $code, ')
           ..write('email: $email, ')
-          ..write('warehouseId: $warehouseId, ')
+          ..write('storeId: $storeId, ')
           ..write('generatedByUserId: $generatedByUserId, ')
           ..write('expiresAt: $expiresAt, ')
           ..write('usedByUserId: $usedByUserId, ')
@@ -26502,7 +26456,7 @@ class InviteCodeData extends DataClass implements Insertable<InviteCodeData> {
     roleId,
     code,
     email,
-    warehouseId,
+    storeId,
     generatedByUserId,
     expiresAt,
     usedByUserId,
@@ -26521,7 +26475,7 @@ class InviteCodeData extends DataClass implements Insertable<InviteCodeData> {
           other.roleId == this.roleId &&
           other.code == this.code &&
           other.email == this.email &&
-          other.warehouseId == this.warehouseId &&
+          other.storeId == this.storeId &&
           other.generatedByUserId == this.generatedByUserId &&
           other.expiresAt == this.expiresAt &&
           other.usedByUserId == this.usedByUserId &&
@@ -26538,7 +26492,7 @@ class InviteCodesCompanion extends UpdateCompanion<InviteCodeData> {
   final Value<String> roleId;
   final Value<String> code;
   final Value<String> email;
-  final Value<String> warehouseId;
+  final Value<String> storeId;
   final Value<String> generatedByUserId;
   final Value<DateTime> expiresAt;
   final Value<String?> usedByUserId;
@@ -26554,7 +26508,7 @@ class InviteCodesCompanion extends UpdateCompanion<InviteCodeData> {
     this.roleId = const Value.absent(),
     this.code = const Value.absent(),
     this.email = const Value.absent(),
-    this.warehouseId = const Value.absent(),
+    this.storeId = const Value.absent(),
     this.generatedByUserId = const Value.absent(),
     this.expiresAt = const Value.absent(),
     this.usedByUserId = const Value.absent(),
@@ -26571,7 +26525,7 @@ class InviteCodesCompanion extends UpdateCompanion<InviteCodeData> {
     required String roleId,
     required String code,
     required String email,
-    required String warehouseId,
+    required String storeId,
     required String generatedByUserId,
     required DateTime expiresAt,
     this.usedByUserId = const Value.absent(),
@@ -26585,7 +26539,7 @@ class InviteCodesCompanion extends UpdateCompanion<InviteCodeData> {
        roleId = Value(roleId),
        code = Value(code),
        email = Value(email),
-       warehouseId = Value(warehouseId),
+       storeId = Value(storeId),
        generatedByUserId = Value(generatedByUserId),
        expiresAt = Value(expiresAt);
   static Insertable<InviteCodeData> custom({
@@ -26594,7 +26548,7 @@ class InviteCodesCompanion extends UpdateCompanion<InviteCodeData> {
     Expression<String>? roleId,
     Expression<String>? code,
     Expression<String>? email,
-    Expression<String>? warehouseId,
+    Expression<String>? storeId,
     Expression<String>? generatedByUserId,
     Expression<DateTime>? expiresAt,
     Expression<String>? usedByUserId,
@@ -26611,7 +26565,7 @@ class InviteCodesCompanion extends UpdateCompanion<InviteCodeData> {
       if (roleId != null) 'role_id': roleId,
       if (code != null) 'code': code,
       if (email != null) 'email': email,
-      if (warehouseId != null) 'warehouse_id': warehouseId,
+      if (storeId != null) 'store_id': storeId,
       if (generatedByUserId != null) 'generated_by_user_id': generatedByUserId,
       if (expiresAt != null) 'expires_at': expiresAt,
       if (usedByUserId != null) 'used_by_user_id': usedByUserId,
@@ -26630,7 +26584,7 @@ class InviteCodesCompanion extends UpdateCompanion<InviteCodeData> {
     Value<String>? roleId,
     Value<String>? code,
     Value<String>? email,
-    Value<String>? warehouseId,
+    Value<String>? storeId,
     Value<String>? generatedByUserId,
     Value<DateTime>? expiresAt,
     Value<String?>? usedByUserId,
@@ -26647,7 +26601,7 @@ class InviteCodesCompanion extends UpdateCompanion<InviteCodeData> {
       roleId: roleId ?? this.roleId,
       code: code ?? this.code,
       email: email ?? this.email,
-      warehouseId: warehouseId ?? this.warehouseId,
+      storeId: storeId ?? this.storeId,
       generatedByUserId: generatedByUserId ?? this.generatedByUserId,
       expiresAt: expiresAt ?? this.expiresAt,
       usedByUserId: usedByUserId ?? this.usedByUserId,
@@ -26678,8 +26632,8 @@ class InviteCodesCompanion extends UpdateCompanion<InviteCodeData> {
     if (email.present) {
       map['email'] = Variable<String>(email.value);
     }
-    if (warehouseId.present) {
-      map['warehouse_id'] = Variable<String>(warehouseId.value);
+    if (storeId.present) {
+      map['store_id'] = Variable<String>(storeId.value);
     }
     if (generatedByUserId.present) {
       map['generated_by_user_id'] = Variable<String>(generatedByUserId.value);
@@ -26719,7 +26673,7 @@ class InviteCodesCompanion extends UpdateCompanion<InviteCodeData> {
           ..write('roleId: $roleId, ')
           ..write('code: $code, ')
           ..write('email: $email, ')
-          ..write('warehouseId: $warehouseId, ')
+          ..write('storeId: $storeId, ')
           ..write('generatedByUserId: $generatedByUserId, ')
           ..write('expiresAt: $expiresAt, ')
           ..write('usedByUserId: $usedByUserId, ')
@@ -26776,18 +26730,18 @@ class $UserStoresTable extends UserStores
       'REFERENCES users (id)',
     ),
   );
-  static const VerificationMeta _warehouseIdMeta = const VerificationMeta(
-    'warehouseId',
+  static const VerificationMeta _storeIdMeta = const VerificationMeta(
+    'storeId',
   );
   @override
-  late final GeneratedColumn<String> warehouseId = GeneratedColumn<String>(
-    'warehouse_id',
+  late final GeneratedColumn<String> storeId = GeneratedColumn<String>(
+    'store_id',
     aliasedName,
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: true,
     defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'REFERENCES warehouses (id)',
+      'REFERENCES stores (id)',
     ),
   );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
@@ -26820,7 +26774,7 @@ class $UserStoresTable extends UserStores
     id,
     businessId,
     userId,
-    warehouseId,
+    storeId,
     createdAt,
     lastUpdatedAt,
   ];
@@ -26855,16 +26809,13 @@ class $UserStoresTable extends UserStores
     } else if (isInserting) {
       context.missing(_userIdMeta);
     }
-    if (data.containsKey('warehouse_id')) {
+    if (data.containsKey('store_id')) {
       context.handle(
-        _warehouseIdMeta,
-        warehouseId.isAcceptableOrUnknown(
-          data['warehouse_id']!,
-          _warehouseIdMeta,
-        ),
+        _storeIdMeta,
+        storeId.isAcceptableOrUnknown(data['store_id']!, _storeIdMeta),
       );
     } else if (isInserting) {
-      context.missing(_warehouseIdMeta);
+      context.missing(_storeIdMeta);
     }
     if (data.containsKey('created_at')) {
       context.handle(
@@ -26902,9 +26853,9 @@ class $UserStoresTable extends UserStores
         DriftSqlType.string,
         data['${effectivePrefix}user_id'],
       )!,
-      warehouseId: attachedDatabase.typeMapping.read(
+      storeId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
-        data['${effectivePrefix}warehouse_id'],
+        data['${effectivePrefix}store_id'],
       )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
@@ -26927,14 +26878,14 @@ class UserStoreData extends DataClass implements Insertable<UserStoreData> {
   final String id;
   final String businessId;
   final String userId;
-  final String warehouseId;
+  final String storeId;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
   const UserStoreData({
     required this.id,
     required this.businessId,
     required this.userId,
-    required this.warehouseId,
+    required this.storeId,
     required this.createdAt,
     required this.lastUpdatedAt,
   });
@@ -26944,7 +26895,7 @@ class UserStoreData extends DataClass implements Insertable<UserStoreData> {
     map['id'] = Variable<String>(id);
     map['business_id'] = Variable<String>(businessId);
     map['user_id'] = Variable<String>(userId);
-    map['warehouse_id'] = Variable<String>(warehouseId);
+    map['store_id'] = Variable<String>(storeId);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
     return map;
@@ -26955,7 +26906,7 @@ class UserStoreData extends DataClass implements Insertable<UserStoreData> {
       id: Value(id),
       businessId: Value(businessId),
       userId: Value(userId),
-      warehouseId: Value(warehouseId),
+      storeId: Value(storeId),
       createdAt: Value(createdAt),
       lastUpdatedAt: Value(lastUpdatedAt),
     );
@@ -26970,7 +26921,7 @@ class UserStoreData extends DataClass implements Insertable<UserStoreData> {
       id: serializer.fromJson<String>(json['id']),
       businessId: serializer.fromJson<String>(json['businessId']),
       userId: serializer.fromJson<String>(json['userId']),
-      warehouseId: serializer.fromJson<String>(json['warehouseId']),
+      storeId: serializer.fromJson<String>(json['storeId']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
     );
@@ -26982,7 +26933,7 @@ class UserStoreData extends DataClass implements Insertable<UserStoreData> {
       'id': serializer.toJson<String>(id),
       'businessId': serializer.toJson<String>(businessId),
       'userId': serializer.toJson<String>(userId),
-      'warehouseId': serializer.toJson<String>(warehouseId),
+      'storeId': serializer.toJson<String>(storeId),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
     };
@@ -26992,14 +26943,14 @@ class UserStoreData extends DataClass implements Insertable<UserStoreData> {
     String? id,
     String? businessId,
     String? userId,
-    String? warehouseId,
+    String? storeId,
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
   }) => UserStoreData(
     id: id ?? this.id,
     businessId: businessId ?? this.businessId,
     userId: userId ?? this.userId,
-    warehouseId: warehouseId ?? this.warehouseId,
+    storeId: storeId ?? this.storeId,
     createdAt: createdAt ?? this.createdAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
   );
@@ -27010,9 +26961,7 @@ class UserStoreData extends DataClass implements Insertable<UserStoreData> {
           ? data.businessId.value
           : this.businessId,
       userId: data.userId.present ? data.userId.value : this.userId,
-      warehouseId: data.warehouseId.present
-          ? data.warehouseId.value
-          : this.warehouseId,
+      storeId: data.storeId.present ? data.storeId.value : this.storeId,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       lastUpdatedAt: data.lastUpdatedAt.present
           ? data.lastUpdatedAt.value
@@ -27026,7 +26975,7 @@ class UserStoreData extends DataClass implements Insertable<UserStoreData> {
           ..write('id: $id, ')
           ..write('businessId: $businessId, ')
           ..write('userId: $userId, ')
-          ..write('warehouseId: $warehouseId, ')
+          ..write('storeId: $storeId, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt')
           ..write(')'))
@@ -27034,14 +26983,8 @@ class UserStoreData extends DataClass implements Insertable<UserStoreData> {
   }
 
   @override
-  int get hashCode => Object.hash(
-    id,
-    businessId,
-    userId,
-    warehouseId,
-    createdAt,
-    lastUpdatedAt,
-  );
+  int get hashCode =>
+      Object.hash(id, businessId, userId, storeId, createdAt, lastUpdatedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -27049,7 +26992,7 @@ class UserStoreData extends DataClass implements Insertable<UserStoreData> {
           other.id == this.id &&
           other.businessId == this.businessId &&
           other.userId == this.userId &&
-          other.warehouseId == this.warehouseId &&
+          other.storeId == this.storeId &&
           other.createdAt == this.createdAt &&
           other.lastUpdatedAt == this.lastUpdatedAt);
 }
@@ -27058,7 +27001,7 @@ class UserStoresCompanion extends UpdateCompanion<UserStoreData> {
   final Value<String> id;
   final Value<String> businessId;
   final Value<String> userId;
-  final Value<String> warehouseId;
+  final Value<String> storeId;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
   final Value<int> rowid;
@@ -27066,7 +27009,7 @@ class UserStoresCompanion extends UpdateCompanion<UserStoreData> {
     this.id = const Value.absent(),
     this.businessId = const Value.absent(),
     this.userId = const Value.absent(),
-    this.warehouseId = const Value.absent(),
+    this.storeId = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -27075,18 +27018,18 @@ class UserStoresCompanion extends UpdateCompanion<UserStoreData> {
     this.id = const Value.absent(),
     required String businessId,
     required String userId,
-    required String warehouseId,
+    required String storeId,
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : businessId = Value(businessId),
        userId = Value(userId),
-       warehouseId = Value(warehouseId);
+       storeId = Value(storeId);
   static Insertable<UserStoreData> custom({
     Expression<String>? id,
     Expression<String>? businessId,
     Expression<String>? userId,
-    Expression<String>? warehouseId,
+    Expression<String>? storeId,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
     Expression<int>? rowid,
@@ -27095,7 +27038,7 @@ class UserStoresCompanion extends UpdateCompanion<UserStoreData> {
       if (id != null) 'id': id,
       if (businessId != null) 'business_id': businessId,
       if (userId != null) 'user_id': userId,
-      if (warehouseId != null) 'warehouse_id': warehouseId,
+      if (storeId != null) 'store_id': storeId,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -27106,7 +27049,7 @@ class UserStoresCompanion extends UpdateCompanion<UserStoreData> {
     Value<String>? id,
     Value<String>? businessId,
     Value<String>? userId,
-    Value<String>? warehouseId,
+    Value<String>? storeId,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
     Value<int>? rowid,
@@ -27115,7 +27058,7 @@ class UserStoresCompanion extends UpdateCompanion<UserStoreData> {
       id: id ?? this.id,
       businessId: businessId ?? this.businessId,
       userId: userId ?? this.userId,
-      warehouseId: warehouseId ?? this.warehouseId,
+      storeId: storeId ?? this.storeId,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
       rowid: rowid ?? this.rowid,
@@ -27134,8 +27077,8 @@ class UserStoresCompanion extends UpdateCompanion<UserStoreData> {
     if (userId.present) {
       map['user_id'] = Variable<String>(userId.value);
     }
-    if (warehouseId.present) {
-      map['warehouse_id'] = Variable<String>(warehouseId.value);
+    if (storeId.present) {
+      map['store_id'] = Variable<String>(storeId.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -27155,7 +27098,7 @@ class UserStoresCompanion extends UpdateCompanion<UserStoreData> {
           ..write('id: $id, ')
           ..write('businessId: $businessId, ')
           ..write('userId: $userId, ')
-          ..write('warehouseId: $warehouseId, ')
+          ..write('storeId: $storeId, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
           ..write('rowid: $rowid')
@@ -29036,7 +28979,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $BusinessesTable businesses = $BusinessesTable(this);
   late final $CrateGroupsTable crateGroups = $CrateGroupsTable(this);
   late final $ManufacturersTable manufacturers = $ManufacturersTable(this);
-  late final $WarehousesTable warehouses = $WarehousesTable(this);
+  late final $StoresTable stores = $StoresTable(this);
   late final $UsersTable users = $UsersTable(this);
   late final $CategoriesTable categories = $CategoriesTable(this);
   late final $SuppliersTable suppliers = $SuppliersTable(this);
@@ -29110,7 +29053,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final NotificationsDao notificationsDao = NotificationsDao(
     this as AppDatabase,
   );
-  late final WarehousesDao warehousesDao = WarehousesDao(this as AppDatabase);
+  late final StoresDao storesDao = StoresDao(this as AppDatabase);
   late final StockLedgerDao stockLedgerDao = StockLedgerDao(
     this as AppDatabase,
   );
@@ -29164,7 +29107,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     businesses,
     crateGroups,
     manufacturers,
-    warehouses,
+    stores,
     users,
     categories,
     suppliers,
@@ -29284,19 +29227,20 @@ final class $$BusinessesTableReferences
     );
   }
 
-  static MultiTypedResultKey<$WarehousesTable, List<WarehouseData>>
-  _warehousesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
-    db.warehouses,
-    aliasName: $_aliasNameGenerator(db.businesses.id, db.warehouses.businessId),
+  static MultiTypedResultKey<$StoresTable, List<StoreData>> _storesRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.stores,
+    aliasName: $_aliasNameGenerator(db.businesses.id, db.stores.businessId),
   );
 
-  $$WarehousesTableProcessedTableManager get warehousesRefs {
-    final manager = $$WarehousesTableTableManager(
+  $$StoresTableProcessedTableManager get storesRefs {
+    final manager = $$StoresTableTableManager(
       $_db,
-      $_db.warehouses,
+      $_db.stores,
     ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
 
-    final cache = $_typedResult.readTableOrNull(_warehousesRefsTable($_db));
+    final cache = $_typedResult.readTableOrNull(_storesRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -30188,22 +30132,22 @@ class $$BusinessesTableFilterComposer
     return f(composer);
   }
 
-  Expression<bool> warehousesRefs(
-    Expression<bool> Function($$WarehousesTableFilterComposer f) f,
+  Expression<bool> storesRefs(
+    Expression<bool> Function($$StoresTableFilterComposer f) f,
   ) {
-    final $$WarehousesTableFilterComposer composer = $composerBuilder(
+    final $$StoresTableFilterComposer composer = $composerBuilder(
       composer: this,
       getCurrentColumn: (t) => t.id,
-      referencedTable: $db.warehouses,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.businessId,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableFilterComposer(
+          }) => $$StoresTableFilterComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -31295,22 +31239,22 @@ class $$BusinessesTableAnnotationComposer
     return f(composer);
   }
 
-  Expression<T> warehousesRefs<T extends Object>(
-    Expression<T> Function($$WarehousesTableAnnotationComposer a) f,
+  Expression<T> storesRefs<T extends Object>(
+    Expression<T> Function($$StoresTableAnnotationComposer a) f,
   ) {
-    final $$WarehousesTableAnnotationComposer composer = $composerBuilder(
+    final $$StoresTableAnnotationComposer composer = $composerBuilder(
       composer: this,
       getCurrentColumn: (t) => t.id,
-      referencedTable: $db.warehouses,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.businessId,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableAnnotationComposer(
+          }) => $$StoresTableAnnotationComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -32270,7 +32214,7 @@ class $$BusinessesTableTableManager
           PrefetchHooks Function({
             bool crateGroupsRefs,
             bool manufacturersRefs,
-            bool warehousesRefs,
+            bool storesRefs,
             bool usersRefs,
             bool categoriesRefs,
             bool suppliersRefs,
@@ -32385,7 +32329,7 @@ class $$BusinessesTableTableManager
               ({
                 crateGroupsRefs = false,
                 manufacturersRefs = false,
-                warehousesRefs = false,
+                storesRefs = false,
                 usersRefs = false,
                 categoriesRefs = false,
                 suppliersRefs = false,
@@ -32429,7 +32373,7 @@ class $$BusinessesTableTableManager
                   explicitlyWatchedTables: [
                     if (crateGroupsRefs) db.crateGroups,
                     if (manufacturersRefs) db.manufacturers,
-                    if (warehousesRefs) db.warehouses,
+                    if (storesRefs) db.stores,
                     if (usersRefs) db.users,
                     if (categoriesRefs) db.categories,
                     if (suppliersRefs) db.suppliers,
@@ -32514,21 +32458,21 @@ class $$BusinessesTableTableManager
                               ),
                           typedResults: items,
                         ),
-                      if (warehousesRefs)
+                      if (storesRefs)
                         await $_getPrefetchedData<
                           BusinessData,
                           $BusinessesTable,
-                          WarehouseData
+                          StoreData
                         >(
                           currentTable: table,
                           referencedTable: $$BusinessesTableReferences
-                              ._warehousesRefsTable(db),
+                              ._storesRefsTable(db),
                           managerFromTypedResult: (p0) =>
                               $$BusinessesTableReferences(
                                 db,
                                 table,
                                 p0,
-                              ).warehousesRefs,
+                              ).storesRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.businessId == item.id,
@@ -33335,7 +33279,7 @@ typedef $$BusinessesTableProcessedTableManager =
       PrefetchHooks Function({
         bool crateGroupsRefs,
         bool manufacturersRefs,
-        bool warehousesRefs,
+        bool storesRefs,
         bool usersRefs,
         bool categoriesRefs,
         bool suppliersRefs,
@@ -35089,8 +35033,8 @@ typedef $$ManufacturersTableProcessedTableManager =
         bool crateLedgerRefs,
       })
     >;
-typedef $$WarehousesTableCreateCompanionBuilder =
-    WarehousesCompanion Function({
+typedef $$StoresTableCreateCompanionBuilder =
+    StoresCompanion Function({
       Value<String> id,
       required String businessId,
       required String name,
@@ -35100,8 +35044,8 @@ typedef $$WarehousesTableCreateCompanionBuilder =
       Value<DateTime> lastUpdatedAt,
       Value<int> rowid,
     });
-typedef $$WarehousesTableUpdateCompanionBuilder =
-    WarehousesCompanion Function({
+typedef $$StoresTableUpdateCompanionBuilder =
+    StoresCompanion Function({
       Value<String> id,
       Value<String> businessId,
       Value<String> name,
@@ -35112,13 +35056,13 @@ typedef $$WarehousesTableUpdateCompanionBuilder =
       Value<int> rowid,
     });
 
-final class $$WarehousesTableReferences
-    extends BaseReferences<_$AppDatabase, $WarehousesTable, WarehouseData> {
-  $$WarehousesTableReferences(super.$_db, super.$_table, super.$_typedResult);
+final class $$StoresTableReferences
+    extends BaseReferences<_$AppDatabase, $StoresTable, StoreData> {
+  $$StoresTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
   static $BusinessesTable _businessIdTable(_$AppDatabase db) =>
       db.businesses.createAlias(
-        $_aliasNameGenerator(db.warehouses.businessId, db.businesses.id),
+        $_aliasNameGenerator(db.stores.businessId, db.businesses.id),
       );
 
   $$BusinessesTableProcessedTableManager get businessId {
@@ -35139,14 +35083,14 @@ final class $$WarehousesTableReferences
     _$AppDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.users,
-    aliasName: $_aliasNameGenerator(db.warehouses.id, db.users.warehouseId),
+    aliasName: $_aliasNameGenerator(db.stores.id, db.users.storeId),
   );
 
   $$UsersTableProcessedTableManager get usersRefs {
     final manager = $$UsersTableTableManager(
       $_db,
       $_db.users,
-    ).filter((f) => f.warehouseId.id.sqlEquals($_itemColumn<String>('id')!));
+    ).filter((f) => f.storeId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_usersRefsTable($_db));
     return ProcessedTableManager(
@@ -35157,14 +35101,14 @@ final class $$WarehousesTableReferences
   static MultiTypedResultKey<$CustomersTable, List<CustomerData>>
   _customersRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.customers,
-    aliasName: $_aliasNameGenerator(db.warehouses.id, db.customers.warehouseId),
+    aliasName: $_aliasNameGenerator(db.stores.id, db.customers.storeId),
   );
 
   $$CustomersTableProcessedTableManager get customersRefs {
     final manager = $$CustomersTableTableManager(
       $_db,
       $_db.customers,
-    ).filter((f) => f.warehouseId.id.sqlEquals($_itemColumn<String>('id')!));
+    ).filter((f) => f.storeId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_customersRefsTable($_db));
     return ProcessedTableManager(
@@ -35176,14 +35120,14 @@ final class $$WarehousesTableReferences
     _$AppDatabase db,
   ) => MultiTypedResultKey.fromTable(
     db.orders,
-    aliasName: $_aliasNameGenerator(db.warehouses.id, db.orders.warehouseId),
+    aliasName: $_aliasNameGenerator(db.stores.id, db.orders.storeId),
   );
 
   $$OrdersTableProcessedTableManager get ordersRefs {
     final manager = $$OrdersTableTableManager(
       $_db,
       $_db.orders,
-    ).filter((f) => f.warehouseId.id.sqlEquals($_itemColumn<String>('id')!));
+    ).filter((f) => f.storeId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_ordersRefsTable($_db));
     return ProcessedTableManager(
@@ -35194,14 +35138,14 @@ final class $$WarehousesTableReferences
   static MultiTypedResultKey<$InventoryTable, List<InventoryData>>
   _inventoryRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.inventory,
-    aliasName: $_aliasNameGenerator(db.warehouses.id, db.inventory.warehouseId),
+    aliasName: $_aliasNameGenerator(db.stores.id, db.inventory.storeId),
   );
 
   $$InventoryTableProcessedTableManager get inventoryRefs {
     final manager = $$InventoryTableTableManager(
       $_db,
       $_db.inventory,
-    ).filter((f) => f.warehouseId.id.sqlEquals($_itemColumn<String>('id')!));
+    ).filter((f) => f.storeId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_inventoryRefsTable($_db));
     return ProcessedTableManager(
@@ -35212,17 +35156,14 @@ final class $$WarehousesTableReferences
   static MultiTypedResultKey<$StockAdjustmentsTable, List<StockAdjustmentData>>
   _stockAdjustmentsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.stockAdjustments,
-    aliasName: $_aliasNameGenerator(
-      db.warehouses.id,
-      db.stockAdjustments.warehouseId,
-    ),
+    aliasName: $_aliasNameGenerator(db.stores.id, db.stockAdjustments.storeId),
   );
 
   $$StockAdjustmentsTableProcessedTableManager get stockAdjustmentsRefs {
     final manager = $$StockAdjustmentsTableTableManager(
       $_db,
       $_db.stockAdjustments,
-    ).filter((f) => f.warehouseId.id.sqlEquals($_itemColumn<String>('id')!));
+    ).filter((f) => f.storeId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(
       _stockAdjustmentsRefsTable($_db),
@@ -35240,7 +35181,7 @@ final class $$WarehousesTableReferences
       MultiTypedResultKey.fromTable(
         db.stockTransactions,
         aliasName: $_aliasNameGenerator(
-          db.warehouses.id,
+          db.stores.id,
           db.stockTransactions.locationId,
         ),
       );
@@ -35262,17 +35203,14 @@ final class $$WarehousesTableReferences
   static MultiTypedResultKey<$OrderItemsTable, List<OrderItemData>>
   _orderItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.orderItems,
-    aliasName: $_aliasNameGenerator(
-      db.warehouses.id,
-      db.orderItems.warehouseId,
-    ),
+    aliasName: $_aliasNameGenerator(db.stores.id, db.orderItems.storeId),
   );
 
   $$OrderItemsTableProcessedTableManager get orderItemsRefs {
     final manager = $$OrderItemsTableTableManager(
       $_db,
       $_db.orderItems,
-    ).filter((f) => f.warehouseId.id.sqlEquals($_itemColumn<String>('id')!));
+    ).filter((f) => f.storeId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_orderItemsRefsTable($_db));
     return ProcessedTableManager(
@@ -35283,14 +35221,14 @@ final class $$WarehousesTableReferences
   static MultiTypedResultKey<$ExpensesTable, List<ExpenseData>>
   _expensesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.expenses,
-    aliasName: $_aliasNameGenerator(db.warehouses.id, db.expenses.warehouseId),
+    aliasName: $_aliasNameGenerator(db.stores.id, db.expenses.storeId),
   );
 
   $$ExpensesTableProcessedTableManager get expensesRefs {
     final manager = $$ExpensesTableTableManager(
       $_db,
       $_db.expenses,
-    ).filter((f) => f.warehouseId.id.sqlEquals($_itemColumn<String>('id')!));
+    ).filter((f) => f.storeId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_expensesRefsTable($_db));
     return ProcessedTableManager(
@@ -35301,17 +35239,14 @@ final class $$WarehousesTableReferences
   static MultiTypedResultKey<$ActivityLogsTable, List<ActivityLogData>>
   _activityLogsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.activityLogs,
-    aliasName: $_aliasNameGenerator(
-      db.warehouses.id,
-      db.activityLogs.warehouseId,
-    ),
+    aliasName: $_aliasNameGenerator(db.stores.id, db.activityLogs.storeId),
   );
 
   $$ActivityLogsTableProcessedTableManager get activityLogsRefs {
     final manager = $$ActivityLogsTableTableManager(
       $_db,
       $_db.activityLogs,
-    ).filter((f) => f.warehouseId.id.sqlEquals($_itemColumn<String>('id')!));
+    ).filter((f) => f.storeId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_activityLogsRefsTable($_db));
     return ProcessedTableManager(
@@ -35322,17 +35257,14 @@ final class $$WarehousesTableReferences
   static MultiTypedResultKey<$InviteCodesTable, List<InviteCodeData>>
   _inviteCodesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.inviteCodes,
-    aliasName: $_aliasNameGenerator(
-      db.warehouses.id,
-      db.inviteCodes.warehouseId,
-    ),
+    aliasName: $_aliasNameGenerator(db.stores.id, db.inviteCodes.storeId),
   );
 
   $$InviteCodesTableProcessedTableManager get inviteCodesRefs {
     final manager = $$InviteCodesTableTableManager(
       $_db,
       $_db.inviteCodes,
-    ).filter((f) => f.warehouseId.id.sqlEquals($_itemColumn<String>('id')!));
+    ).filter((f) => f.storeId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_inviteCodesRefsTable($_db));
     return ProcessedTableManager(
@@ -35343,17 +35275,14 @@ final class $$WarehousesTableReferences
   static MultiTypedResultKey<$UserStoresTable, List<UserStoreData>>
   _userStoresRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.userStores,
-    aliasName: $_aliasNameGenerator(
-      db.warehouses.id,
-      db.userStores.warehouseId,
-    ),
+    aliasName: $_aliasNameGenerator(db.stores.id, db.userStores.storeId),
   );
 
   $$UserStoresTableProcessedTableManager get userStoresRefs {
     final manager = $$UserStoresTableTableManager(
       $_db,
       $_db.userStores,
-    ).filter((f) => f.warehouseId.id.sqlEquals($_itemColumn<String>('id')!));
+    ).filter((f) => f.storeId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_userStoresRefsTable($_db));
     return ProcessedTableManager(
@@ -35362,9 +35291,9 @@ final class $$WarehousesTableReferences
   }
 }
 
-class $$WarehousesTableFilterComposer
-    extends Composer<_$AppDatabase, $WarehousesTable> {
-  $$WarehousesTableFilterComposer({
+class $$StoresTableFilterComposer
+    extends Composer<_$AppDatabase, $StoresTable> {
+  $$StoresTableFilterComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
@@ -35431,7 +35360,7 @@ class $$WarehousesTableFilterComposer
       composer: this,
       getCurrentColumn: (t) => t.id,
       referencedTable: $db.users,
-      getReferencedColumn: (t) => t.warehouseId,
+      getReferencedColumn: (t) => t.storeId,
       builder:
           (
             joinBuilder, {
@@ -35456,7 +35385,7 @@ class $$WarehousesTableFilterComposer
       composer: this,
       getCurrentColumn: (t) => t.id,
       referencedTable: $db.customers,
-      getReferencedColumn: (t) => t.warehouseId,
+      getReferencedColumn: (t) => t.storeId,
       builder:
           (
             joinBuilder, {
@@ -35481,7 +35410,7 @@ class $$WarehousesTableFilterComposer
       composer: this,
       getCurrentColumn: (t) => t.id,
       referencedTable: $db.orders,
-      getReferencedColumn: (t) => t.warehouseId,
+      getReferencedColumn: (t) => t.storeId,
       builder:
           (
             joinBuilder, {
@@ -35506,7 +35435,7 @@ class $$WarehousesTableFilterComposer
       composer: this,
       getCurrentColumn: (t) => t.id,
       referencedTable: $db.inventory,
-      getReferencedColumn: (t) => t.warehouseId,
+      getReferencedColumn: (t) => t.storeId,
       builder:
           (
             joinBuilder, {
@@ -35531,7 +35460,7 @@ class $$WarehousesTableFilterComposer
       composer: this,
       getCurrentColumn: (t) => t.id,
       referencedTable: $db.stockAdjustments,
-      getReferencedColumn: (t) => t.warehouseId,
+      getReferencedColumn: (t) => t.storeId,
       builder:
           (
             joinBuilder, {
@@ -35581,7 +35510,7 @@ class $$WarehousesTableFilterComposer
       composer: this,
       getCurrentColumn: (t) => t.id,
       referencedTable: $db.orderItems,
-      getReferencedColumn: (t) => t.warehouseId,
+      getReferencedColumn: (t) => t.storeId,
       builder:
           (
             joinBuilder, {
@@ -35606,7 +35535,7 @@ class $$WarehousesTableFilterComposer
       composer: this,
       getCurrentColumn: (t) => t.id,
       referencedTable: $db.expenses,
-      getReferencedColumn: (t) => t.warehouseId,
+      getReferencedColumn: (t) => t.storeId,
       builder:
           (
             joinBuilder, {
@@ -35631,7 +35560,7 @@ class $$WarehousesTableFilterComposer
       composer: this,
       getCurrentColumn: (t) => t.id,
       referencedTable: $db.activityLogs,
-      getReferencedColumn: (t) => t.warehouseId,
+      getReferencedColumn: (t) => t.storeId,
       builder:
           (
             joinBuilder, {
@@ -35656,7 +35585,7 @@ class $$WarehousesTableFilterComposer
       composer: this,
       getCurrentColumn: (t) => t.id,
       referencedTable: $db.inviteCodes,
-      getReferencedColumn: (t) => t.warehouseId,
+      getReferencedColumn: (t) => t.storeId,
       builder:
           (
             joinBuilder, {
@@ -35681,7 +35610,7 @@ class $$WarehousesTableFilterComposer
       composer: this,
       getCurrentColumn: (t) => t.id,
       referencedTable: $db.userStores,
-      getReferencedColumn: (t) => t.warehouseId,
+      getReferencedColumn: (t) => t.storeId,
       builder:
           (
             joinBuilder, {
@@ -35700,9 +35629,9 @@ class $$WarehousesTableFilterComposer
   }
 }
 
-class $$WarehousesTableOrderingComposer
-    extends Composer<_$AppDatabase, $WarehousesTable> {
-  $$WarehousesTableOrderingComposer({
+class $$StoresTableOrderingComposer
+    extends Composer<_$AppDatabase, $StoresTable> {
+  $$StoresTableOrderingComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
@@ -35763,9 +35692,9 @@ class $$WarehousesTableOrderingComposer
   }
 }
 
-class $$WarehousesTableAnnotationComposer
-    extends Composer<_$AppDatabase, $WarehousesTable> {
-  $$WarehousesTableAnnotationComposer({
+class $$StoresTableAnnotationComposer
+    extends Composer<_$AppDatabase, $StoresTable> {
+  $$StoresTableAnnotationComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
@@ -35822,7 +35751,7 @@ class $$WarehousesTableAnnotationComposer
       composer: this,
       getCurrentColumn: (t) => t.id,
       referencedTable: $db.users,
-      getReferencedColumn: (t) => t.warehouseId,
+      getReferencedColumn: (t) => t.storeId,
       builder:
           (
             joinBuilder, {
@@ -35847,7 +35776,7 @@ class $$WarehousesTableAnnotationComposer
       composer: this,
       getCurrentColumn: (t) => t.id,
       referencedTable: $db.customers,
-      getReferencedColumn: (t) => t.warehouseId,
+      getReferencedColumn: (t) => t.storeId,
       builder:
           (
             joinBuilder, {
@@ -35872,7 +35801,7 @@ class $$WarehousesTableAnnotationComposer
       composer: this,
       getCurrentColumn: (t) => t.id,
       referencedTable: $db.orders,
-      getReferencedColumn: (t) => t.warehouseId,
+      getReferencedColumn: (t) => t.storeId,
       builder:
           (
             joinBuilder, {
@@ -35897,7 +35826,7 @@ class $$WarehousesTableAnnotationComposer
       composer: this,
       getCurrentColumn: (t) => t.id,
       referencedTable: $db.inventory,
-      getReferencedColumn: (t) => t.warehouseId,
+      getReferencedColumn: (t) => t.storeId,
       builder:
           (
             joinBuilder, {
@@ -35922,7 +35851,7 @@ class $$WarehousesTableAnnotationComposer
       composer: this,
       getCurrentColumn: (t) => t.id,
       referencedTable: $db.stockAdjustments,
-      getReferencedColumn: (t) => t.warehouseId,
+      getReferencedColumn: (t) => t.storeId,
       builder:
           (
             joinBuilder, {
@@ -35973,7 +35902,7 @@ class $$WarehousesTableAnnotationComposer
       composer: this,
       getCurrentColumn: (t) => t.id,
       referencedTable: $db.orderItems,
-      getReferencedColumn: (t) => t.warehouseId,
+      getReferencedColumn: (t) => t.storeId,
       builder:
           (
             joinBuilder, {
@@ -35998,7 +35927,7 @@ class $$WarehousesTableAnnotationComposer
       composer: this,
       getCurrentColumn: (t) => t.id,
       referencedTable: $db.expenses,
-      getReferencedColumn: (t) => t.warehouseId,
+      getReferencedColumn: (t) => t.storeId,
       builder:
           (
             joinBuilder, {
@@ -36023,7 +35952,7 @@ class $$WarehousesTableAnnotationComposer
       composer: this,
       getCurrentColumn: (t) => t.id,
       referencedTable: $db.activityLogs,
-      getReferencedColumn: (t) => t.warehouseId,
+      getReferencedColumn: (t) => t.storeId,
       builder:
           (
             joinBuilder, {
@@ -36048,7 +35977,7 @@ class $$WarehousesTableAnnotationComposer
       composer: this,
       getCurrentColumn: (t) => t.id,
       referencedTable: $db.inviteCodes,
-      getReferencedColumn: (t) => t.warehouseId,
+      getReferencedColumn: (t) => t.storeId,
       builder:
           (
             joinBuilder, {
@@ -36073,7 +36002,7 @@ class $$WarehousesTableAnnotationComposer
       composer: this,
       getCurrentColumn: (t) => t.id,
       referencedTable: $db.userStores,
-      getReferencedColumn: (t) => t.warehouseId,
+      getReferencedColumn: (t) => t.storeId,
       builder:
           (
             joinBuilder, {
@@ -36092,19 +36021,19 @@ class $$WarehousesTableAnnotationComposer
   }
 }
 
-class $$WarehousesTableTableManager
+class $$StoresTableTableManager
     extends
         RootTableManager<
           _$AppDatabase,
-          $WarehousesTable,
-          WarehouseData,
-          $$WarehousesTableFilterComposer,
-          $$WarehousesTableOrderingComposer,
-          $$WarehousesTableAnnotationComposer,
-          $$WarehousesTableCreateCompanionBuilder,
-          $$WarehousesTableUpdateCompanionBuilder,
-          (WarehouseData, $$WarehousesTableReferences),
-          WarehouseData,
+          $StoresTable,
+          StoreData,
+          $$StoresTableFilterComposer,
+          $$StoresTableOrderingComposer,
+          $$StoresTableAnnotationComposer,
+          $$StoresTableCreateCompanionBuilder,
+          $$StoresTableUpdateCompanionBuilder,
+          (StoreData, $$StoresTableReferences),
+          StoreData,
           PrefetchHooks Function({
             bool businessId,
             bool usersRefs,
@@ -36120,17 +36049,17 @@ class $$WarehousesTableTableManager
             bool userStoresRefs,
           })
         > {
-  $$WarehousesTableTableManager(_$AppDatabase db, $WarehousesTable table)
+  $$StoresTableTableManager(_$AppDatabase db, $StoresTable table)
     : super(
         TableManagerState(
           db: db,
           table: table,
           createFilteringComposer: () =>
-              $$WarehousesTableFilterComposer($db: db, $table: table),
+              $$StoresTableFilterComposer($db: db, $table: table),
           createOrderingComposer: () =>
-              $$WarehousesTableOrderingComposer($db: db, $table: table),
+              $$StoresTableOrderingComposer($db: db, $table: table),
           createComputedFieldComposer: () =>
-              $$WarehousesTableAnnotationComposer($db: db, $table: table),
+              $$StoresTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
                 Value<String> id = const Value.absent(),
@@ -36141,7 +36070,7 @@ class $$WarehousesTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
-              }) => WarehousesCompanion(
+              }) => StoresCompanion(
                 id: id,
                 businessId: businessId,
                 name: name,
@@ -36161,7 +36090,7 @@ class $$WarehousesTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
-              }) => WarehousesCompanion.insert(
+              }) => StoresCompanion.insert(
                 id: id,
                 businessId: businessId,
                 name: name,
@@ -36173,10 +36102,8 @@ class $$WarehousesTableTableManager
               ),
           withReferenceMapper: (p0) => p0
               .map(
-                (e) => (
-                  e.readTable(table),
-                  $$WarehousesTableReferences(db, table, e),
-                ),
+                (e) =>
+                    (e.readTable(table), $$StoresTableReferences(db, table, e)),
               )
               .toList(),
           prefetchHooksCallback:
@@ -36230,12 +36157,11 @@ class $$WarehousesTableTableManager
                               state.withJoin(
                                     currentTable: table,
                                     currentColumn: table.businessId,
-                                    referencedTable: $$WarehousesTableReferences
+                                    referencedTable: $$StoresTableReferences
                                         ._businessIdTable(db),
-                                    referencedColumn:
-                                        $$WarehousesTableReferences
-                                            ._businessIdTable(db)
-                                            .id,
+                                    referencedColumn: $$StoresTableReferences
+                                        ._businessIdTable(db)
+                                        .id,
                                   )
                                   as T;
                         }
@@ -36246,120 +36172,112 @@ class $$WarehousesTableTableManager
                     return [
                       if (usersRefs)
                         await $_getPrefetchedData<
-                          WarehouseData,
-                          $WarehousesTable,
+                          StoreData,
+                          $StoresTable,
                           UserData
                         >(
                           currentTable: table,
-                          referencedTable: $$WarehousesTableReferences
+                          referencedTable: $$StoresTableReferences
                               ._usersRefsTable(db),
                           managerFromTypedResult: (p0) =>
-                              $$WarehousesTableReferences(
-                                db,
-                                table,
-                                p0,
-                              ).usersRefs,
+                              $$StoresTableReferences(db, table, p0).usersRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
-                                (e) => e.warehouseId == item.id,
+                                (e) => e.storeId == item.id,
                               ),
                           typedResults: items,
                         ),
                       if (customersRefs)
                         await $_getPrefetchedData<
-                          WarehouseData,
-                          $WarehousesTable,
+                          StoreData,
+                          $StoresTable,
                           CustomerData
                         >(
                           currentTable: table,
-                          referencedTable: $$WarehousesTableReferences
+                          referencedTable: $$StoresTableReferences
                               ._customersRefsTable(db),
                           managerFromTypedResult: (p0) =>
-                              $$WarehousesTableReferences(
+                              $$StoresTableReferences(
                                 db,
                                 table,
                                 p0,
                               ).customersRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
-                                (e) => e.warehouseId == item.id,
+                                (e) => e.storeId == item.id,
                               ),
                           typedResults: items,
                         ),
                       if (ordersRefs)
                         await $_getPrefetchedData<
-                          WarehouseData,
-                          $WarehousesTable,
+                          StoreData,
+                          $StoresTable,
                           OrderData
                         >(
                           currentTable: table,
-                          referencedTable: $$WarehousesTableReferences
+                          referencedTable: $$StoresTableReferences
                               ._ordersRefsTable(db),
                           managerFromTypedResult: (p0) =>
-                              $$WarehousesTableReferences(
-                                db,
-                                table,
-                                p0,
-                              ).ordersRefs,
+                              $$StoresTableReferences(db, table, p0).ordersRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
-                                (e) => e.warehouseId == item.id,
+                                (e) => e.storeId == item.id,
                               ),
                           typedResults: items,
                         ),
                       if (inventoryRefs)
                         await $_getPrefetchedData<
-                          WarehouseData,
-                          $WarehousesTable,
+                          StoreData,
+                          $StoresTable,
                           InventoryData
                         >(
                           currentTable: table,
-                          referencedTable: $$WarehousesTableReferences
+                          referencedTable: $$StoresTableReferences
                               ._inventoryRefsTable(db),
                           managerFromTypedResult: (p0) =>
-                              $$WarehousesTableReferences(
+                              $$StoresTableReferences(
                                 db,
                                 table,
                                 p0,
                               ).inventoryRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
-                                (e) => e.warehouseId == item.id,
+                                (e) => e.storeId == item.id,
                               ),
                           typedResults: items,
                         ),
                       if (stockAdjustmentsRefs)
                         await $_getPrefetchedData<
-                          WarehouseData,
-                          $WarehousesTable,
+                          StoreData,
+                          $StoresTable,
                           StockAdjustmentData
                         >(
                           currentTable: table,
-                          referencedTable: $$WarehousesTableReferences
+                          referencedTable: $$StoresTableReferences
                               ._stockAdjustmentsRefsTable(db),
                           managerFromTypedResult: (p0) =>
-                              $$WarehousesTableReferences(
+                              $$StoresTableReferences(
                                 db,
                                 table,
                                 p0,
                               ).stockAdjustmentsRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
-                                (e) => e.warehouseId == item.id,
+                                (e) => e.storeId == item.id,
                               ),
                           typedResults: items,
                         ),
                       if (stockTransactionsRefs)
                         await $_getPrefetchedData<
-                          WarehouseData,
-                          $WarehousesTable,
+                          StoreData,
+                          $StoresTable,
                           StockTransactionData
                         >(
                           currentTable: table,
-                          referencedTable: $$WarehousesTableReferences
+                          referencedTable: $$StoresTableReferences
                               ._stockTransactionsRefsTable(db),
                           managerFromTypedResult: (p0) =>
-                              $$WarehousesTableReferences(
+                              $$StoresTableReferences(
                                 db,
                                 table,
                                 p0,
@@ -36372,106 +36290,106 @@ class $$WarehousesTableTableManager
                         ),
                       if (orderItemsRefs)
                         await $_getPrefetchedData<
-                          WarehouseData,
-                          $WarehousesTable,
+                          StoreData,
+                          $StoresTable,
                           OrderItemData
                         >(
                           currentTable: table,
-                          referencedTable: $$WarehousesTableReferences
+                          referencedTable: $$StoresTableReferences
                               ._orderItemsRefsTable(db),
                           managerFromTypedResult: (p0) =>
-                              $$WarehousesTableReferences(
+                              $$StoresTableReferences(
                                 db,
                                 table,
                                 p0,
                               ).orderItemsRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
-                                (e) => e.warehouseId == item.id,
+                                (e) => e.storeId == item.id,
                               ),
                           typedResults: items,
                         ),
                       if (expensesRefs)
                         await $_getPrefetchedData<
-                          WarehouseData,
-                          $WarehousesTable,
+                          StoreData,
+                          $StoresTable,
                           ExpenseData
                         >(
                           currentTable: table,
-                          referencedTable: $$WarehousesTableReferences
+                          referencedTable: $$StoresTableReferences
                               ._expensesRefsTable(db),
                           managerFromTypedResult: (p0) =>
-                              $$WarehousesTableReferences(
+                              $$StoresTableReferences(
                                 db,
                                 table,
                                 p0,
                               ).expensesRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
-                                (e) => e.warehouseId == item.id,
+                                (e) => e.storeId == item.id,
                               ),
                           typedResults: items,
                         ),
                       if (activityLogsRefs)
                         await $_getPrefetchedData<
-                          WarehouseData,
-                          $WarehousesTable,
+                          StoreData,
+                          $StoresTable,
                           ActivityLogData
                         >(
                           currentTable: table,
-                          referencedTable: $$WarehousesTableReferences
+                          referencedTable: $$StoresTableReferences
                               ._activityLogsRefsTable(db),
                           managerFromTypedResult: (p0) =>
-                              $$WarehousesTableReferences(
+                              $$StoresTableReferences(
                                 db,
                                 table,
                                 p0,
                               ).activityLogsRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
-                                (e) => e.warehouseId == item.id,
+                                (e) => e.storeId == item.id,
                               ),
                           typedResults: items,
                         ),
                       if (inviteCodesRefs)
                         await $_getPrefetchedData<
-                          WarehouseData,
-                          $WarehousesTable,
+                          StoreData,
+                          $StoresTable,
                           InviteCodeData
                         >(
                           currentTable: table,
-                          referencedTable: $$WarehousesTableReferences
+                          referencedTable: $$StoresTableReferences
                               ._inviteCodesRefsTable(db),
                           managerFromTypedResult: (p0) =>
-                              $$WarehousesTableReferences(
+                              $$StoresTableReferences(
                                 db,
                                 table,
                                 p0,
                               ).inviteCodesRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
-                                (e) => e.warehouseId == item.id,
+                                (e) => e.storeId == item.id,
                               ),
                           typedResults: items,
                         ),
                       if (userStoresRefs)
                         await $_getPrefetchedData<
-                          WarehouseData,
-                          $WarehousesTable,
+                          StoreData,
+                          $StoresTable,
                           UserStoreData
                         >(
                           currentTable: table,
-                          referencedTable: $$WarehousesTableReferences
+                          referencedTable: $$StoresTableReferences
                               ._userStoresRefsTable(db),
                           managerFromTypedResult: (p0) =>
-                              $$WarehousesTableReferences(
+                              $$StoresTableReferences(
                                 db,
                                 table,
                                 p0,
                               ).userStoresRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
-                                (e) => e.warehouseId == item.id,
+                                (e) => e.storeId == item.id,
                               ),
                           typedResults: items,
                         ),
@@ -36483,18 +36401,18 @@ class $$WarehousesTableTableManager
       );
 }
 
-typedef $$WarehousesTableProcessedTableManager =
+typedef $$StoresTableProcessedTableManager =
     ProcessedTableManager<
       _$AppDatabase,
-      $WarehousesTable,
-      WarehouseData,
-      $$WarehousesTableFilterComposer,
-      $$WarehousesTableOrderingComposer,
-      $$WarehousesTableAnnotationComposer,
-      $$WarehousesTableCreateCompanionBuilder,
-      $$WarehousesTableUpdateCompanionBuilder,
-      (WarehouseData, $$WarehousesTableReferences),
-      WarehouseData,
+      $StoresTable,
+      StoreData,
+      $$StoresTableFilterComposer,
+      $$StoresTableOrderingComposer,
+      $$StoresTableAnnotationComposer,
+      $$StoresTableCreateCompanionBuilder,
+      $$StoresTableUpdateCompanionBuilder,
+      (StoreData, $$StoresTableReferences),
+      StoreData,
       PrefetchHooks Function({
         bool businessId,
         bool usersRefs,
@@ -36524,7 +36442,7 @@ typedef $$UsersTableCreateCompanionBuilder =
       Value<int?> pinIterations,
       Value<String> avatarColor,
       Value<bool> biometricEnabled,
-      Value<String?> warehouseId,
+      Value<String?> storeId,
       Value<DateTime> createdAt,
       Value<DateTime?> lastNotificationSentAt,
       Value<DateTime> lastUpdatedAt,
@@ -36544,7 +36462,7 @@ typedef $$UsersTableUpdateCompanionBuilder =
       Value<int?> pinIterations,
       Value<String> avatarColor,
       Value<bool> biometricEnabled,
-      Value<String?> warehouseId,
+      Value<String?> storeId,
       Value<DateTime> createdAt,
       Value<DateTime?> lastNotificationSentAt,
       Value<DateTime> lastUpdatedAt,
@@ -36572,19 +36490,18 @@ final class $$UsersTableReferences
     );
   }
 
-  static $WarehousesTable _warehouseIdTable(_$AppDatabase db) =>
-      db.warehouses.createAlias(
-        $_aliasNameGenerator(db.users.warehouseId, db.warehouses.id),
-      );
+  static $StoresTable _storeIdTable(_$AppDatabase db) => db.stores.createAlias(
+    $_aliasNameGenerator(db.users.storeId, db.stores.id),
+  );
 
-  $$WarehousesTableProcessedTableManager? get warehouseId {
-    final $_column = $_itemColumn<String>('warehouse_id');
+  $$StoresTableProcessedTableManager? get storeId {
+    final $_column = $_itemColumn<String>('store_id');
     if ($_column == null) return null;
-    final manager = $$WarehousesTableTableManager(
+    final manager = $$StoresTableTableManager(
       $_db,
-      $_db.warehouses,
+      $_db.stores,
     ).filter((f) => f.id.sqlEquals($_column));
-    final item = $_typedResult.readTableOrNull(_warehouseIdTable($_db));
+    final item = $_typedResult.readTableOrNull(_storeIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -36828,20 +36745,20 @@ class $$UsersTableFilterComposer extends Composer<_$AppDatabase, $UsersTable> {
     return composer;
   }
 
-  $$WarehousesTableFilterComposer get warehouseId {
-    final $$WarehousesTableFilterComposer composer = $composerBuilder(
+  $$StoresTableFilterComposer get storeId {
+    final $$StoresTableFilterComposer composer = $composerBuilder(
       composer: this,
-      getCurrentColumn: (t) => t.warehouseId,
-      referencedTable: $db.warehouses,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableFilterComposer(
+          }) => $$StoresTableFilterComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -37129,20 +37046,20 @@ class $$UsersTableOrderingComposer
     return composer;
   }
 
-  $$WarehousesTableOrderingComposer get warehouseId {
-    final $$WarehousesTableOrderingComposer composer = $composerBuilder(
+  $$StoresTableOrderingComposer get storeId {
+    final $$StoresTableOrderingComposer composer = $composerBuilder(
       composer: this,
-      getCurrentColumn: (t) => t.warehouseId,
-      referencedTable: $db.warehouses,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableOrderingComposer(
+          }) => $$StoresTableOrderingComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -37241,20 +37158,20 @@ class $$UsersTableAnnotationComposer
     return composer;
   }
 
-  $$WarehousesTableAnnotationComposer get warehouseId {
-    final $$WarehousesTableAnnotationComposer composer = $composerBuilder(
+  $$StoresTableAnnotationComposer get storeId {
+    final $$StoresTableAnnotationComposer composer = $composerBuilder(
       composer: this,
-      getCurrentColumn: (t) => t.warehouseId,
-      referencedTable: $db.warehouses,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableAnnotationComposer(
+          }) => $$StoresTableAnnotationComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -37455,7 +37372,7 @@ class $$UsersTableTableManager
           UserData,
           PrefetchHooks Function({
             bool businessId,
-            bool warehouseId,
+            bool storeId,
             bool ordersRefs,
             bool stockAdjustmentsRefs,
             bool expensesRefs,
@@ -37490,7 +37407,7 @@ class $$UsersTableTableManager
                 Value<int?> pinIterations = const Value.absent(),
                 Value<String> avatarColor = const Value.absent(),
                 Value<bool> biometricEnabled = const Value.absent(),
-                Value<String?> warehouseId = const Value.absent(),
+                Value<String?> storeId = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime?> lastNotificationSentAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -37508,7 +37425,7 @@ class $$UsersTableTableManager
                 pinIterations: pinIterations,
                 avatarColor: avatarColor,
                 biometricEnabled: biometricEnabled,
-                warehouseId: warehouseId,
+                storeId: storeId,
                 createdAt: createdAt,
                 lastNotificationSentAt: lastNotificationSentAt,
                 lastUpdatedAt: lastUpdatedAt,
@@ -37528,7 +37445,7 @@ class $$UsersTableTableManager
                 Value<int?> pinIterations = const Value.absent(),
                 Value<String> avatarColor = const Value.absent(),
                 Value<bool> biometricEnabled = const Value.absent(),
-                Value<String?> warehouseId = const Value.absent(),
+                Value<String?> storeId = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime?> lastNotificationSentAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -37546,7 +37463,7 @@ class $$UsersTableTableManager
                 pinIterations: pinIterations,
                 avatarColor: avatarColor,
                 biometricEnabled: biometricEnabled,
-                warehouseId: warehouseId,
+                storeId: storeId,
                 createdAt: createdAt,
                 lastNotificationSentAt: lastNotificationSentAt,
                 lastUpdatedAt: lastUpdatedAt,
@@ -37561,7 +37478,7 @@ class $$UsersTableTableManager
           prefetchHooksCallback:
               ({
                 businessId = false,
-                warehouseId = false,
+                storeId = false,
                 ordersRefs = false,
                 stockAdjustmentsRefs = false,
                 expensesRefs = false,
@@ -37610,15 +37527,15 @@ class $$UsersTableTableManager
                                   )
                                   as T;
                         }
-                        if (warehouseId) {
+                        if (storeId) {
                           state =
                               state.withJoin(
                                     currentTable: table,
-                                    currentColumn: table.warehouseId,
+                                    currentColumn: table.storeId,
                                     referencedTable: $$UsersTableReferences
-                                        ._warehouseIdTable(db),
+                                        ._storeIdTable(db),
                                     referencedColumn: $$UsersTableReferences
-                                        ._warehouseIdTable(db)
+                                        ._storeIdTable(db)
                                         .id,
                                   )
                                   as T;
@@ -37793,7 +37710,7 @@ typedef $$UsersTableProcessedTableManager =
       UserData,
       PrefetchHooks Function({
         bool businessId,
-        bool warehouseId,
+        bool storeId,
         bool ordersRefs,
         bool stockAdjustmentsRefs,
         bool expensesRefs,
@@ -41423,7 +41340,7 @@ typedef $$CustomersTableCreateCompanionBuilder =
     CustomersCompanion Function({
       Value<String> id,
       required String businessId,
-      Value<String?> warehouseId,
+      Value<String?> storeId,
       required String name,
       Value<String?> phone,
       Value<String?> email,
@@ -41440,7 +41357,7 @@ typedef $$CustomersTableUpdateCompanionBuilder =
     CustomersCompanion Function({
       Value<String> id,
       Value<String> businessId,
-      Value<String?> warehouseId,
+      Value<String?> storeId,
       Value<String> name,
       Value<String?> phone,
       Value<String?> email,
@@ -41477,19 +41394,18 @@ final class $$CustomersTableReferences
     );
   }
 
-  static $WarehousesTable _warehouseIdTable(_$AppDatabase db) =>
-      db.warehouses.createAlias(
-        $_aliasNameGenerator(db.customers.warehouseId, db.warehouses.id),
-      );
+  static $StoresTable _storeIdTable(_$AppDatabase db) => db.stores.createAlias(
+    $_aliasNameGenerator(db.customers.storeId, db.stores.id),
+  );
 
-  $$WarehousesTableProcessedTableManager? get warehouseId {
-    final $_column = $_itemColumn<String>('warehouse_id');
+  $$StoresTableProcessedTableManager? get storeId {
+    final $_column = $_itemColumn<String>('store_id');
     if ($_column == null) return null;
-    final manager = $$WarehousesTableTableManager(
+    final manager = $$StoresTableTableManager(
       $_db,
-      $_db.warehouses,
+      $_db.stores,
     ).filter((f) => f.id.sqlEquals($_column));
-    final item = $_typedResult.readTableOrNull(_warehouseIdTable($_db));
+    final item = $_typedResult.readTableOrNull(_storeIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -41765,20 +41681,20 @@ class $$CustomersTableFilterComposer
     return composer;
   }
 
-  $$WarehousesTableFilterComposer get warehouseId {
-    final $$WarehousesTableFilterComposer composer = $composerBuilder(
+  $$StoresTableFilterComposer get storeId {
+    final $$StoresTableFilterComposer composer = $composerBuilder(
       composer: this,
-      getCurrentColumn: (t) => t.warehouseId,
-      referencedTable: $db.warehouses,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableFilterComposer(
+          }) => $$StoresTableFilterComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -42077,20 +41993,20 @@ class $$CustomersTableOrderingComposer
     return composer;
   }
 
-  $$WarehousesTableOrderingComposer get warehouseId {
-    final $$WarehousesTableOrderingComposer composer = $composerBuilder(
+  $$StoresTableOrderingComposer get storeId {
+    final $$StoresTableOrderingComposer composer = $composerBuilder(
       composer: this,
-      getCurrentColumn: (t) => t.warehouseId,
-      referencedTable: $db.warehouses,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableOrderingComposer(
+          }) => $$StoresTableOrderingComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -42174,20 +42090,20 @@ class $$CustomersTableAnnotationComposer
     return composer;
   }
 
-  $$WarehousesTableAnnotationComposer get warehouseId {
-    final $$WarehousesTableAnnotationComposer composer = $composerBuilder(
+  $$StoresTableAnnotationComposer get storeId {
+    final $$StoresTableAnnotationComposer composer = $composerBuilder(
       composer: this,
-      getCurrentColumn: (t) => t.warehouseId,
-      referencedTable: $db.warehouses,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableAnnotationComposer(
+          }) => $$StoresTableAnnotationComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -42416,7 +42332,7 @@ class $$CustomersTableTableManager
           CustomerData,
           PrefetchHooks Function({
             bool businessId,
-            bool warehouseId,
+            bool storeId,
             bool customerWalletsRefs,
             bool ordersRefs,
             bool walletTransactionsRefs,
@@ -42442,7 +42358,7 @@ class $$CustomersTableTableManager
               ({
                 Value<String> id = const Value.absent(),
                 Value<String> businessId = const Value.absent(),
-                Value<String?> warehouseId = const Value.absent(),
+                Value<String?> storeId = const Value.absent(),
                 Value<String> name = const Value.absent(),
                 Value<String?> phone = const Value.absent(),
                 Value<String?> email = const Value.absent(),
@@ -42457,7 +42373,7 @@ class $$CustomersTableTableManager
               }) => CustomersCompanion(
                 id: id,
                 businessId: businessId,
-                warehouseId: warehouseId,
+                storeId: storeId,
                 name: name,
                 phone: phone,
                 email: email,
@@ -42474,7 +42390,7 @@ class $$CustomersTableTableManager
               ({
                 Value<String> id = const Value.absent(),
                 required String businessId,
-                Value<String?> warehouseId = const Value.absent(),
+                Value<String?> storeId = const Value.absent(),
                 required String name,
                 Value<String?> phone = const Value.absent(),
                 Value<String?> email = const Value.absent(),
@@ -42489,7 +42405,7 @@ class $$CustomersTableTableManager
               }) => CustomersCompanion.insert(
                 id: id,
                 businessId: businessId,
-                warehouseId: warehouseId,
+                storeId: storeId,
                 name: name,
                 phone: phone,
                 email: email,
@@ -42513,7 +42429,7 @@ class $$CustomersTableTableManager
           prefetchHooksCallback:
               ({
                 businessId = false,
-                warehouseId = false,
+                storeId = false,
                 customerWalletsRefs = false,
                 ordersRefs = false,
                 walletTransactionsRefs = false,
@@ -42564,15 +42480,15 @@ class $$CustomersTableTableManager
                                   )
                                   as T;
                         }
-                        if (warehouseId) {
+                        if (storeId) {
                           state =
                               state.withJoin(
                                     currentTable: table,
-                                    currentColumn: table.warehouseId,
+                                    currentColumn: table.storeId,
                                     referencedTable: $$CustomersTableReferences
-                                        ._warehouseIdTable(db),
+                                        ._storeIdTable(db),
                                     referencedColumn: $$CustomersTableReferences
-                                        ._warehouseIdTable(db)
+                                        ._storeIdTable(db)
                                         .id,
                                   )
                                   as T;
@@ -42772,7 +42688,7 @@ typedef $$CustomersTableProcessedTableManager =
       CustomerData,
       PrefetchHooks Function({
         bool businessId,
-        bool warehouseId,
+        bool storeId,
         bool customerWalletsRefs,
         bool ordersRefs,
         bool walletTransactionsRefs,
@@ -43395,7 +43311,7 @@ typedef $$OrdersTableCreateCompanionBuilder =
       Value<String?> cancellationReason,
       Value<String?> barcode,
       Value<String?> staffId,
-      Value<String?> warehouseId,
+      Value<String?> storeId,
       Value<int> crateDepositPaidKobo,
       Value<DateTime?> completedAt,
       Value<DateTime?> cancelledAt,
@@ -43419,7 +43335,7 @@ typedef $$OrdersTableUpdateCompanionBuilder =
       Value<String?> cancellationReason,
       Value<String?> barcode,
       Value<String?> staffId,
-      Value<String?> warehouseId,
+      Value<String?> storeId,
       Value<int> crateDepositPaidKobo,
       Value<DateTime?> completedAt,
       Value<DateTime?> cancelledAt,
@@ -43486,19 +43402,18 @@ final class $$OrdersTableReferences
     );
   }
 
-  static $WarehousesTable _warehouseIdTable(_$AppDatabase db) =>
-      db.warehouses.createAlias(
-        $_aliasNameGenerator(db.orders.warehouseId, db.warehouses.id),
-      );
+  static $StoresTable _storeIdTable(_$AppDatabase db) => db.stores.createAlias(
+    $_aliasNameGenerator(db.orders.storeId, db.stores.id),
+  );
 
-  $$WarehousesTableProcessedTableManager? get warehouseId {
-    final $_column = $_itemColumn<String>('warehouse_id');
+  $$StoresTableProcessedTableManager? get storeId {
+    final $_column = $_itemColumn<String>('store_id');
     if ($_column == null) return null;
-    final manager = $$WarehousesTableTableManager(
+    final manager = $$StoresTableTableManager(
       $_db,
-      $_db.warehouses,
+      $_db.stores,
     ).filter((f) => f.id.sqlEquals($_column));
-    final item = $_typedResult.readTableOrNull(_warehouseIdTable($_db));
+    final item = $_typedResult.readTableOrNull(_storeIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -43849,20 +43764,20 @@ class $$OrdersTableFilterComposer
     return composer;
   }
 
-  $$WarehousesTableFilterComposer get warehouseId {
-    final $$WarehousesTableFilterComposer composer = $composerBuilder(
+  $$StoresTableFilterComposer get storeId {
+    final $$StoresTableFilterComposer composer = $composerBuilder(
       composer: this,
-      getCurrentColumn: (t) => t.warehouseId,
-      referencedTable: $db.warehouses,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableFilterComposer(
+          }) => $$StoresTableFilterComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -44231,20 +44146,20 @@ class $$OrdersTableOrderingComposer
     return composer;
   }
 
-  $$WarehousesTableOrderingComposer get warehouseId {
-    final $$WarehousesTableOrderingComposer composer = $composerBuilder(
+  $$StoresTableOrderingComposer get storeId {
+    final $$StoresTableOrderingComposer composer = $composerBuilder(
       composer: this,
-      getCurrentColumn: (t) => t.warehouseId,
-      referencedTable: $db.warehouses,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableOrderingComposer(
+          }) => $$StoresTableOrderingComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -44403,20 +44318,20 @@ class $$OrdersTableAnnotationComposer
     return composer;
   }
 
-  $$WarehousesTableAnnotationComposer get warehouseId {
-    final $$WarehousesTableAnnotationComposer composer = $composerBuilder(
+  $$StoresTableAnnotationComposer get storeId {
+    final $$StoresTableAnnotationComposer composer = $composerBuilder(
       composer: this,
-      getCurrentColumn: (t) => t.warehouseId,
-      referencedTable: $db.warehouses,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableAnnotationComposer(
+          }) => $$StoresTableAnnotationComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -44648,7 +44563,7 @@ class $$OrdersTableTableManager
             bool businessId,
             bool customerId,
             bool staffId,
-            bool warehouseId,
+            bool storeId,
             bool walletTransactionsRefs,
             bool pendingCrateReturnsRefs,
             bool crateLedgerRefs,
@@ -44686,7 +44601,7 @@ class $$OrdersTableTableManager
                 Value<String?> cancellationReason = const Value.absent(),
                 Value<String?> barcode = const Value.absent(),
                 Value<String?> staffId = const Value.absent(),
-                Value<String?> warehouseId = const Value.absent(),
+                Value<String?> storeId = const Value.absent(),
                 Value<int> crateDepositPaidKobo = const Value.absent(),
                 Value<DateTime?> completedAt = const Value.absent(),
                 Value<DateTime?> cancelledAt = const Value.absent(),
@@ -44708,7 +44623,7 @@ class $$OrdersTableTableManager
                 cancellationReason: cancellationReason,
                 barcode: barcode,
                 staffId: staffId,
-                warehouseId: warehouseId,
+                storeId: storeId,
                 crateDepositPaidKobo: crateDepositPaidKobo,
                 completedAt: completedAt,
                 cancelledAt: cancelledAt,
@@ -44732,7 +44647,7 @@ class $$OrdersTableTableManager
                 Value<String?> cancellationReason = const Value.absent(),
                 Value<String?> barcode = const Value.absent(),
                 Value<String?> staffId = const Value.absent(),
-                Value<String?> warehouseId = const Value.absent(),
+                Value<String?> storeId = const Value.absent(),
                 Value<int> crateDepositPaidKobo = const Value.absent(),
                 Value<DateTime?> completedAt = const Value.absent(),
                 Value<DateTime?> cancelledAt = const Value.absent(),
@@ -44754,7 +44669,7 @@ class $$OrdersTableTableManager
                 cancellationReason: cancellationReason,
                 barcode: barcode,
                 staffId: staffId,
-                warehouseId: warehouseId,
+                storeId: storeId,
                 crateDepositPaidKobo: crateDepositPaidKobo,
                 completedAt: completedAt,
                 cancelledAt: cancelledAt,
@@ -44773,7 +44688,7 @@ class $$OrdersTableTableManager
                 businessId = false,
                 customerId = false,
                 staffId = false,
-                warehouseId = false,
+                storeId = false,
                 walletTransactionsRefs = false,
                 pendingCrateReturnsRefs = false,
                 crateLedgerRefs = false,
@@ -44850,15 +44765,15 @@ class $$OrdersTableTableManager
                                   )
                                   as T;
                         }
-                        if (warehouseId) {
+                        if (storeId) {
                           state =
                               state.withJoin(
                                     currentTable: table,
-                                    currentColumn: table.warehouseId,
+                                    currentColumn: table.storeId,
                                     referencedTable: $$OrdersTableReferences
-                                        ._warehouseIdTable(db),
+                                        ._storeIdTable(db),
                                     referencedColumn: $$OrdersTableReferences
-                                        ._warehouseIdTable(db)
+                                        ._storeIdTable(db)
                                         .id,
                                   )
                                   as T;
@@ -45060,7 +44975,7 @@ typedef $$OrdersTableProcessedTableManager =
         bool businessId,
         bool customerId,
         bool staffId,
-        bool warehouseId,
+        bool storeId,
         bool walletTransactionsRefs,
         bool pendingCrateReturnsRefs,
         bool crateLedgerRefs,
@@ -49752,7 +49667,7 @@ typedef $$InventoryTableCreateCompanionBuilder =
       Value<String> id,
       required String businessId,
       required String productId,
-      required String warehouseId,
+      required String storeId,
       Value<int> quantity,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -49763,7 +49678,7 @@ typedef $$InventoryTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> businessId,
       Value<String> productId,
-      Value<String> warehouseId,
+      Value<String> storeId,
       Value<int> quantity,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -49812,19 +49727,18 @@ final class $$InventoryTableReferences
     );
   }
 
-  static $WarehousesTable _warehouseIdTable(_$AppDatabase db) =>
-      db.warehouses.createAlias(
-        $_aliasNameGenerator(db.inventory.warehouseId, db.warehouses.id),
-      );
+  static $StoresTable _storeIdTable(_$AppDatabase db) => db.stores.createAlias(
+    $_aliasNameGenerator(db.inventory.storeId, db.stores.id),
+  );
 
-  $$WarehousesTableProcessedTableManager get warehouseId {
-    final $_column = $_itemColumn<String>('warehouse_id')!;
+  $$StoresTableProcessedTableManager get storeId {
+    final $_column = $_itemColumn<String>('store_id')!;
 
-    final manager = $$WarehousesTableTableManager(
+    final manager = $$StoresTableTableManager(
       $_db,
-      $_db.warehouses,
+      $_db.stores,
     ).filter((f) => f.id.sqlEquals($_column));
-    final item = $_typedResult.readTableOrNull(_warehouseIdTable($_db));
+    final item = $_typedResult.readTableOrNull(_storeIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -49907,20 +49821,20 @@ class $$InventoryTableFilterComposer
     return composer;
   }
 
-  $$WarehousesTableFilterComposer get warehouseId {
-    final $$WarehousesTableFilterComposer composer = $composerBuilder(
+  $$StoresTableFilterComposer get storeId {
+    final $$StoresTableFilterComposer composer = $composerBuilder(
       composer: this,
-      getCurrentColumn: (t) => t.warehouseId,
-      referencedTable: $db.warehouses,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableFilterComposer(
+          }) => $$StoresTableFilterComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -50006,20 +49920,20 @@ class $$InventoryTableOrderingComposer
     return composer;
   }
 
-  $$WarehousesTableOrderingComposer get warehouseId {
-    final $$WarehousesTableOrderingComposer composer = $composerBuilder(
+  $$StoresTableOrderingComposer get storeId {
+    final $$StoresTableOrderingComposer composer = $composerBuilder(
       composer: this,
-      getCurrentColumn: (t) => t.warehouseId,
-      referencedTable: $db.warehouses,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableOrderingComposer(
+          }) => $$StoresTableOrderingComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -50099,20 +50013,20 @@ class $$InventoryTableAnnotationComposer
     return composer;
   }
 
-  $$WarehousesTableAnnotationComposer get warehouseId {
-    final $$WarehousesTableAnnotationComposer composer = $composerBuilder(
+  $$StoresTableAnnotationComposer get storeId {
+    final $$StoresTableAnnotationComposer composer = $composerBuilder(
       composer: this,
-      getCurrentColumn: (t) => t.warehouseId,
-      referencedTable: $db.warehouses,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableAnnotationComposer(
+          }) => $$StoresTableAnnotationComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -50139,7 +50053,7 @@ class $$InventoryTableTableManager
           PrefetchHooks Function({
             bool businessId,
             bool productId,
-            bool warehouseId,
+            bool storeId,
           })
         > {
   $$InventoryTableTableManager(_$AppDatabase db, $InventoryTable table)
@@ -50158,7 +50072,7 @@ class $$InventoryTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> businessId = const Value.absent(),
                 Value<String> productId = const Value.absent(),
-                Value<String> warehouseId = const Value.absent(),
+                Value<String> storeId = const Value.absent(),
                 Value<int> quantity = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -50167,7 +50081,7 @@ class $$InventoryTableTableManager
                 id: id,
                 businessId: businessId,
                 productId: productId,
-                warehouseId: warehouseId,
+                storeId: storeId,
                 quantity: quantity,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
@@ -50178,7 +50092,7 @@ class $$InventoryTableTableManager
                 Value<String> id = const Value.absent(),
                 required String businessId,
                 required String productId,
-                required String warehouseId,
+                required String storeId,
                 Value<int> quantity = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -50187,7 +50101,7 @@ class $$InventoryTableTableManager
                 id: id,
                 businessId: businessId,
                 productId: productId,
-                warehouseId: warehouseId,
+                storeId: storeId,
                 quantity: quantity,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
@@ -50202,7 +50116,7 @@ class $$InventoryTableTableManager
               )
               .toList(),
           prefetchHooksCallback:
-              ({businessId = false, productId = false, warehouseId = false}) {
+              ({businessId = false, productId = false, storeId = false}) {
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [],
@@ -50248,15 +50162,15 @@ class $$InventoryTableTableManager
                                   )
                                   as T;
                         }
-                        if (warehouseId) {
+                        if (storeId) {
                           state =
                               state.withJoin(
                                     currentTable: table,
-                                    currentColumn: table.warehouseId,
+                                    currentColumn: table.storeId,
                                     referencedTable: $$InventoryTableReferences
-                                        ._warehouseIdTable(db),
+                                        ._storeIdTable(db),
                                     referencedColumn: $$InventoryTableReferences
-                                        ._warehouseIdTable(db)
+                                        ._storeIdTable(db)
                                         .id,
                                   )
                                   as T;
@@ -50285,11 +50199,7 @@ typedef $$InventoryTableProcessedTableManager =
       $$InventoryTableUpdateCompanionBuilder,
       (InventoryData, $$InventoryTableReferences),
       InventoryData,
-      PrefetchHooks Function({
-        bool businessId,
-        bool productId,
-        bool warehouseId,
-      })
+      PrefetchHooks Function({bool businessId, bool productId, bool storeId})
     >;
 typedef $$StockTransfersTableCreateCompanionBuilder =
     StockTransfersCompanion Function({
@@ -50354,20 +50264,17 @@ final class $$StockTransfersTableReferences
     );
   }
 
-  static $WarehousesTable _fromLocationIdTable(_$AppDatabase db) =>
-      db.warehouses.createAlias(
-        $_aliasNameGenerator(
-          db.stockTransfers.fromLocationId,
-          db.warehouses.id,
-        ),
+  static $StoresTable _fromLocationIdTable(_$AppDatabase db) =>
+      db.stores.createAlias(
+        $_aliasNameGenerator(db.stockTransfers.fromLocationId, db.stores.id),
       );
 
-  $$WarehousesTableProcessedTableManager get fromLocationId {
+  $$StoresTableProcessedTableManager get fromLocationId {
     final $_column = $_itemColumn<String>('from_location_id')!;
 
-    final manager = $$WarehousesTableTableManager(
+    final manager = $$StoresTableTableManager(
       $_db,
-      $_db.warehouses,
+      $_db.stores,
     ).filter((f) => f.id.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_fromLocationIdTable($_db));
     if (item == null) return manager;
@@ -50376,17 +50283,17 @@ final class $$StockTransfersTableReferences
     );
   }
 
-  static $WarehousesTable _toLocationIdTable(_$AppDatabase db) =>
-      db.warehouses.createAlias(
-        $_aliasNameGenerator(db.stockTransfers.toLocationId, db.warehouses.id),
+  static $StoresTable _toLocationIdTable(_$AppDatabase db) =>
+      db.stores.createAlias(
+        $_aliasNameGenerator(db.stockTransfers.toLocationId, db.stores.id),
       );
 
-  $$WarehousesTableProcessedTableManager get toLocationId {
+  $$StoresTableProcessedTableManager get toLocationId {
     final $_column = $_itemColumn<String>('to_location_id')!;
 
-    final manager = $$WarehousesTableTableManager(
+    final manager = $$StoresTableTableManager(
       $_db,
-      $_db.warehouses,
+      $_db.stores,
     ).filter((f) => f.id.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_toLocationIdTable($_db));
     if (item == null) return manager;
@@ -50546,20 +50453,20 @@ class $$StockTransfersTableFilterComposer
     return composer;
   }
 
-  $$WarehousesTableFilterComposer get fromLocationId {
-    final $$WarehousesTableFilterComposer composer = $composerBuilder(
+  $$StoresTableFilterComposer get fromLocationId {
+    final $$StoresTableFilterComposer composer = $composerBuilder(
       composer: this,
       getCurrentColumn: (t) => t.fromLocationId,
-      referencedTable: $db.warehouses,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableFilterComposer(
+          }) => $$StoresTableFilterComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -50569,20 +50476,20 @@ class $$StockTransfersTableFilterComposer
     return composer;
   }
 
-  $$WarehousesTableFilterComposer get toLocationId {
-    final $$WarehousesTableFilterComposer composer = $composerBuilder(
+  $$StoresTableFilterComposer get toLocationId {
+    final $$StoresTableFilterComposer composer = $composerBuilder(
       composer: this,
       getCurrentColumn: (t) => t.toLocationId,
-      referencedTable: $db.warehouses,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableFilterComposer(
+          }) => $$StoresTableFilterComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -50754,20 +50661,20 @@ class $$StockTransfersTableOrderingComposer
     return composer;
   }
 
-  $$WarehousesTableOrderingComposer get fromLocationId {
-    final $$WarehousesTableOrderingComposer composer = $composerBuilder(
+  $$StoresTableOrderingComposer get fromLocationId {
+    final $$StoresTableOrderingComposer composer = $composerBuilder(
       composer: this,
       getCurrentColumn: (t) => t.fromLocationId,
-      referencedTable: $db.warehouses,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableOrderingComposer(
+          }) => $$StoresTableOrderingComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -50777,20 +50684,20 @@ class $$StockTransfersTableOrderingComposer
     return composer;
   }
 
-  $$WarehousesTableOrderingComposer get toLocationId {
-    final $$WarehousesTableOrderingComposer composer = $composerBuilder(
+  $$StoresTableOrderingComposer get toLocationId {
+    final $$StoresTableOrderingComposer composer = $composerBuilder(
       composer: this,
       getCurrentColumn: (t) => t.toLocationId,
-      referencedTable: $db.warehouses,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableOrderingComposer(
+          }) => $$StoresTableOrderingComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -50929,20 +50836,20 @@ class $$StockTransfersTableAnnotationComposer
     return composer;
   }
 
-  $$WarehousesTableAnnotationComposer get fromLocationId {
-    final $$WarehousesTableAnnotationComposer composer = $composerBuilder(
+  $$StoresTableAnnotationComposer get fromLocationId {
+    final $$StoresTableAnnotationComposer composer = $composerBuilder(
       composer: this,
       getCurrentColumn: (t) => t.fromLocationId,
-      referencedTable: $db.warehouses,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableAnnotationComposer(
+          }) => $$StoresTableAnnotationComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -50952,20 +50859,20 @@ class $$StockTransfersTableAnnotationComposer
     return composer;
   }
 
-  $$WarehousesTableAnnotationComposer get toLocationId {
-    final $$WarehousesTableAnnotationComposer composer = $composerBuilder(
+  $$StoresTableAnnotationComposer get toLocationId {
+    final $$StoresTableAnnotationComposer composer = $composerBuilder(
       composer: this,
       getCurrentColumn: (t) => t.toLocationId,
-      referencedTable: $db.warehouses,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableAnnotationComposer(
+          }) => $$StoresTableAnnotationComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -51361,7 +51268,7 @@ typedef $$StockAdjustmentsTableCreateCompanionBuilder =
       Value<String> id,
       required String businessId,
       required String productId,
-      required String warehouseId,
+      required String storeId,
       required int quantityDiff,
       required String reason,
       Value<String?> performedBy,
@@ -51374,7 +51281,7 @@ typedef $$StockAdjustmentsTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> businessId,
       Value<String> productId,
-      Value<String> warehouseId,
+      Value<String> storeId,
       Value<int> quantityDiff,
       Value<String> reason,
       Value<String?> performedBy,
@@ -51434,19 +51341,18 @@ final class $$StockAdjustmentsTableReferences
     );
   }
 
-  static $WarehousesTable _warehouseIdTable(_$AppDatabase db) =>
-      db.warehouses.createAlias(
-        $_aliasNameGenerator(db.stockAdjustments.warehouseId, db.warehouses.id),
-      );
+  static $StoresTable _storeIdTable(_$AppDatabase db) => db.stores.createAlias(
+    $_aliasNameGenerator(db.stockAdjustments.storeId, db.stores.id),
+  );
 
-  $$WarehousesTableProcessedTableManager get warehouseId {
-    final $_column = $_itemColumn<String>('warehouse_id')!;
+  $$StoresTableProcessedTableManager get storeId {
+    final $_column = $_itemColumn<String>('store_id')!;
 
-    final manager = $$WarehousesTableTableManager(
+    final manager = $$StoresTableTableManager(
       $_db,
-      $_db.warehouses,
+      $_db.stores,
     ).filter((f) => f.id.sqlEquals($_column));
-    final item = $_typedResult.readTableOrNull(_warehouseIdTable($_db));
+    final item = $_typedResult.readTableOrNull(_storeIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -51580,20 +51486,20 @@ class $$StockAdjustmentsTableFilterComposer
     return composer;
   }
 
-  $$WarehousesTableFilterComposer get warehouseId {
-    final $$WarehousesTableFilterComposer composer = $composerBuilder(
+  $$StoresTableFilterComposer get storeId {
+    final $$StoresTableFilterComposer composer = $composerBuilder(
       composer: this,
-      getCurrentColumn: (t) => t.warehouseId,
-      referencedTable: $db.warehouses,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableFilterComposer(
+          }) => $$StoresTableFilterComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -51732,20 +51638,20 @@ class $$StockAdjustmentsTableOrderingComposer
     return composer;
   }
 
-  $$WarehousesTableOrderingComposer get warehouseId {
-    final $$WarehousesTableOrderingComposer composer = $composerBuilder(
+  $$StoresTableOrderingComposer get storeId {
+    final $$StoresTableOrderingComposer composer = $composerBuilder(
       composer: this,
-      getCurrentColumn: (t) => t.warehouseId,
-      referencedTable: $db.warehouses,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableOrderingComposer(
+          }) => $$StoresTableOrderingComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -51853,20 +51759,20 @@ class $$StockAdjustmentsTableAnnotationComposer
     return composer;
   }
 
-  $$WarehousesTableAnnotationComposer get warehouseId {
-    final $$WarehousesTableAnnotationComposer composer = $composerBuilder(
+  $$StoresTableAnnotationComposer get storeId {
+    final $$StoresTableAnnotationComposer composer = $composerBuilder(
       composer: this,
-      getCurrentColumn: (t) => t.warehouseId,
-      referencedTable: $db.warehouses,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableAnnotationComposer(
+          }) => $$StoresTableAnnotationComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -51942,7 +51848,7 @@ class $$StockAdjustmentsTableTableManager
           PrefetchHooks Function({
             bool businessId,
             bool productId,
-            bool warehouseId,
+            bool storeId,
             bool performedBy,
             bool stockTransactionsRefs,
           })
@@ -51965,7 +51871,7 @@ class $$StockAdjustmentsTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> businessId = const Value.absent(),
                 Value<String> productId = const Value.absent(),
-                Value<String> warehouseId = const Value.absent(),
+                Value<String> storeId = const Value.absent(),
                 Value<int> quantityDiff = const Value.absent(),
                 Value<String> reason = const Value.absent(),
                 Value<String?> performedBy = const Value.absent(),
@@ -51976,7 +51882,7 @@ class $$StockAdjustmentsTableTableManager
                 id: id,
                 businessId: businessId,
                 productId: productId,
-                warehouseId: warehouseId,
+                storeId: storeId,
                 quantityDiff: quantityDiff,
                 reason: reason,
                 performedBy: performedBy,
@@ -51989,7 +51895,7 @@ class $$StockAdjustmentsTableTableManager
                 Value<String> id = const Value.absent(),
                 required String businessId,
                 required String productId,
-                required String warehouseId,
+                required String storeId,
                 required int quantityDiff,
                 required String reason,
                 Value<String?> performedBy = const Value.absent(),
@@ -52000,7 +51906,7 @@ class $$StockAdjustmentsTableTableManager
                 id: id,
                 businessId: businessId,
                 productId: productId,
-                warehouseId: warehouseId,
+                storeId: storeId,
                 quantityDiff: quantityDiff,
                 reason: reason,
                 performedBy: performedBy,
@@ -52020,7 +51926,7 @@ class $$StockAdjustmentsTableTableManager
               ({
                 businessId = false,
                 productId = false,
-                warehouseId = false,
+                storeId = false,
                 performedBy = false,
                 stockTransactionsRefs = false,
               }) {
@@ -52075,17 +51981,17 @@ class $$StockAdjustmentsTableTableManager
                                   )
                                   as T;
                         }
-                        if (warehouseId) {
+                        if (storeId) {
                           state =
                               state.withJoin(
                                     currentTable: table,
-                                    currentColumn: table.warehouseId,
+                                    currentColumn: table.storeId,
                                     referencedTable:
                                         $$StockAdjustmentsTableReferences
-                                            ._warehouseIdTable(db),
+                                            ._storeIdTable(db),
                                     referencedColumn:
                                         $$StockAdjustmentsTableReferences
-                                            ._warehouseIdTable(db)
+                                            ._storeIdTable(db)
                                             .id,
                                   )
                                   as T;
@@ -52154,7 +52060,7 @@ typedef $$StockAdjustmentsTableProcessedTableManager =
       PrefetchHooks Function({
         bool businessId,
         bool productId,
-        bool warehouseId,
+        bool storeId,
         bool performedBy,
         bool stockTransactionsRefs,
       })
@@ -53014,17 +52920,17 @@ final class $$StockTransactionsTableReferences
     );
   }
 
-  static $WarehousesTable _locationIdTable(_$AppDatabase db) =>
-      db.warehouses.createAlias(
-        $_aliasNameGenerator(db.stockTransactions.locationId, db.warehouses.id),
+  static $StoresTable _locationIdTable(_$AppDatabase db) =>
+      db.stores.createAlias(
+        $_aliasNameGenerator(db.stockTransactions.locationId, db.stores.id),
       );
 
-  $$WarehousesTableProcessedTableManager get locationId {
+  $$StoresTableProcessedTableManager get locationId {
     final $_column = $_itemColumn<String>('location_id')!;
 
-    final manager = $$WarehousesTableTableManager(
+    final manager = $$StoresTableTableManager(
       $_db,
-      $_db.warehouses,
+      $_db.stores,
     ).filter((f) => f.id.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_locationIdTable($_db));
     if (item == null) return manager;
@@ -53242,20 +53148,20 @@ class $$StockTransactionsTableFilterComposer
     return composer;
   }
 
-  $$WarehousesTableFilterComposer get locationId {
-    final $$WarehousesTableFilterComposer composer = $composerBuilder(
+  $$StoresTableFilterComposer get locationId {
+    final $$StoresTableFilterComposer composer = $composerBuilder(
       composer: this,
       getCurrentColumn: (t) => t.locationId,
-      referencedTable: $db.warehouses,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableFilterComposer(
+          }) => $$StoresTableFilterComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -53494,20 +53400,20 @@ class $$StockTransactionsTableOrderingComposer
     return composer;
   }
 
-  $$WarehousesTableOrderingComposer get locationId {
-    final $$WarehousesTableOrderingComposer composer = $composerBuilder(
+  $$StoresTableOrderingComposer get locationId {
+    final $$StoresTableOrderingComposer composer = $composerBuilder(
       composer: this,
       getCurrentColumn: (t) => t.locationId,
-      referencedTable: $db.warehouses,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableOrderingComposer(
+          }) => $$StoresTableOrderingComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -53740,20 +53646,20 @@ class $$StockTransactionsTableAnnotationComposer
     return composer;
   }
 
-  $$WarehousesTableAnnotationComposer get locationId {
-    final $$WarehousesTableAnnotationComposer composer = $composerBuilder(
+  $$StoresTableAnnotationComposer get locationId {
+    final $$StoresTableAnnotationComposer composer = $composerBuilder(
       composer: this,
       getCurrentColumn: (t) => t.locationId,
-      referencedTable: $db.warehouses,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableAnnotationComposer(
+          }) => $$StoresTableAnnotationComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -54235,7 +54141,7 @@ typedef $$OrderItemsTableCreateCompanionBuilder =
       required String businessId,
       required String orderId,
       required String productId,
-      required String warehouseId,
+      required String storeId,
       required int quantity,
       required int unitPriceKobo,
       Value<int> buyingPriceKobo,
@@ -54251,7 +54157,7 @@ typedef $$OrderItemsTableUpdateCompanionBuilder =
       Value<String> businessId,
       Value<String> orderId,
       Value<String> productId,
-      Value<String> warehouseId,
+      Value<String> storeId,
       Value<int> quantity,
       Value<int> unitPriceKobo,
       Value<int> buyingPriceKobo,
@@ -54322,19 +54228,18 @@ final class $$OrderItemsTableReferences
     );
   }
 
-  static $WarehousesTable _warehouseIdTable(_$AppDatabase db) =>
-      db.warehouses.createAlias(
-        $_aliasNameGenerator(db.orderItems.warehouseId, db.warehouses.id),
-      );
+  static $StoresTable _storeIdTable(_$AppDatabase db) => db.stores.createAlias(
+    $_aliasNameGenerator(db.orderItems.storeId, db.stores.id),
+  );
 
-  $$WarehousesTableProcessedTableManager get warehouseId {
-    final $_column = $_itemColumn<String>('warehouse_id')!;
+  $$StoresTableProcessedTableManager get storeId {
+    final $_column = $_itemColumn<String>('store_id')!;
 
-    final manager = $$WarehousesTableTableManager(
+    final manager = $$StoresTableTableManager(
       $_db,
-      $_db.warehouses,
+      $_db.stores,
     ).filter((f) => f.id.sqlEquals($_column));
-    final item = $_typedResult.readTableOrNull(_warehouseIdTable($_db));
+    final item = $_typedResult.readTableOrNull(_storeIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -54460,20 +54365,20 @@ class $$OrderItemsTableFilterComposer
     return composer;
   }
 
-  $$WarehousesTableFilterComposer get warehouseId {
-    final $$WarehousesTableFilterComposer composer = $composerBuilder(
+  $$StoresTableFilterComposer get storeId {
+    final $$StoresTableFilterComposer composer = $composerBuilder(
       composer: this,
-      getCurrentColumn: (t) => t.warehouseId,
-      referencedTable: $db.warehouses,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableFilterComposer(
+          }) => $$StoresTableFilterComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -54602,20 +54507,20 @@ class $$OrderItemsTableOrderingComposer
     return composer;
   }
 
-  $$WarehousesTableOrderingComposer get warehouseId {
-    final $$WarehousesTableOrderingComposer composer = $composerBuilder(
+  $$StoresTableOrderingComposer get storeId {
+    final $$StoresTableOrderingComposer composer = $composerBuilder(
       composer: this,
-      getCurrentColumn: (t) => t.warehouseId,
-      referencedTable: $db.warehouses,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableOrderingComposer(
+          }) => $$StoresTableOrderingComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -54736,20 +54641,20 @@ class $$OrderItemsTableAnnotationComposer
     return composer;
   }
 
-  $$WarehousesTableAnnotationComposer get warehouseId {
-    final $$WarehousesTableAnnotationComposer composer = $composerBuilder(
+  $$StoresTableAnnotationComposer get storeId {
+    final $$StoresTableAnnotationComposer composer = $composerBuilder(
       composer: this,
-      getCurrentColumn: (t) => t.warehouseId,
-      referencedTable: $db.warehouses,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableAnnotationComposer(
+          }) => $$StoresTableAnnotationComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -54777,7 +54682,7 @@ class $$OrderItemsTableTableManager
             bool businessId,
             bool orderId,
             bool productId,
-            bool warehouseId,
+            bool storeId,
           })
         > {
   $$OrderItemsTableTableManager(_$AppDatabase db, $OrderItemsTable table)
@@ -54797,7 +54702,7 @@ class $$OrderItemsTableTableManager
                 Value<String> businessId = const Value.absent(),
                 Value<String> orderId = const Value.absent(),
                 Value<String> productId = const Value.absent(),
-                Value<String> warehouseId = const Value.absent(),
+                Value<String> storeId = const Value.absent(),
                 Value<int> quantity = const Value.absent(),
                 Value<int> unitPriceKobo = const Value.absent(),
                 Value<int> buyingPriceKobo = const Value.absent(),
@@ -54811,7 +54716,7 @@ class $$OrderItemsTableTableManager
                 businessId: businessId,
                 orderId: orderId,
                 productId: productId,
-                warehouseId: warehouseId,
+                storeId: storeId,
                 quantity: quantity,
                 unitPriceKobo: unitPriceKobo,
                 buyingPriceKobo: buyingPriceKobo,
@@ -54827,7 +54732,7 @@ class $$OrderItemsTableTableManager
                 required String businessId,
                 required String orderId,
                 required String productId,
-                required String warehouseId,
+                required String storeId,
                 required int quantity,
                 required int unitPriceKobo,
                 Value<int> buyingPriceKobo = const Value.absent(),
@@ -54841,7 +54746,7 @@ class $$OrderItemsTableTableManager
                 businessId: businessId,
                 orderId: orderId,
                 productId: productId,
-                warehouseId: warehouseId,
+                storeId: storeId,
                 quantity: quantity,
                 unitPriceKobo: unitPriceKobo,
                 buyingPriceKobo: buyingPriceKobo,
@@ -54864,7 +54769,7 @@ class $$OrderItemsTableTableManager
                 businessId = false,
                 orderId = false,
                 productId = false,
-                warehouseId = false,
+                storeId = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -54927,16 +54832,16 @@ class $$OrderItemsTableTableManager
                                   )
                                   as T;
                         }
-                        if (warehouseId) {
+                        if (storeId) {
                           state =
                               state.withJoin(
                                     currentTable: table,
-                                    currentColumn: table.warehouseId,
+                                    currentColumn: table.storeId,
                                     referencedTable: $$OrderItemsTableReferences
-                                        ._warehouseIdTable(db),
+                                        ._storeIdTable(db),
                                     referencedColumn:
                                         $$OrderItemsTableReferences
-                                            ._warehouseIdTable(db)
+                                            ._storeIdTable(db)
                                             .id,
                                   )
                                   as T;
@@ -54969,7 +54874,7 @@ typedef $$OrderItemsTableProcessedTableManager =
         bool businessId,
         bool orderId,
         bool productId,
-        bool warehouseId,
+        bool storeId,
       })
     >;
 typedef $$PurchaseItemsTableCreateCompanionBuilder =
@@ -56020,7 +55925,7 @@ typedef $$ExpensesTableCreateCompanionBuilder =
       Value<String?> paymentMethod,
       Value<String?> recordedBy,
       Value<String?> reference,
-      Value<String?> warehouseId,
+      Value<String?> storeId,
       Value<bool> isDeleted,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -56036,7 +55941,7 @@ typedef $$ExpensesTableUpdateCompanionBuilder =
       Value<String?> paymentMethod,
       Value<String?> recordedBy,
       Value<String?> reference,
-      Value<String?> warehouseId,
+      Value<String?> storeId,
       Value<bool> isDeleted,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -56103,19 +56008,18 @@ final class $$ExpensesTableReferences
     );
   }
 
-  static $WarehousesTable _warehouseIdTable(_$AppDatabase db) =>
-      db.warehouses.createAlias(
-        $_aliasNameGenerator(db.expenses.warehouseId, db.warehouses.id),
-      );
+  static $StoresTable _storeIdTable(_$AppDatabase db) => db.stores.createAlias(
+    $_aliasNameGenerator(db.expenses.storeId, db.stores.id),
+  );
 
-  $$WarehousesTableProcessedTableManager? get warehouseId {
-    final $_column = $_itemColumn<String>('warehouse_id');
+  $$StoresTableProcessedTableManager? get storeId {
+    final $_column = $_itemColumn<String>('store_id');
     if ($_column == null) return null;
-    final manager = $$WarehousesTableTableManager(
+    final manager = $$StoresTableTableManager(
       $_db,
-      $_db.warehouses,
+      $_db.stores,
     ).filter((f) => f.id.sqlEquals($_column));
-    final item = $_typedResult.readTableOrNull(_warehouseIdTable($_db));
+    final item = $_typedResult.readTableOrNull(_storeIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -56286,20 +56190,20 @@ class $$ExpensesTableFilterComposer
     return composer;
   }
 
-  $$WarehousesTableFilterComposer get warehouseId {
-    final $$WarehousesTableFilterComposer composer = $composerBuilder(
+  $$StoresTableFilterComposer get storeId {
+    final $$StoresTableFilterComposer composer = $composerBuilder(
       composer: this,
-      getCurrentColumn: (t) => t.warehouseId,
-      referencedTable: $db.warehouses,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableFilterComposer(
+          }) => $$StoresTableFilterComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -56478,20 +56382,20 @@ class $$ExpensesTableOrderingComposer
     return composer;
   }
 
-  $$WarehousesTableOrderingComposer get warehouseId {
-    final $$WarehousesTableOrderingComposer composer = $composerBuilder(
+  $$StoresTableOrderingComposer get storeId {
+    final $$StoresTableOrderingComposer composer = $composerBuilder(
       composer: this,
-      getCurrentColumn: (t) => t.warehouseId,
-      referencedTable: $db.warehouses,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableOrderingComposer(
+          }) => $$StoresTableOrderingComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -56613,20 +56517,20 @@ class $$ExpensesTableAnnotationComposer
     return composer;
   }
 
-  $$WarehousesTableAnnotationComposer get warehouseId {
-    final $$WarehousesTableAnnotationComposer composer = $composerBuilder(
+  $$StoresTableAnnotationComposer get storeId {
+    final $$StoresTableAnnotationComposer composer = $composerBuilder(
       composer: this,
-      getCurrentColumn: (t) => t.warehouseId,
-      referencedTable: $db.warehouses,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableAnnotationComposer(
+          }) => $$StoresTableAnnotationComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -56705,7 +56609,7 @@ class $$ExpensesTableTableManager
             bool businessId,
             bool categoryId,
             bool recordedBy,
-            bool warehouseId,
+            bool storeId,
             bool paymentTransactionsRefs,
             bool activityLogsRefs,
           })
@@ -56731,7 +56635,7 @@ class $$ExpensesTableTableManager
                 Value<String?> paymentMethod = const Value.absent(),
                 Value<String?> recordedBy = const Value.absent(),
                 Value<String?> reference = const Value.absent(),
-                Value<String?> warehouseId = const Value.absent(),
+                Value<String?> storeId = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -56745,7 +56649,7 @@ class $$ExpensesTableTableManager
                 paymentMethod: paymentMethod,
                 recordedBy: recordedBy,
                 reference: reference,
-                warehouseId: warehouseId,
+                storeId: storeId,
                 isDeleted: isDeleted,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
@@ -56761,7 +56665,7 @@ class $$ExpensesTableTableManager
                 Value<String?> paymentMethod = const Value.absent(),
                 Value<String?> recordedBy = const Value.absent(),
                 Value<String?> reference = const Value.absent(),
-                Value<String?> warehouseId = const Value.absent(),
+                Value<String?> storeId = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -56775,7 +56679,7 @@ class $$ExpensesTableTableManager
                 paymentMethod: paymentMethod,
                 recordedBy: recordedBy,
                 reference: reference,
-                warehouseId: warehouseId,
+                storeId: storeId,
                 isDeleted: isDeleted,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
@@ -56794,7 +56698,7 @@ class $$ExpensesTableTableManager
                 businessId = false,
                 categoryId = false,
                 recordedBy = false,
-                warehouseId = false,
+                storeId = false,
                 paymentTransactionsRefs = false,
                 activityLogsRefs = false,
               }) {
@@ -56859,15 +56763,15 @@ class $$ExpensesTableTableManager
                                   )
                                   as T;
                         }
-                        if (warehouseId) {
+                        if (storeId) {
                           state =
                               state.withJoin(
                                     currentTable: table,
-                                    currentColumn: table.warehouseId,
+                                    currentColumn: table.storeId,
                                     referencedTable: $$ExpensesTableReferences
-                                        ._warehouseIdTable(db),
+                                        ._storeIdTable(db),
                                     referencedColumn: $$ExpensesTableReferences
-                                        ._warehouseIdTable(db)
+                                        ._storeIdTable(db)
                                         .id,
                                   )
                                   as T;
@@ -56943,7 +56847,7 @@ typedef $$ExpensesTableProcessedTableManager =
         bool businessId,
         bool categoryId,
         bool recordedBy,
-        bool warehouseId,
+        bool storeId,
         bool paymentTransactionsRefs,
         bool activityLogsRefs,
       })
@@ -59894,7 +59798,7 @@ typedef $$ActivityLogsTableCreateCompanionBuilder =
       Value<String?> expenseId,
       Value<String?> deliveryId,
       Value<String?> walletTxnId,
-      Value<String?> warehouseId,
+      Value<String?> storeId,
       Value<DateTime?> voidedAt,
       Value<String?> voidedBy,
       Value<String?> voidReason,
@@ -59915,7 +59819,7 @@ typedef $$ActivityLogsTableUpdateCompanionBuilder =
       Value<String?> expenseId,
       Value<String?> deliveryId,
       Value<String?> walletTxnId,
-      Value<String?> warehouseId,
+      Value<String?> storeId,
       Value<DateTime?> voidedAt,
       Value<String?> voidedBy,
       Value<String?> voidReason,
@@ -60084,19 +59988,18 @@ final class $$ActivityLogsTableReferences
     );
   }
 
-  static $WarehousesTable _warehouseIdTable(_$AppDatabase db) =>
-      db.warehouses.createAlias(
-        $_aliasNameGenerator(db.activityLogs.warehouseId, db.warehouses.id),
-      );
+  static $StoresTable _storeIdTable(_$AppDatabase db) => db.stores.createAlias(
+    $_aliasNameGenerator(db.activityLogs.storeId, db.stores.id),
+  );
 
-  $$WarehousesTableProcessedTableManager? get warehouseId {
-    final $_column = $_itemColumn<String>('warehouse_id');
+  $$StoresTableProcessedTableManager? get storeId {
+    final $_column = $_itemColumn<String>('store_id');
     if ($_column == null) return null;
-    final manager = $$WarehousesTableTableManager(
+    final manager = $$StoresTableTableManager(
       $_db,
-      $_db.warehouses,
+      $_db.stores,
     ).filter((f) => f.id.sqlEquals($_column));
-    final item = $_typedResult.readTableOrNull(_warehouseIdTable($_db));
+    final item = $_typedResult.readTableOrNull(_storeIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -60350,20 +60253,20 @@ class $$ActivityLogsTableFilterComposer
     return composer;
   }
 
-  $$WarehousesTableFilterComposer get warehouseId {
-    final $$WarehousesTableFilterComposer composer = $composerBuilder(
+  $$StoresTableFilterComposer get storeId {
+    final $$StoresTableFilterComposer composer = $composerBuilder(
       composer: this,
-      getCurrentColumn: (t) => t.warehouseId,
-      referencedTable: $db.warehouses,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableFilterComposer(
+          }) => $$StoresTableFilterComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -60625,20 +60528,20 @@ class $$ActivityLogsTableOrderingComposer
     return composer;
   }
 
-  $$WarehousesTableOrderingComposer get warehouseId {
-    final $$WarehousesTableOrderingComposer composer = $composerBuilder(
+  $$StoresTableOrderingComposer get storeId {
+    final $$StoresTableOrderingComposer composer = $composerBuilder(
       composer: this,
-      getCurrentColumn: (t) => t.warehouseId,
-      referencedTable: $db.warehouses,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableOrderingComposer(
+          }) => $$StoresTableOrderingComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -60893,20 +60796,20 @@ class $$ActivityLogsTableAnnotationComposer
     return composer;
   }
 
-  $$WarehousesTableAnnotationComposer get warehouseId {
-    final $$WarehousesTableAnnotationComposer composer = $composerBuilder(
+  $$StoresTableAnnotationComposer get storeId {
+    final $$StoresTableAnnotationComposer composer = $composerBuilder(
       composer: this,
-      getCurrentColumn: (t) => t.warehouseId,
-      referencedTable: $db.warehouses,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableAnnotationComposer(
+          }) => $$StoresTableAnnotationComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -60962,7 +60865,7 @@ class $$ActivityLogsTableTableManager
             bool expenseId,
             bool deliveryId,
             bool walletTxnId,
-            bool warehouseId,
+            bool storeId,
             bool voidedBy,
           })
         > {
@@ -60990,7 +60893,7 @@ class $$ActivityLogsTableTableManager
                 Value<String?> expenseId = const Value.absent(),
                 Value<String?> deliveryId = const Value.absent(),
                 Value<String?> walletTxnId = const Value.absent(),
-                Value<String?> warehouseId = const Value.absent(),
+                Value<String?> storeId = const Value.absent(),
                 Value<DateTime?> voidedAt = const Value.absent(),
                 Value<String?> voidedBy = const Value.absent(),
                 Value<String?> voidReason = const Value.absent(),
@@ -61009,7 +60912,7 @@ class $$ActivityLogsTableTableManager
                 expenseId: expenseId,
                 deliveryId: deliveryId,
                 walletTxnId: walletTxnId,
-                warehouseId: warehouseId,
+                storeId: storeId,
                 voidedAt: voidedAt,
                 voidedBy: voidedBy,
                 voidReason: voidReason,
@@ -61030,7 +60933,7 @@ class $$ActivityLogsTableTableManager
                 Value<String?> expenseId = const Value.absent(),
                 Value<String?> deliveryId = const Value.absent(),
                 Value<String?> walletTxnId = const Value.absent(),
-                Value<String?> warehouseId = const Value.absent(),
+                Value<String?> storeId = const Value.absent(),
                 Value<DateTime?> voidedAt = const Value.absent(),
                 Value<String?> voidedBy = const Value.absent(),
                 Value<String?> voidReason = const Value.absent(),
@@ -61049,7 +60952,7 @@ class $$ActivityLogsTableTableManager
                 expenseId: expenseId,
                 deliveryId: deliveryId,
                 walletTxnId: walletTxnId,
-                warehouseId: warehouseId,
+                storeId: storeId,
                 voidedAt: voidedAt,
                 voidedBy: voidedBy,
                 voidReason: voidReason,
@@ -61075,7 +60978,7 @@ class $$ActivityLogsTableTableManager
                 expenseId = false,
                 deliveryId = false,
                 walletTxnId = false,
-                warehouseId = false,
+                storeId = false,
                 voidedBy = false,
               }) {
                 return PrefetchHooks(
@@ -61217,17 +61120,17 @@ class $$ActivityLogsTableTableManager
                                   )
                                   as T;
                         }
-                        if (warehouseId) {
+                        if (storeId) {
                           state =
                               state.withJoin(
                                     currentTable: table,
-                                    currentColumn: table.warehouseId,
+                                    currentColumn: table.storeId,
                                     referencedTable:
                                         $$ActivityLogsTableReferences
-                                            ._warehouseIdTable(db),
+                                            ._storeIdTable(db),
                                     referencedColumn:
                                         $$ActivityLogsTableReferences
-                                            ._warehouseIdTable(db)
+                                            ._storeIdTable(db)
                                             .id,
                                   )
                                   as T;
@@ -61280,7 +61183,7 @@ typedef $$ActivityLogsTableProcessedTableManager =
         bool expenseId,
         bool deliveryId,
         bool walletTxnId,
-        bool warehouseId,
+        bool storeId,
         bool voidedBy,
       })
     >;
@@ -65074,7 +64977,7 @@ typedef $$InviteCodesTableCreateCompanionBuilder =
       required String roleId,
       required String code,
       required String email,
-      required String warehouseId,
+      required String storeId,
       required String generatedByUserId,
       required DateTime expiresAt,
       Value<String?> usedByUserId,
@@ -65092,7 +64995,7 @@ typedef $$InviteCodesTableUpdateCompanionBuilder =
       Value<String> roleId,
       Value<String> code,
       Value<String> email,
-      Value<String> warehouseId,
+      Value<String> storeId,
       Value<String> generatedByUserId,
       Value<DateTime> expiresAt,
       Value<String?> usedByUserId,
@@ -65145,19 +65048,18 @@ final class $$InviteCodesTableReferences
     );
   }
 
-  static $WarehousesTable _warehouseIdTable(_$AppDatabase db) =>
-      db.warehouses.createAlias(
-        $_aliasNameGenerator(db.inviteCodes.warehouseId, db.warehouses.id),
-      );
+  static $StoresTable _storeIdTable(_$AppDatabase db) => db.stores.createAlias(
+    $_aliasNameGenerator(db.inviteCodes.storeId, db.stores.id),
+  );
 
-  $$WarehousesTableProcessedTableManager get warehouseId {
-    final $_column = $_itemColumn<String>('warehouse_id')!;
+  $$StoresTableProcessedTableManager get storeId {
+    final $_column = $_itemColumn<String>('store_id')!;
 
-    final manager = $$WarehousesTableTableManager(
+    final manager = $$StoresTableTableManager(
       $_db,
-      $_db.warehouses,
+      $_db.stores,
     ).filter((f) => f.id.sqlEquals($_column));
-    final item = $_typedResult.readTableOrNull(_warehouseIdTable($_db));
+    final item = $_typedResult.readTableOrNull(_storeIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -65303,20 +65205,20 @@ class $$InviteCodesTableFilterComposer
     return composer;
   }
 
-  $$WarehousesTableFilterComposer get warehouseId {
-    final $$WarehousesTableFilterComposer composer = $composerBuilder(
+  $$StoresTableFilterComposer get storeId {
+    final $$StoresTableFilterComposer composer = $composerBuilder(
       composer: this,
-      getCurrentColumn: (t) => t.warehouseId,
-      referencedTable: $db.warehouses,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableFilterComposer(
+          }) => $$StoresTableFilterComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -65473,20 +65375,20 @@ class $$InviteCodesTableOrderingComposer
     return composer;
   }
 
-  $$WarehousesTableOrderingComposer get warehouseId {
-    final $$WarehousesTableOrderingComposer composer = $composerBuilder(
+  $$StoresTableOrderingComposer get storeId {
+    final $$StoresTableOrderingComposer composer = $composerBuilder(
       composer: this,
-      getCurrentColumn: (t) => t.warehouseId,
-      referencedTable: $db.warehouses,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableOrderingComposer(
+          }) => $$StoresTableOrderingComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -65627,20 +65529,20 @@ class $$InviteCodesTableAnnotationComposer
     return composer;
   }
 
-  $$WarehousesTableAnnotationComposer get warehouseId {
-    final $$WarehousesTableAnnotationComposer composer = $composerBuilder(
+  $$StoresTableAnnotationComposer get storeId {
+    final $$StoresTableAnnotationComposer composer = $composerBuilder(
       composer: this,
-      getCurrentColumn: (t) => t.warehouseId,
-      referencedTable: $db.warehouses,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableAnnotationComposer(
+          }) => $$StoresTableAnnotationComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -65713,7 +65615,7 @@ class $$InviteCodesTableTableManager
           PrefetchHooks Function({
             bool businessId,
             bool roleId,
-            bool warehouseId,
+            bool storeId,
             bool generatedByUserId,
             bool usedByUserId,
           })
@@ -65736,7 +65638,7 @@ class $$InviteCodesTableTableManager
                 Value<String> roleId = const Value.absent(),
                 Value<String> code = const Value.absent(),
                 Value<String> email = const Value.absent(),
-                Value<String> warehouseId = const Value.absent(),
+                Value<String> storeId = const Value.absent(),
                 Value<String> generatedByUserId = const Value.absent(),
                 Value<DateTime> expiresAt = const Value.absent(),
                 Value<String?> usedByUserId = const Value.absent(),
@@ -65752,7 +65654,7 @@ class $$InviteCodesTableTableManager
                 roleId: roleId,
                 code: code,
                 email: email,
-                warehouseId: warehouseId,
+                storeId: storeId,
                 generatedByUserId: generatedByUserId,
                 expiresAt: expiresAt,
                 usedByUserId: usedByUserId,
@@ -65770,7 +65672,7 @@ class $$InviteCodesTableTableManager
                 required String roleId,
                 required String code,
                 required String email,
-                required String warehouseId,
+                required String storeId,
                 required String generatedByUserId,
                 required DateTime expiresAt,
                 Value<String?> usedByUserId = const Value.absent(),
@@ -65786,7 +65688,7 @@ class $$InviteCodesTableTableManager
                 roleId: roleId,
                 code: code,
                 email: email,
-                warehouseId: warehouseId,
+                storeId: storeId,
                 generatedByUserId: generatedByUserId,
                 expiresAt: expiresAt,
                 usedByUserId: usedByUserId,
@@ -65809,7 +65711,7 @@ class $$InviteCodesTableTableManager
               ({
                 businessId = false,
                 roleId = false,
-                warehouseId = false,
+                storeId = false,
                 generatedByUserId = false,
                 usedByUserId = false,
               }) {
@@ -65862,17 +65764,17 @@ class $$InviteCodesTableTableManager
                                   )
                                   as T;
                         }
-                        if (warehouseId) {
+                        if (storeId) {
                           state =
                               state.withJoin(
                                     currentTable: table,
-                                    currentColumn: table.warehouseId,
+                                    currentColumn: table.storeId,
                                     referencedTable:
                                         $$InviteCodesTableReferences
-                                            ._warehouseIdTable(db),
+                                            ._storeIdTable(db),
                                     referencedColumn:
                                         $$InviteCodesTableReferences
-                                            ._warehouseIdTable(db)
+                                            ._storeIdTable(db)
                                             .id,
                                   )
                                   as T;
@@ -65934,7 +65836,7 @@ typedef $$InviteCodesTableProcessedTableManager =
       PrefetchHooks Function({
         bool businessId,
         bool roleId,
-        bool warehouseId,
+        bool storeId,
         bool generatedByUserId,
         bool usedByUserId,
       })
@@ -65944,7 +65846,7 @@ typedef $$UserStoresTableCreateCompanionBuilder =
       Value<String> id,
       required String businessId,
       required String userId,
-      required String warehouseId,
+      required String storeId,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
       Value<int> rowid,
@@ -65954,7 +65856,7 @@ typedef $$UserStoresTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> businessId,
       Value<String> userId,
-      Value<String> warehouseId,
+      Value<String> storeId,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
       Value<int> rowid,
@@ -66001,19 +65903,18 @@ final class $$UserStoresTableReferences
     );
   }
 
-  static $WarehousesTable _warehouseIdTable(_$AppDatabase db) =>
-      db.warehouses.createAlias(
-        $_aliasNameGenerator(db.userStores.warehouseId, db.warehouses.id),
-      );
+  static $StoresTable _storeIdTable(_$AppDatabase db) => db.stores.createAlias(
+    $_aliasNameGenerator(db.userStores.storeId, db.stores.id),
+  );
 
-  $$WarehousesTableProcessedTableManager get warehouseId {
-    final $_column = $_itemColumn<String>('warehouse_id')!;
+  $$StoresTableProcessedTableManager get storeId {
+    final $_column = $_itemColumn<String>('store_id')!;
 
-    final manager = $$WarehousesTableTableManager(
+    final manager = $$StoresTableTableManager(
       $_db,
-      $_db.warehouses,
+      $_db.stores,
     ).filter((f) => f.id.sqlEquals($_column));
-    final item = $_typedResult.readTableOrNull(_warehouseIdTable($_db));
+    final item = $_typedResult.readTableOrNull(_storeIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -66091,20 +65992,20 @@ class $$UserStoresTableFilterComposer
     return composer;
   }
 
-  $$WarehousesTableFilterComposer get warehouseId {
-    final $$WarehousesTableFilterComposer composer = $composerBuilder(
+  $$StoresTableFilterComposer get storeId {
+    final $$StoresTableFilterComposer composer = $composerBuilder(
       composer: this,
-      getCurrentColumn: (t) => t.warehouseId,
-      referencedTable: $db.warehouses,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableFilterComposer(
+          }) => $$StoresTableFilterComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -66185,20 +66086,20 @@ class $$UserStoresTableOrderingComposer
     return composer;
   }
 
-  $$WarehousesTableOrderingComposer get warehouseId {
-    final $$WarehousesTableOrderingComposer composer = $composerBuilder(
+  $$StoresTableOrderingComposer get storeId {
+    final $$StoresTableOrderingComposer composer = $composerBuilder(
       composer: this,
-      getCurrentColumn: (t) => t.warehouseId,
-      referencedTable: $db.warehouses,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableOrderingComposer(
+          }) => $$StoresTableOrderingComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -66275,20 +66176,20 @@ class $$UserStoresTableAnnotationComposer
     return composer;
   }
 
-  $$WarehousesTableAnnotationComposer get warehouseId {
-    final $$WarehousesTableAnnotationComposer composer = $composerBuilder(
+  $$StoresTableAnnotationComposer get storeId {
+    final $$StoresTableAnnotationComposer composer = $composerBuilder(
       composer: this,
-      getCurrentColumn: (t) => t.warehouseId,
-      referencedTable: $db.warehouses,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$WarehousesTableAnnotationComposer(
+          }) => $$StoresTableAnnotationComposer(
             $db: $db,
-            $table: $db.warehouses,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -66312,11 +66213,7 @@ class $$UserStoresTableTableManager
           $$UserStoresTableUpdateCompanionBuilder,
           (UserStoreData, $$UserStoresTableReferences),
           UserStoreData,
-          PrefetchHooks Function({
-            bool businessId,
-            bool userId,
-            bool warehouseId,
-          })
+          PrefetchHooks Function({bool businessId, bool userId, bool storeId})
         > {
   $$UserStoresTableTableManager(_$AppDatabase db, $UserStoresTable table)
     : super(
@@ -66334,7 +66231,7 @@ class $$UserStoresTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> businessId = const Value.absent(),
                 Value<String> userId = const Value.absent(),
-                Value<String> warehouseId = const Value.absent(),
+                Value<String> storeId = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -66342,7 +66239,7 @@ class $$UserStoresTableTableManager
                 id: id,
                 businessId: businessId,
                 userId: userId,
-                warehouseId: warehouseId,
+                storeId: storeId,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
                 rowid: rowid,
@@ -66352,7 +66249,7 @@ class $$UserStoresTableTableManager
                 Value<String> id = const Value.absent(),
                 required String businessId,
                 required String userId,
-                required String warehouseId,
+                required String storeId,
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -66360,7 +66257,7 @@ class $$UserStoresTableTableManager
                 id: id,
                 businessId: businessId,
                 userId: userId,
-                warehouseId: warehouseId,
+                storeId: storeId,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
                 rowid: rowid,
@@ -66374,7 +66271,7 @@ class $$UserStoresTableTableManager
               )
               .toList(),
           prefetchHooksCallback:
-              ({businessId = false, userId = false, warehouseId = false}) {
+              ({businessId = false, userId = false, storeId = false}) {
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [],
@@ -66422,16 +66319,16 @@ class $$UserStoresTableTableManager
                                   )
                                   as T;
                         }
-                        if (warehouseId) {
+                        if (storeId) {
                           state =
                               state.withJoin(
                                     currentTable: table,
-                                    currentColumn: table.warehouseId,
+                                    currentColumn: table.storeId,
                                     referencedTable: $$UserStoresTableReferences
-                                        ._warehouseIdTable(db),
+                                        ._storeIdTable(db),
                                     referencedColumn:
                                         $$UserStoresTableReferences
-                                            ._warehouseIdTable(db)
+                                            ._storeIdTable(db)
                                             .id,
                                   )
                                   as T;
@@ -66460,7 +66357,7 @@ typedef $$UserStoresTableProcessedTableManager =
       $$UserStoresTableUpdateCompanionBuilder,
       (UserStoreData, $$UserStoresTableReferences),
       UserStoreData,
-      PrefetchHooks Function({bool businessId, bool userId, bool warehouseId})
+      PrefetchHooks Function({bool businessId, bool userId, bool storeId})
     >;
 typedef $$SystemConfigTableCreateCompanionBuilder =
     SystemConfigCompanion Function({
@@ -67581,8 +67478,8 @@ class $AppDatabaseManager {
       $$CrateGroupsTableTableManager(_db, _db.crateGroups);
   $$ManufacturersTableTableManager get manufacturers =>
       $$ManufacturersTableTableManager(_db, _db.manufacturers);
-  $$WarehousesTableTableManager get warehouses =>
-      $$WarehousesTableTableManager(_db, _db.warehouses);
+  $$StoresTableTableManager get stores =>
+      $$StoresTableTableManager(_db, _db.stores);
   $$UsersTableTableManager get users =>
       $$UsersTableTableManager(_db, _db.users);
   $$CategoriesTableTableManager get categories =>

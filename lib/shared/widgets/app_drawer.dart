@@ -304,10 +304,10 @@ class AppDrawer extends ConsumerWidget {
         ),
         _navItem(
           context,
-          FontAwesomeIcons.warehouse,
-          'Warehouse',
-          active: activeRoute == 'warehouse',
-          onTap: () => _navigateTo(context, ref, 'warehouse'),
+          FontAwesomeIcons.store,
+          'Stores',
+          active: activeRoute == 'stores',
+          onTap: () => _navigateTo(context, ref, 'stores'),
         ),
         SizedBox(height: context.getRSize(12)),
         Divider(color: t.dividerColor),
@@ -416,7 +416,7 @@ class AppDrawer extends ConsumerWidget {
       nav.setIndex(5);
     } else if (route == 'expenses') {
       nav.setIndex(6);
-    } else if (route == 'warehouse') {
+    } else if (route == 'store') {
       nav.setIndex(7);
     } else if (route == 'cart') {
       nav.setIndex(8);

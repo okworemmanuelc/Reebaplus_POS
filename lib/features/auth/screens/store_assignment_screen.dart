@@ -9,17 +9,17 @@ import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_background.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 
-class WarehouseAssignmentScreen extends ConsumerStatefulWidget {
+class StoreAssignmentScreen extends ConsumerStatefulWidget {
   final UserData user;
-  const WarehouseAssignmentScreen({super.key, required this.user});
+  const StoreAssignmentScreen({super.key, required this.user});
 
   @override
-  ConsumerState<WarehouseAssignmentScreen> createState() =>
-      _WarehouseAssignmentScreenState();
+  ConsumerState<StoreAssignmentScreen> createState() =>
+      _StoreAssignmentScreenState();
 }
 
-class _WarehouseAssignmentScreenState
-    extends ConsumerState<WarehouseAssignmentScreen> {
+class _StoreAssignmentScreenState
+    extends ConsumerState<StoreAssignmentScreen> {
   late Timer _timer;
   Duration _timeLeft = Duration.zero;
   late DateTime _expiry;
@@ -57,7 +57,7 @@ class _WarehouseAssignmentScreenState
       _db.users,
     )..where((u) => u.id.equals(widget.user.id))).getSingleOrNull();
 
-    if (updatedUser != null && updatedUser.warehouseId != null) {
+    if (updatedUser != null && updatedUser.storeId != null) {
       // Assignment detected!
       _auth.setCurrentUser(updatedUser, freshSignIn: true);
     }
@@ -116,7 +116,7 @@ class _WarehouseAssignmentScreenState
                   ),
                   child: Center(
                     child: Icon(
-                      FontAwesomeIcons.warehouse,
+                      FontAwesomeIcons.store,
                       size: 40,
                       color: theme.colorScheme.primary,
                     ),
@@ -143,7 +143,7 @@ class _WarehouseAssignmentScreenState
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        'Hello ${widget.user.name.split(' ')[0]}, your account is active but hasn\'t been assigned a warehouse yet.',
+                        'Hello ${widget.user.name.split(' ')[0]}, your account is active but hasn\'t been assigned a store yet.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 15,

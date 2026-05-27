@@ -7,12 +7,12 @@ import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 void main() {
   late AppDatabase db;
   late String businessId;
-  late String warehouseId;
+  late String storeId;
 
   setUp(() async {
     db = AppDatabase.forTesting(NativeDatabase.memory());
     businessId = UuidV7.generate();
-    warehouseId = UuidV7.generate();
+    storeId = UuidV7.generate();
     db.businessIdResolver = () => businessId;
 
     await db.into(db.businesses).insert(BusinessesCompanion.insert(
@@ -20,10 +20,10 @@ void main() {
           name: 'Test Biz',
         ));
         
-    await db.into(db.warehouses).insert(WarehousesCompanion.insert(
-          id: Value(warehouseId),
+    await db.into(db.stores).insert(StoresCompanion.insert(
+          id: Value(storeId),
           businessId: businessId,
-          name: 'Main Warehouse',
+          name: 'Main Store',
         ));
   });
 

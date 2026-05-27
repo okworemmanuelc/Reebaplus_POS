@@ -46,9 +46,9 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   late NavigationService _nav;
   int _currentTab = 0;
   String _selectedManufacturer = 'all';
-  String _selectedWarehouseId = 'all';
+  String _selectedStoreId = 'all';
   String _stockFilter = 'all'; // 'all' | 'low' | 'out' | 'empty_crates'
-  List<WarehouseData> _warehouses = [];
+  List<StoreData> _stores = [];
   List<ProductDataWithStock> _dbProducts = [];
   List<ManufacturerData> _dbManufacturers = [];
   List<CategoryData> _dbCategories = [];
@@ -60,14 +60,14 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
 
   bool _isFirstLoad = true;
   StreamSubscription<List<ProductDataWithStock>>? _productsSub;
-  StreamSubscription<List<WarehouseData>>? _warehousesSub;
+  StreamSubscription<List<StoreData>>? _storesSub;
   StreamSubscription<List<ManufacturerData>>? _manufacturersSub;
   StreamSubscription<List<CategoryData>>? _categoriesSub;
   StreamSubscription<List<CrateGroupData>>? _crateGroupsSub;
   StreamSubscription<Map<String, int>>? _bottlesSub;
   StreamSubscription<Map<String, int>>? _emptyCratesSub;
   StreamSubscription<int>? _emptyCratesSumSub;
-  bool _initialWarehouseSelectionDone = false;
+  bool _initialStoreSelectionDone = false;
   Color get _bg => Theme.of(context).scaffoldBackgroundColor;
   Color get _surface => Theme.of(context).colorScheme.surface;
 
@@ -91,7 +91,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     });
 
     _nav = ref.read(navigationProvider);
-    _nav.selectedWarehouseId.addListener(_handleWarehouseNavigation);
+    _nav.selectedStoreId.addListener(_handleStoreNavigation);
 
     // Defer all DB stream subscriptions until after the first frame so the
     // shimmer skeleton renders immediately without competing with 8+ SQL
@@ -100,21 +100,21 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       if (!mounted) return;
       final db = ref.read(databaseProvider);
 
-      // Stream warehouses so a remote add/rename/soft-delete on another
+      // Stream stores so a remote add/rename/soft-delete on another
       // device updates the dropdown without a manual refresh. The first
-      // emission also seeds the initial warehouse selection and kicks
+      // emission also seeds the initial store selection and kicks
       // off the products subscription.
-      _warehousesSub = db.select(db.warehouses).watch().listen((list) {
+      _storesSub = db.select(db.stores).watch().listen((list) {
         if (!mounted) return;
         setState(() {
-          _warehouses = list;
-          if (!_initialWarehouseSelectionDone) {
-            _initialWarehouseSelectionDone = true;
+          _stores = list;
+          if (!_initialStoreSelectionDone) {
+            _initialStoreSelectionDone = true;
             final mainStore = list
                 .where((w) => w.name.toLowerCase().contains('main store'))
                 .firstOrNull;
             if (mainStore != null) {
-              _selectedWarehouseId = mainStore.id.toString();
+              _selectedStoreId = mainStore.id.toString();
             }
           }
         });
@@ -151,7 +151,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   @override
   void dispose() {
     _productsSub?.cancel();
-    _warehousesSub?.cancel();
+    _storesSub?.cancel();
     _manufacturersSub?.cancel();
     _categoriesSub?.cancel();
     _crateGroupsSub?.cancel();
@@ -159,18 +159,18 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     _emptyCratesSub?.cancel();
     _emptyCratesSumSub?.cancel();
     _tabController.dispose();
-    _nav.selectedWarehouseId.removeListener(_handleWarehouseNavigation);
+    _nav.selectedStoreId.removeListener(_handleStoreNavigation);
     super.dispose();
   }
 
-  void _handleWarehouseNavigation() {
+  void _handleStoreNavigation() {
     final nav = _nav;
-    if (nav.warehouseLocked.value) return;
-    final id = nav.selectedWarehouseId.value;
+    if (nav.storeLocked.value) return;
+    final id = nav.selectedStoreId.value;
     if (id != null) {
-      setState(() => _selectedWarehouseId = id);
+      setState(() => _selectedStoreId = id);
       _subscribeToProducts();
-      nav.selectedWarehouseId.value = null;
+      nav.selectedStoreId.value = null;
     }
   }
 
@@ -178,12 +178,12 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     _productsSub?.cancel();
     _emptyCratesSumSub?.cancel();
 
-    final warehouseId =
-        _selectedWarehouseId == 'all' ? null : _selectedWarehouseId;
+    final storeId =
+        _selectedStoreId == 'all' ? null : _selectedStoreId;
 
     final db = ref.read(databaseProvider);
-    final productStream = warehouseId != null
-        ? db.inventoryDao.watchProductDatasWithStockByWarehouse(warehouseId)
+    final productStream = storeId != null
+        ? db.inventoryDao.watchProductDatasWithStockByStore(storeId)
         : db.inventoryDao.watchAllProductDatasWithStock();
 
     _productsSub = productStream.listen((data) {
@@ -237,9 +237,9 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                 _buildSuppliersTab(context),
                 _buildCratesTab(context),
                 InventoryHistoryTab(
-                  warehouseId: _selectedWarehouseId == 'all'
+                  storeId: _selectedStoreId == 'all'
                       ? null
-                      : _selectedWarehouseId,
+                      : _selectedStoreId,
                 ),
               ],
             ),
@@ -267,9 +267,9 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
             context,
             slideDownRoute(
               StockCountScreen(
-                warehouseId: ref
+                storeId: ref
                     .read(navigationProvider)
-                    .lockedWarehouseId
+                    .lockedStoreId
                     .value,
               ),
             ),
@@ -668,20 +668,20 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
           Expanded(
             child: _isFirstLoad
                 ? const SizedBox.shrink()
-                : (ref.read(navigationProvider).warehouseLocked.value
-                      ? _buildLockedWarehouseChip()
+                : (ref.read(navigationProvider).storeLocked.value
+                      ? _buildLockedStoreChip()
                       : AppDropdown<String>(
-                          value: _selectedWarehouseId,
-                          labelText: 'Warehouse',
+                          value: _selectedStoreId,
+                          labelText: 'Store',
                           items: [
                             DropdownMenuItem(
                               value: 'all',
                               child: Text(
-                                'All Warehouses',
+                                'All Stores',
                                 style: TextStyle(color: _text),
                               ),
                             ),
-                            ..._warehouses.map(
+                            ..._stores.map(
                               (w) => DropdownMenuItem(
                                 value: w.id.toString(),
                                 child: Text(
@@ -693,7 +693,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                           ],
                           onChanged: (val) {
                             if (val != null) {
-                              setState(() => _selectedWarehouseId = val);
+                              setState(() => _selectedStoreId = val);
                               _subscribeToProducts();
                             }
                           },
@@ -727,10 +727,10 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     );
   }
 
-  Widget _buildLockedWarehouseChip() {
-    final lockedId = ref.read(navigationProvider).lockedWarehouseId.value;
-    final warehouse = _warehouses.where((w) => w.id == lockedId).firstOrNull;
-    final label = warehouse?.name ?? 'My Warehouse';
+  Widget _buildLockedStoreChip() {
+    final lockedId = ref.read(navigationProvider).lockedStoreId.value;
+    final store = _stores.where((w) => w.id == lockedId).firstOrNull;
+    final label = store?.name ?? 'My Store';
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: context.getRSize(12),
@@ -745,7 +745,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            FontAwesomeIcons.warehouse,
+            FontAwesomeIcons.store,
             size: context.getRSize(12),
             color: _subtext,
           ),
@@ -815,7 +815,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
             fontPackage: 'font_awesome_flutter',
           ),
           color: accent,
-          warehouseStock: {'w1': item.totalStock.toDouble()},
+          storeStock: {'w1': item.totalStock.toDouble()},
           lowStockThreshold: product.lowStockThreshold.toDouble(),
           sellingPrice: product.sellingPriceKobo / 100.0,
           retailPrice: product.retailPriceKobo / 100.0,
@@ -840,9 +840,9 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
             ProductDetailScreen(
               item: inventoryItem,
               onUpdateStock: () => setState(() {}),
-              selectedWarehouseId: _selectedWarehouseId == 'all'
+              selectedStoreId: _selectedStoreId == 'all'
                   ? null
-                  : _selectedWarehouseId,
+                  : _selectedStoreId,
             ),
           ),
         );

@@ -6,14 +6,14 @@ import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import '../../helpers/dispatch_test_utils.dart';
 
 /// Seeds a staff user (FK target for `recorded_by` and `activity_logs.user_id`)
-/// plus a warehouse (so the optional `p_warehouse_id` linkage test has a
+/// plus a store (so the optional `p_store_id` linkage test has a
 /// real id to point at). Returns the ids.
-Future<({String staffId, String warehouseId})> _seedExpenseFixtures(
+Future<({String staffId, String storeId})> _seedExpenseFixtures(
   AppDatabase db,
   String businessId,
 ) async {
   final staffId = UuidV7.generate();
-  final warehouseId = UuidV7.generate();
+  final storeId = UuidV7.generate();
 
   await db.into(db.users).insert(
         UsersCompanion.insert(
@@ -23,14 +23,14 @@ Future<({String staffId, String warehouseId})> _seedExpenseFixtures(
           pin: '0000',
         ),
       );
-  await db.into(db.warehouses).insert(
-        WarehousesCompanion.insert(
-          id: Value(warehouseId),
+  await db.into(db.stores).insert(
+        StoresCompanion.insert(
+          id: Value(storeId),
           businessId: businessId,
-          name: 'Main Warehouse',
+          name: 'Main Store',
         ),
       );
-  return (staffId: staffId, warehouseId: warehouseId);
+  return (staffId: staffId, storeId: storeId);
 }
 
 void main() {
@@ -127,7 +127,7 @@ void main() {
 
       // Optionals not provided → not in payload.
       expect(payload.containsKey('p_reference'), isFalse);
-      expect(payload.containsKey('p_warehouse_id'), isFalse);
+      expect(payload.containsKey('p_store_id'), isFalse);
     });
 
     test('flag ON: null paymentMethod still sends p_payment_method=other',
@@ -158,7 +158,7 @@ void main() {
       expect(payRows.first.method, 'other');
     });
 
-    test('flag ON: warehouseId + reference flow through to payload',
+    test('flag ON: storeId + reference flow through to payload',
         () async {
       await setFlag(db, 'feature.domain_rpcs_v2.record_expense', on: true);
       final fx = await _seedExpenseFixtures(db, businessId);
@@ -169,7 +169,7 @@ void main() {
         description: 'Generator service',
         paymentMethod: 'cash',
         reference: 'INV-2026-00042',
-        warehouseId: fx.warehouseId,
+        storeId: fx.storeId,
         recordedBy: fx.staffId,
       );
 
@@ -179,7 +179,7 @@ void main() {
       );
       final payload = decodePayload(domain);
       expect(payload['p_reference'], 'INV-2026-00042');
-      expect(payload['p_warehouse_id'], fx.warehouseId);
+      expect(payload['p_store_id'], fx.storeId);
     });
   });
 }
