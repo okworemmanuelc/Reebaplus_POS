@@ -57,7 +57,7 @@ Keep this section updated at the top so it's easy to see what's done at a glance
 - [ ] Role + permission seeding for new businesses
 
 **Auth flow:**
-- [ ] Welcome screen (section 4)
+- [x] Welcome screen (section 4) *(done in Session 6)*
 - [ ] CEO Sign Up flow (section 5)
 - [ ] Staff Sign Up flow (section 6)
 - [ ] Login flow + Forgot PIN (section 7)
@@ -97,6 +97,47 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 ## Session entries
 
 (New entries go below this line. Most recent at the top.)
+
+---
+
+## Session 6 — 2026-05-28 — Welcome screen (master plan §4)
+
+**Built today:**
+- The new Welcome screen — the first screen on a fresh install and after a full logout (master plan §4). Branded entry, centred: logo (with an "RP" rounded-square fallback per §4.1), "Reebaplus", the tagline, an amber **Create a new business** button, an outlined **Join with invite code** button, an "Already have an account? Sign in" link, and the Terms/Privacy small print.
+- §4.3 visuals: dark base (`adBg`) with a faint dotted grid (CustomPaint), a soft amber glow from the top-right corner (RadialGradient), and a gentle fade + slide entrance driven by an AnimationController — no spinner (§30.7).
+- `ComingSoonScreen` — one reusable dark placeholder, used for Join / Terms / Privacy.
+- **Scope split (decided with the user):** this session built the Welcome screen ONLY. The §5 CEO sign-up restructure is the next step and will be **faithful to §5** (one screen, 9 fading steps + dots, business-name first, email/OTP mid-flow).
+- **Routing:** `main.dart` fresh-device branch now returns `WelcomeScreen` (was `EmailEntryScreen`); returning-device → `LoginScreen` unchanged; a full logout re-renders this branch → Welcome (verified the `fullLogout` path nulls the device-user notifier; updated its stale comment).
+- **CTA destinations (today's entry points):** Create a new business / Sign in → `EmailEntryScreen` (it branches new-vs-existing by email); Join with invite code → the placeholder. The §5 restructure will later repoint "Create a new business" to the business-name step; the real invite-code entry is step 8.
+- Reused `AppButton` (amber primary + outline), `SmoothRoute`, and the `colors.dart` tokens — no new theming or button widgets.
+
+**Files touched:**
+- lib/features/auth/screens/welcome_screen.dart (new)
+- lib/features/auth/screens/coming_soon_screen.dart (new)
+- lib/main.dart (fresh-device branch → WelcomeScreen; dropped the now-unused EmailEntryScreen import)
+- lib/shared/services/auth_service.dart (comment-only: fullLogout now routes to WelcomeScreen)
+- test/auth/welcome_screen_test.dart (new — 2 widget tests: renders logo/name/tagline + 3 CTAs; Join routes to the placeholder)
+
+**Database changes:**
+- None. UI only — no schema, cloud, or migration change; nothing to deploy.
+
+**Master plan sections covered:**
+- §4 (Welcome screen) — built. §4.2 CTA routing wired to current entry points (final §5/§8 destinations come in later steps).
+
+**Plan updates made during session:**
+- None.
+
+**Tested:**
+- `flutter analyze lib/ test/` — clean (only the 18 pre-existing `avoid_print` infos in roles_v13_report).
+- `flutter test` — 140 passing / 58 skipped, 0 failures (2 new Welcome widget tests).
+- Emulator smoke (run by the user): fresh install → Welcome; CTAs route correctly; after full logout → returns to Welcome; a returning device user still goes to `LoginScreen`. Confirmed clean.
+
+**Known issues / left open:**
+- "Join with invite code" is a placeholder until step 8 (manual invite-code entry / staff sign-up). "Create a new business" and "Sign in" both currently land on `EmailEntryScreen` — differentiation arrives with the §5 restructure.
+- The "Owner" hardcode (existing_account_screen.dart, profile_screen.dart) is untouched — that's step 6.
+
+**Next session should:**
+- Begin the §5 CEO Sign Up restructure, faithful to §5: one screen with content fading between the 9 steps + dots indicator, reordered to business-name first with email/OTP at steps 5–6, store details with searchable state/country + currency auto-fill, explicit Confirm-PIN, and the "business is ready" screen. Biometric setup moves out of the flow (PIVOT_PLAN §10). Role seeding already works server-side via `complete_onboarding` — no backend change needed for the checkpoint.
 
 ---
 

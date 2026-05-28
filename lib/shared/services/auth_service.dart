@@ -733,7 +733,7 @@ class AuthService extends ValueNotifier<UserData?> {
     }
 
     // 4. Clear local state — triggers the ValueListenableBuilder to rebuild.
-    //    At this point _hasDeviceUser is already false → routes to EmailEntryScreen.
+    //    At this point _hasDeviceUser is already false → routes to WelcomeScreen.
     //    Order matters: clear nav first so store-listeners fire while
     //    the businessId resolver still returns a valid id (see logout()).
     _nav.clearStoreLock();

@@ -1,0 +1,285 @@
+import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/core/theme/colors.dart';
+import 'package:reebaplus_pos/features/auth/screens/coming_soon_screen.dart';
+import 'package:reebaplus_pos/features/auth/screens/email_entry_screen.dart';
+import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/shared/widgets/smooth_route.dart';
+
+/// First screen on a fresh install and after a full logout (master plan §4).
+/// Branded entry with three CTAs. The CTAs route to today's auth entry points;
+/// the §5 CEO sign-up restructure will repoint "Create a new business" later.
+class WelcomeScreen extends StatefulWidget {
+  const WelcomeScreen({super.key});
+
+  @override
+  State<WelcomeScreen> createState() => _WelcomeScreenState();
+}
+
+class _WelcomeScreenState extends State<WelcomeScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _fade;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+    _fade = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _push(Widget page) {
+    Navigator.of(context).push(SmoothRoute(page: page));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: adBg,
+      body: _WelcomeBackground(
+        child: SafeArea(
+          child: FadeTransition(
+            opacity: _fade,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, 0.04),
+                end: Offset.zero,
+              ).animate(_fade),
+              child: Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(28, 32, 28, 28),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const _WelcomeLogo(),
+                      const SizedBox(height: 20),
+                      const Text(
+                        'Reebaplus',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 30,
+                          fontWeight: FontWeight.w800,
+                          color: adTextPrimary,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        'Sales, stock, and staff — all in your pocket.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 15,
+                          height: 1.4,
+                          color: adTextPrimary.withValues(alpha: 0.65),
+                        ),
+                      ),
+                      const SizedBox(height: 44),
+                      AppButton(
+                        text: 'Create a new business',
+                        onPressed: () => _push(const EmailEntryScreen()),
+                      ),
+                      const SizedBox(height: 14),
+                      AppButton(
+                        text: 'Join with invite code',
+                        variant: AppButtonVariant.outline,
+                        onPressed: () => _push(
+                          const ComingSoonScreen(
+                            title: 'Join with invite code',
+                            message:
+                                'Staff sign-up is coming soon. For now, use the invite link your manager shared with you.',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 22),
+                      _SignInLink(onTap: () => _push(const EmailEntryScreen())),
+                      const SizedBox(height: 36),
+                      const _SmallPrint(),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SignInLink extends StatelessWidget {
+  final VoidCallback onTap;
+  const _SignInLink({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Text.rich(
+        TextSpan(
+          text: 'Already have an account? ',
+          style: TextStyle(
+            fontSize: 14,
+            color: adTextPrimary.withValues(alpha: 0.65),
+          ),
+          children: const [
+            TextSpan(
+              text: 'Sign in',
+              style: TextStyle(
+                color: amberPrimary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+        textAlign: TextAlign.center,
+      ),
+    );
+  }
+}
+
+class _SmallPrint extends StatelessWidget {
+  const _SmallPrint();
+
+  void _openPlaceholder(BuildContext context, String title) {
+    Navigator.of(context).push(
+      SmoothRoute(
+        page: ComingSoonScreen(
+          title: title,
+          message: '$title — coming soon.',
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final baseStyle = TextStyle(
+      fontSize: 12,
+      height: 1.5,
+      color: adTextPrimary.withValues(alpha: 0.45),
+    );
+    final linkStyle = baseStyle.copyWith(
+      color: adTextPrimary.withValues(alpha: 0.7),
+      decoration: TextDecoration.underline,
+    );
+
+    return DefaultTextStyle(
+      style: baseStyle,
+      textAlign: TextAlign.center,
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          const Text('By continuing, you agree to our '),
+          GestureDetector(
+            onTap: () => _openPlaceholder(context, 'Terms of Service'),
+            child: Text('Terms of Service', style: linkStyle),
+          ),
+          const Text(' and '),
+          GestureDetector(
+            onTap: () => _openPlaceholder(context, 'Privacy Policy'),
+            child: Text('Privacy Policy', style: linkStyle),
+          ),
+          const Text('.'),
+        ],
+      ),
+    );
+  }
+}
+
+/// Logo with the master-plan §4.1 fallback: a rounded square with "RP" in the
+/// amber accent, shown only if the asset fails to load.
+class _WelcomeLogo extends StatelessWidget {
+  const _WelcomeLogo();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Image.asset(
+        'assets/images/reebaplus_logo.png',
+        height: 104,
+        errorBuilder: (_, __, ___) => Container(
+          width: 104,
+          height: 104,
+          decoration: BoxDecoration(
+            color: amberPrimary.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: amberPrimary, width: 2),
+          ),
+          alignment: Alignment.center,
+          child: const Text(
+            'RP',
+            style: TextStyle(
+              fontSize: 40,
+              fontWeight: FontWeight.w800,
+              color: amberPrimary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Dark base (#080C12) with a faint dotted pattern and a soft amber glow from
+/// the top-right corner (master plan §4.3).
+class _WelcomeBackground extends StatelessWidget {
+  final Widget child;
+  const _WelcomeBackground({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: const BoxDecoration(color: adBg),
+      child: Stack(
+        children: [
+          const Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  center: Alignment(0.9, -0.9),
+                  radius: 1.1,
+                  colors: [amberGlow, Colors.transparent],
+                  stops: [0.0, 0.55],
+                ),
+              ),
+            ),
+          ),
+          Positioned.fill(
+            child: CustomPaint(painter: _DotGridPainter()),
+          ),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _DotGridPainter extends CustomPainter {
+  static const double _spacing = 28;
+  static const double _radius = 1.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = Colors.white.withValues(alpha: 0.03);
+    for (double y = _spacing; y < size.height; y += _spacing) {
+      for (double x = _spacing; x < size.width; x += _spacing) {
+        canvas.drawCircle(Offset(x, y), _radius, paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DotGridPainter oldDelegate) => false;
+}
