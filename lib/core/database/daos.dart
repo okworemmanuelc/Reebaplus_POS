@@ -4125,6 +4125,15 @@ class RolesDao extends DatabaseAccessor<AppDatabase>
         .get();
   }
 
+  /// All non-deleted roles across every business on this device, NOT scoped
+  /// to the current session. Role ids are globally unique, so the role-badge
+  /// resolver (see `userRoleProvider`) can look up a role by id even before
+  /// login binds a business — the Who Is Working / shared-PIN picker shows
+  /// each candidate's role before `setCurrentUser` runs.
+  Stream<List<RoleData>> watchAllUnscoped() {
+    return (select(roles)..where((t) => t.isDeleted.not())).watch();
+  }
+
   /// Lookup by slug — the stable machine identifier (`ceo`, `manager`,
   /// `cashier`, `stock_keeper`). Code that branches on role identity
   /// uses this, not `name`.
@@ -4295,6 +4304,15 @@ class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
   Future<List<UserBusinessData>> getForUser(String userId) {
     return (select(userBusinesses)..where((t) => t.userId.equals(userId)))
         .get();
+  }
+
+  /// Reactive memberships for a specific user, NOT scoped to the current
+  /// session. Filters by user id only so the role-badge resolver works
+  /// before login binds a business (the shared-PIN picker). Drives
+  /// `userRoleProvider`.
+  Stream<List<UserBusinessData>> watchForUser(String userId) {
+    return (select(userBusinesses)..where((t) => t.userId.equals(userId)))
+        .watch();
   }
 
   Future<UserBusinessData?> getForUserInBusiness(

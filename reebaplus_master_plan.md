@@ -207,6 +207,13 @@ Triggered by tapping "Already have an account? Sign in" on the Welcome screen. O
 - Sends email OTP.
 - After verifying, user creates a new PIN (same rules — block obvious patterns).
 - Signs them in.
+- This is also the forced path: 5 wrong PIN attempts drop the user straight into this flow. There is no timed lockout — email/OTP access is the recovery gate.
+
+### 7.4 PIN storage and recovery (local-only by design)
+
+- The 6-digit PIN is a **device unlock** factor, not a portable identity. Its hash (`pin_hash` / `pin_salt` / `pin_iterations`) lives only in the local `users` row and is **never** sent to the cloud. The portable identity is the email + OTP.
+- A new device re-establishes the PIN locally: the user verifies by email OTP, then sets a device PIN (re-entering the same digits is fine — it's a fresh local hash). The Phase-2 "PIN portability across devices/businesses" goal (§28) is met this way — by local re-establishment after OTP — **not** by cloud-storing the PIN. A readable 6-digit hash column would be trivially brute-forceable, which is why fintech apps keep the PIN device-local.
+- If server-side verification is ever genuinely required, the only acceptable form is a rate-limited `SECURITY DEFINER` verify RPC that takes a candidate PIN and returns a boolean — never a readable hash column the client can pull.
 
 ---
 
@@ -1355,6 +1362,7 @@ These are flagged for the second release. The architecture supports them — onl
 - Custom notification settings (CEO can toggle which notifications fire and to whom).
 - Stats tab on Suppliers (currently no Stats tab).
 - More tunable limits beyond discount, expense, and price-change toggle.
+- PIN portability across devices/businesses. Met by **local re-establishment after email OTP** (re-enter the same PIN on a new device), **not** by cloud-storing the PIN. PINs stay device-local (§7.4); if cloud verification is ever needed, it must be a rate-limited `SECURITY DEFINER` verify RPC, never a readable hash column.
 
 ---
 

@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -14,8 +13,10 @@ import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/features/auth/onboarding/onboarding_draft.dart';
+import 'package:reebaplus_pos/features/auth/widgets/auth_form_kit.dart';
 import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
 import 'package:reebaplus_pos/features/auth/widgets/otp_input.dart';
+import 'package:reebaplus_pos/features/auth/widgets/pin_keypad.dart';
 import 'package:reebaplus_pos/features/auth/widgets/shake_widget.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 
@@ -30,7 +31,15 @@ import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 /// into CEO Settings › Security). The §5.2 "email already linked to another
 /// business" branch is deferred — this flow handles new-email CEO sign-up.
 class CeoSignUpScreen extends ConsumerStatefulWidget {
-  const CeoSignUpScreen({super.key});
+  /// When non-null, the email has already been verified upstream (the Login
+  /// flow's OTP → "No account found" → Create path). The Supabase session
+  /// already exists, so the flow skips its own email (step 4) and OTP (step 5)
+  /// steps: business name → type → store → full name → create PIN → confirm
+  /// PIN → ready (7 steps). When null (the Welcome path) the full 9-step flow
+  /// runs and collects + verifies the email itself.
+  final String? verifiedEmail;
+
+  const CeoSignUpScreen({super.key, this.verifiedEmail});
 
   @override
   ConsumerState<CeoSignUpScreen> createState() => _CeoSignUpScreenState();
@@ -61,6 +70,20 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
 
   int _step = 0;
   bool _booting = true;
+
+  /// True when the email was verified upstream — the email (4) and OTP (5)
+  /// steps are skipped.
+  bool get _emailSkipped => widget.verifiedEmail != null;
+
+  /// Total dots to show: 7 when the email/OTP steps are skipped, else 9.
+  int get _displayTotal => _emailSkipped ? _totalSteps - 2 : _totalSteps;
+
+  /// Maps the internal step index (which keeps the email=4/OTP=5 slots even
+  /// when skipped) onto the visible dot index.
+  int get _displayStep {
+    if (!_emailSkipped) return _step;
+    return _step <= 3 ? _step : _step - 2; // 6→4, 7→5, 8→6
+  }
 
   // Step controllers (persist across step navigation so back keeps values).
   final _businessNameCtrl = TextEditingController();
@@ -164,10 +187,19 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
       if (mounted) Navigator.of(context).pop();
       return;
     }
-    // Start from an empty local DB and a fresh draft (no email yet — it's
-    // collected at step 5). Overwrites any prior abandoned draft.
+    // Start from an empty local DB and a fresh draft. Overwrites any prior
+    // abandoned draft. clearAllData wipes only Drift tables — the Supabase
+    // session (set by the upstream verify on the verifiedEmail path) lives in
+    // the SDK and survives, so the commit can still call complete_onboarding.
     await db.clearAllData();
     draftNotifier.start();
+    final verified = widget.verifiedEmail;
+    if (verified != null) {
+      // Email already verified upstream — pre-fill the draft and the field so
+      // the commit (which reads draft.email) and any back-nav stay consistent.
+      _emailCtrl.text = verified;
+      draftNotifier.update((d) => d.email = verified);
+    }
     if (mounted) setState(() => _booting = false);
   }
 
@@ -190,7 +222,8 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
         case 6:
           _pin = '';
           _pinError = null;
-          _step = 5;
+          // When email/OTP were skipped, step 6 follows full name (step 3).
+          _step = _emailSkipped ? 3 : 5;
           break;
         case 5:
           _otpCtrl.clear();
@@ -276,7 +309,8 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
     }
     ref.read(onboardingDraftProvider.notifier).update((d) => d.ownerName = name);
     setState(() => _fullNameError = null);
-    _goTo(4);
+    // Skip email (4) + OTP (5) when the email was verified upstream.
+    _goTo(_emailSkipped ? 6 : 4);
   }
 
   // ── Step 5: email (send OTP on advance) ──────────────────────────────────
@@ -605,7 +639,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
               ],
             ),
           ),
-          _StepDots(current: _step, total: _totalSteps),
+          _StepDots(current: _displayStep, total: _displayTotal),
           const SizedBox(height: 8),
         ],
       ),
@@ -637,73 +671,14 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
   }
 
   // Shared scrollable shell for form-style steps.
-  Widget _formShell({
-    required String title,
-    required String subtitle,
-    required List<Widget> children,
-  }) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(
-        28,
-        12,
-        28,
-        MediaQuery.of(context).viewInsets.bottom + 24,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.w800,
-              color: adTextPrimary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            subtitle,
-            style: TextStyle(
-              fontSize: 15,
-              height: 1.4,
-              color: adTextPrimary.withValues(alpha: 0.65),
-            ),
-          ),
-          const SizedBox(height: 28),
-          ...children,
-        ],
-      ),
-    );
-  }
-
-  Widget _inputCard(Widget child) {
-    return Container(
-      decoration: AppDecorations.glassCard(context),
-      padding: const EdgeInsets.all(16),
-      child: child,
-    );
-  }
-
-  Widget _errorText(String? message) {
-    return SizedBox(
-      height: 22,
-      child: message == null
-          ? null
-          : Text(
-              message,
-              style: const TextStyle(color: Color(0xFFFF6B6B), fontSize: 13),
-            ),
-    );
-  }
-
   // ── Step bodies ──────────────────────────────────────────────────────────
 
   Widget _buildBusinessNameStep() {
-    return _formShell(
+    return AuthFormShell(
       title: "What's your business called?",
       subtitle: 'This is the name your customers will see on receipts.',
       children: [
-        _inputCard(
+        AuthInputCard(child:
           TextField(
             controller: _businessNameCtrl,
             textCapitalization: TextCapitalization.words,
@@ -719,7 +694,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
           ),
         ),
         const SizedBox(height: 4),
-        _errorText(_businessNameError),
+        AuthErrorText(_businessNameError),
         const SizedBox(height: 12),
         AppButton(text: 'Continue', onPressed: _submitBusinessName),
       ],
@@ -727,7 +702,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
   }
 
   Widget _buildBusinessTypeStep() {
-    return _formShell(
+    return AuthFormShell(
       title: 'What type of business?',
       subtitle: 'Pick the one that fits best.',
       children: [
@@ -754,11 +729,11 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
 
   Widget _buildStoreDetailsStep() {
     final currency = currencyForCountry(_countryValue.trim());
-    return _formShell(
+    return AuthFormShell(
       title: 'Your first store',
       subtitle: 'You can add more stores later.',
       children: [
-        _inputCard(
+        AuthInputCard(child:
           TextField(
             controller: _storeNameCtrl,
             textCapitalization: TextCapitalization.words,
@@ -774,7 +749,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
           ),
         ),
         const SizedBox(height: 12),
-        _inputCard(
+        AuthInputCard(child:
           TextField(
             controller: _storeAddressCtrl,
             textCapitalization: TextCapitalization.words,
@@ -787,7 +762,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
           ),
         ),
         const SizedBox(height: 12),
-        _inputCard(
+        AuthInputCard(child:
           _AutocompleteField(
             label: 'State',
             icon: Icons.map_outlined,
@@ -797,7 +772,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
           ),
         ),
         const SizedBox(height: 12),
-        _inputCard(
+        AuthInputCard(child:
           _AutocompleteField(
             label: 'Country',
             icon: Icons.public_outlined,
@@ -831,7 +806,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
           ],
         ),
         const SizedBox(height: 4),
-        _errorText(_storeError),
+        AuthErrorText(_storeError),
         const SizedBox(height: 12),
         AppButton(text: 'Continue', onPressed: _submitStoreDetails),
       ],
@@ -839,11 +814,11 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
   }
 
   Widget _buildFullNameStep() {
-    return _formShell(
+    return AuthFormShell(
       title: "What's your name?",
       subtitle: "You'll be set up as the CEO of this business.",
       children: [
-        _inputCard(
+        AuthInputCard(child:
           TextField(
             controller: _fullNameCtrl,
             textCapitalization: TextCapitalization.words,
@@ -859,7 +834,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
           ),
         ),
         const SizedBox(height: 4),
-        _errorText(_fullNameError),
+        AuthErrorText(_fullNameError),
         const SizedBox(height: 12),
         AppButton(text: 'Continue', onPressed: _submitFullName),
       ],
@@ -867,11 +842,11 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
   }
 
   Widget _buildEmailStep() {
-    return _formShell(
+    return AuthFormShell(
       title: 'Your email',
       subtitle: "We'll send a 6-digit code to confirm it's you.",
       children: [
-        _inputCard(
+        AuthInputCard(child:
           TextField(
             controller: _emailCtrl,
             keyboardType: TextInputType.emailAddress,
@@ -887,7 +862,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
           ),
         ),
         const SizedBox(height: 4),
-        _errorText(_emailError),
+        AuthErrorText(_emailError),
         const SizedBox(height: 12),
         AppButton(
           text: 'Send code',
@@ -951,7 +926,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          Center(child: _errorText(_otpError)),
+          Center(child: AuthErrorText(_otpError)),
           const SizedBox(height: 8),
           if (_otpVerified)
             const AppButton(
@@ -1019,12 +994,12 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
             const SizedBox(height: 28),
             ShakeWidget(
               key: confirming ? _confirmPinShakeKey : _createPinShakeKey,
-              child: _PinDots(filled: _pin.length),
+              child: PinDots(filled: _pin.length),
             ),
             const SizedBox(height: 12),
-            _errorText(_pinError),
+            AuthErrorText(_pinError),
             const SizedBox(height: 12),
-            _PinPad(onDigit: _onPinDigit, onBackspace: _onPinBackspace),
+            PinKeypad(onDigit: _onPinDigit, onBackspace: _onPinBackspace),
           ],
         ],
       ),
@@ -1263,113 +1238,3 @@ class _AutocompleteField extends StatelessWidget {
   }
 }
 
-class _PinDots extends StatelessWidget {
-  final int filled;
-  const _PinDots({required this.filled});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(6, (i) {
-        final isFilled = i < filled;
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          margin: const EdgeInsets.symmetric(horizontal: 6),
-          width: 14,
-          height: 14,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: isFilled ? amberPrimary : adTextPrimary.withValues(alpha: 0.05),
-            border: Border.all(
-              color: isFilled ? amberPrimary : adTextPrimary.withValues(alpha: 0.2),
-              width: 2,
-            ),
-          ),
-        );
-      }),
-    );
-  }
-}
-
-class _PinPad extends StatelessWidget {
-  final ValueChanged<String> onDigit;
-  final VoidCallback onBackspace;
-
-  const _PinPad({required this.onDigit, required this.onBackspace});
-
-  @override
-  Widget build(BuildContext context) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 240),
-      child: Column(
-        children: [
-          _row(['1', '2', '3']),
-          const SizedBox(height: 8),
-          _row(['4', '5', '6']),
-          const SizedBox(height: 8),
-          _row(['7', '8', '9']),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const SizedBox(width: 64, height: 64),
-              const SizedBox(width: 12),
-              _key(context, label: '0', onTap: () => onDigit('0')),
-              const SizedBox(width: 12),
-              _key(context, icon: Icons.backspace_outlined, onTap: onBackspace),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _row(List<String> digits) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: digits
-          .map((d) => Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                child: Builder(
-                  builder: (context) =>
-                      _key(context, label: d, onTap: () => onDigit(d)),
-                ),
-              ))
-          .toList(),
-    );
-  }
-
-  Widget _key(BuildContext context,
-      {String? label, IconData? icon, required VoidCallback onTap}) {
-    return Container(
-      decoration: AppDecorations.glassCard(context, radius: 16),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onHighlightChanged: (h) {
-            if (h) HapticFeedback.lightImpact();
-          },
-          onTap: onTap,
-          child: SizedBox(
-            width: 64,
-            height: 64,
-            child: Center(
-              child: icon != null
-                  ? Icon(icon, color: adTextPrimary, size: 22)
-                  : Text(
-                      label!,
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w600,
-                        color: adTextPrimary,
-                      ),
-                    ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}

@@ -11,9 +11,11 @@ import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/features/auth/screens/create_pin_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/existing_account_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/login_screen.dart';
-import 'package:reebaplus_pos/features/auth/screens/ceo_sign_up_screen.dart';
+import 'package:reebaplus_pos/features/auth/screens/no_account_found_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/smooth_route.dart';
-import 'package:reebaplus_pos/features/auth/widgets/auth_background.dart';
+import 'package:reebaplus_pos/core/theme/colors.dart';
+import 'package:reebaplus_pos/features/auth/widgets/auth_form_kit.dart';
+import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
 import 'package:reebaplus_pos/features/auth/widgets/shake_widget.dart';
 import 'package:reebaplus_pos/features/auth/widgets/otp_input.dart';
 
@@ -220,11 +222,12 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
 
     // OTP verified — route based on whether the user exists locally.
     if (localUser == null) {
-      // New email → the §5 CEO Sign Up flow (it re-collects email/OTP; the
-      // old multi-screen flow was retired). §7.1 "no account found" handling
-      // arrives with the login restructure (PIVOT_PLAN step 6).
+      // No cloud account and no local user (account == null was the only path
+      // left here) → brand-new email. Master plan §7.1: offer "No account
+      // found" with the two real entry points rather than silently dropping
+      // into sign-up. The email is now verified, so Create skips email/OTP.
       Navigator.of(context).pushReplacement(
-        SmoothRoute(page: const CeoSignUpScreen()),
+        SmoothRoute(page: NoAccountFoundScreen(email: widget.email)),
       );
     } else {
       final user = localUser;
@@ -283,148 +286,100 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final textColor = isDark ? Colors.white : Colors.black;
+    const textColor = adTextPrimary;
 
-    return AuthBackground(
-      child: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(28, 40, 28, 40),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Back button
-              Align(
-                alignment: Alignment.centerLeft,
-                child: IconButton(
-                  icon: Icon(Icons.arrow_back_ios, color: textColor, size: 20),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Logo
-              Center(
-                child: Image.asset(
-                  'assets/images/reebaplus_logo.png',
-                  height: 72,
-                  color: isDark ? null : theme.colorScheme.primary,
-                  errorBuilder: (_, __, ___) =>
-                      Icon(Icons.storefront, size: 72, color: textColor),
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              Center(
-                child: Text(
-                  'Check your email',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    color: textColor,
+    return Scaffold(
+      backgroundColor: adBg,
+      body: BrandedAuthBackground(
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+              28,
+              12,
+              28,
+              MediaQuery.of(context).viewInsets.bottom + 24,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Back button
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: IconButton(
+                    icon: const Icon(Icons.arrow_back_ios,
+                        color: textColor, size: 20),
+                    onPressed: () => Navigator.of(context).pop(),
                   ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              Center(
-                child: Text(
+                const SizedBox(height: 8),
+
+                const Text('Check your email', style: authTitleStyle),
+                const SizedBox(height: 8),
+                Text(
                   'Enter the 6-digit code sent to\n${_maskEmail(widget.email)}',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: textColor.withValues(alpha: 0.7),
-                  ),
-                  textAlign: TextAlign.center,
+                  style: authSubtitleStyle,
                 ),
-              ),
-              const SizedBox(height: 36),
+                const SizedBox(height: 28),
 
-              // OTP input — single invisible field driving 6 styled boxes
-              ShakeWidget(
-                key: _shakeKey,
-                child: OtpBoxRow(
-                  controller: _otpController,
-                  hasError: _errorMessage != null,
-                  onSubmit: _canSubmit ? _submit : null,
-                  ignorePointers: _isLockedOut,
-                  readOnly: _loading,
-                  textColor: textColor,
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              Center(
-                child: Text(
-                  'Code expires in 10 minutes',
-                  style: TextStyle(
-                    color: textColor.withValues(alpha: 0.5),
-                    fontSize: 13,
+                // OTP input — single invisible field driving 6 styled boxes
+                ShakeWidget(
+                  key: _shakeKey,
+                  child: OtpBoxRow(
+                    controller: _otpController,
+                    hasError: _errorMessage != null,
+                    onSubmit: _canSubmit ? _submit : null,
+                    ignorePointers: _isLockedOut,
+                    readOnly: _loading,
+                    textColor: textColor,
                   ),
                 ),
-              ),
-              const SizedBox(height: 12),
+                const SizedBox(height: 12),
 
-              // Error message
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
-                child: _errorMessage != null
-                    ? Padding(
-                        key: const ValueKey('err'),
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: Text(
-                          _errorMessage!,
+                Center(
+                  child: Text(
+                    'Code expires in 5 minutes',
+                    style: TextStyle(
+                      color: textColor.withValues(alpha: 0.5),
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Center(child: AuthErrorText(_errorMessage)),
+                const SizedBox(height: 8),
+
+                if (_verified)
+                  const AppButton(
+                    text: 'Verified  ✓',
+                    variant: AppButtonVariant.success,
+                    onPressed: null,
+                  )
+                else
+                  AppButton(
+                    text: 'Verify',
+                    isLoading: _loading,
+                    onPressed: _canSubmit ? _submit : null,
+                  ),
+                const SizedBox(height: 16),
+
+                // Resend button with countdown
+                Center(
+                  child: _resendCountdown > 0
+                      ? Text(
+                          'Resend code in 0:${_resendCountdown.toString().padLeft(2, '0')}',
                           style: TextStyle(
-                            color: theme.colorScheme.error,
+                            color: textColor.withValues(alpha: 0.5),
                             fontSize: 13,
                           ),
-                          textAlign: TextAlign.center,
+                        )
+                      : TextButton(
+                          onPressed:
+                              (_loading || _isLockedOut) ? null : _resend,
+                          child: const Text('Resend code'),
                         ),
-                      )
-                    : const SizedBox(key: ValueKey('no-err'), height: 18),
-              ),
-              const SizedBox(height: 16),
-
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 350),
-                switchInCurve: Curves.easeOut,
-                child: _verified
-                    ? const AppButton(
-                        key: ValueKey('verified'),
-                        text: 'Verified  ✓',
-                        variant: AppButtonVariant.success,
-                        onPressed: null,
-                      )
-                    : AppButton(
-                        key: const ValueKey('verify'),
-                        text: 'Verify',
-                        isLoading: _loading,
-                        onPressed: _canSubmit ? _submit : null,
-                      ),
-              ),
-              const SizedBox(height: 20),
-
-              // Resend button with countdown
-              Center(
-                child: _resendCountdown > 0
-                    ? Text(
-                        'Resend code in 0:${_resendCountdown.toString().padLeft(2, '0')}',
-                        style: TextStyle(
-                          color: textColor.withValues(alpha: 0.5),
-                          fontSize: 13,
-                        ),
-                      )
-                    : TextButton(
-                        onPressed: (_loading || _isLockedOut) ? null : _resend,
-                        child: Text(
-                          'Resend code',
-                          style: TextStyle(
-                            color: textColor.withValues(alpha: 0.75),
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

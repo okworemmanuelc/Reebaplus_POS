@@ -3,13 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/auth/onboarding/onboarding_draft.dart';
 import 'package:reebaplus_pos/features/auth/screens/biometric_setup_screen.dart';
 import 'package:reebaplus_pos/features/auth/widgets/onboarding_step_indicator.dart';
-import 'package:reebaplus_pos/features/auth/widgets/auth_background.dart';
-import 'package:reebaplus_pos/core/theme/app_decorations.dart';
-import 'package:flutter/services.dart';
+import 'package:reebaplus_pos/features/auth/widgets/auth_form_kit.dart';
+import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
+import 'package:reebaplus_pos/features/auth/widgets/pin_keypad.dart';
+import 'package:reebaplus_pos/features/auth/widgets/shake_widget.dart';
 import 'package:reebaplus_pos/shared/widgets/smooth_route.dart';
 
 /// Two-phase PIN entry. Two callers:
@@ -40,7 +42,7 @@ class CreatePinScreen extends ConsumerStatefulWidget {
 }
 
 class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
-  final GlobalKey<_ShakeWidgetState> _shakeKey = GlobalKey();
+  final GlobalKey<ShakeWidgetState> _shakeKey = GlobalKey();
   String _pin = '';
   String _firstPin = '';
   String? _errorMessage;
@@ -218,19 +220,19 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final primary = theme.colorScheme.primary;
-
-    return AuthBackground(
-      child: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: context.rPaddingSymmetric(horizontal: 32, vertical: 24),
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 500),
-              child: _saving
-                  ? _buildSavingState(primary)
-                  : _buildInputState(primary),
+    return Scaffold(
+      backgroundColor: adBg,
+      body: BrandedAuthBackground(
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: context.rPaddingSymmetric(horizontal: 32, vertical: 24),
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 500),
+                child: _saving
+                    ? _buildSavingState(amberPrimary)
+                    : _buildInputState(amberPrimary),
+              ),
             ),
           ),
         ),
@@ -239,8 +241,7 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
   }
 
   Widget _buildSavingState(Color primary) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor = isDark ? Colors.white : Colors.black;
+    const textColor = adTextPrimary;
 
     return Column(
       key: const ValueKey('saving'),
@@ -279,9 +280,7 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
   bool get _isOnboarding => widget.isNewBusinessSetup;
 
   Widget _buildInputState(Color primary) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final textColor = isDark ? Colors.white : Colors.black;
+    const textColor = adTextPrimary;
 
     return Column(
       key: const ValueKey('input'),
@@ -298,7 +297,6 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
         Image.asset(
           'assets/images/reebaplus_logo.png',
           height: context.getRSize(60),
-          color: isDark ? null : primary,
           errorBuilder: (_, __, ___) => Icon(
             Icons.storefront,
             size: context.getRSize(60),
@@ -309,11 +307,7 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
 
         Text(
           _confirming ? 'Confirm your PIN' : 'Create a PIN',
-          style: TextStyle(
-            fontSize: context.getRFontSize(22),
-            fontWeight: FontWeight.w700,
-            color: textColor,
-          ),
+          style: authTitleStyle,
         ),
         SizedBox(height: context.getRSize(6)),
         Text(
@@ -355,28 +349,9 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
         SizedBox(height: context.getRSize(24)),
 
         // Six dots
-        _ShakeWidget(
+        ShakeWidget(
           key: _shakeKey,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(6, (i) {
-              final filled = i < _pin.length;
-              return AnimatedContainer(
-                duration: const Duration(milliseconds: 150),
-                margin: context.rPaddingSymmetric(horizontal: 6),
-                width: context.getRSize(14),
-                height: context.getRSize(14),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: filled ? primary : textColor.withValues(alpha: 0.05),
-                  border: Border.all(
-                    color: filled ? primary : textColor.withValues(alpha: 0.2),
-                    width: 2,
-                  ),
-                ),
-              );
-            }),
-          ),
+          child: PinDots(filled: _pin.length),
         ),
         SizedBox(height: context.getRSize(12)),
 
@@ -397,32 +372,7 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
         SizedBox(height: context.getRSize(16)),
 
         // Numpad
-        ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: context.getRSize(240)),
-          child: Column(
-            children: [
-              _buildKeyRow(['1', '2', '3']),
-              SizedBox(height: context.getRSize(8)),
-              _buildKeyRow(['4', '5', '6']),
-              SizedBox(height: context.getRSize(8)),
-              _buildKeyRow(['7', '8', '9']),
-              SizedBox(height: context.getRSize(8)),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SizedBox(
-                    width: context.getRSize(64),
-                    height: context.getRSize(64),
-                  ),
-                  SizedBox(width: context.getRSize(12)),
-                  _KeyBtn(label: '0', onTap: () => _onDigit('0')),
-                  SizedBox(width: context.getRSize(12)),
-                  _KeyBtn(icon: Icons.backspace_outlined, onTap: _onBackspace),
-                ],
-              ),
-            ],
-          ),
-        ),
+        PinKeypad(onDigit: _onDigit, onBackspace: _onBackspace),
 
         // Phase indicator / Back button
         SizedBox(height: context.getRSize(20)),
@@ -451,130 +401,4 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
     );
   }
 
-  Widget _buildKeyRow(List<String> digits) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: digits.map((d) {
-        return Padding(
-          padding: context.rPaddingSymmetric(horizontal: 6),
-          child: _KeyBtn(label: d, onTap: () => _onDigit(d)),
-        );
-      }).toList(),
-    );
-  }
-}
-
-// ── Keypad button ─────────────────────────────────────────────────────────────
-
-class _KeyBtn extends StatelessWidget {
-  final String? label;
-  final IconData? icon;
-  final VoidCallback onTap;
-
-  const _KeyBtn({this.label, this.icon, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final textColor = isDark ? Colors.white : Colors.black;
-
-    return Container(
-      decoration:
-          AppDecorations.glassCard(
-            context,
-            radius: context.getRSize(16),
-          ).copyWith(
-            boxShadow: [
-              BoxShadow(
-                color: textColor.withValues(alpha: 0.05),
-                blurRadius: 10,
-                spreadRadius: 2,
-              ),
-            ],
-          ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onHighlightChanged: (isHighlighted) {
-            if (isHighlighted) {
-              HapticFeedback.lightImpact();
-            }
-          },
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(context.getRSize(16)),
-          child: SizedBox(
-            width: context.getRSize(64),
-            height: context.getRSize(64),
-            child: Center(
-              child: icon != null
-                  ? Icon(icon, color: textColor, size: context.getRSize(22))
-                  : Text(
-                      label!,
-                      style: TextStyle(
-                        fontSize: context.getRFontSize(24),
-                        fontWeight: FontWeight.w600,
-                        color: textColor,
-                      ),
-                    ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Shake Animation Widget ──────────────────────────────────────────────
-
-class _ShakeWidget extends StatefulWidget {
-  final Widget child;
-  const _ShakeWidget({required Key key, required this.child}) : super(key: key);
-
-  @override
-  _ShakeWidgetState createState() => _ShakeWidgetState();
-}
-
-class _ShakeWidgetState extends State<_ShakeWidget>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _animation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 400),
-      vsync: this,
-    );
-    _animation = TweenSequence<double>([
-      TweenSequenceItem(tween: Tween(begin: 0, end: -10), weight: 1),
-      TweenSequenceItem(tween: Tween(begin: -10, end: 10), weight: 2),
-      TweenSequenceItem(tween: Tween(begin: 10, end: -10), weight: 2),
-      TweenSequenceItem(tween: Tween(begin: -10, end: 10), weight: 2),
-      TweenSequenceItem(tween: Tween(begin: 10, end: 0), weight: 1),
-    ]).animate(_controller);
-  }
-
-  void shake() {
-    _controller.forward(from: 0);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _animation,
-      builder: (context, child) => Transform.translate(
-        offset: Offset(_animation.value, 0),
-        child: child,
-      ),
-      child: widget.child,
-    );
-  }
 }

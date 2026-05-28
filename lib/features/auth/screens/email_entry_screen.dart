@@ -6,14 +6,16 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/features/auth/screens/login_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/otp_verification_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/create_pin_screen.dart';
-import 'package:reebaplus_pos/features/auth/screens/ceo_sign_up_screen.dart';
+import 'package:reebaplus_pos/features/auth/screens/no_account_found_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/existing_account_screen.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
-import 'package:reebaplus_pos/features/auth/widgets/auth_background.dart';
+import 'package:reebaplus_pos/features/auth/widgets/auth_form_kit.dart';
+import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart' show UserData;
 import 'package:reebaplus_pos/main.dart' show supabaseReady;
 
@@ -147,11 +149,12 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
     setState(() => _loading = false);
 
     if (localUser == null) {
-      // New user — start the §5 CEO Sign Up flow (email is re-collected at
-      // its email step; the old multi-screen flow was retired).
+      // Brand-new email (no cloud account, no local user) — master plan §7.1:
+      // show "No account found" with the two real entry points. Google already
+      // verified the email, so Create skips the in-flow email/OTP steps.
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(
-          pageBuilder: (_, __, ___) => const CeoSignUpScreen(),
+          pageBuilder: (_, __, ___) => NoAccountFoundScreen(email: email),
           transitionsBuilder: (_, animation, __, child) {
             final curve = CurvedAnimation(
               parent: animation,
@@ -312,61 +315,18 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final textColor = isDark ? Colors.white : Colors.black;
+    const textColor = adTextPrimary;
 
-    return AuthBackground(
-      child: SafeArea(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(
-            28,
-            40,
-            28,
-            MediaQuery.of(context).viewInsets.bottom + 24,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Scaffold(
+      backgroundColor: adBg,
+      body: BrandedAuthBackground(
+        child: SafeArea(
+          child: AuthFormShell(
+            title: 'Sign in',
+            subtitle: 'Enter your email to continue.',
             children: [
-              // Logo
-              Center(
-                child: Image.asset(
-                  'assets/images/reebaplus_logo.png',
-                  height: 90,
-                  // In light mode, the logo might be white-on-white if not careful.
-                  // We can apply a slight color filter or use an icon if needed.
-                  color: isDark ? null : theme.colorScheme.primary,
-                  errorBuilder: (_, __, ___) =>
-                      Icon(Icons.storefront, size: 90, color: textColor),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Center(
-                child: Text(
-                  'Reebaplus POS',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    color: textColor,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 6),
-              Center(
-                child: Text(
-                  'Enter your email to continue',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: textColor.withValues(alpha: 0.7),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 40),
-
               // Email card
-              Container(
-                decoration: AppDecorations.glassCard(context),
-                padding: const EdgeInsets.all(16),
+              AuthInputCard(
                 child: TextField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
@@ -374,7 +334,7 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
                   readOnly: widget.lockedEmail,
                   textInputAction: TextInputAction.done,
                   onSubmitted: (_) => _loading ? null : _submit(),
-                  style: TextStyle(color: textColor),
+                  style: const TextStyle(color: textColor),
                   decoration: AppDecorations.authInputDecoration(
                     context,
                     label: widget.lockedEmail

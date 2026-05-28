@@ -3,18 +3,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/shared/utils/role_display.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/features/auth/screens/email_entry_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/otp_verification_screen.dart';
 import 'dart:async';
 import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:reebaplus_pos/features/auth/widgets/auth_background.dart';
+import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
+import 'package:reebaplus_pos/features/auth/widgets/pin_keypad.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/colors.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -30,11 +34,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   bool _biometricsAvailable = false;
   final TextEditingController _emailController = TextEditingController();
 
-  // ── Returning User & Lockout State ──────────────────────────────────────────
+  // ── Returning User & PIN-attempt State ──────────────────────────────────────
   UserData? _identifiedUser;
+  // 5 wrong PINs forces the Forgot-PIN (email OTP) flow — master plan §7.1.
+  // There is no time-based lockout; email/OTP access is the recovery gate.
   int _failedAttempts = 0;
-  DateTime? _lockoutUntil;
-  Timer? _lockoutTimer;
   String? _pinWarning;
 
   // ── Success animation state ────────────────────────────────────────────────
@@ -65,20 +69,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }
 
   Future<void> _initUserAndLockoutState() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    // Check lockout
-    final lockoutMs = prefs.getInt('pin_lockout_until');
-    if (lockoutMs != null) {
-      final lockoutTime = DateTime.fromMillisecondsSinceEpoch(lockoutMs);
-      if (lockoutTime.isAfter(DateTime.now())) {
-        setState(() => _lockoutUntil = lockoutTime);
-        _startLockoutTimer();
-      } else {
-        await prefs.remove('pin_lockout_until');
-      }
-    }
-
     // Identify user
     final auth = ref.read(authProvider);
     final db = ref.read(databaseProvider);
@@ -102,28 +92,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     }
 
     _checkBiometricAvailability();
-  }
-
-  void _startLockoutTimer() {
-    _lockoutTimer?.cancel();
-    _lockoutTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      if (_lockoutUntil != null && DateTime.now().isAfter(_lockoutUntil!)) {
-        timer.cancel();
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.remove('pin_lockout_until');
-        setState(() {
-          _lockoutUntil = null;
-          _failedAttempts = 0;
-          _pinWarning = null;
-        });
-      } else {
-        setState(() {}); // trigger rebuild for countdown
-      }
-    });
   }
 
   /// Checks whether the device supports biometrics and updates [_biometricsAvailable].
@@ -223,7 +191,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   @override
   void dispose() {
     _checkAnim.dispose();
-    _lockoutTimer?.cancel();
     _emailController.dispose();
     _pinNotifier.dispose();
     super.dispose();
@@ -232,10 +199,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   // ── PIN input helpers ──────────────────────────────────────────────────────
 
   void _onDigit(String digit) {
-    if (_pinNotifier.value.length >= 6 ||
-        _checking ||
-        _loginSuccess ||
-        _lockoutUntil != null) {
+    if (_pinNotifier.value.length >= 6 || _checking || _loginSuccess) {
       return;
     }
     // Update value WITHOUT full screen rebuild to maintain 120fps input & retain ink ripple
@@ -289,26 +253,34 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       });
 
       _failedAttempts++;
-      final prefs = await SharedPreferences.getInstance();
+      _pinNotifier.value = '';
+
+      // 5 wrong PINs → force the Forgot-PIN flow (master plan §7.1). Email/OTP
+      // access is the recovery gate; there is no time-based lockout.
+      if (_failedAttempts >= 5) {
+        setState(() {
+          _checking = false;
+          _pinWarning = null;
+        });
+        if (mounted) {
+          AppNotification.showError(
+            context,
+            'Too many wrong PINs. Reset your PIN by email to continue.',
+          );
+          await _forgotPin();
+        }
+        return;
+      }
 
       setState(() {
         _checking = false;
-
-        if (_failedAttempts >= 5) {
-          _lockoutUntil = DateTime.now().add(const Duration(minutes: 15));
-          prefs.setInt(
-            'pin_lockout_until',
-            _lockoutUntil!.millisecondsSinceEpoch,
-          );
-          _startLockoutTimer();
-        } else if (_failedAttempts >= 3) {
+        if (_failedAttempts >= 3) {
           _pinWarning =
-              '${5 - _failedAttempts} attempts remaining before lockout.';
+              '${5 - _failedAttempts} attempts remaining before PIN reset.';
         }
       });
-      _pinNotifier.value = '';
 
-      if (mounted && _lockoutUntil == null) {
+      if (mounted) {
         AppNotification.showError(context, 'Wrong PIN. Please try again.');
       }
       return;
@@ -449,7 +421,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       MaterialPageRoute(
         builder: (_) => OtpVerificationScreen(
           user: _identifiedUser,
-          email: _identifiedUser!.email!,
+          email: email,
           isPinReset: true,
         ),
       ),
@@ -475,49 +447,36 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final textColor = isDark ? Colors.white : Colors.black;
-    final subtextColor = textColor.withValues(alpha: 0.7);
-    final surface = isDark
-        ? Colors.white.withValues(alpha: 0.1)
-        : Colors.black.withValues(alpha: 0.05);
-
-    return AuthBackground(
+    return Scaffold(
+      backgroundColor: adBg,
       resizeToAvoidBottomInset: false,
-      child: SafeArea(
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 300),
-          child: _loginSuccess
-              ? _SuccessOverlay(
-                  key: const ValueKey('success'),
-                  user: _loggedInUser!,
-                  checkScale: _checkScale,
-                  checkFade: _checkFade,
-                  bg: Colors.transparent,
-                  textColor: textColor,
-                  subtextColor: subtextColor,
-                )
-              : _PinPad(
-                  pinNotifier: _pinNotifier,
-                  emailController: _emailController,
-                  checking: _checking,
-                  identifiedUser: _identifiedUser,
-                  lockoutUntil: _lockoutUntil,
-                  warningText: _pinWarning,
-                  bg: Colors.transparent,
-                  surface: surface,
-                  textColor: textColor,
-                  subtextColor: subtextColor,
-                  onDigit: _onDigit,
-                  onBackspace: _onBackspace,
-                  onSwitchToEmail: _switchToEmail,
-                  onForgotPin: _forgotPin,
-                  biometricsAvailable: _biometricsAvailable,
-                  onBiometrics: _biometricsAvailable
-                      ? _triggerBiometrics
-                      : null,
-                ),
+      body: BrandedAuthBackground(
+        child: SafeArea(
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 300),
+            child: _loginSuccess
+                ? _SuccessOverlay(
+                    key: const ValueKey('success'),
+                    user: _loggedInUser!,
+                    checkScale: _checkScale,
+                    checkFade: _checkFade,
+                  )
+                : _PinPad(
+                    pinNotifier: _pinNotifier,
+                    emailController: _emailController,
+                    checking: _checking,
+                    identifiedUser: _identifiedUser,
+                    warningText: _pinWarning,
+                    onDigit: _onDigit,
+                    onBackspace: _onBackspace,
+                    onSwitchToEmail: _switchToEmail,
+                    onForgotPin: _forgotPin,
+                    biometricsAvailable: _biometricsAvailable,
+                    onBiometrics: _biometricsAvailable
+                        ? _triggerBiometrics
+                        : null,
+                  ),
+          ),
         ),
       ),
     );
@@ -530,30 +489,26 @@ class _SuccessOverlay extends StatelessWidget {
   final UserData user;
   final Animation<double> checkScale;
   final Animation<double> checkFade;
-  final Color bg;
-  final Color textColor;
-  final Color subtextColor;
 
   const _SuccessOverlay({
     super.key,
     required this.user,
     required this.checkScale,
     required this.checkFade,
-    required this.bg,
-    required this.textColor,
-    required this.subtextColor,
   });
 
   Color _hexColor(BuildContext context, String hex) {
     try {
       return Color(int.parse(hex.replaceFirst('#', '0xFF')));
     } catch (_) {
-      return Theme.of(context).colorScheme.primary;
+      return amberPrimary;
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    const textColor = adTextPrimary;
+    final subtextColor = adTextPrimary.withValues(alpha: 0.65);
     final avatarColor = _hexColor(context, user.avatarColor);
 
     return Center(
@@ -581,7 +536,7 @@ class _SuccessOverlay extends StatelessWidget {
             // ── Welcome text ─────────────────────────────────────────────
             Text(
               'Welcome, ${user.name}',
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
                 color: textColor,
@@ -676,12 +631,7 @@ class _PinPad extends StatelessWidget {
   final TextEditingController emailController;
   final bool checking;
   final UserData? identifiedUser;
-  final DateTime? lockoutUntil;
   final String? warningText;
-  final Color bg;
-  final Color surface;
-  final Color textColor;
-  final Color subtextColor;
   final void Function(String) onDigit;
   final VoidCallback onBackspace;
   final VoidCallback? onSwitchToEmail;
@@ -694,12 +644,7 @@ class _PinPad extends StatelessWidget {
     required this.emailController,
     required this.checking,
     this.identifiedUser,
-    this.lockoutUntil,
     this.warningText,
-    required this.bg,
-    required this.surface,
-    required this.textColor,
-    required this.subtextColor,
     required this.onDigit,
     required this.onBackspace,
     this.onSwitchToEmail,
@@ -712,21 +657,14 @@ class _PinPad extends StatelessWidget {
     try {
       return Color(int.parse(hex.replaceFirst('#', '0xFF')));
     } catch (_) {
-      return Theme.of(context).colorScheme.primary;
+      return amberPrimary;
     }
-  }
-
-  String _formatDuration(Duration d) {
-    String twoDigits(int n) => n.toString().padLeft(2, "0");
-    String twoDigitMinutes = twoDigits(d.inMinutes.remainder(60));
-    String twoDigitSeconds = twoDigits(d.inSeconds.remainder(60));
-    return "$twoDigitMinutes:$twoDigitSeconds";
   }
 
   @override
   Widget build(BuildContext context) {
-    final isLockedOut = lockoutUntil != null;
-
+    const textColor = adTextPrimary;
+    final subtextColor = adTextPrimary.withValues(alpha: 0.65);
     return Center(
       child: SingleChildScrollView(
         padding: context.rPaddingSymmetric(horizontal: 32, vertical: 16),
@@ -775,7 +713,7 @@ class _PinPad extends StatelessWidget {
               padding: EdgeInsets.only(bottom: context.getRSize(16)),
               child: TextFormField(
                 controller: emailController,
-                style: TextStyle(color: textColor),
+                style: const TextStyle(color: textColor),
                 decoration: AppDecorations.authInputDecoration(
                   context,
                   label: 'Email Address',
@@ -786,93 +724,21 @@ class _PinPad extends StatelessWidget {
               ),
             ),
             Text(
-              isLockedOut
-                  ? 'Device locked due to multiple failed attempts'
-                  : 'Enter your 6-digit PIN to continue',
+              'Enter your 6-digit PIN to continue',
               style: TextStyle(
                 fontSize: context.getRFontSize(14),
-                color: isLockedOut ? Colors.redAccent : subtextColor,
+                color: subtextColor,
               ),
               textAlign: TextAlign.center,
             ),
             SizedBox(height: context.getRSize(20)),
 
-            if (isLockedOut) ...[
-              // ── Lockout State ─────────────────────────────────────────────
-              Container(
-                padding: context.rPaddingSymmetric(
-                  horizontal: 24,
-                  vertical: 32,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.redAccent.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(context.getRSize(20)),
-                  border: Border.all(
-                    color: Colors.redAccent.withValues(alpha: 0.3),
-                  ),
-                ),
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.lock_clock_rounded,
-                      color: Colors.redAccent,
-                      size: context.getRSize(48),
-                    ),
-                    SizedBox(height: context.getRSize(16)),
-                    Text(
-                      _formatDuration(lockoutUntil!.difference(DateTime.now())),
-                      style: TextStyle(
-                        fontSize: context.getRFontSize(36),
-                        fontWeight: FontWeight.bold,
-                        color: Colors.redAccent,
-                        letterSpacing: 2,
-                      ),
-                    ),
-                    SizedBox(height: context.getRSize(8)),
-                    const Text(
-                      'Try again later',
-                      style: TextStyle(color: Colors.redAccent),
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(height: context.getRSize(24)),
-              TextButton.icon(
-                onPressed: onSwitchToEmail,
-                icon: Icon(Icons.email_rounded, size: context.getRSize(18)),
-                label: const Text('Reset PIN with Email'),
-                style: TextButton.styleFrom(foregroundColor: textColor),
-              ),
-            ] else ...[
+            ...[
               // ── Six dots ────────────────────────────────────────────────
               ValueListenableBuilder<String>(
                 valueListenable: pinNotifier,
-                builder: (context, currentPin, _) {
-                  return Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(6, (i) {
-                      final filled = i < currentPin.length;
-                      return AnimatedContainer(
-                        duration: const Duration(milliseconds: 150),
-                        margin: context.rPaddingSymmetric(horizontal: 6),
-                        width: context.getRSize(12),
-                        height: context.getRSize(12),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: filled
-                              ? Theme.of(context).colorScheme.primary
-                              : textColor.withValues(alpha: 0.1),
-                          border: Border.all(
-                            color: filled
-                                ? Theme.of(context).colorScheme.primary
-                                : textColor.withValues(alpha: 0.3),
-                            width: 2,
-                          ),
-                        ),
-                      );
-                    }),
-                  );
-                },
+                builder: (context, currentPin, _) =>
+                    PinDots(filled: currentPin.length),
               ),
 
               // ── Warning Message ────────────────────────────────────────────
@@ -892,49 +758,16 @@ class _PinPad extends StatelessWidget {
                     : const SizedBox.shrink(),
               ),
 
-              // ── Numeric keypad ───────────────────────────────────────────
-              ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: context.getRSize(240)),
-                child: Column(
-                  children: [
-                    _buildKeyRow(context, ['1', '2', '3'], surface, textColor),
-                    SizedBox(height: context.getRSize(8)),
-                    _buildKeyRow(context, ['4', '5', '6'], surface, textColor),
-                    SizedBox(height: context.getRSize(8)),
-                    _buildKeyRow(context, ['7', '8', '9'], surface, textColor),
-                    SizedBox(height: context.getRSize(8)),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        biometricsAvailable && onBiometrics != null
-                            ? _KeyButton(
-                                icon: Icons.fingerprint_rounded,
-                                surface: surface,
-                                textColor: textColor,
-                                onTap: onBiometrics!,
-                              )
-                            : SizedBox(
-                                width: context.getRSize(64),
-                                height: context.getRSize(64),
-                              ),
-                        SizedBox(width: context.getRSize(8)),
-                        _KeyButton(
-                          label: '0',
-                          surface: surface,
-                          textColor: textColor,
-                          onTap: () => onDigit('0'),
-                        ),
-                        SizedBox(width: context.getRSize(8)),
-                        _KeyButton(
-                          icon: Icons.backspace_outlined,
-                          surface: surface,
-                          textColor: textColor,
-                          onTap: onBackspace,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+              // ── Numeric keypad (biometric fills the bottom-left slot) ─────
+              PinKeypad(
+                onDigit: onDigit,
+                onBackspace: onBackspace,
+                leadingKey: biometricsAvailable && onBiometrics != null
+                    ? PinKey(
+                        icon: Icons.fingerprint_rounded,
+                        onTap: onBiometrics!,
+                      )
+                    : null,
               ),
 
               SizedBox(height: context.getRSize(20)),
@@ -974,92 +807,6 @@ class _PinPad extends StatelessWidget {
     );
   }
 
-  Widget _buildKeyRow(
-    BuildContext context,
-    List<String> digits,
-    Color surface,
-    Color textColor,
-  ) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: digits.map((d) {
-        return Padding(
-          padding: context.rPaddingSymmetric(horizontal: 6),
-          child: _KeyButton(
-            label: d,
-            surface: surface,
-            textColor: textColor,
-            onTap: () => onDigit(d),
-          ),
-        );
-      }).toList(),
-    );
-  }
-}
-
-// ── Single keypad button ────────────────────────────────────────────────────
-
-class _KeyButton extends StatelessWidget {
-  final String? label;
-  final IconData? icon;
-  final Color surface;
-  final Color textColor;
-  final VoidCallback onTap;
-
-  const _KeyButton({
-    this.label,
-    this.icon,
-    required this.surface,
-    required this.textColor,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration:
-          AppDecorations.glassCard(
-            context,
-            radius: context.getRSize(16),
-          ).copyWith(
-            boxShadow: [
-              BoxShadow(
-                color: textColor.withValues(alpha: 0.05),
-                blurRadius: 10,
-                spreadRadius: 2,
-              ),
-            ],
-          ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onHighlightChanged: (isHighlighted) {
-            if (isHighlighted) {
-              HapticFeedback.lightImpact();
-            }
-          },
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(context.getRSize(16)),
-          child: SizedBox(
-            width: context.getRSize(64),
-            height: context.getRSize(64),
-            child: Center(
-              child: icon != null
-                  ? Icon(icon, color: textColor, size: context.getRSize(22))
-                  : Text(
-                      label!,
-                      style: TextStyle(
-                        fontSize: context.getRFontSize(24),
-                        fontWeight: FontWeight.w600,
-                        color: textColor,
-                      ),
-                    ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 // ── Bottom sheet when multiple users share the same PIN ────────────────────
@@ -1133,9 +880,20 @@ class _UserPickerSheet extends StatelessWidget {
                 u.name,
                 style: TextStyle(fontWeight: FontWeight.w600, color: textColor),
               ),
-              subtitle: Text(
-                'Owner',
-                style: TextStyle(fontSize: 12, color: subtextColor),
+              subtitle: Consumer(
+                builder: (context, ref, _) {
+                  final role = ref.watch(userRoleProvider(u.id));
+                  return Text(
+                    role?.name ?? 'Member',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: role == null
+                          ? subtextColor
+                          : roleTagColor(role.slug),
+                    ),
+                  );
+                },
               ),
               onTap: () => onSelected(u),
             ),
