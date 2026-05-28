@@ -1583,6 +1583,14 @@ class AppDatabase extends _$AppDatabase {
         await customStatement('ALTER TABLE warehouses RENAME TO stores');
 
         // 2. Rename warehouse_id columns to store_id everywhere.
+        //    invite_codes and user_stores are created by the v13 block via
+        //    m.createTable, which builds them from the CURRENT Drift schema
+        //    (already store_id). So a device upgrading FROM < 13 gets those
+        //    two tables with store_id and no warehouse_id to rename — an
+        //    unconditional RENAME COLUMN then throws "no such column:
+        //    warehouse_id". (The v13→v14 path wasn't exercised until a real
+        //    device hit it.) Guard each rename on the old column actually
+        //    existing, which also makes the loop idempotent on retry.
         for (final t in const [
           'users',
           'customers',
@@ -1595,9 +1603,14 @@ class AppDatabase extends _$AppDatabase {
           'invite_codes',
           'user_stores',
         ]) {
-          await customStatement(
-            'ALTER TABLE $t RENAME COLUMN warehouse_id TO store_id',
-          );
+          final hasOldColumn = await customSelect(
+            "SELECT 1 FROM pragma_table_info('$t') WHERE name = 'warehouse_id'",
+          ).get();
+          if (hasOldColumn.isNotEmpty) {
+            await customStatement(
+              'ALTER TABLE $t RENAME COLUMN warehouse_id TO store_id',
+            );
+          }
         }
 
         // 3. Rename the sync + soft-delete indexes on the renamed table.
