@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:reebaplus_pos/features/dashboard/screens/dashboard_screen.dart';
+import 'package:reebaplus_pos/features/dashboard/screens/home_screen.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/add_product_sheet.dart';
 import 'package:reebaplus_pos/features/pos/screens/pos_home_screen.dart';
 import 'package:reebaplus_pos/features/inventory/screens/inventory_screen.dart';
@@ -54,7 +54,7 @@ class _MainLayoutState extends ConsumerState<MainLayout>
   final Set<int> _initializedTabs = {};
 
   final List<Widget> _tabWidgets = [
-    const DashboardScreen(), // 0
+    const HomeScreen(), // 0
     const PosHomeScreen(), // 1
     const InventoryScreen(), // 2
     const OrdersScreen(), // 3

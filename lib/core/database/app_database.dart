@@ -245,7 +245,7 @@ class Customers extends Table {
   TextColumn get email => text().nullable()();
   TextColumn get address => text().nullable()();
   TextColumn get googleMapsLocation => text().nullable()();
-  TextColumn get customerGroup =>
+  TextColumn get priceTier =>
       text().withDefault(const Constant('retailer'))();
   IntColumn get walletLimitKobo => integer().withDefault(const Constant(0))();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
@@ -258,7 +258,7 @@ class Customers extends Table {
 
   @override
   List<String> get customConstraints => [
-    "CHECK (customer_group IN ('retailer','wholesaler','distributor','walk_in'))",
+    "CHECK (price_tier IN ('retailer','wholesaler'))",
   ];
 }
 
@@ -473,7 +473,7 @@ class StockTransactions extends Table {
       text().nullable().references(StockTransfers, #id)();
   TextColumn get adjustmentId =>
       text().nullable().references(StockAdjustments, #id)();
-  TextColumn get purchaseId => text().nullable().references(Purchases, #id)();
+  TextColumn get shipmentId => text().nullable().references(Shipments, #id)();
   TextColumn get performedBy => text().nullable().references(Users, #id)();
   DateTimeColumn get voidedAt => dateTime().nullable()();
   TextColumn get voidedBy => text().nullable().references(Users, #id)();
@@ -492,7 +492,7 @@ class StockTransactions extends Table {
           (CASE WHEN order_id IS NOT NULL THEN 1 ELSE 0 END) +
           (CASE WHEN transfer_id IS NOT NULL THEN 1 ELSE 0 END) +
           (CASE WHEN adjustment_id IS NOT NULL THEN 1 ELSE 0 END) +
-          (CASE WHEN purchase_id IS NOT NULL THEN 1 ELSE 0 END) = 1
+          (CASE WHEN shipment_id IS NOT NULL THEN 1 ELSE 0 END) = 1
         )''',
   ];
 }
@@ -560,8 +560,8 @@ class OrderItems extends Table {
   ];
 }
 
-@DataClassName('DeliveryData')
-class Purchases extends Table {
+@DataClassName('ShipmentData')
+class Shipments extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get supplierId => text().references(Suppliers, #id)();
@@ -584,7 +584,7 @@ class Purchases extends Table {
 class PurchaseItems extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
   TextColumn get businessId => text().references(Businesses, #id)();
-  TextColumn get purchaseId => text().references(Purchases, #id)();
+  TextColumn get purchaseId => text().references(Shipments, #id)();
   TextColumn get productId => text().references(Products, #id)();
   IntColumn get quantity => integer()();
   IntColumn get unitPriceKobo => integer()();
@@ -737,7 +737,7 @@ class PaymentTransactions extends Table {
   TextColumn get method => text()();
   TextColumn get type => text()();
   TextColumn get orderId => text().nullable().references(Orders, #id)();
-  TextColumn get purchaseId => text().nullable().references(Purchases, #id)();
+  TextColumn get shipmentId => text().nullable().references(Shipments, #id)();
   TextColumn get expenseId => text().nullable().references(Expenses, #id)();
   TextColumn get walletTxnId =>
       text().nullable().references(WalletTransactions, #id)();
@@ -760,7 +760,7 @@ class PaymentTransactions extends Table {
     "CHECK (type IN ('sale','purchase','expense','refund','wallet_topup'))",
     '''CHECK (
           (CASE WHEN order_id IS NOT NULL THEN 1 ELSE 0 END) +
-          (CASE WHEN purchase_id IS NOT NULL THEN 1 ELSE 0 END) +
+          (CASE WHEN shipment_id IS NOT NULL THEN 1 ELSE 0 END) +
           (CASE WHEN expense_id IS NOT NULL THEN 1 ELSE 0 END) +
           (CASE WHEN wallet_txn_id IS NOT NULL THEN 1 ELSE 0 END) +
           (CASE WHEN delivery_id IS NOT NULL THEN 1 ELSE 0 END) = 1
@@ -1132,7 +1132,7 @@ class MigrationEvents extends Table {
     StockTransactions,
     Orders,
     OrderItems,
-    Purchases,
+    Shipments,
     PurchaseItems,
     ExpenseCategories,
     Expenses,
@@ -1162,7 +1162,7 @@ class MigrationEvents extends Table {
     InventoryDao,
     OrdersDao,
     CustomersDao,
-    DeliveriesDao,
+    ShipmentsDao,
     ExpensesDao,
     SyncDao,
     ActivityLogDao,
@@ -1221,7 +1221,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 14;
+  int get schemaVersion => 15;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1685,6 +1685,130 @@ class AppDatabase extends _$AppDatabase {
           "  AND json_extract(payload, '\$.p_warehouse_id') IS NOT NULL",
         );
       }
+      if (from < 15) {
+        // v15 (Reebaplus pivot step 4): small renames pass. Mirrors
+        // supabase/migrations/0046_pivot_small_renames.sql.
+        //   (a) customers.customer_group → price_tier + CHECK
+        //       tightened to ('retailer','wholesaler') + data
+        //       migration                                    [done]
+        //   (b) purchases → shipments (table) +
+        //       stock_transactions/payment_transactions
+        //       .purchase_id → .shipment_id                   [done]
+        //   (c) drop purchase_items   — DEFERRED to step 25 (Track
+        //       Shipments rebuild). purchase_items still backs the
+        //       product-detail "Last Delivery" card via
+        //       ShipmentsDao.getLastShipmentForProduct; dropping it now
+        //       would orphan that feature with no replacement.
+        //   (d) crate_groups → crate_size_groups — DEFERRED to its own
+        //       focused session (≈196 refs / 22 files + cloud RPCs).
+
+        // (a) Rename customers.customer_group → price_tier. SQLite
+        //     ≥ 3.25 rewrites the CHECK constraint expression that
+        //     references the renamed column automatically.
+        await customStatement(
+          'ALTER TABLE customers RENAME COLUMN customer_group TO price_tier',
+        );
+        // Master plan §16/§21: Price Tier is Retailer / Wholesaler only.
+        // Migrate the two legacy values off before tightening the CHECK
+        // (the table rebuild below copies under the new 2-value CHECK,
+        // so any 'distributor'/'walk_in' row would fail the copy).
+        await customStatement(
+          "UPDATE customers SET price_tier = 'wholesaler' WHERE price_tier = 'distributor'",
+        );
+        await customStatement(
+          "UPDATE customers SET price_tier = 'retailer' WHERE price_tier = 'walk_in'",
+        );
+        // SQLite can't ALTER a CHECK constraint, so rebuild the table to
+        // narrow it from the 4-value legacy CHECK to the 2-value one
+        // (the current Drift schema's customConstraints). TableMigration
+        // copies all rows 1:1 (column set is unchanged — price_tier
+        // already exists after the RENAME above). Rebuilding drops the
+        // table's indexes + bump trigger, so recreate them to match
+        // onCreate exactly.
+        await m.alterTable(TableMigration(customers));
+        await customStatement(
+          'CREATE INDEX idx_customers_business_lua ON customers (business_id, last_updated_at)',
+        );
+        await customStatement(
+          'CREATE INDEX idx_customers_business_deleted ON customers (business_id, is_deleted)',
+        );
+        await customStatement(
+          'CREATE INDEX idx_customers_business_phone ON customers (business_id, phone)',
+        );
+        await customStatement(
+          'CREATE TRIGGER bump_customers_last_updated_at '
+          'AFTER UPDATE ON customers '
+          'FOR EACH ROW '
+          'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+          'BEGIN '
+          "UPDATE customers SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+          'END',
+        );
+        // Rewrite pending sync_queue payloads. Table-upsert envelopes
+        // carry top-level $.customer_group; the pos_create_customer
+        // domain envelope carries $.p_customer_group. Cloud 0046
+        // renames both the column and the RPC parameter, so pre-v15
+        // queued writes must forward their keys or they hard-fail with
+        // PostgREST 42703 (every other table) on push.
+        await customStatement(
+          "UPDATE sync_queue "
+          "SET payload = json_remove("
+          "  json_set(payload, '\$.price_tier', json_extract(payload, '\$.customer_group')), "
+          "  '\$.customer_group'"
+          ") "
+          "WHERE status = 'pending' "
+          "  AND json_extract(payload, '\$.customer_group') IS NOT NULL",
+        );
+        await customStatement(
+          "UPDATE sync_queue "
+          "SET payload = json_remove("
+          "  json_set(payload, '\$.p_price_tier', json_extract(payload, '\$.p_customer_group')), "
+          "  '\$.p_customer_group'"
+          ") "
+          "WHERE status = 'pending' "
+          "  AND json_extract(payload, '\$.p_customer_group') IS NOT NULL",
+        );
+
+        // (b) Rename purchases → shipments. SQLite ≥ 3.25 auto-updates
+        //     the FK target on referencing tables (purchase_items,
+        //     stock_transactions, payment_transactions) through the
+        //     table rename. The FK *column* names on the two permanent
+        //     ledger tables are renamed to shipment_id for consistency;
+        //     purchase_items keeps purchase_id (that table is slated for
+        //     removal in step 25).
+        await customStatement('ALTER TABLE purchases RENAME TO shipments');
+        await customStatement(
+          'ALTER TABLE stock_transactions RENAME COLUMN purchase_id TO shipment_id',
+        );
+        await customStatement(
+          'ALTER TABLE payment_transactions RENAME COLUMN purchase_id TO shipment_id',
+        );
+        // Forward pending sync_queue rows targeting the old table name.
+        await customStatement(
+          "UPDATE sync_queue SET action_type = 'shipments:upsert' "
+          "WHERE action_type = 'purchases:upsert' AND status = 'pending'",
+        );
+        await customStatement(
+          "UPDATE sync_queue SET action_type = 'shipments:delete' "
+          "WHERE action_type = 'purchases:delete' AND status = 'pending'",
+        );
+        // Rewrite pending payload keys: stock_transactions /
+        // payment_transactions upserts carry top-level $.purchase_id;
+        // cloud 0046 renames the column, so forward it or the push
+        // 42703s. Scoped to those two tables only — purchase_items
+        // KEEPS its purchase_id column, so its payloads must not be
+        // rewritten.
+        await customStatement(
+          "UPDATE sync_queue "
+          "SET payload = json_remove("
+          "  json_set(payload, '\$.shipment_id', json_extract(payload, '\$.purchase_id')), "
+          "  '\$.purchase_id'"
+          ") "
+          "WHERE status = 'pending' "
+          "  AND action_type IN ('stock_transactions:upsert', 'payment_transactions:upsert') "
+          "  AND json_extract(payload, '\$.purchase_id') IS NOT NULL",
+        );
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -1794,7 +1918,7 @@ const List<String> _syncedTenantTables = [
   'stock_transactions',
   'orders',
   'order_items',
-  'purchases',
+  'shipments',
   'purchase_items',
   'drivers',
   'delivery_receipts',
@@ -1945,7 +2069,7 @@ const List<_LedgerImmutability> _ledgerTables = [
     'order_id',
     'transfer_id',
     'adjustment_id',
-    'purchase_id',
+    'shipment_id',
     'performed_by',
     'created_at',
   ]),
@@ -1970,7 +2094,7 @@ const List<_LedgerImmutability> _ledgerTables = [
     'method',
     'type',
     'order_id',
-    'purchase_id',
+    'shipment_id',
     'expense_id',
     'wallet_txn_id',
     'delivery_id',

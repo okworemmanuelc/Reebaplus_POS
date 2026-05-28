@@ -48,7 +48,7 @@ mixin _$InventoryDaoMixin on DatabaseAccessor<AppDatabase> {
   $CustomersTable get customers => attachedDatabase.customers;
   $OrdersTable get orders => attachedDatabase.orders;
   $StockTransfersTable get stockTransfers => attachedDatabase.stockTransfers;
-  $PurchasesTable get purchases => attachedDatabase.purchases;
+  $ShipmentsTable get shipments => attachedDatabase.shipments;
   $StockTransactionsTable get stockTransactions =>
       attachedDatabase.stockTransactions;
   InventoryDaoManager get managers => InventoryDaoManager(this);
@@ -89,8 +89,8 @@ class InventoryDaoManager {
         _db.attachedDatabase,
         _db.stockTransfers,
       );
-  $$PurchasesTableTableManager get purchases =>
-      $$PurchasesTableTableManager(_db.attachedDatabase, _db.purchases);
+  $$ShipmentsTableTableManager get shipments =>
+      $$ShipmentsTableTableManager(_db.attachedDatabase, _db.shipments);
   $$StockTransactionsTableTableManager get stockTransactions =>
       $$StockTransactionsTableTableManager(
         _db.attachedDatabase,
@@ -115,7 +115,7 @@ mixin _$OrdersDaoMixin on DatabaseAccessor<AppDatabase> {
   $StockTransfersTable get stockTransfers => attachedDatabase.stockTransfers;
   $StockAdjustmentsTable get stockAdjustments =>
       attachedDatabase.stockAdjustments;
-  $PurchasesTable get purchases => attachedDatabase.purchases;
+  $ShipmentsTable get shipments => attachedDatabase.shipments;
   $StockTransactionsTable get stockTransactions =>
       attachedDatabase.stockTransactions;
   $ExpenseCategoriesTable get expenseCategories =>
@@ -171,8 +171,8 @@ class OrdersDaoManager {
         _db.attachedDatabase,
         _db.stockAdjustments,
       );
-  $$PurchasesTableTableManager get purchases =>
-      $$PurchasesTableTableManager(_db.attachedDatabase, _db.purchases);
+  $$ShipmentsTableTableManager get shipments =>
+      $$ShipmentsTableTableManager(_db.attachedDatabase, _db.shipments);
   $$StockTransactionsTableTableManager get stockTransactions =>
       $$StockTransactionsTableTableManager(
         _db.attachedDatabase,
@@ -256,29 +256,29 @@ class CustomersDaoManager {
       );
 }
 
-mixin _$DeliveriesDaoMixin on DatabaseAccessor<AppDatabase> {
+mixin _$ShipmentsDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
   $CrateGroupsTable get crateGroups => attachedDatabase.crateGroups;
   $SuppliersTable get suppliers => attachedDatabase.suppliers;
-  $PurchasesTable get purchases => attachedDatabase.purchases;
+  $ShipmentsTable get shipments => attachedDatabase.shipments;
   $CategoriesTable get categories => attachedDatabase.categories;
   $ManufacturersTable get manufacturers => attachedDatabase.manufacturers;
   $ProductsTable get products => attachedDatabase.products;
   $PurchaseItemsTable get purchaseItems => attachedDatabase.purchaseItems;
-  DeliveriesDaoManager get managers => DeliveriesDaoManager(this);
+  ShipmentsDaoManager get managers => ShipmentsDaoManager(this);
 }
 
-class DeliveriesDaoManager {
-  final _$DeliveriesDaoMixin _db;
-  DeliveriesDaoManager(this._db);
+class ShipmentsDaoManager {
+  final _$ShipmentsDaoMixin _db;
+  ShipmentsDaoManager(this._db);
   $$BusinessesTableTableManager get businesses =>
       $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
   $$CrateGroupsTableTableManager get crateGroups =>
       $$CrateGroupsTableTableManager(_db.attachedDatabase, _db.crateGroups);
   $$SuppliersTableTableManager get suppliers =>
       $$SuppliersTableTableManager(_db.attachedDatabase, _db.suppliers);
-  $$PurchasesTableTableManager get purchases =>
-      $$PurchasesTableTableManager(_db.attachedDatabase, _db.purchases);
+  $$ShipmentsTableTableManager get shipments =>
+      $$ShipmentsTableTableManager(_db.attachedDatabase, _db.shipments);
   $$CategoriesTableTableManager get categories =>
       $$CategoriesTableTableManager(_db.attachedDatabase, _db.categories);
   $$ManufacturersTableTableManager get manufacturers =>
@@ -310,7 +310,7 @@ mixin _$ExpensesDaoMixin on DatabaseAccessor<AppDatabase> {
   $WalletTransactionsTable get walletTransactions =>
       attachedDatabase.walletTransactions;
   $ActivityLogsTable get activityLogs => attachedDatabase.activityLogs;
-  $PurchasesTable get purchases => attachedDatabase.purchases;
+  $ShipmentsTable get shipments => attachedDatabase.shipments;
   $PaymentTransactionsTable get paymentTransactions =>
       attachedDatabase.paymentTransactions;
   ExpensesDaoManager get managers => ExpensesDaoManager(this);
@@ -365,8 +365,8 @@ class ExpensesDaoManager {
       );
   $$ActivityLogsTableTableManager get activityLogs =>
       $$ActivityLogsTableTableManager(_db.attachedDatabase, _db.activityLogs);
-  $$PurchasesTableTableManager get purchases =>
-      $$PurchasesTableTableManager(_db.attachedDatabase, _db.purchases);
+  $$ShipmentsTableTableManager get shipments =>
+      $$ShipmentsTableTableManager(_db.attachedDatabase, _db.shipments);
   $$PaymentTransactionsTableTableManager get paymentTransactions =>
       $$PaymentTransactionsTableTableManager(
         _db.attachedDatabase,
@@ -524,7 +524,7 @@ mixin _$StockLedgerDaoMixin on DatabaseAccessor<AppDatabase> {
   $StockTransfersTable get stockTransfers => attachedDatabase.stockTransfers;
   $StockAdjustmentsTable get stockAdjustments =>
       attachedDatabase.stockAdjustments;
-  $PurchasesTable get purchases => attachedDatabase.purchases;
+  $ShipmentsTable get shipments => attachedDatabase.shipments;
   $StockTransactionsTable get stockTransactions =>
       attachedDatabase.stockTransactions;
   $InventoryTable get inventory => attachedDatabase.inventory;
@@ -564,8 +564,8 @@ class StockLedgerDaoManager {
         _db.attachedDatabase,
         _db.stockAdjustments,
       );
-  $$PurchasesTableTableManager get purchases =>
-      $$PurchasesTableTableManager(_db.attachedDatabase, _db.purchases);
+  $$ShipmentsTableTableManager get shipments =>
+      $$ShipmentsTableTableManager(_db.attachedDatabase, _db.shipments);
   $$StockTransactionsTableTableManager get stockTransactions =>
       $$StockTransactionsTableTableManager(
         _db.attachedDatabase,
@@ -589,7 +589,7 @@ mixin _$StockTransferDaoMixin on DatabaseAccessor<AppDatabase> {
   $OrdersTable get orders => attachedDatabase.orders;
   $StockAdjustmentsTable get stockAdjustments =>
       attachedDatabase.stockAdjustments;
-  $PurchasesTable get purchases => attachedDatabase.purchases;
+  $ShipmentsTable get shipments => attachedDatabase.shipments;
   $StockTransactionsTable get stockTransactions =>
       attachedDatabase.stockTransactions;
   StockTransferDaoManager get managers => StockTransferDaoManager(this);
@@ -628,8 +628,8 @@ class StockTransferDaoManager {
         _db.attachedDatabase,
         _db.stockAdjustments,
       );
-  $$PurchasesTableTableManager get purchases =>
-      $$PurchasesTableTableManager(_db.attachedDatabase, _db.purchases);
+  $$ShipmentsTableTableManager get shipments =>
+      $$ShipmentsTableTableManager(_db.attachedDatabase, _db.shipments);
   $$StockTransactionsTableTableManager get stockTransactions =>
       $$StockTransactionsTableTableManager(
         _db.attachedDatabase,
@@ -728,7 +728,7 @@ mixin _$WalletTransactionsDaoMixin on DatabaseAccessor<AppDatabase> {
       attachedDatabase.walletTransactions;
   $CrateGroupsTable get crateGroups => attachedDatabase.crateGroups;
   $SuppliersTable get suppliers => attachedDatabase.suppliers;
-  $PurchasesTable get purchases => attachedDatabase.purchases;
+  $ShipmentsTable get shipments => attachedDatabase.shipments;
   $ExpenseCategoriesTable get expenseCategories =>
       attachedDatabase.expenseCategories;
   $ExpensesTable get expenses => attachedDatabase.expenses;
@@ -768,8 +768,8 @@ class WalletTransactionsDaoManager {
       $$CrateGroupsTableTableManager(_db.attachedDatabase, _db.crateGroups);
   $$SuppliersTableTableManager get suppliers =>
       $$SuppliersTableTableManager(_db.attachedDatabase, _db.suppliers);
-  $$PurchasesTableTableManager get purchases =>
-      $$PurchasesTableTableManager(_db.attachedDatabase, _db.purchases);
+  $$ShipmentsTableTableManager get shipments =>
+      $$ShipmentsTableTableManager(_db.attachedDatabase, _db.shipments);
   $$ExpenseCategoriesTableTableManager get expenseCategories =>
       $$ExpenseCategoriesTableTableManager(
         _db.attachedDatabase,

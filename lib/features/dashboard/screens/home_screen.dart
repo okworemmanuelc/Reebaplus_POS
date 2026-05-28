@@ -26,14 +26,14 @@ import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 
-class DashboardScreen extends ConsumerStatefulWidget {
-  const DashboardScreen({super.key});
+class HomeScreen extends ConsumerStatefulWidget {
+  const HomeScreen({super.key});
 
   @override
-  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _DashboardScreenState extends ConsumerState<DashboardScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen> {
   String _selectedPeriod = 'Day';
   final List<String> _periods = ['Day', 'Week', 'Month', 'Year', 'To Date'];
 

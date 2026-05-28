@@ -100,6 +100,64 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 
 ---
 
+## Session 4 — 2026-05-28 — Pivot step 4 (small renames, partial) + cloud 0042–0045 deploy
+
+**Built today:**
+- Deployed cloud migrations 0042–0045 to the linked Supabase project (`supabase db push`). All four applied cleanly and now show as remote in `supabase migration list`. This closes the v14 cut-over window — v14 clients' queued writes drain on next push.
+- Started PIVOT_PLAN step 4 ("small renames"). Step 4 turned out to be four independent schema mutations, not one, so it was done as vertical slices (schema → codegen → references → analyzer-green per slice), smallest first. Two slices landed; two were deferred (see Plan updates).
+- **Slice (a) Customer Group → Price Tier.** Drift column `customers.customer_group` → `price_tier`. Dart enum `CustomerGroup` → `PriceTier`, field `customerGroup` → `priceTier`. DAO `getPriceForCustomerGroup` → `getPriceForTier`. `pos_create_customer` domain envelope key `p_customer_group` → `p_price_tier`. UI label "Customer Group" → "Price Tier".
+- **Slice (a) close-out — CHECK tighten + data migration (the part that was incomplete).** Master plan §16/§21 says Price Tier is Retailer / Wholesaler only, so the CHECK was narrowed from the 4-value legacy set (`retailer,wholesaler,distributor,walk_in`) to `('retailer','wholesaler')`. Local v15 block now: migrates data (`distributor`→`wholesaler`, `walk_in`→`retailer`) then rebuilds the customers table via `m.alterTable(TableMigration(customers))` (SQLite can't ALTER a CHECK) and recreates its three indexes (`idx_customers_business_lua`, `_business_deleted`, `_business_phone`) + `bump_customers_last_updated_at` trigger. Cloud 0046 does the data `UPDATE` then `DROP CONSTRAINT customers_customer_group_check` / `ADD CONSTRAINT customers_price_tier_check`. 0046_rollback reverses (restores the 4-value CHECK; the data migration itself is one-way). Fresh-install CHECK enforcement covered by new `test/database/price_tier_check_test.dart` (5/5).
+- **Slice (b) Purchases → Shipments.** Drift table `purchases` → `shipments`, class `Purchases` → `Shipments`, data class `DeliveryData` → `ShipmentData`, `DeliveriesDao` → `ShipmentsDao` (+ `getLastDeliveryForProduct` → `getLastShipmentForProduct`, `LastDeliveryInfo` → `LastShipmentInfo`). The permanent ledger FK columns `stock_transactions.purchase_id` and `payment_transactions.purchase_id` → `shipment_id` (their exactly-one-FK CHECK constraints and the `_ledgerTables` immutability lists updated to match). `purchase_items` KEEPS its `purchase_id` column (table is deferred-for-drop). Synced-table lists + sync restore case updated.
+- **Dashboard → Home (Option A, settled at close-out).** Drawer label "Dashboard" → "Home". Class `DashboardScreen` → `HomeScreen`, file `dashboard_screen.dart` → `home_screen.dart` (git mv; `main_layout` import + usage updated). Internal nav route key kept at the original stable `'dashboard'` (an earlier pass had flipped it to `'home'`; reverted across all 7 usages — navigation_service index map, drawer, home/reports_hub/approvals screens). Net: user-facing = Home, code class = HomeScreen, internal route key = 'dashboard'. `lib/features/dashboard/` folder kept.
+- **Settings → CEO Settings.** Drawer label + the two SettingsScreen AppBar titles. (Role-based hiding deferred — see Plan updates.)
+- Drift schema bumped 14 → 15. Single `if (from < 15)` migration block covers slices (a) + (b): the column/table renames plus pending-`sync_queue` payload rewrites (`customer_group`→`price_tier`, `p_customer_group`→`p_price_tier`, and `purchase_id`→`shipment_id` scoped to `stock_transactions`/`payment_transactions` upserts only, plus `purchases:*`→`shipments:*` action-type forwarding).
+- Cloud migration `supabase/migrations/0046_pivot_small_renames.sql` (write-only, NOT deployed). Renames the two cloud columns + the table, and rewrites every live function that referenced the old names — authoritative list pulled from `pg_proc` on the live DB: `pos_create_customer` (→ `p_price_tier`/`price_tier`), `pos_inventory_delta_v2` (→ `shipment_id`), `pos_pull_snapshot` (array `'purchases'`→`'shipments'`), and DROP of the dead v1 `pos_inventory_delta` (already broken since 0045 renamed `inventory.warehouse_id`; client only calls `_v2`). Rollback `supabase/scripts/rollback/0046_rollback.sql` mirrors the reverse (restores all four functions incl. v1, reverses the renames).
+
+**Files touched:**
+- lib/core/database/app_database.dart (schemaVersion 14→15, v15 migration block, Customers/StockTransactions/PaymentTransactions/PurchaseItems table defs, Shipments class + DataClassName, ledger CHECK + immutability lists, @DriftDatabase tables/daos lists, `_syncedTenantTables`)
+- lib/core/database/app_database.g.dart, daos.g.dart (regenerated)
+- lib/core/database/daos.dart (ShipmentsDao, getPriceForTier, pos_create_customer envelope key, stock-transaction referenceId)
+- lib/core/services/supabase_sync_service.dart (synced list + restore case `purchases`→`shipments`/`ShipmentData`)
+- lib/features/customers/data/models/customer.dart, data/services/customer_service.dart, screens/customers_screen.dart, screens/customer_detail_screen.dart, widgets/add_customer_sheet.dart (PriceTier)
+- lib/features/pos/controllers/pos_controller.dart, screens/pos_home_screen.dart, widgets/product_grid.dart (PriceTier)
+- lib/features/inventory/screens/product_detail_screen.dart (ShipmentsDao / LastShipmentInfo)
+- lib/shared/widgets/app_drawer.dart (Home + CEO Settings labels, route key), lib/shared/services/navigation_service.dart (route key), lib/features/dashboard/screens/{dashboard,reports_hub,approvals}_screen.dart (route key)
+- lib/core/settings/settings_screen.dart (AppBar titles)
+- test/integration/rpcs/pos_create_customer_test.dart (p_price_tier contract — skipped integration test)
+- supabase/migrations/0046_pivot_small_renames.sql (new, write-only; + CHECK tighten at close-out)
+- supabase/scripts/rollback/0046_rollback.sql (new; + CHECK restore)
+- lib/features/dashboard/screens/home_screen.dart (renamed from dashboard_screen.dart, class HomeScreen)
+- lib/shared/widgets/main_layout.dart (HomeScreen import + usage)
+- test/database/price_tier_check_test.dart (new, fresh-install CHECK enforcement, 5/5)
+- test/database/renames_v15_payload_rewrite_test.dart (new, payload rewrites, 9/9 — written alongside this work)
+- PIVOT_PLAN.md (step 4 status + deferrals)
+
+**Database changes:**
+- Drift v15: `customers.customer_group`→`price_tier`; `purchases`→`shipments`; `stock_transactions.purchase_id`/`payment_transactions.purchase_id`→`shipment_id`. `purchase_items` unchanged.
+- Cloud 0042–0045 DEPLOYED. Cloud 0046 WRITTEN but NOT deployed (gated).
+
+**Master plan sections covered:**
+- §2 renames (Price Tier, Home, Shipments, CEO Settings). Decisions Q5/Q8/Q9 touched (see deferrals).
+
+**Plan updates made during session (recorded in PIVOT_PLAN.md step 4):**
+- **Drop `purchase_items` (Q5) deferred to step 25** — it still backs the product-detail "Last Delivery" card via `ShipmentsDao.getLastShipmentForProduct`; dropping now orphans the feature with no replacement.
+- **Crate Groups → Crate Size Groups (Q8) deferred to its own session** — ≈196 refs / 22 files + cloud RPC rewrites; v14-scale, not "small". (User chose "its own focused session".)
+- **Hide CEO Settings for non-CEO (Q9) deferred to step 10** ("Sidebar role guards") — no role-resolution infra exists yet (only a hardcoded `isCEO=true` placeholder in inventory). Step 4 did the label only.
+
+**Tested:**
+- `flutter analyze` clean (only pre-existing `avoid_print` infos in `test/database/roles_v13_report.dart`). `flutter test` → **all 122 pass** (108 prior + 9 `renames_v15_payload_rewrite_test` + 5 `price_tier_check_test`), 0 failures.
+- One bootstrap failure surfaced mid-slice-(b) and was fixed: the two ledger tables' CHECK constraints and `_ledgerTables` immutability lists still referenced `purchase_id` after the getter rename; updated to `shipment_id` + regenerated.
+
+**Known issues / left open:**
+- Cloud 0046 not deployed — deploy after this lands, right after the v15 client ships (re-read 0046 header's deploy-ordering note). Until then, v15 clients pushing `price_tier`/`shipment_id` keys to the un-migrated cloud will 42703 and queue (no data loss).
+- "Zero stragglers" checkpoint only partial: `purchase_items`/`PurchaseItems` and `crate_group(s)` deliberately remain pending their deferred steps.
+- The v11→v14 (now v15) upgrade schema-fixture test gap from Session 3 still stands. Specifically untested: the v15 customers table-rebuild path (`m.alterTable(TableMigration(customers))` + index/trigger recreation). Reasoning gives confidence (FK enforcement is OFF during onUpgrade — proven by the v12 incident where `DROP TABLE` reached the copy stage; column set is unchanged post-rename so the copy is 1:1; indexes/trigger recreated to match onCreate exactly) and fresh-install CHECK is tested, but the actual 14→15 upgrade is not exercised. Build the schema-fixture before any real-device release.
+
+**Next session should:**
+- Deploy cloud 0046 (after confirming the deploy-ordering note), then do slice (d): Crate Groups → Crate Size Groups as a dedicated v14-scale rename session (schema v16 + cloud 0047). Then resume the plan at step 5 (Welcome + CEO Sign Up flow).
+
+---
+
 ## Session 3 — 2026-05-27 — Schema v14 (warehouses → stores rename pass)
 
 **Built today:**

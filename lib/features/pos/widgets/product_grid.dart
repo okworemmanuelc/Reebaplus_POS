@@ -250,9 +250,9 @@ class _ProductCardState extends ConsumerState<_ProductCard>
     final int priceKobo = ref
         .read(databaseProvider)
         .catalogDao
-        .getPriceForCustomerGroup(
+        .getPriceForTier(
           product,
-          widget.controller.selectedGroup == CustomerGroup.retailer
+          widget.controller.selectedGroup == PriceTier.retailer
               ? 'retail'
               : 'wholesaler',
         );

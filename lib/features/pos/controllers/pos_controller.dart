@@ -15,7 +15,7 @@ class PosController extends ChangeNotifier {
   List<ManufacturerData> manufacturers = [];
   String? selectedCategoryId;
   String selectedManufacturerId = 'All';
-  CustomerGroup selectedGroup = CustomerGroup.retailer;
+  PriceTier selectedGroup = PriceTier.retailer;
   String searchQuery = '';
   bool isSearching = false;
   String? currentStoreName;
@@ -125,7 +125,7 @@ class PosController extends ChangeNotifier {
   void _onCustomerSelected() {
     final customer = _cartService.activeCustomer.value;
     if (customer != null) {
-      selectedGroup = customer.customerGroup;
+      selectedGroup = customer.priceTier;
       notifyListeners();
     }
   }
@@ -141,7 +141,7 @@ class PosController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void selectGroup(CustomerGroup group) {
+  void selectGroup(PriceTier group) {
     selectedGroup = group;
     notifyListeners();
   }

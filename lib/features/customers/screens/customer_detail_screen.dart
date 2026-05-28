@@ -120,8 +120,8 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
   String get _address =>
       _customerData?.address ?? widget.customer?.addressText ?? '';
   String get _groupName =>
-      _customerData?.customerGroup ??
-      widget.customer?.customerGroup.name ??
+      _customerData?.priceTier ??
+      widget.customer?.priceTier.name ??
       'retailer';
   DateTime get _joinedAt =>
       _customerData?.createdAt ?? widget.customer?.createdAt ?? DateTime.now();

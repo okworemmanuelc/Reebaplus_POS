@@ -432,7 +432,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                         ),
                       ),
                       child: Text(
-                        customer.customerGroup.name.toUpperCase(),
+                        customer.priceTier.name.toUpperCase(),
                         style: TextStyle(
                           fontSize: context.getRFontSize(9),
                           fontWeight: FontWeight.w800,

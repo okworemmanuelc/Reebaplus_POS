@@ -39,7 +39,7 @@ class CustomerService extends ValueNotifier<List<Customer>> {
         phone: Value(customer.phone),
         address: Value(customer.addressText),
         googleMapsLocation: Value(customer.googleMapsLocation),
-        customerGroup: Value(customer.customerGroup.name),
+        priceTier: Value(customer.priceTier.name),
         storeId: Value(customer.storeId),
         businessId: businessId,
       ),

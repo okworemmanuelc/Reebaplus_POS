@@ -65,7 +65,7 @@ void main() {
           'p_wallet_id': walletId,
           'p_name': 'Round Trip Rita',
           'p_phone': '+2348000000001',
-          'p_customer_group': 'retailer',
+          'p_price_tier': 'retailer',
         },
       );
 
@@ -79,7 +79,7 @@ void main() {
       expect(customer['business_id'], clients.env.businessId);
       expect(customer['name'], 'Round Trip Rita');
       expect(customer['phone'], '+2348000000001');
-      expect(customer['customer_group'], 'retailer');
+      expect(customer['price_tier'], 'retailer');
       expect(customer['is_deleted'], isFalse);
       expect(customer['last_updated_at'], isNotNull);
 
@@ -170,7 +170,7 @@ void main() {
       expect(crossBiz, isEmpty);
     }, skip: _skipReason);
 
-    test('atomicity (validation): invalid p_customer_group raises mid-body, no rows',
+    test('atomicity (validation): invalid p_price_tier raises mid-body, no rows',
         () async {
       final customerId = UuidV7.generate();
       final walletId = UuidV7.generate();
@@ -182,13 +182,13 @@ void main() {
           'p_customer_id': customerId,
           'p_wallet_id': walletId,
           'p_name': 'Bad Group Bob',
-          'p_customer_group': 'invalid_group', // CHECK constraint rejects
+          'p_price_tier': 'invalid_group', // CHECK constraint rejects
         });
       } catch (e) {
         caught = e;
       }
       expect(caught, isNotNull,
-          reason: 'customer_group CHECK constraint should fire');
+          reason: 'price_tier CHECK constraint should fire');
 
       // Both inserts must roll back — proves the RPC is atomic, not just
       // that the dispatcher rejected the call before any work happened.

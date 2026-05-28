@@ -255,7 +255,7 @@ class AppDrawer extends ConsumerWidget {
         _navItem(
           context,
           FontAwesomeIcons.chartLine,
-          'Dashboard',
+          'Home',
           active: activeRoute == 'dashboard',
           onTap: () => _navigateTo(context, ref, 'dashboard'),
         ),
@@ -336,7 +336,7 @@ class AppDrawer extends ConsumerWidget {
         _navItem(
           context,
           FontAwesomeIcons.gear,
-          'Settings',
+          'CEO Settings',
           active: false,
           onTap: () {
             Navigator.pop(context);

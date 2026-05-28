@@ -1305,7 +1305,7 @@ class SupabaseSyncService {
     'customers',
     'orders',
     'order_items',
-    'purchases',
+    'shipments',
     'purchase_items',
     'expense_categories',
     'expenses',
@@ -2507,11 +2507,11 @@ class SupabaseSyncService {
                 .insertOnConflictUpdate(SystemConfigData.fromJson(r));
           }
           break;
-        case 'purchases':
+        case 'shipments':
           for (var r in rows) {
             await _db
-                .into(_db.purchases)
-                .insertOnConflictUpdate(DeliveryData.fromJson(r));
+                .into(_db.shipments)
+                .insertOnConflictUpdate(ShipmentData.fromJson(r));
           }
           break;
         case 'purchase_items':

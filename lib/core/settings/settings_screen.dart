@@ -98,7 +98,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       return Scaffold(
         backgroundColor: t.scaffoldBackgroundColor,
         appBar: AppBar(
-          title: const Text('Settings'),
+          title: const Text('CEO Settings'),
           backgroundColor: Colors.transparent,
           elevation: 0,
         ),
@@ -110,7 +110,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       backgroundColor: t.scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text(
-          'Settings',
+          'CEO Settings',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.transparent,

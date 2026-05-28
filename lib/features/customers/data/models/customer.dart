@@ -1,7 +1,7 @@
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/features/customers/data/models/payment.dart';
 
-enum CustomerGroup { retailer, wholesaler }
+enum PriceTier { retailer, wholesaler }
 
 class Customer {
   // Walk-in sentinel — replaces the legacy `id == -1` integer sentinel.
@@ -14,7 +14,7 @@ class Customer {
   final String? phone;
   final int walletLimitKobo;
   final DateTime createdAt;
-  final CustomerGroup customerGroup;
+  final PriceTier priceTier;
   final bool isWalkIn;
   final Map<String, int> emptyCratesBalance;
   final List<Payment> payments;
@@ -28,7 +28,7 @@ class Customer {
     this.phone,
     this.walletLimitKobo = 0,
     DateTime? createdAt,
-    this.customerGroup = CustomerGroup.retailer,
+    this.priceTier = PriceTier.retailer,
     this.isWalkIn = false,
     this.emptyCratesBalance = const {},
     this.payments = const [],
@@ -45,7 +45,7 @@ class Customer {
     String? phone,
     int? walletLimitKobo,
     DateTime? createdAt,
-    CustomerGroup? customerGroup,
+    PriceTier? priceTier,
     bool? isWalkIn,
     Map<String, int>? emptyCratesBalance,
     List<Payment>? payments,
@@ -59,7 +59,7 @@ class Customer {
       phone: phone ?? this.phone,
       walletLimitKobo: walletLimitKobo ?? this.walletLimitKobo,
       createdAt: createdAt ?? this.createdAt,
-      customerGroup: customerGroup ?? this.customerGroup,
+      priceTier: priceTier ?? this.priceTier,
       isWalkIn: isWalkIn ?? this.isWalkIn,
       emptyCratesBalance: emptyCratesBalance ?? this.emptyCratesBalance,
       payments: payments ?? this.payments,
@@ -68,9 +68,9 @@ class Customer {
   }
 
   static Customer fromDb(CustomerData data) {
-    CustomerGroup group = CustomerGroup.retailer;
+    PriceTier group = PriceTier.retailer;
     try {
-      group = CustomerGroup.values.firstWhere((e) => e.name == data.customerGroup);
+      group = PriceTier.values.firstWhere((e) => e.name == data.priceTier);
     } catch (_) {}
 
     return Customer(
@@ -81,7 +81,7 @@ class Customer {
       phone: data.phone,
       walletLimitKobo: data.walletLimitKobo,
       createdAt: data.createdAt,
-      customerGroup: group,
+      priceTier: group,
       isWalkIn: data.id == walkInId,
       emptyCratesBalance: const {}, // TODO: Fetch from CrateBalances table
       payments: const [], // TODO: Fetch from Payments table

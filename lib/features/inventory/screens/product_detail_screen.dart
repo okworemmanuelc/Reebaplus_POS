@@ -68,7 +68,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   ProductData? _productData; // full DB row, used by UpdateProductSheet
 
   ProductSalesSummary? _salesSummary;
-  LastDeliveryInfo? _lastDelivery;
+  LastShipmentInfo? _lastDelivery;
   bool _deliveryLoaded = false;
   bool _contentReady = false; // deferred load flag
   bool _canEdit =
@@ -165,8 +165,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     final summary = await db.ordersDao.getSalesSummaryForProduct(productId);
     if (mounted) setState(() => _salesSummary = summary);
 
-    // Load last delivery from purchases
-    final delivery = await db.deliveriesDao.getLastDeliveryForProduct(
+    // Load last shipment from shipments
+    final delivery = await db.shipmentsDao.getLastShipmentForProduct(
       productId,
     );
     if (mounted) {
@@ -1101,7 +1101,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     );
   }
 
-  // ── Last Delivery Card — reads from Purchases table ───────────────────────
+  // ── Last Delivery Card — reads from Shipments table ───────────────────────
   Widget _buildDeliveryCard(BuildContext context) {
     if (!_deliveryLoaded) {
       return _infoCard(context, [

@@ -368,7 +368,7 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
     await db.syncDao.enqueueUpsert('products', comp);
   }
 
-  int getPriceForCustomerGroup(ProductData product, String group) {
+  int getPriceForTier(ProductData product, String group) {
     switch (group) {
       case 'wholesaler':
         return product.distributorPriceKobo ?? product.retailPriceKobo;
@@ -1742,8 +1742,8 @@ class CustomersDao extends DatabaseAccessor<AppDatabase>
           if (custComp.address.present) 'p_address': custComp.address.value,
           if (custComp.googleMapsLocation.present)
             'p_google_maps_location': custComp.googleMapsLocation.value,
-          if (custComp.customerGroup.present)
-            'p_customer_group': custComp.customerGroup.value,
+          if (custComp.priceTier.present)
+            'p_price_tier': custComp.priceTier.value,
           if (custComp.walletLimitKobo.present)
             'p_wallet_limit_kobo': custComp.walletLimitKobo.value,
           if (custComp.storeId.present)
@@ -1824,34 +1824,34 @@ class CustomersDao extends DatabaseAccessor<AppDatabase>
   }
 }
 
-@DriftAccessor(tables: [Purchases, PurchaseItems, Suppliers, Products])
-class DeliveriesDao extends DatabaseAccessor<AppDatabase>
-    with _$DeliveriesDaoMixin, BusinessScopedDao<AppDatabase> {
-  DeliveriesDao(super.db);
+@DriftAccessor(tables: [Shipments, PurchaseItems, Suppliers, Products])
+class ShipmentsDao extends DatabaseAccessor<AppDatabase>
+    with _$ShipmentsDaoMixin, BusinessScopedDao<AppDatabase> {
+  ShipmentsDao(super.db);
 
-  /// Most recent purchase row for a given product, exposed as a small struct
+  /// Most recent shipment row for a given product, exposed as a small struct
   /// for the product-detail screen. Returns null when the product has never
-  /// been purchased.
-  Future<LastDeliveryInfo?> getLastDeliveryForProduct(String productId) async {
+  /// been received in a shipment.
+  Future<LastShipmentInfo?> getLastShipmentForProduct(String productId) async {
     final query =
         select(purchaseItems).join([
             innerJoin(
-              purchases,
-              purchases.id.equalsExp(purchaseItems.purchaseId),
+              shipments,
+              shipments.id.equalsExp(purchaseItems.purchaseId),
             ),
           ])
           ..where(
             whereBusiness(purchaseItems) &
                 purchaseItems.productId.equals(productId),
           )
-          ..orderBy([OrderingTerm.desc(purchases.createdAt)])
+          ..orderBy([OrderingTerm.desc(shipments.createdAt)])
           ..limit(1);
     final row = await query.getSingleOrNull();
     if (row == null) return null;
     final item = row.readTable(purchaseItems);
-    final purchase = row.readTable(purchases);
-    return LastDeliveryInfo(
-      date: purchase.createdAt,
+    final shipment = row.readTable(shipments);
+    return LastShipmentInfo(
+      date: shipment.createdAt,
       quantity: item.quantity,
       unitPriceKobo: item.unitPriceKobo,
       totalKobo: item.totalKobo,
@@ -1859,13 +1859,13 @@ class DeliveriesDao extends DatabaseAccessor<AppDatabase>
   }
 }
 
-class LastDeliveryInfo {
+class LastShipmentInfo {
   final DateTime date;
   final int quantity;
   final int unitPriceKobo;
   final int totalKobo;
 
-  const LastDeliveryInfo({
+  const LastShipmentInfo({
     required this.date,
     required this.quantity,
     required this.unitPriceKobo,
@@ -3041,7 +3041,7 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
       performedByName: u.name,
       locationId: s.locationId,
       storeName: w?.name,
-      referenceId: s.orderId ?? s.transferId ?? s.adjustmentId ?? s.purchaseId,
+      referenceId: s.orderId ?? s.transferId ?? s.adjustmentId ?? s.shipmentId,
       createdAt: s.createdAt,
       unitPriceKobo: p.sellingPriceKobo > 0
           ? p.sellingPriceKobo

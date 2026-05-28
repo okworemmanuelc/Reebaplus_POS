@@ -33,7 +33,7 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
   final _addressCtrl = TextEditingController();
   final _locationCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
-  CustomerGroup _selectedGroup = CustomerGroup.retailer;
+  PriceTier _selectedGroup = PriceTier.retailer;
   final _formKey = GlobalKey<FormState>();
 
   // Store selection
@@ -65,12 +65,12 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
   Widget _groupDropdown() {
     return Column(
       children: [
-        AppDropdown<CustomerGroup>(
-          labelText: 'Customer Group',
+        AppDropdown<PriceTier>(
+          labelText: 'Price Tier',
           value: _selectedGroup,
           items: const [
-            DropdownMenuItem(value: CustomerGroup.retailer, child: Text('Retailer')),
-            DropdownMenuItem(value: CustomerGroup.wholesaler, child: Text('Wholesaler')),
+            DropdownMenuItem(value: PriceTier.retailer, child: Text('Retailer')),
+            DropdownMenuItem(value: PriceTier.wholesaler, child: Text('Wholesaler')),
           ],
           onChanged: (val) {
             if (val != null) setState(() => _selectedGroup = val);
@@ -277,7 +277,7 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
                               phone: _phoneCtrl.text.trim().isEmpty
                                   ? null
                                   : _phoneCtrl.text.trim(),
-                              customerGroup: _selectedGroup,
+                              priceTier: _selectedGroup,
                               isWalkIn: false,
                               storeId: storeId,
                             );

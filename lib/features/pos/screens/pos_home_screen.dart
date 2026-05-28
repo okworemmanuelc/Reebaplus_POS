@@ -238,15 +238,15 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
             flex: 4,
             child: _controller!.isLoading
                 ? const SizedBox.shrink()
-                : AppDropdown<CustomerGroup>(
+                : AppDropdown<PriceTier>(
                     value: _controller!.selectedGroup,
                     items: const [
                       DropdownMenuItem(
-                        value: CustomerGroup.retailer,
+                        value: PriceTier.retailer,
                         child: Text('Retailer'),
                       ),
                       DropdownMenuItem(
-                        value: CustomerGroup.wholesaler,
+                        value: PriceTier.wholesaler,
                         child: Text('Wholesaler'),
                       ),
                     ],
