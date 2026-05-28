@@ -58,7 +58,7 @@ Keep this section updated at the top so it's easy to see what's done at a glance
 
 **Auth flow:**
 - [x] Welcome screen (section 4) *(done in Session 6)*
-- [ ] CEO Sign Up flow (section 5)
+- [x] CEO Sign Up flow (section 5) *(done in Session 7 — new-email path; §5.2 existing-email branch deferred)*
 - [ ] Staff Sign Up flow (section 6)
 - [ ] Login flow + Forgot PIN (section 7)
 - [ ] Who Is Working picker (section 8)
@@ -97,6 +97,70 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 ## Session entries
 
 (New entries go below this line. Most recent at the top.)
+
+---
+
+## Session 7 — 2026-05-28 — §5 CEO Sign Up restructure + roles pull-sync
+
+**Built today:**
+
+Two pieces, done in order.
+
+- **Task A — roles reach the local DB on pull.** The 5 role/membership tables (`roles`, `role_permissions`, `role_settings`, `user_businesses`, `user_stores`) were seeded cloud-side by `complete_onboarding` and already pushed from the client, but the *pull* path never listed them — so a fresh device's role tables stayed empty. Added them to the pull in three places: the cloud snapshot function (`pos_pull_snapshot`), the client's pull order, and the restore handlers. Now a sign-up pulls the 4 default roles (+ their permissions/settings + the CEO's membership/store link) down to the device. New test proves a role-bearing snapshot restores locally.
+
+- **Task B — one CEO Sign Up screen, nine fading steps (master plan §5).** Replaced the old 8-screen onboarding chain (which ran email-first and in a different order) with a single screen that fades between the 9 steps in the master-plan order: business name → business type → store details → full name → email → OTP → create PIN → confirm PIN → "your business is ready". A small dots indicator sits at the top. Business name first; email/OTP mid-flow; explicit confirm-PIN; store details has searchable State + Country (default Nigeria) with currency auto-filling from the country. The "business is ready" step auto-continues to Home after 3 seconds, and the Add-Product sheet auto-opens on the first Home frame (behaviour kept from the old success screen).
+- The six business types are the master-plan set (Restaurant, Supermarket, Bar, Beer distributor, Pharmacy, Boutique) — not the old 8-item list.
+- Dropped from the flow (not in §5): business phone, business email, timezone, tax-reg-number. The commit feeds safe defaults (business email = CEO email, phone = '', timezone = Africa/Lagos, tax-reg = none); currency comes from the country.
+- Biometric setup is no longer part of the CEO flow (it'll be wired into CEO Settings › Security later). The biometric screen file stays (the PIN-reset / staff path still uses it).
+- The Welcome "Create a new business" button now opens the new screen. The Welcome background (dark + amber glow + dot grid) was extracted into a shared widget so both screens match.
+
+**Decisions / conflicts resolved (told to the user up front):**
+- OTP resend cooldown is **30s** (master plan §5.1) — the old login OTP screen used 60s.
+- OTP step shows "expires in 5 minutes" (master plan) — actual expiry is whatever Supabase is configured for (server-side, unchanged).
+- Progress indicator is plain dots (master plan says "small dots") rather than the old labelled 7-step indicator, which doesn't fit 9 steps.
+- **New-email login fallthrough repointed.** The kept login screens (`email_entry`, `otp_verification`) used to route a brand-new email into the old chain. They now route to the new CEO Sign Up screen (which re-collects email/OTP). This is a known double-OTP wart for the rare "Sign in → brand-new email" path; the proper "No account found" handling (§7.1) lands with the login restructure (PIVOT_PLAN step 6).
+
+**Files touched:**
+- supabase/migrations/0048_pull_roles_tables.sql (new — DEPLOYED 2026-05-28; 0047 was already remote)
+- supabase/scripts/rollback/0048_rollback.sql (new)
+- lib/core/services/supabase_sync_service.dart (`_pullOrder` + 5 restore cases + `restoreTableDataForTesting` seam)
+- lib/features/auth/screens/ceo_sign_up_screen.dart (new — the single-screen flow; PIN-step crash fix: split create/confirm shake keys so the shared GlobalKey isn't duplicated during the AnimatedSwitcher cross-fade)
+- lib/features/auth/widgets/branded_auth_background.dart (new — extracted Welcome background)
+- lib/features/auth/onboarding/onboarding_draft.dart (email mutable, set at step 5; stale doc comments updated)
+- lib/features/auth/screens/welcome_screen.dart (CTA → CeoSignUpScreen; uses shared background)
+- lib/features/auth/screens/email_entry_screen.dart, otp_verification_screen.dart (new-email branch → CeoSignUpScreen)
+- lib/core/data/countries.dart, currencies.dart, nigerian_states.dart (new — Autocomplete data, no new packages)
+- test/database/roles_pull_restore_test.dart (new — 2 tests)
+- DELETED: business_type_selection_screen.dart, new_owner_name_screen.dart, business_details_screen.dart, location_details_screen.dart, business_settings_screen.dart
+
+**Database changes:**
+- No local schema change (still v16).
+- Cloud 0048 DEPLOYED 2026-05-28 (`supabase db push`). Correction: the remote was already at 0047 — the earlier "cloud through 0046 / 0047 undeployed" notes (Sessions 4/5 and this entry's first draft) were stale. Remote is now at 0048.
+
+**Master plan sections covered:**
+- §5 (CEO Sign Up) — built, new-email path. §5.2 existing-email branch deferred.
+- Touches §4 (Welcome CTA repoint), §2.4 (roles now pulled), §30.6 (currency auto-fill / Nigeria default).
+
+**Plan updates made during session:**
+- None to the master plan. PIVOT_PLAN step 5 is the work; no scope change.
+
+**Tested:**
+- `flutter analyze lib/ test/` — clean except the 18 pre-existing `avoid_print` infos in roles_v13_report.dart.
+- `flutter test` — 142 pass (140 prior + 2 new restore tests), 58 skipped, 0 failures.
+- Emulator smoke (user-run): full 9-step §5 sign-up, the PIN-step crash fix, and `complete_onboarding` all work end-to-end. The §5 "4 roles in the local DB" role-check is deferred to staff onboarding (now unblocked since cloud 0048 is deployed).
+
+**Known issues / left open:**
+- **§5 role-check not yet confirmed on-device.** Cloud 0048 is deployed, so a fresh sign-up's post-onboarding pull should now land 4 roles + their permissions/settings + 1 user_businesses + 1 user_stores locally — to be verified during staff onboarding (§6).
+- **Double-OTP** on the "Sign in → brand-new email" path (see decisions above) — cleaned up in step 6.
+- §5.2 existing-email → confirm-existing-PIN branch deferred.
+- `auth_service.createNewOwner` is still dead (no callers) and its internal comment still names a deleted screen — left untouched (out of scope; surgical).
+
+**Next session should:**
+- Run the emulator smoke + DB checkpoint above. Then continue PIVOT_PLAN: Staff Sign Up (§6) / Login restructure (§7, incl. "No account found" + "Owner" hardcode removal), per the recommended order.
+
+**Session 7 follow-ups (same session):**
+- Store-name field placeholder set to "Abuja Branch".
+- Fixed a duplicate-GlobalKey crash in the PIN step: the create (step 6) and confirm (step 7) bodies both came from `_buildPinStep()` sharing one `ShakeWidget` GlobalKey, and the AnimatedSwitcher kept both mounted during the cross-fade. Split into `_createPinShakeKey` / `_confirmPinShakeKey` (mismatch path shakes the create key via a post-frame callback since step 6 isn't mounted yet at that synchronous point).
 
 ---
 

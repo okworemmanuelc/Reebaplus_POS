@@ -10,7 +10,7 @@ import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/features/auth/screens/login_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/otp_verification_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/create_pin_screen.dart';
-import 'package:reebaplus_pos/features/auth/screens/business_type_selection_screen.dart';
+import 'package:reebaplus_pos/features/auth/screens/ceo_sign_up_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/existing_account_screen.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_background.dart';
@@ -147,11 +147,11 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
     setState(() => _loading = false);
 
     if (localUser == null) {
-      // New user — start business setup flow
+      // New user — start the §5 CEO Sign Up flow (email is re-collected at
+      // its email step; the old multi-screen flow was retired).
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(
-          pageBuilder: (_, __, ___) =>
-              BusinessTypeSelectionScreen(email: email),
+          pageBuilder: (_, __, ___) => const CeoSignUpScreen(),
           transitionsBuilder: (_, animation, __, child) {
             final curve = CurvedAnimation(
               parent: animation,

@@ -11,7 +11,7 @@ import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/features/auth/screens/create_pin_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/existing_account_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/login_screen.dart';
-import 'package:reebaplus_pos/features/auth/screens/business_type_selection_screen.dart';
+import 'package:reebaplus_pos/features/auth/screens/ceo_sign_up_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/smooth_route.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_background.dart';
 import 'package:reebaplus_pos/features/auth/widgets/shake_widget.dart';
@@ -220,8 +220,11 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
 
     // OTP verified — route based on whether the user exists locally.
     if (localUser == null) {
+      // New email → the §5 CEO Sign Up flow (it re-collects email/OTP; the
+      // old multi-screen flow was retired). §7.1 "no account found" handling
+      // arrives with the login restructure (PIVOT_PLAN step 6).
       Navigator.of(context).pushReplacement(
-        SmoothRoute(page: BusinessTypeSelectionScreen(email: widget.email)),
+        SmoothRoute(page: const CeoSignUpScreen()),
       );
     } else {
       final user = localUser;

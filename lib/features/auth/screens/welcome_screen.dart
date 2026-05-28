@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
+import 'package:reebaplus_pos/features/auth/screens/ceo_sign_up_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/coming_soon_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/email_entry_screen.dart';
+import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/smooth_route.dart';
 
@@ -45,7 +47,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: adBg,
-      body: _WelcomeBackground(
+      body: BrandedAuthBackground(
         child: SafeArea(
           child: FadeTransition(
             opacity: _fade,
@@ -86,7 +88,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                       const SizedBox(height: 44),
                       AppButton(
                         text: 'Create a new business',
-                        onPressed: () => _push(const EmailEntryScreen()),
+                        onPressed: () => _push(const CeoSignUpScreen()),
                       ),
                       const SizedBox(height: 14),
                       AppButton(
@@ -232,54 +234,3 @@ class _WelcomeLogo extends StatelessWidget {
   }
 }
 
-/// Dark base (#080C12) with a faint dotted pattern and a soft amber glow from
-/// the top-right corner (master plan §4.3).
-class _WelcomeBackground extends StatelessWidget {
-  final Widget child;
-  const _WelcomeBackground({required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: const BoxDecoration(color: adBg),
-      child: Stack(
-        children: [
-          const Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: RadialGradient(
-                  center: Alignment(0.9, -0.9),
-                  radius: 1.1,
-                  colors: [amberGlow, Colors.transparent],
-                  stops: [0.0, 0.55],
-                ),
-              ),
-            ),
-          ),
-          Positioned.fill(
-            child: CustomPaint(painter: _DotGridPainter()),
-          ),
-          child,
-        ],
-      ),
-    );
-  }
-}
-
-class _DotGridPainter extends CustomPainter {
-  static const double _spacing = 28;
-  static const double _radius = 1.0;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = Colors.white.withValues(alpha: 0.03);
-    for (double y = _spacing; y < size.height; y += _spacing) {
-      for (double x = _spacing; x < size.width; x += _spacing) {
-        canvas.drawCircle(Offset(x, y), _radius, paint);
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _DotGridPainter oldDelegate) => false;
-}
