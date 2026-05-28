@@ -827,7 +827,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
     // Empty crates are tracked for any product whose unit == 'Bottle'.
     // The deposit price per bottle is read live from the manufacturer's
     // current `depositAmountKobo`, so a CEO edit reflects everywhere
-    // immediately. CrateGroups are no longer the gating identifier.
+    // immediately. CrateSizeGroups are no longer the gating identifier.
     final bottleItems = cartItems
         .where(
           (i) =>

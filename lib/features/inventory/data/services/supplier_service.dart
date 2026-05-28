@@ -5,7 +5,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 
 class SupplierService extends ValueNotifier<List<Supplier>> {
   final AppDatabase _db;
-  Map<String, CrateGroupData> _crateGroupsById = const {};
+  Map<String, CrateSizeGroupData> _crateSizeGroupsById = const {};
   List<SupplierData> _lastSuppliers = const [];
 
   SupplierService(this._db) : super([]) {
@@ -13,8 +13,8 @@ class SupplierService extends ValueNotifier<List<Supplier>> {
   }
 
   void _init() {
-    _db.inventoryDao.watchAllCrateGroups().listen((groups) {
-      _crateGroupsById = {for (final g in groups) g.id: g};
+    _db.inventoryDao.watchAllCrateSizeGroups().listen((groups) {
+      _crateSizeGroupsById = {for (final g in groups) g.id: g};
       value = _lastSuppliers.map(_fromDb).toList();
     });
     _db.catalogDao.watchAllSupplierDatas().listen((dataList) {
@@ -24,9 +24,9 @@ class SupplierService extends ValueNotifier<List<Supplier>> {
   }
 
   Supplier _fromDb(SupplierData d) {
-    final cgName = d.crateGroupId == null
+    final cgName = d.crateSizeGroupId == null
         ? null
-        : _crateGroupsById[d.crateGroupId!]?.name;
+        : _crateSizeGroupsById[d.crateSizeGroupId!]?.name;
     return Supplier(
       id: d.id,
       name: d.name,

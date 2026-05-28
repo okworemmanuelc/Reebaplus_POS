@@ -50,7 +50,7 @@ class CrateReturnApprovalService {
         businessId: pending.businessId,
         customerId: Value(pending.customerId),
         manufacturerId: const Value.absent(),
-        crateGroupId: pending.crateGroupId,
+        crateSizeGroupId: pending.crateSizeGroupId,
         quantityDelta: delta,
         movementType: 'returned',
         referenceReturnId: Value(returnId),
@@ -60,15 +60,15 @@ class CrateReturnApprovalService {
       await db.into(db.crateLedger).insert(ledgerComp);
 
       await db.customStatement(
-        'INSERT INTO customer_crate_balances (id, business_id, customer_id, crate_group_id, balance) '
+        'INSERT INTO customer_crate_balances (id, business_id, customer_id, crate_size_group_id, balance) '
         'VALUES (?, ?, ?, ?, ?) '
-        'ON CONFLICT(business_id, customer_id, crate_group_id) DO UPDATE SET '
+        'ON CONFLICT(business_id, customer_id, crate_size_group_id) DO UPDATE SET '
         'balance = balance + excluded.balance, last_updated_at = CURRENT_TIMESTAMP',
         [
           UuidV7.generate(),
           pending.businessId,
           pending.customerId,
-          pending.crateGroupId,
+          pending.crateSizeGroupId,
           delta
         ],
       );
@@ -89,7 +89,7 @@ class CrateReturnApprovalService {
               ..where((t) =>
                   t.businessId.equals(pending.businessId) &
                   t.customerId.equals(pending.customerId) &
-                  t.crateGroupId.equals(pending.crateGroupId)))
+                  t.crateSizeGroupId.equals(pending.crateSizeGroupId)))
             .getSingle();
         await db.syncDao.enqueueUpsert('customer_crate_balances', balRow);
       }

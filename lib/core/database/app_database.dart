@@ -49,12 +49,15 @@ class Businesses extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-@DataClassName('CrateGroupData')
-class CrateGroups extends Table {
+@DataClassName('CrateSizeGroupData')
+class CrateSizeGroups extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get name => text()();
-  IntColumn get size => integer()(); // 12, 20, 24
+  // Crate size is a category (Big / Medium / Small), not a bottle count.
+  // Column name matches the cloud's existing `crate_size_label` text column.
+  TextColumn get crateSizeLabel =>
+      text().withDefault(const Constant('medium'))();
   IntColumn get emptyCrateStock => integer().withDefault(const Constant(0))();
   IntColumn get depositAmountKobo => integer().withDefault(const Constant(0))();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
@@ -66,7 +69,9 @@ class CrateGroups extends Table {
   Set<Column> get primaryKey => {id};
 
   @override
-  List<String> get customConstraints => ['CHECK (size IN (12,20,24))'];
+  List<String> get customConstraints => [
+    "CHECK (crate_size_label IN ('big','medium','small'))",
+  ];
 }
 
 @DataClassName('ManufacturerData')
@@ -157,8 +162,8 @@ class Suppliers extends Table {
   TextColumn get phone => text().nullable()();
   TextColumn get email => text().nullable()();
   TextColumn get address => text().nullable()();
-  TextColumn get crateGroupId =>
-      text().nullable().references(CrateGroups, #id)();
+  TextColumn get crateSizeGroupId =>
+      text().nullable().references(CrateSizeGroups, #id)();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
@@ -173,8 +178,8 @@ class Products extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get categoryId => text().nullable().references(Categories, #id)();
-  TextColumn get crateGroupId =>
-      text().nullable().references(CrateGroups, #id)();
+  TextColumn get crateSizeGroupId =>
+      text().nullable().references(CrateSizeGroups, #id)();
   TextColumn get supplierId => text().nullable().references(Suppliers, #id)();
   TextColumn get manufacturerId =>
       text().nullable().references(Manufacturers, #id)();
@@ -320,7 +325,7 @@ class CustomerCrateBalances extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get customerId => text().references(Customers, #id)();
-  TextColumn get crateGroupId => text().references(CrateGroups, #id)();
+  TextColumn get crateSizeGroupId => text().references(CrateSizeGroups, #id)();
   IntColumn get balance => integer().withDefault(const Constant(0))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
@@ -331,7 +336,7 @@ class CustomerCrateBalances extends Table {
 
   @override
   List<String> get customConstraints => [
-    'UNIQUE (business_id, customer_id, crate_group_id)',
+    'UNIQUE (business_id, customer_id, crate_size_group_id)',
   ];
 }
 
@@ -339,7 +344,7 @@ class ManufacturerCrateBalances extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get manufacturerId => text().references(Manufacturers, #id)();
-  TextColumn get crateGroupId => text().references(CrateGroups, #id)();
+  TextColumn get crateSizeGroupId => text().references(CrateSizeGroups, #id)();
   IntColumn get balance => integer().withDefault(const Constant(0))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
@@ -350,7 +355,7 @@ class ManufacturerCrateBalances extends Table {
 
   @override
   List<String> get customConstraints => [
-    'UNIQUE (business_id, manufacturer_id, crate_group_id)',
+    'UNIQUE (business_id, manufacturer_id, crate_size_group_id)',
   ];
 }
 
@@ -361,7 +366,7 @@ class CrateLedger extends Table {
   TextColumn get customerId => text().nullable().references(Customers, #id)();
   TextColumn get manufacturerId =>
       text().nullable().references(Manufacturers, #id)();
-  TextColumn get crateGroupId => text().references(CrateGroups, #id)();
+  TextColumn get crateSizeGroupId => text().references(CrateSizeGroups, #id)();
   IntColumn get quantityDelta => integer()();
   TextColumn get movementType => text().withLength(min: 1, max: 32)();
   TextColumn get referenceOrderId =>
@@ -705,7 +710,7 @@ class PendingCrateReturns extends Table {
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get orderId => text().nullable().references(Orders, #id)();
   TextColumn get customerId => text().references(Customers, #id)();
-  TextColumn get crateGroupId => text().references(CrateGroups, #id)();
+  TextColumn get crateSizeGroupId => text().references(CrateSizeGroups, #id)();
   IntColumn get quantity => integer()();
   TextColumn get submittedBy => text().references(Users, #id)();
   DateTimeColumn get submittedAt =>
@@ -1112,7 +1117,7 @@ class MigrationEvents extends Table {
 @DriftDatabase(
   tables: [
     Businesses,
-    CrateGroups,
+    CrateSizeGroups,
     Manufacturers,
     Stores,
     Users,
@@ -1174,7 +1179,7 @@ class MigrationEvents extends Table {
     SessionsDao,
     WalletTransactionsDao,
     CustomerWalletsDao,
-    CrateGroupsDao,
+    CrateSizeGroupsDao,
     CustomerCrateBalancesDao,
     ManufacturerCrateBalancesDao,
     CrateLedgerDao,
@@ -1221,7 +1226,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 15;
+  int get schemaVersion => 16;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1699,8 +1704,8 @@ class AppDatabase extends _$AppDatabase {
         //       product-detail "Last Delivery" card via
         //       ShipmentsDao.getLastShipmentForProduct; dropping it now
         //       would orphan that feature with no replacement.
-        //   (d) crate_groups → crate_size_groups — DEFERRED to its own
-        //       focused session (≈196 refs / 22 files + cloud RPCs).
+        //   (d) crate_groups → crate_size_groups — done in v16 below
+        //       (its own focused session, schema v16 + cloud 0047).
 
         // (a) Rename customers.customer_group → price_tier. SQLite
         //     ≥ 3.25 rewrites the CHECK constraint expression that
@@ -1809,6 +1814,116 @@ class AppDatabase extends _$AppDatabase {
           "  AND json_extract(payload, '\$.purchase_id') IS NOT NULL",
         );
       }
+      if (from < 16) {
+        // v16 (Reebaplus pivot: Crate Size Groups). Mirrors
+        // supabase/migrations/0047_crate_size_groups.sql.
+        //   - crate_groups → crate_size_groups (table + Drift classes)
+        //   - crate_group_id → crate_size_group_id on the 6 FK tables
+        //     (suppliers, products, customer_crate_balances,
+        //     manufacturer_crate_balances, crate_ledger,
+        //     pending_crate_returns)
+        //   - size INT (12/20/24) → crate_size_label TEXT
+        //     (big/medium/small) — the numeric size was display-only and
+        //     fed no crate math; the new column name matches the cloud's
+        //     existing crate_size_label text column so the value syncs.
+
+        // 1. Rename the table. SQLite ≥ 3.25 auto-rewrites the FK *target*
+        //    table-name references on the 6 dependents through this rename.
+        await customStatement(
+          'ALTER TABLE crate_groups RENAME TO crate_size_groups',
+        );
+
+        // 2. Rename the FK *column* on each dependent. RENAME COLUMN
+        //    auto-updates that table's own indexes / triggers / CHECK / FK
+        //    that reference the column (so crate_ledger's immutability
+        //    trigger and idx_crate_ledger_owner_group follow automatically).
+        for (final t in const [
+          'suppliers',
+          'products',
+          'customer_crate_balances',
+          'manufacturer_crate_balances',
+          'crate_ledger',
+          'pending_crate_returns',
+        ]) {
+          await customStatement(
+            'ALTER TABLE $t RENAME COLUMN crate_group_id TO crate_size_group_id',
+          );
+        }
+
+        // 3. Convert size INT → crate_size_label TEXT. SQLite can't change
+        //    a column's type or CHECK in place, so rebuild the (now
+        //    renamed) table from the current Drift schema. The
+        //    columnTransformer derives the text category from the old
+        //    numeric size (12→small, 20→medium, 24→big; any other value,
+        //    incl. NULL, → medium). Rebuilding drops the table's indexes +
+        //    bump trigger, so recreate them under the new table name to
+        //    match onCreate exactly. (FK enforcement is OFF during
+        //    onUpgrade, so the dependents' FKs survive the rebuild.)
+        await m.alterTable(
+          TableMigration(
+            crateSizeGroups,
+            columnTransformer: {
+              crateSizeGroups.crateSizeLabel: const CustomExpression<String>(
+                "CASE size "
+                "WHEN 12 THEN 'small' "
+                "WHEN 20 THEN 'medium' "
+                "WHEN 24 THEN 'big' "
+                "ELSE 'medium' END",
+              ),
+            },
+          ),
+        );
+        await customStatement(
+          'CREATE INDEX idx_crate_size_groups_business_lua ON crate_size_groups (business_id, last_updated_at)',
+        );
+        await customStatement(
+          'CREATE INDEX idx_crate_size_groups_business_deleted ON crate_size_groups (business_id, is_deleted)',
+        );
+        await customStatement(
+          'CREATE TRIGGER bump_crate_size_groups_last_updated_at '
+          'AFTER UPDATE ON crate_size_groups '
+          'FOR EACH ROW '
+          'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+          'BEGIN '
+          "UPDATE crate_size_groups SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+          'END',
+        );
+
+        // 4. Forward pending sync_queue rows: table action types + payload
+        //    keys. Cloud 0047 renames the table, the FK columns, and the
+        //    RPC parameter p_crate_group_id, so pre-v16 queued writes must
+        //    forward their keys or they hard-fail with PostgREST 42703.
+        await customStatement(
+          "UPDATE sync_queue SET action_type = 'crate_size_groups:upsert' "
+          "WHERE action_type = 'crate_groups:upsert' AND status = 'pending'",
+        );
+        await customStatement(
+          "UPDATE sync_queue SET action_type = 'crate_size_groups:delete' "
+          "WHERE action_type = 'crate_groups:delete' AND status = 'pending'",
+        );
+        // Table-upsert envelopes (products, suppliers, the two crate-balance
+        // caches, pending_crate_returns) carry top-level $.crate_group_id.
+        await customStatement(
+          "UPDATE sync_queue "
+          "SET payload = json_remove("
+          "  json_set(payload, '\$.crate_size_group_id', json_extract(payload, '\$.crate_group_id')), "
+          "  '\$.crate_group_id'"
+          ") "
+          "WHERE status = 'pending' "
+          "  AND json_extract(payload, '\$.crate_group_id') IS NOT NULL",
+        );
+        // Domain envelopes (pos_create_product, pos_record_crate_return)
+        // carry top-level $.p_crate_group_id.
+        await customStatement(
+          "UPDATE sync_queue "
+          "SET payload = json_remove("
+          "  json_set(payload, '\$.p_crate_size_group_id', json_extract(payload, '\$.p_crate_group_id')), "
+          "  '\$.p_crate_group_id'"
+          ") "
+          "WHERE status = 'pending' "
+          "  AND json_extract(payload, '\$.p_crate_group_id') IS NOT NULL",
+        );
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -1904,7 +2019,7 @@ const List<String> _syncedTenantTables = [
   'sessions',
   'stores',
   'manufacturers',
-  'crate_groups',
+  'crate_size_groups',
   'categories',
   'suppliers',
   'products',
@@ -2037,7 +2152,7 @@ String _sqlEscape(String s) => s.replaceAll("'", "''");
 const List<String> _softDeletableTables = [
   'stores',
   'manufacturers',
-  'crate_groups',
+  'crate_size_groups',
   'categories',
   'suppliers',
   'products',
@@ -2121,7 +2236,7 @@ const List<_LedgerImmutability> _ledgerTables = [
     'business_id',
     'customer_id',
     'manufacturer_id',
-    'crate_group_id',
+    'crate_size_group_id',
     'quantity_delta',
     'movement_type',
     'reference_order_id',
@@ -2159,7 +2274,7 @@ List<String> get _postCreateStatements {
     'CREATE INDEX idx_price_lists_product ON price_lists (product_id, effective_from)',
     'CREATE INDEX idx_customers_business_phone ON customers (business_id, phone)',
     'CREATE INDEX idx_wallet_txn_business_cust_time ON wallet_transactions (business_id, customer_id, created_at)',
-    'CREATE INDEX idx_crate_ledger_owner_group ON crate_ledger (business_id, customer_id, manufacturer_id, crate_group_id, created_at)',
+    'CREATE INDEX idx_crate_ledger_owner_group ON crate_ledger (business_id, customer_id, manufacturer_id, crate_size_group_id, created_at)',
     'CREATE INDEX idx_inventory_business_ps ON inventory (business_id, product_id, store_id)',
     'CREATE INDEX idx_stock_txn_prod_loc_time ON stock_transactions (product_id, location_id, created_at)',
     'CREATE INDEX idx_orders_business_time ON orders (business_id, created_at)',

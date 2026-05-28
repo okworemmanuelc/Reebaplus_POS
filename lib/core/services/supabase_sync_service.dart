@@ -283,7 +283,7 @@ class SupabaseSyncService {
     'users': 1,
     'stores': 2,
     'manufacturers': 3,
-    'crate_groups': 3,
+    'crate_size_groups': 3,
     'categories': 4,
     'suppliers': 5,
     'products': 10,
@@ -1040,11 +1040,11 @@ class SupabaseSyncService {
         final balance = balanceRow['balance'];
         final lua = balanceRow['last_updated_at'] as String?;
         final parsed = lua != null ? DateTime.tryParse(lua) : null;
-        final crateGroupId = balanceRow['crate_group_id'] as String?;
+        final crateSizeGroupId = balanceRow['crate_size_group_id'] as String?;
         final businessIdStr = balanceRow['business_id'] as String?;
         if (balance is int &&
             parsed != null &&
-            crateGroupId != null &&
+            crateSizeGroupId != null &&
             businessIdStr != null) {
           final customerId = balanceRow['customer_id'] as String?;
           final manufacturerId = balanceRow['manufacturer_id'] as String?;
@@ -1053,7 +1053,7 @@ class SupabaseSyncService {
                   ..where((t) =>
                       t.businessId.equals(businessIdStr) &
                       t.customerId.equals(customerId) &
-                      t.crateGroupId.equals(crateGroupId)))
+                      t.crateSizeGroupId.equals(crateSizeGroupId)))
                 .write(CustomerCrateBalancesCompanion(
               balance: Value(balance),
               lastUpdatedAt: Value(parsed),
@@ -1063,7 +1063,7 @@ class SupabaseSyncService {
                   ..where((t) =>
                       t.businessId.equals(businessIdStr) &
                       t.manufacturerId.equals(manufacturerId) &
-                      t.crateGroupId.equals(crateGroupId)))
+                      t.crateSizeGroupId.equals(crateSizeGroupId)))
                 .write(ManufacturerCrateBalancesCompanion(
               balance: Value(balance),
               lastUpdatedAt: Value(parsed),
@@ -1290,10 +1290,10 @@ class SupabaseSyncService {
   }
 
   /// Tables fed into `_restoreTableData` after a pull, in FK-safe order.
-  /// `crates` removed — cloud schema has only `crate_groups`.
+  /// `crates` removed — cloud schema has only `crate_size_groups`.
   static const _pullOrder = [
     'businesses',
-    'crate_groups',
+    'crate_size_groups',
     'manufacturers',
     'stores',
     'users',
@@ -2405,11 +2405,11 @@ class SupabaseSyncService {
                 .insertOnConflictUpdate(ProductData.fromJson(r));
           }
           break;
-        case 'crate_groups':
+        case 'crate_size_groups':
           for (var r in rows) {
             await _db
-                .into(_db.crateGroups)
-                .insertOnConflictUpdate(CrateGroupData.fromJson(r));
+                .into(_db.crateSizeGroups)
+                .insertOnConflictUpdate(CrateSizeGroupData.fromJson(r));
           }
           break;
         case 'manufacturers':

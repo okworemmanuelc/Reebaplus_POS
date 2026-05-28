@@ -100,6 +100,60 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 
 ---
 
+## Session 5 — 2026-05-28 — Crate Size Groups (schema v16 + cloud 0047)
+
+**Built today:**
+- The deferred crate rename from Step 4 (PIVOT_PLAN decision Q8), as its own focused session. `crate_groups` → `crate_size_groups` everywhere, and the crate "size" stopped being a bottle-count number and became a word category: **Big / Medium / Small**.
+- **Scope change (recorded in PIVOT_PLAN before coding, per CLAUDE.md):** Q8 originally said "rename + relax `size IN (12,20,24)` to `size > 0`". The user revised this to "drop the number, make it a Big/Medium/Small category". The master plan needed no change (it never specifies crate size values). PIVOT_PLAN Q8 updated in three places + the §1.3 block.
+- **Local (Drift v16).** Renamed table `crate_groups`→`crate_size_groups`, classes `CrateGroups`→`CrateSizeGroups` / `CrateGroupData`→`CrateSizeGroupData`, DAO `CrateGroupsDao`→`CrateSizeGroupsDao` (+ result classes). Cascaded `crateGroupId`→`crateSizeGroupId` / `crate_group_id`→`crate_size_group_id` on the 6 FK tables (suppliers, products, customer_crate_balances + its UNIQUE, manufacturer_crate_balances + its UNIQUE, crate_ledger, pending_crate_returns). Converted the `size` IntColumn → `crateSizeLabel` TextColumn (CHECK `IN ('big','medium','small')`, default `'medium'`). Updated `_syncedTenantTables`, `_softDeletableTables`, the crate_ledger immutability list, and `idx_crate_ledger_owner_group`.
+- **v16 migration block** — the codebase's first table-rebuild migration. Renames the table, renames the 6 FK columns, then rebuilds crate_size_groups via `m.alterTable(TableMigration(...))` with a `columnTransformer` mapping `size` → `crate_size_label` (`12→small, 20→medium, 24→big`, else `medium`); recreates the two indexes + bump trigger the rebuild drops. Forwards pending `sync_queue` rows: `crate_groups:*`→`crate_size_groups:*` action types, and `crate_group_id`→`crate_size_group_id` / `p_crate_group_id`→`p_crate_size_group_id` payload keys.
+- **The rename was scoped to the DB FK chain only.** A legacy client-side brand enum `CrateGroup { nbPlc, guinness, cocaCola, premium }` (in `crate_group.dart`) is unrelated to the DB table and was left untouched — verified the rename tokens (`CrateGroups`, `crateGroupId`, `crate_group_id`, …) never collide with the brand tokens (`CrateGroup`, `crateGroup`, `crateGroupName`, `CrateGroupLabel`). Applied via scoped `sed` across lib + test (Session-3 precedent), then hand-fixed the two `.size` display sites and the "Crate Group Assets" label.
+- **UI:** the two `${grp.size} bottles` sites now show the capitalised category (e.g. "Medium"); "Crate Group Assets" → "Crate Size Group Assets".
+- **Cloud `0047_crate_size_groups.sql` (+ rollback)** — written, NOT deployed. Renames table + indexes, renames the 6 FK columns, converts `size int → crate_size_label text` (same CHECK + mapping as local), and rebuilds the 4 affected RPCs from their latest bodies: `pos_pull_snapshot` (array entry), `pos_create_product_v2` (param `p_crate_group_id`→`p_crate_size_group_id`, DROP+recreate), `pos_record_crate_return` (param + columns, DROP+recreate), `pos_approve_crate_return` (column refs, CREATE OR REPLACE).
+
+**IMPORTANT correction made this session (cloud schema reality):**
+- The task brief AND a prior memory note both claimed the cloud `crate_groups` "already had `crate_size_label` text and lacked `size`/`empty_crate_stock`/`deposit_amount_kobo`." **This was false.** Reading the cloud migration history directly: `0001_initial.sql` created crate_groups with `size int CHECK (size IN (12,20,24))` + `empty_crate_stock` + `deposit_amount_kobo`, and **no migration ever altered it** — `crate_size_label` exists nowhere cloud-side. So cloud was identical to local pre-v16, there was **no divergence**, and 0047 must convert `size→crate_size_label` cloud-side too (not just rename). Surfaced this to the user before writing 0047; the user confirmed the cloud crate table has **zero rows** and wants it stored as words. The stale `project_crate_cloud_divergence.md` memory was corrected.
+- Mapping direction (`12→small` vs the 0001 comment's `12=big`): user said "just save as words" (no records to migrate), so kept the brief's `12→small, 20→medium, 24→big` consistently on both sides.
+
+**Files touched:**
+- lib/core/database/app_database.dart (schemaVersion 15→16, v16 migration block, CrateSizeGroups table + crateSizeLabel + CHECK, 6 FK column renames, @DriftDatabase tables/daos lists, _syncedTenantTables, _softDeletableTables, crate_ledger immutability list, idx_crate_ledger_owner_group)
+- lib/core/database/app_database.g.dart, daos.g.dart (regenerated — build_runner, 268 outputs)
+- lib/core/database/daos.dart + ~11 other lib files (sed rename: providers, sync service, sync_diagnostic, supplier_service, inventory_screen, crate_return_modal, receive_delivery_sheet, cart_service, crate_return_approval_service, receipt_widget)
+- lib/features/inventory/screens/inventory_screen.dart (label + category display), lib/features/deliveries/widgets/receive_delivery_sheet.dart (category display)
+- test/ (sed rename across crate-touching tests + hand-fixed `size: 12`→`crateSizeLabel: Value('small')` in 3 local tests and `'size': 12`→`'crate_size_label': 'small'` in 3 cloud integration tests)
+- test/database/crate_size_groups_v16_payload_rewrite_test.dart (new, 8 tests)
+- test/database/crate_size_groups_v16_migration_test.dart (new, 5 tests — target shape + size→label mapping)
+- supabase/migrations/0047_crate_size_groups.sql (new, write-only)
+- supabase/scripts/rollback/0047_rollback.sql (new)
+- PIVOT_PLAN.md (Q8 revision in 3 places + §1.3 block + cloud-reality correction + step-4 deferral marked done)
+- BUILD_LOG.md (this entry)
+
+**Database changes:**
+- Drift v16: `crate_groups`→`crate_size_groups`; `crate_group_id`→`crate_size_group_id` on 6 tables; `size int`→`crate_size_label text` (CHECK big/medium/small, default medium).
+- Cloud 0047 WRITTEN, NOT deployed. 0045+0046 are already deployed (0046 pushed this session), so 0047 only waits on the v16 client shipping — deploy right after.
+
+**Master plan sections covered:**
+- §2 rename (Crate Size Groups). Decision Q8 (revised). No master plan edit needed (never specified crate size values; empty-crate flow in §13.4/§16.10 unaffected — `emptyCrateStock`/`depositAmountKobo` untouched).
+
+**Plan updates made during session:**
+- Q8 revised: numeric `size` dropped in favour of a Big/Medium/Small `crate_size_label`. Recorded in PIVOT_PLAN before coding.
+- Corrected the false "cloud has crate_size_label / lacks the two columns" premise (see the IMPORTANT correction above).
+
+**Tested:**
+- `flutter analyze lib/ test/` — 0 errors (only the 18 pre-existing `avoid_print` infos).
+- `flutter test` — **135 pass** (122 prior + 8 payload-rewrite + 5 migration), 0 failures.
+- Grep checkpoint: zero DB-identifier stragglers in lib (outside the v16 migration block, which intentionally holds the old strings for the ALTERs); the legacy `CrateGroup` brand enum remains intact (1 enum). The only old-token hits are the intentional pre-migration keys inside the two new rewrite/migration tests.
+
+**Known issues / left open:**
+- **Cloud 0047 not deployed.** 0045+0046 are deployed (0046 pushed this session), so 0047 only waits on the v16 client — deploy with/right after it ships. Until then, v16 clients pushing `crate_size_group_id` / `crate_size_groups:*` / `p_crate_size_group_id` to the un-migrated cloud will 42703 and queue (no data loss; the v16 block also forwards pre-v16 queued rows).
+- **NOT verified on the emulator.** The two `.size`→category display sites and the inventory label change were not exercised on a running app this session — recommend a `flutter run` smoke (fresh install + a v15→v16 upgrade) to confirm the inventory crate cards show the category label and nothing crashes.
+- **v15→v16 onUpgrade not driven end-to-end by an automated test.** Consistent with the standing v11→v15 schema-fixture gap (still deferred). The new migration test mirrors the rebuild's `size→label` CASE mapping + asserts the v16 target shape, but the real `TableMigration` rebuild path on a populated v15 DB is covered only by reasoning (FK enforcement OFF during onUpgrade; column set otherwise unchanged). Build the schema-fixture harness before a real-device release — now doubly worth it given v16 is the first table-rebuild migration.
+
+**Next session should:**
+- Deploy cloud 0047 once the v16 client ships (0046 was already deployed this session), then resume PIVOT_PLAN at step 5 (Welcome + CEO Sign Up flow).
+
+---
+
 ## Session 4 — 2026-05-28 — Pivot step 4 (small renames, partial) + cloud 0042–0045 deploy
 
 **Built today:**

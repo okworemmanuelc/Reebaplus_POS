@@ -208,7 +208,7 @@ final pendingCrateReturnsProvider =
 class PendingReturnWithDetails {
   final PendingCrateReturnData returnRow;
   final CustomerData customer;
-  final CrateGroupData crateGroup;
+  final CrateSizeGroupData crateGroup;
   PendingReturnWithDetails({
     required this.returnRow,
     required this.customer,
@@ -222,8 +222,8 @@ final pendingReturnsWithDetailsProvider =
   final query = db.select(db.pendingCrateReturns).join([
     innerJoin(db.customers,
         db.customers.id.equalsExp(db.pendingCrateReturns.customerId)),
-    innerJoin(db.crateGroups,
-        db.crateGroups.id.equalsExp(db.pendingCrateReturns.crateGroupId)),
+    innerJoin(db.crateSizeGroups,
+        db.crateSizeGroups.id.equalsExp(db.pendingCrateReturns.crateSizeGroupId)),
   ])
     ..where(db.pendingCrateReturns.status.equals('pending'));
 
@@ -231,7 +231,7 @@ final pendingReturnsWithDetailsProvider =
       .map((r) => PendingReturnWithDetails(
             returnRow: r.readTable(db.pendingCrateReturns),
             customer: r.readTable(db.customers),
-            crateGroup: r.readTable(db.crateGroups),
+            crateGroup: r.readTable(db.crateSizeGroups),
           ))
       .toList());
 });

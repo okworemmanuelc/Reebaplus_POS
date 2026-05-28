@@ -292,7 +292,7 @@ class ReceiptWidget extends StatelessWidget {
                 for (final item in cart) {
                   final mid = item['manufacturerId'];
                   if (mid is String &&
-                      (item['crateGroupId'] != null ||
+                      (item['crateSizeGroupId'] != null ||
                           ((item['emptyCrateValueKobo'] ?? 0) as num) > 0)) {
                     mfrQty[mid] =
                         (mfrQty[mid] ?? 0) + (item['qty'] as num).toDouble();

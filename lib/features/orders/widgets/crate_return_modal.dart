@@ -105,7 +105,7 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
       final mfId = product.manufacturerId ?? '';
       final mfName = mfrNames[mfId] ??
           (mfId.isEmpty ? 'Unknown Manufacturer' : 'Manufacturer $mfId');
-      final cgId = product.crateGroupId ?? '';
+      final cgId = product.crateSizeGroupId ?? '';
       if (cgId.isEmpty) continue; // Skip if no crate group linked
 
       final qty = ri.item.quantity;
@@ -113,7 +113,7 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
 
       accum.putIfAbsent(
         key,
-        () => _ManufacturerAccum(id: mfId, name: mfName, crateGroupId: cgId),
+        () => _ManufacturerAccum(id: mfId, name: mfName, crateSizeGroupId: cgId),
       );
       accum[key]!.totalQty += qty;
     }
@@ -122,7 +122,7 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
         .map(
           (a) => _ManufacturerRow(
             manufacturerId: a.id,
-            crateGroupId: a.crateGroupId,
+            crateSizeGroupId: a.crateSizeGroupId,
             name: a.name,
             expectedQty: a.totalQty,
             controller: TextEditingController(text: a.totalQty.toString()),
@@ -182,10 +182,10 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
         }
 
         // 2. Record in ledger and update customer cache
-        if (returned > 0 && row.crateGroupId.isNotEmpty) {
+        if (returned > 0 && row.crateSizeGroupId.isNotEmpty) {
           await db.crateLedgerDao.recordCrateReturnByCustomer(
             customerId: customer.id,
-            crateGroupId: row.crateGroupId,
+            crateSizeGroupId: row.crateSizeGroupId,
             quantity: returned,
             performedBy: auth.currentUser?.id ?? '',
             orderId: order.id,
@@ -416,14 +416,14 @@ class _ManufacturerReturnTile extends StatelessWidget {
 
 class _ManufacturerRow {
   final String manufacturerId;
-  final String crateGroupId;
+  final String crateSizeGroupId;
   final String name;
   final int expectedQty;
   final TextEditingController controller;
 
   _ManufacturerRow({
     required this.manufacturerId,
-    required this.crateGroupId,
+    required this.crateSizeGroupId,
     required this.name,
     required this.expectedQty,
     required this.controller,
@@ -433,12 +433,12 @@ class _ManufacturerRow {
 class _ManufacturerAccum {
   final String id;
   final String name;
-  final String crateGroupId;
+  final String crateSizeGroupId;
   int totalQty = 0;
 
   _ManufacturerAccum({
     required this.id,
     required this.name,
-    required this.crateGroupId,
+    required this.crateSizeGroupId,
   });
 }

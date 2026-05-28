@@ -8,11 +8,11 @@ import '../../helpers/dispatch_test_utils.dart';
 
 /// Seeds: staff (FK target for submittedBy/approvedBy), customer,
 /// crate_group, and a pending_crate_returns row with status='pending'.
-Future<({String staffId, String customerId, String crateGroupId, String pendingId, int quantity})>
+Future<({String staffId, String customerId, String crateSizeGroupId, String pendingId, int quantity})>
     _seedApproveFixtures(AppDatabase db, String businessId) async {
   final staffId = UuidV7.generate();
   final customerId = UuidV7.generate();
-  final crateGroupId = UuidV7.generate();
+  final crateSizeGroupId = UuidV7.generate();
   final pendingId = UuidV7.generate();
   const quantity = 5;
 
@@ -31,12 +31,12 @@ Future<({String staffId, String customerId, String crateGroupId, String pendingI
           name: 'Returner Rita',
         ),
       );
-  await db.into(db.crateGroups).insert(
-        CrateGroupsCompanion.insert(
-          id: Value(crateGroupId),
+  await db.into(db.crateSizeGroups).insert(
+        CrateSizeGroupsCompanion.insert(
+          id: Value(crateSizeGroupId),
           businessId: businessId,
           name: 'Crate-A',
-          size: 12,
+          crateSizeLabel: const Value('small'),
         ),
       );
   await db.into(db.pendingCrateReturns).insert(
@@ -44,7 +44,7 @@ Future<({String staffId, String customerId, String crateGroupId, String pendingI
           id: Value(pendingId),
           businessId: businessId,
           customerId: customerId,
-          crateGroupId: crateGroupId,
+          crateSizeGroupId: crateSizeGroupId,
           quantity: quantity,
           submittedBy: staffId,
         ),
@@ -52,7 +52,7 @@ Future<({String staffId, String customerId, String crateGroupId, String pendingI
   return (
     staffId: staffId,
     customerId: customerId,
-    crateGroupId: crateGroupId,
+    crateSizeGroupId: crateSizeGroupId,
     pendingId: pendingId,
     quantity: quantity,
   );

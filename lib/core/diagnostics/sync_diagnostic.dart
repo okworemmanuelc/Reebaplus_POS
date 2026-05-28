@@ -40,7 +40,7 @@ class SyncDiagnostic {
   static const List<String> tables = [
     'stores',
     'manufacturers',
-    'crate_groups',
+    'crate_size_groups',
     'categories',
     'suppliers',
     'products',

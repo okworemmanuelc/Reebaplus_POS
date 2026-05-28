@@ -14,7 +14,7 @@ Future<
       String staffId,
       String customerId,
       String manufacturerId,
-      String crateGroupId,
+      String crateSizeGroupId,
     })> _seedCrateFixtures(
   AppDatabase db,
   String businessId,
@@ -22,7 +22,7 @@ Future<
   final staffId = UuidV7.generate();
   final customerId = UuidV7.generate();
   final manufacturerId = UuidV7.generate();
-  final crateGroupId = UuidV7.generate();
+  final crateSizeGroupId = UuidV7.generate();
 
   await db.into(db.users).insert(
         UsersCompanion.insert(
@@ -46,19 +46,19 @@ Future<
           name: 'Crate Manco',
         ),
       );
-  await db.into(db.crateGroups).insert(
-        CrateGroupsCompanion.insert(
-          id: Value(crateGroupId),
+  await db.into(db.crateSizeGroups).insert(
+        CrateSizeGroupsCompanion.insert(
+          id: Value(crateSizeGroupId),
           businessId: businessId,
           name: '12-pack',
-          size: 12,
+          crateSizeLabel: const Value('small'),
         ),
       );
   return (
     staffId: staffId,
     customerId: customerId,
     manufacturerId: manufacturerId,
-    crateGroupId: crateGroupId,
+    crateSizeGroupId: crateSizeGroupId,
   );
 }
 
@@ -82,7 +82,7 @@ void main() {
 
       await db.crateLedgerDao.recordCrateReturnByCustomer(
         customerId: fx.customerId,
-        crateGroupId: fx.crateGroupId,
+        crateSizeGroupId: fx.crateSizeGroupId,
         quantity: 5,
         performedBy: fx.staffId,
       );
@@ -109,7 +109,7 @@ void main() {
 
       await db.crateLedgerDao.recordCrateReturnByCustomer(
         customerId: fx.customerId,
-        crateGroupId: fx.crateGroupId,
+        crateSizeGroupId: fx.crateSizeGroupId,
         quantity: 3,
         performedBy: fx.staffId,
       );
@@ -131,7 +131,7 @@ void main() {
       expect(payload['p_actor_id'], fx.staffId);
       expect(payload['p_owner_kind'], 'customer');
       expect(payload['p_owner_id'], fx.customerId);
-      expect(payload['p_crate_group_id'], fx.crateGroupId);
+      expect(payload['p_crate_size_group_id'], fx.crateSizeGroupId);
       expect(payload['p_quantity_delta'], -3);
       expect(payload['p_movement_type'], 'returned');
 
@@ -164,7 +164,7 @@ void main() {
 
       await db.crateLedgerDao.recordCrateReturnByCustomer(
         customerId: fx.customerId,
-        crateGroupId: fx.crateGroupId,
+        crateSizeGroupId: fx.crateSizeGroupId,
         quantity: 1,
         performedBy: fx.staffId,
         orderId: orderId,
@@ -184,7 +184,7 @@ void main() {
 
       await db.crateLedgerDao.recordCrateReturnByManufacturer(
         manufacturerId: fx.manufacturerId,
-        crateGroupId: fx.crateGroupId,
+        crateSizeGroupId: fx.crateSizeGroupId,
         quantity: 7,
         performedBy: fx.staffId,
       );
@@ -207,7 +207,7 @@ void main() {
 
       await db.crateLedgerDao.recordCrateReturnByManufacturer(
         manufacturerId: fx.manufacturerId,
-        crateGroupId: fx.crateGroupId,
+        crateSizeGroupId: fx.crateSizeGroupId,
         quantity: 4,
         performedBy: fx.staffId,
       );

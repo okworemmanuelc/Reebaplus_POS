@@ -56,14 +56,14 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   Map<String, int> _fullCratesByMfr = {};
   Map<String, int> _emptyCratesByMfr = {};
   int _totalCrateAssetsSum = 0;
-  List<CrateGroupData> _dbCrateGroups = [];
+  List<CrateSizeGroupData> _dbCrateSizeGroups = [];
 
   bool _isFirstLoad = true;
   StreamSubscription<List<ProductDataWithStock>>? _productsSub;
   StreamSubscription<List<StoreData>>? _storesSub;
   StreamSubscription<List<ManufacturerData>>? _manufacturersSub;
   StreamSubscription<List<CategoryData>>? _categoriesSub;
-  StreamSubscription<List<CrateGroupData>>? _crateGroupsSub;
+  StreamSubscription<List<CrateSizeGroupData>>? _crateSizeGroupsSub;
   StreamSubscription<Map<String, int>>? _bottlesSub;
   StreamSubscription<Map<String, int>>? _emptyCratesSub;
   StreamSubscription<int>? _emptyCratesSumSub;
@@ -77,8 +77,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       Theme.of(context).iconTheme.color!;
   Color get _border => Theme.of(context).dividerColor;
 
-  List<CrateGroupData> get _activeCrateGroups =>
-      _dbCrateGroups.where((cg) => cg.emptyCrateStock > 0).toList();
+  List<CrateSizeGroupData> get _activeCrateSizeGroups =>
+      _dbCrateSizeGroups.where((cg) => cg.emptyCrateStock > 0).toList();
 
   @override
   void initState() {
@@ -142,8 +142,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         },
       );
 
-      _crateGroupsSub = db.inventoryDao.watchAllCrateGroups().listen((data) {
-        if (mounted) setState(() => _dbCrateGroups = data);
+      _crateSizeGroupsSub = db.inventoryDao.watchAllCrateSizeGroups().listen((data) {
+        if (mounted) setState(() => _dbCrateSizeGroups = data);
       });
     });
   }
@@ -154,7 +154,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     _storesSub?.cancel();
     _manufacturersSub?.cancel();
     _categoriesSub?.cancel();
-    _crateGroupsSub?.cancel();
+    _crateSizeGroupsSub?.cancel();
     _bottlesSub?.cancel();
     _emptyCratesSub?.cancel();
     _emptyCratesSumSub?.cancel();
@@ -1030,7 +1030,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
             return _buildManufacturerCard(context, mfr, stat);
           }),
 
-        if (_activeCrateGroups.isNotEmpty) ...[
+        if (_activeCrateSizeGroups.isNotEmpty) ...[
           SizedBox(height: context.getRSize(24)),
           _buildCrateGroupAssets(context),
         ],
@@ -1741,7 +1741,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
             ),
             SizedBox(width: context.getRSize(10)),
             Text(
-              'Crate Group Assets',
+              'Crate Size Group Assets',
               style: TextStyle(
                 fontSize: context.getRFontSize(16),
                 fontWeight: FontWeight.bold,
@@ -1760,9 +1760,9 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
             crossAxisSpacing: context.getRSize(12),
             mainAxisSpacing: context.getRSize(12),
           ),
-          itemCount: _activeCrateGroups.length,
+          itemCount: _activeCrateSizeGroups.length,
           itemBuilder: (context, i) {
-            final grp = _activeCrateGroups[i];
+            final grp = _activeCrateSizeGroups[i];
             return Container(
               padding: EdgeInsets.all(context.getRSize(16)),
               decoration: BoxDecoration(
@@ -1784,7 +1784,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
-                    '${grp.size} bottles',
+                    '${grp.crateSizeLabel[0].toUpperCase()}${grp.crateSizeLabel.substring(1)}',
                     style: TextStyle(
                       fontSize: context.getRFontSize(11),
                       color: _subtext,
@@ -1824,7 +1824,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     );
   }
 
-  void _showUpdateCrateGroupDialog(CrateGroupData grp) {
+  void _showUpdateCrateGroupDialog(CrateSizeGroupData grp) {
     final stockCtrl = TextEditingController(
       text: grp.emptyCrateStock.toString(),
     );

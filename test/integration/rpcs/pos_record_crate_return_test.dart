@@ -13,7 +13,7 @@ import '../../helpers/test_business_fixture.dart';
 ///
 /// Note on cleanup: `crate_ledger` is append-only on the cloud — the
 /// `forbid_delete` trigger raises on any DELETE. Customers, manufacturers,
-/// and crate_groups referenced by ledger rows are also undeleteable
+/// and crate_size_groups referenced by ledger rows are also undeleteable
 /// (FK NO ACTION + the ledger's append-only trigger blocks cascade
 /// nullification). These tests therefore leak a ledger row + their
 /// referenced seed entities per run. Cache balance rows are cleaned in
@@ -35,49 +35,49 @@ void main() {
   // Each test seeds its own customer / manufacturer / crate_group so
   // balance composites are fresh and assertions don't tangle with prior
   // runs' values. We track them only for the cache-balance cleanup.
-  final createdCustomers = <({String customerId, String crateGroupId})>[];
-  final createdManufacturers = <({String manufacturerId, String crateGroupId})>[];
+  final createdCustomers = <({String customerId, String crateSizeGroupId})>[];
+  final createdManufacturers = <({String manufacturerId, String crateSizeGroupId})>[];
 
-  Future<({String customerId, String crateGroupId})>
+  Future<({String customerId, String crateSizeGroupId})>
       seedCustomerAndCrateGroup() async {
     final customerId = UuidV7.generate();
     final walletId = UuidV7.generate();
-    final crateGroupId = UuidV7.generate();
+    final crateSizeGroupId = UuidV7.generate();
     await clients.userClient.rpc('pos_create_customer', params: {
       'p_business_id': clients.env.businessId,
       'p_customer_id': customerId,
       'p_wallet_id': walletId,
       'p_name': 'Crate Test Customer',
     });
-    // crate_groups has no v2 RPC yet — insert via service role.
-    await clients.adminClient.from('crate_groups').insert({
-      'id': crateGroupId,
+    // crate_size_groups has no v2 RPC yet — insert via service role.
+    await clients.adminClient.from('crate_size_groups').insert({
+      'id': crateSizeGroupId,
       'business_id': clients.env.businessId,
       'name': 'Crate Test Pack',
-      'size': 12,
+      'crate_size_label': 'small',
     });
-    createdCustomers.add((customerId: customerId, crateGroupId: crateGroupId));
-    return (customerId: customerId, crateGroupId: crateGroupId);
+    createdCustomers.add((customerId: customerId, crateSizeGroupId: crateSizeGroupId));
+    return (customerId: customerId, crateSizeGroupId: crateSizeGroupId);
   }
 
-  Future<({String manufacturerId, String crateGroupId})>
+  Future<({String manufacturerId, String crateSizeGroupId})>
       seedManufacturerAndCrateGroup() async {
     final manufacturerId = UuidV7.generate();
-    final crateGroupId = UuidV7.generate();
+    final crateSizeGroupId = UuidV7.generate();
     await clients.adminClient.from('manufacturers').insert({
       'id': manufacturerId,
       'business_id': clients.env.businessId,
       'name': 'Crate Test Manco',
     });
-    await clients.adminClient.from('crate_groups').insert({
-      'id': crateGroupId,
+    await clients.adminClient.from('crate_size_groups').insert({
+      'id': crateSizeGroupId,
       'business_id': clients.env.businessId,
       'name': 'Crate Test Pack M',
-      'size': 12,
+      'crate_size_label': 'small',
     });
     createdManufacturers
-        .add((manufacturerId: manufacturerId, crateGroupId: crateGroupId));
-    return (manufacturerId: manufacturerId, crateGroupId: crateGroupId);
+        .add((manufacturerId: manufacturerId, crateSizeGroupId: crateSizeGroupId));
+    return (manufacturerId: manufacturerId, crateSizeGroupId: crateSizeGroupId);
   }
 
   setUpAll(() async {
@@ -91,14 +91,14 @@ void main() {
     for (final c in createdCustomers) {
       await fixture.deleteCustomerCrateBalance(
         customerId: c.customerId,
-        crateGroupId: c.crateGroupId,
+        crateSizeGroupId: c.crateSizeGroupId,
       );
     }
     createdCustomers.clear();
     for (final m in createdManufacturers) {
       await fixture.deleteManufacturerCrateBalance(
         manufacturerId: m.manufacturerId,
-        crateGroupId: m.crateGroupId,
+        crateSizeGroupId: m.crateSizeGroupId,
       );
     }
     createdManufacturers.clear();
@@ -122,7 +122,7 @@ void main() {
           'p_ledger_id': ledgerId,
           'p_owner_kind': 'customer',
           'p_owner_id': s.customerId,
-          'p_crate_group_id': s.crateGroupId,
+          'p_crate_size_group_id': s.crateSizeGroupId,
           'p_quantity_delta': -5, // customer returning 5 reduces our liability
           'p_movement_type': 'returned',
         },
@@ -136,7 +136,7 @@ void main() {
       expect(ledger['id'], ledgerId);
       expect(ledger['customer_id'], s.customerId);
       expect(ledger['manufacturer_id'], isNull);
-      expect(ledger['crate_group_id'], s.crateGroupId);
+      expect(ledger['crate_size_group_id'], s.crateSizeGroupId);
       expect(ledger['quantity_delta'], -5);
       expect(ledger['movement_type'], 'returned');
       expect(ledger['voided_at'], isNull);
@@ -144,7 +144,7 @@ void main() {
       final bal = map['balance_row'] as Map;
       expect(bal['customer_id'], s.customerId);
       expect(bal['manufacturer_id'], isNull);
-      expect(bal['crate_group_id'], s.crateGroupId);
+      expect(bal['crate_size_group_id'], s.crateSizeGroupId);
       expect(bal['balance'], -5,
           reason: 'fresh composite — first delta IS the balance');
 
@@ -159,7 +159,7 @@ void main() {
 
       final cloudBal = await fixture.readCustomerCrateBalance(
         customerId: s.customerId,
-        crateGroupId: s.crateGroupId,
+        crateSizeGroupId: s.crateSizeGroupId,
       );
       expect(cloudBal, -5);
     }, skip: _skipReason);
@@ -177,7 +177,7 @@ void main() {
           'p_ledger_id': ledgerId,
           'p_owner_kind': 'manufacturer',
           'p_owner_id': s.manufacturerId,
-          'p_crate_group_id': s.crateGroupId,
+          'p_crate_size_group_id': s.crateSizeGroupId,
           'p_quantity_delta': 8, // we received 8 empties from the manufacturer
           'p_movement_type': 'returned',
         },
@@ -199,7 +199,7 @@ void main() {
           .from('customer_crate_balances')
           .select('id')
           .eq('business_id', clients.env.businessId)
-          .eq('crate_group_id', s.crateGroupId);
+          .eq('crate_size_group_id', s.crateSizeGroupId);
       expect(customerSideRows, isEmpty);
     }, skip: _skipReason);
 
@@ -214,7 +214,7 @@ void main() {
             'p_ledger_id': ledgerId,
             'p_owner_kind': 'customer',
             'p_owner_id': s.customerId,
-            'p_crate_group_id': s.crateGroupId,
+            'p_crate_size_group_id': s.crateSizeGroupId,
             'p_quantity_delta': -3,
             'p_movement_type': 'returned',
           };
@@ -235,7 +235,7 @@ void main() {
 
       final cloudBal = await fixture.readCustomerCrateBalance(
         customerId: s.customerId,
-        crateGroupId: s.crateGroupId,
+        crateSizeGroupId: s.crateSizeGroupId,
       );
       expect(cloudBal, -3);
 
@@ -260,7 +260,7 @@ void main() {
           'p_ledger_id': ledgerId,
           'p_owner_kind': 'customer',
           'p_owner_id': UuidV7.generate(),
-          'p_crate_group_id': UuidV7.generate(),
+          'p_crate_size_group_id': UuidV7.generate(),
           'p_quantity_delta': -1,
           'p_movement_type': 'returned',
         });
@@ -285,7 +285,7 @@ void main() {
           'p_ledger_id': ledgerId,
           'p_owner_kind': 'driver', // not in {customer, manufacturer}
           'p_owner_id': s.customerId,
-          'p_crate_group_id': s.crateGroupId,
+          'p_crate_size_group_id': s.crateSizeGroupId,
           'p_quantity_delta': -1,
           'p_movement_type': 'returned',
         });
@@ -298,7 +298,7 @@ void main() {
       // Balance row also must not exist (no partial write).
       final cloudBal = await fixture.readCustomerCrateBalance(
         customerId: s.customerId,
-        crateGroupId: s.crateGroupId,
+        crateSizeGroupId: s.crateSizeGroupId,
       );
       expect(cloudBal, isNull,
           reason: 'failed RPC must not have created a balance row');
@@ -318,7 +318,7 @@ void main() {
           'p_ledger_id': ledgerId,
           'p_owner_kind': 'customer',
           'p_owner_id': s.customerId,
-          'p_crate_group_id': s.crateGroupId,
+          'p_crate_size_group_id': s.crateSizeGroupId,
           'p_quantity_delta': -1,
           'p_movement_type': 'lost_to_god', // not in CHECK list
         });

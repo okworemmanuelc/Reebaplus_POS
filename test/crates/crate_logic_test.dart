@@ -13,7 +13,7 @@ void main() {
   const userId = 'user-456';
   const customerId = 'cust-789';
   const manufacturerId = 'mfr-001';
-  const crateGroupId = 'group-crate-12';
+  const crateSizeGroupId = 'group-crate-12';
 
   setUp(() async {
     db = AppDatabase.forTesting(NativeDatabase.memory());
@@ -35,11 +35,11 @@ void main() {
         id: const Value(manufacturerId),
         businessId: businessId,
         name: 'Test Mfr'));
-    await db.into(db.crateGroups).insert(CrateGroupsCompanion.insert(
-        id: const Value(crateGroupId),
+    await db.into(db.crateSizeGroups).insert(CrateSizeGroupsCompanion.insert(
+        id: const Value(crateSizeGroupId),
         businessId: businessId,
         name: '12-Pack',
-        size: 12));
+        crateSizeLabel: const Value('small')));
   });
 
   tearDown(() async {
@@ -54,7 +54,7 @@ void main() {
 
       await db.crateLedgerDao.recordCrateReturnByManufacturer(
         manufacturerId: manufacturerId,
-        crateGroupId: crateGroupId,
+        crateSizeGroupId: crateSizeGroupId,
         quantity: 10,
         performedBy: userId,
       );
@@ -86,7 +86,7 @@ void main() {
         orderId: null,
         customerId: customerId,
         submittedBy: userId,
-        crateGroupId: crateGroupId,
+        crateSizeGroupId: crateSizeGroupId,
         quantity: 5,
       );
 
@@ -116,7 +116,7 @@ void main() {
         orderId: null,
         customerId: customerId,
         submittedBy: userId,
-        crateGroupId: crateGroupId,
+        crateSizeGroupId: crateSizeGroupId,
         quantity: 5,
       );
 
@@ -139,7 +139,7 @@ void main() {
               businessId: businessId,
               customerId: const Value(customerId),
               manufacturerId: const Value(manufacturerId),
-              crateGroupId: crateGroupId,
+              crateSizeGroupId: crateSizeGroupId,
               quantityDelta: 10,
               movementType: 'issued',
             )),
@@ -155,7 +155,7 @@ void main() {
               businessId: businessId,
               customerId: const Value.absent(),
               manufacturerId: const Value.absent(),
-              crateGroupId: crateGroupId,
+              crateSizeGroupId: crateSizeGroupId,
               quantityDelta: 10,
               movementType: 'issued',
             )),

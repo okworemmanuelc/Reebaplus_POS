@@ -116,8 +116,9 @@ All from master plan §2.4 unless noted. All are synced tenant tables and must b
 #### `crate_groups` → `crate_size_groups`
 - File: [app_database.dart:53-70](lib/core/database/app_database.dart#L53-L70).
 - **Rename table** (decision Q8). Rename the Drift class (`CrateGroups` → `CrateSizeGroups`), the data class, the DAO, and every `crateGroupId` foreign key column (in `Suppliers`, `Products`, `CustomerCrateBalances`, `ManufacturerCrateBalances`, `CrateLedger`, `PendingCrateReturns`) → `crateSizeGroupId`.
-- **Relax the size CHECK constraint.** Currently `CHECK (size IN (12,20,24))`. New: `CHECK (size > 0)`.
-- Migration plan: standard `TableMigration` for the rename + constraint relaxation; cascade-rename the FK columns.
+- **Size becomes a category, not a bottle count (decision Q8, revised 2026-05-28).** The numeric `size IN (12,20,24)` is dropped; `size` (int) is replaced by `crate_size_label` (text) with `CHECK (crate_size_label IN ('big','medium','small'))`, default `'medium'`. This supersedes the earlier "relax to `size > 0`" wording. The numeric size was display-only (two sites) and fed no crate math, so the change is safe.
+- **Cloud schema reality (verified 2026-05-28 against the migration history, not the earlier brief):** cloud `crate_groups` was created in `0001_initial.sql` with `size int CHECK (size IN (12,20,24))` PLUS `empty_crate_stock` / `deposit_amount_kobo`, and no migration ever altered it — there is **no** `crate_size_label` column today (the prior "cloud already has crate_size_label" note was wrong). The user confirmed the cloud table currently holds **zero** crate rows. So cloud 0047 converts `size int → crate_size_label text` exactly like the local side, and since `empty_crate_stock` / `deposit_amount_kobo` already exist cloud-side there is **no** local↔cloud divergence to defer.
+- Migration plan: local `TableMigration` rebuild (int→text can't be done in place) mapping `12→small / 20→medium / 24→big` (else `medium`); cascade-rename the FK columns. Cloud 0047 mirrors with the same CHECK and mapping (table empty, so the data UPDATE is a no-op in practice).
 
 ### 1.4 Existing tables that become obsolete
 
@@ -213,7 +214,7 @@ A single pass across the whole codebase. Below are the most-affected files for e
 - The current behaviour of showing Settings to everyone is a bug against master plan §27.3 and CLAUDE.md hard rule #6.
 
 ### Crate Group → Crate Size Group (decision Q8)
-- [app_database.dart:53-70](lib/core/database/app_database.dart#L53-L70) — table + class rename. Relax `size IN (12,20,24)` to `size > 0`.
+- [app_database.dart:53-70](lib/core/database/app_database.dart#L53-L70) — table + class rename. Replace `size` int (`IN (12,20,24)`) with `crate_size_label` text (`IN ('big','medium','small')`, default `'medium'`) — decision Q8 revised 2026-05-28.
 - Cascade the `crate_group_id` FK column rename across `Suppliers`, `Products`, `CustomerCrateBalances`, `ManufacturerCrateBalances`, `CrateLedger`, `PendingCrateReturns`.
 - DAO rename: `CrateGroupsDao` → `CrateSizeGroupsDao`.
 - UI labels in inventory and customer profile.
@@ -549,7 +550,7 @@ Each step = one focused session. Build sessions checkpoint with the user before 
    - **Status (done 2026-05-28, schema v15 + cloud 0046):** Customer Group → Price Tier ✅ (column `customer_group`→`price_tier`, **CHECK tightened to `('retailer','wholesaler')`** per master plan §16/§21 + data migration `distributor`→`wholesaler`/`walk_in`→`retailer`; local v15 rebuilds the customers table to apply the narrowed CHECK on upgrades; enum `CustomerGroup`→`PriceTier`, `pos_create_customer` RPC `p_price_tier`). Purchases → Shipments ✅ (table `purchases`→`shipments`, `Purchases`→`Shipments`/`DeliveryData`→`ShipmentData`, `DeliveriesDao`→`ShipmentsDao`, ledger FK `purchase_id`→`shipment_id` on `stock_transactions`/`payment_transactions`; dead v1 `pos_inventory_delta` dropped). Dashboard → Home ✅ (Option A: user-facing label "Home", class `DashboardScreen`→`HomeScreen`, file `dashboard_screen.dart`→`home_screen.dart`; internal nav route key kept at the original stable `'dashboard'`). Settings → CEO Settings ✅ (label only).
    - **Deferred (decisions recorded here, do not re-attempt without revisiting):**
      - **Drop `purchase_items` (Q5) → deferred to step 25.** It still backs the product-detail "Last Delivery" card via `ShipmentsDao.getLastShipmentForProduct`; dropping it now orphans that feature. Drop it when Track Shipments rebuilds the data model. `purchase_items` keeps its `purchase_id` column meanwhile.
-     - **Crate Groups → Crate Size Groups (Q8) → deferred to its own focused session.** ≈196 client refs / 22 files + multiple cloud RPC rewrites — v14-scale, not a "small" rename.
+     - **Crate Groups → Crate Size Groups (Q8) → done in its own focused session (2026-05-28, schema v16 + cloud 0047).** ≈197 client refs / 12 files. Scope revised: `size` int dropped in favour of `crate_size_label` text (`big`/`medium`/`small`, default `medium`) — see the §1.3 Q8 block above. First migration table rebuild (int→text). Cloud schema verified against migration history: cloud `crate_groups` still had `size int` + `empty_crate_stock`/`deposit_amount_kobo` (no `crate_size_label`), so 0047 converts size→label cloud-side too — no divergence (the earlier "cloud lacks the two columns" note was wrong; user confirmed zero cloud crate rows).
      - **Hide CEO Settings for non-CEO (Q9) → deferred to step 10** ("Sidebar role guards"), which owns the role-resolution infra (none exists yet; only a hardcoded `isCEO=true` placeholder in inventory). Step 4 did the label only.
    - **Checkpoint note:** "zero stragglers" is only partial this session — `purchase_items` / `PurchaseItems` / `crate_group(s)` deliberately remain pending their deferred steps.
 5. **Welcome + restructured CEO Sign Up flow.** Includes seeding the 4 default roles on completion. **Checkpoint:** can sign up a fresh CEO and the 4 roles appear in DB.
@@ -596,7 +597,7 @@ All 10 open questions from the first draft have been answered. Full reasoning is
 - **Q5.** Drop `purchase_items` along with the `purchases` → `shipments` rename.
 - **Q6.** Migrate `activity_logs` to generic `entity_type` / `entity_id` / `before` / `after` shape, with row-by-row copy.
 - **Q7.** Drop "Pro Tips" from the main sidebar. Moves to CEO Settings > Help in Phase 2.
-- **Q8.** Rename `crate_groups` → `crate_size_groups`. Relax `size IN (12,20,24)` to `size > 0`.
+- **Q8.** Rename `crate_groups` → `crate_size_groups`. ~~Relax `size IN (12,20,24)` to `size > 0`.~~ **Revised 2026-05-28:** drop the numeric size entirely; replace `size` int with `crate_size_label` text (`IN ('big','medium','small')`, default `'medium'`). Numeric size was display-only and fed no crate math.
 - **Q9.** Rename "Settings" → "CEO Settings". Hide from non-CEO. Current behaviour of showing Settings to everyone is a bug against master plan §27.3.
 - **Q10.** Keep `barcode_widget` dependency. Add barcode scanning in Inventory and POS for Pharmacy and Supermarket business types only. QR code on receipt still removed (master plan §15.3). New master plan §16.11 added.
 

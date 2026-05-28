@@ -104,9 +104,9 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
         'category': product is ProductData
             ? product.categoryId
             : product['category'],
-        'crateGroupId': product is ProductData
-            ? product.crateGroupId
-            : product['crateGroupId'],
+        'crateSizeGroupId': product is ProductData
+            ? product.crateSizeGroupId
+            : product['crateSizeGroupId'],
         'crateGroupName': product is ProductData
             ? null
             : product['crateGroupName'],

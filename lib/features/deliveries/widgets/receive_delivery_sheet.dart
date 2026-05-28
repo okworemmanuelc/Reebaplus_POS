@@ -39,7 +39,7 @@ class _DeliveryItemLine {
   ProductData? selectedProduct;
   Supplier? selectedSupplier;
   String selectedCategory = 'Other';
-  CrateGroupData? selectedCrateGroup;
+  CrateSizeGroupData? selectedCrateGroup;
   bool trackEmpties = false;
 
   double get lineTotal {
@@ -56,7 +56,7 @@ class _DeliveryItemLine {
 
 class _ReceiveDeliverySheetState extends ConsumerState<ReceiveDeliverySheet> {
   final List<_DeliveryItemLine> _lines = [];
-  List<CrateGroupData> _crateGroups = [];
+  List<CrateSizeGroupData> _crateSizeGroups = [];
   List<ProductData> _allProducts = [];
   List<StoreData> _stores = [];
   StoreData? _selectedStore;
@@ -72,15 +72,15 @@ class _ReceiveDeliverySheetState extends ConsumerState<ReceiveDeliverySheet> {
   void initState() {
     super.initState();
     _addLine(null);
-    _loadCrateGroups();
+    _loadCrateSizeGroups();
     _loadProducts();
     _loadStores();
   }
 
-  Future<void> _loadCrateGroups() async {
+  Future<void> _loadCrateSizeGroups() async {
     final db = ref.read(databaseProvider);
-    final groups = await db.inventoryDao.getAllCrateGroups();
-    if (mounted) setState(() => _crateGroups = groups);
+    final groups = await db.inventoryDao.getAllCrateSizeGroups();
+    if (mounted) setState(() => _crateSizeGroups = groups);
   }
 
   Future<void> _loadProducts() async {
@@ -287,9 +287,9 @@ class _ReceiveDeliverySheetState extends ConsumerState<ReceiveDeliverySheet> {
             // Pre-fill trackEmpties from the product's saved setting.
             line.trackEmpties = selection.trackEmpties;
 
-            if (selection.crateGroupId != null) {
-              final match = _crateGroups
-                  .where((cg) => cg.id == selection.crateGroupId)
+            if (selection.crateSizeGroupId != null) {
+              final match = _crateSizeGroups
+                  .where((cg) => cg.id == selection.crateSizeGroupId)
                   .firstOrNull;
               line.selectedCrateGroup = match;
             } else {
@@ -512,13 +512,15 @@ class _ReceiveDeliverySheetState extends ConsumerState<ReceiveDeliverySheet> {
 
             if (line.selectedCategory == 'Alcoholic') ...[
               const SizedBox(height: 12),
-              AppDropdown<CrateGroupData>(
+              AppDropdown<CrateSizeGroupData>(
                 labelText: 'Crate Company *',
                 value: line.selectedCrateGroup,
-                items: _crateGroups.map((cg) {
+                items: _crateSizeGroups.map((cg) {
                   return DropdownMenuItem(
                     value: cg,
-                    child: Text('${cg.name} (${cg.size} bottles)'),
+                    child: Text(
+                      '${cg.name} (${cg.crateSizeLabel[0].toUpperCase()}${cg.crateSizeLabel.substring(1)})',
+                    ),
                   );
                 }).toList(),
                 onChanged: (v) => setState(() => line.selectedCrateGroup = v),
