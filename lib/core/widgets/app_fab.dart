@@ -26,7 +26,7 @@ class AppFAB extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     
-    // Width should match "Add Warehouse" style (~160-180px responsive)
+    // Width should match "Add Store" style (~160-180px responsive)
     final double defaultWidth = rSize(context, 165);
     
     Widget fab = Container(

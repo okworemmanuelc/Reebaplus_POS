@@ -1,9 +1,9 @@
-class Warehouse {
+class Store {
   final String id;
   final String name;
   final String location;
 
-  Warehouse({
+  Store({
     required this.id,
     required this.name,
     required this.location,

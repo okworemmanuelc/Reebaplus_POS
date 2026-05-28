@@ -5,15 +5,15 @@ import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 
 import '../../helpers/dispatch_test_utils.dart';
 
-/// Seeds: warehouse + staff (so initial-stock paths can resolve FKs).
-Future<({String warehouseId, String staffId})> _seedCreateProductFixtures(
+/// Seeds: store + staff (so initial-stock paths can resolve FKs).
+Future<({String storeId, String staffId})> _seedCreateProductFixtures(
   AppDatabase db,
   String businessId,
 ) async {
-  final warehouseId = UuidV7.generate();
-  await db.into(db.warehouses).insert(
-        WarehousesCompanion.insert(
-          id: Value(warehouseId),
+  final storeId = UuidV7.generate();
+  await db.into(db.stores).insert(
+        StoresCompanion.insert(
+          id: Value(storeId),
           businessId: businessId,
           name: 'Main',
         ),
@@ -27,7 +27,7 @@ Future<({String warehouseId, String staffId})> _seedCreateProductFixtures(
           pin: '0000',
         ),
       );
-  return (warehouseId: warehouseId, staffId: staffId);
+  return (storeId: storeId, staffId: staffId);
 }
 
 void main() {
@@ -82,7 +82,7 @@ void main() {
           sellingPriceKobo: const Value(150000),
         ),
         initialStock: 24,
-        warehouseId: fx.warehouseId,
+        storeId: fx.storeId,
         performedBy: fx.staffId,
       );
 
@@ -118,7 +118,7 @@ void main() {
           trackEmpties: const Value(true),
         ),
         initialStock: 50,
-        warehouseId: fx.warehouseId,
+        storeId: fx.storeId,
         performedBy: fx.staffId,
       );
 
@@ -149,7 +149,7 @@ void main() {
       expect(payload['p_track_empties'], true);
 
       final initialStock = payload['p_initial_stock'] as Map;
-      expect(initialStock['warehouse_id'], fx.warehouseId);
+      expect(initialStock['store_id'], fx.storeId);
       expect(initialStock['quantity'], 50);
       // performed_by must NOT be in p_initial_stock — server uses
       // p_actor_id at the top level. Same shape as batch 8.

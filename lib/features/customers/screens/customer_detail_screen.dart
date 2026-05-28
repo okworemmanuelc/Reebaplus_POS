@@ -389,12 +389,12 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
       };
     }).toList();
 
-    // Resolve branch name from warehouse
+    // Resolve branch name from store
     String? branchName;
-    if (order.warehouseId != null) {
-      final warehouses = await db.select(db.warehouses).get();
-      branchName = warehouses
-          .where((w) => w.id == order.warehouseId)
+    if (order.storeId != null) {
+      final stores = await db.select(db.stores).get();
+      branchName = stores
+          .where((w) => w.id == order.storeId)
           .map((w) => w.name)
           .firstOrNull;
     }

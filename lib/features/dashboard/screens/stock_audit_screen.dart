@@ -27,7 +27,7 @@ class _StockAuditScreenState extends ConsumerState<StockAuditScreen> {
   bool _loading = true;
 
   String _selectedPeriod = 'This Month';
-  String? _selectedWarehouseId;
+  String? _selectedStoreId;
   String? _selectedMovementType;
   String _businessTz = 'UTC';
 
@@ -84,17 +84,17 @@ class _StockAuditScreenState extends ConsumerState<StockAuditScreen> {
 
     _sub = db.stockLedgerDao
         .watchAllTransactionsFiltered(
-          warehouseId: _selectedWarehouseId,
+          storeId: _selectedStoreId,
           startDate: dates.$1,
           endDate: dates.$2,
           movementType: _selectedMovementType,
         )
         .listen((data) async {
-          // Also fetch reconciliation if warehouse is selected
+          // Also fetch reconciliation if store is selected
           PeriodReconciliation? recon;
-          if (_selectedWarehouseId != null && dates.$1 != null) {
+          if (_selectedStoreId != null && dates.$1 != null) {
             recon = await db.stockLedgerDao.getPeriodReconciliation(
-              warehouseId: _selectedWarehouseId!,
+              storeId: _selectedStoreId!,
               startDate: dates.$1!,
               endDate: dates.$2 ?? DateTime.now(),
             );
@@ -190,7 +190,7 @@ class _StockAuditScreenState extends ConsumerState<StockAuditScreen> {
   }
 
   Widget _buildFilters(BuildContext context, ColorScheme colorScheme) {
-    final warehouses = ref.watch(allWarehousesProvider);
+    final stores = ref.watch(allStoresProvider);
 
     return Container(
       padding: EdgeInsets.symmetric(
@@ -228,16 +228,16 @@ class _StockAuditScreenState extends ConsumerState<StockAuditScreen> {
           ),
           SizedBox(width: context.spacingS),
 
-          // Warehouse dropdown
+          // Store dropdown
           Expanded(
-            child: warehouses.when(
+            child: stores.when(
               data: (wList) => AppDropdown<String?>(
-                value: _selectedWarehouseId,
+                value: _selectedStoreId,
                 items: [
                   const DropdownMenuItem<String?>(
                     value: null,
                     child: Text(
-                      'All Warehouses',
+                      'All Stores',
                       style: TextStyle(fontSize: 12),
                     ),
                   ),
@@ -249,7 +249,7 @@ class _StockAuditScreenState extends ConsumerState<StockAuditScreen> {
                   ),
                 ],
                 onChanged: (v) {
-                  _selectedWarehouseId = v;
+                  _selectedStoreId = v;
                   _subscribe();
                 },
               ),

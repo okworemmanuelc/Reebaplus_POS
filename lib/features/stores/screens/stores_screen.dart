@@ -17,17 +17,17 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
-import 'package:reebaplus_pos/features/warehouse/screens/warehouse_details_screen.dart';
-import 'package:reebaplus_pos/features/warehouse/screens/stock_transfer_screen.dart';
+import 'package:reebaplus_pos/features/stores/screens/store_details_screen.dart';
+import 'package:reebaplus_pos/features/stores/screens/stock_transfer_screen.dart';
 
-class WarehouseScreen extends ConsumerStatefulWidget {
-  const WarehouseScreen({super.key});
+class StoresScreen extends ConsumerStatefulWidget {
+  const StoresScreen({super.key});
 
   @override
-  ConsumerState<WarehouseScreen> createState() => _WarehouseScreenState();
+  ConsumerState<StoresScreen> createState() => _StoresScreenState();
 }
 
-class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
+class _StoresScreenState extends ConsumerState<StoresScreen> {
   Color get _bg => Theme.of(context).scaffoldBackgroundColor;
   Color get _surface => Theme.of(context).colorScheme.surface;
   Color get _text => Theme.of(context).colorScheme.onSurface;
@@ -35,25 +35,25 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
       Theme.of(context).textTheme.bodySmall?.color ??
       Theme.of(context).iconTheme.color!;
   Color get _border => Theme.of(context).dividerColor;
-  List<WarehouseData> _warehouses = [];
-  StreamSubscription<List<WarehouseData>>? _warehousesSub;
+  List<StoreData> _stores = [];
+  StreamSubscription<List<StoreData>>? _storesSub;
 
   @override
   void initState() {
     super.initState();
     final db = ref.read(databaseProvider);
-    _warehousesSub = db.select(db.warehouses).watch().listen((data) {
-      if (mounted) setState(() => _warehouses = data);
+    _storesSub = db.select(db.stores).watch().listen((data) {
+      if (mounted) setState(() => _stores = data);
     });
   }
 
   @override
   void dispose() {
-    _warehousesSub?.cancel();
+    _storesSub?.cancel();
     super.dispose();
   }
 
-  // ── Add Warehouse ──────────────────────────────────────────────────────────
+  // ── Add Store ──────────────────────────────────────────────────────────
   void _showAddSheet(BuildContext context) {
     final nameCtrl = TextEditingController();
     final addressCtrl = TextEditingController();
@@ -114,14 +114,14 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Icon(
-                            FontAwesomeIcons.warehouse,
+                            FontAwesomeIcons.store,
                             color: Theme.of(context).colorScheme.primary,
                             size: rSize(ctx, 18),
                           ),
                         ),
                         SizedBox(width: rSize(ctx, 12)),
                         Text(
-                          'New Warehouse',
+                          'New Store',
                           style: TextStyle(
                             fontSize: rFontSize(ctx, 18),
                             fontWeight: FontWeight.bold,
@@ -134,10 +134,10 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
 
                     AppInput(
                       controller: nameCtrl,
-                      labelText: 'Warehouse Name',
+                      labelText: 'Store Name',
                       hintText: 'e.g. Main Store, Annex B',
                       prefixIcon: const Icon(
-                        Icons.warehouse_outlined,
+                        Icons.store_outlined,
                         size: 20,
                       ),
                       validator: (v) => v == null || v.trim().isEmpty
@@ -184,7 +184,7 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
 
                     // Save button
                     AppButton(
-                      text: 'Save Warehouse',
+                      text: 'Save Store',
                       onPressed: saving
                           ? null
                           : () async {
@@ -198,16 +198,16 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
                                 final whBusinessId =
                                     ref.read(authProvider).currentUser?.businessId;
                                 if (whBusinessId == null) return;
-                                final whComp = WarehousesCompanion.insert(
+                                final whComp = StoresCompanion.insert(
                                   id: Value(UuidV7.generate()),
                                   name: nameCtrl.text.trim(),
                                   businessId: whBusinessId,
                                   location: Value(combinedLocation),
                                   lastUpdatedAt: Value(DateTime.now()),
                                 );
-                                await db.into(db.warehouses).insert(whComp);
+                                await db.into(db.stores).insert(whComp);
                                 await db.syncDao
-                                    .enqueueUpsert('warehouses', whComp);
+                                    .enqueueUpsert('stores', whComp);
                                 if (ctx.mounted) Navigator.pop(ctx);
                               } catch (e) {
                                 setSheet(() => saving = false);
@@ -227,12 +227,12 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
     );
   }
 
-  // ── Edit Warehouse ─────────────────────────────────────────────────────────
-  void _showEditSheet(BuildContext context, WarehouseData warehouse) {
-    final nameCtrl = TextEditingController(text: warehouse.name);
+  // ── Edit Store ─────────────────────────────────────────────────────────
+  void _showEditSheet(BuildContext context, StoreData store) {
+    final nameCtrl = TextEditingController(text: store.name);
 
     // Parse location: "Street, City/State, Country"
-    final locParts = (warehouse.location ?? '').split(', ');
+    final locParts = (store.location ?? '').split(', ');
     final addressCtrl = TextEditingController(
       text: locParts.isNotEmpty ? locParts[0] : '',
     );
@@ -302,7 +302,7 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
                         ),
                         SizedBox(width: rSize(ctx, 12)),
                         Text(
-                          'Edit Warehouse',
+                          'Edit Store',
                           style: TextStyle(
                             fontSize: rFontSize(ctx, 18),
                             fontWeight: FontWeight.bold,
@@ -314,10 +314,10 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
                     SizedBox(height: rSize(ctx, 24)),
                     AppInput(
                       controller: nameCtrl,
-                      labelText: 'Warehouse Name',
+                      labelText: 'Store Name',
                       hintText: 'e.g. Main Store',
                       prefixIcon: const Icon(
-                        Icons.warehouse_outlined,
+                        Icons.store_outlined,
                         size: 20,
                       ),
                       validator: (v) => v == null || v.trim().isEmpty
@@ -369,18 +369,18 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
                               final combinedLocation =
                                   '${addressCtrl.text.trim()}, ${cityStateCtrl.text.trim()}, ${countryCtrl.text.trim()}';
 
-                              final whComp = WarehousesCompanion(
-                                id: Value(warehouse.id),
+                              final whComp = StoresCompanion(
+                                id: Value(store.id),
                                 name: Value(nameCtrl.text.trim()),
                                 location: Value(combinedLocation),
                                 lastUpdatedAt: Value(DateTime.now()),
                               );
                               await (db.update(
-                                db.warehouses,
-                              )..where((t) => t.id.equals(warehouse.id)))
+                                db.stores,
+                              )..where((t) => t.id.equals(store.id)))
                                   .write(whComp);
                               await db.syncDao
-                                  .enqueueUpsert('warehouses', whComp);
+                                  .enqueueUpsert('stores', whComp);
                               if (ctx.mounted) Navigator.pop(ctx);
                             },
                     ),
@@ -394,15 +394,15 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
     );
   }
 
-  // ── Delete Warehouse ───────────────────────────────────────────────────────
+  // ── Delete Store ───────────────────────────────────────────────────────
   Future<void> _confirmDelete(
     BuildContext context,
-    WarehouseData warehouse,
+    StoreData store,
   ) async {
     final db = ref.read(databaseProvider);
     final rows = await (db.select(
       db.inventory,
-    )..where((t) => t.warehouseId.equals(warehouse.id))).get();
+    )..where((t) => t.storeId.equals(store.id))).get();
     final stock = rows.fold<int>(0, (sum, r) => sum + r.quantity);
     if (!context.mounted) return;
 
@@ -412,7 +412,7 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
         backgroundColor: _surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(
-          'Delete Warehouse',
+          'Delete Store',
           style: TextStyle(
             color: _text,
             fontWeight: FontWeight.bold,
@@ -424,7 +424,7 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Are you sure you want to delete "${warehouse.name}"?',
+              'Are you sure you want to delete "${store.name}"?',
               style: TextStyle(color: _subtext),
             ),
             if (stock > 0) ...[
@@ -451,7 +451,7 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'This warehouse has $stock units in stock. Deleting it will also remove its inventory records.',
+                        'This store has $stock units in stock. Deleting it will also remove its inventory records.',
                         style: const TextStyle(
                           color: AppColors.warning,
                           fontSize: 12,
@@ -478,21 +478,21 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
             size: AppButtonSize.small,
             onPressed: () async {
               Navigator.pop(ctx);
-              // Soft-delete the warehouse: hard-delete would orphan
+              // Soft-delete the store: hard-delete would orphan
               // inventory and ledger FKs. The cloud-side cascade in 0001
               // is ON DELETE CASCADE for inventory, but realtime DELETE
               // events confuse local listeners. Soft-delete + enqueue is
               // the consistent path with the rest of the codebase.
               final db = ref.read(databaseProvider);
-              final whComp = WarehousesCompanion(
-                id: Value(warehouse.id),
+              final whComp = StoresCompanion(
+                id: Value(store.id),
                 isDeleted: const Value(true),
                 lastUpdatedAt: Value(DateTime.now()),
               );
-              await (db.update(db.warehouses)
-                    ..where((t) => t.id.equals(warehouse.id)))
+              await (db.update(db.stores)
+                    ..where((t) => t.id.equals(store.id)))
                   .write(whComp);
-              await db.syncDao.enqueueUpsert('warehouses', whComp);
+              await db.syncDao.enqueueUpsert('stores', whComp);
             },
           ),
         ],
@@ -504,15 +504,15 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
   @override
   Widget build(BuildContext context) {
     return SharedScaffold(
-      activeRoute: 'warehouse',
+      activeRoute: 'store',
       backgroundColor: _bg,
       appBar: AppBar(
         backgroundColor: _surface,
         elevation: 0,
         leading: const MenuButton(),
         title: const AppBarHeader(
-          icon: FontAwesomeIcons.warehouse,
-          title: 'Warehouses',
+          icon: FontAwesomeIcons.store,
+          title: 'Stores',
           subtitle: 'Manage Storage Locations',
         ),
         actions: [
@@ -533,13 +533,13 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
       floatingActionButton: AppFAB(
         onPressed: () => _showAddSheet(context),
         icon: Icons.add_rounded,
-        label: 'Add Warehouse',
+        label: 'Add Store',
       ),
       body: Builder(
         builder: (context) {
-          final warehouses = _warehouses;
+          final stores = _stores;
 
-          if (warehouses.isEmpty) {
+          if (stores.isEmpty) {
             return _buildEmptyState(context);
           }
 
@@ -550,9 +550,9 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
               rSize(context, 16),
               rSize(context, 100) + context.bottomInset,
             ),
-            itemCount: warehouses.length,
+            itemCount: stores.length,
             itemBuilder: (context, index) =>
-                _buildWarehouseCard(context, warehouses[index]),
+                _buildStoreCard(context, stores[index]),
           );
         },
       ),
@@ -574,7 +574,7 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
               shape: BoxShape.circle,
             ),
             child: Icon(
-              FontAwesomeIcons.warehouse,
+              FontAwesomeIcons.store,
               size: rSize(context, 40),
               color: Theme.of(
                 context,
@@ -583,7 +583,7 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
           ),
           SizedBox(height: rSize(context, 20)),
           Text(
-            'No Warehouses Yet',
+            'No Stores Yet',
             style: TextStyle(
               fontSize: rFontSize(context, 18),
               fontWeight: FontWeight.bold,
@@ -592,7 +592,7 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
           ),
           SizedBox(height: rSize(context, 8)),
           Text(
-            'Tap "Add Warehouse" to create\nyour first storage location.',
+            'Tap "Add Store" to create\nyour first storage location.',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: rFontSize(context, 14),
@@ -605,33 +605,33 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
     );
   }
 
-  // ── Warehouse card ─────────────────────────────────────────────────────────
-  Widget _buildWarehouseCard(BuildContext context, WarehouseData warehouse) {
-    return _WarehouseCard(
-      warehouse: warehouse,
-      onEdit: () => _showEditSheet(context, warehouse),
-      onDelete: () => _confirmDelete(context, warehouse),
+  // ── Store card ─────────────────────────────────────────────────────────
+  Widget _buildStoreCard(BuildContext context, StoreData store) {
+    return _StoreCard(
+      store: store,
+      onEdit: () => _showEditSheet(context, store),
+      onDelete: () => _confirmDelete(context, store),
     );
   }
 }
 
-// ── Reactive warehouse card ────────────────────────────────────────────────────
-class _WarehouseCard extends ConsumerStatefulWidget {
-  final WarehouseData warehouse;
+// ── Reactive store card ────────────────────────────────────────────────────
+class _StoreCard extends ConsumerStatefulWidget {
+  final StoreData store;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
-  const _WarehouseCard({
-    required this.warehouse,
+  const _StoreCard({
+    required this.store,
     required this.onEdit,
     required this.onDelete,
   });
 
   @override
-  ConsumerState<_WarehouseCard> createState() => _WarehouseCardState();
+  ConsumerState<_StoreCard> createState() => _StoreCardState();
 }
 
-class _WarehouseCardState extends ConsumerState<_WarehouseCard> {
+class _StoreCardState extends ConsumerState<_StoreCard> {
   List<ProductDataWithStock> _inventory = [];
 
   StreamSubscription<List<ProductDataWithStock>>? _invSub;
@@ -649,8 +649,8 @@ class _WarehouseCardState extends ConsumerState<_WarehouseCard> {
   void initState() {
     super.initState();
     final db = ref.read(databaseProvider);
-    final id = widget.warehouse.id;
-    _invSub = db.inventoryDao.watchProductDatasWithStockByWarehouse(id).listen((
+    final id = widget.store.id;
+    _invSub = db.inventoryDao.watchProductDatasWithStockByStore(id).listen((
       list,
     ) {
       if (mounted) setState(() => _inventory = list);
@@ -691,7 +691,7 @@ class _WarehouseCardState extends ConsumerState<_WarehouseCard> {
                 context,
                 MaterialPageRoute(
                   builder: (context) =>
-                      WarehouseDetailsScreen(warehouse: widget.warehouse),
+                      StoreDetailsScreen(store: widget.store),
                 ),
               );
             },
@@ -709,7 +709,7 @@ class _WarehouseCardState extends ConsumerState<_WarehouseCard> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
-                      FontAwesomeIcons.warehouse,
+                      FontAwesomeIcons.store,
                       color: Theme.of(context).colorScheme.primary,
                       size: rSize(context, 20),
                     ),
@@ -720,15 +720,15 @@ class _WarehouseCardState extends ConsumerState<_WarehouseCard> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          widget.warehouse.name,
+                          widget.store.name,
                           style: TextStyle(
                             fontSize: rFontSize(context, 16),
                             fontWeight: FontWeight.bold,
                             color: _text,
                           ),
                         ),
-                        if (widget.warehouse.location != null &&
-                            widget.warehouse.location!.isNotEmpty) ...[
+                        if (widget.store.location != null &&
+                            widget.store.location!.isNotEmpty) ...[
                           SizedBox(height: rSize(context, 3)),
                           Row(
                             children: [
@@ -740,7 +740,7 @@ class _WarehouseCardState extends ConsumerState<_WarehouseCard> {
                               SizedBox(width: rSize(context, 4)),
                               Expanded(
                                 child: Text(
-                                  widget.warehouse.location!,
+                                  widget.store.location!,
                                   style: TextStyle(
                                     fontSize: rFontSize(context, 12),
                                     color: _subtext,

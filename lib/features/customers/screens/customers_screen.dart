@@ -26,38 +26,38 @@ class CustomersScreen extends ConsumerStatefulWidget {
 
 class _CustomersScreenState extends ConsumerState<CustomersScreen> {
   bool _isFirstLoad = true;
-  List<WarehouseData> _warehouses = [];
-  // null = "All Warehouses"
-  String? _selectedWarehouseId;
+  List<StoreData> _stores = [];
+  // null = "All Stores"
+  String? _selectedStoreId;
 
   @override
   void initState() {
     super.initState();
-    _loadWarehouses();
+    _loadStores();
   }
 
-  Future<void> _loadWarehouses() async {
+  Future<void> _loadStores() async {
     final db = ref.read(databaseProvider);
-    final ws = await db.select(db.warehouses).get();
+    final ws = await db.select(db.stores).get();
 
     final nav = ref.read(navigationProvider);
-    final oneShot = nav.customersInitialWarehouseId.value;
+    final oneShot = nav.customersInitialStoreId.value;
 
     String? defaultId;
     if (oneShot != null) {
-      // One-shot pre-filter set by another screen (e.g. warehouse details
+      // One-shot pre-filter set by another screen (e.g. store details
       // "Customers" card). Consume immediately so it only applies once.
       defaultId = oneShot;
-      nav.customersInitialWarehouseId.value = null;
+      nav.customersInitialStoreId.value = null;
     } else {
-      // Lone owner: default to the warehouse currently selected on the POS screen
-      defaultId = nav.lockedWarehouseId.value;
+      // Lone owner: default to the store currently selected on the POS screen
+      defaultId = nav.lockedStoreId.value;
     }
 
     if (mounted) {
       setState(() {
-        _warehouses = ws;
-        _selectedWarehouseId = defaultId;
+        _stores = ws;
+        _selectedStoreId = defaultId;
         _isFirstLoad = false;
       });
     }
@@ -80,7 +80,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
           drawer: const AppDrawer(activeRoute: 'customers'),
           body: Column(
             children: [
-              _buildWarehouseFilter(
+              _buildStoreFilter(
                 context,
                 surfaceCol,
                 textCol,
@@ -102,13 +102,13 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
 
                     List<Customer> filtered;
 
-                    if (_selectedWarehouseId == null) {
+                    if (_selectedStoreId == null) {
                       // "All" selected
                       filtered = customers;
                     } else {
-                      // A specific warehouse selected
+                      // A specific store selected
                       filtered = customers
-                          .where((c) => c.warehouseId == _selectedWarehouseId)
+                          .where((c) => c.storeId == _selectedStoreId)
                           .toList();
                     }
 
@@ -161,7 +161,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
         );
   }
 
-  Widget _buildWarehouseFilter(
+  Widget _buildStoreFilter(
     BuildContext context,
     Color surfaceCol,
     Color textCol,
@@ -179,7 +179,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
       child: Row(
         children: [
           Icon(
-            FontAwesomeIcons.warehouse,
+            FontAwesomeIcons.store,
             size: context.getRSize(13),
             color: subtextCol,
           ),
@@ -194,23 +194,23 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
           SizedBox(width: context.getRSize(8)),
           Expanded(
             child: AppDropdown<String?>(
-              value: _selectedWarehouseId,
+              value: _selectedStoreId,
               items: [
                 const DropdownMenuItem<String?>(
                   value: null,
                   child: Text(
-                    'All Warehouses',
+                    'All Stores',
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                ..._warehouses.map(
+                ..._stores.map(
                   (w) => DropdownMenuItem<String?>(
                     value: w.id,
                     child: Text(w.name, overflow: TextOverflow.ellipsis),
                   ),
                 ),
               ],
-              onChanged: (id) => setState(() => _selectedWarehouseId = id),
+              onChanged: (id) => setState(() => _selectedStoreId = id),
             ),
           ),
         ],

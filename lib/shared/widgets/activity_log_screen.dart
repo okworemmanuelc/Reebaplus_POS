@@ -8,7 +8,7 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/models/activity_log.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/features/inventory/data/inventory_data.dart';
-import 'package:reebaplus_pos/features/warehouse/data/models/warehouse.dart';
+import 'package:reebaplus_pos/features/stores/data/models/store.dart';
 import 'package:reebaplus_pos/shared/widgets/app_drawer.dart';
 import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
@@ -21,7 +21,7 @@ class ActivityLogScreen extends ConsumerStatefulWidget {
 }
 
 class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
-  String? _selectedWarehouseId;
+  String? _selectedStoreId;
   final bool _loading = false;
 
   @override
@@ -142,7 +142,7 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
           drawer: const AppDrawer(activeRoute: 'activity_logs'),
           body: Column(
             children: [
-              _buildWarehouseFilter(
+              _buildStoreFilter(
                 context,
                 surfaceCol,
                 textCol,
@@ -188,7 +188,7 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
     );
   }
 
-  Widget _buildWarehouseFilter(
+  Widget _buildStoreFilter(
     BuildContext context,
     Color surfaceCol,
     Color textCol,
@@ -208,29 +208,29 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
         border: Border(bottom: BorderSide(color: borderCol)),
       ),
       child: AppDropdown<String?>(
-        labelText: 'Filter by Warehouse',
-        value: _selectedWarehouseId,
+        labelText: 'Filter by Store',
+        value: _selectedStoreId,
         items: [
           const DropdownMenuItem<String?>(
             value: null,
-            child: Text('All Warehouses'),
+            child: Text('All Stores'),
           ),
-          ...kWarehouses.map((w) {
+          ...kStores.map((w) {
             return DropdownMenuItem<String?>(value: w.id, child: Text(w.name));
           }),
         ],
-        onChanged: (val) => setState(() => _selectedWarehouseId = val),
+        onChanged: (val) => setState(() => _selectedStoreId = val),
       ),
     );
   }
 
   List<ActivityLog> _filterLogs(List<ActivityLog> logs) {
-    // Lone owner sees everything. Only warehouse filter remains.
-    if (_selectedWarehouseId == null) return logs;
+    // Lone owner sees everything. Only store filter remains.
+    if (_selectedStoreId == null) return logs;
 
     return logs.where((log) {
-      final isWarehouseScoped =
-          log.warehouseId != null ||
+      final isStoreScoped =
+          log.storeId != null ||
           log.productId != null ||
           log.deliveryId != null ||
           log.orderId != null ||
@@ -238,8 +238,8 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
           log.action.toLowerCase().contains('stock') ||
           log.action.toLowerCase().contains('delivery');
 
-      if (!isWarehouseScoped) return true;
-      return log.warehouseId == _selectedWarehouseId;
+      if (!isStoreScoped) return true;
+      return log.storeId == _selectedStoreId;
     }).toList();
 
   }
@@ -276,9 +276,9 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
           ),
           SizedBox(height: context.getRSize(8)),
           Text(
-            _selectedWarehouseId == null
+            _selectedStoreId == null
                 ? 'Actions performed in the app will appear here.'
-                : 'No activity found for the selected warehouse.',
+                : 'No activity found for the selected store.',
             style: TextStyle(
               fontSize: context.getRFontSize(14),
               color: subtextCol,
@@ -395,7 +395,7 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
                           color: subtextCol.withValues(alpha: 0.5),
                         ),
                       ),
-                      if (log.warehouseId != null)
+                      if (log.storeId != null)
                         Container(
                           padding: EdgeInsets.symmetric(
                             horizontal: context.getRSize(6),
@@ -406,10 +406,10 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
-                            kWarehouses
+                            kStores
                                 .firstWhere(
-                                  (w) => w.id == log.warehouseId,
-                                  orElse: () => Warehouse(
+                                  (w) => w.id == log.storeId,
+                                  orElse: () => Store(
                                     id: '',
                                     name: 'N/A',
                                     location: '',

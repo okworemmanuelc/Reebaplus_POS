@@ -156,7 +156,7 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
       description: desc,
       paymentMethod: _paymentMethod,
       reference: _refCtrl.text,
-      warehouseId: currentUser.warehouseId,
+      storeId: currentUser.storeId,
       recordedBy: currentUser.id,
     );
 

@@ -47,8 +47,8 @@ void main() {
   late TestClients clients;
   late TestBusinessFixture fixture;
 
-  // One warehouse + product reused across tests; admin-inserted in setUpAll.
-  late String warehouseId;
+  // One store + product reused across tests; admin-inserted in setUpAll.
+  late String storeId;
   late String productId;
 
   // Per-test resources.
@@ -82,7 +82,7 @@ void main() {
       'payment_type': 'cash',
       'status': 'completed',
       'staff_id': clients.env.userId,
-      'warehouse_id': warehouseId,
+      'store_id': storeId,
       'completed_at': DateTime.now().toUtc().toIso8601String(),
     });
 
@@ -90,7 +90,7 @@ void main() {
       'business_id': clients.env.businessId,
       'order_id': orderId,
       'product_id': productId,
-      'warehouse_id': warehouseId,
+      'store_id': storeId,
       'quantity': qty,
       'unit_price_kobo': unitPriceKobo,
       'total_kobo': totalKobo,
@@ -101,7 +101,7 @@ void main() {
       'id': stxId,
       'business_id': clients.env.businessId,
       'product_id': productId,
-      'location_id': warehouseId,
+      'location_id': storeId,
       'quantity_delta': -qty,
       'movement_type': 'sale',
       'order_id': orderId,
@@ -132,12 +132,12 @@ void main() {
     clients = await TestClients.setUp();
     fixture = TestBusinessFixture(clients.adminClient, clients.env.businessId);
 
-    // Reusable warehouse + product (idempotent — leak across runs is fine).
-    warehouseId = UuidV7.generate();
-    await clients.adminClient.from('warehouses').insert({
-      'id': warehouseId,
+    // Reusable store + product (idempotent — leak across runs is fine).
+    storeId = UuidV7.generate();
+    await clients.adminClient.from('stores').insert({
+      'id': storeId,
       'business_id': clients.env.businessId,
-      'name': 'Cancel Test Warehouse',
+      'name': 'Cancel Test Store',
     });
 
     productId = UuidV7.generate();
@@ -154,7 +154,7 @@ void main() {
     await clients.adminClient.from('inventory').insert({
       'business_id': clients.env.businessId,
       'product_id': productId,
-      'warehouse_id': warehouseId,
+      'store_id': storeId,
       'quantity': 1000,
     });
   });

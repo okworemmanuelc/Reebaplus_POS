@@ -25,15 +25,15 @@ class OrderService {
     required int amountPaidKobo,
     required String paymentType,
     String? staffId,
-    String? warehouseId,
+    String? storeId,
     int crateDepositPaidKobo = 0,
     String paymentSubType = 'cash',
   }) async {
     if (staffId == null || staffId.isEmpty) {
       throw ArgumentError('staffId is required');
     }
-    if (warehouseId == null || warehouseId.isEmpty) {
-      throw ArgumentError('warehouseId is required');
+    if (storeId == null || storeId.isEmpty) {
+      throw ArgumentError('storeId is required');
     }
     if (cart.isEmpty) {
       throw ArgumentError('cart is empty');
@@ -61,7 +61,7 @@ class OrderService {
     final items = _buildOrderItems(
       cart: cart,
       orderId: orderId,
-      warehouseId: warehouseId,
+      storeId: storeId,
     );
 
     final orderCompanion = OrdersCompanion.insert(
@@ -75,7 +75,7 @@ class OrderService {
       paymentType: dbPaymentType,
       status: 'completed',
       staffId: Value(staffId),
-      warehouseId: Value(warehouseId),
+      storeId: Value(storeId),
       crateDepositPaidKobo: Value(crateDepositPaidKobo),
       completedAt: Value(DateTime.now().toUtc()),
     );
@@ -87,7 +87,7 @@ class OrderService {
       amountPaidKobo: amountPaidKobo,
       totalAmountKobo: totalAmountKobo,
       staffId: staffId,
-      warehouseId: warehouseId,
+      storeId: storeId,
       walletDebitKobo: walletDebitKobo,
       paymentMethod: _resolvePaymentMethod(paymentSubType),
     );
@@ -147,10 +147,10 @@ class OrderService {
       for (final item in items) {
         final qty = item.quantity.value;
         final productId = item.productId.value;
-        final whId = item.warehouseId.value;
+        final whId = item.storeId.value;
         await _db.customUpdate(
           'UPDATE inventory SET quantity = quantity + ?, last_updated_at = ? '
-          'WHERE business_id = ? AND product_id = ? AND warehouse_id = ?',
+          'WHERE business_id = ? AND product_id = ? AND store_id = ?',
           variables: [
             Variable<int>(qty),
             Variable<DateTime>(DateTime.now()),
@@ -203,7 +203,7 @@ class OrderService {
   List<OrderItemsCompanion> _buildOrderItems({
     required List<Map<String, dynamic>> cart,
     required String orderId,
-    required String warehouseId,
+    required String storeId,
   }) {
     final businessId = _ordersDao.requireBusinessId();
     return cart
@@ -236,7 +236,7 @@ class OrderService {
             businessId: businessId,
             orderId: orderId,
             productId: productId,
-            warehouseId: warehouseId,
+            storeId: storeId,
             quantity: qty,
             unitPriceKobo: unitPriceKobo,
             buyingPriceKobo: Value(buyingPriceKobo),

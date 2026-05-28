@@ -38,7 +38,7 @@ class SyncDiagnostic {
   /// it is filtered by `id`, not `business_id`, and there is exactly one row
   /// per business — the count is uninformative here.
   static const List<String> tables = [
-    'warehouses',
+    'stores',
     'manufacturers',
     'crate_groups',
     'categories',

@@ -19,7 +19,7 @@ part 'daos.g.dart';
 const Object _unset = Object();
 
 @DriftAccessor(
-  tables: [Suppliers, Products, Categories, Warehouses, Manufacturers],
+  tables: [Suppliers, Products, Categories, Stores, Manufacturers],
 )
 class CatalogDao extends DatabaseAccessor<AppDatabase>
     with _$CatalogDaoMixin, BusinessScopedDao<AppDatabase> {
@@ -70,7 +70,7 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
   Future<String> insertProductWithInitialStock(
     ProductsCompanion companion, {
     int? initialStock,
-    String? warehouseId,
+    String? storeId,
     String? performedBy,
   }) async {
     final id = UuidV7.generate();
@@ -83,7 +83,7 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
         await db.systemConfigDao.get('feature.domain_rpcs_v2.create_product');
     final useDomainRpc = flagValue == 'true' || flagValue == '"true"';
     final hasInitialStock =
-        initialStock != null && initialStock > 0 && warehouseId != null;
+        initialStock != null && initialStock > 0 && storeId != null;
 
     await transaction(() async {
       // Product row goes in locally for both paths (UI immediate; the
@@ -98,15 +98,15 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
         // the response is the sole writer of those rows locally.
         if (hasInitialStock) {
           await customInsert(
-            'INSERT INTO inventory (id, business_id, product_id, warehouse_id, quantity) '
+            'INSERT INTO inventory (id, business_id, product_id, store_id, quantity) '
             'VALUES (?, ?, ?, ?, ?) '
-            'ON CONFLICT(business_id, product_id, warehouse_id) DO UPDATE SET '
+            'ON CONFLICT(business_id, product_id, store_id) DO UPDATE SET '
             'quantity = quantity + excluded.quantity',
             variables: [
               Variable(UuidV7.generate()),
               Variable(requireBusinessId()),
               Variable(id),
-              Variable(warehouseId),
+              Variable(storeId),
               Variable(initialStock),
             ],
             updates: {db.inventory},
@@ -157,7 +157,7 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
             'p_image_path': productJson['image_path'],
           if (hasInitialStock)
             'p_initial_stock': <String, dynamic>{
-              'warehouse_id': warehouseId,
+              'store_id': storeId,
               'quantity': initialStock,
             },
         };
@@ -175,7 +175,7 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
           id: Value(adjId),
           businessId: requireBusinessId(),
           productId: id,
-          warehouseId: warehouseId,
+          storeId: storeId,
           quantityDiff: initialStock,
           reason: 'initial_stock',
           performedBy: Value(performedBy),
@@ -189,7 +189,7 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
           id: Value(txId),
           businessId: requireBusinessId(),
           productId: id,
-          locationId: warehouseId,
+          locationId: storeId,
           quantityDelta: initialStock,
           movementType: 'adjustment',
           adjustmentId: Value(adjId),
@@ -200,15 +200,15 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
         await db.syncDao.enqueueUpsert('stock_transactions', txComp);
 
         await customInsert(
-          'INSERT INTO inventory (id, business_id, product_id, warehouse_id, quantity) '
+          'INSERT INTO inventory (id, business_id, product_id, store_id, quantity) '
           'VALUES (?, ?, ?, ?, ?) '
-          'ON CONFLICT(business_id, product_id, warehouse_id) DO UPDATE SET '
+          'ON CONFLICT(business_id, product_id, store_id) DO UPDATE SET '
           'quantity = quantity + excluded.quantity',
           variables: [
             Variable(UuidV7.generate()),
             Variable(requireBusinessId()),
             Variable(id),
-            Variable(warehouseId),
+            Variable(storeId),
             Variable(initialStock),
           ],
           updates: {db.inventory},
@@ -216,7 +216,7 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
         final invRow = await (db.select(db.inventory)
               ..where((t) =>
                   t.productId.equals(id) &
-                  t.warehouseId.equals(warehouseId) &
+                  t.storeId.equals(storeId) &
                   t.businessId.equals(requireBusinessId())))
             .getSingle();
         await db.syncDao.enqueueUpsert('inventory', invRow);
@@ -411,7 +411,7 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
   tables: [
     Products,
     Inventory,
-    Warehouses,
+    Stores,
     CrateGroups,
     Manufacturers,
     Categories,
@@ -475,7 +475,7 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
   }
 
   Future<List<ProductDataWithStock>> getProductsWithStock({
-    String? warehouseId,
+    String? storeId,
   }) async {
     final ps =
         await (select(products)
@@ -483,8 +483,8 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
               ..orderBy([(t) => OrderingTerm(expression: t.name)]))
             .get();
     final invQuery = select(inventory)..where((t) => whereBusiness(t));
-    if (warehouseId != null) {
-      invQuery.where((t) => t.warehouseId.equals(warehouseId));
+    if (storeId != null) {
+      invQuery.where((t) => t.storeId.equals(storeId));
     }
     final invs = await invQuery.get();
     final totals = <String, int>{};
@@ -501,7 +501,7 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
 
   Stream<List<ProductDataWithStock>> _watchProductsWithStock({
     String? categoryId,
-    String? warehouseId,
+    String? storeId,
     bool lowStockOnly = false,
   }) {
     final productsQuery = select(products)
@@ -511,8 +511,8 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
       productsQuery.where((t) => t.categoryId.equals(categoryId));
     }
     final invQuery = select(inventory)..where((t) => whereBusiness(t));
-    if (warehouseId != null) {
-      invQuery.where((t) => t.warehouseId.equals(warehouseId));
+    if (storeId != null) {
+      invQuery.where((t) => t.storeId.equals(storeId));
     }
     return Rx.combineLatest2<
       List<ProductData>,
@@ -542,9 +542,9 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
     String? categoryId,
   ) => _watchProductsWithStock(categoryId: categoryId);
 
-  Stream<List<ProductDataWithStock>> watchProductsByWarehouse(
-    String warehouseId,
-  ) => _watchProductsWithStock(warehouseId: warehouseId);
+  Stream<List<ProductDataWithStock>> watchProductsByStore(
+    String storeId,
+  ) => _watchProductsWithStock(storeId: storeId);
 
   Stream<List<ProductDataWithStock>> watchAllProductDatasWithStock() =>
       _watchProductsWithStock();
@@ -552,23 +552,23 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
   Stream<List<ProductDataWithStock>> watchLowStockProductDatas() =>
       _watchProductsWithStock(lowStockOnly: true);
 
-  Stream<List<ProductDataWithStock>> watchProductDatasWithStockByWarehouse(
-    String warehouseId,
-  ) => _watchProductsWithStock(warehouseId: warehouseId);
+  Stream<List<ProductDataWithStock>> watchProductDatasWithStockByStore(
+    String storeId,
+  ) => _watchProductsWithStock(storeId: storeId);
 
-  // No callers as of PR 4a; empty crates aren't tracked per-warehouse in the
+  // No callers as of PR 4a; empty crates aren't tracked per-store in the
   // current schema (manufacturer- and crate-group-scoped only). Returns 0 so
   // any future caller renders cleanly until PR 4c rewires crate aggregates.
-  Stream<int> watchTotalEmptyCratesByWarehouse(String? warehouseId) =>
+  Stream<int> watchTotalEmptyCratesByStore(String? storeId) =>
       Stream<int>.value(0);
 
-  /// Adjust on-hand inventory by [delta] for ([productId], [warehouseId]).
+  /// Adjust on-hand inventory by [delta] for ([productId], [storeId]).
   /// Append-only: writes a `stock_adjustments` row + a `stock_transactions`
   /// ledger row referencing it, then UPSERTs the inventory cache. Negative
   /// delta is guarded against quantity going negative.
   Future<void> adjustStock(
     String productId,
-    String warehouseId,
+    String storeId,
     int delta,
     String note,
     String? staffId,
@@ -593,15 +593,15 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
       // text and break later reads.
       if (delta >= 0) {
         await customInsert(
-          'INSERT INTO inventory (id, business_id, product_id, warehouse_id, quantity) '
+          'INSERT INTO inventory (id, business_id, product_id, store_id, quantity) '
           'VALUES (?, ?, ?, ?, ?) '
-          'ON CONFLICT(business_id, product_id, warehouse_id) DO UPDATE SET '
+          'ON CONFLICT(business_id, product_id, store_id) DO UPDATE SET '
           'quantity = quantity + excluded.quantity',
           variables: [
             Variable(UuidV7.generate()),
             Variable(requireBusinessId()),
             Variable(productId),
-            Variable(warehouseId),
+            Variable(storeId),
             Variable(delta),
           ],
           updates: {inventory},
@@ -610,13 +610,13 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
         // Decrement with stock guard.
         final rowsAffected = await customUpdate(
           'UPDATE inventory SET quantity = quantity + ? '
-          'WHERE business_id = ? AND product_id = ? AND warehouse_id = ? '
+          'WHERE business_id = ? AND product_id = ? AND store_id = ? '
           'AND quantity >= ?',
           variables: [
             Variable(delta),
             Variable(requireBusinessId()),
             Variable(productId),
-            Variable(warehouseId),
+            Variable(storeId),
             Variable(-delta),
           ],
           updates: {inventory},
@@ -640,7 +640,7 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
             {
               'movement_id': movementId,
               'product_id': productId,
-              'warehouse_id': warehouseId,
+              'store_id': storeId,
               'quantity_delta': delta,
               'movement_type': 'adjustment',
               'reason': note,
@@ -658,7 +658,7 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
         id: Value(adjustmentId),
         businessId: requireBusinessId(),
         productId: productId,
-        warehouseId: warehouseId,
+        storeId: storeId,
         quantityDiff: delta,
         reason: note,
         performedBy: Value(staffId),
@@ -672,7 +672,7 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
         id: Value(txId),
         businessId: requireBusinessId(),
         productId: productId,
-        locationId: warehouseId,
+        locationId: storeId,
         quantityDelta: delta,
         movementType: 'adjustment',
         adjustmentId: Value(adjustmentId),
@@ -686,7 +686,7 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
           await (select(inventory)..where(
                 (t) =>
                     t.productId.equals(productId) &
-                    t.warehouseId.equals(warehouseId) &
+                    t.storeId.equals(storeId) &
                     whereBusiness(t),
               ))
               .getSingle();
@@ -792,31 +792,31 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
         .map((rows) => rows.fold<int>(0, (sum, m) => sum + m.emptyCrateStock));
   }
 
-  Future<List<ProductStockWithWarehouse>> getProductsStockPerWarehouse({
-    String? warehouseId,
+  Future<List<ProductStockWithStore>> getProductsStockPerStore({
+    String? storeId,
   }) async {
     final ps = await (select(
       products,
     )..where((t) => whereBusiness(t) & t.isDeleted.not())).get();
     final whs = await (select(
-      warehouses,
+      stores,
     )..where((t) => whereBusiness(t) & t.isDeleted.not())).get();
     final invQuery = select(inventory)..where((t) => whereBusiness(t));
-    if (warehouseId != null) {
-      invQuery.where((t) => t.warehouseId.equals(warehouseId));
+    if (storeId != null) {
+      invQuery.where((t) => t.storeId.equals(storeId));
     }
     final invs = await invQuery.get();
     final productById = {for (final p in ps) p.id: p};
-    final warehouseById = {for (final w in whs) w.id: w};
-    final out = <ProductStockWithWarehouse>[];
+    final storeById = {for (final w in whs) w.id: w};
+    final out = <ProductStockWithStore>[];
     for (final i in invs) {
       final p = productById[i.productId];
-      final w = warehouseById[i.warehouseId];
+      final w = storeById[i.storeId];
       if (p == null || w == null) continue;
       out.add(
-        ProductStockWithWarehouse(
-          warehouseId: w.id,
-          warehouseName: w.name,
+        ProductStockWithStore(
+          storeId: w.id,
+          storeName: w.name,
           product: p,
           totalStock: i.quantity,
         ),
@@ -833,14 +833,14 @@ class ProductDataWithStock {
   ProductDataWithStock({required this.product, required this.totalStock});
 }
 
-class ProductStockWithWarehouse {
-  final String warehouseId;
-  final String warehouseName;
+class ProductStockWithStore {
+  final String storeId;
+  final String storeName;
   final ProductData product;
   final int totalStock;
-  const ProductStockWithWarehouse({
-    required this.warehouseId,
-    required this.warehouseName,
+  const ProductStockWithStore({
+    required this.storeId,
+    required this.storeName,
     required this.product,
     required this.totalStock,
   });
@@ -906,12 +906,12 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         .watch();
   }
 
-  Stream<List<OrderData>> watchOrdersByWarehouse(String? warehouseId) {
+  Stream<List<OrderData>> watchOrdersByStore(String? storeId) {
     return (select(orders)
           ..where((o) {
             final expr = whereBusiness(o);
-            if (warehouseId != null) {
-              return expr & o.warehouseId.equals(warehouseId);
+            if (storeId != null) {
+              return expr & o.storeId.equals(storeId);
             }
             return expr;
           })
@@ -942,15 +942,15 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
 
   // ── N+1 fix: single joined query + fold ────────────────────────────────────
 
-  Stream<List<OrderWithItems>> watchAllOrdersWithItems({String? warehouseId}) {
+  Stream<List<OrderWithItems>> watchAllOrdersWithItems({String? storeId}) {
     final query = select(orders).join([
       leftOuterJoin(orderItems, orderItems.orderId.equalsExp(orders.id)),
       leftOuterJoin(customers, customers.id.equalsExp(orders.customerId)),
       leftOuterJoin(products, products.id.equalsExp(orderItems.productId)),
     ]);
     query.where(whereBusiness(orders));
-    if (warehouseId != null) {
-      query.where(orders.warehouseId.equals(warehouseId));
+    if (storeId != null) {
+      query.where(orders.storeId.equals(storeId));
     }
     query.orderBy([OrderingTerm.desc(orders.createdAt)]);
 
@@ -1003,7 +1003,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     required int amountPaidKobo,
     required int totalAmountKobo,
     required String staffId,
-    String? warehouseId,
+    String? storeId,
     int walletDebitKobo = 0,
     String paymentMethod = 'cash',
   }) {
@@ -1029,12 +1029,12 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       for (final item in items) {
         final qty = item.quantity.value;
         final productId = item.productId.value;
-        final whId = item.warehouseId.value;
+        final whId = item.storeId.value;
 
         final rowsAffected = await customUpdate(
           'UPDATE inventory SET quantity = quantity - ? '
           'WHERE business_id = ? AND product_id = ? '
-          'AND warehouse_id = ? AND quantity >= ?',
+          'AND store_id = ? AND quantity >= ?',
           variables: [
             Variable(qty),
             Variable(requireBusinessId()),
@@ -1074,18 +1074,18 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
           };
         }).toList();
 
-        // Resolve the sale-level warehouse: explicit arg wins, otherwise
+        // Resolve the sale-level store: explicit arg wins, otherwise
         // fall back to the first item's. The v2 RPC requires a single
-        // warehouse for both the order header and the stock movements.
-        final saleWarehouseId =
-            warehouseId ?? items.first.warehouseId.value;
+        // store for both the order header and the stock movements.
+        final saleStoreId =
+            storeId ?? items.first.storeId.value;
 
         final payload = <String, dynamic>{
           'p_business_id': requireBusinessId(),
           'p_actor_id': staffId,
           'p_order_id': orderId,
           'p_order_number': orderJson['order_number'],
-          'p_warehouse_id': saleWarehouseId,
+          'p_store_id': saleStoreId,
           'p_payment_type': orderJson['payment_type'],
           'p_items': thinItems,
           if (orderJson.containsKey('status'))
@@ -1128,7 +1128,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
           id: Value(txId),
           businessId: requireBusinessId(),
           productId: item.productId.value,
-          locationId: warehouseId ?? item.warehouseId.value,
+          locationId: storeId ?? item.storeId.value,
           quantityDelta: -item.quantity.value,
           movementType: 'sale',
           orderId: Value(orderId),
@@ -1195,12 +1195,12 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       // v1 also enqueues the updated inventory cache so the cloud converges.
       for (final item in items) {
         final productId = item.productId.value;
-        final whId = item.warehouseId.value;
+        final whId = item.storeId.value;
         final invRow =
             await (select(inventory)..where(
                   (t) =>
                       t.productId.equals(productId) &
-                      t.warehouseId.equals(whId) &
+                      t.storeId.equals(whId) &
                       whereBusiness(t),
                 ))
                 .getSingle();
@@ -1299,7 +1299,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         // Restore inventory
         await customUpdate(
           'UPDATE inventory SET quantity = quantity + ? '
-          'WHERE business_id = ? AND product_id = ? AND warehouse_id = ?',
+          'WHERE business_id = ? AND product_id = ? AND store_id = ?',
           variables: [
             Variable(-row.quantityDelta),
             Variable(requireBusinessId()),
@@ -1313,7 +1313,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
             await (select(inventory)..where(
                   (t) =>
                       t.productId.equals(row.productId) &
-                      t.warehouseId.equals(row.locationId) &
+                      t.storeId.equals(row.locationId) &
                       whereBusiness(t),
                 ))
                 .getSingle();
@@ -1646,12 +1646,12 @@ class CustomersDao extends DatabaseAccessor<AppDatabase>
         .watch();
   }
 
-  Stream<List<CustomerData>> watchCustomersByWarehouse(String warehouseId) {
+  Stream<List<CustomerData>> watchCustomersByStore(String storeId) {
     return (select(customers)
           ..where(
             (t) =>
                 whereBusiness(t) &
-                t.warehouseId.equals(warehouseId) &
+                t.storeId.equals(storeId) &
                 t.isDeleted.not(),
           )
           ..orderBy([(t) => OrderingTerm(expression: t.name)]))
@@ -1746,8 +1746,8 @@ class CustomersDao extends DatabaseAccessor<AppDatabase>
             'p_customer_group': custComp.customerGroup.value,
           if (custComp.walletLimitKobo.present)
             'p_wallet_limit_kobo': custComp.walletLimitKobo.value,
-          if (custComp.warehouseId.present)
-            'p_warehouse_id': custComp.warehouseId.value,
+          if (custComp.storeId.present)
+            'p_store_id': custComp.storeId.value,
         };
         await db.syncDao
             .enqueue('domain:pos_create_customer', jsonEncode(payload));
@@ -1880,7 +1880,7 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
     with _$ExpensesDaoMixin, BusinessScopedDao<AppDatabase> {
   ExpensesDao(super.db);
 
-  Stream<List<ExpenseWithCategory>> watchAll({String? warehouseId}) {
+  Stream<List<ExpenseWithCategory>> watchAll({String? storeId}) {
     final query = select(expenses).join([
       leftOuterJoin(
         expenseCategories,
@@ -1889,8 +1889,8 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
     ]);
 
     query.where(whereBusiness(expenses) & expenses.isDeleted.not());
-    if (warehouseId != null) {
-      query.where(expenses.warehouseId.equals(warehouseId));
+    if (storeId != null) {
+      query.where(expenses.storeId.equals(storeId));
     }
     query.orderBy([OrderingTerm.desc(expenses.createdAt)]);
 
@@ -1940,7 +1940,7 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
     required String description,
     String? paymentMethod,
     String? reference,
-    String? warehouseId,
+    String? storeId,
     required String recordedBy,
   }) async {
     final flagValue = await db.systemConfigDao
@@ -1968,7 +1968,7 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
         paymentMethod: Value(paymentMethod),
         recordedBy: Value(recordedBy),
         reference: Value(reference),
-        warehouseId: Value(warehouseId),
+        storeId: Value(storeId),
         lastUpdatedAt: Value(DateTime.now()),
       );
       await into(expenses).insert(expComp);
@@ -1982,7 +1982,7 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
         action: 'expense_created',
         description: 'Recorded expense: $description ($categoryName)',
         expenseId: Value(expenseId),
-        warehouseId: Value(warehouseId),
+        storeId: Value(storeId),
         lastUpdatedAt: Value(DateTime.now()),
       );
       await into(db.activityLogs).insert(activityComp);
@@ -2012,7 +2012,7 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
           'p_category_id': categoryId,
           'p_payment_method': effectivePaymentMethod,
           if (reference != null) 'p_reference': reference,
-          if (warehouseId != null) 'p_warehouse_id': warehouseId,
+          if (storeId != null) 'p_store_id': storeId,
         };
         await db.syncDao
             .enqueue('domain:pos_record_expense', jsonEncode(payload));
@@ -2633,7 +2633,7 @@ class ActivityLogDao extends DatabaseAccessor<AppDatabase>
     required String action,
     required String description,
     String? staffId,
-    String? warehouseId,
+    String? storeId,
     String? orderId,
     String? productId,
     String? customerId,
@@ -2654,7 +2654,7 @@ class ActivityLogDao extends DatabaseAccessor<AppDatabase>
       expenseId: Value(expenseId),
       deliveryId: Value(deliveryId),
       walletTxnId: Value(walletTxnId),
-      warehouseId: Value(warehouseId),
+      storeId: Value(storeId),
       lastUpdatedAt: Value(DateTime.now()),
     );
     await into(activityLogs).insert(row);
@@ -2778,20 +2778,20 @@ class ActivityLogDao extends DatabaseAccessor<AppDatabase>
   }
 }
 
-@DriftAccessor(tables: [Users, Warehouses])
-class WarehousesDao extends DatabaseAccessor<AppDatabase>
-    with _$WarehousesDaoMixin, BusinessScopedDao<AppDatabase> {
-  WarehousesDao(super.db);
+@DriftAccessor(tables: [Users, Stores])
+class StoresDao extends DatabaseAccessor<AppDatabase>
+    with _$StoresDaoMixin, BusinessScopedDao<AppDatabase> {
+  StoresDao(super.db);
 
-  Stream<WarehouseData?> watchWarehouse(String id) {
+  Stream<StoreData?> watchStore(String id) {
     return (select(
-      warehouses,
+      stores,
     )..where((t) => t.id.equals(id) & whereBusiness(t))).watchSingleOrNull();
   }
 
-  Future<WarehouseData?> getWarehouse(String id) {
+  Future<StoreData?> getStore(String id) {
     return (select(
-      warehouses,
+      stores,
     )..where((t) => t.id.equals(id) & whereBusiness(t))).getSingleOrNull();
   }
 
@@ -2937,7 +2937,7 @@ class NotificationsDao extends DatabaseAccessor<AppDatabase>
 }
 
 @DriftAccessor(
-  tables: [StockTransactions, Products, Users, Warehouses, Inventory],
+  tables: [StockTransactions, Products, Users, Stores, Inventory],
 )
 class StockLedgerDao extends DatabaseAccessor<AppDatabase>
     with _$StockLedgerDaoMixin, BusinessScopedDao<AppDatabase> {
@@ -2950,7 +2950,7 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
                 (i) =>
                     whereBusiness(i) &
                     i.productId.equals(productId) &
-                    i.warehouseId.equals(locationId),
+                    i.storeId.equals(locationId),
               )
               ..limit(1))
             .getSingleOrNull();
@@ -2963,7 +2963,7 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
             (i) =>
                 whereBusiness(i) &
                 i.productId.equals(productId) &
-                i.warehouseId.equals(locationId),
+                i.storeId.equals(locationId),
           )
           ..limit(1))
         .watchSingleOrNull()
@@ -2992,10 +2992,10 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
         .watch();
   }
 
-  // ── Filtered queries with joined product/user/warehouse names ──────────
+  // ── Filtered queries with joined product/user/store names ──────────
 
   JoinedSelectStatement<HasResultSet, dynamic> _buildFilteredQuery({
-    String? warehouseId,
+    String? storeId,
     DateTime? startDate,
     DateTime? endDate,
     String? movementType,
@@ -3004,15 +3004,15 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
       innerJoin(products, products.id.equalsExp(stockTransactions.productId)),
       innerJoin(users, users.id.equalsExp(stockTransactions.performedBy)),
       leftOuterJoin(
-        warehouses,
-        warehouses.id.equalsExp(stockTransactions.locationId),
+        stores,
+        stores.id.equalsExp(stockTransactions.locationId),
       ),
     ]);
     query.where(
       whereBusiness(stockTransactions) & stockTransactions.voidedAt.isNull(),
     );
-    if (warehouseId != null) {
-      query.where(stockTransactions.locationId.equals(warehouseId));
+    if (storeId != null) {
+      query.where(stockTransactions.locationId.equals(storeId));
     }
     if (startDate != null) {
       query.where(stockTransactions.createdAt.isBiggerOrEqualValue(startDate));
@@ -3031,7 +3031,7 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
     final s = row.readTable(stockTransactions);
     final p = row.readTable(products);
     final u = row.readTable(users);
-    final w = row.readTableOrNull(warehouses);
+    final w = row.readTableOrNull(stores);
     return StockTransactionWithDetails(
       transactionId: s.id,
       productId: s.productId,
@@ -3040,7 +3040,7 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
       quantityDelta: s.quantityDelta,
       performedByName: u.name,
       locationId: s.locationId,
-      warehouseName: w?.name,
+      storeName: w?.name,
       referenceId: s.orderId ?? s.transferId ?? s.adjustmentId ?? s.purchaseId,
       createdAt: s.createdAt,
       unitPriceKobo: p.sellingPriceKobo > 0
@@ -3050,13 +3050,13 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
   }
 
   Stream<List<StockTransactionWithDetails>> watchAllTransactionsFiltered({
-    String? warehouseId,
+    String? storeId,
     DateTime? startDate,
     DateTime? endDate,
     String? movementType,
   }) {
     return _buildFilteredQuery(
-      warehouseId: warehouseId,
+      storeId: storeId,
       startDate: startDate,
       endDate: endDate,
       movementType: movementType,
@@ -3064,13 +3064,13 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
   }
 
   Future<List<StockTransactionWithDetails>> getTransactionsFiltered({
-    String? warehouseId,
+    String? storeId,
     DateTime? startDate,
     DateTime? endDate,
     String? movementType,
   }) async {
     final rows = await _buildFilteredQuery(
-      warehouseId: warehouseId,
+      storeId: storeId,
       startDate: startDate,
       endDate: endDate,
       movementType: movementType,
@@ -3079,12 +3079,12 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
   }
 
   Future<PeriodStockSummary> getPeriodSummary({
-    String? warehouseId,
+    String? storeId,
     DateTime? startDate,
     DateTime? endDate,
   }) async {
     final txns = await getTransactionsFiltered(
-      warehouseId: warehouseId,
+      storeId: storeId,
       startDate: startDate,
       endDate: endDate,
     );
@@ -3108,7 +3108,7 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
 
   Future<List<StockTransactionWithBalance>> getRunningBalanceForProduct(
     String productId, {
-    String? warehouseId,
+    String? storeId,
   }) async {
     final query = select(stockTransactions)
       ..where(
@@ -3118,8 +3118,8 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
             s.voidedAt.isNull(),
       )
       ..orderBy([(s) => OrderingTerm.asc(s.createdAt)]);
-    if (warehouseId != null) {
-      query.where((s) => s.locationId.equals(warehouseId));
+    if (storeId != null) {
+      query.where((s) => s.locationId.equals(storeId));
     }
     final txns = await query.get();
     int balance = 0;
@@ -3140,17 +3140,17 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
   }
 
   Future<PeriodReconciliation> getPeriodReconciliation({
-    required String warehouseId,
+    required String storeId,
     required DateTime startDate,
     required DateTime endDate,
   }) async {
-    // Get all transactions for this warehouse, sorted by time
+    // Get all transactions for this store, sorted by time
     final allTxns =
         await (select(stockTransactions)
               ..where(
                 (s) =>
                     whereBusiness(s) &
-                    s.locationId.equals(warehouseId) &
+                    s.locationId.equals(storeId) &
                     s.voidedAt.isNull(),
               )
               ..orderBy([(s) => OrderingTerm.asc(s.createdAt)]))
@@ -3177,7 +3177,7 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
     // Get current actual stock from inventory table
     final invRows =
         await (select(inventory)..where(
-              (i) => whereBusiness(i) & i.warehouseId.equals(warehouseId),
+              (i) => whereBusiness(i) & i.storeId.equals(storeId),
             ))
             .get();
     final actualClosing = invRows.fold<int>(0, (s, r) => s + r.quantity);
@@ -3198,7 +3198,7 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
     )..where((p) => whereBusiness(p) & p.isDeleted.not())).get();
     final invs = await (select(
       inventory,
-    )..where((i) => whereBusiness(i) & i.warehouseId.equals(locationId))).get();
+    )..where((i) => whereBusiness(i) & i.storeId.equals(locationId))).get();
     final stockMap = <String, int>{};
     for (final i in invs) {
       stockMap[i.productId] = (stockMap[i.productId] ?? 0) + i.quantity;
@@ -3245,7 +3245,7 @@ class StockTransactionWithDetails {
   final int quantityDelta;
   final String performedByName;
   final String locationId;
-  final String? warehouseName;
+  final String? storeName;
   final String? referenceId;
   final DateTime createdAt;
   final int unitPriceKobo;
@@ -3258,7 +3258,7 @@ class StockTransactionWithDetails {
     required this.quantityDelta,
     required this.performedByName,
     required this.locationId,
-    this.warehouseName,
+    this.storeName,
     this.referenceId,
     required this.createdAt,
     required this.unitPriceKobo,
@@ -4058,5 +4058,312 @@ class SystemConfigDao extends DatabaseAccessor<AppDatabase>
       'ON CONFLICT("key") DO UPDATE SET value = excluded.value, last_updated_at = (strftime(\'%s\', \'now\'))',
       [key, value],
     );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Master plan §2.4 — roles, permissions, membership (schema v13)
+// ---------------------------------------------------------------------------
+
+/// Read-only access to the global `permissions` table. Rows are seeded
+/// by migration on both the client and the cloud; nothing writes to
+/// this table at runtime, so no enqueue path.
+@DriftAccessor(tables: [Permissions])
+class PermissionsDao extends DatabaseAccessor<AppDatabase>
+    with _$PermissionsDaoMixin {
+  PermissionsDao(super.db);
+
+  Future<List<PermissionData>> getAll() {
+    return (select(permissions)
+          ..orderBy([
+            (t) => OrderingTerm.asc(t.category),
+            (t) => OrderingTerm.asc(t.key),
+          ]))
+        .get();
+  }
+
+  Stream<List<PermissionData>> watchAll() {
+    return (select(permissions)
+          ..orderBy([
+            (t) => OrderingTerm.asc(t.category),
+            (t) => OrderingTerm.asc(t.key),
+          ]))
+        .watch();
+  }
+
+  Future<PermissionData?> getByKey(String key) {
+    return (select(permissions)..where((t) => t.key.equals(key)))
+        .getSingleOrNull();
+  }
+}
+
+@DriftAccessor(tables: [Roles])
+class RolesDao extends DatabaseAccessor<AppDatabase>
+    with _$RolesDaoMixin, BusinessScopedDao<AppDatabase> {
+  RolesDao(super.db);
+
+  /// All non-deleted roles for the current business, ordered for
+  /// display: system defaults first (CEO → Manager → Cashier →
+  /// Stock keeper), then any Phase 2 custom roles.
+  Stream<List<RoleData>> watchAll() {
+    return (select(roles)
+          ..where((t) => whereBusiness(t) & t.isDeleted.not())
+          ..orderBy([
+            (t) => OrderingTerm.desc(t.isSystemDefault),
+            (t) => OrderingTerm.asc(t.name),
+          ]))
+        .watch();
+  }
+
+  Future<List<RoleData>> getAll() {
+    return (select(roles)
+          ..where((t) => whereBusiness(t) & t.isDeleted.not())
+          ..orderBy([
+            (t) => OrderingTerm.desc(t.isSystemDefault),
+            (t) => OrderingTerm.asc(t.name),
+          ]))
+        .get();
+  }
+
+  /// Lookup by slug — the stable machine identifier (`ceo`, `manager`,
+  /// `cashier`, `stock_keeper`). Code that branches on role identity
+  /// uses this, not `name`.
+  Future<RoleData?> getBySlug(String slug) {
+    return (select(roles)
+          ..where((t) => whereBusiness(t) & t.slug.equals(slug))
+          ..limit(1))
+        .getSingleOrNull();
+  }
+
+  /// Insert a role. Used by tests and (future) Phase 2 custom-role UI.
+  /// The four system defaults are seeded server-side by
+  /// `complete_onboarding` and arrive locally via sync pull.
+  Future<void> insertRole(RolesCompanion row) async {
+    await into(roles).insert(row);
+    await db.syncDao.enqueueUpsert('roles', row);
+  }
+}
+
+@DriftAccessor(tables: [RolePermissions])
+class RolePermissionsDao extends DatabaseAccessor<AppDatabase>
+    with _$RolePermissionsDaoMixin, BusinessScopedDao<AppDatabase> {
+  RolePermissionsDao(super.db);
+
+  Stream<List<RolePermissionData>> watchForRole(String roleId) {
+    return (select(rolePermissions)
+          ..where((t) => whereBusiness(t) & t.roleId.equals(roleId))
+          ..orderBy([(t) => OrderingTerm.asc(t.permissionKey)]))
+        .watch();
+  }
+
+  Future<List<RolePermissionData>> getForRole(String roleId) {
+    return (select(rolePermissions)
+          ..where((t) => whereBusiness(t) & t.roleId.equals(roleId))
+          ..orderBy([(t) => OrderingTerm.asc(t.permissionKey)]))
+        .get();
+  }
+
+  /// Count of granted permissions for a role. Used by the verification
+  /// test and by CEO Settings to show "N of M permissions granted".
+  Future<int> countForRole(String roleId) async {
+    final row =
+        await (selectOnly(rolePermissions)
+              ..addColumns([rolePermissions.id.count()])
+              ..where(
+                  whereBusiness(rolePermissions) &
+                      rolePermissions.roleId.equals(roleId)))
+            .getSingle();
+    return row.read(rolePermissions.id.count()) ?? 0;
+  }
+
+  /// Grant a permission to a role. UNIQUE (role_id, permission_key)
+  /// guards against duplicates.
+  Future<void> grant(String roleId, String permissionKey) async {
+    final row = RolePermissionsCompanion.insert(
+      id: Value(UuidV7.generate()),
+      businessId: requireBusinessId(),
+      roleId: roleId,
+      permissionKey: permissionKey,
+      lastUpdatedAt: Value(DateTime.now()),
+    );
+    await into(rolePermissions).insert(row);
+    await db.syncDao.enqueueUpsert('role_permissions', row);
+  }
+
+  /// Revoke a permission. Deletes the row and enqueues the
+  /// tombstone — `role_permissions` is not an append-only ledger, so
+  /// hard-delete via `enqueueDelete` is the right path here.
+  Future<void> revoke(String roleId, String permissionKey) async {
+    final existing = await (select(rolePermissions)
+          ..where((t) =>
+              whereBusiness(t) &
+              t.roleId.equals(roleId) &
+              t.permissionKey.equals(permissionKey))
+          ..limit(1))
+        .getSingleOrNull();
+    if (existing == null) return;
+    await (delete(rolePermissions)..where((t) => t.id.equals(existing.id)))
+        .go();
+    await db.syncDao.enqueueDelete('role_permissions', existing.id);
+  }
+}
+
+@DriftAccessor(tables: [RoleSettings])
+class RoleSettingsDao extends DatabaseAccessor<AppDatabase>
+    with _$RoleSettingsDaoMixin, BusinessScopedDao<AppDatabase> {
+  RoleSettingsDao(super.db);
+
+  Stream<List<RoleSettingData>> watchForRole(String roleId) {
+    return (select(roleSettings)
+          ..where((t) => whereBusiness(t) & t.roleId.equals(roleId))
+          ..orderBy([(t) => OrderingTerm.asc(t.settingKey)]))
+        .watch();
+  }
+
+  Future<List<RoleSettingData>> getForRole(String roleId) {
+    return (select(roleSettings)
+          ..where((t) => whereBusiness(t) & t.roleId.equals(roleId))
+          ..orderBy([(t) => OrderingTerm.asc(t.settingKey)]))
+        .get();
+  }
+
+  Future<String?> getValue(String roleId, String settingKey) async {
+    final row = await (select(roleSettings)
+          ..where((t) =>
+              whereBusiness(t) &
+              t.roleId.equals(roleId) &
+              t.settingKey.equals(settingKey))
+          ..limit(1))
+        .getSingleOrNull();
+    return row?.settingValue;
+  }
+
+  /// Set a setting value. Upserts on (role_id, setting_key).
+  Future<void> set(String roleId, String settingKey, String? value) async {
+    final existing = await (select(roleSettings)
+          ..where((t) =>
+              whereBusiness(t) &
+              t.roleId.equals(roleId) &
+              t.settingKey.equals(settingKey))
+          ..limit(1))
+        .getSingleOrNull();
+    if (existing != null) {
+      final comp = RoleSettingsCompanion(
+        id: Value(existing.id),
+        settingValue: Value(value),
+        lastUpdatedAt: Value(DateTime.now()),
+      );
+      await (update(roleSettings)..where((t) => t.id.equals(existing.id)))
+          .write(comp);
+      // Refresh full row for enqueue (payload carries businessId etc.)
+      final refreshed = await (select(roleSettings)
+            ..where((t) => t.id.equals(existing.id)))
+          .getSingle();
+      await db.syncDao.enqueueUpsert('role_settings', refreshed);
+    } else {
+      final comp = RoleSettingsCompanion.insert(
+        id: Value(UuidV7.generate()),
+        businessId: requireBusinessId(),
+        roleId: roleId,
+        settingKey: settingKey,
+        settingValue: Value(value),
+        lastUpdatedAt: Value(DateTime.now()),
+      );
+      await into(roleSettings).insert(comp);
+      await db.syncDao.enqueueUpsert('role_settings', comp);
+    }
+  }
+}
+
+@DriftAccessor(tables: [UserBusinesses])
+class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
+    with _$UserBusinessesDaoMixin, BusinessScopedDao<AppDatabase> {
+  UserBusinessesDao(super.db);
+
+  /// All active memberships for the current business. Drives the
+  /// Staff Management list and the Who Is Working picker.
+  Stream<List<UserBusinessData>> watchForCurrentBusiness() {
+    return (select(userBusinesses)
+          ..where((t) => whereBusiness(t))
+          ..orderBy([(t) => OrderingTerm.asc(t.status)]))
+        .watch();
+  }
+
+  /// All memberships for a specific user — Phase 1 always returns
+  /// at most one row, but the query supports the Phase 2 multi-
+  /// business model without a schema change.
+  Future<List<UserBusinessData>> getForUser(String userId) {
+    return (select(userBusinesses)..where((t) => t.userId.equals(userId)))
+        .get();
+  }
+
+  Future<UserBusinessData?> getForUserInBusiness(
+    String userId,
+    String businessId,
+  ) {
+    return (select(userBusinesses)
+          ..where((t) =>
+              t.userId.equals(userId) & t.businessId.equals(businessId))
+          ..limit(1))
+        .getSingleOrNull();
+  }
+
+  Future<void> insertMembership(UserBusinessesCompanion row) async {
+    await into(userBusinesses).insert(row);
+    await db.syncDao.enqueueUpsert('user_businesses', row);
+  }
+}
+
+@DriftAccessor(tables: [InviteCodes])
+class InviteCodesDao extends DatabaseAccessor<AppDatabase>
+    with _$InviteCodesDaoMixin, BusinessScopedDao<AppDatabase> {
+  InviteCodesDao(super.db);
+
+  /// Active invite codes (not yet used, not revoked, not soft-
+  /// deleted, not expired). Drives the Invites tab.
+  Stream<List<InviteCodeData>> watchActive() {
+    final now = DateTime.now();
+    return (select(inviteCodes)
+          ..where((t) =>
+              whereBusiness(t) &
+              t.isDeleted.not() &
+              t.usedAt.isNull() &
+              t.revokedAt.isNull() &
+              t.expiresAt.isBiggerThanValue(now))
+          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+        .watch();
+  }
+
+  Future<InviteCodeData?> getByCode(String code) {
+    return (select(inviteCodes)
+          ..where((t) => t.code.equals(code))
+          ..limit(1))
+        .getSingleOrNull();
+  }
+
+  Future<void> insertInvite(InviteCodesCompanion row) async {
+    await into(inviteCodes).insert(row);
+    await db.syncDao.enqueueUpsert('invite_codes', row);
+  }
+}
+
+@DriftAccessor(tables: [UserStores])
+class UserStoresDao extends DatabaseAccessor<AppDatabase>
+    with _$UserStoresDaoMixin, BusinessScopedDao<AppDatabase> {
+  UserStoresDao(super.db);
+
+  Stream<List<UserStoreData>> watchForUser(String userId) {
+    return (select(userStores)..where((t) => t.userId.equals(userId))).watch();
+  }
+
+  Future<List<UserStoreData>> getForUser(String userId) {
+    return (select(userStores)..where((t) => t.userId.equals(userId))).get();
+  }
+
+  /// Assign a user to a store. UNIQUE (user_id, store_id) guards
+  /// against duplicates.
+  Future<void> assign(UserStoresCompanion row) async {
+    await into(userStores).insert(row);
+    await db.syncDao.enqueueUpsert('user_stores', row);
   }
 }

@@ -58,8 +58,8 @@ class _ReceiveDeliverySheetState extends ConsumerState<ReceiveDeliverySheet> {
   final List<_DeliveryItemLine> _lines = [];
   List<CrateGroupData> _crateGroups = [];
   List<ProductData> _allProducts = [];
-  List<WarehouseData> _warehouses = [];
-  WarehouseData? _selectedWarehouse;
+  List<StoreData> _stores = [];
+  StoreData? _selectedStore;
   Color get _surface => Theme.of(context).colorScheme.surface;
   Color get _text => Theme.of(context).colorScheme.onSurface;
   Color get _subtext =>
@@ -74,7 +74,7 @@ class _ReceiveDeliverySheetState extends ConsumerState<ReceiveDeliverySheet> {
     _addLine(null);
     _loadCrateGroups();
     _loadProducts();
-    _loadWarehouses();
+    _loadStores();
   }
 
   Future<void> _loadCrateGroups() async {
@@ -89,13 +89,13 @@ class _ReceiveDeliverySheetState extends ConsumerState<ReceiveDeliverySheet> {
     if (mounted) setState(() => _allProducts = products);
   }
 
-  Future<void> _loadWarehouses() async {
+  Future<void> _loadStores() async {
     final db = ref.read(databaseProvider);
-    final whs = await db.select(db.warehouses).get();
+    final whs = await db.select(db.stores).get();
     if (mounted) {
       setState(() {
-        _warehouses = whs;
-        if (whs.isNotEmpty) _selectedWarehouse = whs.first;
+        _stores = whs;
+        if (whs.isNotEmpty) _selectedStore = whs.first;
       });
     }
   }
@@ -139,11 +139,11 @@ class _ReceiveDeliverySheetState extends ConsumerState<ReceiveDeliverySheet> {
   }
 
   Future<void> _submit() async {
-    // Validate warehouse
-    if (_selectedWarehouse == null) {
+    // Validate store
+    if (_selectedStore == null) {
       AppNotification.showError(
         context,
-        'Please select a destination warehouse.',
+        'Please select a destination store.',
       );
       return;
     }
@@ -195,7 +195,7 @@ class _ReceiveDeliverySheetState extends ConsumerState<ReceiveDeliverySheet> {
       // Update stock in the database
       await db.inventoryDao.adjustStock(
         l.selectedProduct!.id,
-        _selectedWarehouse!.id,
+        _selectedStore!.id,
         qty,
         'Delivery received',
         null,
@@ -245,7 +245,7 @@ class _ReceiveDeliverySheetState extends ConsumerState<ReceiveDeliverySheet> {
         .read(activityLogProvider)
         .logAction(
           "Delivery Received",
-          "Delivery from $mainSupplierName to ${_selectedWarehouse!.name} — ${deliveryItems.length} item(s), ${totalQty.toInt()} units added to stock",
+          "Delivery from $mainSupplierName to ${_selectedStore!.name} — ${deliveryItems.length} item(s), ${totalQty.toInt()} units added to stock",
         );
 
     if (!mounted) return;
@@ -253,7 +253,7 @@ class _ReceiveDeliverySheetState extends ConsumerState<ReceiveDeliverySheet> {
     Navigator.pop(context);
     AppNotification.showSuccess(
       context,
-      '${totalQty.toInt()} units added to ${_selectedWarehouse!.name}.',
+      '${totalQty.toInt()} units added to ${_selectedStore!.name}.',
     );
   }
 
@@ -398,20 +398,20 @@ class _ReceiveDeliverySheetState extends ConsumerState<ReceiveDeliverySheet> {
                           ),
                         ),
                         SizedBox(height: context.getRSize(16)),
-                        // ── WAREHOUSE SELECTOR ─────────────────────────────
-                        if (_warehouses.isEmpty)
+                        // ── STORE SELECTOR ─────────────────────────────
+                        if (_stores.isEmpty)
                           Text(
-                            'No warehouses found. Add a warehouse first.',
+                            'No stores found. Add a store first.',
                             style: TextStyle(
                               fontSize: 13,
                               color: Theme.of(context).colorScheme.error,
                             ),
                           )
                         else
-                          AppDropdown<WarehouseData?>(
-                            labelText: 'DESTINATION WAREHOUSE *',
-                            value: _selectedWarehouse,
-                            items: _warehouses
+                          AppDropdown<StoreData?>(
+                            labelText: 'DESTINATION STORE *',
+                            value: _selectedStore,
+                            items: _stores
                                 .map(
                                   (w) => DropdownMenuItem(
                                     value: w,
@@ -420,7 +420,7 @@ class _ReceiveDeliverySheetState extends ConsumerState<ReceiveDeliverySheet> {
                                 )
                                 .toList(),
                             onChanged: (v) =>
-                                setState(() => _selectedWarehouse = v),
+                                setState(() => _selectedStore = v),
                           ),
                         SizedBox(height: context.getRSize(16)),
                       ],

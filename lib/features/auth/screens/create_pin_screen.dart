@@ -130,7 +130,7 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
     var step = 'start';
     try {
       // New-business path: commit the wizard draft atomically NOW. The
-      // complete_onboarding RPC creates businesses + profiles + warehouses
+      // complete_onboarding RPC creates businesses + profiles + stores
       // + settings server-side with onboarding_complete=true, then mirrors
       // them locally in one Drift transaction. Returns the persisted user.
       //
@@ -166,7 +166,7 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
       debugPrint('[CreatePinScreen] setUserPin ok');
 
       step = 'getUserById';
-      final updatedUser = await db.warehousesDao.getUserById(persistedUser.id);
+      final updatedUser = await db.storesDao.getUserById(persistedUser.id);
 
       if (!mounted) return;
 

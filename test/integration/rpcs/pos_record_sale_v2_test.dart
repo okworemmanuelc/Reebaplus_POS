@@ -42,10 +42,10 @@ void main() {
   late TestClients clients;
   late TestBusinessFixture fixture;
 
-  // Reusable warehouse + product (admin-inserted in setUpAll).
-  late String warehouseId;
+  // Reusable store + product (admin-inserted in setUpAll).
+  late String storeId;
   late String productId;
-  // Product with NO inventory row at [warehouseId]. Used to exercise the
+  // Product with NO inventory row at [storeId]. Used to exercise the
   // `inventory_row_missing` path that 0017 split out from `insufficient_stock`.
   late String stocklessProductId;
 
@@ -66,11 +66,11 @@ void main() {
     clients = await TestClients.setUp();
     fixture = TestBusinessFixture(clients.adminClient, clients.env.businessId);
 
-    warehouseId = UuidV7.generate();
-    await clients.adminClient.from('warehouses').insert({
-      'id': warehouseId,
+    storeId = UuidV7.generate();
+    await clients.adminClient.from('stores').insert({
+      'id': storeId,
       'business_id': clients.env.businessId,
-      'name': 'Sale Test Warehouse',
+      'name': 'Sale Test Store',
     });
 
     productId = UuidV7.generate();
@@ -86,12 +86,12 @@ void main() {
     await clients.adminClient.from('inventory').insert({
       'business_id': clients.env.businessId,
       'product_id': productId,
-      'warehouse_id': warehouseId,
+      'store_id': storeId,
       'quantity': 1000,
     });
 
     // Second product, intentionally never given an inventory row at
-    // [warehouseId]. This isolates the `inventory_row_missing` raise from
+    // [storeId]. This isolates the `inventory_row_missing` raise from
     // the `insufficient_stock` raise — see 0017 for the split rationale.
     stocklessProductId = UuidV7.generate();
     await clients.adminClient.from('products').insert({
@@ -124,7 +124,7 @@ void main() {
           'p_actor_id': clients.env.userId,
           'p_order_id': orderId,
           'p_order_number': orderNumber,
-          'p_warehouse_id': warehouseId,
+          'p_store_id': storeId,
           'p_payment_type': 'cash',
           'p_items': [
             {
@@ -194,7 +194,7 @@ void main() {
             'p_actor_id': clients.env.userId,
             'p_order_id': orderId,
             'p_order_number': orderNumber,
-            'p_warehouse_id': warehouseId,
+            'p_store_id': storeId,
             'p_payment_type': 'cash',
             'p_items': [
               {
@@ -238,7 +238,7 @@ void main() {
           'p_actor_id': clients.env.userId,
           'p_order_id': orderId,
           'p_order_number': 'ORD-XTNT',
-          'p_warehouse_id': warehouseId,
+          'p_store_id': storeId,
           'p_payment_type': 'cash',
           'p_items': [
             {
@@ -265,7 +265,7 @@ void main() {
           .select('quantity')
           .eq('business_id', clients.env.businessId)
           .eq('product_id', productId)
-          .eq('warehouse_id', warehouseId)
+          .eq('store_id', storeId)
           .single();
       final preQty = preInv['quantity'] as int;
 
@@ -278,7 +278,7 @@ void main() {
           'p_order_id': orderId,
           'p_order_number':
               'ORD-MF-${orderId.substring(orderId.length - 12)}',
-          'p_warehouse_id': warehouseId,
+          'p_store_id': storeId,
           'p_payment_type': 'cash',
           'p_items': [
             // Item 1: succeeds — small qty.
@@ -339,7 +339,7 @@ void main() {
           .select('quantity')
           .eq('business_id', clients.env.businessId)
           .eq('product_id', productId)
-          .eq('warehouse_id', warehouseId)
+          .eq('store_id', storeId)
           .single();
       expect(postInv['quantity'], preQty,
           reason: 'inventory must be unchanged after a mid-flight rollback');
@@ -357,7 +357,7 @@ void main() {
           'p_order_id': orderId,
           'p_order_number':
               'ORD-EMPTY-${orderId.substring(orderId.length - 12)}',
-          'p_warehouse_id': warehouseId,
+          'p_store_id': storeId,
           'p_payment_type': 'cash',
           'p_items': [],
         });
@@ -396,7 +396,7 @@ void main() {
           'p_order_id': orderId,
           'p_order_number':
               'ORD-WAL-${orderId.substring(orderId.length - 12)}',
-          'p_warehouse_id': warehouseId,
+          'p_store_id': storeId,
           'p_payment_type': 'wallet',
           'p_items': [
             {
@@ -423,7 +423,7 @@ void main() {
 
     test(
         'error: inventory_row_missing raises (with HINT) when no inventory '
-        'row exists for product+warehouse — 0017 split guard',
+        'row exists for product+store — 0017 split guard',
         () async {
       final orderId = UuidV7.generate();
       Object? caught;
@@ -434,7 +434,7 @@ void main() {
           'p_order_id': orderId,
           'p_order_number':
               'ORD-MISS-${orderId.substring(orderId.length - 12)}',
-          'p_warehouse_id': warehouseId,
+          'p_store_id': storeId,
           'p_payment_type': 'cash',
           'p_items': [
             {
@@ -457,7 +457,7 @@ void main() {
           reason: '0017 attaches a JSON HINT for diagnostics');
       final hint = jsonDecode(ex.hint!) as Map<String, dynamic>;
       expect(hint['product_id'], stocklessProductId);
-      expect(hint['warehouse_id'], warehouseId);
+      expect(hint['store_id'], storeId);
 
       // Atomicity: nothing landed.
       expect(await fixture.countById('orders', orderId), 0,
@@ -474,7 +474,7 @@ void main() {
           .select('quantity')
           .eq('business_id', clients.env.businessId)
           .eq('product_id', productId)
-          .eq('warehouse_id', warehouseId)
+          .eq('store_id', storeId)
           .single();
       final available = preInv['quantity'] as int;
 
@@ -487,7 +487,7 @@ void main() {
           'p_order_id': orderId,
           'p_order_number':
               'ORD-LOW-${orderId.substring(orderId.length - 12)}',
-          'p_warehouse_id': warehouseId,
+          'p_store_id': storeId,
           'p_payment_type': 'cash',
           'p_items': [
             {
@@ -508,7 +508,7 @@ void main() {
       expect(ex.hint, isNotNull);
       final hint = jsonDecode(ex.hint!) as Map<String, dynamic>;
       expect(hint['product_id'], productId);
-      expect(hint['warehouse_id'], warehouseId);
+      expect(hint['store_id'], storeId);
       expect(hint['available_qty'], available,
           reason: '0017 added available_qty to the HINT');
 
@@ -525,7 +525,7 @@ void main() {
           .select('quantity')
           .eq('business_id', clients.env.businessId)
           .eq('product_id', productId)
-          .eq('warehouse_id', warehouseId)
+          .eq('store_id', storeId)
           .single();
       final preQty = preInv['quantity'] as int;
 
@@ -538,7 +538,7 @@ void main() {
           'p_order_id': orderId,
           'p_order_number':
               'ORD-MFM-${orderId.substring(orderId.length - 12)}',
-          'p_warehouse_id': warehouseId,
+          'p_store_id': storeId,
           'p_payment_type': 'cash',
           'p_items': [
             // Item 1: succeeds — order_items + inventory UPDATE + stock_tx
@@ -549,7 +549,7 @@ void main() {
               'unit_price_kobo': 100000,
             },
             // Item 2: fails — no inventory row exists for this product at
-            // [warehouseId], triggering the 0017 raise.
+            // [storeId], triggering the 0017 raise.
             {
               'product_id': stocklessProductId,
               'quantity': 1,
@@ -589,7 +589,7 @@ void main() {
           .select('quantity')
           .eq('business_id', clients.env.businessId)
           .eq('product_id', productId)
-          .eq('warehouse_id', warehouseId)
+          .eq('store_id', storeId)
           .single();
       expect(postInv['quantity'], preQty,
           reason: 'item 1 inventory deduction must roll back');

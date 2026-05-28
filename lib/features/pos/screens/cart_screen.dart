@@ -52,7 +52,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
   late double _crateDeposit;
   Customer? _activeCustomer;
   List<ManufacturerData> _manufacturers = [];
-  List<WarehouseData> _warehouses = [];
+  List<StoreData> _stores = [];
   late final CartService _cart;
 
   // ── Clear animation ──
@@ -84,8 +84,8 @@ class _CartScreenState extends ConsumerState<CartScreen>
     final db = ref.read(databaseProvider);
     _cart.addListener(_onCartChanged);
     _cart.activeCustomer.addListener(_onActiveCustomerChanged);
-    db.select(db.warehouses).get().then((ws) {
-      if (mounted) setState(() => _warehouses = ws);
+    db.select(db.stores).get().then((ws) {
+      if (mounted) setState(() => _stores = ws);
     });
     db.select(db.manufacturers).watch().listen((data) {
       if (mounted) setState(() => _manufacturers = data);
@@ -292,10 +292,10 @@ class _CartScreenState extends ConsumerState<CartScreen>
   Color get _border => Theme.of(context).dividerColor;
 
   void _showChangeCustomerModal() {
-    // Default picker warehouse — lone owner picks from POS lock.
-    final String? defaultPickerWarehouseId = ref
+    // Default picker store — lone owner picks from POS lock.
+    final String? defaultPickerStoreId = ref
         .read(navigationProvider)
-        .lockedWarehouseId
+        .lockedStoreId
         .value;
 
     showModalBottomSheet(
@@ -304,7 +304,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
       backgroundColor: Colors.transparent,
       builder: (modalCtx) {
         String searchQuery = '';
-        String? pickerWarehouseId = defaultPickerWarehouseId;
+        String? pickerStoreId = defaultPickerStoreId;
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () => Navigator.pop(modalCtx),
@@ -401,8 +401,8 @@ class _CartScreenState extends ConsumerState<CartScreen>
                               ],
                             ),
                           ),
-                          // ── Warehouse filter ──
-                          if (_warehouses.isNotEmpty)
+                          // ── Store filter ──
+                          if (_stores.isNotEmpty)
                             Padding(
                               padding: EdgeInsets.fromLTRB(
                                 modalCtx.getRSize(20),
@@ -413,19 +413,19 @@ class _CartScreenState extends ConsumerState<CartScreen>
                               child: Row(
                                 children: [
                                   Icon(
-                                    FontAwesomeIcons.warehouse,
+                                    FontAwesomeIcons.store,
                                     size: modalCtx.getRSize(12),
                                     color: _subtext,
                                   ),
                                   SizedBox(width: modalCtx.getRSize(6)),
                                   Expanded(
                                     child: AppDropdown<String?>(
-                                      value: pickerWarehouseId,
+                                      value: pickerStoreId,
                                       items: [
                                         DropdownMenuItem<String?>(
                                           value: null,
                                           child: Text(
-                                            'All Warehouses',
+                                            'All Stores',
                                             style: TextStyle(
                                               fontSize: modalCtx.getRFontSize(
                                                 13,
@@ -437,7 +437,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                             ),
                                           ),
                                         ),
-                                        ..._warehouses.map(
+                                        ..._stores.map(
                                           (w) => DropdownMenuItem<String?>(
                                             value: w.id,
                                             child: Text(
@@ -457,7 +457,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                         ),
                                       ],
                                       onChanged: (id) => setDialogState(
-                                        () => pickerWarehouseId = id,
+                                        () => pickerStoreId = id,
                                       ),
                                     ),
                                   ),
@@ -491,9 +491,9 @@ class _CartScreenState extends ConsumerState<CartScreen>
                               ),
                               builder: (_, allCustomers, __) {
                                 final customers = allCustomers.where((c) {
-                                  // Warehouse filter
-                                  if (pickerWarehouseId != null &&
-                                      c.warehouseId != pickerWarehouseId) {
+                                  // Store filter
+                                  if (pickerStoreId != null &&
+                                      c.storeId != pickerStoreId) {
                                     return false;
                                   }
                                   // Search filter

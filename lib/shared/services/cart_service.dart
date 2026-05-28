@@ -49,7 +49,7 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
   }
 
   /// Adds a product to the cart, clamping the total quantity to [maxStock]
-  /// (the available stock for the locked warehouse). Returns true if the
+  /// (the available stock for the locked store). Returns true if the
   /// full requested [qty] was accepted, false if it was clamped or rejected.
   ///
   /// Pass [maxStock] as a very large number (or omit) for legacy Map products

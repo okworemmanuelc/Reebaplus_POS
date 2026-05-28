@@ -5,7 +5,7 @@ class ActivityLog {
   final String action;
   final String description;
   final DateTime timestamp;
-  final String? warehouseId;
+  final String? storeId;
   final String? userId;
 
   // Typed FKs (PR 4)
@@ -21,7 +21,7 @@ class ActivityLog {
     required this.action,
     required this.description,
     required this.timestamp,
-    this.warehouseId,
+    this.storeId,
     this.userId,
     this.orderId,
     this.productId,
@@ -37,7 +37,7 @@ class ActivityLog {
       action: data.action,
       description: data.description,
       timestamp: data.createdAt,
-      warehouseId: data.warehouseId,
+      storeId: data.storeId,
       userId: data.userId,
       orderId: data.orderId,
       productId: data.productId,

@@ -10,23 +10,23 @@ import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 
-class WarehouseDetailsScreen extends ConsumerStatefulWidget {
-  final WarehouseData warehouse;
+class StoreDetailsScreen extends ConsumerStatefulWidget {
+  final StoreData store;
 
-  const WarehouseDetailsScreen({super.key, required this.warehouse});
+  const StoreDetailsScreen({super.key, required this.store});
 
   @override
-  ConsumerState<WarehouseDetailsScreen> createState() =>
-      _WarehouseDetailsScreenState();
+  ConsumerState<StoreDetailsScreen> createState() =>
+      _StoreDetailsScreenState();
 }
 
-class _WarehouseDetailsScreenState
-    extends ConsumerState<WarehouseDetailsScreen> {
-  WarehouseData? _liveWarehouse;
+class _StoreDetailsScreenState
+    extends ConsumerState<StoreDetailsScreen> {
+  StoreData? _liveStore;
   List<ProductDataWithStock> _inventory = [];
   List<CustomerData> _customers = [];
 
-  StreamSubscription<WarehouseData?>? _warehouseSub;
+  StreamSubscription<StoreData?>? _storeSub;
   StreamSubscription<List<ProductDataWithStock>>? _inventorySub;
   StreamSubscription<List<CustomerData>>? _customersSub;
 
@@ -38,23 +38,23 @@ class _WarehouseDetailsScreenState
       Theme.of(context).iconTheme.color!;
   Color get _border => Theme.of(context).dividerColor;
 
-  WarehouseData get _warehouse => _liveWarehouse ?? widget.warehouse;
+  StoreData get _store => _liveStore ?? widget.store;
 
   @override
   void initState() {
     super.initState();
-    final id = widget.warehouse.id;
+    final id = widget.store.id;
     final db = ref.read(databaseProvider);
 
-    _warehouseSub = db.warehousesDao.watchWarehouse(id).listen((w) {
-      if (mounted && w != null) setState(() => _liveWarehouse = w);
+    _storeSub = db.storesDao.watchStore(id).listen((w) {
+      if (mounted && w != null) setState(() => _liveStore = w);
     });
     _inventorySub = db.inventoryDao
-        .watchProductDatasWithStockByWarehouse(id)
+        .watchProductDatasWithStockByStore(id)
         .listen((list) {
           if (mounted) setState(() => _inventory = list);
         });
-    _customersSub = db.customersDao.watchCustomersByWarehouse(id).listen((
+    _customersSub = db.customersDao.watchCustomersByStore(id).listen((
       list,
     ) {
       if (mounted) setState(() => _customers = list);
@@ -63,7 +63,7 @@ class _WarehouseDetailsScreenState
 
   @override
   void dispose() {
-    _warehouseSub?.cancel();
+    _storeSub?.cancel();
     _inventorySub?.cancel();
     _customersSub?.cancel();
     super.dispose();
@@ -86,7 +86,7 @@ class _WarehouseDetailsScreenState
     final customersCount = _customers.length;
 
     return SharedScaffold(
-      activeRoute: 'warehouse',
+      activeRoute: 'store',
       backgroundColor: _bg,
       appBar: AppBar(
         backgroundColor: _surface,
@@ -96,9 +96,9 @@ class _WarehouseDetailsScreenState
           onPressed: () => Navigator.pop(context),
         ),
         title: AppBarHeader(
-          icon: FontAwesomeIcons.warehouse,
-          title: _warehouse.name,
-          subtitle: _warehouse.location ?? 'Main Storage',
+          icon: FontAwesomeIcons.store,
+          title: _store.name,
+          subtitle: _store.location ?? 'Main Storage',
         ),
       ),
       body: LayoutBuilder(
@@ -157,7 +157,7 @@ class _WarehouseDetailsScreenState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Warehouse Value',
+                  'Store Value',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.8),
                     fontSize: rFontSize(context, 14),
@@ -240,7 +240,7 @@ class _WarehouseDetailsScreenState
           behavior: HitTestBehavior.opaque,
           onTap: () {
             final nav = ref.read(navigationProvider);
-            nav.customersInitialWarehouseId.value = widget.warehouse.id;
+            nav.customersInitialStoreId.value = widget.store.id;
             Navigator.of(context).pop();
             nav.setIndex(4);
           },
@@ -354,7 +354,7 @@ class _WarehouseDetailsScreenState
                   Padding(
                     padding: EdgeInsets.all(rSize(context, 20)),
                     child: Text(
-                      'No stock in this warehouse yet.',
+                      'No stock in this store yet.',
                       style: TextStyle(
                         color: _subtext,
                         fontSize: rFontSize(context, 13),
@@ -457,7 +457,7 @@ class _WarehouseDetailsScreenState
           Theme.of(context).colorScheme.primary,
           () {
             final nav = ref.read(navigationProvider);
-            nav.selectedWarehouseId.value = widget.warehouse.id.toString();
+            nav.selectedStoreId.value = widget.store.id.toString();
             nav.setIndex(2);
           },
         ),

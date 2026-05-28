@@ -36,16 +36,16 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
   CustomerGroup _selectedGroup = CustomerGroup.retailer;
   final _formKey = GlobalKey<FormState>();
 
-  // Warehouse selection
-  List<WarehouseData> _warehouses = [];
-  String? _selectedWarehouseId;
+  // Store selection
+  List<StoreData> _stores = [];
+  String? _selectedStoreId;
 
   @override
   void initState() {
     super.initState();
     final db = ref.read(databaseProvider);
-    db.select(db.warehouses).get().then((wh) {
-      if (mounted) setState(() => _warehouses = wh);
+    db.select(db.stores).get().then((wh) {
+      if (mounted) setState(() => _stores = wh);
     });
   }
   Color get _surface => Theme.of(context).colorScheme.surface;
@@ -200,17 +200,17 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
                           ),
                           _groupDropdown(),
                           AppDropdown<String>(
-                            labelText: 'Assign to Warehouse',
-                            value: _selectedWarehouseId,
-                            hintText: 'Select warehouse',
-                            items: _warehouses.map((wh) {
+                            labelText: 'Assign to Store',
+                            value: _selectedStoreId,
+                            hintText: 'Select store',
+                            items: _stores.map((wh) {
                               return DropdownMenuItem<String>(
                                 value: wh.id,
                                 child: Text(wh.name),
                               );
                             }).toList(),
-                            onChanged: (val) => setState(() => _selectedWarehouseId = val),
-                            validator: (v) => v == null ? 'Please select a warehouse' : null,
+                            onChanged: (val) => setState(() => _selectedStoreId = val),
+                            validator: (v) => v == null ? 'Please select a store' : null,
                           ),
                           SizedBox(height: context.getRSize(16)),
                           AppInput(
@@ -266,8 +266,8 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
                               return;
                             }
 
-                            // Lone owner picks warehouse manually
-                            final warehouseId = _selectedWarehouseId;
+                            // Lone owner picks store manually
+                            final storeId = _selectedStoreId;
 
                             final newCustomer = Customer(
                               id: '', // Database will generate this
@@ -279,7 +279,7 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
                                   : _phoneCtrl.text.trim(),
                               customerGroup: _selectedGroup,
                               isWalkIn: false,
-                              warehouseId: warehouseId,
+                              storeId: storeId,
                             );
                             final saved = await ref.read(customerServiceProvider).addCustomer(
                               newCustomer,

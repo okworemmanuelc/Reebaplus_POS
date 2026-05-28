@@ -18,7 +18,7 @@ class PosController extends ChangeNotifier {
   CustomerGroup selectedGroup = CustomerGroup.retailer;
   String searchQuery = '';
   bool isSearching = false;
-  String? currentWarehouseName;
+  String? currentStoreName;
 
   bool isLoading = true;
   bool _disposed = false;
@@ -42,7 +42,7 @@ class PosController extends ChangeNotifier {
     _loadManufacturers();
     _subscribeToProducts();
     _cartService.activeCustomer.addListener(_onCustomerSelected);
-    _navigationService.lockedWarehouseId.addListener(_subscribeToProducts);
+    _navigationService.lockedStoreId.addListener(_subscribeToProducts);
   }
 
   @override
@@ -53,7 +53,7 @@ class PosController extends ChangeNotifier {
     _manufacturersSub?.cancel();
     _debounce?.cancel();
     _cartService.activeCustomer.removeListener(_onCustomerSelected);
-    _navigationService.lockedWarehouseId.removeListener(_subscribeToProducts);
+    _navigationService.lockedStoreId.removeListener(_subscribeToProducts);
     super.dispose();
   }
 
@@ -79,28 +79,28 @@ class PosController extends ChangeNotifier {
   void _subscribeToProducts() {
     _productsSub?.cancel();
 
-    // The lockedWarehouseId listener fires during lockApp/logout. If the
+    // The lockedStoreId listener fires during lockApp/logout. If the
     // ordering ever regresses (or another teardown path nulls businessId
-    // before clearing the warehouse), bail rather than throw. Mirrors the
+    // before clearing the store), bail rather than throw. Mirrors the
     // currentUser==null guard in auto_lock_wrapper.dart.
     if (_database.currentBusinessId == null) {
       return;
     }
 
-    final warehouseId = _navigationService.lockedWarehouseId.value;
+    final storeId = _navigationService.lockedStoreId.value;
 
     final minLoading = Future.delayed(const Duration(seconds: 2));
 
-    if (warehouseId != null) {
-      // Fetch warehouse name
-      _database.warehousesDao.getWarehouse(warehouseId).then((w) {
+    if (storeId != null) {
+      // Fetch store name
+      _database.storesDao.getStore(storeId).then((w) {
         if (_disposed) return;
-        currentWarehouseName = w?.name;
+        currentStoreName = w?.name;
         notifyListeners();
       });
 
       _productsSub = _database.inventoryDao
-          .watchProductDatasWithStockByWarehouse(warehouseId)
+          .watchProductDatasWithStockByStore(storeId)
           .listen((data) async {
             await minLoading;
             if (_disposed) return;
@@ -109,7 +109,7 @@ class PosController extends ChangeNotifier {
             notifyListeners();
           });
     } else {
-      currentWarehouseName = null;
+      currentStoreName = null;
       _productsSub = _database.inventoryDao
           .watchProductsByCategory(selectedCategoryId)
           .listen((data) async {

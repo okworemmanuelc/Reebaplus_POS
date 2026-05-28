@@ -46,20 +46,20 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
           cartService: ref.read(cartProvider),
         );
       });
-      _initWarehouse();
+      _initStore();
     });
   }
 
-  Future<void> _initWarehouse() async {
-    if (ref.read(navigationProvider).lockedWarehouseId.value == null) {
-      // Stream-based first read: yields as soon as the warehouses table
+  Future<void> _initStore() async {
+    if (ref.read(navigationProvider).lockedStoreId.value == null) {
+      // Stream-based first read: yields as soon as the stores table
       // has at least one row, including after a fresh-login pull. The
       // earlier one-shot `.get()` returned [] on a cold start and left
-      // the warehouse unlocked.
+      // the store unlocked.
       final db = ref.read(databaseProvider);
-      final houses = await db.select(db.warehouses).watch().first;
+      final houses = await db.select(db.stores).watch().first;
       if (houses.isNotEmpty && mounted) {
-        ref.read(navigationProvider).setLockedWarehouse(houses.first.id);
+        ref.read(navigationProvider).setLockedStore(houses.first.id);
       }
     }
   }
@@ -189,7 +189,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
       title: AppBarHeader(
         icon: FontAwesomeIcons.beerMugEmpty,
         title: 'Reebaplus POS',
-        subtitle: _controller!.currentWarehouseName ?? 'Point of Sale',
+        subtitle: _controller!.currentStoreName ?? 'Point of Sale',
       ),
       actions: [
         IconButton(
@@ -207,14 +207,14 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
         ),
         IconButton(
           icon: Icon(
-            FontAwesomeIcons.warehouse,
+            FontAwesomeIcons.store,
             size: 16,
-            color: ref.read(navigationProvider).lockedWarehouseId.value == null
+            color: ref.read(navigationProvider).lockedStoreId.value == null
                 ? subtextCol
                 : Theme.of(context).colorScheme.primary,
           ),
-          tooltip: 'Select Warehouse',
-          onPressed: () => _showWarehousePicker(context, subtextCol),
+          tooltip: 'Select Store',
+          onPressed: () => _showStorePicker(context, subtextCol),
         ),
         const NotificationBell(),
         SizedBox(width: context.getRSize(16)),
@@ -413,12 +413,12 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
     );
   }
 
-  Future<void> _showWarehousePicker(
+  Future<void> _showStorePicker(
     BuildContext context,
     Color subtextCol,
   ) async {
     final db = ref.read(databaseProvider);
-    final warehouses = await db.select(db.warehouses).get();
+    final stores = await db.select(db.stores).get();
     if (!context.mounted) return;
     final surface = Theme.of(context).colorScheme.surface;
     final text = Theme.of(context).colorScheme.onSurface;
@@ -474,14 +474,14 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
-                      FontAwesomeIcons.warehouse,
+                      FontAwesomeIcons.store,
                       size: 18,
                       color: Theme.of(context).colorScheme.primary,
                     ),
                   ),
                   const SizedBox(width: 16),
                   Text(
-                    'Switch Warehouse',
+                    'Switch Store',
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w800,
@@ -502,14 +502,14 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
                     mainAxisSpacing: 16,
                     childAspectRatio: 1.3,
                   ),
-                  itemCount: warehouses.length,
+                  itemCount: stores.length,
                   itemBuilder: (ctx, i) {
-                    final w = warehouses[i];
+                    final w = stores[i];
                     final isSelected =
-                        ref.read(navigationProvider).lockedWarehouseId.value == w.id;
+                        ref.read(navigationProvider).lockedStoreId.value == w.id;
                     return InkWell(
                       onTap: () {
-                        ref.read(navigationProvider).setLockedWarehouse(w.id);
+                        ref.read(navigationProvider).setLockedStore(w.id);
                         Navigator.pop(ctx);
                         setState(() {});
                       },

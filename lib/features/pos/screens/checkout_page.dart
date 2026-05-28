@@ -68,7 +68,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   Map<String, String> _manufacturerNames = {};
   String? _branchName;
   StreamSubscription<List<ManufacturerData>>? _manufacturersSub;
-  StreamSubscription<WarehouseData?>? _activeWarehouseSub;
+  StreamSubscription<StoreData?>? _activeStoreSub;
   late final Customer? _initialCustomer;
 
   // Computed on confirm — passed to receipt
@@ -113,10 +113,10 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     final nav = ref.read(navigationProvider);
     final auth = ref.read(authProvider);
 
-    final warehouseId =
-        nav.lockedWarehouseId.value ?? auth.currentUser?.warehouseId;
+    final storeId =
+        nav.lockedStoreId.value ?? auth.currentUser?.storeId;
 
-    // Stream-driven so a remote rename of the active warehouse or a new
+    // Stream-driven so a remote rename of the active store or a new
     // manufacturer arriving via realtime updates the receipt header / map
     // without a manual refresh.
     _manufacturersSub = db.inventoryDao.watchAllManufacturers().listen((list) {
@@ -126,9 +126,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       });
     });
 
-    if (warehouseId != null) {
-      _activeWarehouseSub = (db.select(db.warehouses)
-            ..where((t) => t.id.equals(warehouseId))
+    if (storeId != null) {
+      _activeStoreSub = (db.select(db.stores)
+            ..where((t) => t.id.equals(storeId))
             ..limit(1))
           .watchSingleOrNull()
           .listen((w) {
@@ -143,7 +143,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     _cart.activeCustomer.removeListener(_onCustomerChanged);
     _cashReceivedCtrl.dispose();
     _manufacturersSub?.cancel();
-    _activeWarehouseSub?.cancel();
+    _activeStoreSub?.cancel();
     super.dispose();
   }
 
@@ -656,15 +656,15 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       // ── Call atomic transaction ──────────────────────────────────────
       final auth = ref.read(authProvider);
       final nav = ref.read(navigationProvider);
-      final warehouseId =
-          nav.lockedWarehouseId.value ?? auth.currentUser?.warehouseId;
+      final storeId =
+          nav.lockedStoreId.value ?? auth.currentUser?.storeId;
 
       // Ensure branch name is resolved before proceeding to receipt
-      if (_branchName == null && warehouseId != null) {
+      if (_branchName == null && storeId != null) {
         final db = ref.read(databaseProvider);
         final w = await (db.select(
-          db.warehouses,
-        )..where((t) => t.id.equals(warehouseId))).getSingleOrNull();
+          db.stores,
+        )..where((t) => t.id.equals(storeId))).getSingleOrNull();
         if (mounted) setState(() => _branchName = w?.name);
       }
 
@@ -677,7 +677,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             amountPaidKobo: amountPaidKobo,
             paymentType: _paymentLabel,
             staffId: auth.currentUser?.id,
-            warehouseId: warehouseId,
+            storeId: storeId,
             crateDepositPaidKobo: (widget.crateDeposit * 100).round(),
             paymentSubType: _isWalletPayment ? 'wallet' : 'cash',
           );

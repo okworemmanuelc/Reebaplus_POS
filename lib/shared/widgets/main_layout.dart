@@ -9,7 +9,7 @@ import 'package:reebaplus_pos/features/orders/screens/orders_screen.dart';
 import 'package:reebaplus_pos/features/customers/screens/customers_screen.dart';
 import 'package:reebaplus_pos/features/payments/screens/payments_screen.dart';
 import 'package:reebaplus_pos/features/expenses/screens/expenses_screen.dart';
-import 'package:reebaplus_pos/features/warehouse/screens/warehouse_screen.dart';
+import 'package:reebaplus_pos/features/stores/screens/stores_screen.dart';
 import 'package:reebaplus_pos/features/pos/screens/cart_screen.dart';
 import 'package:reebaplus_pos/features/deliveries/screens/deliveries_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/activity_log_screen.dart';
@@ -61,7 +61,7 @@ class _MainLayoutState extends ConsumerState<MainLayout>
     const CustomersScreen(), // 4
     const PaymentsScreen(), // 5
     const ExpensesScreen(), // 6
-    const WarehouseScreen(), // 7
+    const StoresScreen(), // 7
     const CartScreen(
       cart: [],
       crateDeposit: 0.0,

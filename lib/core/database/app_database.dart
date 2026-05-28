@@ -85,8 +85,8 @@ class Manufacturers extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-@DataClassName('WarehouseData')
-class Warehouses extends Table {
+@DataClassName('StoreData')
+class Stores extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get name => text()();
@@ -118,7 +118,7 @@ class Users extends Table {
   TextColumn get avatarColor => text().withDefault(const Constant('#3B82F6'))();
   BoolColumn get biometricEnabled =>
       boolean().withDefault(const Constant(false))();
-  TextColumn get warehouseId => text().nullable().references(Warehouses, #id)();
+  TextColumn get storeId => text().nullable().references(Stores, #id)();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastNotificationSentAt => dateTime().nullable()();
   DateTimeColumn get lastUpdatedAt =>
@@ -239,7 +239,7 @@ class PriceLists extends Table {
 class Customers extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
   TextColumn get businessId => text().references(Businesses, #id)();
-  TextColumn get warehouseId => text().nullable().references(Warehouses, #id)();
+  TextColumn get storeId => text().nullable().references(Stores, #id)();
   TextColumn get name => text()();
   TextColumn get phone => text().nullable()();
   TextColumn get email => text().nullable()();
@@ -394,7 +394,7 @@ class Inventory extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get productId => text().references(Products, #id)();
-  TextColumn get warehouseId => text().references(Warehouses, #id)();
+  TextColumn get storeId => text().references(Stores, #id)();
   IntColumn get quantity => integer().withDefault(const Constant(0))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
@@ -405,7 +405,7 @@ class Inventory extends Table {
 
   @override
   List<String> get customConstraints => [
-    'UNIQUE (business_id, product_id, warehouse_id)',
+    'UNIQUE (business_id, product_id, store_id)',
   ];
 }
 
@@ -419,8 +419,8 @@ class Inventory extends Table {
 class StockTransfers extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
   TextColumn get businessId => text().references(Businesses, #id)();
-  TextColumn get fromLocationId => text().references(Warehouses, #id)();
-  TextColumn get toLocationId => text().references(Warehouses, #id)();
+  TextColumn get fromLocationId => text().references(Stores, #id)();
+  TextColumn get toLocationId => text().references(Stores, #id)();
   TextColumn get productId => text().references(Products, #id)();
   IntColumn get quantity => integer()();
   TextColumn get status => text().withDefault(const Constant('pending'))();
@@ -447,7 +447,7 @@ class StockAdjustments extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get productId => text().references(Products, #id)();
-  TextColumn get warehouseId => text().references(Warehouses, #id)();
+  TextColumn get storeId => text().references(Stores, #id)();
   IntColumn get quantityDiff => integer()();
   TextColumn get reason => text()();
   TextColumn get performedBy => text().nullable().references(Users, #id)();
@@ -465,7 +465,7 @@ class StockTransactions extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get productId => text().references(Products, #id)();
-  TextColumn get locationId => text().references(Warehouses, #id)();
+  TextColumn get locationId => text().references(Stores, #id)();
   IntColumn get quantityDelta => integer()();
   TextColumn get movementType => text()();
   TextColumn get orderId => text().nullable().references(Orders, #id)();
@@ -514,7 +514,7 @@ class Orders extends Table {
   TextColumn get cancellationReason => text().nullable()();
   TextColumn get barcode => text().nullable()();
   TextColumn get staffId => text().nullable().references(Users, #id)();
-  TextColumn get warehouseId => text().nullable().references(Warehouses, #id)();
+  TextColumn get storeId => text().nullable().references(Stores, #id)();
   IntColumn get crateDepositPaidKobo =>
       integer().withDefault(const Constant(0))();
   DateTimeColumn get completedAt => dateTime().nullable()();
@@ -540,7 +540,7 @@ class OrderItems extends Table {
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get orderId => text().references(Orders, #id)();
   TextColumn get productId => text().references(Products, #id)();
-  TextColumn get warehouseId => text().references(Warehouses, #id)();
+  TextColumn get storeId => text().references(Stores, #id)();
   IntColumn get quantity => integer()();
   IntColumn get unitPriceKobo => integer()();
   IntColumn get buyingPriceKobo => integer().withDefault(const Constant(0))();
@@ -628,7 +628,7 @@ class Expenses extends Table {
   TextColumn get paymentMethod => text().nullable()();
   TextColumn get recordedBy => text().nullable().references(Users, #id)();
   TextColumn get reference => text().nullable()();
-  TextColumn get warehouseId => text().nullable().references(Warehouses, #id)();
+  TextColumn get storeId => text().nullable().references(Stores, #id)();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
@@ -784,7 +784,7 @@ class ActivityLogs extends Table {
       text().nullable().references(DeliveryReceipts, #id)();
   TextColumn get walletTxnId =>
       text().nullable().references(WalletTransactions, #id)();
-  TextColumn get warehouseId => text().nullable().references(Warehouses, #id)();
+  TextColumn get storeId => text().nullable().references(Stores, #id)();
   DateTimeColumn get voidedAt => dateTime().nullable()();
   TextColumn get voidedBy => text().nullable().references(Users, #id)();
   TextColumn get voidReason => text().nullable()();
@@ -863,6 +863,172 @@ class Sessions extends Table {
 
   @override
   Set<Column> get primaryKey => {id};
+}
+
+// ---------------------------------------------------------------------------
+// Master plan §2.4 — roles, permissions, and membership (schema v13)
+// ---------------------------------------------------------------------------
+//
+// Six tenant-scoped synced tables (roles, role_permissions, role_settings,
+// user_businesses, invite_codes, user_stores) plus one global static-config
+// table (permissions). The cloud's `complete_onboarding` RPC seeds the four
+// default roles + 63 role_permissions + 8 role_settings + the CEO's
+// membership on new business creation; pre-existing businesses are
+// backfilled by cloud migration 0043. Local devices receive the seeded rows
+// via the next sync pull. Local seeding happens only for the global
+// `permissions` table (identical on every device).
+
+/// Global static config. One row per permission key. NOT in
+/// `_syncedTenantTables` — the keys are identical on every device and
+/// every business; cloud and local are seeded by migration. The cloud's
+/// `permissions` table mirrors the same rows for RLS / RPC reference.
+@DataClassName('PermissionData')
+class Permissions extends Table {
+  TextColumn get key => text()();
+  TextColumn get description => text()();
+  TextColumn get category => text()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {key};
+}
+
+@DataClassName('RoleData')
+class Roles extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get name => text()();
+  // Lowercase machine identifier. Code branching on role identity uses
+  // this column (`ceo`, `manager`, `cashier`, `stock_keeper`), never
+  // `name`. The four system defaults always carry these four slugs;
+  // Phase 2 custom roles will derive slugs from their names.
+  TextColumn get slug => text()();
+  BoolColumn get isSystemDefault =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => [
+    'UNIQUE (business_id, name)',
+    'UNIQUE (business_id, slug)',
+  ];
+}
+
+@DataClassName('RolePermissionData')
+class RolePermissions extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get roleId => text().references(Roles, #id)();
+  TextColumn get permissionKey => text()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => [
+    'UNIQUE (role_id, permission_key)',
+  ];
+}
+
+@DataClassName('RoleSettingData')
+class RoleSettings extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get roleId => text().references(Roles, #id)();
+  TextColumn get settingKey => text()();
+  // TEXT — string/JSON-encoded value. NULL is meaningful for
+  // unlimited-style settings (e.g. CEO's max_expense_approval_kobo).
+  TextColumn get settingValue => text().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => [
+    'UNIQUE (role_id, setting_key)',
+  ];
+}
+
+@DataClassName('UserBusinessData')
+class UserBusinesses extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get userId => text().references(Users, #id)();
+  TextColumn get roleId => text().references(Roles, #id)();
+  TextColumn get status => text().withDefault(const Constant('active'))();
+  DateTimeColumn get lastLoginAt => dateTime().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => [
+    "CHECK (status IN ('active','suspended'))",
+    'UNIQUE (user_id, business_id)',
+  ];
+}
+
+@DataClassName('InviteCodeData')
+class InviteCodes extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get roleId => text().references(Roles, #id)();
+  // 8-char uppercase alphanumeric, e.g. "K7M2QXP9".
+  TextColumn get code => text().withLength(min: 8, max: 8)();
+  // The email the invite was generated for. Staff Sign Up requires
+  // a match (master plan §6).
+  TextColumn get email => text()();
+  // The store the invitee will be assigned to on acceptance
+  // (master plan §6.2).
+  TextColumn get storeId => text().references(Stores, #id)();
+  TextColumn get generatedByUserId => text().references(Users, #id)();
+  DateTimeColumn get expiresAt => dateTime()();
+  TextColumn get usedByUserId => text().nullable().references(Users, #id)();
+  DateTimeColumn get usedAt => dateTime().nullable()();
+  DateTimeColumn get revokedAt => dateTime().nullable()();
+  BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+@DataClassName('UserStoreData')
+class UserStores extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get userId => text().references(Users, #id)();
+  TextColumn get storeId => text().references(Stores, #id)();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => [
+    'UNIQUE (user_id, store_id)',
+  ];
 }
 
 // Global (non-tenant) config — replaces sentinel-business-id pattern.
@@ -948,7 +1114,7 @@ class MigrationEvents extends Table {
     Businesses,
     CrateGroups,
     Manufacturers,
-    Warehouses,
+    Stores,
     Users,
     Categories,
     Suppliers,
@@ -979,6 +1145,13 @@ class MigrationEvents extends Table {
     Notifications,
     Settings,
     Sessions,
+    Permissions,
+    Roles,
+    RolePermissions,
+    RoleSettings,
+    UserBusinesses,
+    InviteCodes,
+    UserStores,
     SystemConfig,
     SyncQueue,
     SyncQueueOrphans,
@@ -994,7 +1167,7 @@ class MigrationEvents extends Table {
     SyncDao,
     ActivityLogDao,
     NotificationsDao,
-    WarehousesDao,
+    StoresDao,
     StockLedgerDao,
     StockTransferDao,
     PendingCrateReturnsDao,
@@ -1007,6 +1180,13 @@ class MigrationEvents extends Table {
     CrateLedgerDao,
     SettingsDao,
     SystemConfigDao,
+    PermissionsDao,
+    RolesDao,
+    RolePermissionsDao,
+    RoleSettingsDao,
+    UserBusinessesDao,
+    InviteCodesDao,
+    UserStoresDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -1041,7 +1221,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 14;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1267,11 +1447,24 @@ class AppDatabase extends _$AppDatabase {
         // Order:
         //   1. Drop any queued upserts targeting the dropping tables so
         //      the next push doesn't fail on the now-gone cloud tables.
-        //   2. Drop the (business_id, *) indexes that reference dropped
-        //      columns before alterTable rebuilds users.
+        //   2. Drop the (business_id, *) indexes for the about-to-go
+        //      tables / columns.
         //   3. Drop the tables.
-        //   4. alterTable(users) to rebuild without role / role_tier
-        //      columns and their CHECK constraints.
+        //   4. Drop role / role_tier columns from users via raw
+        //      ALTER TABLE … DROP COLUMN.
+        //
+        // The earlier v12 implementation used `m.alterTable(TableMigration(users))`
+        // to rebuild users without role/role_tier. That broke once schema
+        // changes after v12 touched the users table — TableMigration uses
+        // the CURRENT Drift schema to define the rebuilt table, so a
+        // v11 → v14 upgrade tried to SELECT `store_id` (added in v14) from
+        // the pre-rename users table that still had `warehouse_id`. Using
+        // raw DROP COLUMN decouples this block from whatever the current
+        // schema looks like; v14's column rename and any future column
+        // adds/renames run cleanly afterwards.
+        //
+        // SQLite 3.35+ supports DROP COLUMN; bundled via
+        // sqlite3_flutter_libs: ^0.5.15.
         await customStatement(
           "DELETE FROM sync_queue "
           "WHERE action_type IN ('business_members:upsert', "
@@ -1294,7 +1487,203 @@ class AppDatabase extends _$AppDatabase {
         );
         await customStatement('DROP TABLE IF EXISTS business_members');
         await customStatement('DROP TABLE IF EXISTS invites');
-        await m.alterTable(TableMigration(users));
+        // Try/catch wraps make this idempotent — re-running v12 against a
+        // table where the column was already dropped (e.g. a half-completed
+        // earlier attempt that aborted between the two statements) skips
+        // rather than erroring. SQLite has no DROP COLUMN IF EXISTS.
+        try {
+          await customStatement('ALTER TABLE users DROP COLUMN role');
+        } catch (_) {/* already gone */}
+        try {
+          await customStatement('ALTER TABLE users DROP COLUMN role_tier');
+        } catch (_) {/* already gone */}
+      }
+      if (from < 13) {
+        // v13 (Reebaplus master plan §2.4): data-driven roles +
+        // permissions + membership. Adds seven tables — six tenant-
+        // scoped synced tables and one global static-config table
+        // (permissions). The cloud's matching migrations
+        // (0042/0043/0044) create the same tables server-side, seed
+        // permission keys, and update the `complete_onboarding` RPC
+        // to seed default roles on every new business. Pre-existing
+        // businesses are backfilled by cloud 0043; this local block
+        // only creates empty tables and seeds the global permissions
+        // rows. Tenant rows arrive via the next sync pull.
+        await m.createTable(permissions);
+        await m.createTable(roles);
+        await m.createTable(rolePermissions);
+        await m.createTable(roleSettings);
+        await m.createTable(userBusinesses);
+        await m.createTable(inviteCodes);
+        await m.createTable(userStores);
+
+        // Sync indexes for the six new synced tenant tables.
+        for (final t in _v13NewSyncedTables) {
+          await customStatement(
+            'CREATE INDEX idx_${t}_business_lua ON $t (business_id, last_updated_at)',
+          );
+        }
+
+        // Soft-delete indexes for the soft-deletable additions.
+        for (final t in const ['roles', 'invite_codes']) {
+          await customStatement(
+            'CREATE INDEX idx_${t}_business_deleted ON $t (business_id, is_deleted)',
+          );
+        }
+
+        // Hot-path indexes specific to the new tables.
+        for (final stmt in _v13HotPathIndexStatements) {
+          await customStatement(stmt);
+        }
+
+        // bump_<table>_last_updated_at triggers for the new synced
+        // tenant tables. Same shape as the loop in
+        // `_postCreateStatements` so fresh installs and upgrades end
+        // up with identical triggers.
+        for (final t in _v13NewSyncedTables) {
+          await customStatement(
+            'CREATE TRIGGER bump_${t}_last_updated_at '
+            'AFTER UPDATE ON $t '
+            'FOR EACH ROW '
+            'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+            'BEGIN '
+            "UPDATE $t SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+            'END',
+          );
+        }
+
+        // Seed the global permissions table. Static config — same on
+        // every device and the cloud (cloud 0043 inserts the same
+        // rows). Never changes at runtime.
+        for (final stmt in _permissionsSeedStatements) {
+          await customStatement(stmt);
+        }
+      }
+      if (from < 14) {
+        // v14 (Reebaplus pivot step 3): rename warehouses → stores
+        // throughout the schema. Mirrors supabase/migrations/
+        // 0045_rename_warehouses_to_stores.sql.
+        //
+        // SQLite ≥ 3.25 auto-updates FK definitions, trigger bodies,
+        // and index column references through ALTER TABLE ... RENAME TO
+        // and RENAME COLUMN. Index NAMES and trigger NAMES that embed
+        // the old name (idx_warehouses_*, bump_warehouses_*,
+        // idx_inventory_business_pw) must still be rebuilt explicitly.
+        //
+        // The v13-era `invite_codes.warehouse_id` and
+        // `user_stores.warehouse_id` placeholder columns are renamed
+        // here in the same pass.
+
+        // 1. Rename the table.
+        await customStatement('ALTER TABLE warehouses RENAME TO stores');
+
+        // 2. Rename warehouse_id columns to store_id everywhere.
+        for (final t in const [
+          'users',
+          'customers',
+          'inventory',
+          'stock_adjustments',
+          'orders',
+          'order_items',
+          'expenses',
+          'activity_logs',
+          'invite_codes',
+          'user_stores',
+        ]) {
+          await customStatement(
+            'ALTER TABLE $t RENAME COLUMN warehouse_id TO store_id',
+          );
+        }
+
+        // 3. Rename the sync + soft-delete indexes on the renamed table.
+        await customStatement(
+          'DROP INDEX IF EXISTS idx_warehouses_business_lua',
+        );
+        await customStatement(
+          'DROP INDEX IF EXISTS idx_warehouses_business_deleted',
+        );
+        await customStatement(
+          'CREATE INDEX idx_stores_business_lua '
+          'ON stores (business_id, last_updated_at)',
+        );
+        await customStatement(
+          'CREATE INDEX idx_stores_business_deleted '
+          'ON stores (business_id, is_deleted)',
+        );
+
+        // 4. Rebuild the inventory hot-path index with the new name.
+        await customStatement('DROP INDEX IF EXISTS idx_inventory_business_pw');
+        await customStatement(
+          'CREATE INDEX idx_inventory_business_ps '
+          'ON inventory (business_id, product_id, store_id)',
+        );
+
+        // 5. Rename the bump trigger on the renamed table.
+        await customStatement(
+          'DROP TRIGGER IF EXISTS bump_warehouses_last_updated_at',
+        );
+        await customStatement(
+          'CREATE TRIGGER bump_stores_last_updated_at '
+          'AFTER UPDATE ON stores '
+          'FOR EACH ROW '
+          'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+          'BEGIN '
+          "UPDATE stores SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+          'END',
+        );
+
+        // 6. Forward any pending sync_queue rows that target the old
+        //    table name. (Writes to the renamed table itself.)
+        await customStatement(
+          "UPDATE sync_queue SET action_type = 'stores:upsert' "
+          "WHERE action_type = 'warehouses:upsert' AND status = 'pending'",
+        );
+        await customStatement(
+          "UPDATE sync_queue SET action_type = 'stores:delete' "
+          "WHERE action_type = 'warehouses:delete' AND status = 'pending'",
+        );
+
+        // 7. Rewrite pending sync_queue payload keys. Pre-v14 enqueued
+        //    writes for tables that reference the renamed table carry
+        //    `warehouse_id` in their JSON payload (e.g. users:upsert,
+        //    customers:upsert, inventory:upsert, …). After cloud 0045
+        //    deploys, those keys either get silently stripped by the
+        //    push-time column whitelist (users) or hard-fail with
+        //    PostgREST 42703 "column warehouse_id does not exist"
+        //    (every other table). Same problem at the domain RPC layer:
+        //    envelopes enqueued before v14 pass `p_warehouse_id` at the
+        //    top of their payload, and the cloud's renamed RPCs expect
+        //    `p_store_id`. Rewrite both shapes in place.
+        //
+        //    LIMITATION: this rewrites only TOP-LEVEL keys. Domain RPC
+        //    envelopes for pos_record_sale_v2 / pos_inventory_delta_v2
+        //    embed `warehouse_id` / `location_id` inside nested arrays
+        //    (`p_items`, `p_movements`). Those nested keys are NOT
+        //    rewritten — SQLite's json_set can't recurse, and the
+        //    nested shape is RPC-specific. If a v13 device upgrades
+        //    with pending domain envelopes that have nested
+        //    `warehouse_id` keys, those envelopes will fail loudly on
+        //    push and need to be replayed (or sync_queue cleared).
+        //    Practical risk: low — domain envelopes drain quickly and
+        //    are typically empty at app-restart time.
+        await customStatement(
+          "UPDATE sync_queue "
+          "SET payload = json_remove("
+          "  json_set(payload, '\$.store_id', json_extract(payload, '\$.warehouse_id')), "
+          "  '\$.warehouse_id'"
+          ") "
+          "WHERE status = 'pending' "
+          "  AND json_extract(payload, '\$.warehouse_id') IS NOT NULL",
+        );
+        await customStatement(
+          "UPDATE sync_queue "
+          "SET payload = json_remove("
+          "  json_set(payload, '\$.p_store_id', json_extract(payload, '\$.p_warehouse_id')), "
+          "  '\$.p_warehouse_id'"
+          ") "
+          "WHERE status = 'pending' "
+          "  AND json_extract(payload, '\$.p_warehouse_id') IS NOT NULL",
+        );
       }
     },
     beforeOpen: (details) async {
@@ -1389,7 +1778,7 @@ LazyDatabase _openConnection() {
 const List<String> _syncedTenantTables = [
   'users',
   'sessions',
-  'warehouses',
+  'stores',
   'manufacturers',
   'crate_groups',
   'categories',
@@ -1417,7 +1806,104 @@ const List<String> _syncedTenantTables = [
   'activity_logs',
   'notifications',
   'settings',
+  // v13 (master plan §2.4). `permissions` is intentionally absent —
+  // it's global static config, identical on every device and seeded
+  // by migration on both client and cloud.
+  'roles',
+  'role_permissions',
+  'role_settings',
+  'user_businesses',
+  'invite_codes',
+  'user_stores',
 ];
+
+// Subset of `_syncedTenantTables` introduced in schema v13. Used by
+// the v13 upgrade block to create the matching indexes + bump triggers
+// for devices upgrading from v12. Fresh installs get the same shape
+// via the global `_syncedTenantTables` loop in `_postCreateStatements`.
+const List<String> _v13NewSyncedTables = [
+  'roles',
+  'role_permissions',
+  'role_settings',
+  'user_businesses',
+  'invite_codes',
+  'user_stores',
+];
+
+// Hot-path indexes for the v13 tables. Applied during both onCreate
+// (via `_postCreateStatements`) and the v13 upgrade block.
+const List<String> _v13HotPathIndexStatements = [
+  'CREATE INDEX idx_role_permissions_role ON role_permissions (role_id)',
+  'CREATE INDEX idx_role_settings_role ON role_settings (role_id)',
+  'CREATE INDEX idx_user_businesses_user ON user_businesses (user_id)',
+  'CREATE INDEX idx_user_stores_user ON user_stores (user_id)',
+  // Only one active code per `code` value at a time. Used codes and
+  // revoked/deleted codes drop out so the same code value could in
+  // principle be reused (the 8-char alphanumeric keyspace is large
+  // enough that this never matters in practice).
+  'CREATE UNIQUE INDEX uq_invite_codes_active ON invite_codes (code) '
+      'WHERE used_at IS NULL AND revoked_at IS NULL AND is_deleted = 0',
+];
+
+// Default permission keys seeded into the global `permissions` table.
+// Identical on every device and on the cloud (mirror this list in
+// supabase/migrations/0043_seed_permissions_and_backfill_businesses.sql).
+// Each row: (key, description, category). Category groups toggles in
+// the CEO Settings > Roles & Permissions sub-page. 30 keys total.
+const List<List<String>> _defaultPermissionRows = [
+  // Sales
+  ['sales.make', 'Make a sale', 'Sales'],
+  ['sales.cancel', 'Cancel a sale', 'Sales'],
+  ['sales.discount.give', 'Give a discount on a sale', 'Sales'],
+  // Products
+  ['products.add', 'Add a new product', 'Products'],
+  ['products.edit_price', 'Edit product prices', 'Products'],
+  ['products.edit_buying_price', 'Edit product buying price', 'Products'],
+  ['products.delete', 'Delete a product', 'Products'],
+  // Stock
+  ['stock.add', 'Add stock to existing products', 'Stock'],
+  ['stock.view', 'View stock levels', 'Stock'],
+  ['stock.adjust', 'Adjust stock quantities (damages, theft, count)', 'Stock'],
+  // Expenses
+  ['expenses.create', 'Record a new expense', 'Expenses'],
+  ['expenses.approve', 'Approve or reject pending expenses', 'Expenses'],
+  // Reports
+  ['reports.see_sales', 'See sales reports', 'Reports'],
+  ['reports.see_profit', 'See profit reports', 'Reports'],
+  ['reports.see_cost_prices', 'See buying prices in reports', 'Reports'],
+  ['reports.see_expenses', 'See expense reports', 'Reports'],
+  // Customers
+  ['customers.add', 'Add a new customer', 'Customers'],
+  ['customers.update', 'Update customer details', 'Customers'],
+  ['customers.delete', 'Soft-delete a customer', 'Customers'],
+  ['customers.wallet.update', 'Add funds to customer wallets', 'Customers'],
+  // Suppliers / Shipments
+  ['suppliers.manage', 'Manage suppliers and payments', 'Suppliers'],
+  ['shipments.manage', 'Manage incoming shipments', 'Suppliers'],
+  // Staff
+  ['staff.invite', 'Generate staff invite codes', 'Staff'],
+  ['staff.suspend', 'Suspend or reactivate staff', 'Staff'],
+  ['staff.change_role', 'Change a staff member\'s role', 'Staff'],
+  // System
+  ['activity_logs.view', 'View activity logs', 'System'],
+  ['settings.manage', 'Manage business settings', 'System'],
+  // Funds Register
+  ['funds.open_day', 'Open the day in Funds Register', 'Funds'],
+  ['funds.close_day', 'Close the day in Funds Register', 'Funds'],
+  ['funds.view', 'View Funds Register balances', 'Funds'],
+];
+
+// SQL statements that seed the global permissions table. Built once
+// at app start (top-level final). Used by both `_postCreateStatements`
+// (fresh installs) and the v13 upgrade block.
+final List<String> _permissionsSeedStatements = _defaultPermissionRows
+    .map(
+      (row) => "INSERT INTO permissions (key, description, category) "
+          "VALUES ('${_sqlEscape(row[0])}', '${_sqlEscape(row[1])}', '${_sqlEscape(row[2])}')",
+    )
+    .toList(growable: false);
+
+String _sqlEscape(String s) => s.replaceAll("'", "''");
 
 // 0033_staff_lifecycle_hard_delete dropped soft-delete on users and
 // business_members — both the columns and their (business_id, is_deleted)
@@ -1425,7 +1911,7 @@ const List<String> _syncedTenantTables = [
 // users row persists for historical FK reference. Keep the other entries
 // intact: products/customers/etc. still soft-delete normally.
 const List<String> _softDeletableTables = [
-  'warehouses',
+  'stores',
   'manufacturers',
   'crate_groups',
   'categories',
@@ -1437,6 +1923,9 @@ const List<String> _softDeletableTables = [
   'drivers',
   'expense_categories',
   'expenses',
+  // v13 additions.
+  'roles',
+  'invite_codes',
 ];
 
 class _LedgerImmutability {
@@ -1500,7 +1989,7 @@ const List<_LedgerImmutability> _ledgerTables = [
     'expense_id',
     'delivery_id',
     'wallet_txn_id',
-    'warehouse_id',
+    'store_id',
     'created_at',
   ]),
   _LedgerImmutability('crate_ledger', [
@@ -1547,7 +2036,7 @@ List<String> get _postCreateStatements {
     'CREATE INDEX idx_customers_business_phone ON customers (business_id, phone)',
     'CREATE INDEX idx_wallet_txn_business_cust_time ON wallet_transactions (business_id, customer_id, created_at)',
     'CREATE INDEX idx_crate_ledger_owner_group ON crate_ledger (business_id, customer_id, manufacturer_id, crate_group_id, created_at)',
-    'CREATE INDEX idx_inventory_business_pw ON inventory (business_id, product_id, warehouse_id)',
+    'CREATE INDEX idx_inventory_business_ps ON inventory (business_id, product_id, store_id)',
     'CREATE INDEX idx_stock_txn_prod_loc_time ON stock_transactions (product_id, location_id, created_at)',
     'CREATE INDEX idx_orders_business_time ON orders (business_id, created_at)',
     'CREATE INDEX idx_orders_business_status ON orders (business_id, status)',
@@ -1639,6 +2128,19 @@ List<String> get _postCreateStatements {
       'END',
     );
   }
+
+  // -- v13 (master plan §2.4) hot-path indexes for the new tables.
+  // The (business_id, last_updated_at) and (business_id, is_deleted)
+  // indexes for the v13 synced tables are already created by the
+  // loops above (the tables are in `_syncedTenantTables` and
+  // `_softDeletableTables`). These are the per-feature indexes that
+  // those loops don't cover.
+  stmts.addAll(_v13HotPathIndexStatements);
+
+  // -- v13 seed: global `permissions` table. Static config, identical
+  // on every device and the cloud (cloud 0043 inserts the same rows).
+  // No sync involvement.
+  stmts.addAll(_permissionsSeedStatements);
 
   return stmts;
 }

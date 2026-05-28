@@ -40,7 +40,7 @@ class CustomerService extends ValueNotifier<List<Customer>> {
         address: Value(customer.addressText),
         googleMapsLocation: Value(customer.googleMapsLocation),
         customerGroup: Value(customer.customerGroup.name),
-        warehouseId: Value(customer.warehouseId),
+        storeId: Value(customer.storeId),
         businessId: businessId,
       ),
     );

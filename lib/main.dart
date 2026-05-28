@@ -15,7 +15,7 @@ import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
 import 'package:reebaplus_pos/features/auth/screens/login_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/email_entry_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/otp_verification_screen.dart';
-import 'package:reebaplus_pos/features/auth/screens/warehouse_assignment_screen.dart';
+import 'package:reebaplus_pos/features/auth/screens/store_assignment_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_background.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
@@ -282,8 +282,8 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
               }
             }
  
-            if (user.warehouseId == null) {
-              return WarehouseAssignmentScreen(user: user);
+            if (user.storeId == null) {
+              return StoreAssignmentScreen(user: user);
             }
             return const MainLayout();
           }(),
