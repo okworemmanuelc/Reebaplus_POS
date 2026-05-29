@@ -11,7 +11,7 @@ These guidelines bias toward caution over speed. For trivial tasks, use judgment
 Before writing any code or proposing any approach:
 
 1. Read this file in full.
-2. Read `MASTER_PLAN.md` in full.
+2. Read `reebaplus_MASTER_PLAN.md` in full.
 3. Read `BUILD_LOG.md` to see what has already been built.
 4. Confirm what you've read by listing the master plan sections relevant to today's work.
 5. Wait for approval before writing code.
