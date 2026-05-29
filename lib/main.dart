@@ -13,7 +13,7 @@ import 'package:reebaplus_pos/core/database/db_wipe.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
 import 'package:reebaplus_pos/features/auth/screens/login_screen.dart';
-import 'package:reebaplus_pos/features/auth/screens/email_entry_screen.dart';
+import 'package:reebaplus_pos/features/auth/screens/welcome_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/otp_verification_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/store_assignment_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
@@ -244,7 +244,7 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
               // transitional bucket re-enter via EmailEntry / LoginScreen.
               return _hasDeviceUser!
                   ? const LoginScreen()
-                  : const EmailEntryScreen();
+                  : const WelcomeScreen();
             }
 
             // Session-gate. Local user is set but Supabase has no JWT —

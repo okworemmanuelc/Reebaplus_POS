@@ -405,6 +405,14 @@ class SupabaseSyncService {
     return out;
   }
 
+  /// Exposes `_restoreTableData` to unit tests so a snapshot/realtime payload
+  /// can be replayed against an in-memory DB without standing up a real
+  /// Supabase client (the restore path only touches `_db`). The actual logic
+  /// stays in `_restoreTableData` so the instance path and tests can't drift.
+  @visibleForTesting
+  Future<void> restoreTableDataForTesting(String table, List<dynamic> data) =>
+      _restoreTableData(table, data);
+
   /// Pushes all pending local changes to Supabase.
   Future<void> pushPending() async {
     // Without an authenticated session the server sees auth.uid() as NULL,
@@ -1297,6 +1305,15 @@ class SupabaseSyncService {
     'manufacturers',
     'stores',
     'users',
+    // Roles + membership (master plan §2.4). FK-safe order: roles before its
+    // dependents; user_businesses/user_stores after users + stores (above).
+    // `permissions` is global (seeded by migration on both sides, not pulled);
+    // `invite_codes` is deferred to Staff Sign Up.
+    'roles',
+    'role_settings',
+    'role_permissions',
+    'user_businesses',
+    'user_stores',
     'profiles',
     'categories',
     'suppliers',
@@ -2396,6 +2413,46 @@ class SupabaseSyncService {
                     ),
                   );
             }
+          }
+          break;
+        // Roles + membership (master plan §2.4). Plain synced tenant tables —
+        // no device-local columns to protect, so the simple fromJson upsert
+        // (like stores) is correct. Restore order is FK-safe via _pullOrder:
+        // roles → role_settings/role_permissions → user_businesses/user_stores,
+        // all after businesses/users/stores.
+        case 'roles':
+          for (var r in rows) {
+            await _db
+                .into(_db.roles)
+                .insertOnConflictUpdate(RoleData.fromJson(r));
+          }
+          break;
+        case 'role_permissions':
+          for (var r in rows) {
+            await _db
+                .into(_db.rolePermissions)
+                .insertOnConflictUpdate(RolePermissionData.fromJson(r));
+          }
+          break;
+        case 'role_settings':
+          for (var r in rows) {
+            await _db
+                .into(_db.roleSettings)
+                .insertOnConflictUpdate(RoleSettingData.fromJson(r));
+          }
+          break;
+        case 'user_businesses':
+          for (var r in rows) {
+            await _db
+                .into(_db.userBusinesses)
+                .insertOnConflictUpdate(UserBusinessData.fromJson(r));
+          }
+          break;
+        case 'user_stores':
+          for (var r in rows) {
+            await _db
+                .into(_db.userStores)
+                .insertOnConflictUpdate(UserStoreData.fromJson(r));
           }
           break;
         case 'products':

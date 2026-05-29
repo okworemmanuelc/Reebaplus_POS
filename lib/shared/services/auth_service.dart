@@ -211,9 +211,50 @@ class AuthService extends ValueNotifier<UserData?> {
       final businessName = business?['name'] as String?;
       if (businessName == null) return null;
 
+      // Resolve the user's role from the cloud so the existing-account screen
+      // can show it before any local pull. Best-effort: failures leave the
+      // role null and the UI falls back gracefully.
+      //
+      // user_businesses.user_id holds the app users.id, NOT the Supabase auth
+      // uid, so resolve the canonical users.id for this auth_user_id first
+      // (mirrors the lookup in upsertLocalUserFromProfile).
+      String? roleName;
+      String? roleSlug;
+      try {
+        final cloudUser = await _supabase
+            .from('users')
+            .select('id')
+            .eq('auth_user_id', authUser.id)
+            .eq('business_id', businessId)
+            .maybeSingle();
+        final userId = cloudUser?['id'] as String?;
+        if (userId != null) {
+          final membership = await _supabase
+              .from('user_businesses')
+              .select('role_id')
+              .eq('user_id', userId)
+              .eq('business_id', businessId)
+              .maybeSingle();
+          final roleId = membership?['role_id'] as String?;
+          if (roleId != null) {
+            final role = await _supabase
+                .from('roles')
+                .select('name, slug')
+                .eq('id', roleId)
+                .maybeSingle();
+            roleName = role?['name'] as String?;
+            roleSlug = role?['slug'] as String?;
+          }
+        }
+      } catch (e) {
+        debugPrint('[AuthService] fetchSupabaseAccount role lookup error: $e');
+      }
+
       return SupabaseAccountInfo(
         businessId: businessId,
         businessName: businessName,
+        roleName: roleName,
+        roleSlug: roleSlug,
       );
     } catch (e) {
       debugPrint('[AuthService] fetchSupabaseAccount error: $e');
@@ -474,6 +515,15 @@ class AuthService extends ValueNotifier<UserData?> {
       // listener or a manual banner retry.
       unawaited(_sync.pullChanges(user.businessId));
 
+      // Stamp the login time on this membership so Staff Management shows it.
+      // Fire-and-forget — value is set above, so the business resolver is bound.
+      unawaited(
+        _db.userBusinessesDao
+            .touchLastLogin(user.id, user.businessId)
+            .catchError((Object e) =>
+                debugPrint('[AuthService] touchLastLogin error: $e')),
+      );
+
       if (user.storeId == null) {
         scheduleMicrotask(() => _handleOnboardingAlerts(user));
       }
@@ -733,7 +783,7 @@ class AuthService extends ValueNotifier<UserData?> {
     }
 
     // 4. Clear local state — triggers the ValueListenableBuilder to rebuild.
-    //    At this point _hasDeviceUser is already false → routes to EmailEntryScreen.
+    //    At this point _hasDeviceUser is already false → routes to WelcomeScreen.
     //    Order matters: clear nav first so store-listeners fire while
     //    the businessId resolver still returns a valid id (see logout()).
     _nav.clearStoreLock();
@@ -1097,8 +1147,19 @@ class SupabaseAccountInfo {
   final String businessId;
   final String businessName;
 
+  /// The user's role in this business, read from the cloud so the
+  /// existing-account screen (fresh device, before any pull) can show the
+  /// real role instead of a hardcoded label. Null if the role couldn't be
+  /// resolved — callers render a graceful fallback. [roleSlug] is the stable
+  /// machine id (`ceo`/`manager`/`cashier`/`stock_keeper`) used for the
+  /// color tag (master plan §8.2).
+  final String? roleName;
+  final String? roleSlug;
+
   const SupabaseAccountInfo({
     required this.businessId,
     required this.businessName,
+    this.roleName,
+    this.roleSlug,
   });
 }

@@ -6,7 +6,9 @@ import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
+import 'package:reebaplus_pos/shared/utils/role_display.dart';
 import 'package:reebaplus_pos/core/settings/settings_screen.dart';
 import 'package:reebaplus_pos/shared/utils/avatar_helpers.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
@@ -85,6 +87,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ?.name ??
         'Unassigned';
 
+    // Real role (master plan §8.2) — null until the membership + role rows are
+    // local (returning devices already have them; a fresh device gets them via
+    // the post-login pull). Falls back to a neutral label while resolving.
+    final role = ref.watch(userRoleProvider(user.id));
+    final roleName = role?.name ?? 'Member';
+    final roleColor = roleTagColor(role?.slug);
+
     if (!_contentReady) {
       return SharedScaffold(
         activeRoute: 'profile',
@@ -99,7 +108,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           title: AppBarHeader(
             icon: FontAwesomeIcons.user,
             title: user.name,
-            subtitle: 'OWNER',
+            subtitle: roleName.toUpperCase(),
           ),
         ),
         body: Center(
@@ -123,7 +132,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         title: AppBarHeader(
           icon: FontAwesomeIcons.user,
           title: user.name,
-          subtitle: 'OWNER',
+          subtitle: roleName.toUpperCase(),
         ),
       ),
       body: LayoutBuilder(
@@ -134,7 +143,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               bottom: context.getRSize(20) + context.bottomInset,
             ),
             children: [
-              _buildProfileHeader(user, avatarColor, storeName),
+              _buildProfileHeader(
+                  user, avatarColor, storeName, roleName, roleColor),
               SizedBox(height: context.getRSize(24)),
               _buildPerformanceMetrics(isWide),
               SizedBox(height: context.getRSize(24)),
@@ -150,7 +160,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Widget _buildProfileHeader(
-      UserData user, Color color, String store) {
+      UserData user, Color color, String store, String roleName,
+      Color roleColor) {
     return Container(
       padding: EdgeInsets.all(context.getRSize(24)),
       decoration: BoxDecoration(
@@ -190,7 +201,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ),
           ),
           SizedBox(height: context.getRSize(8)),
-          _buildRoleTag('Owner'),
+          _buildRoleTag(roleName, roleColor),
           SizedBox(height: context.getRSize(8)),
           Container(
             padding: EdgeInsets.symmetric(
@@ -223,8 +234,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  Widget _buildRoleTag(String role) {
-    final color = Theme.of(context).colorScheme.primary;
+  Widget _buildRoleTag(String role, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(

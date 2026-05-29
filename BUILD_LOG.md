@@ -57,14 +57,14 @@ Keep this section updated at the top so it's easy to see what's done at a glance
 - [ ] Role + permission seeding for new businesses
 
 **Auth flow:**
-- [ ] Welcome screen (section 4)
-- [ ] CEO Sign Up flow (section 5)
-- [ ] Staff Sign Up flow (section 6)
-- [ ] Login flow + Forgot PIN (section 7)
+- [x] Welcome screen (section 4) *(done in Session 6)*
+- [x] CEO Sign Up flow (section 5) *(done in Session 7 — new-email path; §5.2 existing-email branch deferred)*
+- [x] Staff Sign Up flow (section 6) *(done in Session 10)*
+- [x] Login flow + Forgot PIN (section 7) *(done in Session 8 — §7.1–7.4; §5.2/§7.2 multi-business confirm-PIN deferred to Phase 2)*
 - [ ] Who Is Working picker (section 8)
 
 **Core screens:**
-- [ ] Staff Management (section 9)
+- [x] Staff Management (section 9) *(done in Session 10)*
 - [ ] CEO Settings (section 10)
 - [ ] Home / Dashboard (section 11)
 - [ ] Point of Sale (section 12)
@@ -97,6 +97,271 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 ## Session entries
 
 (New entries go below this line. Most recent at the top.)
+
+---
+
+## Session 10 — 2026-05-29 — Staff Management + Invite Codes + Staff Sign Up (pivot step 8)
+
+**Built today:**
+
+The whole staff onboarding + management feature. Step 8 was pulled ahead of the Who-Is-Working picker (step 7): the picker has nothing to show until staff exist, so building staff first gives it real data.
+
+- **Staff Management screen** (§9; CEO + Manager only — hidden entirely for Cashier/Stock keeper). Two tabs (Staff, Invites) with search and an "Invite new staff" button. Staff cards show avatar, name, role colour tag, and last login; suspended staff drop to a greyed section. A Manager sees the CEO and other Managers as faded read-only rows, and sees themselves as a normal card marked "You".
+- **Invite a staff member** modal — pick a role and store, enter the person's email, generate an 8-character one-use code (7-day expiry), and share it by Copy / SMS / WhatsApp. A Manager can only invite Cashiers and Stock keepers, and only to their own store. Pending invites can be revoked.
+- **Staff detail screen** — change role and suspend/reactivate (each behind a confirm dialog), plus total sales and last login. You can't open or manage your own card.
+- **Staff Sign Up flow** (§6) — a new single screen with 6 fading steps (invite code → email → OTP → create PIN → confirm PIN → "Welcome to {business}"). The invited person enters the code, the app shows the business + role and pre-fills their email, they verify by OTP and set a device PIN, then land on Home as the right role with the right store. The Welcome and "No account found" screens' "Join with invite code" buttons now open this (they previously showed a "coming soon" placeholder).
+- **Role / permission checks** — new providers for "the current user's role" and "what they're allowed to do", used to hide Staff Management from staff who can't invite and to restrict a Manager's invite options.
+- **Smaller fixes:** the store dropdown no longer lists a store twice (it had been including soft-deleted / other-business stores); "last login" is now actually recorded on sign-in (it always read "Never" before); and the staff list refreshes when opened (and pull-to-refresh) so a CEO sees newly-joined staff without re-logging in.
+
+**Decisions / scope:**
+- Redemption runs server-side and the device mirrors the result locally, exactly like CEO onboarding — added as the 7th documented direct-write exception in CLAUDE.md §5.
+- The "active now" dot (staff logged in on another till) is deferred — there is no presence data yet.
+- "Last login" is a single timestamp; a richer "last 5 logins" history is deferred (no data source yet).
+- The login email auto-fill / "this PIN belongs to multiple accounts, pick one" issue is deferred to the Who-Is-Working / login work (step 7). Logout deliberately keeps device data (shared-till model).
+
+**Files touched:**
+- New: lib/features/auth/screens/staff_sign_up_screen.dart, lib/features/staff/screens/staff_management_screen.dart, lib/features/staff/screens/staff_detail_screen.dart, lib/features/staff/widgets/invite_staff_sheet.dart
+- lib/core/database/daos.dart (InviteCodesDao.revoke; UserBusinessesDao.setStatus/setRole/touchLastLogin; StoresDao.watchActiveStores)
+- lib/core/providers/stream_providers.dart (currentUserRoleProvider, currentUserPermissionsProvider, hasPermission, usersByBusinessProvider; allStoresProvider now active-only)
+- lib/shared/services/auth_service.dart (stamp last login on sign-in)
+- lib/shared/widgets/app_drawer.dart (permission-gated Staff Management item)
+- lib/features/auth/screens/welcome_screen.dart, no_account_found_screen.dart ("Join with invite code" → Staff Sign Up)
+- CLAUDE.md (§5 exception #7)
+- Tests: test/auth/staff_sign_up_screen_test.dart, test/staff/invite_staff_sheet_test.dart, test/sync/dispatch/staff_dao_dispatch_test.dart, plus route updates in test/auth/no_account_found_screen_test.dart and welcome_screen_test.dart
+
+**Database changes:**
+- No local schema change (still Drift v16) — the membership / invite tables already existed from v13.
+- Four cloud migrations, all deployed (each with a rollback script): 0049 (lookup_invite_code + redeem_invite_code RPCs), 0050 (fix infinite-recursion in the user_businesses RLS policy — 42P17), 0051 (resolve the membership tables' RLS via profiles, matching the rest of the app — fixes the 42501 rejections), 0052 (fix an ambiguous "email" column reference in the redeem RPC — 42702). 0050–0052 were latent issues surfaced because Step 8 is the first feature to read/write these tables from the authenticated client rather than via SECURITY DEFINER RPCs.
+
+**Master plan sections covered:**
+- §6 Staff Sign Up — built.
+- §9 Staff Management — built (§9.1–9.7).
+
+**Plan updates made during session:**
+- No master-plan change. CLAUDE.md §5 gained a 7th sync-exception entry (staff-redemption local mirror).
+
+**Tested:**
+- `flutter analyze lib/ test/` — clean (only the 18 pre-existing `avoid_print` infos in roles_v13_report.dart).
+- `flutter test` — 150 pass, 58 skipped, 0 failures (new: invite-sheet Manager role-filter, staff DAO sync-leak, staff sign-up code step).
+- On device: full invite → redeem → join loop confirmed working after the four cloud fixes; cross-role checks (Manager invite restrictions, hide-don't-grey) confirmed.
+
+**Known issues / left open:**
+- FAB can still sit behind the system nav bar on the physical device — an inset-fix attempt plus temporary debug logging are in staff_management_screen.dart, awaiting on-device inset values to finish.
+- Login email auto-fill / "pick an account" picker — deferred to step 7.
+- §6.2 "email already linked to another business → confirm existing PIN" — deferred to Phase 2.
+- Redeem-failure message is generic ("Something went wrong, re-enter your PIN") — could be made specific later.
+
+**Next session should:**
+- Confirm the FAB on the physical device, decide the login email-fill fix (now vs step 7), then continue the pivot — Who Is Working picker (step 7) and/or CEO Settings Roles & Permissions (step 9).
+
+---
+
+## Session 9 — 2026-05-28 — Auth visual unification (branded look across all auth screens)
+
+**Built today:**
+
+Purely visual pass — no behaviour changed. Brought the older auth screens onto the same branded dark/amber look as CEO Sign Up, Welcome, and No-account-found, and pulled the shared styling into one place.
+
+- **Two new shared widget files (single source of truth):**
+  - `pin_keypad.dart` — `PinDots` (6 amber dots), `PinKey` (one 64×64 glass key), and `PinKeypad` (the full numpad, with a `leadingKey` slot for Login's biometric button).
+  - `auth_form_kit.dart` — `authTitleStyle` / `authSubtitleStyle`, `AuthFormShell` (title/subtitle scroll shell), `AuthInputCard` (glass field wrapper), `AuthErrorText` (fixed-height inline error).
+- **CEO Sign Up now consumes those shared widgets** (its inline `_PinDots`/`_PinPad`/`_formShell`/`_inputCard`/`_errorText` were removed). This kills the duplicate PIN-pad that used to live in both ceo_sign_up and create_pin.
+- **Restyled five screens** to the branded look (`BrandedAuthBackground` + the form kit / shared PIN widgets / `AppButton`), preserving every routing branch, timer, lockout, biometric path, and the "capture providers before await" pattern:
+  - **email_entry** — branded form shell, glass email field, Google + "Login with PIN" preserved.
+  - **otp_verification** — matches the CEO OTP step (title, `OtpBoxRow`, verify/"Verified ✓"/resend). Expiry copy aligned to "5 minutes" (consistent with the rest of auth / master plan §7.1).
+  - **existing_account** — branded business card + the real role badge (color tag).
+  - **create_pin** — branded background + shared `PinDots`/`PinKeypad`, shared `ShakeWidget` (its private copy removed).
+  - **login** — branded background + shared `PinDots`/`PinKeypad`, biometric button passed via `leadingKey`; success overlay + user-picker (with role tags) preserved.
+- **Folded in the pending fix:** `fetchSupabaseAccount` resolves the app `users.id` from `auth_user_id` first, then queries `user_businesses` by that id (the column holds the app id, not the auth uid).
+
+**Decisions / scope:**
+- The legacy `auth_background.dart` (blurred-photo look) is intentionally **kept** — still used by the deferred screens (biometric setup, store assignment, access-granted, success-dashboard, welcome-verification) and main.dart. Expect a small visual seam at the biometric/success tail of the existing-account path; acceptable since biometric is deferred to CEO Settings.
+- No logic/flow change anywhere.
+
+**Files touched:**
+- New: lib/features/auth/widgets/pin_keypad.dart, lib/features/auth/widgets/auth_form_kit.dart
+- Refactored to consume shared widgets: lib/features/auth/screens/ceo_sign_up_screen.dart
+- Restyled: email_entry_screen.dart, otp_verification_screen.dart, existing_account_screen.dart, create_pin_screen.dart, login_screen.dart
+- Fix: lib/shared/services/auth_service.dart (fetchSupabaseAccount role lookup)
+
+**Database changes:**
+- None.
+
+**Master plan sections covered:**
+- §4.3 branded visual style (now applied across the whole auth surface). No plan change.
+
+**Plan updates made during session:**
+- None.
+
+**Tested:**
+- `flutter analyze lib/ test/` — clean except the 18 pre-existing `avoid_print` infos in roles_v13_report.dart.
+- `flutter test` — 144 pass, 58 skipped, 0 failures (no finder tests broke from the extraction).
+- Emulator: not yet run this session — see below.
+
+**Known issues / left open:**
+- **Emulator regression gate not yet run** (auth is hard to unit-test): returning-device PIN + biometric unlock; 5-wrong → forced Forgot-PIN; existing-email fresh-device → branded email → OTP → existing-account (real role) → create-PIN → Home; brand-new email → OTP → No-account-found → Create → CEO Sign Up (visually continuous); multi-user PIN sheet with role tags; CEO Sign Up still end-to-end (now consumes the extracted widgets).
+- The `_UserPickerSheet` modal keeps theme-surface colors (not rebranded) — preserved per scope.
+
+**Next session should:**
+- Run the emulator regression gate above, then continue the pivot: Staff Sign Up (§6) / Who Is Working picker (§8).
+
+---
+
+## Session 8 — 2026-05-28 — §7 Login + Forgot PIN (pivot step 6)
+
+**Built today:**
+
+Targeted changes to the Login flow — most of §7 already existed (PIN entry, biometrics, attempt counter, a wired Forgot-PIN link), so this session fixed the gaps.
+
+- **No account found (§7.1).** A brand-new email that signs in through the Login flow now lands on a proper "No account found" screen (Create a new business / Join with invite code) instead of being silently dropped into sign-up. New `no_account_found_screen.dart` (dark theme, shared branded background). The OTP screen's brand-new branch and the email screen's Google brand-new branch both route here now.
+- **Double-OTP wart fixed.** "Create a new business" on the No-account-found screen hands the already-verified email to CEO Sign Up via a new `verifiedEmail` argument. When set, the sign-up flow skips its own email + OTP steps (business name → type → store → full name → create PIN → confirm PIN → ready; 7 steps, dots adjust). The Welcome path (no verified email) keeps the full 9 steps.
+- **5 wrong PINs → forced Forgot-PIN (§7.1).** Dropped the old 15-minute device lockout entirely. The fifth wrong PIN now sends an email OTP and routes into the existing reset flow (OTP → create new PIN → biometric setup → signed in). The 3rd/4th wrong attempt still warns "N attempts remaining" — reworded from "before lockout" to "before PIN reset".
+- **"Owner" hardcode → real role (§8.2).** Built a reactive role-badge resolver (`userRoleProvider`) that resolves a user's role by id (works before login binds a business, e.g. the shared-PIN picker). Replaced the literal "Owner" in five places: the login user-picker, the existing-account card, and three spots in the profile screen (two app-bar subtitles + the role tag). Each shows the real role name with the master-plan color tag (CEO amber, Manager blue, Cashier green, Stock keeper grey). The existing-account screen is reached before any local pull, so it reads the role from the cloud (added to `SupabaseAccountInfo`).
+
+**Decisions / scope (told to the user up front):**
+- §5.2 "one PIN across businesses" and the §7.2 multi-business picker stay **Phase 2** (they depend on multi-business membership + cross-device PIN). Phase 1's existing "email already linked to X — sign out & use a different email" handling stays.
+- **PINs stay local-only** (device unlock; email/OTP = portable identity). The Phase-2 "PIN portability" goal is met by local re-establishment after OTP, not by cloud-storing a brute-forceable 6-digit hash. Documented in the master plan (§7.4 + §28); no schema or CLAUDE.md change — those already state PINs are local-only.
+
+**Files touched:**
+- lib/features/auth/screens/no_account_found_screen.dart (new)
+- lib/features/auth/screens/login_screen.dart (removed 15-min lockout + lockout UI; 5-wrong forces Forgot-PIN; user-picker role badge; robust `_forgotPin` email)
+- lib/features/auth/screens/ceo_sign_up_screen.dart (`verifiedEmail` arg + email/OTP step skip + dot mapping)
+- lib/features/auth/screens/otp_verification_screen.dart, email_entry_screen.dart (brand-new branch → No-account-found)
+- lib/features/auth/screens/existing_account_screen.dart (real role tag from cloud)
+- lib/features/profile/screens/profile_screen.dart (real role in 3 spots)
+- lib/shared/services/auth_service.dart (`SupabaseAccountInfo` carries roleName/roleSlug; fetch from cloud)
+- lib/shared/utils/role_display.dart (new — `roleTagColor` by slug)
+- lib/core/providers/stream_providers.dart (`userRoleProvider` + two private non-scoped helpers)
+- lib/core/database/daos.dart (`RolesDao.watchAllUnscoped`, `UserBusinessesDao.watchForUser`)
+- test/auth/no_account_found_screen_test.dart (new — 2 tests)
+- reebaplus_master_plan.md (§7.3 forced-path note, new §7.4 PIN local-only, §28 PIN-portability entry)
+
+**Database changes:**
+- None. No schema change (still v16), no cloud migration.
+
+**Master plan sections covered:**
+- §7 Login Flow (§7.1 no-account-found + 5-wrong-force, §7.3 forgot-PIN verified, new §7.4 PIN storage/recovery).
+- §8.2 role color tags (CEO/Manager/Cashier/Stock keeper).
+- §28 Phase 2 — PIN portability entry.
+
+**Plan updates made during session:**
+- Master plan only: added §7.3 forced-path bullet, new §7.4 (PIN local-only intent), and a §28 Phase-2 PIN-portability entry. No behavioural plan change.
+
+**Tested:**
+- `flutter analyze lib/ test/` — clean except the 18 pre-existing `avoid_print` infos in roles_v13_report.dart.
+- `flutter test` — 144 pass (142 prior + 2 new No-account-found tests), 58 skipped, 0 failures.
+- Emulator: not yet run this session — see below.
+
+**Known issues / left open:**
+- **Emulator smoke not yet run** for: returning-device PIN → role badge; fresh-device existing account → OTP → set device PIN; brand-new email → OTP → No-account-found → Create (7-step, email/OTP skipped); 5 wrong PINs → forced reset.
+- Shared PIN-pad widget duplication (create_pin_screen + ceo_sign_up_screen) — tracked tech-debt, not done.
+- §5.2 / §7.2 multi-business confirm-PIN + picker — Phase 2.
+
+**Next session should:**
+- Run the emulator smoke list above, then continue the pivot: Staff Sign Up (§6) / Who Is Working picker (§8).
+
+
+
+**Built today:**
+
+Two pieces, done in order.
+
+- **Task A — roles reach the local DB on pull.** The 5 role/membership tables (`roles`, `role_permissions`, `role_settings`, `user_businesses`, `user_stores`) were seeded cloud-side by `complete_onboarding` and already pushed from the client, but the *pull* path never listed them — so a fresh device's role tables stayed empty. Added them to the pull in three places: the cloud snapshot function (`pos_pull_snapshot`), the client's pull order, and the restore handlers. Now a sign-up pulls the 4 default roles (+ their permissions/settings + the CEO's membership/store link) down to the device. New test proves a role-bearing snapshot restores locally.
+
+- **Task B — one CEO Sign Up screen, nine fading steps (master plan §5).** Replaced the old 8-screen onboarding chain (which ran email-first and in a different order) with a single screen that fades between the 9 steps in the master-plan order: business name → business type → store details → full name → email → OTP → create PIN → confirm PIN → "your business is ready". A small dots indicator sits at the top. Business name first; email/OTP mid-flow; explicit confirm-PIN; store details has searchable State + Country (default Nigeria) with currency auto-filling from the country. The "business is ready" step auto-continues to Home after 3 seconds, and the Add-Product sheet auto-opens on the first Home frame (behaviour kept from the old success screen).
+- The six business types are the master-plan set (Restaurant, Supermarket, Bar, Beer distributor, Pharmacy, Boutique) — not the old 8-item list.
+- Dropped from the flow (not in §5): business phone, business email, timezone, tax-reg-number. The commit feeds safe defaults (business email = CEO email, phone = '', timezone = Africa/Lagos, tax-reg = none); currency comes from the country.
+- Biometric setup is no longer part of the CEO flow (it'll be wired into CEO Settings › Security later). The biometric screen file stays (the PIN-reset / staff path still uses it).
+- The Welcome "Create a new business" button now opens the new screen. The Welcome background (dark + amber glow + dot grid) was extracted into a shared widget so both screens match.
+
+**Decisions / conflicts resolved (told to the user up front):**
+- OTP resend cooldown is **30s** (master plan §5.1) — the old login OTP screen used 60s.
+- OTP step shows "expires in 5 minutes" (master plan) — actual expiry is whatever Supabase is configured for (server-side, unchanged).
+- Progress indicator is plain dots (master plan says "small dots") rather than the old labelled 7-step indicator, which doesn't fit 9 steps.
+- **New-email login fallthrough repointed.** The kept login screens (`email_entry`, `otp_verification`) used to route a brand-new email into the old chain. They now route to the new CEO Sign Up screen (which re-collects email/OTP). This is a known double-OTP wart for the rare "Sign in → brand-new email" path; the proper "No account found" handling (§7.1) lands with the login restructure (PIVOT_PLAN step 6).
+
+**Files touched:**
+- supabase/migrations/0048_pull_roles_tables.sql (new — DEPLOYED 2026-05-28; 0047 was already remote)
+- supabase/scripts/rollback/0048_rollback.sql (new)
+- lib/core/services/supabase_sync_service.dart (`_pullOrder` + 5 restore cases + `restoreTableDataForTesting` seam)
+- lib/features/auth/screens/ceo_sign_up_screen.dart (new — the single-screen flow; PIN-step crash fix: split create/confirm shake keys so the shared GlobalKey isn't duplicated during the AnimatedSwitcher cross-fade)
+- lib/features/auth/widgets/branded_auth_background.dart (new — extracted Welcome background)
+- lib/features/auth/onboarding/onboarding_draft.dart (email mutable, set at step 5; stale doc comments updated)
+- lib/features/auth/screens/welcome_screen.dart (CTA → CeoSignUpScreen; uses shared background)
+- lib/features/auth/screens/email_entry_screen.dart, otp_verification_screen.dart (new-email branch → CeoSignUpScreen)
+- lib/core/data/countries.dart, currencies.dart, nigerian_states.dart (new — Autocomplete data, no new packages)
+- test/database/roles_pull_restore_test.dart (new — 2 tests)
+- DELETED: business_type_selection_screen.dart, new_owner_name_screen.dart, business_details_screen.dart, location_details_screen.dart, business_settings_screen.dart
+
+**Database changes:**
+- No local schema change (still v16).
+- Cloud 0048 DEPLOYED 2026-05-28 (`supabase db push`). Correction: the remote was already at 0047 — the earlier "cloud through 0046 / 0047 undeployed" notes (Sessions 4/5 and this entry's first draft) were stale. Remote is now at 0048.
+
+**Master plan sections covered:**
+- §5 (CEO Sign Up) — built, new-email path. §5.2 existing-email branch deferred.
+- Touches §4 (Welcome CTA repoint), §2.4 (roles now pulled), §30.6 (currency auto-fill / Nigeria default).
+
+**Plan updates made during session:**
+- None to the master plan. PIVOT_PLAN step 5 is the work; no scope change.
+
+**Tested:**
+- `flutter analyze lib/ test/` — clean except the 18 pre-existing `avoid_print` infos in roles_v13_report.dart.
+- `flutter test` — 142 pass (140 prior + 2 new restore tests), 58 skipped, 0 failures.
+- Emulator smoke (user-run): full 9-step §5 sign-up, the PIN-step crash fix, and `complete_onboarding` all work end-to-end. The §5 "4 roles in the local DB" role-check is deferred to staff onboarding (now unblocked since cloud 0048 is deployed).
+
+**Known issues / left open:**
+- **§5 role-check not yet confirmed on-device.** Cloud 0048 is deployed, so a fresh sign-up's post-onboarding pull should now land 4 roles + their permissions/settings + 1 user_businesses + 1 user_stores locally — to be verified during staff onboarding (§6).
+- **Double-OTP** on the "Sign in → brand-new email" path (see decisions above) — cleaned up in step 6.
+- §5.2 existing-email → confirm-existing-PIN branch deferred.
+- `auth_service.createNewOwner` is still dead (no callers) and its internal comment still names a deleted screen — left untouched (out of scope; surgical).
+
+**Next session should:**
+- Run the emulator smoke + DB checkpoint above. Then continue PIVOT_PLAN: Staff Sign Up (§6) / Login restructure (§7, incl. "No account found" + "Owner" hardcode removal), per the recommended order.
+
+**Session 7 follow-ups (same session):**
+- Store-name field placeholder set to "Abuja Branch".
+- Fixed a duplicate-GlobalKey crash in the PIN step: the create (step 6) and confirm (step 7) bodies both came from `_buildPinStep()` sharing one `ShakeWidget` GlobalKey, and the AnimatedSwitcher kept both mounted during the cross-fade. Split into `_createPinShakeKey` / `_confirmPinShakeKey` (mismatch path shakes the create key via a post-frame callback since step 6 isn't mounted yet at that synchronous point).
+
+---
+
+## Session 6 — 2026-05-28 — Welcome screen (master plan §4)
+
+**Built today:**
+- The new Welcome screen — the first screen on a fresh install and after a full logout (master plan §4). Branded entry, centred: logo (with an "RP" rounded-square fallback per §4.1), "Reebaplus", the tagline, an amber **Create a new business** button, an outlined **Join with invite code** button, an "Already have an account? Sign in" link, and the Terms/Privacy small print.
+- §4.3 visuals: dark base (`adBg`) with a faint dotted grid (CustomPaint), a soft amber glow from the top-right corner (RadialGradient), and a gentle fade + slide entrance driven by an AnimationController — no spinner (§30.7).
+- `ComingSoonScreen` — one reusable dark placeholder, used for Join / Terms / Privacy.
+- **Scope split (decided with the user):** this session built the Welcome screen ONLY. The §5 CEO sign-up restructure is the next step and will be **faithful to §5** (one screen, 9 fading steps + dots, business-name first, email/OTP mid-flow).
+- **Routing:** `main.dart` fresh-device branch now returns `WelcomeScreen` (was `EmailEntryScreen`); returning-device → `LoginScreen` unchanged; a full logout re-renders this branch → Welcome (verified the `fullLogout` path nulls the device-user notifier; updated its stale comment).
+- **CTA destinations (today's entry points):** Create a new business / Sign in → `EmailEntryScreen` (it branches new-vs-existing by email); Join with invite code → the placeholder. The §5 restructure will later repoint "Create a new business" to the business-name step; the real invite-code entry is step 8.
+- Reused `AppButton` (amber primary + outline), `SmoothRoute`, and the `colors.dart` tokens — no new theming or button widgets.
+
+**Files touched:**
+- lib/features/auth/screens/welcome_screen.dart (new)
+- lib/features/auth/screens/coming_soon_screen.dart (new)
+- lib/main.dart (fresh-device branch → WelcomeScreen; dropped the now-unused EmailEntryScreen import)
+- lib/shared/services/auth_service.dart (comment-only: fullLogout now routes to WelcomeScreen)
+- test/auth/welcome_screen_test.dart (new — 2 widget tests: renders logo/name/tagline + 3 CTAs; Join routes to the placeholder)
+
+**Database changes:**
+- None. UI only — no schema, cloud, or migration change; nothing to deploy.
+
+**Master plan sections covered:**
+- §4 (Welcome screen) — built. §4.2 CTA routing wired to current entry points (final §5/§8 destinations come in later steps).
+
+**Plan updates made during session:**
+- None.
+
+**Tested:**
+- `flutter analyze lib/ test/` — clean (only the 18 pre-existing `avoid_print` infos in roles_v13_report).
+- `flutter test` — 140 passing / 58 skipped, 0 failures (2 new Welcome widget tests).
+- Emulator smoke (run by the user): fresh install → Welcome; CTAs route correctly; after full logout → returns to Welcome; a returning device user still goes to `LoginScreen`. Confirmed clean.
+
+**Known issues / left open:**
+- "Join with invite code" is a placeholder until step 8 (manual invite-code entry / staff sign-up). "Create a new business" and "Sign in" both currently land on `EmailEntryScreen` — differentiation arrives with the §5 restructure.
+- The "Owner" hardcode (existing_account_screen.dart, profile_screen.dart) is untouched — that's step 6.
+
+**Next session should:**
+- Begin the §5 CEO Sign Up restructure, faithful to §5: one screen with content fading between the 9 steps + dots indicator, reordered to business-name first with email/OTP at steps 5–6, store details with searchable state/country + currency auto-fill, explicit Confirm-PIN, and the "business is ready" screen. Biometric setup moves out of the flow (PIVOT_PLAN §10). Role seeding already works server-side via `complete_onboarding` — no backend change needed for the checkpoint.
 
 ---
 

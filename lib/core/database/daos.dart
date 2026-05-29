@@ -2783,6 +2783,15 @@ class StoresDao extends DatabaseAccessor<AppDatabase>
     with _$StoresDaoMixin, BusinessScopedDao<AppDatabase> {
   StoresDao(super.db);
 
+  /// Active (non-deleted) stores for the current business, ordered by name.
+  /// Drives store pickers and the Stores screen.
+  Stream<List<StoreData>> watchActiveStores() {
+    return (select(stores)
+          ..where((t) => whereBusiness(t) & t.isDeleted.not())
+          ..orderBy([(t) => OrderingTerm(expression: t.name)]))
+        .watch();
+  }
+
   Stream<StoreData?> watchStore(String id) {
     return (select(
       stores,
@@ -4125,6 +4134,15 @@ class RolesDao extends DatabaseAccessor<AppDatabase>
         .get();
   }
 
+  /// All non-deleted roles across every business on this device, NOT scoped
+  /// to the current session. Role ids are globally unique, so the role-badge
+  /// resolver (see `userRoleProvider`) can look up a role by id even before
+  /// login binds a business — the Who Is Working / shared-PIN picker shows
+  /// each candidate's role before `setCurrentUser` runs.
+  Stream<List<RoleData>> watchAllUnscoped() {
+    return (select(roles)..where((t) => t.isDeleted.not())).watch();
+  }
+
   /// Lookup by slug — the stable machine identifier (`ceo`, `manager`,
   /// `cashier`, `stock_keeper`). Code that branches on role identity
   /// uses this, not `name`.
@@ -4297,6 +4315,15 @@ class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
         .get();
   }
 
+  /// Reactive memberships for a specific user, NOT scoped to the current
+  /// session. Filters by user id only so the role-badge resolver works
+  /// before login binds a business (the shared-PIN picker). Drives
+  /// `userRoleProvider`.
+  Stream<List<UserBusinessData>> watchForUser(String userId) {
+    return (select(userBusinesses)..where((t) => t.userId.equals(userId)))
+        .watch();
+  }
+
   Future<UserBusinessData?> getForUserInBusiness(
     String userId,
     String businessId,
@@ -4311,6 +4338,60 @@ class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
   Future<void> insertMembership(UserBusinessesCompanion row) async {
     await into(userBusinesses).insert(row);
     await db.syncDao.enqueueUpsert('user_businesses', row);
+  }
+
+  /// Suspend or reactivate a membership. [status] is `'active'` or
+  /// `'suspended'` (matches the CHECK constraint). Enqueues the updated
+  /// row for sync.
+  Future<void> setStatus(String membershipId, String status) async {
+    await (update(userBusinesses)..where((t) => t.id.equals(membershipId)))
+        .write(
+      UserBusinessesCompanion(
+        status: Value(status),
+        lastUpdatedAt: Value(DateTime.now()),
+      ),
+    );
+    // Re-read the full row so the enqueue payload carries businessId etc.
+    final refreshed = await (select(userBusinesses)
+          ..where((t) => t.id.equals(membershipId)))
+        .getSingle();
+    await db.syncDao.enqueueUpsert('user_businesses', refreshed);
+  }
+
+  /// Change the role on a membership. Enqueues the updated row for sync.
+  Future<void> setRole(String membershipId, String roleId) async {
+    await (update(userBusinesses)..where((t) => t.id.equals(membershipId)))
+        .write(
+      UserBusinessesCompanion(
+        roleId: Value(roleId),
+        lastUpdatedAt: Value(DateTime.now()),
+      ),
+    );
+    // Re-read the full row so the enqueue payload carries businessId etc.
+    final refreshed = await (select(userBusinesses)
+          ..where((t) => t.id.equals(membershipId)))
+        .getSingle();
+    await db.syncDao.enqueueUpsert('user_businesses', refreshed);
+  }
+
+  /// Stamp the login time on a user's membership. Enqueues the updated row
+  /// for sync. No-op if the user has no membership in [businessId].
+  Future<void> touchLastLogin(String userId, String businessId) async {
+    final now = DateTime.now();
+    await (update(userBusinesses)
+          ..where((t) =>
+              t.userId.equals(userId) & t.businessId.equals(businessId)))
+        .write(
+      UserBusinessesCompanion(
+        lastLoginAt: Value(now),
+        lastUpdatedAt: Value(now),
+      ),
+    );
+    // Re-read the full row so the enqueue payload carries businessId etc.
+    final refreshed = await getForUserInBusiness(userId, businessId);
+    if (refreshed != null) {
+      await db.syncDao.enqueueUpsert('user_businesses', refreshed);
+    }
   }
 }
 
@@ -4344,6 +4425,24 @@ class InviteCodesDao extends DatabaseAccessor<AppDatabase>
   Future<void> insertInvite(InviteCodesCompanion row) async {
     await into(inviteCodes).insert(row);
     await db.syncDao.enqueueUpsert('invite_codes', row);
+  }
+
+  /// Revoke an invite code (soft — stays in sync). Sets `revokedAt` so the
+  /// code drops out of `watchActive` and can no longer be redeemed. The
+  /// row stays in `invite_codes`; enqueue the full row so the cloud sees
+  /// the revoke (CLAUDE.md hard rule #9 / §5 soft-delete via enqueueUpsert).
+  Future<void> revoke(String id) async {
+    final now = DateTime.now();
+    await (update(inviteCodes)..where((t) => t.id.equals(id))).write(
+      InviteCodesCompanion(
+        revokedAt: Value(now),
+        lastUpdatedAt: Value(now),
+      ),
+    );
+    // Re-read the full row so the enqueue payload carries businessId etc.
+    final refreshed =
+        await (select(inviteCodes)..where((t) => t.id.equals(id))).getSingle();
+    await db.syncDao.enqueueUpsert('invite_codes', refreshed);
   }
 }
 

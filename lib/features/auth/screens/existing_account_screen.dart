@@ -4,10 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/features/auth/screens/create_pin_screen.dart';
-import 'package:reebaplus_pos/features/auth/widgets/auth_background.dart';
+import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
+import 'package:reebaplus_pos/shared/utils/role_display.dart';
 
 /// Shown after OTP verification on a fresh device when the email already has
 /// a Supabase account. Lists the linked business + role so the user can
@@ -118,79 +120,66 @@ class _ExistingAccountScreenState extends ConsumerState<ExistingAccountScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final textColor = isDark ? Colors.white : Colors.black;
+    const textColor = adTextPrimary;
 
-    return AuthBackground(
-      child: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: IconButton(
-                  icon: Icon(Icons.arrow_back_ios, color: textColor, size: 20),
-                  onPressed: _loading
-                      ? null
-                      : () => Navigator.of(context).pop(),
+    return Scaffold(
+      backgroundColor: adBg,
+      body: BrandedAuthBackground(
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: IconButton(
+                    icon: const Icon(Icons.arrow_back_ios,
+                        color: textColor, size: 20),
+                    onPressed: _loading
+                        ? null
+                        : () => Navigator.of(context).pop(),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              Center(
-                child: Image.asset(
-                  'assets/images/reebaplus_logo.png',
-                  height: 90,
-                  color: isDark ? null : theme.colorScheme.primary,
-                  errorBuilder: (_, __, ___) =>
-                      Icon(Icons.storefront, size: 90, color: textColor),
-                ),
-              ),
-              const SizedBox(height: 24),
-              Center(
-                child: Text(
+                const SizedBox(height: 16),
+                const Text(
                   'Welcome back',
                   style: TextStyle(
                     fontSize: 28,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w800,
                     color: textColor,
                   ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              Center(
-                child: Text(
+                const SizedBox(height: 8),
+                Text(
                   'We found an existing account for ${_maskEmail(widget.email)}.\nSelect a business to continue.',
-                  textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 15,
-                    color: textColor.withValues(alpha: 0.7),
+                    color: textColor.withValues(alpha: 0.65),
                     height: 1.4,
                   ),
                 ),
-              ),
-              const SizedBox(height: 36),
+                const SizedBox(height: 36),
 
-              _buildBusinessCard(context, account: widget.account),
+                _buildBusinessCard(context, account: widget.account),
 
-              const SizedBox(height: 28),
+                const SizedBox(height: 28),
 
-              Center(
-                child: TextButton(
-                  onPressed: _loading ? null : _onCreateNew,
-                  child: Text(
-                    'Create a new business instead',
-                    style: TextStyle(
-                      color: textColor.withValues(alpha: 0.75),
-                      fontSize: 14,
-                      decoration: TextDecoration.underline,
+                Center(
+                  child: TextButton(
+                    onPressed: _loading ? null : _onCreateNew,
+                    child: Text(
+                      'Create a new business instead',
+                      style: TextStyle(
+                        color: textColor.withValues(alpha: 0.75),
+                        fontSize: 14,
+                        decoration: TextDecoration.underline,
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -201,10 +190,8 @@ class _ExistingAccountScreenState extends ConsumerState<ExistingAccountScreen> {
     BuildContext context, {
     required SupabaseAccountInfo account,
   }) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final textColor = isDark ? Colors.white : Colors.black;
-    final primary = theme.colorScheme.primary;
+    const textColor = adTextPrimary;
+    const primary = amberPrimary;
 
     return Container(
       decoration: AppDecorations.glassCard(context, radius: 20),
@@ -225,7 +212,8 @@ class _ExistingAccountScreenState extends ConsumerState<ExistingAccountScreen> {
                     color: primary.withValues(alpha: 0.15),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(Icons.business_rounded, color: primary, size: 26),
+                  child: const Icon(Icons.business_rounded,
+                      color: primary, size: 26),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -234,30 +222,36 @@ class _ExistingAccountScreenState extends ConsumerState<ExistingAccountScreen> {
                     children: [
                       Text(
                         account.businessName,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.w600,
                           color: textColor,
                         ),
                       ),
                       const SizedBox(height: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: primary.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text(
-                          'Owner',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: primary,
-                          ),
-                        ),
+                      Builder(
+                        builder: (context) {
+                          final tagColor =
+                              roleTagColor(widget.account.roleSlug);
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: tagColor.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              widget.account.roleName ?? 'Member',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: tagColor,
+                              ),
+                            ),
+                          );
+                        },
                       ),
                     ],
                   ),
