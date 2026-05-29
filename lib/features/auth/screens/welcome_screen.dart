@@ -3,6 +3,7 @@ import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/features/auth/screens/ceo_sign_up_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/coming_soon_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/email_entry_screen.dart';
+import 'package:reebaplus_pos/features/auth/screens/staff_sign_up_screen.dart';
 import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/smooth_route.dart';
@@ -94,13 +95,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                       AppButton(
                         text: 'Join with invite code',
                         variant: AppButtonVariant.outline,
-                        onPressed: () => _push(
-                          const ComingSoonScreen(
-                            title: 'Join with invite code',
-                            message:
-                                'Staff sign-up is coming soon. For now, use the invite link your manager shared with you.',
-                          ),
-                        ),
+                        onPressed: () => _push(const StaffSignUpScreen()),
                       ),
                       const SizedBox(height: 22),
                       _SignInLink(onTap: () => _push(const EmailEntryScreen())),

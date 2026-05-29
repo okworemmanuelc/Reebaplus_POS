@@ -59,12 +59,12 @@ Keep this section updated at the top so it's easy to see what's done at a glance
 **Auth flow:**
 - [x] Welcome screen (section 4) *(done in Session 6)*
 - [x] CEO Sign Up flow (section 5) *(done in Session 7 — new-email path; §5.2 existing-email branch deferred)*
-- [ ] Staff Sign Up flow (section 6)
+- [x] Staff Sign Up flow (section 6) *(done in Session 10)*
 - [x] Login flow + Forgot PIN (section 7) *(done in Session 8 — §7.1–7.4; §5.2/§7.2 multi-business confirm-PIN deferred to Phase 2)*
 - [ ] Who Is Working picker (section 8)
 
 **Core screens:**
-- [ ] Staff Management (section 9)
+- [x] Staff Management (section 9) *(done in Session 10)*
 - [ ] CEO Settings (section 10)
 - [ ] Home / Dashboard (section 11)
 - [ ] Point of Sale (section 12)
@@ -97,6 +97,62 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 ## Session entries
 
 (New entries go below this line. Most recent at the top.)
+
+---
+
+## Session 10 — 2026-05-29 — Staff Management + Invite Codes + Staff Sign Up (pivot step 8)
+
+**Built today:**
+
+The whole staff onboarding + management feature. Step 8 was pulled ahead of the Who-Is-Working picker (step 7): the picker has nothing to show until staff exist, so building staff first gives it real data.
+
+- **Staff Management screen** (§9; CEO + Manager only — hidden entirely for Cashier/Stock keeper). Two tabs (Staff, Invites) with search and an "Invite new staff" button. Staff cards show avatar, name, role colour tag, and last login; suspended staff drop to a greyed section. A Manager sees the CEO and other Managers as faded read-only rows, and sees themselves as a normal card marked "You".
+- **Invite a staff member** modal — pick a role and store, enter the person's email, generate an 8-character one-use code (7-day expiry), and share it by Copy / SMS / WhatsApp. A Manager can only invite Cashiers and Stock keepers, and only to their own store. Pending invites can be revoked.
+- **Staff detail screen** — change role and suspend/reactivate (each behind a confirm dialog), plus total sales and last login. You can't open or manage your own card.
+- **Staff Sign Up flow** (§6) — a new single screen with 6 fading steps (invite code → email → OTP → create PIN → confirm PIN → "Welcome to {business}"). The invited person enters the code, the app shows the business + role and pre-fills their email, they verify by OTP and set a device PIN, then land on Home as the right role with the right store. The Welcome and "No account found" screens' "Join with invite code" buttons now open this (they previously showed a "coming soon" placeholder).
+- **Role / permission checks** — new providers for "the current user's role" and "what they're allowed to do", used to hide Staff Management from staff who can't invite and to restrict a Manager's invite options.
+- **Smaller fixes:** the store dropdown no longer lists a store twice (it had been including soft-deleted / other-business stores); "last login" is now actually recorded on sign-in (it always read "Never" before); and the staff list refreshes when opened (and pull-to-refresh) so a CEO sees newly-joined staff without re-logging in.
+
+**Decisions / scope:**
+- Redemption runs server-side and the device mirrors the result locally, exactly like CEO onboarding — added as the 7th documented direct-write exception in CLAUDE.md §5.
+- The "active now" dot (staff logged in on another till) is deferred — there is no presence data yet.
+- "Last login" is a single timestamp; a richer "last 5 logins" history is deferred (no data source yet).
+- The login email auto-fill / "this PIN belongs to multiple accounts, pick one" issue is deferred to the Who-Is-Working / login work (step 7). Logout deliberately keeps device data (shared-till model).
+
+**Files touched:**
+- New: lib/features/auth/screens/staff_sign_up_screen.dart, lib/features/staff/screens/staff_management_screen.dart, lib/features/staff/screens/staff_detail_screen.dart, lib/features/staff/widgets/invite_staff_sheet.dart
+- lib/core/database/daos.dart (InviteCodesDao.revoke; UserBusinessesDao.setStatus/setRole/touchLastLogin; StoresDao.watchActiveStores)
+- lib/core/providers/stream_providers.dart (currentUserRoleProvider, currentUserPermissionsProvider, hasPermission, usersByBusinessProvider; allStoresProvider now active-only)
+- lib/shared/services/auth_service.dart (stamp last login on sign-in)
+- lib/shared/widgets/app_drawer.dart (permission-gated Staff Management item)
+- lib/features/auth/screens/welcome_screen.dart, no_account_found_screen.dart ("Join with invite code" → Staff Sign Up)
+- CLAUDE.md (§5 exception #7)
+- Tests: test/auth/staff_sign_up_screen_test.dart, test/staff/invite_staff_sheet_test.dart, test/sync/dispatch/staff_dao_dispatch_test.dart, plus route updates in test/auth/no_account_found_screen_test.dart and welcome_screen_test.dart
+
+**Database changes:**
+- No local schema change (still Drift v16) — the membership / invite tables already existed from v13.
+- Four cloud migrations, all deployed (each with a rollback script): 0049 (lookup_invite_code + redeem_invite_code RPCs), 0050 (fix infinite-recursion in the user_businesses RLS policy — 42P17), 0051 (resolve the membership tables' RLS via profiles, matching the rest of the app — fixes the 42501 rejections), 0052 (fix an ambiguous "email" column reference in the redeem RPC — 42702). 0050–0052 were latent issues surfaced because Step 8 is the first feature to read/write these tables from the authenticated client rather than via SECURITY DEFINER RPCs.
+
+**Master plan sections covered:**
+- §6 Staff Sign Up — built.
+- §9 Staff Management — built (§9.1–9.7).
+
+**Plan updates made during session:**
+- No master-plan change. CLAUDE.md §5 gained a 7th sync-exception entry (staff-redemption local mirror).
+
+**Tested:**
+- `flutter analyze lib/ test/` — clean (only the 18 pre-existing `avoid_print` infos in roles_v13_report.dart).
+- `flutter test` — 150 pass, 58 skipped, 0 failures (new: invite-sheet Manager role-filter, staff DAO sync-leak, staff sign-up code step).
+- On device: full invite → redeem → join loop confirmed working after the four cloud fixes; cross-role checks (Manager invite restrictions, hide-don't-grey) confirmed.
+
+**Known issues / left open:**
+- FAB can still sit behind the system nav bar on the physical device — an inset-fix attempt plus temporary debug logging are in staff_management_screen.dart, awaiting on-device inset values to finish.
+- Login email auto-fill / "pick an account" picker — deferred to step 7.
+- §6.2 "email already linked to another business → confirm existing PIN" — deferred to Phase 2.
+- Redeem-failure message is generic ("Something went wrong, re-enter your PIN") — could be made specific later.
+
+**Next session should:**
+- Confirm the FAB on the physical device, decide the login email-fill fix (now vs step 7), then continue the pivot — Who Is Working picker (step 7) and/or CEO Settings Roles & Permissions (step 9).
 
 ---
 

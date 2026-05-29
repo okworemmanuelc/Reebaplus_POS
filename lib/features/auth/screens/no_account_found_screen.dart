@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/features/auth/screens/ceo_sign_up_screen.dart';
-import 'package:reebaplus_pos/features/auth/screens/coming_soon_screen.dart';
+import 'package:reebaplus_pos/features/auth/screens/staff_sign_up_screen.dart';
 import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/smooth_route.dart';
@@ -85,14 +85,7 @@ class NoAccountFoundScreen extends StatelessWidget {
                   text: 'Join with invite code',
                   variant: AppButtonVariant.outline,
                   onPressed: () => Navigator.of(context).push(
-                    SmoothRoute(
-                      page: const ComingSoonScreen(
-                        title: 'Join with invite code',
-                        message:
-                            'Staff sign-up is coming soon. For now, use the '
-                            'invite link your manager shared with you.',
-                      ),
-                    ),
+                    SmoothRoute(page: const StaffSignUpScreen()),
                   ),
                 ),
               ],

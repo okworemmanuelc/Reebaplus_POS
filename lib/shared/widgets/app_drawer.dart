@@ -8,7 +8,9 @@ import 'package:reebaplus_pos/core/theme/theme_settings_screen.dart';
 import 'package:reebaplus_pos/core/settings/settings_screen.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/features/profile/screens/profile_screen.dart';
+import 'package:reebaplus_pos/features/staff/screens/staff_management_screen.dart';
 import 'package:reebaplus_pos/features/sync/screens/sync_issues_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/user_tips_modal.dart';
 
@@ -333,6 +335,24 @@ class AppDrawer extends ConsumerWidget {
           active: activeRoute == 'cart',
           onTap: () => _navigateTo(context, ref, 'cart'),
         ),
+        // Gated to roles that can invite staff (CEO + Manager). Hidden
+        // entirely for Cashier / Stock keeper (hard rule #7 — hide, don't
+        // grey out). Routes to a pushed screen, like CEO Settings below.
+        if (hasPermission(ref, 'staff.invite'))
+          _navItem(
+            context,
+            FontAwesomeIcons.userGroup,
+            'Staff Management',
+            active: false,
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const StaffManagementScreen(),
+                ),
+              );
+            },
+          ),
         _navItem(
           context,
           FontAwesomeIcons.gear,

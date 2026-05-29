@@ -17,8 +17,7 @@ final allOrdersProvider = StreamProvider<List<OrderWithItems>>((ref) {
 
 // ── Stores ──────────────────────────────────────────────────────────────────
 final allStoresProvider = StreamProvider<List<StoreData>>((ref) {
-  final db = ref.watch(databaseProvider);
-  return db.select(db.stores).watch();
+  return ref.watch(databaseProvider).storesDao.watchActiveStores();
 });
 
 // ── Expenses ───────────────────────────────────────────────────────────────
@@ -118,6 +117,22 @@ final myUserStoresProvider =
   return ref.watch(databaseProvider).userStoresDao.watchForUser(userId);
 });
 
+/// All users in the current business, keyed by id — joins to
+/// [userBusinessesProvider] so Staff Management can render each
+/// membership's name/avatar. Read-only (no synced write); businessId
+/// is the current session's via the Drift business resolver.
+final usersByBusinessProvider =
+    StreamProvider<Map<String, UserData>>((ref) {
+  final db = ref.watch(databaseProvider);
+  final businessId = db.currentBusinessId;
+  if (businessId == null) {
+    return Stream<Map<String, UserData>>.value(const {});
+  }
+  return (db.select(db.users)..where((t) => t.businessId.equals(businessId)))
+      .watch()
+      .map((rows) => {for (final u in rows) u.id: u});
+});
+
 // ── Role badge resolver (master plan §8.2) ──────────────────────────────────
 
 /// Every role on this device, NOT scoped to the current session — role ids
@@ -156,3 +171,34 @@ final activeInviteCodesProvider =
     StreamProvider<List<InviteCodeData>>((ref) {
   return ref.watch(databaseProvider).inviteCodesDao.watchActive();
 });
+
+// ── Current-user role & permission checks (PIVOT_PLAN step 8A) ───────────────
+
+/// The [RoleData] for the currently logged-in user. Resolves the session
+/// user's id via [authProvider] and reuses [userRoleProvider]. Returns null
+/// while no one is logged in or before the membership + role rows have
+/// arrived locally — callers must render a graceful fallback while null.
+final currentUserRoleProvider = Provider<RoleData?>((ref) {
+  final userId = ref.watch(authProvider).currentUser?.id;
+  if (userId == null) return null;
+  return ref.watch(userRoleProvider(userId));
+});
+
+/// The set of permission keys granted to the current user's role (e.g.
+/// `staff.invite`, `sales.make`). Empty until the role + its grants are
+/// resolved locally. Use [hasPermission] for a single-key check.
+final currentUserPermissionsProvider = Provider<Set<String>>((ref) {
+  final role = ref.watch(currentUserRoleProvider);
+  if (role == null) return const <String>{};
+  final grants = ref.watch(rolePermissionsProvider(role.id)).valueOrNull;
+  if (grants == null) return const <String>{};
+  return grants.map((g) => g.permissionKey).toSet();
+});
+
+/// True if the current user's role grants [key]. Thin reader over
+/// [currentUserPermissionsProvider] — reused by every role-gated screen,
+/// button, and action (CLAUDE.md hard rule #6). Hide, don't disable, when
+/// this returns false (hard rule #7).
+bool hasPermission(WidgetRef ref, String key) {
+  return ref.watch(currentUserPermissionsProvider).contains(key);
+}

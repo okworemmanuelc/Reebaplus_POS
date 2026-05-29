@@ -515,6 +515,15 @@ class AuthService extends ValueNotifier<UserData?> {
       // listener or a manual banner retry.
       unawaited(_sync.pullChanges(user.businessId));
 
+      // Stamp the login time on this membership so Staff Management shows it.
+      // Fire-and-forget — value is set above, so the business resolver is bound.
+      unawaited(
+        _db.userBusinessesDao
+            .touchLastLogin(user.id, user.businessId)
+            .catchError((Object e) =>
+                debugPrint('[AuthService] touchLastLogin error: $e')),
+      );
+
       if (user.storeId == null) {
         scheduleMicrotask(() => _handleOnboardingAlerts(user));
       }
