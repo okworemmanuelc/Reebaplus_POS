@@ -15,11 +15,18 @@ import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 
 /// Staff detail screen (master plan §9.5-9.6). Shows the member's avatar,
 /// name, role, status, and assigned store, plus Change role / Suspend
-/// (Reactivate) actions, each gated behind a confirm dialog. Reached only
-/// from a manageable card in Staff Management.
+/// (Reactivate) actions, each gated behind a confirm dialog. Reached from a
+/// manageable card in Staff Management, or — with [readOnly] true — from the
+/// viewer's own card, which opens view-only (no Change role / Suspend, since
+/// you still can't manage yourself).
 class StaffDetailScreen extends ConsumerStatefulWidget {
   final String membershipId;
-  const StaffDetailScreen({super.key, required this.membershipId});
+  final bool readOnly;
+  const StaffDetailScreen({
+    super.key,
+    required this.membershipId,
+    this.readOnly = false,
+  });
 
   @override
   ConsumerState<StaffDetailScreen> createState() => _StaffDetailScreenState();
@@ -292,24 +299,28 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                       : DateFormat('MMM d, y • h:mm a')
                           .format(membership.lastLoginAt!),
                 ),
-                SizedBox(height: context.getRSize(28)),
-                AppButton(
-                  text: 'Change role',
-                  icon: FontAwesomeIcons.userGear,
-                  variant: AppButtonVariant.secondary,
-                  onPressed: () => _changeRole(membership, role, roleOptions),
-                ),
-                SizedBox(height: context.getRSize(12)),
-                AppButton(
-                  text: suspended ? 'Reactivate' : 'Suspend',
-                  icon: suspended
-                      ? FontAwesomeIcons.userCheck
-                      : FontAwesomeIcons.userSlash,
-                  variant: suspended
-                      ? AppButtonVariant.success
-                      : AppButtonVariant.danger,
-                  onPressed: () => _toggleSuspend(membership),
-                ),
+                // View-only (own card): hide the manage actions — you can't
+                // change your own role or suspend yourself.
+                if (!widget.readOnly) ...[
+                  SizedBox(height: context.getRSize(28)),
+                  AppButton(
+                    text: 'Change role',
+                    icon: FontAwesomeIcons.userGear,
+                    variant: AppButtonVariant.secondary,
+                    onPressed: () => _changeRole(membership, role, roleOptions),
+                  ),
+                  SizedBox(height: context.getRSize(12)),
+                  AppButton(
+                    text: suspended ? 'Reactivate' : 'Suspend',
+                    icon: suspended
+                        ? FontAwesomeIcons.userCheck
+                        : FontAwesomeIcons.userSlash,
+                    variant: suspended
+                        ? AppButtonVariant.success
+                        : AppButtonVariant.danger,
+                    onPressed: () => _toggleSuspend(membership),
+                  ),
+                ],
               ],
             ),
     );

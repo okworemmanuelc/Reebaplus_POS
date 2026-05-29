@@ -21,7 +21,13 @@ import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
-  const LoginScreen({super.key});
+  /// When set (e.g. routed from the Who Is Working picker, master plan §8.4),
+  /// the screen identifies this exact staff member instead of reading the
+  /// device user — so the name, avatar, and PIN-scoping email all match the
+  /// tapped card rather than whoever first set up the device.
+  final UserData? presetUser;
+
+  const LoginScreen({super.key, this.presetUser});
 
   @override
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
@@ -72,6 +78,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     // Identify user
     final auth = ref.read(authProvider);
     final db = ref.read(databaseProvider);
+
+    // Picker-driven entry (master plan §8.4): the staff member is already
+    // chosen, so use it verbatim and skip the device-user / last-email
+    // lookups — that's what fixes the carried-over device email showing on
+    // another staff member's PIN screen.
+    if (widget.presetUser != null) {
+      final user = widget.presetUser!;
+      _identifiedUser = user;
+      if (user.email != null) _emailController.text = user.email!;
+      _checkBiometricAvailability();
+      return;
+    }
+
     final userId = await auth.getDeviceUserId();
     if (userId != null) {
       final user = await db.storesDao.getUserById(userId);
@@ -224,13 +243,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
     if (!mounted) return;
 
+    // Scope the PIN check to the identified user's email when known, so two
+    // staff who happen to share a PIN don't collide on the same device.
+    final scopeEmail =
+        _identifiedUser?.email ?? _emailController.text.trim();
+
     List<UserData> matches;
     try {
       matches = await ref
           .read(authProvider)
           .getUsersByPin(
             _pinNotifier.value,
-            email: _emailController.text.trim(),
+            email: scopeEmail,
           );
     } catch (e) {
       if (!mounted) return;
@@ -713,6 +737,11 @@ class _PinPad extends StatelessWidget {
               padding: EdgeInsets.only(bottom: context.getRSize(16)),
               child: TextFormField(
                 controller: emailController,
+                // When we already know who's signing in (returning device user
+                // or a picker-selected staff member), the email is fixed — it
+                // scopes the PIN check, so editing it would let it drift away
+                // from the identified user. Switch accounts via the link below.
+                readOnly: identifiedUser != null,
                 style: const TextStyle(color: textColor),
                 decoration: AppDecorations.authInputDecoration(
                   context,

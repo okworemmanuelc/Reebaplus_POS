@@ -154,6 +154,16 @@ class SupabaseSyncService {
   static String _consecutiveFailuresKey(String businessId) =>
       'consecutive_pull_failures::$businessId';
 
+  /// Device-wide one-shot flag for the invite_codes backfill (see
+  /// [ensureBackfillOnce]). Bumping the suffix re-arms the backfill for a
+  /// future table that lands in the pull path after devices have synced.
+  static const _backfillCursorResetKey = 'sync_backfill_done::invite_codes_v2';
+
+  /// Prefix of the per-business incremental-pull cursor keys written by
+  /// [pullChanges]. Kept as a named constant so [ensureBackfillOnce] and
+  /// the cursor read/write below can't drift.
+  static const _lastSyncPrefix = 'last_sync_timestamp::';
+
   /// Tracks the previous value of [isOnline] so the listener can detect
   /// `false → true` transitions. ValueNotifier doesn't surface old values
   /// in listener callbacks, so we keep our own copy.
@@ -1232,6 +1242,40 @@ class SupabaseSyncService {
   /// setCurrentUser, the connectivity-recovery listener, a manual banner
   /// retry, and a FirstSyncScreen retry all converge on this single entry
   /// point and must not race each other.
+  ///
+  /// One-time, device-wide backfill for tables that were added to the pull
+  /// path AFTER devices had already advanced their per-business
+  /// `last_sync_timestamp::<businessId>` cursor. Incremental pulls only return
+  /// rows with `last_updated_at > cursor`, so rows that already existed when
+  /// the table joined the snapshot (e.g. invite_codes created before 0053)
+  /// sit below the cursor and never arrive on an already-synced device.
+  ///
+  /// Clearing every `last_sync_timestamp::*` key forces the next
+  /// [pullChanges] on each tenant to run full (`since = null`) and re-pull all
+  /// tables, including the newly-pullable one, exactly once. Guarded by a
+  /// device-wide SharedPreferences flag so it runs a single time.
+  ///
+  /// No data loss: a full pull restores via `insertOnConflictUpdate`, and the
+  /// `sync_queue` (pending local writes) is untouched. New rows already arrive
+  /// via incremental pull + realtime; this only recovers the historical ones.
+  Future<void> ensureBackfillOnce() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_backfillCursorResetKey) ?? false) return;
+
+    final cursorKeys = prefs
+        .getKeys()
+        .where((k) => k.startsWith(_lastSyncPrefix))
+        .toList();
+    for (final k in cursorKeys) {
+      await prefs.remove(k);
+    }
+    await prefs.setBool(_backfillCursorResetKey, true);
+    debugPrint(
+      '[SyncService] invite_codes backfill: cleared ${cursorKeys.length} '
+      'sync cursor(s) — next pull(s) run full to backfill the table.',
+    );
+  }
+
   Future<void> pullChanges(String businessId) async {
     if (_fullPullRunning) {
       debugPrint(
@@ -1243,12 +1287,16 @@ class SupabaseSyncService {
     _currentBusinessId = businessId;
     pullStatus.value = const PullStatus(stage: PullStage.background);
 
+    // One-shot backfill: clear stale cursors BEFORE reading this tenant's, so
+    // the read below sees null and this pull runs full. Runs once per device.
+    await ensureBackfillOnce();
+
     final prefs = await SharedPreferences.getInstance();
     // Per-business key: a wiped DB or a device that has switched businesses
     // must not inherit the timestamp from a different tenant, otherwise
     // incremental pulls skip rows that haven't been touched in the cloud
     // since the unrelated last sync.
-    final key = 'last_sync_timestamp::$businessId';
+    final key = '$_lastSyncPrefix$businessId';
     final lastSyncStr = prefs.getString(key);
     DateTime? since;
     if (lastSyncStr != null) {
@@ -1307,13 +1355,17 @@ class SupabaseSyncService {
     'users',
     // Roles + membership (master plan §2.4). FK-safe order: roles before its
     // dependents; user_businesses/user_stores after users + stores (above).
-    // `permissions` is global (seeded by migration on both sides, not pulled);
-    // `invite_codes` is deferred to Staff Sign Up.
+    // `permissions` is global (seeded by migration on both sides, not pulled).
     'roles',
     'role_settings',
     'role_permissions',
     'user_businesses',
     'user_stores',
+    // invite_codes references business/role/store/generated-by-user — all
+    // pulled above — so it's FK-safe here. Pulled so the Staff Management
+    // Invites tab (§9.3, CEO+Manager) shows codes created on any device in
+    // the business, not just the creator's device.
+    'invite_codes',
     'profiles',
     'categories',
     'suppliers',
@@ -2453,6 +2505,18 @@ class SupabaseSyncService {
             await _db
                 .into(_db.userStores)
                 .insertOnConflictUpdate(UserStoreData.fromJson(r));
+          }
+          break;
+        // invite_codes (master plan §6/§9.3). Plain synced tenant table — no
+        // device-local columns, so the simple fromJson upsert is correct.
+        // Restore order is FK-safe via _pullOrder (after businesses/roles/
+        // stores/users). Realtime delivery routes here too via the public:*
+        // wildcard, so codes also appear live on other devices.
+        case 'invite_codes':
+          for (var r in rows) {
+            await _db
+                .into(_db.inviteCodes)
+                .insertOnConflictUpdate(InviteCodeData.fromJson(r));
           }
           break;
         case 'products':

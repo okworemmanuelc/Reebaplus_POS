@@ -496,6 +496,8 @@ class AuthService extends ValueNotifier<UserData?> {
   /// pass UserData/businessId by widget args instead of reading from `value`.
   void setCurrentUser(UserData user, {bool freshSignIn = false}) {
     try {
+      // A successful sign-in clears the picker-on-unlock flag set by lockApp().
+      showPickerOnUnlock = false;
       // Side-effects first — navigationService fully ready before any rebuild
       _nav.applyUserStoreLock(user.storeId);
       _nav.setIndex(0);
@@ -711,6 +713,13 @@ class AuthService extends ValueNotifier<UserData?> {
   /// so that users who explicitly pressed "Log Out" aren't immediately logged back in.
   bool bypassNextBiometric = false;
 
+  /// If true, the next "logged-out but device still has a user" render routes
+  /// to the Who Is Working picker instead of the PIN screen (master plan §8.5).
+  /// Set by [lockApp] (manual lock, Switch User, auto-lock all go through it);
+  /// reset by [setCurrentUser] on the next successful sign-in. Cold start
+  /// leaves this false, so a fresh launch still lands on the PIN screen.
+  bool showPickerOnUnlock = false;
+
   /// Clears the active user, removes the store lock, but retains the
   /// device-level session so the next launch shows the personalized PIN screen.
   ///
@@ -753,6 +762,10 @@ class AuthService extends ValueNotifier<UserData?> {
     // See logout() — same ordering rule.
     _nav.clearStoreLock();
     _nav.resetNavigation();
+    // Lock/Switch User/auto-lock return to the Who Is Working picker, not the
+    // PIN screen (master plan §8.5). Set before `value = null` so the flag is
+    // in place by the time main.dart rebuilds on the null user.
+    showPickerOnUnlock = true;
     value = null;
     bypassNextBiometric = true;
   }

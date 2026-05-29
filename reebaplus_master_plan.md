@@ -167,13 +167,14 @@ Triggered by tapping "Create a new business" on the Welcome screen. One screen, 
 
 ## 6. Staff Sign Up Flow
 
-Triggered by tapping "Join with invite code" on the Welcome screen. One screen, content fades between 6 steps. Small dots progress indicator at the top.
+Triggered by tapping "Join with invite code" on the Welcome screen. One screen, content fades between 7 steps. Small dots progress indicator at the top.
 
 ### 6.1 Steps in order
 
 - Invite code (8 letters and numbers mixed). If invalid, expired, or already used, show error on the same step with "Try again" option.
 - Email. Must match the email the invite was generated for.
 - OTP — 6 digits, valid 5 minutes, resend after 30 seconds, 5 wrong attempts max.
+- Full name — the staff member's own name. Required; shown everywhere they appear (Staff Management, Who's Working picker, receipts). Mirrors the full-name step in CEO Sign Up (§5). Added 2026-05-29 — §6 originally had no name step, so staff defaulted to showing their email.
 - Create PIN — 6 digits, block obvious patterns.
 - Confirm PIN.
 - "Welcome to [Business Name]" — auto-continues to Home after 3 seconds.
@@ -181,7 +182,7 @@ Triggered by tapping "Join with invite code" on the Welcome screen. One screen, 
 ### 6.2 Behaviour
 
 - Back button goes back one step, keeps typed values.
-- If email is already linked to another business, skip PIN creation, confirm existing PIN instead.
+- If email is already linked to another business, skip the full-name and PIN creation steps, confirm existing PIN instead (that account already has a name). (Phase 2.)
 - Role and assigned store are read from the invite code and applied automatically.
 
 ---

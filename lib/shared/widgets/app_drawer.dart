@@ -101,8 +101,10 @@ class AppDrawer extends ConsumerWidget {
               ),
               if (user != null)
                 IconButton(
-                  icon: const FaIcon(FontAwesomeIcons.lock, size: 18),
-                  tooltip: 'Lock app',
+                  // Switch User — returns to the Who Is Working picker
+                  // (master plan §8.5), not a full logout.
+                  icon: const FaIcon(FontAwesomeIcons.rightLeft, size: 18),
+                  tooltip: 'Switch User',
                   color: Theme.of(
                     context,
                   ).colorScheme.onSurface.withValues(alpha: 0.85),
