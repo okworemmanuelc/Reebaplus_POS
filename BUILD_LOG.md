@@ -65,7 +65,7 @@ Keep this section updated at the top so it's easy to see what's done at a glance
 
 **Core screens:**
 - [x] Staff Management (section 9) *(done in Session 10)*
-- [ ] CEO Settings (section 10)
+- [x] CEO Settings (section 10) *(§10.1 menu + Business Info / Stores / Security / Activity Logs access done in Session 14; §10.2 Roles & Permissions deferred — routes to Coming Soon)*
 - [ ] Home / Dashboard (section 11)
 - [ ] Point of Sale (section 12)
 - [ ] Cart + Edit Quantity modal (section 13)
@@ -97,6 +97,61 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 ## Session entries
 
 (New entries go below this line. Most recent at the top.)
+
+---
+
+## Session 14 — 2026-05-29 — CEO Settings menu + sub-pages (§10.1)
+
+**Built today:**
+- Turned the old flat "CEO Settings" screen into the proper menu from the master plan. It now lists five sections — Business Info, Stores, Security, Roles & Permissions, Activity Logs access — and each opens its own page. The old Profile card was removed (your profile is still reached by tapping your avatar in the side menu).
+- **Business Info** page: edit the business name, type (the six business types), and currency, then Save. The save reaches the cloud and is written to the activity log.
+- **Stores** page: read-only for now — shows your store's name and address. Adding more stores is a later (Phase 2) feature, noted on the page.
+- **Security** page: auto-lock is now a row of preset chips — 1, 3, 5, 10, 15, 30 minutes. The biometric login switch was moved here and **fixed**: before, the switch saved to a place the login screen never read (so it did nothing and also leaked across devices). It now saves on the device itself, the same place login checks.
+- **Activity Logs access** page: a per-role on/off switch for who can view activity logs. The CEO row is locked on and can't be turned off; other roles default off.
+- **Roles & Permissions** (the detailed per-role toggles, §10.2) is **deferred** to a follow-up — its row opens a "coming soon" placeholder for now.
+- The "CEO Settings" item in the side menu is now **hidden** for anyone who isn't the CEO (it was showing for everyone before).
+
+**Plan decisions made this session (with the user):**
+- **Auto-lock now defaults to 5 minutes and is always on**, matching the master plan (§10.1/§8.5). Before, the code defaulted to "Never." The new preset chips have **no "Never" option** — auto-lock can't be switched off entirely anymore, only its interval changed. (This was a deliberate plan-vs-code choice the user confirmed; the master plan already said 5 min, so no plan edit was needed.)
+- **Biometric toggle kept** on the Security page (the plan's Security section only mentions auto-lock, but biometrics is an existing shipped feature, so it stays) and switched to device-local storage.
+
+**Files touched:**
+- lib/core/database/daos.dart (new `BusinessesDao.updateInfo` — edits name/type, enqueues to cloud)
+- lib/core/database/app_database.dart (registered `BusinessesDao`)
+- lib/core/data/business_types.dart (new — shared list of the six business types)
+- lib/core/settings/settings_screen.dart (rewritten into the menu)
+- lib/core/settings/settings_widgets.dart (new — shared section title / tile / fade-in / no-access widgets)
+- lib/core/settings/business_info_screen.dart (new)
+- lib/core/settings/stores_settings_screen.dart (new)
+- lib/core/settings/security_settings_screen.dart (new)
+- lib/core/settings/activity_logs_access_screen.dart (new)
+- lib/shared/widgets/app_drawer.dart (hide "CEO Settings" unless the user has settings.manage)
+- lib/shared/widgets/auto_lock_wrapper.dart (default interval 0/Never → 300s/5min)
+- test/sync/dispatch/businesses_dao_dispatch_test.dart (new)
+- test/settings/settings_menu_gating_test.dart (new)
+- test/settings/activity_logs_access_toggle_test.dart (new)
+
+**Database changes:**
+- None. No migration, no schema/version bump. Business name/type write to the existing `businesses` row; currency is the existing synced `default_currency` setting; activity-log access uses the existing role-permissions.
+
+**Master plan sections covered:**
+- §10.1 — CEO Settings menu + Business Info, Stores, Security, Activity Logs access sub-pages.
+- §10.2 — Roles & Permissions: deferred (placeholder route).
+
+**Plan updates made during session:**
+- None. (The auto-lock default already matched the plan once we chose "follow the plan.")
+
+**Tested:**
+- 3 new tests, all green: BusinessesDao.updateInfo enqueues a `businesses:upsert` (and coalesces repeats); the drawer "CEO Settings" gate shows for CEO and hides for Cashier; the Activity Logs toggle locks CEO on, grants (upsert) and revokes (delete tombstone) for other roles.
+- Full suite green: `flutter analyze` clean for all touched files; `flutter test --exclude-tags=integration` → all passed (173, 2 env-gated skips).
+
+**Known issues / left open:**
+- Roles & Permissions detail page (§10.2) still to build.
+- Stores page is view-only; the `stores` table stores address as one combined `location` string (no separate state/country columns), so the page shows name + that one line.
+- Minor/benign: editing the business row triggers a realtime echo that runs `putIfAbsent('timezone','UTC')` on restore — harmless here because the real timezone lives in `settings`, not the `businesses.timezone` column. Noted, not fixed.
+
+**Next session should:**
+- Build the §10.2 Roles & Permissions sub-page (per-role permission toggles grouped by category, CEO locked on, plus the role limits: max discount %, max expense approval, can-change-prices).
 
 ---
 

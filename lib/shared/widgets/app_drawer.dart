@@ -355,18 +355,22 @@ class AppDrawer extends ConsumerWidget {
               );
             },
           ),
-        _navItem(
-          context,
-          FontAwesomeIcons.gear,
-          'CEO Settings',
-          active: false,
-          onTap: () {
-            Navigator.pop(context);
-            Navigator.of(
-              context,
-            ).push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
-          },
-        ),
+        // Gated to CEO (settings.manage is CEO-only by default; migration
+        // 0043). Hidden entirely for other roles (hard rule #7 — hide, don't
+        // grey out), mirroring the Staff Management gate above.
+        if (hasPermission(ref, 'settings.manage'))
+          _navItem(
+            context,
+            FontAwesomeIcons.gear,
+            'CEO Settings',
+            active: false,
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
+            },
+          ),
         _navItem(
           context,
           FontAwesomeIcons.cloudArrowUp,

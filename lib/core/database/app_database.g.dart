@@ -29086,6 +29086,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     this as AppDatabase,
   );
   late final SettingsDao settingsDao = SettingsDao(this as AppDatabase);
+  late final BusinessesDao businessesDao = BusinessesDao(this as AppDatabase);
   late final SystemConfigDao systemConfigDao = SystemConfigDao(
     this as AppDatabase,
   );

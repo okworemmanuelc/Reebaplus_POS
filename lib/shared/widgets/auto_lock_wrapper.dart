@@ -94,9 +94,10 @@ class _AutoLockWrapperState extends ConsumerState<AutoLockWrapper>
         } else {
           final intervalStr =
               await _db.settingsDao.get('auto_lock_interval_seconds');
-          // Default 0 = Never. Auto-lock is opt-in; an inactivity logout
-          // mid-shift is more disruptive than a stale session.
-          final autoLockSeconds = int.tryParse(intervalStr ?? '') ?? 0;
+          // Default 5 min (300 s) when unset — master plan §10.1/§8.5. The
+          // Security page presets (1/3/5/10/15/30 min) have no "Never" option,
+          // so auto-lock is always on, only the interval is adjustable.
+          final autoLockSeconds = int.tryParse(intervalStr ?? '') ?? 300;
 
           if (autoLockSeconds > 0 && difference.inSeconds >= autoLockSeconds) {
             if (_auth.currentUser != null) {

@@ -4047,6 +4047,35 @@ class SettingsDao extends DatabaseAccessor<AppDatabase>
   }
 }
 
+@DriftAccessor(tables: [Businesses])
+class BusinessesDao extends DatabaseAccessor<AppDatabase>
+    with _$BusinessesDaoMixin, BusinessScopedDao<AppDatabase> {
+  BusinessesDao(super.db);
+
+  /// Edits the current business's name and/or type (CEO Settings > Business
+  /// Info, §10.1). Currency is a synced `settings` key (`default_currency`),
+  /// not a column here — set it via [SettingsDao.set].
+  ///
+  /// `businesses` is cloud-synced via its special push/pull/realtime path
+  /// (it is intentionally absent from `_syncedTenantTables`), so the write
+  /// still routes through `enqueueUpsert`. Because that absence also means
+  /// no `bump_businesses_last_updated_at` trigger exists, `lastUpdatedAt`
+  /// is stamped explicitly here (same as onboarding's local mirror).
+  Future<void> updateInfo({String? name, String? type}) async {
+    final id = requireBusinessId();
+    await (update(businesses)..where((t) => t.id.equals(id))).write(
+      BusinessesCompanion(
+        name: name == null ? const Value.absent() : Value(name),
+        type: type == null ? const Value.absent() : Value(type),
+        lastUpdatedAt: Value(DateTime.now()),
+      ),
+    );
+    final row =
+        await (select(businesses)..where((t) => t.id.equals(id))).getSingle();
+    await db.syncDao.enqueueUpsert('businesses', row);
+  }
+}
+
 @DriftAccessor(tables: [SystemConfig])
 class SystemConfigDao extends DatabaseAccessor<AppDatabase>
     with _$SystemConfigDaoMixin {
