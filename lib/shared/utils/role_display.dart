@@ -20,4 +20,22 @@ Color roleTagColor(String? slug) {
   }
 }
 
+/// Sort rank for a role by its stable slug — CEO first, then Manager,
+/// Cashier, Stock keeper (the master-plan role hierarchy). Unknown / null
+/// slugs sort last. Used to arrange staff by role in Staff Management (§9.2).
+int roleRank(String? slug) {
+  switch (slug) {
+    case 'ceo':
+      return 0;
+    case 'manager':
+      return 1;
+    case 'cashier':
+      return 2;
+    case 'stock_keeper':
+      return 3;
+    default:
+      return 4;
+  }
+}
+
 const Color _roleGrey = Color(0xFF94A3B8);

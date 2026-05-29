@@ -20,15 +20,18 @@ import 'package:reebaplus_pos/features/auth/widgets/shake_widget.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 
-/// Master plan §6 — Staff Sign Up. One screen, content fades between 6 steps
-/// (invite code → email → OTP → create PIN → confirm PIN → "Welcome to
-/// {business}"). A small dots indicator sits at the top. State lives in a
+/// Master plan §6 — Staff Sign Up. One screen, content fades between 7 steps
+/// (invite code → email → OTP → full name → create PIN → confirm PIN →
+/// "Welcome to {business}"). A small dots indicator sits at the top. State
+/// lives in a
 /// lightweight [StaffSignUpDraft]; the redemption (`redeem_invite_code` RPC +
 /// local mirror) runs after Confirm PIN, then straight to Home.
 ///
 /// The §6.2 "email already linked to another business → confirm existing PIN"
 /// branch is deferred to Phase 2 (consistent with the §5.2 / §7.2 deferrals).
-/// This Phase 1 flow handles a fresh device PIN setup.
+/// This Phase 1 flow handles a fresh device PIN setup. §6.2 also notes the
+/// full-name step is skipped for an already-linked email (the name already
+/// exists) — also Phase 2; Phase 1 always shows it.
 class StaffSignUpScreen extends ConsumerStatefulWidget {
   const StaffSignUpScreen({super.key});
 
@@ -54,8 +57,9 @@ class StaffSignUpDraft {
 }
 
 class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
-  // Six dots — staff always do all six steps (master plan §6.1).
-  static const int _totalSteps = 6;
+  // Seven dots — staff always do all seven steps in Phase 1 (master plan §6.1;
+  // the §6.2 name-step skip for already-linked emails is deferred to Phase 2).
+  static const int _totalSteps = 7;
 
   // Obvious PINs to block (master plan §6.1). Mirrors ceo_sign_up_screen.dart.
   static const Set<String> _blockedPins = {
@@ -84,6 +88,10 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
   bool _sendingOtp = false;
   String? _otpSentForEmail; // guards against resending on back/forward
 
+  // Step 3 — full name.
+  final _nameCtrl = TextEditingController();
+  String? _nameError;
+
   // Step 2 — OTP.
   bool _otpVerifying = false;
   bool _otpVerified = false;
@@ -97,8 +105,8 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
   DateTime? _lockoutEndTime;
   Timer? _lockoutTimer;
 
-  // Steps 3 & 4 — PIN. Distinct shake keys: the create (step 3) and confirm
-  // (step 4) PIN bodies are both produced by _buildPinStep() and stay mounted
+  // Steps 4 & 5 — PIN. Distinct shake keys: the create (step 4) and confirm
+  // (step 5) PIN bodies are both produced by _buildPinStep() and stay mounted
   // together during the AnimatedSwitcher cross-fade — one shared GlobalKey
   // across two live widgets crashes. One key per sub-step avoids the collision.
   String _pin = '';
@@ -120,6 +128,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
     _codeCtrl.dispose();
     _emailDisplayCtrl.dispose();
     _otpCtrl.dispose();
+    _nameCtrl.dispose();
     _resendTimer?.cancel();
     _lockoutTimer?.cancel();
     super.dispose();
@@ -157,23 +166,23 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
   // ── Navigation ─────────────────────────────────────────────────────────
 
   void _back() {
-    if (_committing || _step == 5) return;
+    if (_committing || _step == 6) return;
     if (_step == 0) {
       Navigator.of(context).maybePop();
       return;
     }
     setState(() {
       switch (_step) {
-        case 4:
+        case 5:
           _pin = '';
           _firstPin = '';
           _pinError = null;
-          _step = 3;
+          _step = 4;
           break;
-        case 3:
+        case 4:
           _pin = '';
           _pinError = null;
-          _step = 2;
+          _step = 3;
           break;
         case 2:
           _otpCtrl.clear();
@@ -366,7 +375,8 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
     }
 
     // Verified — Supabase now has an authenticated session, so the
-    // redemption at Confirm PIN can call redeem_invite_code.
+    // redemption at Confirm PIN can call redeem_invite_code. Advance to the
+    // full-name step (3).
     await auth.saveAuthMethod('email');
     if (!mounted) return;
     setState(() {
@@ -400,7 +410,21 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
     });
   }
 
-  // ── Steps 3 & 4: PIN ─────────────────────────────────────────────────────
+  // ── Step 3: full name ────────────────────────────────────────────────────
+
+  void _submitName() {
+    final name = _nameCtrl.text.trim();
+    if (name.isEmpty) {
+      setState(() => _nameError = 'Please enter your full name.');
+      return;
+    }
+    setState(() {
+      _nameError = null;
+      _step = 4;
+    });
+  }
+
+  // ── Steps 4 & 5: PIN ─────────────────────────────────────────────────────
 
   void _onPinDigit(String digit) {
     if (_committing || _pin.length >= 6) return;
@@ -422,32 +446,32 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
   }
 
   void _onPinComplete() {
-    if (_step == 3) {
+    if (_step == 4) {
       if (_blockedPins.contains(_pin)) {
         setState(() {
           _pinError = 'Please choose a stronger PIN.';
           _pin = '';
         });
-        // Stay on step 3 — the create body is mounted, shake synchronously.
+        // Stay on step 4 — the create body is mounted, shake synchronously.
         _createPinShakeKey.currentState?.shake();
         return;
       }
       setState(() {
         _firstPin = _pin;
         _pin = '';
-        _step = 4;
+        _step = 5;
       });
       return;
     }
-    // Confirm phase (step 4).
+    // Confirm phase (step 5).
     if (_pin != _firstPin) {
       setState(() {
         _pin = '';
         _firstPin = '';
         _pinError = "PINs don't match. Try again.";
-        _step = 3;
+        _step = 4;
       });
-      // We just switched back to step 3; the create body isn't mounted yet at
+      // We just switched back to step 4; the create body isn't mounted yet at
       // this synchronous point, so shake it after the frame lands.
       WidgetsBinding.instance.addPostFrameCallback(
         (_) => _createPinShakeKey.currentState?.shake(),
@@ -479,7 +503,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
             _committing = false;
             _pin = '';
             _firstPin = '';
-            _step = 3;
+            _step = 4;
           });
         }
         return;
@@ -495,8 +519,9 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
         params: {
           'p_code': code,
           'p_user_id': mintedUserId,
-          // §6.1 has no name step — the RPC defaults the name to the email.
-          'p_name': null,
+          // §6 full-name step: send the captured name. The RPC only falls back
+          // to the email when p_name is null.
+          'p_name': _nameCtrl.text.trim(),
         },
       );
 
@@ -618,7 +643,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
       }
 
       if (!mounted) return;
-      setState(() => _step = 5);
+      setState(() => _step = 6);
 
       // Let the user read "Welcome to {business}" before landing on Home.
       await Future.delayed(const Duration(seconds: 3));
@@ -635,7 +660,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
           final refreshed = await db.storesDao.getUserById(hydrated.id);
           if (refreshed != null) {
             if (!mounted) return;
-            setState(() => _step = 5);
+            setState(() => _step = 6);
             await Future.delayed(const Duration(seconds: 3));
             auth.setCurrentUser(refreshed);
             return;
@@ -652,7 +677,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
           _pin = '';
           _firstPin = '';
           _pinError = 'Something went wrong. Please re-enter your PIN.';
-          _step = 3;
+          _step = 4;
         });
       }
     }
@@ -686,7 +711,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
   }
 
   Widget _buildTopBar() {
-    final showBack = _step != 5 && !_committing;
+    final showBack = _step != 6 && !_committing;
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
       child: Column(
@@ -722,9 +747,11 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
       case 2:
         return _buildOtpStep();
       case 3:
+        return _buildNameStep();
       case 4:
-        return _buildPinStep();
       case 5:
+        return _buildPinStep();
+      case 6:
         return _buildSuccessStep();
       default:
         return const SizedBox.shrink();
@@ -900,8 +927,42 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
     );
   }
 
+  Widget _buildNameStep() {
+    return AuthFormShell(
+      title: 'What should we call you?',
+      subtitle: 'Enter your full name — this is how your team will see you.',
+      children: [
+        AuthInputCard(
+          child: TextField(
+            controller: _nameCtrl,
+            textCapitalization: TextCapitalization.words,
+            textInputAction: TextInputAction.done,
+            autofocus: true,
+            onChanged: (_) {
+              if (_nameError != null) setState(() => _nameError = null);
+            },
+            onSubmitted: (_) => _submitName(),
+            style: const TextStyle(color: adTextPrimary),
+            decoration: AppDecorations.authInputDecoration(
+              context,
+              label: 'Full name',
+              prefixIcon: Icons.person_outline,
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        AuthErrorText(_nameError),
+        const SizedBox(height: 12),
+        AppButton(
+          text: 'Continue',
+          onPressed: _submitName,
+        ),
+      ],
+    );
+  }
+
   Widget _buildPinStep() {
-    final confirming = _step == 4;
+    final confirming = _step == 5;
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(28, 12, 28, 24),
       child: Column(
@@ -1014,7 +1075,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
 
 // ── Small private widgets ────────────────────────────────────────────────
 
-/// Six small dots indicating progress (master plan §6: "small dots progress
+/// Seven small dots indicating progress (master plan §6: "small dots progress
 /// indicator", fading between steps). Mirrors the CEO sign-up indicator.
 class _StepDots extends StatelessWidget {
   final int current;

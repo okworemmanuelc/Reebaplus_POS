@@ -227,11 +227,18 @@ class _StaffTabState extends ConsumerState<_StaffTab> {
           manageable: manageable, isSelf: isSelf));
     }
 
+    // Arrange staff by role (CEO → Manager → Cashier → Stock keeper), then
+    // alphabetically by name within each role (master plan §9.2).
+    int byRoleThenName(_StaffRow a, _StaffRow b) {
+      final r = roleRank(a.role?.slug).compareTo(roleRank(b.role?.slug));
+      return r != 0 ? r : a.user.name.compareTo(b.user.name);
+    }
+
     final active = rows.where((r) => r.membership.status == 'active').toList()
-      ..sort((a, b) => a.user.name.compareTo(b.user.name));
+      ..sort(byRoleThenName);
     final suspended =
         rows.where((r) => r.membership.status == 'suspended').toList()
-          ..sort((a, b) => a.user.name.compareTo(b.user.name));
+          ..sort(byRoleThenName);
 
     return Column(
       children: [
@@ -429,7 +436,7 @@ class _StaffCard extends StatelessWidget {
                 ],
               ),
             ),
-            if (row.manageable)
+            if (row.manageable || row.isSelf)
               Icon(FontAwesomeIcons.chevronRight,
                   size: context.getRSize(13), color: subtext),
           ],
@@ -439,13 +446,20 @@ class _StaffCard extends StatelessWidget {
 
     final wrapped = faded ? Opacity(opacity: 0.55, child: card) : card;
 
-    if (!row.manageable) return wrapped;
+    // Faded non-self rows (CEO / other Managers a Manager can't act on) stay
+    // non-tappable. Your own card opens a view-only detail (§9.5); manageable
+    // rows open the full detail. row.isSelf is false for manageable rows, so
+    // readOnly is true only for your own card.
+    if (!row.manageable && !row.isSelf) return wrapped;
     return InkWell(
       borderRadius: BorderRadius.circular(16),
       onTap: () {
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) => StaffDetailScreen(membershipId: row.membership.id),
+            builder: (_) => StaffDetailScreen(
+              membershipId: row.membership.id,
+              readOnly: row.isSelf,
+            ),
           ),
         );
       },

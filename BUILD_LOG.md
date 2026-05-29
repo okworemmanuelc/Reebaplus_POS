@@ -100,6 +100,81 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 
 ---
 
+## Session 13 — 2026-05-29 — Staff full name at sign-up (§6) + view-only own staff card (§9.5)
+
+**Built today:**
+- Staff Sign Up now asks for the new staff member's full name. Before this, sign-up never collected a name, so the cloud defaulted each user's name to their email — which is why Staff Management cards and the Who's Working picker showed email addresses instead of names. The name is captured on a new step (after the email code, before creating the PIN) and sent to the cloud at redemption. Fixing it at the source fixes every screen that shows a user's name, automatically.
+- Tapping your own card in Staff Management now opens your staff detail in view-only mode. Before, your own card did nothing when tapped. View-only means you can see your details but there are no "Change role" or "Suspend" buttons — you still can't manage yourself. The greyed-out rows a Manager sees for the CEO / other Managers stay non-tappable as before.
+- Also in this session (separate fix, same screen file): Staff Management no longer crashes on open. It was firing a background data refresh during the widget build, which is illegal; the refresh now waits until after the first frame. (Roster still refreshes on open and on pull-to-refresh.)
+
+**Files touched:**
+- lib/features/auth/screens/staff_sign_up_screen.dart (new full-name step; renumbered the later steps 6→7; sends the name to redeem_invite_code)
+- lib/features/staff/screens/staff_detail_screen.dart (new `readOnly` flag hides the manage actions)
+- lib/features/staff/screens/staff_management_screen.dart (own card opens view-only detail; chevron shown on own card; + the post-frame crash fix)
+- test/auth/staff_sign_up_screen_test.dart (added: renders 7 step dots)
+- test/staff/staff_detail_screen_test.dart (new: view-only hides actions; manageable shows them)
+
+**Database changes:**
+- None. No migration, no schema/version bump. The cloud `redeem_invite_code` RPC already accepted a name parameter (we were sending null); we now send the entered name. The RPC still falls back to the email only when the name is blank.
+
+**Master plan sections covered:**
+- §6 (Staff Sign Up) — full-name step.
+- §9.5 (Staff detail) — own card opens view-only.
+
+**Plan updates made during session:**
+- Master plan §6 was updated by the planner (before this code): added the Full name step after OTP, bumped "6 steps → 7 steps", and noted in §6.2 that the name step is skipped for an already-linked email (Phase 2). The master plan was already edited — this session only implemented it.
+
+**Tested:**
+- `flutter analyze lib/ test/` — clean apart from the 18 pre-existing `avoid_print` infos in test/database/roles_v13_report.dart. No new issues.
+- `flutter test` — full suite green: 161 passed / 58 skipped / 0 failures.
+- Note on test coverage: the new step-count test guards the 6→7 renumbering. Driving the sign-up flow all the way to the name step / redemption in a widget test needs Supabase + OTP test doubles the harness doesn't have, so the `p_name` send is verified by reading the RPC (uses the name when non-blank) rather than an end-to-end test.
+
+**Known issues / left open:**
+- Staff who already signed up keep email-as-name until they're re-created (re-invite / re-sign-up on test devices). No backfill.
+- Emulator pass still to do: a brand-new staff sign-up shows a real name in Staff Management + the Who's Working picker; tapping your own card opens a view-only detail.
+
+**Next session should:**
+- Continue the pivot plan (next unbuilt step), or run the emulator checks above before committing.
+
+---
+
+## Session 12 — 2026-05-29 — Invite codes now sync to every device (pull-path completion)
+
+**Built today:**
+- Fixed a one-sided sync bug: staff invite codes were saved to the cloud but never sent back down to other devices. A code generated on one device showed up in the Staff Management → Invites tab only on that device; every other CEO/Manager login (and the shared till) saw an empty tab. Now a code created anywhere in the business appears in the Invites tab on all devices within a sync tick (and live via realtime).
+- No new feature, table, or column — this just finishes the round-trip for an existing table (invite_codes). It was deliberately left out of the pull when the only consumer was Staff Sign Up redemption (which doesn't need local rows); the Invites tab was missed.
+- One-time backfill for devices that had already synced before this change: the pull is incremental (only fetches rows changed since the device's last sync), so invites that already existed would never come down. Added a one-shot, device-wide reset that clears the sync cursors once so the next pull is a full pull and backfills the existing invites. New invites already arrive normally; this only recovers the historical ones. No data loss — a full pull just re-reads and overwrites, and nothing waiting to be uploaded is touched.
+
+**Files touched:**
+- lib/core/services/supabase_sync_service.dart (added invite_codes to the pull order + a restore case; updated the stale "deferred to Staff Sign Up" comment; added `ensureBackfillOnce()` one-shot cursor reset, called at the top of `pullChanges`)
+- test/sync/sync_backfill_once_test.dart (new — backfill guard: clears cursors once, keeps unrelated keys, idempotent)
+- supabase/migrations/0053_pull_invite_codes.sql (new — adds invite_codes to pos_pull_snapshot)
+- supabase/scripts/rollback/0053_rollback.sql (new — reverses 0053)
+- test/database/invite_codes_pull_restore_test.dart (new)
+
+**Database changes:**
+- Cloud migration 0053: adds `invite_codes` to the `pos_pull_snapshot` function's table list so a pull returns the business's invite codes. No schema change — the table already existed (0042) and already pushed. Deploy 0053 before/with shipping the client change.
+- No client schema change (no Drift version bump). invite_codes was already a synced table.
+
+**Master plan sections covered:**
+- §6 / §9.3 (Staff Management → Invites tab, CEO + Manager). The tab query (InviteCodesDao.watchActive) was already business-scoped; it just had no rows from other devices to show.
+
+**Plan updates made during session:**
+- None.
+
+**Tested:**
+- `flutter analyze lib/ test/` — (see session output; expected 18 pre-existing avoid_print infos, no new issues).
+- `flutter test` — full suite + 3 new restore tests (row lands locally; used/revoked/expired/deleted codes filtered out of watchActive while the full set still pulls; restore is idempotent).
+- RLS confirmed unchanged: `invite_codes_tenant_rw` (0050/0051, profiles-based) already lets a tenant's CEO/Manager SELECT their codes; pos_pull_snapshot is SECURITY DEFINER with its own tenant guard.
+
+**Known issues / left open:**
+- None for this fix. Emulator check (cross-device): generate an invite on device A → it appears in the Invites tab on device B within a pull/realtime tick.
+
+**Next session should:**
+- Continue the pivot plan (drawer rebuild §27.3, or the next unbuilt step).
+
+---
+
 ## Session 11 — 2026-05-29 — Who Is Working picker (master plan §8, pivot step 7)
 
 **Built today:**
