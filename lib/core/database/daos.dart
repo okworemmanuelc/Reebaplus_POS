@@ -4293,7 +4293,16 @@ class RoleSettingsDao extends DatabaseAccessor<AppDatabase>
   }
 }
 
-@DriftAccessor(tables: [UserBusinesses])
+/// One active staff member for the Who Is Working picker (master plan §8):
+/// the user row plus their resolved role (null if the role row hasn't synced
+/// locally yet).
+class WhoIsWorkingEntry {
+  final UserData user;
+  final RoleData? role;
+  const WhoIsWorkingEntry({required this.user, this.role});
+}
+
+@DriftAccessor(tables: [UserBusinesses, Users, Roles])
 class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
     with _$UserBusinessesDaoMixin, BusinessScopedDao<AppDatabase> {
   UserBusinessesDao(super.db);
@@ -4305,6 +4314,35 @@ class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
           ..where((t) => whereBusiness(t))
           ..orderBy([(t) => OrderingTerm.asc(t.status)]))
         .watch();
+  }
+
+  /// Active staff (with their user + role rows) for [businessId], joined in
+  /// one query — drives the Who Is Working picker (master plan §8).
+  ///
+  /// Deliberately NOT business-scoped via [whereBusiness]/[requireBusinessId]:
+  /// the picker renders BEFORE sign-in, so the session resolver has no current
+  /// business yet (`currentBusinessId == null`). It filters by the explicit
+  /// [businessId] argument instead. Suspended staff are excluded (§8.3).
+  Stream<List<WhoIsWorkingEntry>> watchActiveStaffForBusiness(
+    String businessId,
+  ) {
+    final query = select(userBusinesses).join([
+      innerJoin(users, users.id.equalsExp(userBusinesses.userId)),
+      leftOuterJoin(roles, roles.id.equalsExp(userBusinesses.roleId)),
+    ])
+      ..where(
+        userBusinesses.businessId.equals(businessId) &
+            userBusinesses.status.equals('active'),
+      )
+      ..orderBy([OrderingTerm.asc(users.name)]);
+    return query.watch().map(
+          (rows) => rows
+              .map((row) => WhoIsWorkingEntry(
+                    user: row.readTable(users),
+                    role: row.readTableOrNull(roles),
+                  ))
+              .toList(),
+        );
   }
 
   /// All memberships for a specific user — Phase 1 always returns

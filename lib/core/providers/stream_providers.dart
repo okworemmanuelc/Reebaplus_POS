@@ -101,14 +101,25 @@ final roleSettingsProvider =
   return ref.watch(databaseProvider).roleSettingsDao.watchForRole(roleId);
 });
 
-/// All memberships for the current business — drives Staff Management
-/// and the Who Is Working picker.
+/// All memberships for the current business — drives Staff Management.
 final userBusinessesProvider =
     StreamProvider<List<UserBusinessData>>((ref) {
   return ref
       .watch(databaseProvider)
       .userBusinessesDao
       .watchForCurrentBusiness();
+});
+
+/// Active staff (user + role) for a given business — drives the Who Is
+/// Working picker (master plan §8). Keyed by an explicit businessId because
+/// the picker renders before sign-in, when the session has no current
+/// business; the session-scoped [userBusinessesProvider] can't be used there.
+final activeStaffProvider =
+    StreamProvider.family<List<WhoIsWorkingEntry>, String>((ref, businessId) {
+  return ref
+      .watch(databaseProvider)
+      .userBusinessesDao
+      .watchActiveStaffForBusiness(businessId);
 });
 
 /// Stores the given user is assigned to.

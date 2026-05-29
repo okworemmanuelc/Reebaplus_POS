@@ -13,6 +13,7 @@ import 'package:reebaplus_pos/core/database/db_wipe.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
 import 'package:reebaplus_pos/features/auth/screens/login_screen.dart';
+import 'package:reebaplus_pos/features/auth/screens/who_is_working_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/welcome_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/otp_verification_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/store_assignment_screen.dart';
@@ -234,17 +235,19 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
             if (user == null) {
               // Still reading SharedPreferences — show branded splash.
               if (_hasDeviceUser == null) return const _BrandedSplash();
-              // Returning user on this device → skip email, go to PIN screen.
-              // New device / fresh install → go to email entry flow.
+              // New device / fresh install → email entry flow.
               //
               // Legacy in-progress onboarding (a half-built business from
               // before the collect-first wizard) is no longer auto-resumed
               // — the new wizard commits atomically at PIN, so abandonment
               // can't leave a half-state to resume into. Users in that
               // transitional bucket re-enter via EmailEntry / LoginScreen.
-              return _hasDeviceUser!
-                  ? const LoginScreen()
-                  : const WelcomeScreen();
+              if (!_hasDeviceUser!) return const WelcomeScreen();
+              // Known device. A lock / Switch User / auto-lock returns to the
+              // Who Is Working picker (master plan §8.5); a cold start lands
+              // straight on the personalized PIN screen.
+              if (_auth.showPickerOnUnlock) return const WhoIsWorkingScreen();
+              return const LoginScreen();
             }
 
             // Session-gate. Local user is set but Supabase has no JWT —

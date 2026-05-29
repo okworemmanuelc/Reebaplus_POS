@@ -56,7 +56,14 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen>
     _tabController.addListener(() => setState(() {}));
     // Fire-and-forget refresh on open so a stale roster (device pulled at
     // login, before later staff joined) catches up without a re-login.
-    if (mounted) unawaited(_pullStaffRoster(ref));
+    // Deferred to a post-frame callback: _pullStaffRoster → pullChanges writes
+    // pullStatus.value synchronously, which is bridged into Riverpod via
+    // pullStatusProvider (watched by the always-mounted SyncBanner). Mutating a
+    // watched provider during the build phase is illegal, so wait until the
+    // first frame is committed.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_pullStaffRoster(ref));
+    });
   }
 
   @override
@@ -87,13 +94,6 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen>
           final mq = MediaQuery.of(context);
           final view = View.of(context);
           final physBottom = view.viewPadding.bottom / view.devicePixelRatio;
-          // TEMP DEBUG — physical Samsung FAB inset investigation.
-          debugPrint(
-            '[StaffMgmt FAB] mq.viewPadding.bottom=${mq.viewPadding.bottom} '
-            'mq.padding.bottom=${mq.padding.bottom} '
-            'mq.viewInsets.bottom=${mq.viewInsets.bottom} '
-            'view.viewPadding.bottom(logical)=$physBottom',
-          );
           final inset = math.max(mq.viewPadding.bottom, physBottom);
           return Padding(
             padding: EdgeInsets.only(bottom: inset),

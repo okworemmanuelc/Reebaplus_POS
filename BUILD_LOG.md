@@ -61,7 +61,7 @@ Keep this section updated at the top so it's easy to see what's done at a glance
 - [x] CEO Sign Up flow (section 5) *(done in Session 7 — new-email path; §5.2 existing-email branch deferred)*
 - [x] Staff Sign Up flow (section 6) *(done in Session 10)*
 - [x] Login flow + Forgot PIN (section 7) *(done in Session 8 — §7.1–7.4; §5.2/§7.2 multi-business confirm-PIN deferred to Phase 2)*
-- [ ] Who Is Working picker (section 8)
+- [x] Who Is Working picker (section 8) *(done in Session 11 — §8.1–8.5; "active now" dot deferred)*
 
 **Core screens:**
 - [x] Staff Management (section 9) *(done in Session 10)*
@@ -97,6 +97,55 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 ## Session entries
 
 (New entries go below this line. Most recent at the top.)
+
+---
+
+## Session 11 — 2026-05-29 — Who Is Working picker (master plan §8, pivot step 7)
+
+**Built today:**
+- The shared-till "Who's working?" picker. It's the screen staff see all day when they switch shifts or come back after the screen auto-locks — different from the Login screen, which is only for a fresh device or a full logout.
+- The picker shows the business name and today's date, the title "Who's working?", and one tappable card per active staff member (avatar initials, name, role colour tag). Suspended staff are hidden. If there's only one staff member (or none), it skips straight to the PIN screen.
+- Tapping a card opens the PIN screen already pointed at that person. If that person hasn't set a PIN yet, it emails them a one-time code instead.
+- A manual lock, the "Switch User" button, and the silent auto-lock now all return to this picker. A cold start (first launch of the day) still goes straight to the PIN screen as before.
+- The sidebar's lock button is now a "Switch User" button (switch icon + tooltip); it behaves exactly as before, just better named for the shared-till use.
+- Reused the Login screen for PIN entry by letting callers hand it a specific staff member. This also fixed a small bug where a different staff member's PIN screen could show the device-owner's email carried over from setup — the email field is now locked to whoever was picked, which keeps the PIN check pointed at the right person when two staff share a PIN.
+
+**Files touched:**
+- lib/core/database/daos.dart (new `WhoIsWorkingEntry` + `UserBusinessesDao.watchActiveStaffForBusiness`; added Users/Roles to the accessor)
+- lib/core/database/daos.g.dart, lib/core/database/app_database.g.dart (regenerated)
+- lib/core/providers/stream_providers.dart (new `activeStaffProvider`)
+- lib/shared/services/auth_service.dart (`showPickerOnUnlock` flag)
+- lib/features/auth/screens/login_screen.dart (`presetUser` param + read-only email when identified)
+- lib/features/auth/screens/who_is_working_screen.dart (new)
+- lib/main.dart (route to picker on unlock)
+- lib/shared/widgets/app_drawer.dart (lock → Switch User control)
+- lib/features/staff/screens/staff_management_screen.dart (removed leftover FAB debug print)
+- test/staff/who_is_working_dao_test.dart (new)
+- test/auth/pin_email_scoping_test.dart (new)
+- test/auth/who_is_working_screen_test.dart (new)
+
+**Database changes:**
+- None. No new tables or columns. The picker reads existing tables (user_businesses + users + roles) through a new read-only DAO query. Nothing new is written or synced.
+
+**Master plan sections covered:**
+- §8 (Who Is Working picker) — §8.1 layout, §8.2 cards, §8.3 rules (suspended hidden, single-staff skip), §8.4 tap-to-PIN, §8.5 Switch User / auto-lock routing.
+- §30.7 (no spinners) — branded fade while resolving.
+- Deferred from §8.2: the "active now" dot (needs multi-till presence; not in this step's scope).
+
+**Plan updates made during session:**
+- None.
+
+**Tested:**
+- `flutter analyze lib/ test/` — 18 issues, all the pre-existing `avoid_print` infos in test/database/roles_v13_report.dart. No new issues.
+- `flutter test` — 155 passed, 58 skipped (baseline 150/58 + 5 new). New tests: DAO returns only active staff of the right business with role joined; getUsersByPin scopes by email when two users share a PIN; picker shows N cards with suspended hidden and tap routes to the PIN screen.
+
+**Known issues / left open:**
+- The "active now" dot (§8.2) is deferred until multi-till presence tracking exists.
+- The picker resolves the business from the device user, with a single-local-business fallback. Multi-business on one device is Phase 2, so this is fine for now.
+- The full labelled "Switch User" button in the redesigned drawer (§27.3 / master plan §27 line 1287) is part of the later drawer-rebuild step; this step only renamed the existing lock control.
+
+**Next session should:**
+- Continue the pivot plan (next unbuilt step after the picker). The drawer rebuild (§27.3) will replace the icon-only Switch User control with the full labelled button and the grouped sidebar items.
 
 ---
 
