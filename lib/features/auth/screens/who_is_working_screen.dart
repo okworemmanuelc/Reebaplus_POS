@@ -158,10 +158,16 @@ class _WhoIsWorkingScreenState extends ConsumerState<WhoIsWorkingScreen> {
           _replaceWithPin(staff.isEmpty ? _deviceUser : staff.first.user);
           return const _BrandedFade(key: ValueKey('shortcut'));
         }
+        // Arrange by role (CEO → Manager → Cashier → Stock keeper), then name
+        // — consistent with the Staff Management list (§9.2).
+        final ordered = [...staff]..sort((a, b) {
+          final r = roleRank(a.role?.slug).compareTo(roleRank(b.role?.slug));
+          return r != 0 ? r : a.user.name.compareTo(b.user.name);
+        });
         return _PickerList(
           key: const ValueKey('picker'),
           businessId: businessId,
-          staff: staff,
+          staff: ordered,
           onTap: _onTapStaff,
         );
       },
