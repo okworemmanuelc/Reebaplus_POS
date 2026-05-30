@@ -368,7 +368,7 @@ Renamed from Dashboard to match the bottom nav. Role-aware screen showing busine
 
 ### 11.3 Reports button
 
-Stays at top. Badge counts actionable alerts across all reports (low stock, overdue payments, debt issues, reconciliation mismatches, etc.). Full Reports planning in section 21.
+Stays at top. Visible to CEO and Manager only — roles below Manager (Cashier, Stock keeper) do not see it. Badge counts actionable alerts across all reports (low stock, overdue payments, debt issues, reconciliation mismatches, etc.). Full Reports planning in section 21.
 
 ### 11.4 Cards by role
 
