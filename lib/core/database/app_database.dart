@@ -2225,7 +2225,20 @@ class AppDatabase extends _$AppDatabase {
       if (from < 21) {
         // v21 (Funds Register): optional account number / terminal id on POS
         // and Bank accounts. Mirrors supabase/migrations/0059_funds_account_number.sql.
-        await m.addColumn(fundsAccounts, fundsAccounts.accountNumber);
+        //
+        // Idempotency guard: for a device coming from < 20, the `from < 20` block
+        // above already created funds_accounts via `m.createTable(fundsAccounts)`,
+        // which builds the table from the CURRENT schema — so account_number is
+        // already present and a blind addColumn would throw "duplicate column".
+        // Only add it for a device genuinely at v20 (funds_accounts created
+        // before this column existed). Covered by migration_upgrade_test.dart.
+        final info =
+            await customSelect('PRAGMA table_info(funds_accounts)').get();
+        final hasAccountNumber =
+            info.any((r) => r.read<String>('name') == 'account_number');
+        if (!hasAccountNumber) {
+          await m.addColumn(fundsAccounts, fundsAccounts.accountNumber);
+        }
       }
     },
     beforeOpen: (details) async {
