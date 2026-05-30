@@ -75,8 +75,8 @@ Keep this section updated at the top so it's easy to see what's done at a glance
 - [x] Home / Dashboard (section 11) *(role-aware cards, subtitle, store lock, Total SKUs — commit 8307314)*
 - [x] Point of Sale (section 12) *(role guards — Session 19)*
 - [x] Cart + Edit Quantity modal (section 13) *(discount + role caps, fractional toggle, per-cashier saved carts, Undo — Session 20)*
-- [ ] Checkout (section 14)
-- [ ] Receipt (section 15)
+- [x] Checkout (section 14) *(two-step payment + receiving account done with Funds Register Session 26; "Add wallet info to receipt" checkbox added Session 30 — §14 now complete)*
+- [~] Receipt (section 15) *(QR code removed — §15.3 / hard rule #8 — and §15.1 wallet-info display wired in Session 30; full §15 pass (refund button, Completed-tab specifics) still pending)*
 - [ ] Inventory + Product Details (section 16)
 - [ ] Daily Stock Count (section 17)
 - [ ] Customers + Customer Profile (section 18)
@@ -103,6 +103,61 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 ## Session entries
 
 (New entries go below this line. Most recent at the top.)
+
+---
+
+## Session 30 — 2026-05-30 — Checkout §14 final piece + QR removed from receipts
+
+**Built today:**
+- Added the "Add wallet info to receipt" checkbox to Checkout (§14.1). Off by
+  default. Only shown for registered customers — walk-ins have no wallet (§14.3).
+  This was the one §14 element still missing; the two-step payment + receiving
+  account picker were already done with Funds Register (Session 26).
+- Made the checkbox actually do something: when ticked, the customer's resulting
+  wallet balance now prints on the receipt as "Wallet Balance: ₦X (credit/debt)"
+  — on both the on-screen receipt and the thermal print (§15.1). Before today the
+  `walletBalance` value was passed to both receipts but never displayed at all.
+- Removed the QR code from both receipts (on-screen `ReceiptWidget` and the
+  thermal `ThermalReceiptService`). The master plan §15.3 says "QR code is removed.
+  Replaced by nothing," and CLAUDE.md hard rule #8 forbids it — it was lingering
+  drift, found while wiring the wallet info. Nothing replaces it.
+
+**Files touched:**
+- lib/features/pos/screens/checkout_page.dart (checkbox state + UI + pass-through)
+- lib/shared/widgets/receipt_widget.dart (showWalletInfo param, wallet line, QR removed, unused barcode import dropped)
+- lib/features/pos/services/receipt_builder.dart (showWalletInfo param, wallet line, QR removed)
+- test/receipt_widget_test.dart (NEW — 5 tests: wallet-info gate + QR-removal regression guard)
+- BUILD_LOG.md, reebaplus_master_plan.md (§3 build-order checkbox)
+
+**Database changes:**
+- None.
+
+**Master plan sections covered:**
+- §14.1 — "Add wallet info to receipt" checkbox (off by default). §14 now complete.
+- §15.1 — wallet info on the receipt, gated by the checkbox.
+- §15.3 — QR code removed (also satisfies CLAUDE.md hard rule #8).
+
+**Plan updates made during session:**
+- None to the plan text. Marked §14 Checkout `[x]` and §15 Receipt `[~]` (partial:
+  QR + wallet info done; full §15 pass — refund button, Completed-tab — still open).
+
+**Tested:**
+- New test/receipt_widget_test.dart: 5 tests green (hidden by default; shows with
+  debt tag; shows with credit tag; null balance renders nothing; QR absent).
+- Full suite: 212 passed / 58 skipped. `flutter analyze` clean (only the 18
+  pre-existing avoid_print infos in test report scripts).
+
+**Known issues / left open:**
+- `barcode_widget` (pubspec) is now unused anywhere in `lib/`. Left in place —
+  flagged for the user to decide whether to drop the dependency.
+- The Orders > Completed reprint path passes `walletBalance` but not
+  `showWalletInfo`, so it defaults to off — reprints never show wallet info. That
+  matches "off by default" since the checkbox choice isn't persisted; revisit if
+  §15 should persist the choice per order.
+
+**Next session should:**
+- Either do the full §15 Receipt pass (refund button for Manager/CEO on the
+  Completed tab, rider info), or continue the build order.
 
 ---
 

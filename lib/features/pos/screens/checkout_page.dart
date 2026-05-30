@@ -64,6 +64,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   bool _isWalletPayment = false;
   // §14.2 Step 2 — chosen receiving account; null falls back to Cash Till.
   String? _selectedFundsAccountId;
+  // §14.1 — opt in to printing wallet info on the receipt. Off by default;
+  // only meaningful for registered customers (walk-ins have no wallet, §14.3).
+  bool _addWalletInfoToReceipt = false;
   final TextEditingController _cashReceivedCtrl = TextEditingController();
   final ScreenshotController _screenshotCtrl = ScreenshotController();
   bool _paymentConfirmed = false;
@@ -465,6 +468,13 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
               _paymentType == PaymentType.partialCash)
             _buildAccountPicker(),
 
+          // §14.1 — "Add wallet info to receipt" (off by default). Only shown
+          // for registered customers; walk-ins have no wallet (§14.3).
+          if (!_isWalkIn) ...[
+            SizedBox(height: context.getRSize(20)),
+            _buildWalletInfoCheckbox(),
+          ],
+
           SizedBox(height: context.getRSize(32)),
           AppButton(
             text: 'Confirm Payment',
@@ -759,6 +769,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                 customerPhone: _initialCustomer?.phone,
                 cashReceived: _amountPaid,
                 walletBalance: _isWalkIn ? null : _dynamicNewCustomerWallet,
+                showWalletInfo: !_isWalkIn && _addWalletInfoToReceipt,
                 riderName: 'Pick-up Order',
                 manufacturerNames: _manufacturerNames,
                 branchName: _branchName,
@@ -917,6 +928,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         customerPhone: widget.customer?.phone,
         cashReceived: _amountPaid,
         walletBalance: _isWalkIn ? null : _dynamicNewCustomerWallet,
+        showWalletInfo: !_isWalkIn && _addWalletInfoToReceipt,
         riderName: 'Pick-up Order',
         branchName: _branchName,
       );
@@ -1053,6 +1065,47 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           );
         }),
       ],
+    );
+  }
+
+  /// §14.1 — "Add wallet info to receipt" toggle. When ticked, the customer's
+  /// resulting wallet balance is printed on the receipt (§15.1). Off by default.
+  Widget _buildWalletInfoCheckbox() {
+    final on = _addWalletInfoToReceipt;
+    return GestureDetector(
+      onTap: () =>
+          setState(() => _addWalletInfoToReceipt = !_addWalletInfoToReceipt),
+      child: Container(
+        padding: EdgeInsets.all(context.getRSize(14)),
+        decoration: BoxDecoration(
+          color: on ? blueMain.withValues(alpha: 0.08) : _surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: on ? blueMain : _border,
+            width: on ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              on ? Icons.check_box : Icons.check_box_outline_blank,
+              size: context.getRSize(22),
+              color: on ? blueMain : _subtext,
+            ),
+            SizedBox(width: context.getRSize(12)),
+            Expanded(
+              child: Text(
+                'Add wallet info to receipt',
+                style: TextStyle(
+                  fontSize: context.getRFontSize(14),
+                  fontWeight: FontWeight.w600,
+                  color: _text,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

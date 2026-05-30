@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:barcode_widget/barcode_widget.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/product_name.dart';
@@ -17,6 +16,10 @@ class ReceiptWidget extends StatelessWidget {
   final String? customerPhone;
   final double? cashReceived;
   final double? walletBalance;
+
+  /// §15.1 — wallet info is printed only when the cashier ticked the
+  /// "Add wallet info to receipt" checkbox at checkout. Off by default.
+  final bool showWalletInfo;
   final DateTime? reprintDate;
   final DateTime? reshareDate;
   final String? riderName;
@@ -43,6 +46,7 @@ class ReceiptWidget extends StatelessWidget {
     this.customerPhone,
     this.cashReceived,
     this.walletBalance,
+    this.showWalletInfo = false,
     this.reprintDate,
     this.reshareDate,
     this.riderName,
@@ -407,6 +411,22 @@ class ReceiptWidget extends StatelessWidget {
               style: TextStyle(fontSize: context.getRFontSize(13), color: sub),
             ),
           ),
+          // §15.1 — wallet info, only when ticked at checkout.
+          if (showWalletInfo && walletBalance != null) ...[
+            SizedBox(height: context.getRSize(4)),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Wallet Balance: ${formatCurrency(walletBalance!)}'
+                ' ${walletBalance! < 0 ? '(debt)' : '(credit)'}',
+                style: TextStyle(
+                  fontSize: context.getRFontSize(13),
+                  fontWeight: FontWeight.w600,
+                  color: textCol,
+                ),
+              ),
+            ),
+          ],
 
           SizedBox(height: context.getRSize(24)),
           Text(
@@ -414,17 +434,6 @@ class ReceiptWidget extends StatelessWidget {
             style: TextStyle(
               fontSize: context.getRFontSize(13),
               fontWeight: FontWeight.bold,
-              color: textCol,
-            ),
-          ),
-          SizedBox(height: context.getRSize(8)),
-          BarcodeWidget(
-            barcode: Barcode.qrCode(),
-            data: 'https://reebaplus.com/receipt/$orderId',
-            width: context.getRSize(120),
-            height: context.getRSize(120),
-            style: TextStyle(
-              fontSize: context.getRFontSize(12),
               color: textCol,
             ),
           ),

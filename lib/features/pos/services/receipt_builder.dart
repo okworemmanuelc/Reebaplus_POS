@@ -18,6 +18,7 @@ class ThermalReceiptService {
     String? customerPhone,
     double? cashReceived,
     double? walletBalance,
+    bool showWalletInfo = false,
     DateTime? reprintDate,
     DateTime? reshareDate,
     String? riderName,
@@ -218,21 +219,19 @@ class ThermalReceiptService {
       formatCurrency(cashReceived ?? total).replaceAll('₦', 'N'),
     );
 
+    // §15.1 — wallet info, only when ticked at checkout.
+    if (showWalletInfo && walletBalance != null) {
+      final tag = walletBalance < 0 ? '(debt)' : '(credit)';
+      bytes += _buildTwoColumnRow(
+        generator,
+        'Wallet Balance:',
+        '${formatCurrency(walletBalance).replaceAll('₦', 'N')} $tag',
+      );
+    }
+
     bytes += generator.text('');
 
-    // --- 6. QR CODE ---
-    bytes += generator.qrcode(
-      'https://reebaplus.com/receipt/$orderId',
-      size: QRSize.size4,
-    );
-    // Explicitly print the unformatted number below the QR code
-    bytes += generator.text(
-      orderId,
-      styles: const PosStyles(align: PosAlign.center),
-    );
-    bytes += generator.text('');
-
-    // --- 7. FOOTER ---
+    // --- 6. FOOTER ---
     bytes += generator.text(
       'Rider: ${riderName ?? 'Pick-up'}',
       styles: const PosStyles(align: PosAlign.center, bold: true),

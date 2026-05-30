@@ -105,7 +105,7 @@ Each step unlocks the next. Build in this order:
 - [x] Cart flow with discounts, role caps, fractional sales, per-cashier saved carts (§13). *(Session 20.)*
 - [ ] Inventory and Product Details, role-aware — includes the destructive product price-column migration (buying / retailer / wholesaler). *(moved ahead of Checkout 2026-05-30: products + prices must be finished before the sales flow.)*
 - [~] Funds Register (new — multi-account model). Phase 1 done: accounts (Cash Till auto + CEO adds POS/Bank), Open Day, the POS Opening-Cash gate, and crediting the chosen account on each sale (§23). *(moved ahead of Checkout 2026-05-30: §14 Step-2 "pick receiving account" + hard rule #10 both require it. Phase 2 — Close Day, reconciliation, Funds History — deferred.)*
-- [ ] Checkout flow with wallet integration (§14). *(Wallet flow pre-existing, not yet formally re-passed.)*
+- [x] Checkout flow with wallet integration (§14). *(Two-step payment + receiving account with Funds Register, Session 26; "Add wallet info to receipt" checkbox added Session 30. §14 complete.)*
 - [ ] Customers screen with wallet.
 - [ ] Orders (Pending, Completed, Cancelled).
 - [ ] Daily Stock Count.
