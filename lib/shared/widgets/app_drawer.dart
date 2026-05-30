@@ -12,7 +12,7 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/features/profile/screens/profile_screen.dart';
 import 'package:reebaplus_pos/features/staff/screens/staff_management_screen.dart';
 import 'package:reebaplus_pos/features/sync/screens/sync_issues_screen.dart';
-import 'package:reebaplus_pos/shared/widgets/user_tips_modal.dart';
+import 'package:reebaplus_pos/shared/utils/role_display.dart';
 
 class AppDrawer extends ConsumerWidget {
   // Pass 'pos' or 'inventory' to highlight the correct nav item
@@ -41,6 +41,10 @@ class AppDrawer extends ConsumerWidget {
     // animation) when the sync streams below would otherwise be re-built and
     // trip requireBusinessId(). See plan: curried-tinkering-hinton.md.
     final user = ref.watch(authProvider).currentUser;
+    // Role tag for the profile area (§27.1). Null until the membership + role
+    // rows resolve locally; fall back to the theme primary while null.
+    final role = ref.watch(currentUserRoleProvider);
+    final roleColor = role == null ? primary : roleTagColor(role.slug);
     return Container(
       width: double.infinity,
       padding: EdgeInsets.fromLTRB(
@@ -53,7 +57,7 @@ class AppDrawer extends ConsumerWidget {
         gradient: LinearGradient(
           colors: [
             Theme.of(context).scaffoldBackgroundColor,
-            primary.withValues(alpha: 0.3),
+            roleColor.withValues(alpha: 0.3),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -219,28 +223,55 @@ class AppDrawer extends ConsumerWidget {
               fontWeight: FontWeight.bold,
             ),
           ),
-          SizedBox(height: context.getRSize(4)),
-          Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: context.getRSize(10),
-              vertical: context.getRSize(4),
-            ),
-            decoration: BoxDecoration(
-              color: Theme.of(
-                context,
-              ).colorScheme.onSurface.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              'Terminal 01',
-              style: TextStyle(
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurface.withValues(alpha: 0.8),
-                fontSize: context.getRFontSize(12),
-                fontWeight: FontWeight.w600,
+          SizedBox(height: context.getRSize(6)),
+          Row(
+            children: [
+              // Role tag — colour by role (§27.1). Hidden until the role
+              // resolves locally.
+              if (role != null) ...[
+                Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: context.getRSize(10),
+                    vertical: context.getRSize(4),
+                  ),
+                  decoration: BoxDecoration(
+                    color: roleColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    role.name,
+                    style: TextStyle(
+                      color: roleColor,
+                      fontSize: context.getRFontSize(12),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                SizedBox(width: context.getRSize(8)),
+              ],
+              Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: context.getRSize(10),
+                  vertical: context.getRSize(4),
+                ),
+                decoration: BoxDecoration(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  'Terminal 01',
+                  style: TextStyle(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.8),
+                    fontSize: context.getRFontSize(12),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
         ],
       ),
@@ -263,13 +294,17 @@ class AppDrawer extends ConsumerWidget {
           active: activeRoute == 'dashboard',
           onTap: () => _navigateTo(context, ref, 'dashboard'),
         ),
-        _navItem(
-          context,
-          FontAwesomeIcons.cashRegister,
-          'Point of Sale',
-          active: activeRoute == 'pos',
-          onTap: () => _navigateTo(context, ref, 'pos'),
-        ),
+        // Point of Sale — hidden for Stock keeper (§27.3 / §12). sales.make is
+        // held by CEO, Manager, Cashier — not Stock keeper.
+        if (hasPermission(ref, 'sales.make'))
+          _navItem(
+            context,
+            FontAwesomeIcons.cashRegister,
+            'Point of Sale',
+            active: activeRoute == 'pos',
+            onTap: () => _navigateTo(context, ref, 'pos'),
+          ),
+        // Inventory & Orders — visible to all four roles (§27.3).
         _navItem(
           context,
           FontAwesomeIcons.boxesStacked,
@@ -284,59 +319,61 @@ class AppDrawer extends ConsumerWidget {
           active: activeRoute == 'orders',
           onTap: () => _navigateTo(context, ref, 'orders'),
         ),
-        _navItem(
-          context,
-          FontAwesomeIcons.users,
-          'Customers',
-          active: activeRoute == 'customers',
-          onTap: () => _navigateTo(context, ref, 'customers'),
-        ),
-        _navItem(
-          context,
-          FontAwesomeIcons.moneyBillWave,
-          'Supplier Accounts',
-          active:
-              activeRoute == 'supplier_accounts' || activeRoute == 'payments',
-          onTap: () => _navigateTo(context, ref, 'supplier_accounts'),
-        ),
-        _navItem(
-          context,
-          FontAwesomeIcons.fileInvoiceDollar,
-          'Expenses',
-          active: activeRoute == 'expenses',
-          onTap: () => _navigateTo(context, ref, 'expenses'),
-        ),
-        _navItem(
-          context,
-          FontAwesomeIcons.store,
-          'Stores',
-          active: activeRoute == 'stores',
-          onTap: () => _navigateTo(context, ref, 'stores'),
-        ),
+        // Customers — hidden for Stock keeper (§27.3). customers.add is held by
+        // CEO, Manager, Cashier — not Stock keeper.
+        if (hasPermission(ref, 'customers.add'))
+          _navItem(
+            context,
+            FontAwesomeIcons.users,
+            'Customers',
+            active: activeRoute == 'customers',
+            onTap: () => _navigateTo(context, ref, 'customers'),
+          ),
+        // Supplier Accounts — CEO always; Manager only if the CEO granted
+        // suppliers.manage ("if toggled", §27.3); hidden for Cashier/Stock keeper.
+        if (hasPermission(ref, 'suppliers.manage'))
+          _navItem(
+            context,
+            FontAwesomeIcons.moneyBillWave,
+            'Supplier Accounts',
+            active:
+                activeRoute == 'supplier_accounts' || activeRoute == 'payments',
+            onTap: () => _navigateTo(context, ref, 'supplier_accounts'),
+          ),
+        // Expenses — CEO/Manager only (§27.3). expenses.create not held by
+        // Cashier or Stock keeper.
+        if (hasPermission(ref, 'expenses.create'))
+          _navItem(
+            context,
+            FontAwesomeIcons.fileInvoiceDollar,
+            'Expenses',
+            active: activeRoute == 'expenses',
+            onTap: () => _navigateTo(context, ref, 'expenses'),
+          ),
+        // Stores — CEO only (§27.3). settings.manage is CEO-only by default.
+        if (hasPermission(ref, 'settings.manage'))
+          _navItem(
+            context,
+            FontAwesomeIcons.store,
+            'Stores',
+            active: activeRoute == 'stores',
+            onTap: () => _navigateTo(context, ref, 'stores'),
+          ),
         SizedBox(height: context.getRSize(12)),
         Divider(color: t.dividerColor),
         SizedBox(height: context.getRSize(12)),
-        _navItem(
-          context,
-          FontAwesomeIcons.clockRotateLeft,
-          'Activity Logs',
-          active: activeRoute == 'activity_logs',
-          onTap: () => _navigateTo(context, ref, 'activity_logs'),
-        ),
-        _navItem(
-          context,
-          FontAwesomeIcons.truckArrowRight,
-          'Deliveries',
-          active: activeRoute == 'deliveries',
-          onTap: () => _navigateTo(context, ref, 'deliveries'),
-        ),
-        _navItem(
-          context,
-          FontAwesomeIcons.cartShopping,
-          'Cart',
-          active: activeRoute == 'cart',
-          onTap: () => _navigateTo(context, ref, 'cart'),
-        ),
+        // Activity Logs — CEO always; Manager only if the CEO granted
+        // activity_logs.view ("if toggled", §27.3); hidden for Cashier/Stock keeper.
+        if (hasPermission(ref, 'activity_logs.view'))
+          _navItem(
+            context,
+            FontAwesomeIcons.clockRotateLeft,
+            'Activity Logs',
+            active: activeRoute == 'activity_logs',
+            onTap: () => _navigateTo(context, ref, 'activity_logs'),
+          ),
+        // Deliveries (Phase 3) and Cart (bottom nav only) removed from the
+        // sidebar per master plan §27.5.
         // Gated to roles that can invite staff (CEO + Manager). Hidden
         // entirely for Cashier / Stock keeper (hard rule #7 — hide, don't
         // grey out). Routes to a pushed screen, like CEO Settings below.
@@ -383,16 +420,8 @@ class AppDrawer extends ConsumerWidget {
             );
           },
         ),
-        _navItem(
-          context,
-          FontAwesomeIcons.lightbulb,
-          'Pro Tips',
-          active: false,
-          onTap: () {
-            Navigator.pop(context);
-            UserTipsModal.show(context);
-          },
-        ),
+        // Pro Tips removed from the sidebar (decision Q7 — not surfaced in
+        // Phase 1; UserTipsModal stays in code for Phase 2).
         SizedBox(height: context.getRSize(12)),
         Divider(color: t.dividerColor),
         SizedBox(height: context.getRSize(12)),

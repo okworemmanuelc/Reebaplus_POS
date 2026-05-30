@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
 
 import 'package:reebaplus_pos/core/utils/number_format.dart';
@@ -16,14 +15,12 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
-import 'package:reebaplus_pos/shared/widgets/user_tips_modal.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/sales_detail_screen.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/reports_hub_screen.dart';
 import 'package:reebaplus_pos/features/customers/screens/customers_screen.dart';
 import 'package:reebaplus_pos/features/expenses/screens/expenses_screen.dart';
 import 'package:reebaplus_pos/features/orders/screens/orders_screen.dart';
-import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 
@@ -42,9 +39,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   String? _selectedStoreId;
   List<StoreData> _stores = [];
   StreamSubscription? _storesSub;
-
-  // Pro-tips hero visibility
-  bool _showProTips = false;
 
   // Total SKUs card expand state (§11.5 — Cashier/Stock keeper).
   bool _skusExpanded = false;
@@ -81,13 +75,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Future<void> _initializeData() async {
-    // Track login count to hide pro tips after first visit
-    SharedPreferences.getInstance().then((prefs) {
-      final count = (prefs.getInt('dashboard_visit_count') ?? 0) + 1;
-      prefs.setInt('dashboard_visit_count', count);
-      if (mounted) setState(() => _showProTips = count <= 1);
-    });
-
     // Stores for the filter dropdown
     final db = ref.read(databaseProvider);
     _storesSub = db.select(db.stores).watch().listen((wh) {
@@ -367,10 +354,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               bottom: context.spacingM + context.bottomInset,
             ),
             children: [
-              if (_showProTips) ...[
-                _buildQuickStartHero(),
-                SizedBox(height: context.spacingL),
-              ],
               _buildPeriodHeader(
                 storeLocked: storeLocked,
                 lockedStores: lockedStores,
@@ -399,79 +382,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ],
           ),
         ),
-    );
-  }
-
-  Widget _buildQuickStartHero() {
-    return Container(
-      padding: EdgeInsets.all(context.spacingL),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Theme.of(context).colorScheme.primary,
-            Theme.of(context).colorScheme.secondary,
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(context.radiusL),
-        boxShadow: [
-          BoxShadow(
-            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  FontAwesomeIcons.rocket,
-                  color: Colors.white,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 16),
-              const Expanded(
-                child: Text(
-                  'Welcome to Reebaplus POS!',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            'Get started with our pro tips and master your beverage business in minutes.',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 14,
-              height: 1.4,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 20),
-          AppButton(
-            text: 'View Pro Tips',
-            variant: AppButtonVariant.secondary,
-            isFullWidth: false,
-            onPressed: () => UserTipsModal.show(context),
-          ),
-        ],
-      ),
     );
   }
 
