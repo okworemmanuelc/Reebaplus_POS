@@ -84,30 +84,36 @@ More keys can be added as features grow:
 - `activity_logs.view`, `settings.manage`
 - `funds.open_day`, `funds.close_day`, `funds.view`
 
+### 2.6 Live sync across devices
+
+The app is offline-first with cloud sync. Beyond pull-on-open, a change made on one device should appear on the other devices in the same business **live**, without a manual refresh — the CEO changing the business colour (§10.1), a price edit, a new sale, a stock adjustment. This live, cross-device behaviour is the reason the synced tables exist; it is a product requirement, not a nicety.
+
+**Known issue (flagged 2026-05-30):** live (realtime) delivery is currently broken — inbound changes only land when the user pulls to refresh. Pushing changes to the cloud is unaffected; this is purely the inbound realtime channel. Root cause (a malformed wildcard realtime subscription, not a publication gap) and the planned fix are tracked in the pivot plan's risk register (§7). To be fixed after the in-flight CEO Settings work lands.
+
 ---
 
 ## 3. Build Order
 
 Each step unlocks the next. Build in this order:
 
-- Database schema rebuild. Drop the brittle role constraint. Build all new tables. Seed default roles and permissions on business creation.
-- Auth flow. Welcome screen, CEO Sign Up, Staff Sign Up, Login (with Forgot PIN), Who is working picker.
-- Staff Management screen with invite flow.
-- CEO Settings page.
-- Home screen, role-aware.
-- Point of Sale, guarded by role.
-- Cart and Checkout flow with wallet integration.
-- Inventory and Product Details, role-aware.
-- Customers screen with wallet.
-- Orders (Pending, Completed, Cancelled).
-- Daily Stock Count.
-- Funds Register (new — multi-account model).
-- Expenses with pending approval flow.
-- Supplier Accounts.
-- Track Shipments (new).
-- Activity Logs.
-- Reports.
-- Notifications.
+- [x] Database schema rebuild. Drop the brittle role constraint. Build all new tables. Seed default roles and permissions on business creation.
+- [x] Auth flow. Welcome screen, CEO Sign Up, Staff Sign Up, Login (with Forgot PIN), Who is working picker.
+- [x] Staff Management screen with invite flow.
+- [x] CEO Settings page.
+- [x] Home screen, role-aware.
+- [ ] Point of Sale, guarded by role.
+- [ ] Cart and Checkout flow with wallet integration.
+- [ ] Inventory and Product Details, role-aware.
+- [ ] Customers screen with wallet.
+- [ ] Orders (Pending, Completed, Cancelled).
+- [ ] Daily Stock Count.
+- [ ] Funds Register (new — multi-account model).
+- [ ] Expenses with pending approval flow.
+- [ ] Supplier Accounts.
+- [ ] Track Shipments (new).
+- [ ] Activity Logs.
+- [ ] Reports.
+- [ ] Notifications.
 
 ---
 
@@ -134,7 +140,7 @@ This is the first screen users see on a fresh install and after a full logout. N
 
 ### 4.3 Visual style
 
-- Match the existing dark theme with yellow/orange accent.
+- Match the existing dark theme with yellow/orange accent. The accent (business colour) is CEO-selectable in CEO Settings → Appearance (§10.1) and applies business-wide; default amber. Light/dark/system stays a per-device choice.
 - Background: dark base with a subtle pattern (faint dotted or grid) and a soft yellow gradient glow from one corner.
 - Small fade-in animation on load — logo, name, tagline, and buttons fade in gently.
 
@@ -323,6 +329,7 @@ Where the CEO tunes everything about the business. Menu screen with tappable sec
 - Security — auto-lock timer with preset chips: 1, 3, 5, 10, 15, 30 minutes (default 5).
 - Roles & Permissions — four role cards (CEO, Manager, Cashier, Stock keeper). Tap to open.
 - Activity Logs access — toggle for which roles can view activity logs (CEO only by default).
+- Appearance — CEO picks the business colour (accent): Amber, Blue, Purple, or Green. Synced, so it applies to every device in the business. Light/dark/system mode is NOT here — that stays a per-device comfort choice, set from "Display" in the side menu. Default colour: amber.
 
 ### 10.2 Roles & Permissions sub-page (per role)
 
@@ -332,6 +339,9 @@ Where the CEO tunes everything about the business. Menu screen with tappable sec
   - Max discount % (per role). Default: Manager 10%, Cashier 0%.
   - Max expense approval amount (per role). Default: Manager amount set by CEO.
   - Can change product prices (toggle). Default: Manager ON, others OFF.
+  - Allow viewing other stores (Manager role only). Default OFF. When ON, the Manager's Home store
+    picker is unlocked (see §11.2) so they can view other stores and request restock. Stored per role
+    in `role_settings` (key `manager_view_all_stores`).
 
 ### 10.3 Phase 2 (deferred)
 
@@ -354,13 +364,18 @@ Renamed from Dashboard to match the bottom nav. Role-aware screen showing busine
 
 - Store dropdown (renamed from "All Warehouses" → "All Stores").
   - CEO: can pick any store or All Stores.
-  - Manager: locked to assigned store (toggleable in CEO Settings).
-  - Cashier and Stock keeper: locked to own store.
+  - Manager: locked to assigned store by default. The CEO can flip a per-role toggle — "Allow viewing
+    other stores" in Roles & Permissions → Manager (§10.2) — that unlocks the full store picker for
+    Managers, so a Manager can check another store's stock and request restock when running low. Built
+    in Phase 1.
+  - Cashier and Stock keeper: locked to own store (no toggle).
+  - A locked user assigned to more than one store gets a dropdown limited to their assigned stores
+    (no "All Stores" entry).
 - Day/period dropdown stays as is.
 
 ### 11.3 Reports button
 
-Stays at top. Badge counts actionable alerts across all reports (low stock, overdue payments, debt issues, reconciliation mismatches, etc.). Full Reports planning in section 21.
+Stays at top. Visible to CEO and Manager only — roles below Manager (Cashier, Stock keeper) do not see it. Badge counts actionable alerts across all reports (low stock, overdue payments, debt issues, reconciliation mismatches, etc.). Full Reports planning in section 21.
 
 ### 11.4 Cards by role
 
@@ -1315,7 +1330,7 @@ Hardcoded for now. Custom notification settings = Phase 2.
 
 - Reports
 - Activity Logs
-- Settings
+- CEO Settings
 
 ### 27.3 Visibility by role
 
@@ -1334,7 +1349,7 @@ Hardcoded for now. Custom notification settings = Phase 2.
 | Stores | Yes | Hidden | Hidden | Hidden |
 | Reports | Yes | Yes | Own sales | Hidden |
 | Activity Logs | Yes | If toggled | Hidden | Hidden |
-| Settings | Yes | Hidden | Hidden | Hidden |
+| CEO Settings | Yes | Hidden | Hidden | Hidden |
 
 ### 27.4 Bottom nav
 

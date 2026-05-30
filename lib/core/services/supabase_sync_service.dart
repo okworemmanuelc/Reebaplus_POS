@@ -2021,7 +2021,7 @@ class SupabaseSyncService {
         unawaited(() async {
           try {
             final prefs = await SharedPreferences.getInstance();
-            final key = 'last_sync_timestamp::$businessId';
+            final key = '$_lastSyncPrefix$businessId';
             final lastSyncStr = prefs.getString(key);
             DateTime? since;
             if (lastSyncStr != null) {

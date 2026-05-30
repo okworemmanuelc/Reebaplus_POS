@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
 
 import 'package:reebaplus_pos/core/utils/number_format.dart';
@@ -14,15 +13,14 @@ import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
-import 'package:reebaplus_pos/shared/widgets/user_tips_modal.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/sales_detail_screen.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/reports_hub_screen.dart';
 import 'package:reebaplus_pos/features/customers/screens/customers_screen.dart';
 import 'package:reebaplus_pos/features/expenses/screens/expenses_screen.dart';
 import 'package:reebaplus_pos/features/orders/screens/orders_screen.dart';
-import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 
@@ -42,18 +40,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   List<StoreData> _stores = [];
   StreamSubscription? _storesSub;
 
-  // Locked store view is no longer enforced for the lone owner.
-  final bool _storeLocked = false;
-  final String _lockedStoreName = '';
-
-  // Pro-tips hero visibility
-  bool _showProTips = false;
+  // Total SKUs card expand state (§11.5 — Cashier/Stock keeper).
+  bool _skusExpanded = false;
 
   // DB-backed data
   List<OrderWithItems> _allOrdersWithItems = [];
   List<ExpenseWithCategory> _allExpenses = [];
   List<Customer> _customers = [];
   double _totalStockValue = 0;
+  List<ProductDataWithStock> _inventoryItems = [];
   List<UserData> _staffList = [];
 
   bool _ordersLoading = true;
@@ -80,13 +75,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Future<void> _initializeData() async {
-    // Track login count to hide pro tips after first visit
-    SharedPreferences.getInstance().then((prefs) {
-      final count = (prefs.getInt('dashboard_visit_count') ?? 0) + 1;
-      prefs.setInt('dashboard_visit_count', count);
-      if (mounted) setState(() => _showProTips = count <= 1);
-    });
-
     // Stores for the filter dropdown
     final db = ref.read(databaseProvider);
     _storesSub = db.select(db.stores).watch().listen((wh) {
@@ -137,6 +125,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _inventorySub = stream.listen((items) {
       if (mounted) {
         setState(() {
+          _inventoryItems = items;
           _totalStockValue = items.fold<double>(
             0,
             (sum, item) =>
@@ -194,6 +183,60 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // ── Role resolution & §11.4 card visibility ─────────────────────────────
+    final role = ref.watch(currentUserRoleProvider);
+    final slug = role?.slug;
+    final userId = ref.watch(authProvider).currentUser?.id;
+
+    final isCeo = slug == 'ceo';
+    final isManager = slug == 'manager';
+    final isCashier = slug == 'cashier';
+    final isStockKeeper = slug == 'stock_keeper';
+
+    final showTotalSales = isCeo || isManager || isCashier;
+    final showNetProfit = isCeo;
+    final showPending = slug != null; // all four roles
+    final showExpenses = isCeo || isManager;
+    final showStockValue = isCeo || isManager;
+    final showTotalSkus = isCashier || isStockKeeper;
+    final showWallet = isCeo || isManager || isCashier;
+    final showStaffSales = isCeo || isManager;
+
+    final subtitle = isCashier
+        ? "Today's Sales"
+        : isStockKeeper
+            ? 'Stock Overview'
+            : 'Business Overview';
+
+    // ── Store filter lock (§11.2) ────────────────────────────────────────────
+    // CEO is always free. Manager is free only when the CEO toggle is on.
+    // Cashier/Stock keeper are always locked to their assigned store(s).
+    final canViewAllStores =
+        isCeo || (isManager && ref.watch(managerCanViewAllStoresProvider));
+    final assignedStoreIds = (userId == null
+            ? const <UserStoreData>[]
+            : (ref.watch(myUserStoresProvider(userId)).valueOrNull ??
+                const <UserStoreData>[]))
+        .map((s) => s.storeId)
+        .toSet();
+    final storeLocked = slug != null && !canViewAllStores;
+    final lockedStores =
+        _stores.where((s) => assignedStoreIds.contains(s.id)).toList();
+
+    // Pin a locked user's filter to an allowed store, re-subscribing once.
+    // Single store → that one; multiple → first allowed if the current
+    // selection isn't one of theirs (e.g. the default "All").
+    if (storeLocked && lockedStores.isNotEmpty &&
+        !lockedStores.any((s) => s.id == _selectedStoreId)) {
+      final id = lockedStores.first.id;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _selectedStoreId == id) return;
+        setState(() => _selectedStoreId = id);
+        _subscribeInventory(id);
+        _subscribeExpenses(id);
+      });
+    }
+
     // Filter by selected period and store
     final filteredOrdersWithItems = _allOrdersWithItems
         .where(
@@ -219,8 +262,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               .where((c) => c.storeId == _selectedStoreId)
               .toList();
 
-    // Metrics
-    final totalSales = filteredOrdersWithItems.fold<double>(
+    // Metrics. Cashier sees own sales only (§11.4); other roles see the
+    // store/period-scoped total.
+    final salesOrders = isCashier
+        ? filteredOrdersWithItems
+            .where((o) => o.order.staffId == userId)
+            .toList()
+        : filteredOrdersWithItems;
+    final totalSales = salesOrders.fold<double>(
       0,
       (sum, o) => sum + o.order.totalAmountKobo / 100.0,
     );
@@ -289,10 +338,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           backgroundColor: _surface,
           elevation: 0,
           leading: const MenuButton(),
-          title: const AppBarHeader(
+          title: AppBarHeader(
             icon: FontAwesomeIcons.chartLine,
             title: 'Reebaplus POS',
-            subtitle: 'Business Overview',
+            subtitle: subtitle,
           ),
           actions: [
             const NotificationBell(),
@@ -305,11 +354,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               bottom: context.spacingM + context.bottomInset,
             ),
             children: [
-              if (_showProTips) ...[
-                _buildQuickStartHero(),
-                SizedBox(height: context.spacingL),
-              ],
-              _buildPeriodHeader(),
+              _buildPeriodHeader(
+                storeLocked: storeLocked,
+                lockedStores: lockedStores,
+                showReports: isCeo || isManager,
+              ),
               SizedBox(height: context.spacingM),
               _buildMetricsList(
                 sales: totalSales,
@@ -318,8 +367,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 credit: totalCredit,
                 debt: totalDebt,
                 expenses: totalExpenses,
-                filteredOrders: filteredOrdersWithItems,
+                filteredOrders: salesOrders,
                 staffSalesList: staffSalesList,
+                showTotalSales: showTotalSales,
+                showNetProfit: showNetProfit,
+                showPending: showPending,
+                showExpenses: showExpenses,
+                showStockValue: showStockValue,
+                showTotalSkus: showTotalSkus,
+                showWallet: showWallet,
+                showStaffSales: showStaffSales,
               ),
               SizedBox(height: context.spacingL),
             ],
@@ -328,80 +385,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildQuickStartHero() {
-    return Container(
-      padding: EdgeInsets.all(context.spacingL),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Theme.of(context).colorScheme.primary,
-            Theme.of(context).colorScheme.secondary,
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(context.radiusL),
-        boxShadow: [
-          BoxShadow(
-            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  FontAwesomeIcons.rocket,
-                  color: Colors.white,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 16),
-              const Expanded(
-                child: Text(
-                  'Welcome to Reebaplus POS!',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            'Get started with our pro tips and master your beverage business in minutes.',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 14,
-              height: 1.4,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 20),
-          AppButton(
-            text: 'View Pro Tips',
-            variant: AppButtonVariant.secondary,
-            isFullWidth: false,
-            onPressed: () => UserTipsModal.show(context),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPeriodHeader() {
+  Widget _buildPeriodHeader({
+    required bool storeLocked,
+    required List<StoreData> lockedStores,
+    required bool showReports,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -428,14 +416,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               ],
             ),
-            _buildReportButton(),
+            if (showReports) _buildReportButton(),
           ],
         ),
         SizedBox(height: context.getRSize(12)),
         Row(
           children: [
-            if (_storeLocked) ...[
-              Flexible(child: _buildLockedStoreChip()),
+            // Locked to a single store → fixed chip. Locked but assigned to
+            // several → dropdown limited to those stores (no "All"). Free →
+            // full picker with "All Stores".
+            if (storeLocked && lockedStores.length > 1) ...[
+              Flexible(
+                child: _buildStoreDropdown(
+                  stores: lockedStores,
+                  includeAll: false,
+                ),
+              ),
+              SizedBox(width: context.getRSize(8)),
+            ] else if (storeLocked) ...[
+              Flexible(
+                child: _buildLockedStoreChip(
+                  lockedStores.isEmpty ? '' : lockedStores.first.name,
+                ),
+              ),
               SizedBox(width: context.getRSize(8)),
             ] else if (_stores.isNotEmpty) ...[
               Flexible(child: _buildStoreDropdown()),
@@ -502,7 +505,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildLockedStoreChip() {
+  Widget _buildLockedStoreChip(String name) {
     return Container(
       height: 48,
       padding: EdgeInsets.symmetric(horizontal: context.getRSize(12)),
@@ -522,9 +525,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           SizedBox(width: context.getRSize(6)),
           Flexible(
             child: Text(
-              _lockedStoreName.isEmpty
-                  ? 'My Store'
-                  : _lockedStoreName,
+              name.isEmpty ? 'My Store' : name,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: context.getRFontSize(13),
@@ -540,17 +541,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildStoreDropdown() {
+  Widget _buildStoreDropdown({List<StoreData>? stores, bool includeAll = true}) {
+    final list = stores ?? _stores;
     return SizedBox(
       width: context.getRSize(160),
       child: AppDropdown<String?>(
         value: _selectedStoreId,
         items: [
-          const DropdownMenuItem<String?>(
-            value: null,
-            child: Text('All Stores'),
-          ),
-          ..._stores.map(
+          if (includeAll)
+            const DropdownMenuItem<String?>(
+              value: null,
+              child: Text('All Stores'),
+            ),
+          ...list.map(
             (wh) => DropdownMenuItem<String?>(
                 value: wh.id, child: Text(wh.name)),
           ),
@@ -598,130 +601,302 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     required double expenses,
     required List<OrderWithItems> filteredOrders,
     required List<MapEntry<String, double>> staffSalesList,
+    required bool showTotalSales,
+    required bool showNetProfit,
+    required bool showPending,
+    required bool showExpenses,
+    required bool showStockValue,
+    required bool showTotalSkus,
+    required bool showWallet,
+    required bool showStaffSales,
   }) {
+    // Cards are gated by role (§11.4). Build a list so hidden/loading cards
+    // leave no gap; a single spacer is inserted between visible cards.
+    final cards = <Widget>[];
+    void add(Widget card) {
+      if (cards.isNotEmpty) cards.add(SizedBox(height: context.spacingM));
+      cards.add(card);
+    }
+
+    if (showTotalSales && !_ordersLoading) {
+      add(_robustMetricCard(
+        label: 'Total Sales',
+        value: formatCurrency(sales),
+        subtitle: 'Generated from $_selectedPeriod transactions',
+        icon: FontAwesomeIcons.nairaSign,
+        color: Theme.of(context).colorScheme.primary,
+        trend: sales > 0 ? 'Active' : 'No sales',
+        isNeutral: true,
+        onTap: () => _openSalesDetail(filteredOrders, 'sales'),
+      ));
+    }
+    if (showNetProfit && !(_ordersLoading || _expensesLoading)) {
+      add(_robustMetricCard(
+        label: 'Net Profit',
+        value: profit != null ? formatCurrency(profit) : '—',
+        subtitle: profit != null
+            ? 'Revenue minus cost of goods & expenses'
+            : 'Add buying prices to products to see profit',
+        icon: FontAwesomeIcons.chartLine,
+        color: profit != null
+            ? (profit >= 0 ? success : danger)
+            : Theme.of(context).colorScheme.primary,
+        trend: profit != null
+            ? (profit >= 0 ? 'Positive' : 'Negative')
+            : 'N/A',
+        isPositive: profit == null || profit >= 0,
+        onTap: profit != null
+            ? () => _openSalesDetail(filteredOrders, 'profit')
+            : null,
+      ));
+    }
+    if (showPending && !_ordersLoading) {
+      add(_robustMetricCard(
+        label: 'Pending Orders',
+        value: pending.toString(),
+        subtitle: 'Orders awaiting fulfillment',
+        icon: FontAwesomeIcons.clock,
+        color: AppColors.warning,
+        trend: pending > 0 ? 'Attention' : 'Clear',
+        isNeutral: true,
+        onTap: () {
+          Navigator.of(context).push(
+            slideLeftRoute(const OrdersScreen(initialIndex: 0)),
+          );
+        },
+      ));
+    }
+    if (showExpenses && !_expensesLoading) {
+      add(_robustMetricCard(
+        label: 'Total Expenses',
+        value: formatCurrency(expenses),
+        subtitle: 'Including operations & staff',
+        icon: FontAwesomeIcons.fileInvoiceDollar,
+        color: Theme.of(context).colorScheme.error,
+        trend: expenses > 0 ? 'Recorded' : 'None',
+        isPositive: false,
+        inverted: true,
+        onTap: () {
+          String initialPeriod = 'All Time';
+          switch (_selectedPeriod) {
+            case 'Day':
+              initialPeriod = 'Today';
+              break;
+            case 'Week':
+              initialPeriod = 'This Week';
+              break;
+            case 'Month':
+              initialPeriod = 'This Month';
+              break;
+            case 'Year':
+              initialPeriod = 'This Year';
+              break;
+            case 'To Date':
+              initialPeriod = 'All Time';
+              break;
+          }
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => ExpensesScreen(initialPeriod: initialPeriod),
+            ),
+          );
+        },
+      ));
+    }
+    if (showStockValue && !_inventoryLoading) {
+      add(_robustMetricCard(
+        label: 'Stock Value',
+        value: formatCurrency(_totalStockValue),
+        subtitle: 'Estimated inventory worth',
+        icon: FontAwesomeIcons.boxesStacked,
+        color: Theme.of(context).colorScheme.primary,
+        trend: 'Live',
+        isNeutral: true,
+        onTap: () => ref.read(navigationProvider).setIndex(2),
+      ));
+    }
+    if (showTotalSkus && !_inventoryLoading) {
+      add(_buildTotalSkusCard());
+    }
+    if (showWallet && !_customersLoading) {
+      add(_robustMetricCard(
+        label: 'Customer Wallet',
+        value: 'Cr: ${formatCurrency(credit)}',
+        subtitle: 'Debt: ${formatCurrency(debt)}',
+        icon: FontAwesomeIcons.wallet,
+        color: Theme.of(context).colorScheme.primary,
+        trend: debt > 0 ? 'Pending Recov.' : 'Healthy',
+        isPositive: debt == 0,
+        onTap: () {
+          Navigator.of(context).push(
+            slideLeftRoute(const CustomersScreen()),
+          );
+        },
+      ));
+    }
+
     return Column(
       children: [
-        _ordersLoading
-            ? const SizedBox.shrink()
-            : _robustMetricCard(
-                label: 'Total Sales',
-                value: formatCurrency(sales),
-                subtitle: 'Generated from $_selectedPeriod transactions',
-                icon: FontAwesomeIcons.nairaSign,
-                color: Theme.of(context).colorScheme.primary,
-                trend: sales > 0 ? 'Active' : 'No sales',
-                isNeutral: true,
-                onTap: () => _openSalesDetail(filteredOrders, 'sales'),
-              ),
-        SizedBox(height: context.spacingM),
-        _ordersLoading || _expensesLoading
-            ? const SizedBox.shrink()
-            : _robustMetricCard(
-                label: 'Net Profit',
-                value: profit != null ? formatCurrency(profit) : '—',
-                subtitle: profit != null
-                    ? 'Revenue minus cost of goods & expenses'
-                    : 'Add buying prices to products to see profit',
-                icon: FontAwesomeIcons.chartLine,
-                color: profit != null
-                    ? (profit >= 0 ? success : danger)
-                    : Theme.of(context).colorScheme.primary,
-                trend: profit != null
-                    ? (profit >= 0 ? 'Positive' : 'Negative')
-                    : 'N/A',
-                isPositive: profit == null || profit >= 0,
-                onTap: profit != null
-                    ? () => _openSalesDetail(filteredOrders, 'profit')
-                    : null,
-              ),
-        SizedBox(height: context.spacingM),
-        _ordersLoading
-            ? const SizedBox.shrink()
-            : _robustMetricCard(
-                label: 'Pending Orders',
-                value: pending.toString(),
-                subtitle: 'Orders awaiting fulfillment',
-                icon: FontAwesomeIcons.clock,
-                color: AppColors.warning,
-                trend: pending > 0 ? 'Attention' : 'Clear',
-                isNeutral: true,
-                onTap: () {
-                  Navigator.of(context).push(
-                    slideLeftRoute(const OrdersScreen(initialIndex: 0)),
-                  );
-                },
-              ),
-        SizedBox(height: context.spacingM),
-        _expensesLoading
-            ? const SizedBox.shrink()
-            : _robustMetricCard(
-                label: 'Total Expenses',
-                value: formatCurrency(expenses),
-                subtitle: 'Including operations & staff',
-                icon: FontAwesomeIcons.fileInvoiceDollar,
-                color: Theme.of(context).colorScheme.error,
-                trend: expenses > 0 ? 'Recorded' : 'None',
-                isPositive: false,
-                inverted: true,
-                onTap: () {
-                  String initialPeriod = 'All Time';
-                  switch (_selectedPeriod) {
-                    case 'Day':
-                      initialPeriod = 'Today';
-                      break;
-                    case 'Week':
-                      initialPeriod = 'This Week';
-                      break;
-                    case 'Month':
-                      initialPeriod = 'This Month';
-                      break;
-                    case 'Year':
-                      initialPeriod = 'This Year';
-                      break;
-                    case 'To Date':
-                      initialPeriod = 'All Time';
-                      break;
-                  }
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          ExpensesScreen(initialPeriod: initialPeriod),
-                    ),
-                  );
-                },
-              ),
-        SizedBox(height: context.spacingM),
-        _inventoryLoading
-            ? const SizedBox.shrink()
-            : _robustMetricCard(
-                label: 'Stock Value',
-                value: formatCurrency(_totalStockValue),
-                subtitle: 'Estimated inventory worth',
-                icon: FontAwesomeIcons.boxesStacked,
-                color: Theme.of(context).colorScheme.primary,
-                trend: 'Live',
-                isNeutral: true,
-                onTap: () => ref.read(navigationProvider).setIndex(2),
-              ),
-        SizedBox(height: context.spacingM),
-        _customersLoading
-            ? const SizedBox.shrink()
-            : _robustMetricCard(
-                label: 'Customer Wallet',
-                value: 'Cr: ${formatCurrency(credit)}',
-                subtitle: 'Debt: ${formatCurrency(debt)}',
-                icon: FontAwesomeIcons.wallet,
-                color: Theme.of(context).colorScheme.primary,
-                trend: debt > 0 ? 'Pending Recov.' : 'Healthy',
-                isPositive: debt == 0,
-                onTap: () {
-                  Navigator.of(context).push(
-                    slideLeftRoute(const CustomersScreen()),
-                  );
-                },
-              ),
-        _buildStaffSalesSection(staffSalesList),
+        ...cards,
+        if (showStaffSales) _buildStaffSalesSection(staffSalesList),
       ],
+    );
+  }
+
+  /// §11.5 — Total SKUs, expandable, grouped by manufacturer. Cashier/Stock
+  /// keeper only. Closed shows the SKU count; expanded lists per-manufacturer
+  /// counts.
+  Widget _buildTotalSkusCard() {
+    final totalSkus = _inventoryItems.length;
+    final manufacturers = ref.watch(allManufacturersProvider).valueOrNull ??
+        const <ManufacturerData>[];
+    final names = {for (final m in manufacturers) m.id: m.name};
+
+    final counts = <String, int>{};
+    for (final item in _inventoryItems) {
+      final mid = item.product.manufacturerId;
+      final label =
+          mid == null ? 'Unspecified' : (names[mid] ?? 'Unspecified');
+      counts[label] = (counts[label] ?? 0) + 1;
+    }
+    final grouped = counts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    final color = Theme.of(context).colorScheme.primary;
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(context.radiusL),
+        border: Border.all(color: _border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(context.radiusL),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(context.radiusL),
+              onTap: () => setState(() => _skusExpanded = !_skusExpanded),
+              child: Padding(
+                padding: EdgeInsets.all(context.spacingM),
+                child: Row(
+                  children: [
+                    Container(
+                      width: context.getRSize(56),
+                      height: context.getRSize(56),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            color.withValues(alpha: 0.1),
+                            color.withValues(alpha: 0.05),
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Icon(FontAwesomeIcons.boxesStacked,
+                          color: color, size: context.getRSize(24)),
+                    ),
+                    SizedBox(width: context.spacingM),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Total SKUs',
+                            style: TextStyle(
+                              fontSize: context.getRFontSize(13),
+                              color: _subtext,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          SizedBox(height: context.getRSize(2)),
+                          Text(
+                            '$totalSkus',
+                            style: TextStyle(
+                              fontSize: context.getRFontSize(22),
+                              fontWeight: FontWeight.w900,
+                              color: _text,
+                            ),
+                          ),
+                          SizedBox(height: context.getRSize(2)),
+                          Text(
+                            'Tap to see breakdown by manufacturer',
+                            style: TextStyle(
+                              fontSize: context.getRFontSize(12),
+                              color: _subtext.withValues(alpha: 0.7),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      _skusExpanded
+                          ? Icons.keyboard_arrow_up
+                          : Icons.keyboard_arrow_down,
+                      color: _subtext,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (_skusExpanded) ...[
+            Divider(height: 1, color: _border),
+            if (grouped.isEmpty)
+              Padding(
+                padding: EdgeInsets.all(context.spacingM),
+                child: Text(
+                  'No products yet',
+                  style: TextStyle(
+                      color: _subtext, fontSize: context.getRFontSize(13)),
+                ),
+              )
+            else
+              for (int i = 0; i < grouped.length; i++) ...[
+                if (i > 0) Divider(height: 1, color: _border),
+                Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: context.spacingM,
+                    vertical: context.getRSize(10),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          grouped[i].key,
+                          style: TextStyle(
+                            fontSize: context.getRFontSize(14),
+                            fontWeight: FontWeight.w600,
+                            color: _text,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Text(
+                        '${grouped[i].value}',
+                        style: TextStyle(
+                          fontSize: context.getRFontSize(14),
+                          fontWeight: FontWeight.w800,
+                          color: _text,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+          ],
+        ],
+      ),
     );
   }
 

@@ -53,8 +53,8 @@ Keep this section updated at the top so it's easy to see what's done at a glance
 ### Phase 1 — In progress
 
 **Foundation:**
-- [ ] Database schema rebuild (section 2 of master plan)
-- [ ] Role + permission seeding for new businesses
+- [x] Database schema rebuild (section 2 of master plan) *(done in Session 2 — schema v13)*
+- [x] Role + permission seeding for new businesses *(done in Session 2)*
 
 **Auth flow:**
 - [x] Welcome screen (section 4) *(done in Session 6)*
@@ -65,8 +65,8 @@ Keep this section updated at the top so it's easy to see what's done at a glance
 
 **Core screens:**
 - [x] Staff Management (section 9) *(done in Session 10)*
-- [ ] CEO Settings (section 10)
-- [ ] Home / Dashboard (section 11)
+- [x] CEO Settings (section 10) *(§10.1 menu + Business Info / Stores / Security / Activity Logs access done in Session 14; §10.2 Roles & Permissions done in Session 15; Appearance added to §10.1 in Session 17; §10.3 is Phase 2)*
+- [x] Home / Dashboard (section 11) *(role-aware cards, subtitle, store lock, Total SKUs — commit 8307314)*
 - [ ] Point of Sale (section 12)
 - [ ] Cart + Edit Quantity modal (section 13)
 - [ ] Checkout (section 14)
@@ -86,7 +86,7 @@ Keep this section updated at the top so it's easy to see what's done at a glance
 
 **Cross-cutting:**
 - [ ] Role-based guards wired everywhere
-- [ ] Rename pass: Warehouse → Store *(done in Session 3)*, Dashboard → Home, Cash Register → Funds Register
+- [~] Rename pass: Warehouse → Store *(done in Session 3)*, Dashboard → Home *(done with §11)*; Cash Register → Funds Register pending (section 23)
 - [ ] Loading animations replaced with fade-ins
 - [ ] All UUIDs replaced with short codes in user-facing text
 
@@ -97,6 +97,211 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 ## Session entries
 
 (New entries go below this line. Most recent at the top.)
+
+---
+
+## Session 18 — 2026-05-30 — Sidebar role guards + profile role tag (§27, pivot step 10)
+
+**Built today:**
+- The sidebar used to show every item to everyone. Now each role only sees what it's allowed to. A Stock keeper no longer sees Point of Sale, Customers, Supplier Accounts, Expenses, Stores, Activity Logs, Staff Management, or CEO Settings — just Home, Inventory, and Orders. A Cashier additionally sees POS and Customers. A Manager sees those plus Expenses and Staff Management. The CEO sees everything.
+- Visibility is decided by the same permission a role already has (e.g. a role only sees "Expenses" if it can create expenses), so it stays correct if the CEO later changes a role's permissions. Supplier Accounts and Activity Logs show for a Manager only if the CEO has granted those — matching "Manager if toggled" in the plan.
+- Removed three sidebar items: Deliveries (a Phase 3 feature), Cart (it lives in the bottom bar only now), and Pro Tips. The "View Pro Tips" welcome card on Home was removed too, so Pro Tips isn't shown anywhere in Phase 1 (the tips screen stays in the code for Phase 2).
+- The sidebar profile area now shows the person's role as a coloured tag (CEO yellow, Manager blue, Cashier green, Stock keeper grey), and the header tint matches.
+
+**Files touched:**
+- lib/shared/widgets/app_drawer.dart
+- lib/features/dashboard/screens/home_screen.dart
+- test/settings/sidebar_role_visibility_test.dart
+
+**Database changes:**
+- None.
+
+**Master plan sections covered:**
+- Section 27 (27.1 profile role tag, 27.3 visibility-by-role, 27.5 removed items) — sidebar role guards. Decisions Q7 (drop Pro Tips) and Q9 (hide CEO Settings for non-CEO — the CEO Settings gate was already in place; this pass extends the same gating to the rest).
+
+**Plan updates made during session:**
+- None. This implements the existing §27 spec.
+
+**Tested:**
+- New `sidebar_role_visibility_test` seeds all four roles with the default-grant matrix (migration 0043) and asserts each role sees exactly its §27.3 set. `flutter analyze` clean on the changed files; `flutter test test/settings/` green.
+
+**Known issues / left open:**
+- Sync Issues sidebar item was left to the concurrent CEO Settings → Devices relocation work-stream (not touched here).
+- Bottom-nav POS guard for Stock keeper (so the POS tab itself is unreachable) belongs to pivot step 12 (POS role guards), not this pass.
+
+---
+
+## Session 17 — 2026-05-30 — Business appearance: CEO picks the colour, device keeps light/dark (§10.1)
+
+**Built today:**
+- The CEO can now choose the app's **colour for the whole business** (Amber, Blue, Purple, Green) from a new **CEO Settings → Appearance** page. The choice is synced, so every device in the business shows that colour. Default stays amber.
+- **Light/dark/system mode stays a personal, per-device choice** — it did NOT move into CEO settings. The old drawer "Appearance" entry is now **"Display"** and only controls light/dark/system for the device you're on. (So a night-shift cashier can still use dark mode even if the CEO picked a light-ish colour.)
+- Under the hood: the business colour lives in a synced setting (`business_design_system`). A small bridge in the app's root applies it to the running theme on every device, so a CEO's change propagates to other devices automatically. Picking a colour is CEO-only and is written to the activity log.
+
+**Plan decision made this session (with the user):**
+- Appearance wasn't in the master plan and the plan implied a fixed dark+amber brand. The user chose: **CEO picks the business colour (synced); each device keeps its own light/dark for comfort.** The master plan was updated first (§10.1 + the §4.3 note) before building.
+
+**Files touched:**
+- reebaplus_master_plan.md (§10.1 Appearance section + §4.3 accent note)
+- lib/core/settings/appearance_settings_screen.dart (new — CEO colour picker, synced)
+- lib/core/providers/stream_providers.dart (new `businessDesignSystemProvider` + `kBusinessDesignSystemKey`, guarded against pre-login)
+- lib/main.dart (app-root bridge: synced colour → themeController)
+- lib/core/settings/settings_screen.dart (new "Appearance" menu row)
+- lib/core/theme/theme_settings_screen.dart (trimmed to light/dark only; titled "Display")
+- lib/shared/widgets/app_drawer.dart (drawer tile relabelled "Appearance" → "Display")
+- test/settings/appearance_settings_screen_test.dart (new)
+
+**Database changes:**
+- None. No migration, no schema/version bump. The colour is a synced `settings` key (`business_design_system`), set via the existing `SettingsDao.set` (which already enqueues). Light/dark stays in SharedPreferences.
+
+**Master plan sections covered:**
+- §10.1 — Appearance added (CEO business colour, synced; light/dark per-device).
+
+**Plan updates made during session:**
+- Added the Appearance section to §10.1 and a note to §4.3 (the accent is CEO-selectable, default amber; light/dark per-device).
+
+**Tested:**
+- New test: CEO picks a colour → the synced `business_design_system` setting is written ('green') + a sync upsert is enqueued + the live theme updates; a non-CEO viewer sees the no-access body (no colour cards).
+- Full suite green: `flutter analyze` clean for all touched files; `flutter test --exclude-tags=integration` → all passed (186, 2 env-gated skips).
+
+**Known issues / left open:**
+- The light/dark "Display" screen and the colour "Appearance" screen are now two separate entries (drawer vs CEO Settings) by design.
+- Pre-login the device shows its cached colour (or amber) until the business setting syncs in — then the bridge applies the business colour.
+
+**Next session should:**
+- Continue §11 Home (in progress) or the next core screen.
+
+---
+
+## Session 16 — 2026-05-30 — Home screen made role-aware (§11)
+
+**Built today:**
+- The Home screen used to show every card to everyone. Now it follows the master plan: each person only sees the cards meant for their role. A CEO sees everything (Total Sales, Net Profit, Pending Orders, Expenses, Stock Value, Customer Wallet, Staff Sales). A Manager sees the same minus Net Profit. A Cashier sees only their own sales total, Pending Orders, Customer Wallet, and a new "Total SKUs" card. A Stock keeper sees just Pending Orders and the Total SKUs card.
+- The header subtitle now changes by role: CEO/Manager see "Business Overview", a Cashier sees "Today's Sales", a Stock keeper sees "Stock Overview".
+- New "Total SKUs" card (for Cashier and Stock keeper) — tap it to expand a breakdown of how many products each manufacturer has.
+- The store filter at the top is now locked for everyone except the CEO. A Cashier or Stock keeper is pinned to their own store. A Manager is pinned to their store too — unless the CEO turns on a new switch.
+- New CEO switch: in CEO Settings → Roles & Permissions → Manager, there's now an "Allow viewing other stores" toggle. When on, a Manager can switch stores on Home to check another store's stock and request restock when running low. Off by default.
+
+**Files touched:**
+- lib/features/dashboard/screens/home_screen.dart
+- lib/core/settings/role_permissions_detail_screen.dart
+- lib/core/providers/stream_providers.dart
+- reebaplus_MASTER_PLAN.md
+- test/settings/role_permissions_detail_test.dart
+
+**Database changes:**
+- None. The new Manager toggle is stored in the existing `role_settings` table (key `manager_view_all_stores`), the same place the max-discount and max-expense limits already live. Writes route through the existing DAO, so it syncs to the cloud like the other role settings.
+
+**Master plan sections covered:**
+- Section 11 (11.1 subtitle, 11.2 store-filter lock, 11.4 cards by role, 11.5 Total SKUs) — Home made role-aware.
+
+**Plan updates made during session:**
+- §11.2 and §10.2 were refined to spell out the Manager "Allow viewing other stores" toggle: that it's built in Phase 1, lives in Roles & Permissions → Manager, defaults off, and unlocks the Home store picker (rationale: a Manager checking another store's stock to request restock). The toggle was already named in §11.2; this pins down its exact behaviour and where it lives, per the no-verbal-only-changes rule.
+
+**Tested:**
+- `flutter analyze` clean (no new issues). Full `flutter test` suite green: 184 passed, 0 failed.
+- New tests: the Manager toggle defaults off, persists to `role_settings` as `'true'`, and enqueues a sync upsert; the toggle is hidden for CEO and Cashier roles; and the `managerCanViewAllStoresProvider` reads false by default and flips true once the CEO enables it.
+
+**Known issues / left open:**
+- The Reports button badge is still a hardcoded "3" placeholder — its real alert count depends on the §21 Reports work, deferred by decision.
+- Per-card visibility toggles per role remain Phase-2-deferred (§11.4, §28).
+- End-to-end check on the emulator (logging in as each role) not yet done this session — recommended before merge.
+
+---
+
+## Session 15 — 2026-05-29 — Roles & Permissions sub-page (§10.2)
+
+**Built today:**
+- The last piece of CEO Settings. The "Roles & Permissions" menu row no longer opens a "coming soon" placeholder — it now opens a real screen listing the four roles (CEO, Manager, Cashier, Stock keeper) as colour-coded cards, each showing how many of the 30 permissions it has. Tap a role to open its detail page.
+- The role detail page shows every permission as an on/off switch, grouped by category (Sales, Products, Stock, Expenses, Reports, Customers, Suppliers, Staff, System, Funds — in that master-plan order). Flipping a switch grants or removes that permission for the role and syncs to the cloud.
+- The CEO role is locked: all its switches are on and greyed-out, and its limits read "unlimited" — the CEO's access can never be accidentally removed.
+- Below the switches are the two role limits: a **maximum discount %** slider (0–100) and a **maximum expense approval** amount (in naira). Both save when you finish adjusting them and sync to the cloud. For the CEO they show "100% (unlimited)" and "Unlimited".
+- "Can change product prices" is simply the existing **Edit product prices** permission toggle in the Products group (it already had the right default: Manager on, others off) — so there's no duplicate control and no database change was needed.
+
+**Plan decisions made this session (with the user):**
+- "Can change product prices" is represented by the existing `products.edit_price` permission toggle, not a separate new setting — avoids a duplicate control and a migration.
+
+**Files touched:**
+- lib/core/settings/roles_permissions_screen.dart (new — the four role cards)
+- lib/core/settings/role_permissions_detail_screen.dart (new — grouped toggles + the two limits, CEO locked)
+- lib/core/settings/settings_screen.dart (route Roles & Permissions to the new screen; dropped the Coming Soon placeholder)
+- test/settings/role_permissions_detail_test.dart (new)
+- test/settings/roles_permissions_screen_test.dart (new)
+
+**Database changes:**
+- None. No migration, no schema/version bump. Permissions use the existing role_permissions grant/revoke; limits use the existing role_settings `set` (both already sync). The 30-permission catalog and the seeded limit defaults were already in place.
+
+**Master plan sections covered:**
+- §10.2 — Roles & Permissions per-role page (permission toggles by category + max discount % and max expense approval limits; CEO locked).
+- §10.3 (custom roles, custom permission groups, more limits) remains Phase 2.
+
+**Plan updates made during session:**
+- None.
+
+**Tested:**
+- 2 new test files (7 tests), all green: CEO detail shows all 30 toggles locked-on with read-only limits; toggling a Cashier permission on grants it (sync upsert) and off revokes it (sync delete); editing the expense limit stores the right kobo value and syncs; dragging the discount slider stores a new percent and syncs; the role list renders four cards with correct counts and navigates to the detail on tap.
+- Full suite green: `flutter analyze` clean for all touched files; `flutter test --exclude-tags=integration` → all passed (180, 2 env-gated skips).
+
+**Known issues / left open:**
+- Section 10 (CEO Settings) is now fully done for Phase 1. The role limits (max discount, max expense approval, edit-price permission) are stored + synced but not yet *enforced* anywhere — the screens that would honour them (POS discount, Expenses approval, Product price editing) are later sections.
+
+**Next session should:**
+- Move on to the next core screen (Home / Dashboard, §11) or another pending section.
+
+---
+
+## Session 14 — 2026-05-29 — CEO Settings menu + sub-pages (§10.1)
+
+**Built today:**
+- Turned the old flat "CEO Settings" screen into the proper menu from the master plan. It now lists five sections — Business Info, Stores, Security, Roles & Permissions, Activity Logs access — and each opens its own page. The old Profile card was removed (your profile is still reached by tapping your avatar in the side menu).
+- **Business Info** page: edit the business name, type (the six business types), and currency, then Save. The save reaches the cloud and is written to the activity log.
+- **Stores** page: read-only for now — shows your store's name and address. Adding more stores is a later (Phase 2) feature, noted on the page.
+- **Security** page: auto-lock is now a row of preset chips — 1, 3, 5, 10, 15, 30 minutes. The biometric login switch was moved here and **fixed**: before, the switch saved to a place the login screen never read (so it did nothing and also leaked across devices). It now saves on the device itself, the same place login checks.
+- **Activity Logs access** page: a per-role on/off switch for who can view activity logs. The CEO row is locked on and can't be turned off; other roles default off.
+- **Roles & Permissions** (the detailed per-role toggles, §10.2) is **deferred** to a follow-up — its row opens a "coming soon" placeholder for now.
+- The "CEO Settings" item in the side menu is now **hidden** for anyone who isn't the CEO (it was showing for everyone before).
+
+**Plan decisions made this session (with the user):**
+- **Auto-lock now defaults to 5 minutes and is always on**, matching the master plan (§10.1/§8.5). Before, the code defaulted to "Never." The new preset chips have **no "Never" option** — auto-lock can't be switched off entirely anymore, only its interval changed. (This was a deliberate plan-vs-code choice the user confirmed; the master plan already said 5 min, so no plan edit was needed.)
+- **Biometric toggle kept** on the Security page (the plan's Security section only mentions auto-lock, but biometrics is an existing shipped feature, so it stays) and switched to device-local storage.
+
+**Files touched:**
+- lib/core/database/daos.dart (new `BusinessesDao.updateInfo` — edits name/type, enqueues to cloud)
+- lib/core/database/app_database.dart (registered `BusinessesDao`)
+- lib/core/data/business_types.dart (new — shared list of the six business types)
+- lib/core/settings/settings_screen.dart (rewritten into the menu)
+- lib/core/settings/settings_widgets.dart (new — shared section title / tile / fade-in / no-access widgets)
+- lib/core/settings/business_info_screen.dart (new)
+- lib/core/settings/stores_settings_screen.dart (new)
+- lib/core/settings/security_settings_screen.dart (new)
+- lib/core/settings/activity_logs_access_screen.dart (new)
+- lib/shared/widgets/app_drawer.dart (hide "CEO Settings" unless the user has settings.manage)
+- lib/shared/widgets/auto_lock_wrapper.dart (default interval 0/Never → 300s/5min)
+- test/sync/dispatch/businesses_dao_dispatch_test.dart (new)
+- test/settings/settings_menu_gating_test.dart (new)
+- test/settings/activity_logs_access_toggle_test.dart (new)
+
+**Database changes:**
+- None. No migration, no schema/version bump. Business name/type write to the existing `businesses` row; currency is the existing synced `default_currency` setting; activity-log access uses the existing role-permissions.
+
+**Master plan sections covered:**
+- §10.1 — CEO Settings menu + Business Info, Stores, Security, Activity Logs access sub-pages.
+- §10.2 — Roles & Permissions: deferred (placeholder route).
+
+**Plan updates made during session:**
+- None. (The auto-lock default already matched the plan once we chose "follow the plan.")
+
+**Tested:**
+- 3 new tests, all green: BusinessesDao.updateInfo enqueues a `businesses:upsert` (and coalesces repeats); the drawer "CEO Settings" gate shows for CEO and hides for Cashier; the Activity Logs toggle locks CEO on, grants (upsert) and revokes (delete tombstone) for other roles.
+- Full suite green: `flutter analyze` clean for all touched files; `flutter test --exclude-tags=integration` → all passed (173, 2 env-gated skips).
+
+**Known issues / left open:**
+- Roles & Permissions detail page (§10.2) still to build.
+- Stores page is view-only; the `stores` table stores address as one combined `location` string (no separate state/country columns), so the page shows name + that one line.
+- Minor/benign: editing the business row triggers a realtime echo that runs `putIfAbsent('timezone','UTC')` on restore — harmless here because the real timezone lives in `settings`, not the `businesses.timezone` column. Noted, not fixed.
+
+**Next session should:**
+- Build the §10.2 Roles & Permissions sub-page (per-role permission toggles grouped by category, CEO locked on, plus the role limits: max discount %, max expense approval, can-change-prices).
 
 ---
 

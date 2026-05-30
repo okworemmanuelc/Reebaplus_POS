@@ -11,7 +11,7 @@ These guidelines bias toward caution over speed. For trivial tasks, use judgment
 Before writing any code or proposing any approach:
 
 1. Read this file in full.
-2. Read `MASTER_PLAN.md` in full.
+2. Read `reebaplus_master_plan.md` in full.
 3. Read `BUILD_LOG.md` to see what has already been built.
 4. Confirm what you've read by listing the master plan sections relevant to today's work.
 5. Wait for approval before writing code.
@@ -112,7 +112,7 @@ Adding a package has a cost beyond installing it: bundle size, security surface,
 
 ## Hard rules — never break these
 
-1. **Never** add features that are not in `MASTER_PLAN.md`. If something seems missing, ask before adding.
+1. **Never** add features that are not in `reebaplus_master_plan.md`. If something seems missing, ask before adding.
 2. **Never** add Phase 2 or Phase 3 features. Refuse politely and point to the master plan.
 3. **Never** invent a fifth role.
 4. **Never** show raw UUIDs in user-facing text. Use the short codes specified in the master plan (ORD-000001, INV-K7M2QX, REC-0912, etc.).
@@ -178,7 +178,7 @@ Before ending a session:
 If the user changes the plan mid-build:
 
 1. Stop coding.
-2. Update `MASTER_PLAN.md` to reflect the change.
+2. Update `reebaplus_master_plan.md` to reflect the change.
 3. Note the change in `BUILD_LOG.md` under the current session entry.
 4. Resume coding only after the plan is updated.
 

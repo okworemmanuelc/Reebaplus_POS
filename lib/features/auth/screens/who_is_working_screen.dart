@@ -56,11 +56,13 @@ class _WhoIsWorkingScreenState extends ConsumerState<WhoIsWorkingScreen> {
       businessId = deviceUser?.businessId;
     }
 
-    // Defensive fallback to the single local business — the picker is
-    // normally reached only after a signed-in lock, so a device user exists.
+    // Defensive fallback when the device user didn't resolve a business: only
+    // auto-pick when there's exactly ONE local business — never guess between
+    // multiple tenants. With 0 or >1, leave businessId null so _buildBody falls
+    // back to the PIN/email flow.
     if (businessId == null) {
       final businesses = await db.select(db.businesses).get();
-      if (businesses.isNotEmpty) businessId = businesses.first.id;
+      if (businesses.length == 1) businessId = businesses.first.id;
     }
 
     if (!mounted) return;
@@ -84,6 +86,17 @@ class _WhoIsWorkingScreenState extends ConsumerState<WhoIsWorkingScreen> {
           builder: (_) => LoginScreen(presetUser: presetUser),
         ),
       );
+    });
+  }
+
+  /// Runs [action] once, after the current frame — used by the single-staff
+  /// shortcut's no-PIN (OTP) path, which (like [_replaceWithPin]) must not
+  /// navigate during build. Shares the [_navigated] guard.
+  void _shortcutTo(VoidCallback action) {
+    if (_navigated) return;
+    _navigated = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) action();
     });
   }
 
@@ -153,9 +166,25 @@ class _WhoIsWorkingScreenState extends ConsumerState<WhoIsWorkingScreen> {
         return const _BrandedFade(key: ValueKey('error'));
       },
       data: (staff) {
-        // §8.3: 0 or 1 staff → skip the picker and go straight to PIN.
+        // §8.3: 0 or 1 staff → skip the picker. Mirror _onTapStaff so a single
+        // staff member without a device PIN verifies by OTP rather than being
+        // dropped on the PIN screen.
         if (staff.length <= 1) {
-          _replaceWithPin(staff.isEmpty ? _deviceUser : staff.first.user);
+          final entry = staff.isEmpty ? null : staff.first;
+          final email = entry?.user.email;
+          // Only take the OTP shortcut when the lone staff has no device PIN
+          // AND a usable email — otherwise _onTapStaff just shows an error and
+          // returns, stranding the user on the branded fade with _navigated
+          // already set. Fall back to the PIN screen, which offers its own
+          // email/switch-account recovery path.
+          if (entry != null &&
+              entry.user.pinHash == null &&
+              email != null &&
+              email.isNotEmpty) {
+            _shortcutTo(() => _onTapStaff(entry));
+          } else {
+            _replaceWithPin(entry?.user ?? _deviceUser);
+          }
           return const _BrandedFade(key: ValueKey('shortcut'));
         }
         // Arrange by role (CEO → Manager → Cashier → Stock keeper), then name

@@ -975,6 +975,18 @@ class SettingsDaoManager {
       $$SettingsTableTableManager(_db.attachedDatabase, _db.settings);
 }
 
+mixin _$BusinessesDaoMixin on DatabaseAccessor<AppDatabase> {
+  $BusinessesTable get businesses => attachedDatabase.businesses;
+  BusinessesDaoManager get managers => BusinessesDaoManager(this);
+}
+
+class BusinessesDaoManager {
+  final _$BusinessesDaoMixin _db;
+  BusinessesDaoManager(this._db);
+  $$BusinessesTableTableManager get businesses =>
+      $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+}
+
 mixin _$SystemConfigDaoMixin on DatabaseAccessor<AppDatabase> {
   $SystemConfigTable get systemConfig => attachedDatabase.systemConfig;
   SystemConfigDaoManager get managers => SystemConfigDaoManager(this);

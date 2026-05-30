@@ -26,8 +26,8 @@ import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
 import 'package:reebaplus_pos/features/staff/screens/staff_detail_screen.dart';
 
 /// Real AuthService with the one platform-bound startup call stubbed out.
-/// currentUser stays null — the detail screen renders the member from the
-/// seeded membership regardless of who's logged in.
+/// The test binds a permissioned CEO as the current user (see pumpDetail) so
+/// the manage-buttons permission gate (staff.invite) resolves.
 class _FakeAuth extends AuthService {
   _FakeAuth(super.db, super.nav, super.secure, super.sync, super.supabase);
 
@@ -38,6 +38,7 @@ class _FakeAuth extends AuthService {
 void main() {
   late AppDatabase db;
   late String biz;
+  late String ceoUserId;
   late String membershipId;
 
   setUpAll(() async {
@@ -59,10 +60,18 @@ void main() {
     final ceoRoleId = UuidV7.generate();
     await db.into(db.roles).insert(RolesCompanion.insert(
         id: Value(ceoRoleId), businessId: biz, name: 'CEO', slug: 'ceo'));
+    // Grant the CEO role staff-management access so the bound viewer passes the
+    // manage-buttons permission gate (hard rule #6).
+    await db.into(db.rolePermissions).insert(RolePermissionsCompanion.insert(
+          id: Value(UuidV7.generate()),
+          businessId: biz,
+          roleId: ceoRoleId,
+          permissionKey: 'staff.invite',
+        ));
 
-    final userId = UuidV7.generate();
+    ceoUserId = UuidV7.generate();
     await db.into(db.users).insert(UsersCompanion.insert(
-          id: Value(userId),
+          id: Value(ceoUserId),
           businessId: biz,
           name: 'Adaeze',
           pin: '__HASHED__',
@@ -72,7 +81,7 @@ void main() {
     await db.into(db.userBusinesses).insert(UserBusinessesCompanion.insert(
           id: Value(membershipId),
           businessId: biz,
-          userId: userId,
+          userId: ceoUserId,
           roleId: ceoRoleId,
           status: const Value('active'),
         ));
@@ -98,11 +107,13 @@ void main() {
       SupabaseSyncService(db, client),
       client,
     );
-    // AuthService's constructor points businessIdResolver at its (null) current
-    // user, so scope the session providers to the seeded business AFTER it's
-    // built. The detail screen renders the member regardless of who's signed
-    // in, so a null current user is fine.
+    // Scope the session providers to the seeded business (overriding the
+    // resolver AuthService wires to its current user), then bind a permissioned
+    // CEO as the current user so currentUserPermissionsProvider resolves
+    // staff.invite and the manage-buttons gate passes — matching real usage,
+    // where the detail screen is only reached by a logged-in CEO/Manager.
     db.businessIdResolver = () => biz;
+    fake.value = await db.storesDao.getUserById(ceoUserId);
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),

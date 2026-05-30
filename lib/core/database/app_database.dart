@@ -1184,6 +1184,7 @@ class MigrationEvents extends Table {
     ManufacturerCrateBalancesDao,
     CrateLedgerDao,
     SettingsDao,
+    BusinessesDao,
     SystemConfigDao,
     PermissionsDao,
     RolesDao,

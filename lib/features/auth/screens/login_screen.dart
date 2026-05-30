@@ -130,7 +130,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
       final isEnabled = prefs.getBool('biometrics_enabled') ?? false;
       if (mounted) {
-        setState(() => _biometricsAvailable = available && isEnabled);
+        // Biometrics authenticates the device owner, not a specific account, so
+        // it's unsafe for a picker-selected (preset) user on a shared till — it
+        // would resolve the last device user, not the chosen staff member.
+        // Disable it whenever a preset user is in play; that person uses a PIN.
+        setState(() => _biometricsAvailable =
+            available && isEnabled && widget.presetUser == null);
       }
     } catch (_) {}
   }

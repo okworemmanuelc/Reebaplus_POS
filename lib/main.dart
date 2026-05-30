@@ -11,6 +11,7 @@ import 'package:reebaplus_pos/core/theme/theme_notifier.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/db_wipe.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
 import 'package:reebaplus_pos/features/auth/screens/login_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/who_is_working_screen.dart';
@@ -204,7 +205,16 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
     final auth = ref.watch(authProvider);
     final user = auth.value;
     final localBusinessesAsync = ref.watch(localBusinessesProvider);
- 
+
+    // Apply the CEO-chosen business accent colour (synced) to this device.
+    // Null = pre-login / unset → leave the device's themeController value alone
+    // (amber default). setDesignSystem no-ops on an unchanged value, so the
+    // CEO's own write doesn't loop back through the settings stream.
+    ref.listen(businessDesignSystemProvider, (_, next) {
+      final ds = next.valueOrNull;
+      if (ds != null) themeController.setDesignSystem(ds);
+    });
+
     return ForceUpdateWrapper(
       child: AutoLockWrapper(
         child: MaterialApp(

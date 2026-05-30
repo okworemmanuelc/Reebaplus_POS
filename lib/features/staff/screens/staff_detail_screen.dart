@@ -74,6 +74,11 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
     RoleData? currentRole,
     List<RoleData> options,
   ) async {
+    // Defense-in-depth (hard rule #6): re-check the manage permission at the
+    // start, not only at button render.
+    if (!ref.read(currentUserPermissionsProvider).contains('staff.invite')) {
+      return;
+    }
     final picked = await showDialog<RoleData>(
       context: context,
       builder: (ctx) => SimpleDialog(
@@ -131,6 +136,10 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
   }
 
   Future<void> _toggleSuspend(UserBusinessData membership) async {
+    // Defense-in-depth (hard rule #6): re-check before running.
+    if (!ref.read(currentUserPermissionsProvider).contains('staff.invite')) {
+      return;
+    }
     final suspending = membership.status == 'active';
     final confirmed = await showDialog<bool>(
       context: context,
@@ -299,9 +308,11 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                       : DateFormat('MMM d, y • h:mm a')
                           .format(membership.lastLoginAt!),
                 ),
-                // View-only (own card): hide the manage actions — you can't
-                // change your own role or suspend yourself.
-                if (!widget.readOnly) ...[
+                // Manage actions — hidden in view-only (own card) and gated by
+                // the staff-management permission (hard rule #6 defense-in-depth;
+                // CEO + Manager hold it). The manageable→readOnly logic already
+                // restricts which staff a viewer can act on.
+                if (!widget.readOnly && hasPermission(ref, 'staff.invite')) ...[
                   SizedBox(height: context.getRSize(28)),
                   AppButton(
                     text: 'Change role',

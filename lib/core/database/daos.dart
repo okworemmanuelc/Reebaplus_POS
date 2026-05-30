@@ -4016,10 +4016,21 @@ class SettingsDao extends DatabaseAccessor<AppDatabase>
   }
 
   Future<void> set(String key, String value) async {
-    await customStatement(
+    // customInsert (not customStatement) so Drift marks `settings` as updated
+    // and re-fires any open watch() streams — without `updates:`, raw
+    // statements are invisible to stream watchers, so reactive readers (e.g.
+    // the business accent colour via businessDesignSystemProvider) never see
+    // the new value until they re-subscribe.
+    await customInsert(
       'INSERT INTO settings (id, business_id, "key", value) VALUES (?, ?, ?, ?) '
       'ON CONFLICT(business_id, "key") DO UPDATE SET value = excluded.value, last_updated_at = (strftime(\'%s\', \'now\'))',
-      [UuidV7.generate(), requireBusinessId(), key, value],
+      variables: [
+        Variable.withString(UuidV7.generate()),
+        Variable.withString(requireBusinessId()),
+        Variable.withString(key),
+        Variable.withString(value),
+      ],
+      updates: {settings},
     );
     final row =
         await (select(settings)
@@ -4044,6 +4055,35 @@ class SettingsDao extends DatabaseAccessor<AppDatabase>
 
   Stream<String> watchTimezone() {
     return watch('business_timezone').map((v) => v ?? 'UTC');
+  }
+}
+
+@DriftAccessor(tables: [Businesses])
+class BusinessesDao extends DatabaseAccessor<AppDatabase>
+    with _$BusinessesDaoMixin, BusinessScopedDao<AppDatabase> {
+  BusinessesDao(super.db);
+
+  /// Edits the current business's name and/or type (CEO Settings > Business
+  /// Info, §10.1). Currency is a synced `settings` key (`default_currency`),
+  /// not a column here — set it via [SettingsDao.set].
+  ///
+  /// `businesses` is cloud-synced via its special push/pull/realtime path
+  /// (it is intentionally absent from `_syncedTenantTables`), so the write
+  /// still routes through `enqueueUpsert`. Because that absence also means
+  /// no `bump_businesses_last_updated_at` trigger exists, `lastUpdatedAt`
+  /// is stamped explicitly here (same as onboarding's local mirror).
+  Future<void> updateInfo({String? name, String? type}) async {
+    final id = requireBusinessId();
+    await (update(businesses)..where((t) => t.id.equals(id))).write(
+      BusinessesCompanion(
+        name: name == null ? const Value.absent() : Value(name),
+        type: type == null ? const Value.absent() : Value(type),
+        lastUpdatedAt: Value(DateTime.now()),
+      ),
+    );
+    final row =
+        await (select(businesses)..where((t) => t.id.equals(id))).getSingle();
+    await db.syncDao.enqueueUpsert('businesses', row);
   }
 }
 
