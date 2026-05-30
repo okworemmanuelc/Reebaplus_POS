@@ -146,8 +146,8 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
   tick with NO manual pull. (This is the only way to truly confirm realtime delivery.)
 - ~35 channels are opened on connect (one per `_pullOrder` tenant table) — within
   Supabase limits, but worth watching the join logs on a real device.
-- Deploy status of cloud funds migrations 0058–0060 is still unconfirmed — if not
-  pushed, a second device 42501s on funds writes regardless of realtime.
+- Cloud funds migrations 0057–0060 confirmed applied remotely (`supabase migration
+  list`: remote at 0060), so a second device won't 42501 on funds writes.
 
 **Next session should:**
 - Do the two-device realtime confirmation, then burn down the on-device verification
@@ -247,9 +247,9 @@ solved earlier in this build, repeated for the funds tables:
   optional account number / terminal id (Cash Till leaves it null). Local v20 → v21
   adds the nullable `funds_accounts.account_number`; cloud `0059_funds_account_number.sql`
   mirrors it.
-- **Deploy status of 0058–0060 is unconfirmed in this log** — verify they are pushed
-  to the linked Supabase project (0057 was). Until 0058/0060 are applied cloud-side,
-  funds writes 42501 from a second device and Open Day won't pull down.
+- **Deploy status of 0058–0060: CONFIRMED applied remotely** (verified 2026-05-30 via
+  `supabase migration list` — local and remote both at 0060). The funds RLS fix (0058)
+  and pull fix (0060) are live cloud-side.
 
 **Capture / git note (2026-05-30):** Sessions 24, 25, and 26 (+ these follow-ups)
 were committed together in a single commit off schema v19 — they were interleaved in
