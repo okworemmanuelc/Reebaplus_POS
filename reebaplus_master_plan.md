@@ -1330,7 +1330,7 @@ Hardcoded for now. Custom notification settings = Phase 2.
 
 - Reports
 - Activity Logs
-- Settings
+- CEO Settings
 
 ### 27.3 Visibility by role
 
@@ -1349,7 +1349,7 @@ Hardcoded for now. Custom notification settings = Phase 2.
 | Stores | Yes | Hidden | Hidden | Hidden |
 | Reports | Yes | Yes | Own sales | Hidden |
 | Activity Logs | Yes | If toggled | Hidden | Hidden |
-| Settings | Yes | Hidden | Hidden | Hidden |
+| CEO Settings | Yes | Hidden | Hidden | Hidden |
 
 ### 27.4 Bottom nav
 

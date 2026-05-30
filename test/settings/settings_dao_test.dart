@@ -66,19 +66,16 @@ void main() {
 
       // A live watcher must see subsequent writes — this is what drives the
       // appearance colour applying instantly on the device that changed it
-      // (and on a second device once the synced row lands locally).
-      final emissions = <String?>[];
-      final sub = db.settingsDao.watch('business_design_system').listen(
-            emissions.add,
-          );
-      // Let the initial emission land.
-      await Future<void>.delayed(const Duration(milliseconds: 20));
+      // (and on a second device once the synced row lands locally). Use a
+      // stream matcher rather than timed delays so the sequence is asserted
+      // deterministically.
+      final expectation = expectLater(
+        db.settingsDao.watch('business_design_system'),
+        emitsInOrder(['amber', 'purple']),
+      );
 
       await db.settingsDao.set('business_design_system', 'purple');
-      await Future<void>.delayed(const Duration(milliseconds: 20));
-
-      await sub.cancel();
-      expect(emissions, ['amber', 'purple']);
+      await expectation;
     });
 
     test('getTimezone returns Africa/Lagos by default (if configured) or UTC', () async {

@@ -78,8 +78,14 @@ class _RoleCard extends ConsumerWidget {
     final isCeo = role.slug == 'ceo';
     final count =
         ref.watch(rolePermissionsProvider(role.id)).valueOrNull?.length ?? 0;
+    // Derive the denominator from the global catalogue so it never goes stale
+    // if permission keys are added. Falls back to 30 (the current seed count)
+    // until the catalogue resolves locally.
+    final total =
+        ref.watch(allPermissionsProvider).valueOrNull?.length ?? 30;
     // CEO is locked all-on; show the full count regardless of sync state.
-    final subtitle = isCeo ? 'All 30 permissions' : '$count of 30 permissions';
+    final subtitle =
+        isCeo ? 'All $total permissions' : '$count of $total permissions';
 
     return Material(
       color: Colors.transparent,

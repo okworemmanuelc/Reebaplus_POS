@@ -171,7 +171,16 @@ class _WhoIsWorkingScreenState extends ConsumerState<WhoIsWorkingScreen> {
         // dropped on the PIN screen.
         if (staff.length <= 1) {
           final entry = staff.isEmpty ? null : staff.first;
-          if (entry != null && entry.user.pinHash == null) {
+          final email = entry?.user.email;
+          // Only take the OTP shortcut when the lone staff has no device PIN
+          // AND a usable email — otherwise _onTapStaff just shows an error and
+          // returns, stranding the user on the branded fade with _navigated
+          // already set. Fall back to the PIN screen, which offers its own
+          // email/switch-account recovery path.
+          if (entry != null &&
+              entry.user.pinHash == null &&
+              email != null &&
+              email.isNotEmpty) {
             _shortcutTo(() => _onTapStaff(entry));
           } else {
             _replaceWithPin(entry?.user ?? _deviceUser);
