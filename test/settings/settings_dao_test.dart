@@ -60,6 +60,27 @@ void main() {
       expect(rows.length, equals(1));
     });
 
+    test('watch() re-emits after set() writes the key', () async {
+      db.businessIdResolver = () => biz1;
+      await db.settingsDao.set('business_design_system', 'amber');
+
+      // A live watcher must see subsequent writes — this is what drives the
+      // appearance colour applying instantly on the device that changed it
+      // (and on a second device once the synced row lands locally).
+      final emissions = <String?>[];
+      final sub = db.settingsDao.watch('business_design_system').listen(
+            emissions.add,
+          );
+      // Let the initial emission land.
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      await db.settingsDao.set('business_design_system', 'purple');
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      await sub.cancel();
+      expect(emissions, ['amber', 'purple']);
+    });
+
     test('getTimezone returns Africa/Lagos by default (if configured) or UTC', () async {
       db.businessIdResolver = () => biz1;
       // If nothing set, should return default
