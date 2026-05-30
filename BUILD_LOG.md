@@ -100,6 +100,53 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 
 ---
 
+## Session 28 — 2026-05-30 — Manufacturer partial-upsert sync fix (Sync Issues 23502)
+
+**Built today:**
+- **Fixed manufacturers not syncing** (the "null value in column name … 23502"
+  error on the Sync Issues screen). Setting a manufacturer's Empty Crate Value /
+  deposit / empty-crate stock enqueued a cloud upsert carrying ONLY the changed
+  column (+ id/business_id/last_updated_at) — no `name`. The cloud `manufacturers`
+  table has `name NOT NULL`, and a Supabase upsert is an INSERT…ON CONFLICT whose
+  INSERT is validated before the merge, so the missing name was rejected and the
+  change never reached the cloud (the row retried forever in the queue).
+- Three methods had this shape: `updateManufacturerEmptyCrateValue` (CatalogDao),
+  `updateManufacturerStock` and `updateManufacturerDeposit` (InventoryDao). Each
+  now reads the row back after the local write and enqueues the FULL row
+  (`toCompanion(true)`), the same pattern `insertManufacturer` already used.
+
+**Files touched:**
+- lib/core/database/daos.dart (a `_enqueueFullManufacturer` helper in each of the two DAOs + the three call sites)
+- test/sync/dispatch/manufacturer_partial_upsert_test.dart (new — 3 tests: each update enqueues a payload containing `name`)
+
+**Database changes:**
+- None. No schema bump, no cloud migration — the cloud table is correct; the client
+  was sending an incomplete payload.
+
+**Master plan sections covered:**
+- §16.5 (manufacturer-level Empty Crate Value, Session 25) — sync correctness fix.
+
+**Tested:**
+- `flutter analyze` clean. New tests green; full suite (excl. integration) green.
+
+**Known issues / left open:**
+- **On the device:** the already-queued bad `manufacturers:upsert` (attempts: 6)
+  won't self-heal — tap **Discard** on it in Sync Issues. The fix makes future
+  manufacturer saves push correctly; to get that one value to the cloud, re-open
+  the product/manufacturer and re-save the Empty Crate Value once (fresh full-row
+  upsert).
+- **Broader risk — partial-row upserts:** this is one instance of the class flagged
+  in the role-refactor work. ANY DAO method that enqueues a partial companion for a
+  synced table with NOT NULL cloud columns has the same failure mode. Only the three
+  manufacturer methods were fixed here (the reported one); a sweep of per-column
+  update methods across the DAOs is worth a dedicated pass.
+
+**Next session should:**
+- Optionally sweep for other partial-companion enqueues; otherwise resume the
+  verification-backlog burndown / two-device realtime check.
+
+---
+
 ## Session 27 — 2026-05-30 — Realtime cross-device sync fix (foundation)
 
 **Built today:**

@@ -394,6 +394,19 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
     }
   }
 
+  /// Enqueues the FULL manufacturer row for sync. The per-column update methods
+  /// below write only the changed column locally, but a partial `manufacturers`
+  /// upsert omits the NOT NULL `name`, which the cloud rejects (23502). Reading
+  /// the row back and enqueuing every column keeps the cloud insert valid.
+  Future<void> _enqueueFullManufacturer(String id) async {
+    final row = await (select(manufacturers)
+          ..where((t) => t.id.equals(id) & whereBusiness(t)))
+        .getSingleOrNull();
+    if (row != null) {
+      await db.syncDao.enqueueUpsert('manufacturers', row.toCompanion(true));
+    }
+  }
+
   Future<void> updateManufacturerEmptyCrateValue(
     String manufacturerId,
     int valueKobo,
@@ -407,7 +420,8 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
     await (update(manufacturers)
           ..where((t) => t.id.equals(manufacturerId) & whereBusiness(t)))
         .write(comp);
-    await db.syncDao.enqueueUpsert('manufacturers', comp);
+    // Full-row enqueue: a partial upsert would omit the NOT NULL name → 23502.
+    await _enqueueFullManufacturer(manufacturerId);
   }
 
   Future<void> updateTrackEmpties(String productId, bool value) async {
@@ -465,6 +479,18 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
     return id;
   }
 
+  /// Enqueues the FULL manufacturer row for sync. A partial `manufacturers`
+  /// upsert omits the NOT NULL `name`, which the cloud rejects (23502), so the
+  /// per-column updates below read the row back and enqueue every column.
+  Future<void> _enqueueFullManufacturer(String id) async {
+    final row = await (select(manufacturers)
+          ..where((t) => t.id.equals(id) & whereBusiness(t)))
+        .getSingleOrNull();
+    if (row != null) {
+      await db.syncDao.enqueueUpsert('manufacturers', row.toCompanion(true));
+    }
+  }
+
   Future<void> updateManufacturerStock(String id, int newStock) async {
     final now = DateTime.now();
     final comp = ManufacturersCompanion(
@@ -475,7 +501,7 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
     await (update(
       manufacturers,
     )..where((t) => t.id.equals(id) & whereBusiness(t))).write(comp);
-    await db.syncDao.enqueueUpsert('manufacturers', comp);
+    await _enqueueFullManufacturer(id);
   }
 
   Future<void> updateManufacturerDeposit(String id, int depositKobo) async {
@@ -488,7 +514,7 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
     await (update(
       manufacturers,
     )..where((t) => t.id.equals(id) & whereBusiness(t))).write(comp);
-    await db.syncDao.enqueueUpsert('manufacturers', comp);
+    await _enqueueFullManufacturer(id);
   }
 
   Future<List<ProductDataWithStock>> getProductsWithStock({
