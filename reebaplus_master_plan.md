@@ -90,24 +90,24 @@ More keys can be added as features grow:
 
 Each step unlocks the next. Build in this order:
 
-- Database schema rebuild. Drop the brittle role constraint. Build all new tables. Seed default roles and permissions on business creation.
-- Auth flow. Welcome screen, CEO Sign Up, Staff Sign Up, Login (with Forgot PIN), Who is working picker.
-- Staff Management screen with invite flow.
-- CEO Settings page.
-- Home screen, role-aware.
-- Point of Sale, guarded by role.
-- Cart and Checkout flow with wallet integration.
-- Inventory and Product Details, role-aware.
-- Customers screen with wallet.
-- Orders (Pending, Completed, Cancelled).
-- Daily Stock Count.
-- Funds Register (new — multi-account model).
-- Expenses with pending approval flow.
-- Supplier Accounts.
-- Track Shipments (new).
-- Activity Logs.
-- Reports.
-- Notifications.
+- [x] Database schema rebuild. Drop the brittle role constraint. Build all new tables. Seed default roles and permissions on business creation.
+- [x] Auth flow. Welcome screen, CEO Sign Up, Staff Sign Up, Login (with Forgot PIN), Who is working picker.
+- [x] Staff Management screen with invite flow.
+- [x] CEO Settings page.
+- [x] Home screen, role-aware.
+- [ ] Point of Sale, guarded by role.
+- [ ] Cart and Checkout flow with wallet integration.
+- [ ] Inventory and Product Details, role-aware.
+- [ ] Customers screen with wallet.
+- [ ] Orders (Pending, Completed, Cancelled).
+- [ ] Daily Stock Count.
+- [ ] Funds Register (new — multi-account model).
+- [ ] Expenses with pending approval flow.
+- [ ] Supplier Accounts.
+- [ ] Track Shipments (new).
+- [ ] Activity Logs.
+- [ ] Reports.
+- [ ] Notifications.
 
 ---
 
@@ -134,7 +134,7 @@ This is the first screen users see on a fresh install and after a full logout. N
 
 ### 4.3 Visual style
 
-- Match the existing dark theme with yellow/orange accent.
+- Match the existing dark theme with yellow/orange accent. The accent (business colour) is CEO-selectable in CEO Settings → Appearance (§10.1) and applies business-wide; default amber. Light/dark/system stays a per-device choice.
 - Background: dark base with a subtle pattern (faint dotted or grid) and a soft yellow gradient glow from one corner.
 - Small fade-in animation on load — logo, name, tagline, and buttons fade in gently.
 
@@ -323,6 +323,7 @@ Where the CEO tunes everything about the business. Menu screen with tappable sec
 - Security — auto-lock timer with preset chips: 1, 3, 5, 10, 15, 30 minutes (default 5).
 - Roles & Permissions — four role cards (CEO, Manager, Cashier, Stock keeper). Tap to open.
 - Activity Logs access — toggle for which roles can view activity logs (CEO only by default).
+- Appearance — CEO picks the business colour (accent): Amber, Blue, Purple, or Green. Synced, so it applies to every device in the business. Light/dark/system mode is NOT here — that stays a per-device comfort choice, set from "Display" in the side menu. Default colour: amber.
 
 ### 10.2 Roles & Permissions sub-page (per role)
 

@@ -53,8 +53,8 @@ Keep this section updated at the top so it's easy to see what's done at a glance
 ### Phase 1 — In progress
 
 **Foundation:**
-- [ ] Database schema rebuild (section 2 of master plan)
-- [ ] Role + permission seeding for new businesses
+- [x] Database schema rebuild (section 2 of master plan) *(done in Session 2 — schema v13)*
+- [x] Role + permission seeding for new businesses *(done in Session 2)*
 
 **Auth flow:**
 - [x] Welcome screen (section 4) *(done in Session 6)*
@@ -65,8 +65,8 @@ Keep this section updated at the top so it's easy to see what's done at a glance
 
 **Core screens:**
 - [x] Staff Management (section 9) *(done in Session 10)*
-- [x] CEO Settings (section 10) *(§10.1 menu + Business Info / Stores / Security / Activity Logs access done in Session 14; §10.2 Roles & Permissions done in Session 15; §10.3 is Phase 2)*
-- [ ] Home / Dashboard (section 11)
+- [x] CEO Settings (section 10) *(§10.1 menu + Business Info / Stores / Security / Activity Logs access done in Session 14; §10.2 Roles & Permissions done in Session 15; Appearance added to §10.1 in Session 17; §10.3 is Phase 2)*
+- [x] Home / Dashboard (section 11) *(role-aware cards, subtitle, store lock, Total SKUs — commit 8307314)*
 - [ ] Point of Sale (section 12)
 - [ ] Cart + Edit Quantity modal (section 13)
 - [ ] Checkout (section 14)
@@ -86,7 +86,7 @@ Keep this section updated at the top so it's easy to see what's done at a glance
 
 **Cross-cutting:**
 - [ ] Role-based guards wired everywhere
-- [ ] Rename pass: Warehouse → Store *(done in Session 3)*, Dashboard → Home, Cash Register → Funds Register
+- [~] Rename pass: Warehouse → Store *(done in Session 3)*, Dashboard → Home *(done with §11)*; Cash Register → Funds Register pending (section 23)
 - [ ] Loading animations replaced with fade-ins
 - [ ] All UUIDs replaced with short codes in user-facing text
 
@@ -97,6 +97,79 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 ## Session entries
 
 (New entries go below this line. Most recent at the top.)
+
+---
+
+## Session 18 — 2026-05-30 — Sidebar role guards + profile role tag (§27, pivot step 10)
+
+**Built today:**
+- The sidebar used to show every item to everyone. Now each role only sees what it's allowed to. A Stock keeper no longer sees Point of Sale, Customers, Supplier Accounts, Expenses, Stores, Activity Logs, Staff Management, or CEO Settings — just Home, Inventory, and Orders. A Cashier additionally sees POS and Customers. A Manager sees those plus Expenses and Staff Management. The CEO sees everything.
+- Visibility is decided by the same permission a role already has (e.g. a role only sees "Expenses" if it can create expenses), so it stays correct if the CEO later changes a role's permissions. Supplier Accounts and Activity Logs show for a Manager only if the CEO has granted those — matching "Manager if toggled" in the plan.
+- Removed three sidebar items: Deliveries (a Phase 3 feature), Cart (it lives in the bottom bar only now), and Pro Tips. The "View Pro Tips" welcome card on Home was removed too, so Pro Tips isn't shown anywhere in Phase 1 (the tips screen stays in the code for Phase 2).
+- The sidebar profile area now shows the person's role as a coloured tag (CEO yellow, Manager blue, Cashier green, Stock keeper grey), and the header tint matches.
+
+**Files touched:**
+- lib/shared/widgets/app_drawer.dart
+- lib/features/dashboard/screens/home_screen.dart
+- test/settings/sidebar_role_visibility_test.dart
+
+**Database changes:**
+- None.
+
+**Master plan sections covered:**
+- Section 27 (27.1 profile role tag, 27.3 visibility-by-role, 27.5 removed items) — sidebar role guards. Decisions Q7 (drop Pro Tips) and Q9 (hide CEO Settings for non-CEO — the CEO Settings gate was already in place; this pass extends the same gating to the rest).
+
+**Plan updates made during session:**
+- None. This implements the existing §27 spec.
+
+**Tested:**
+- New `sidebar_role_visibility_test` seeds all four roles with the default-grant matrix (migration 0043) and asserts each role sees exactly its §27.3 set. `flutter analyze` clean on the changed files; `flutter test test/settings/` green.
+
+**Known issues / left open:**
+- Sync Issues sidebar item was left to the concurrent CEO Settings → Devices relocation work-stream (not touched here).
+- Bottom-nav POS guard for Stock keeper (so the POS tab itself is unreachable) belongs to pivot step 12 (POS role guards), not this pass.
+
+---
+
+## Session 17 — 2026-05-30 — Business appearance: CEO picks the colour, device keeps light/dark (§10.1)
+
+**Built today:**
+- The CEO can now choose the app's **colour for the whole business** (Amber, Blue, Purple, Green) from a new **CEO Settings → Appearance** page. The choice is synced, so every device in the business shows that colour. Default stays amber.
+- **Light/dark/system mode stays a personal, per-device choice** — it did NOT move into CEO settings. The old drawer "Appearance" entry is now **"Display"** and only controls light/dark/system for the device you're on. (So a night-shift cashier can still use dark mode even if the CEO picked a light-ish colour.)
+- Under the hood: the business colour lives in a synced setting (`business_design_system`). A small bridge in the app's root applies it to the running theme on every device, so a CEO's change propagates to other devices automatically. Picking a colour is CEO-only and is written to the activity log.
+
+**Plan decision made this session (with the user):**
+- Appearance wasn't in the master plan and the plan implied a fixed dark+amber brand. The user chose: **CEO picks the business colour (synced); each device keeps its own light/dark for comfort.** The master plan was updated first (§10.1 + the §4.3 note) before building.
+
+**Files touched:**
+- reebaplus_master_plan.md (§10.1 Appearance section + §4.3 accent note)
+- lib/core/settings/appearance_settings_screen.dart (new — CEO colour picker, synced)
+- lib/core/providers/stream_providers.dart (new `businessDesignSystemProvider` + `kBusinessDesignSystemKey`, guarded against pre-login)
+- lib/main.dart (app-root bridge: synced colour → themeController)
+- lib/core/settings/settings_screen.dart (new "Appearance" menu row)
+- lib/core/theme/theme_settings_screen.dart (trimmed to light/dark only; titled "Display")
+- lib/shared/widgets/app_drawer.dart (drawer tile relabelled "Appearance" → "Display")
+- test/settings/appearance_settings_screen_test.dart (new)
+
+**Database changes:**
+- None. No migration, no schema/version bump. The colour is a synced `settings` key (`business_design_system`), set via the existing `SettingsDao.set` (which already enqueues). Light/dark stays in SharedPreferences.
+
+**Master plan sections covered:**
+- §10.1 — Appearance added (CEO business colour, synced; light/dark per-device).
+
+**Plan updates made during session:**
+- Added the Appearance section to §10.1 and a note to §4.3 (the accent is CEO-selectable, default amber; light/dark per-device).
+
+**Tested:**
+- New test: CEO picks a colour → the synced `business_design_system` setting is written ('green') + a sync upsert is enqueued + the live theme updates; a non-CEO viewer sees the no-access body (no colour cards).
+- Full suite green: `flutter analyze` clean for all touched files; `flutter test --exclude-tags=integration` → all passed (186, 2 env-gated skips).
+
+**Known issues / left open:**
+- The light/dark "Display" screen and the colour "Appearance" screen are now two separate entries (drawer vs CEO Settings) by design.
+- Pre-login the device shows its cached colour (or amber) until the business setting syncs in — then the bridge applies the business colour.
+
+**Next session should:**
+- Continue §11 Home (in progress) or the next core screen.
 
 ---
 
