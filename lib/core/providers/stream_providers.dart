@@ -9,6 +9,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/theme/theme_notifier.dart';
+import 'package:reebaplus_pos/shared/utils/role_display.dart';
 
 // ── Orders ──────────────────────────────────────────────────────────────────
 final allOrdersProvider = StreamProvider<List<OrderWithItems>>((ref) {
@@ -77,10 +79,43 @@ final storeByIdProvider =
 
 // ── Roles & permissions (master plan §2.4, schema v13) ─────────────────────
 
-/// All non-deleted roles for the current business, ordered system
-/// defaults first (CEO → Manager → Cashier → Stock keeper).
+/// All non-deleted roles for the current business, sorted by role tier
+/// (CEO → Manager → Cashier → Stock keeper) via [roleRank]. This is the
+/// canonical display order for roles across the whole app — any UI that lists
+/// roles must come through this provider (or otherwise sort by [roleRank]) so
+/// the tier order is consistent everywhere.
 final allRolesProvider = StreamProvider<List<RoleData>>((ref) {
-  return ref.watch(databaseProvider).rolesDao.watchAll();
+  return ref.watch(databaseProvider).rolesDao.watchAll().map(
+        (roles) => roles.toList()
+          ..sort((a, b) => roleRank(a.slug).compareTo(roleRank(b.slug))),
+      );
+});
+
+// ── Appearance (business accent colour, §10.1) ──────────────────────────────
+
+/// Settings key for the CEO-chosen business accent (synced). Value is the
+/// [DesignSystem] enum name: 'amber' | 'blue' | 'purple' | 'green'.
+const kBusinessDesignSystemKey = 'business_design_system';
+
+DesignSystem? _parseDesignSystem(String? v) {
+  if (v == null) return null;
+  try {
+    return DesignSystem.values.byName(v);
+  } catch (_) {
+    return null;
+  }
+}
+
+/// The business-wide accent colour, streamed from the synced `settings` row.
+/// Null when no session is bound (pre-login) or the key is unset/invalid — the
+/// app-root bridge then leaves the device's themeController value alone (amber
+/// default). The null-session guard is required because `settingsDao.watch`
+/// calls `requireBusinessId()`, which throws without a business.
+final businessDesignSystemProvider = StreamProvider<DesignSystem?>((ref) {
+  ref.watch(authProvider); // re-subscribe when the session binds / unbinds
+  final db = ref.watch(databaseProvider);
+  if (db.currentBusinessId == null) return Stream.value(null);
+  return db.settingsDao.watch(kBusinessDesignSystemKey).map(_parseDesignSystem);
 });
 
 /// Global permissions catalog. Identical on every device and every

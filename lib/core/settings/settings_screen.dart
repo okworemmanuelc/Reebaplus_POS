@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/activity_logs_access_screen.dart';
+import 'package:reebaplus_pos/core/settings/appearance_settings_screen.dart';
 import 'package:reebaplus_pos/core/settings/business_info_screen.dart';
 import 'package:reebaplus_pos/core/settings/roles_permissions_screen.dart';
 import 'package:reebaplus_pos/core/settings/security_settings_screen.dart';
@@ -78,6 +79,15 @@ class SettingsScreen extends ConsumerWidget {
                     trailing: _chevron(context),
                     onTap: () =>
                         _open(context, const ActivityLogsAccessScreen()),
+                  ),
+                  const SizedBox(height: 16),
+                  SettingsTile(
+                    icon: Icons.palette_rounded,
+                    title: 'Appearance',
+                    subtitle: 'Business colour (applies to all devices)',
+                    trailing: _chevron(context),
+                    onTap: () =>
+                        _open(context, const AppearanceSettingsScreen()),
                   ),
                 ],
               ),

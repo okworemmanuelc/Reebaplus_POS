@@ -627,7 +627,7 @@ class AppDrawer extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Appearance',
+                      'Display',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: context.getRFontSize(14),
@@ -637,7 +637,7 @@ class AppDrawer extends ConsumerWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                     Text(
-                      'Theme & Display',
+                      'Light & dark mode',
                       style: TextStyle(
                         fontSize: context.getRFontSize(11),
                         color: Colors.white.withValues(alpha: 0.7),
