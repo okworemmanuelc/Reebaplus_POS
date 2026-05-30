@@ -83,7 +83,17 @@ class CrateReturnApprovalService {
         await db.syncDao
             .enqueue('domain:pos_approve_crate_return', jsonEncode(payload));
       } else {
-        await db.syncDao.enqueueUpsert('pending_crate_returns', pcrComp);
+        // Full-row enqueue: a partial pending_crate_returns upsert omits NOT NULL
+        // customer_id / crate_size_group_id / quantity / submitted_by → 23502.
+        await db.syncDao.enqueueUpsert(
+          'pending_crate_returns',
+          pending.toCompanion(true).copyWith(
+                status: const Value('approved'),
+                approvedBy: Value(approvedBy),
+                approvedAt: Value(now),
+                lastUpdatedAt: Value(now),
+              ),
+        );
         await db.syncDao.enqueueUpsert('crate_ledger', ledgerComp);
         final balRow = await (db.select(db.customerCrateBalances)
               ..where((t) =>
@@ -121,7 +131,15 @@ class CrateReturnApprovalService {
       await (db.update(db.pendingCrateReturns)
             ..where((t) => t.id.equals(returnId)))
           .write(pcrComp);
-      await db.syncDao.enqueueUpsert('pending_crate_returns', pcrComp);
+      // Full-row enqueue (see approve): a partial upsert would 23502.
+      await db.syncDao.enqueueUpsert(
+        'pending_crate_returns',
+        pending.toCompanion(true).copyWith(
+              status: const Value('rejected'),
+              rejectionReason: Value(rejectionReason),
+              lastUpdatedAt: Value(now),
+            ),
+      );
     });
   }
 }

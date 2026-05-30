@@ -673,7 +673,14 @@ class AuthService extends ValueNotifier<UserData?> {
         );
         await (_db.update(_db.users)..where((u) => u.id.equals(currentUser.id)))
             .write(notifBump);
-        await _db.syncDao.enqueueUpsert('users', notifBump);
+        // Full-row enqueue: a partial users upsert omits the NOT NULL name.
+        // Local-only columns (pin, etc.) are stripped by the cloud whitelist.
+        await _db.syncDao.enqueueUpsert(
+          'users',
+          currentUser.toCompanion(true).copyWith(
+                lastNotificationSentAt: Value(now),
+              ),
+        );
       }
 
       // 3. Escalation notification (if 48h passed)
@@ -693,7 +700,13 @@ class AuthService extends ValueNotifier<UserData?> {
           await (_db.update(_db.users)
                 ..where((u) => u.id.equals(currentUser.id)))
               .write(escalationBump);
-          await _db.syncDao.enqueueUpsert('users', escalationBump);
+          // Full-row enqueue (see above): partial users upsert omits NOT NULL name.
+          await _db.syncDao.enqueueUpsert(
+            'users',
+            currentUser.toCompanion(true).copyWith(
+                  lastNotificationSentAt: Value(now),
+                ),
+          );
         }
       }
 

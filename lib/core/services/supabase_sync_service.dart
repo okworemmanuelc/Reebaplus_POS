@@ -537,11 +537,18 @@ class SupabaseSyncService {
     }
 
     // Group items by their action signature (table + action + optional
-    // conflict target). One Supabase round-trip per group, batched as an
-    // array. PostgREST's array-upsert preserves partial-row semantics: only
-    // columns present in each payload are updated, so partial Drift
-    // Companions (e.g. markCompleted writing only {status, completed_at})
-    // don't NULL-out untouched columns.
+    // conflict target). One Supabase round-trip per group, batched as an array.
+    //
+    // CAUTION: an upsert here is `INSERT ... ON CONFLICT DO UPDATE`. The DO
+    // UPDATE branch only touches columns present in each payload (so a partial
+    // payload won't NULL-out untouched columns on an existing row) — BUT Postgres
+    // validates NOT-NULL constraints on the INSERT attempt BEFORE conflict
+    // resolution, so a PARTIAL payload that omits a NOT-NULL-no-default column
+    // (e.g. `name`) fails with 23502 even when the row already exists. Every
+    // enqueued upsert must therefore carry a FULL row, not just the changed
+    // columns — see the `_enqueueFull*` helpers / `toCompanion(true)` pattern in
+    // daos.dart. (The earlier "partial-row semantics are safe" note was wrong and
+    // produced a class of silent sync failures.)
     final groups = <_PushGroup, List<SyncQueueData>>{};
     for (final item in tableItems) {
       final parts = item.actionType.split(':');

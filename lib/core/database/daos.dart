@@ -287,7 +287,8 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
     await (update(
       products,
     )..where((t) => t.id.equals(productId) & whereBusiness(t))).write(comp);
-    await db.syncDao.enqueueUpsert('products', comp);
+    // Full-row enqueue: a partial products upsert omits the NOT NULL name → 23502.
+    await _enqueueFullProduct(productId);
   }
 
   Future<void> updateProductDetails(
@@ -382,7 +383,7 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
     await (update(
       products,
     )..where((t) => t.id.equals(productId) & whereBusiness(t))).write(comp);
-    await db.syncDao.enqueueUpsert('products', comp);
+    await _enqueueFullProduct(productId);
   }
 
   int getPriceForTier(ProductData product, String group) {
@@ -404,6 +405,18 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
         .getSingleOrNull();
     if (row != null) {
       await db.syncDao.enqueueUpsert('manufacturers', row.toCompanion(true));
+    }
+  }
+
+  /// Enqueues the FULL product row for sync. Per-column product updates and the
+  /// soft-delete build a partial companion; a partial `products` upsert omits the
+  /// NOT NULL `name`, which the cloud rejects (23502). Re-read + enqueue all cols.
+  Future<void> _enqueueFullProduct(String id) async {
+    final row = await (select(products)
+          ..where((t) => t.id.equals(id) & whereBusiness(t)))
+        .getSingleOrNull();
+    if (row != null) {
+      await db.syncDao.enqueueUpsert('products', row.toCompanion(true));
     }
   }
 
@@ -434,7 +447,7 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
     await (update(
       products,
     )..where((t) => t.id.equals(productId) & whereBusiness(t))).write(comp);
-    await db.syncDao.enqueueUpsert('products', comp);
+    await _enqueueFullProduct(productId);
   }
 }
 
@@ -778,7 +791,14 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
     await (update(
       crateSizeGroups,
     )..where((t) => t.id.equals(groupId) & whereBusiness(t))).write(comp);
-    await db.syncDao.enqueueUpsert('crate_size_groups', comp);
+    // Full-row enqueue: a partial crate_size_groups upsert omits NOT NULL name.
+    final fullGroup = await (select(crateSizeGroups)
+          ..where((t) => t.id.equals(groupId) & whereBusiness(t)))
+        .getSingleOrNull();
+    if (fullGroup != null) {
+      await db.syncDao
+          .enqueueUpsert('crate_size_groups', fullGroup.toCompanion(true));
+    }
   }
 
   /// Increment a manufacturer's empty-crate stock counter. Used by the
@@ -1030,17 +1050,29 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
 
   // ── Writes ─────────────────────────────────────────────────────────────────
 
-  Future<void> assignRider(String orderId, String riderName) {
+  /// Enqueues the FULL order row for sync. Per-column order updates build a
+  /// partial companion; a partial `orders` upsert omits NOT NULL columns
+  /// (order_number, total_amount_kobo, …) and the cloud rejects it (23502).
+  Future<void> _enqueueFullOrder(String id) async {
+    final row = await (select(orders)
+          ..where((o) => o.id.equals(id) & whereBusiness(o)))
+        .getSingleOrNull();
+    if (row != null) {
+      await db.syncDao.enqueueUpsert('orders', row.toCompanion(true));
+    }
+  }
+
+  Future<void> assignRider(String orderId, String riderName) async {
     final now = DateTime.now();
     final comp = OrdersCompanion(
       id: Value(orderId),
       riderName: Value(riderName),
       lastUpdatedAt: Value(now),
     );
-    return (update(orders)
+    await (update(orders)
           ..where((o) => o.id.equals(orderId) & whereBusiness(o)))
-        .write(comp)
-        .then((_) => db.syncDao.enqueueUpsert('orders', comp));
+        .write(comp);
+    await _enqueueFullOrder(orderId);
   }
 
   /// Atomic order + items + inventory + ledger + payment + wallet in a single txn.
@@ -1298,7 +1330,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       await (update(
         orders,
       )..where((o) => o.id.equals(orderId) & whereBusiness(o))).write(comp);
-      await db.syncDao.enqueueUpsert('orders', comp);
+      await _enqueueFullOrder(orderId);
     });
   }
 
@@ -1344,7 +1376,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       }
 
       // v1 path: full local mirror + per-table enqueues.
-      await db.syncDao.enqueueUpsert('orders', ordComp);
+      await _enqueueFullOrder(orderId);
 
       // Stock: append COMPENSATING rows (ledger is append-only)
       final saleRows =
@@ -3006,7 +3038,13 @@ class NotificationsDao extends DatabaseAccessor<AppDatabase>
           (t) => t.id.equals(id) & whereBusiness(t) & _whereForCurrentUser(t),
         ))
         .write(comp);
-    await db.syncDao.enqueueUpsert('notifications', comp);
+    // Full-row enqueue: a partial notifications upsert omits NOT NULL type/message.
+    final row = await (select(notifications)
+          ..where((t) => t.id.equals(id) & whereBusiness(t)))
+        .getSingleOrNull();
+    if (row != null) {
+      await db.syncDao.enqueueUpsert('notifications', row.toCompanion(true));
+    }
   }
 
   Future<void> markAllRead() async {
@@ -3031,12 +3069,15 @@ class NotificationsDao extends DatabaseAccessor<AppDatabase>
         );
 
     for (final notif in unread) {
-      final comp = NotificationsCompanion(
-        id: Value(notif.id),
-        isRead: const Value(true),
-        lastUpdatedAt: Value(now),
+      // Full row (with the read flag applied) so the cloud upsert's INSERT has
+      // the NOT NULL type/message columns; a partial upsert would 23502.
+      await db.syncDao.enqueueUpsert(
+        'notifications',
+        notif.toCompanion(true).copyWith(
+              isRead: const Value(true),
+              lastUpdatedAt: Value(now),
+            ),
       );
-      await db.syncDao.enqueueUpsert('notifications', comp);
     }
   }
 
@@ -3522,7 +3563,15 @@ class PendingCrateReturnsDao extends DatabaseAccessor<AppDatabase>
     await (update(
       pendingCrateReturns,
     )..where((t) => t.id.equals(id) & whereBusiness(t))).write(comp);
-    await db.syncDao.enqueueUpsert('pending_crate_returns', comp);
+    // Full-row enqueue: a partial pending_crate_returns upsert omits NOT NULL
+    // customer_id / crate_size_group_id / quantity / submitted_by.
+    final row = await (select(pendingCrateReturns)
+          ..where((t) => t.id.equals(id) & whereBusiness(t)))
+        .getSingleOrNull();
+    if (row != null) {
+      await db.syncDao
+          .enqueueUpsert('pending_crate_returns', row.toCompanion(true));
+    }
   }
 }
 
@@ -3569,7 +3618,13 @@ class SessionsDao extends DatabaseAccessor<AppDatabase>
     await (update(
       sessions,
     )..where((t) => t.id.equals(sessionId) & whereBusiness(t))).write(comp);
-    await db.syncDao.enqueueUpsert('sessions', comp);
+    // Full-row enqueue: a partial sessions upsert omits NOT NULL user_id/expires_at.
+    final row = await (select(sessions)
+          ..where((t) => t.id.equals(sessionId) & whereBusiness(t)))
+        .getSingleOrNull();
+    if (row != null) {
+      await db.syncDao.enqueueUpsert('sessions', row.toCompanion(true));
+    }
   }
 
   Future<void> revokeAllSessionsForUser(String userId) async {
@@ -3597,12 +3652,13 @@ class SessionsDao extends DatabaseAccessor<AppDatabase>
         );
 
     for (final s in active) {
-      final comp = SessionsCompanion(
-        id: Value(s.id),
-        revokedAt: Value(now),
-        lastUpdatedAt: Value(now),
+      await db.syncDao.enqueueUpsert(
+        'sessions',
+        s.toCompanion(true).copyWith(
+              revokedAt: Value(now),
+              lastUpdatedAt: Value(now),
+            ),
       );
-      await db.syncDao.enqueueUpsert('sessions', comp);
     }
   }
 
@@ -3648,7 +3704,13 @@ class CustomerWalletsDao extends DatabaseAccessor<AppDatabase>
     await (update(
       attachedDatabase.customers,
     )..where((t) => t.id.equals(customerId) & whereBusiness(t))).write(comp);
-    await db.syncDao.enqueueUpsert('customers', comp);
+    // Full-row enqueue: a partial customers upsert omits the NOT NULL name.
+    final row = await (attachedDatabase.select(attachedDatabase.customers)
+          ..where((t) => t.id.equals(customerId) & whereBusiness(t)))
+        .getSingleOrNull();
+    if (row != null) {
+      await db.syncDao.enqueueUpsert('customers', row.toCompanion(true));
+    }
   }
 }
 
@@ -3929,7 +3991,14 @@ class FundsAccountsDao extends DatabaseAccessor<AppDatabase>
     await (update(fundsAccounts)
           ..where((t) => t.id.equals(id) & whereBusiness(t)))
         .write(comp);
-    await db.syncDao.enqueueUpsert('funds_accounts', comp);
+    // Full-row enqueue: a partial funds_accounts upsert omits NOT NULL
+    // store_id / account_type / name.
+    final row = await (select(fundsAccounts)
+          ..where((t) => t.id.equals(id) & whereBusiness(t)))
+        .getSingleOrNull();
+    if (row != null) {
+      await db.syncDao.enqueueUpsert('funds_accounts', row.toCompanion(true));
+    }
   }
 }
 

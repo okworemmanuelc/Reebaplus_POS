@@ -492,7 +492,14 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
               await (db.update(db.stores)
                     ..where((t) => t.id.equals(store.id)))
                   .write(whComp);
-              await db.syncDao.enqueueUpsert('stores', whComp);
+              // Full-row enqueue: a partial stores upsert omits the NOT NULL name.
+              await db.syncDao.enqueueUpsert(
+                'stores',
+                store.toCompanion(true).copyWith(
+                      isDeleted: const Value(true),
+                      lastUpdatedAt: whComp.lastUpdatedAt,
+                    ),
+              );
             },
           ),
         ],

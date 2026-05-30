@@ -100,6 +100,62 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 
 ---
 
+## Session 29 — 2026-05-30 — Partial-upsert sweep: 19 more methods fixed (sync correctness)
+
+**Built today:**
+- **Swept the codebase for the partial-row upsert bug** that the manufacturer fix
+  (Session 28) exposed, and fixed all 19 genuine offenders. The push path does an
+  `INSERT … ON CONFLICT` upsert; Postgres validates NOT-NULL on the INSERT *before*
+  the conflict merges, so any queued payload missing a NOT-NULL-no-default column
+  (usually `name`) is rejected (23502) and never syncs. These are latent — each fires
+  only when its path runs + a push happens — which is why only the freshly-exercised
+  manufacturer one showed on the Sync Issues screen.
+- Fixed (each now re-reads and enqueues the FULL row, the proven manufacturer pattern):
+  - products: `softDeleteProduct`, `updateMonthlyTarget`, `updateTrackEmpties`
+  - orders: `assignRider`, `markCompleted`, `markCancelled` (v1 path)
+  - sessions: `revokeSession` (every full logout), `revokeAllSessionsForUser`
+  - notifications: `markRead`, `markAllRead`
+  - pending_crate_returns: `updateStatus`, service `approve`/`reject` (v1 path)
+  - crate_size_groups: `updateCrateGroupStock`
+  - customers: `updateWalletLimit`
+  - funds_accounts: `softDeleteAccount`
+  - stores: soft-delete handler
+  - users: the two onboarding-alert notification bumps
+- **Corrected the misleading comment** in supabase_sync_service that claimed partial
+  upserts were safe — the assumption that institutionalised this whole bug class.
+
+**Files touched:**
+- lib/core/database/daos.dart (14 methods + `_enqueueFullProduct` / `_enqueueFullOrder` helpers)
+- lib/shared/services/crate_return_approval_service.dart (approve/reject v1 paths)
+- lib/shared/services/auth_service.dart (2 users notif bumps)
+- lib/features/stores/screens/stores_screen.dart (store soft-delete)
+- lib/core/services/supabase_sync_service.dart (corrected the partial-upsert comment)
+- test/sync/dispatch/partial_upsert_full_row_test.dart (new — 3 product regression tests)
+
+**Database changes:**
+- None. Client-only — no schema bump, no cloud migration. The cloud tables are
+  correct; the client was sending incomplete payloads.
+
+**Tested:**
+- `flutter analyze` clean. Full suite 212 passed / 0 failed (6 partial-upsert
+  regression tests: 3 products here + 3 manufacturers from Session 28).
+- Verified by grep that no partial-companion enqueue remains for any offender table.
+  The three that look similar (`updateProductDetails`, store create/edit) include
+  `name` / use `.insert`, so they're safe.
+
+**Known issues / left open:**
+- The full-row `users` enqueue puts local-only columns (pin, etc.) into the LOCAL
+  sync_queue payload; the cloud column whitelist strips them on push, so they never
+  leave the device. Acceptable; noted for awareness.
+- No on-device action needed (unlike Session 28's stuck queue item) — these are
+  invisible until the paths run, and now enqueue correctly.
+
+**Next session should:**
+- Resume the verification-backlog burndown (POS / Cart / Inventory / Funds Register
+  on-device), or the next master-plan screen.
+
+---
+
 ## Session 28 — 2026-05-30 — Manufacturer partial-upsert sync fix (Sync Issues 23502)
 
 **Built today:**
