@@ -188,9 +188,9 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
   the existing restore tests.
 
 **Known issues / left open:**
-- **Needs a 30-second two-device on-device check** to close the fix: edit a product /
-  open the day / change the CEO colour on device A → it lands on device B within a
-  tick with NO manual pull. (This is the only way to truly confirm realtime delivery.)
+- ✅ **Two-device realtime delivery CONFIRMED working on-device (2026-05-30, user-run):**
+  a change on device A (product / Open Day / CEO colour) lands on device B within a
+  tick with NO manual pull. The foundation fix is closed.
 - ~35 channels are opened on connect (one per `_pullOrder` tenant table) — within
   Supabase limits, but worth watching the join logs on a real device.
 - Cloud funds migrations 0057–0060 confirmed applied remotely (`supabase migration
