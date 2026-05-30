@@ -22,6 +22,7 @@ import 'package:reebaplus_pos/features/pos/widgets/quick_sale_modal.dart';
 import 'package:reebaplus_pos/shared/widgets/pin_dialog.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 
 class PosHomeScreen extends ConsumerStatefulWidget {
   const PosHomeScreen({super.key});
@@ -73,13 +74,34 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // §12 / hard rule #6: POS is gated to roles that hold `sales.make` (CEO,
+    // Manager, Cashier). Stock keeper is already hidden in the sidebar; this is
+    // defense-in-depth against deep-links / bottom-nav.
+    if (!hasPermission(ref, 'sales.make')) {
+      return SharedScaffold(
+        activeRoute: 'pos',
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        body: SafeArea(
+          child: Center(
+            child: Text(
+              'You don\'t have access to Point of Sale.',
+              style: TextStyle(
+                color:
+                    Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     if (_controller == null) {
       final bgCol = Theme.of(context).scaffoldBackgroundColor;
       return SharedScaffold(
         activeRoute: 'pos',
         backgroundColor: bgCol,
         body: const SafeArea(
-          child: Center(child: CircularProgressIndicator()),
+          child: SizedBox.shrink(),
         ),
       );
     }
@@ -154,17 +176,24 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
                     Expanded(
                       // ...
                       child: _controller!.isLoading
-                          ? const Center(child: CircularProgressIndicator())
-                          : AppRefreshWrapper(
-                              child: ProductGrid(
-                                products: _controller!.filteredProducts,
-                                onProductTap: (item) =>
-                                    _addToCart(context, item),
-                                cardCol: cardCol,
-                                textCol: textCol,
-                                subtextCol: subtextCol,
-                                borderCol: borderCol,
-                                controller: _controller!,
+                          ? const SizedBox.shrink()
+                          : TweenAnimationBuilder<double>(
+                              // §12.5: subtle fade-in for content, no spinner.
+                              tween: Tween(begin: 0, end: 1),
+                              duration: const Duration(milliseconds: 250),
+                              builder: (_, v, child) =>
+                                  Opacity(opacity: v, child: child),
+                              child: AppRefreshWrapper(
+                                child: ProductGrid(
+                                  products: _controller!.filteredProducts,
+                                  onProductTap: (item) =>
+                                      _addToCart(context, item),
+                                  cardCol: cardCol,
+                                  textCol: textCol,
+                                  subtextCol: subtextCol,
+                                  borderCol: borderCol,
+                                  controller: _controller!,
+                                ),
                               ),
                             ),
                     ),
@@ -182,6 +211,8 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
     Color textCol,
     Color subtextCol,
   ) {
+    // §12.1: the store selector is CEO-only (CEO can switch selling store).
+    final isCeo = ref.watch(currentUserRoleProvider)?.slug == 'ceo';
     return AppBar(
       backgroundColor: surfaceCol,
       elevation: 0,
@@ -205,17 +236,18 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
             if (!_controller!.isSearching) _searchController.clear();
           },
         ),
-        IconButton(
-          icon: Icon(
-            FontAwesomeIcons.store,
-            size: 16,
-            color: ref.read(navigationProvider).lockedStoreId.value == null
-                ? subtextCol
-                : Theme.of(context).colorScheme.primary,
+        if (isCeo)
+          IconButton(
+            icon: Icon(
+              FontAwesomeIcons.store,
+              size: 16,
+              color: ref.read(navigationProvider).lockedStoreId.value == null
+                  ? subtextCol
+                  : Theme.of(context).colorScheme.primary,
+            ),
+            tooltip: 'Select Store',
+            onPressed: () => _showStorePicker(context, subtextCol),
           ),
-          tooltip: 'Select Store',
-          onPressed: () => _showStorePicker(context, subtextCol),
-        ),
         const NotificationBell(),
         SizedBox(width: context.getRSize(16)),
       ],
@@ -229,6 +261,11 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
     Color subtextCol,
     Color borderCol,
   ) {
+    // §12.2: CEO/Manager switch price tier freely; Cashier is locked to
+    // Retailer (a selected wholesaler customer still auto-applies via the
+    // controller's customer listener).
+    final slug = ref.watch(currentUserRoleProvider)?.slug;
+    final canSwitchTier = slug == 'ceo' || slug == 'manager';
     return Container(
       color: surfaceCol,
       padding: EdgeInsets.all(context.getRSize(16)),
@@ -238,21 +275,27 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
             flex: 4,
             child: _controller!.isLoading
                 ? const SizedBox.shrink()
-                : AppDropdown<PriceTier>(
-                    value: _controller!.selectedGroup,
-                    items: const [
-                      DropdownMenuItem(
-                        value: PriceTier.retailer,
-                        child: Text('Retailer'),
+                : IgnorePointer(
+                    ignoring: !canSwitchTier,
+                    child: Opacity(
+                      opacity: canSwitchTier ? 1.0 : 0.6,
+                      child: AppDropdown<PriceTier>(
+                        value: _controller!.selectedGroup,
+                        items: const [
+                          DropdownMenuItem(
+                            value: PriceTier.retailer,
+                            child: Text('Retailer'),
+                          ),
+                          DropdownMenuItem(
+                            value: PriceTier.wholesaler,
+                            child: Text('Wholesaler'),
+                          ),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) _controller!.selectGroup(val);
+                        },
                       ),
-                      DropdownMenuItem(
-                        value: PriceTier.wholesaler,
-                        child: Text('Wholesaler'),
-                      ),
-                    ],
-                    onChanged: (val) {
-                      if (val != null) _controller!.selectGroup(val);
-                    },
+                    ),
                   ),
           ),
           SizedBox(width: context.getRSize(8)),
@@ -394,9 +437,38 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
   }
 
   Future<void> _showQuickSaleModal(BuildContext context) async {
-    // Require a manager (tier 4+) before opening the quick-sale modal
-    final approver = await PinDialog.show(context, title: 'Quick Sale');
-    if (approver == null) return; // cancelled or wrong PIN
+    // §12.3: Quick Sale needs CEO/Manager authority. CEO and Manager proceed
+    // directly; a Cashier must enter a CEO or Manager PIN (their own PIN is
+    // rejected).
+    final slug = ref.read(currentUserRoleProvider)?.slug;
+    if (slug != 'ceo' && slug != 'manager') {
+      final approver = await PinDialog.show(context, title: 'Quick Sale');
+      if (approver == null) return; // cancelled or wrong PIN
+      // Resolve the approver's role straight from the DB. We can't use
+      // `ref.read(userRoleProvider(approver.id))` here: that provider is backed
+      // by stream providers, and for an id nothing on screen is watching, a cold
+      // read returns null before the streams emit — which wrongly rejected a
+      // valid CEO/Manager PIN. Awaiting the DAOs mirrors userRoleProvider's
+      // membership → role resolution synchronously.
+      final db = ref.read(databaseProvider);
+      final memberships = await db.userBusinessesDao.getForUser(approver.id);
+      String? approverSlug;
+      if (memberships.isNotEmpty) {
+        final roleId = memberships.first.roleId;
+        final roles = await db.rolesDao.getAll();
+        for (final r in roles) {
+          if (r.id == roleId) {
+            approverSlug = r.slug;
+            break;
+          }
+        }
+      }
+      if (approverSlug != 'ceo' && approverSlug != 'manager') {
+        if (!context.mounted) return;
+        AppNotification.showError(context, 'Manager or CEO PIN required.');
+        return;
+      }
+    }
 
     if (!context.mounted) return;
     showDialog(

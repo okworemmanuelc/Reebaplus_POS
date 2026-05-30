@@ -100,6 +100,43 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 
 ---
 
+## Session 19 — 2026-05-30 — Point of Sale, guarded by role (§12, pivot step 12)
+
+**Built today:**
+- Made the Point of Sale screen role-aware. Most of the §12 UI already existed (price tier dropdown, store picker, out-of-stock greying, Quick Sale modal); this session added the role gates around it.
+- POS now blocks anyone without "make a sale" permission. The Stock keeper was already hidden from the sidebar; now if they reach POS by any other route they see a plain "You don't have access" message instead of the till.
+- The store-switcher icon in the top bar is now CEO-only. Managers and Cashiers just see the current store name; only the CEO can switch which store they're selling from.
+- The Retailer/Wholesaler price dropdown is now locked for Cashiers — they stay on Retailer. CEO and Manager can still switch freely. (If a registered wholesaler customer is added to the cart, the price still switches automatically for everyone, as before.)
+- Quick Sale now needs a manager. A CEO or Manager opens it straight away; a Cashier must type a CEO or Manager PIN first, and their own PIN is rejected.
+- Replaced the spinning loaders on the POS screen with a gentle fade-in, matching the rest of the app.
+
+**Files touched:**
+- lib/features/pos/screens/pos_home_screen.dart
+
+**Database changes:**
+- None. Every change is read-only display/gating — no synced-table writes, no schema change.
+
+**Master plan sections covered:**
+- §12 — Point of Sale (role-based access, store selector CEO-only, price tier defaults, Quick Sale PIN gate, fade-in loading).
+
+**Plan updates made during session:**
+- Ticked the §3 build-order box for "Point of Sale, guarded by role" and marked pivot step 12 done.
+
+**Tested:**
+- `flutter analyze` on the POS screen — clean, no issues.
+- Manual role walk-through still to do on the emulator (switch user across CEO / Manager / Cashier / Stock keeper).
+
+**Known issues / left open:**
+- Barcode scan for Pharmacy/Supermarket (§12.6) — deferred to pivot step 40 (needs a camera package).
+- Block-POS-until-Open-Day (hard rule #10 / §12) — depends on the Funds Register Open Day feature, which doesn't exist yet (pivot step 16).
+- Role-based discount caps — they live in the Cart screen, pivot step 13.
+- The realtime inbound-sync bug (flagged 2026-05-30, §2.6 / pivot §7) was parked until POS landed — now eligible to fix.
+
+**Next session should:**
+- Pivot step 13: Cart + Edit Quantity modal + role-based discount caps (and the `allowFractionalSales` column). Or take the now-unblocked realtime inbound-sync fix first.
+
+---
+
 ## Session 18 — 2026-05-30 — Sidebar role guards + profile role tag (§27, pivot step 10)
 
 **Built today:**
