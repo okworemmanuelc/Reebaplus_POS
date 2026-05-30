@@ -29,6 +29,8 @@ class OrderService {
     int crateDepositPaidKobo = 0,
     int discountKobo = 0,
     String paymentSubType = 'cash',
+    String? fundsAccountId,
+    String? businessDate,
   }) async {
     if (staffId == null || staffId.isEmpty) {
       throw ArgumentError('staffId is required');
@@ -38,6 +40,14 @@ class OrderService {
     }
     if (cart.isEmpty) {
       throw ArgumentError('cart is empty');
+    }
+    // Hard rule #5: any money that actually arrives (cash / card / transfer)
+    // must land in a Funds Register account. Wallet and credit sales pay 0 now
+    // and route through the wallet, so they don't need one.
+    if (amountPaidKobo > 0 && (fundsAccountId == null || fundsAccountId.isEmpty)) {
+      throw ArgumentError(
+        'A paid sale must credit a Funds Register account (fundsAccountId)',
+      );
     }
 
     final orderId = UuidV7.generate();
@@ -99,6 +109,8 @@ class OrderService {
       storeId: storeId,
       walletDebitKobo: walletDebitKobo,
       paymentMethod: _resolvePaymentMethod(paymentSubType),
+      fundsAccountId: fundsAccountId,
+      businessDate: businessDate,
     );
 
     // Surface server-side errors (insufficient_stock from a concurrent

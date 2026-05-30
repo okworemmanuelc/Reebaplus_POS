@@ -319,6 +319,17 @@ class AppDrawer extends ConsumerWidget {
           active: activeRoute == 'orders',
           onTap: () => _navigateTo(context, ref, 'orders'),
         ),
+        // Funds Register — Manager/CEO only (§23.7). Replaces the old Cash
+        // Register item (hard rule #8). funds.* are CEO + Manager permissions.
+        if (hasPermission(ref, 'funds.view') ||
+            hasPermission(ref, 'funds.open_day'))
+          _navItem(
+            context,
+            FontAwesomeIcons.vault,
+            'Funds Register',
+            active: activeRoute == 'funds_register',
+            onTap: () => _navigateTo(context, ref, 'funds_register'),
+          ),
         // Customers — hidden for Stock keeper (§27.3). customers.add is held by
         // CEO, Manager, Cashier — not Stock keeper.
         if (hasPermission(ref, 'customers.add'))
@@ -479,6 +490,8 @@ class AppDrawer extends ConsumerWidget {
       nav.setIndex(9);
     } else if (route == 'activity_logs') {
       nav.setIndex(10);
+    } else if (route == 'funds_register') {
+      nav.setIndex(11);
     }
   }
 

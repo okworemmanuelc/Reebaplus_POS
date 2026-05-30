@@ -194,6 +194,12 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     setState(() {
       _selectedManufacturer = manufacturer;
       _manufacturerSuggestions = [];
+      // Crate value is shared at the manufacturer level — autofill it from the
+      // chosen manufacturer (§16.5). The user can still override the field.
+      if (manufacturer.depositAmountKobo > 0) {
+        _emptyCrateValueCtrl.text = (manufacturer.depositAmountKobo / 100)
+            .toStringAsFixed(2);
+      }
     });
   }
 
@@ -459,6 +465,14 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
           expiryDate: _expiryDate,
         );
 
+        // Persist the crate value at the manufacturer level (§16.5).
+        if (_selectedManufacturer != null && _emptyCrateValueKobo != null) {
+          await db.catalogDao.updateManufacturerEmptyCrateValue(
+            _selectedManufacturer!.id,
+            _emptyCrateValueKobo!,
+          );
+        }
+
         // 2. Add stock
         await db.inventoryDao.adjustStock(
           productId,
@@ -613,6 +627,15 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         storeId: _selectedStore?.id,
         performedBy: auth.currentUser?.id,
       );
+
+      // Persist the crate value at the manufacturer level so every product of
+      // this manufacturer shares one value (§16.5).
+      if (_selectedManufacturer != null && _emptyCrateValueKobo != null) {
+        await db.catalogDao.updateManufacturerEmptyCrateValue(
+          _selectedManufacturer!.id,
+          _emptyCrateValueKobo!,
+        );
+      }
 
       await ref
           .read(activityLogProvider)
@@ -893,36 +916,6 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                 ),
                 const SizedBox(height: 8),
 
-                // ── TRACK EMPTIES ──────────────────────────────────────
-                if (_unit.toLowerCase() == 'bottle') ...[
-                  CheckboxListTile(
-                    value: _trackEmpties,
-                    onChanged: (v) =>
-                        setState(() => _trackEmpties = v ?? false),
-                    title: const Text('Track empty crate returns'),
-                    subtitle: const Text(
-                      'Enables deposit collection and crate return flow for this product',
-                    ),
-                    controlAffinity: ListTileControlAffinity.leading,
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                  ),
-                  // ── EMPTY CRATE VALUE (only when tracking empties) ────
-                  if (_trackEmpties) ...[
-                    const SizedBox(height: 6),
-                    AppInput(
-                      controller: _emptyCrateValueCtrl,
-                      labelText: 'Empty Crate Value (₦)',
-                      hintText: '0.00',
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      inputFormatters: [CurrencyInputFormatter()],
-                    ),
-                    const SizedBox(height: 4),
-                  ],
-                ],
-
                 // ── ALLOW FRACTIONAL SALES ─────────────────────────────
                 CheckboxListTile(
                   value: _allowFractionalSales,
@@ -1019,6 +1012,37 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                     border: border,
                   ),
                 const SizedBox(height: 16),
+
+                // ── TRACK EMPTIES + CRATE VALUE (directly below Manufacturer) ─
+                if (_unit.toLowerCase() == 'bottle') ...[
+                  CheckboxListTile(
+                    value: _trackEmpties,
+                    onChanged: (v) =>
+                        setState(() => _trackEmpties = v ?? false),
+                    title: const Text('Track empty crate returns'),
+                    subtitle: const Text(
+                      'Enables deposit collection and crate return flow for this product',
+                    ),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                  ),
+                  // Crate value is shared at the manufacturer level; selecting
+                  // a manufacturer autofills it (§16.5).
+                  if (_trackEmpties) ...[
+                    const SizedBox(height: 6),
+                    AppInput(
+                      controller: _emptyCrateValueCtrl,
+                      labelText: 'Empty Crate Value (₦)',
+                      hintText: '0.00',
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      inputFormatters: [CurrencyInputFormatter()],
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                ],
 
                 // ── SUPPLIER ───────────────────────────────────────────
                 AppInput(

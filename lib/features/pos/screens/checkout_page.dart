@@ -10,6 +10,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/receipt_widget.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/logger.dart';
@@ -61,6 +62,8 @@ enum PaymentType { fullCash, partialCash, credit }
 class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   PaymentType _paymentType = PaymentType.fullCash;
   bool _isWalletPayment = false;
+  // §14.2 Step 2 — chosen receiving account; null falls back to Cash Till.
+  String? _selectedFundsAccountId;
   final TextEditingController _cashReceivedCtrl = TextEditingController();
   final ScreenshotController _screenshotCtrl = ScreenshotController();
   bool _paymentConfirmed = false;
@@ -456,6 +459,12 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             disabled: _isWalkIn,
           ),
 
+          // §14.2 Step 2: pick the receiving account — only when cash / card /
+          // transfer actually lands in an account (not a wallet or credit sale).
+          if ((_paymentType == PaymentType.fullCash && !_isWalletPayment) ||
+              _paymentType == PaymentType.partialCash)
+            _buildAccountPicker(),
+
           SizedBox(height: context.getRSize(32)),
           AppButton(
             text: 'Confirm Payment',
@@ -664,6 +673,23 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         if (mounted) setState(() => _branchName = w?.name);
       }
 
+      // §14.2 Step 2: the receiving Funds Register account. Defaults to the
+      // store's Cash Till when the cashier didn't pick one. The business date
+      // buckets the credit (the day is guaranteed open — the POS gate enforced
+      // it before checkout was reachable).
+      String? fundsAccountId = _selectedFundsAccountId;
+      if (fundsAccountId == null && storeId != null) {
+        final accounts = await ref
+            .read(databaseProvider)
+            .fundsAccountsDao
+            .getActiveAccountsForStore(storeId);
+        if (accounts.isNotEmpty) {
+          final till = accounts.where((a) => a.accountType == 'cash_till');
+          fundsAccountId = (till.isNotEmpty ? till.first : accounts.first).id;
+        }
+      }
+      final businessDate = ref.read(todaysBusinessDateProvider).valueOrNull;
+
       final orderNo = await ref
           .read(orderServiceProvider)
           .addOrder(
@@ -680,6 +706,8 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
               (s, i) => s + ((i['discountKobo'] as int?) ?? 0),
             ),
             paymentSubType: _isWalletPayment ? 'wallet' : 'cash',
+            fundsAccountId: fundsAccountId,
+            businessDate: businessDate,
           );
 
       // ── Success Flow ────────────────────────────────────────────────
@@ -963,6 +991,70 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   }
 
   // ── Wallet sub-options (shown under Full Cash when customer is named) ───────
+
+  /// §14.2 Step 2 — receiving-account picker. Lists the store's active funds
+  /// accounts; the selection defaults to Cash Till.
+  Widget _buildAccountPicker() {
+    final storeId = ref.read(navigationProvider).lockedStoreId.value ??
+        ref.read(authProvider).currentUser?.storeId;
+    if (storeId == null) return const SizedBox.shrink();
+    final accounts =
+        ref.watch(fundsAccountsForStoreProvider(storeId)).valueOrNull ??
+            const <FundsAccountData>[];
+    if (accounts.isEmpty) return const SizedBox.shrink();
+    final cashTill = accounts.where((a) => a.accountType == 'cash_till');
+    final selected = _selectedFundsAccountId ??
+        (cashTill.isNotEmpty ? cashTill.first.id : accounts.first.id);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(height: context.getRSize(20)),
+        _sectionLabel('Receiving Account'),
+        SizedBox(height: context.getRSize(12)),
+        ...accounts.map((a) {
+          final isSel = a.id == selected;
+          final label = a.accountType == 'cash_till' ? 'Cash Till' : a.name;
+          return GestureDetector(
+            onTap: () => setState(() => _selectedFundsAccountId = a.id),
+            child: Container(
+              margin: EdgeInsets.only(bottom: context.getRSize(8)),
+              padding: EdgeInsets.all(context.getRSize(14)),
+              decoration: BoxDecoration(
+                color:
+                    isSel ? blueMain.withValues(alpha: 0.08) : Colors.transparent,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: isSel ? blueMain : _border,
+                  width: isSel ? 1.5 : 1,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    isSel
+                        ? Icons.radio_button_checked
+                        : Icons.radio_button_unchecked,
+                    size: context.getRSize(20),
+                    color: isSel ? blueMain : _subtext,
+                  ),
+                  SizedBox(width: context.getRSize(12)),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: context.getRFontSize(14),
+                      fontWeight: FontWeight.w600,
+                      color: _text,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+      ],
+    );
+  }
 
   Widget _buildWalletSubOptions() {
     final walletBalance = _walletBalanceFor(widget.customer?.id);

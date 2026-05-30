@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/theme/theme_notifier.dart';
+import 'package:reebaplus_pos/core/utils/business_time.dart';
 import 'package:reebaplus_pos/shared/utils/role_display.dart';
 
 // ── Orders ──────────────────────────────────────────────────────────────────
@@ -303,4 +304,46 @@ final managerCanViewAllStoresProvider = Provider<bool>((ref) {
     }
   }
   return false;
+});
+
+// ── Funds Register (master plan §23) ─────────────────────────────────────────
+
+/// Today's business-day calendar date (`YYYY-MM-DD`) in the business timezone.
+/// The single definition shared by the POS Open-Day gate, the Open Day flow,
+/// and the live balances view so they always agree on "today". Computed from
+/// the business timezone, never the raw device clock (R3 in the plan).
+final todaysBusinessDateProvider = FutureProvider<String>((ref) async {
+  final db = ref.watch(databaseProvider);
+  final bizId = db.currentBusinessId;
+  final tz = bizId == null ? 'UTC' : await getBusinessTimezone(db, bizId);
+  return businessDateString(DateTime.now(), tz);
+});
+
+/// Active funds accounts for a store (Cash Till first). Drives the Accounts
+/// list and the checkout receiving-account picker.
+final fundsAccountsForStoreProvider =
+    StreamProvider.family<List<FundsAccountData>, String>((ref, storeId) {
+  return ref
+      .watch(databaseProvider)
+      .fundsAccountsDao
+      .watchActiveAccountsForStore(storeId);
+});
+
+/// Whether the day is open for (store, businessDate) — THE POS gate.
+final isDayOpenProvider =
+    StreamProvider.family<bool, ({String storeId, String businessDate})>(
+        (ref, key) {
+  return ref
+      .watch(databaseProvider)
+      .fundDaysDao
+      .watchIsDayOpen(key.storeId, key.businessDate);
+});
+
+/// Live per-account expected balances (kobo) for (store, businessDate).
+final fundDayBalancesProvider = StreamProvider.family<Map<String, int>,
+    ({String storeId, String businessDate})>((ref, key) {
+  return ref
+      .watch(databaseProvider)
+      .fundTransactionsDao
+      .watchStoreBalancesForDay(key.storeId, key.businessDate);
 });

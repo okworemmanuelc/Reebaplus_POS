@@ -104,11 +104,11 @@ Each step unlocks the next. Build in this order:
 - [x] Point of Sale, guarded by role.
 - [x] Cart flow with discounts, role caps, fractional sales, per-cashier saved carts (§13). *(Session 20.)*
 - [ ] Inventory and Product Details, role-aware — includes the destructive product price-column migration (buying / retailer / wholesaler). *(moved ahead of Checkout 2026-05-30: products + prices must be finished before the sales flow.)*
+- [~] Funds Register (new — multi-account model). Phase 1 done: accounts (Cash Till auto + CEO adds POS/Bank), Open Day, the POS Opening-Cash gate, and crediting the chosen account on each sale (§23). *(moved ahead of Checkout 2026-05-30: §14 Step-2 "pick receiving account" + hard rule #10 both require it. Phase 2 — Close Day, reconciliation, Funds History — deferred.)*
 - [ ] Checkout flow with wallet integration (§14). *(Wallet flow pre-existing, not yet formally re-passed.)*
 - [ ] Customers screen with wallet.
 - [ ] Orders (Pending, Completed, Cancelled).
 - [ ] Daily Stock Count.
-- [ ] Funds Register (new — multi-account model).
 - [ ] Expenses with pending approval flow.
 - [ ] Supplier Accounts.
 - [ ] Track Shipments (new).
@@ -648,8 +648,8 @@ Optional fields:
 - Size.
 - Supplier.
 - Allow fractional sales — toggle, default OFF. Controls whether −0.5 / +0.5 chips appear in the Edit Quantity modal.
-- Track empty crate returns — toggle, only shown for Bar / Beer Distributor businesses.
-- Empty Crate Value (₦) — shown only when "Track empty crate returns" is on. The value of one empty crate, saved to the product's `emptyCrateValueKobo`.
+- Track empty crate returns — toggle, only shown for Bottle-unit products. Positioned directly below the Manufacturer field. (Amended 2026-05-30, pivot step 15.)
+- Empty Crate Value (₦) — shown only when "Track empty crate returns" is on, directly under the toggle (below Manufacturer). The crate value is **set at the manufacturer level** (`manufacturers.depositAmountKobo`): selecting a manufacturer autofills this field from that manufacturer's stored value, and saving writes the entered value back to the manufacturer so every product of the same manufacturer shares one crate value. The value is also mirrored to the product's `emptyCrateValueKobo` so the cart's deposit math is unchanged. (Amended 2026-05-30, pivot step 15.)
 - Barcode — optional text field with scan-via-camera helper. Only surfaced on Pharmacy and Supermarket businesses (see §16.11).
 
 Color selector is deferred (2026-05-30, pivot step 15): the 12-swatch picker is removed for now; products keep a default `colorHex`. It will be revisited when Boutique / Gadgets product types land, where colour is a real product attribute rather than a tile tint.
@@ -675,7 +675,7 @@ Contents:
 
 Action buttons by role:
 
-- CEO / Manager: "Update Product" — opens Add Product form prefilled with all values. Can edit anything including quantity.
+- CEO / Manager: the detail screen is **view-only until the top "Edit" (pencil) button is tapped**, which makes every field editable in place — name, description, prices, category / manufacturer / supplier / unit dropdowns, low-stock alert, size, expiry date, the allow-fractional and track-empties toggles, the empty-crate value, and the product image. A single **"Save Product"** button at the bottom persists everything in one update and shows a success / error banner. **The Sales Target is editable by CEO only** (a Manager sees it read-only with a "(CEO only)" note). **Quantity is read-only here** — stock changes go through Add Product (restock) or the Stock keeper's Update Stock modal, never inline. (Amended 2026-05-30, pivot step 15: replaces the old "opens the Add Product form prefilled" flow.)
 - Stock Keeper: "Update Stock" — opens small modal:
   - Adjustment type: Add stock / Remove stock.
   - Quantity.
@@ -700,6 +700,7 @@ Action buttons by role:
 ### 16.8 History tab
 
 - Tracks sales-driven stock movements, stock added, transfers between stores (Phase 2), and damages recorded.
+- Product deletions also appear here: deleting a product removes its remaining stock via adjustment rows, which show in History (with the units removed, who deleted it, and when). (Amended 2026-05-30, pivot step 15.)
 - Time filters: Today, 7 Days, 30 Days, All.
 - CEO: full history across all stores. Manager: own store. Stock keeper: own store. Cashier: hidden.
 

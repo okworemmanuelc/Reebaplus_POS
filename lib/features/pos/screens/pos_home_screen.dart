@@ -95,6 +95,28 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
       );
     }
 
+    // §23.4 / hard rule #10: POS is blocked until the day is opened (opening
+    // cash set) for the current store. Only applies once the store + today's
+    // business date resolve; while the gate stream is still loading we show a
+    // blank placeholder rather than flashing the block.
+    final storeId = ref.read(navigationProvider).lockedStoreId.value;
+    final today = ref.watch(todaysBusinessDateProvider).valueOrNull;
+    if (storeId != null && today != null) {
+      final isOpen = ref
+          .watch(isDayOpenProvider((storeId: storeId, businessDate: today)))
+          .valueOrNull;
+      if (isOpen == null) {
+        return SharedScaffold(
+          activeRoute: 'pos',
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+          body: const SafeArea(child: SizedBox.shrink()),
+        );
+      }
+      if (!isOpen) {
+        return _buildDayNotOpenBlock(context);
+      }
+    }
+
     if (_controller == null) {
       final bgCol = Theme.of(context).scaffoldBackgroundColor;
       return SharedScaffold(
@@ -350,6 +372,65 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
     );
   }
 
+  /// The POS Opening-Cash block (§23.4 / hard rule #10). Manager/CEO can tap
+  /// through to the Funds Register Open Day; Cashier is told to wait.
+  Widget _buildDayNotOpenBlock(BuildContext context) {
+    final slug = ref.watch(currentUserRoleProvider)?.slug;
+    final canOpen = slug == 'ceo' || slug == 'manager';
+    final theme = Theme.of(context);
+    final onSurface = theme.colorScheme.onSurface;
+
+    final content = Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            FontAwesomeIcons.cashRegister,
+            size: 48,
+            color: onSurface.withValues(alpha: 0.3),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'Opening cash not set',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: onSurface,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            canOpen
+                ? "Tap to enter today's opening cash and start selling."
+                : 'Wait for a Manager or CEO to open the day.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 14,
+              color: onSurface.withValues(alpha: 0.6),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    return SharedScaffold(
+      activeRoute: 'pos',
+      backgroundColor: theme.scaffoldBackgroundColor,
+      body: SafeArea(
+        child: Center(
+          child: canOpen
+              ? InkWell(
+                  borderRadius: BorderRadius.circular(20),
+                  onTap: () => ref.read(navigationProvider).setIndex(11),
+                  child: content,
+                )
+              : content,
+        ),
+      ),
+    );
+  }
+
   Widget _buildCartFab(BuildContext context) {
     return ValueListenableBuilder<List<Map<String, dynamic>>>(
       valueListenable: ref.read(cartProvider),
@@ -366,7 +447,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
 
         return AppFAB(
           onPressed: () {
-            ref.read(navigationProvider).setIndex(9); // 9 corresponds to Cart tab
+            ref.read(navigationProvider).setIndex(8); // 8 = CartScreen (9 is Deliveries)
           },
           icon: FontAwesomeIcons.cartShopping,
           label: 'Go to Cart',

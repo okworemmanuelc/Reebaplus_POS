@@ -1408,6 +1408,11 @@ class SupabaseSyncService {
     'system_config',
     'price_lists',
     'payment_transactions',
+    // Funds Register (§23). fund_transactions references funds_accounts +
+    // orders + payment_transactions, so it follows all three.
+    'funds_accounts',
+    'fund_days',
+    'fund_transactions',
     'sessions',
     'settings',
   ];
@@ -2983,6 +2988,51 @@ class SupabaseSyncService {
                   .insertOnConflictUpdate(PendingCrateReturnData.fromJson(r)),
             );
           }
+          break;
+        // ── Funds Register (§23) ──────────────────────────────────────────
+        case 'funds_accounts':
+          for (var r in rows) {
+            await _insertResilient(
+              'funds_accounts',
+              r,
+              fkSkipped,
+              () => _db
+                  .into(_db.fundsAccounts)
+                  .insertOnConflictUpdate(FundsAccountData.fromJson(r)),
+            );
+          }
+          break;
+        case 'fund_days':
+          for (var r in rows) {
+            await _insertResilient(
+              'fund_days',
+              r,
+              fkSkipped,
+              () => _db
+                  .into(_db.fundDays)
+                  .insertOnConflictUpdate(FundDayData.fromJson(r)),
+            );
+          }
+          break;
+        case 'fund_transactions':
+          // Append-only ledger — insert-or-ignore (an UPDATE would trip the
+          // immutability trigger); void columns ride a targeted update.
+          await _restoreLedgerTable(
+            rows,
+            tableName: 'fund_transactions',
+            fkSkipped: fkSkipped,
+            table: _db.fundTransactions,
+            fromJson: FundTransactionData.fromJson,
+            voidedAtOf: (d) => d.voidedAt,
+            whereNotYetVoided: (t, d) =>
+                t.id.equals(d.id) & t.voidedAt.isNull(),
+            buildVoidCompanion: (d) => FundTransactionsCompanion(
+              voidedAt: Value(d.voidedAt),
+              voidedBy: Value(d.voidedBy),
+              voidReason: Value(d.voidReason),
+              lastUpdatedAt: Value(d.lastUpdatedAt),
+            ),
+          );
           break;
         default:
           debugPrint('[SyncService] Restore logic not implemented for $table');

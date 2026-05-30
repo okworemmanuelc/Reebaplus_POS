@@ -304,6 +304,7 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
     bool? allowFractionalSales,
     int? lowStockThreshold,
     String? imagePath,
+    int? monthlyTargetUnits,
     // Optional cosmetic / metadata fields. Wrapped with present-check
     // sentinels so the caller can leave any of them out and the column
     // stays untouched (Value.absent vs Value(null) — the latter would
@@ -336,6 +337,9 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
       lowStockThreshold: lowStockThreshold == null
           ? const Value.absent()
           : Value(lowStockThreshold),
+      monthlyTargetUnits: monthlyTargetUnits == null
+          ? const Value.absent()
+          : Value(monthlyTargetUnits),
       imagePath: Value(imagePath),
       subtitle: identical(subtitle, _unset)
           ? const Value.absent()
@@ -1029,6 +1033,8 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     String? storeId,
     int walletDebitKobo = 0,
     String paymentMethod = 'cash',
+    String? fundsAccountId,
+    String? businessDate,
   }) {
     return db.transaction(() async {
       final orderId = order.id.present ? order.id.value : UuidV7.generate();
@@ -1176,6 +1182,26 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         );
         await into(paymentTransactions).insert(payComp);
         await db.syncDao.enqueueUpsert('payment_transactions', payComp);
+
+        // Funds Register credit (§14.2 / §23.5 / hard rule #5): the cash /
+        // card / transfer portion that landed in the chosen account. Wallet
+        // and credit sales have amountPaidKobo == 0, so they never reach here.
+        // The "a paid sale MUST name an account" rule is enforced at the
+        // business entry (OrderService.addOrder); here we credit when one is
+        // provided. V1 path only — if `feature.domain_rpcs_v2.record_sale` is
+        // ever enabled, the server must mint this row inside pos_record_sale_v2
+        // instead (see Funds Register plan, risk R2).
+        if (fundsAccountId != null && businessDate != null) {
+          await db.fundTransactionsDao.creditSale(
+            fundsAccountId: fundsAccountId,
+            storeId: storeId ?? items.first.storeId.value,
+            businessDate: businessDate,
+            amountKobo: amountPaidKobo,
+            orderId: orderId,
+            paymentId: payId,
+            performedBy: staffId,
+          );
+        }
       }
 
       if (walletDebitKobo > 0) {
@@ -3788,6 +3814,267 @@ class CustomerCrateBalanceWithGroup {
   final CustomerCrateBalance balance;
   final CrateSizeGroupData group;
   CustomerCrateBalanceWithGroup({required this.balance, required this.group});
+}
+
+// ── Funds Register DAOs (master plan §23) ────────────────────────────────────
+
+@DriftAccessor(tables: [FundsAccounts])
+class FundsAccountsDao extends DatabaseAccessor<AppDatabase>
+    with _$FundsAccountsDaoMixin, BusinessScopedDao<AppDatabase> {
+  FundsAccountsDao(super.db);
+
+  /// Active (non-deleted) accounts for [storeId] — Cash Till first (account
+  /// type sorts cash_till < pos_machine), then by name.
+  Stream<List<FundsAccountData>> watchActiveAccountsForStore(String storeId) {
+    return (select(fundsAccounts)
+          ..where((t) =>
+              whereBusiness(t) & t.storeId.equals(storeId) & t.isDeleted.not())
+          ..orderBy([
+            (t) => OrderingTerm(expression: t.accountType),
+            (t) => OrderingTerm(expression: t.name),
+          ]))
+        .watch();
+  }
+
+  /// One-shot business-scoped variant for the checkout account picker (reads
+  /// once so a multi-business device can't surface another business's account).
+  Future<List<FundsAccountData>> getActiveAccountsForStore(String storeId) {
+    return (select(fundsAccounts)
+          ..where((t) =>
+              whereBusiness(t) & t.storeId.equals(storeId) & t.isDeleted.not())
+          ..orderBy([
+            (t) => OrderingTerm(expression: t.accountType),
+            (t) => OrderingTerm(expression: t.name),
+          ]))
+        .get();
+  }
+
+  /// Idempotently ensures a Cash Till exists for [storeId] and returns it.
+  Future<FundsAccountData> ensureCashTill(String storeId) async {
+    final existing = await (select(fundsAccounts)
+          ..where((t) =>
+              whereBusiness(t) &
+              t.storeId.equals(storeId) &
+              t.accountType.equals('cash_till') &
+              t.isDeleted.not())
+          ..limit(1))
+        .getSingleOrNull();
+    if (existing != null) return existing;
+    final id = await createAccount(
+      storeId: storeId,
+      accountType: 'cash_till',
+      name: 'Cash Till',
+    );
+    return (select(fundsAccounts)..where((t) => t.id.equals(id))).getSingle();
+  }
+
+  /// Creates an account (cash_till | pos_machine | bank) + enqueues the upsert.
+  Future<String> createAccount({
+    required String storeId,
+    required String accountType,
+    required String name,
+    String? accountNumber,
+  }) async {
+    final id = UuidV7.generate();
+    final row = FundsAccountsCompanion.insert(
+      id: Value(id),
+      businessId: requireBusinessId(),
+      storeId: storeId,
+      accountType: accountType,
+      name: name,
+      accountNumber: Value(accountNumber),
+      lastUpdatedAt: Value(DateTime.now()),
+    );
+    await into(fundsAccounts).insert(row);
+    await db.syncDao.enqueueUpsert('funds_accounts', row);
+    return id;
+  }
+
+  /// Soft-deletes an account — §5 / hard rule #9: enqueueUpsert, never
+  /// enqueueDelete. Partial companion carries id + business_id so the cloud's
+  /// upsert flips is_deleted on the existing row (same shape as products).
+  Future<void> softDeleteAccount(String id) async {
+    final comp = FundsAccountsCompanion(
+      id: Value(id),
+      businessId: Value(requireBusinessId()),
+      isDeleted: const Value(true),
+      lastUpdatedAt: Value(DateTime.now()),
+    );
+    await (update(fundsAccounts)
+          ..where((t) => t.id.equals(id) & whereBusiness(t)))
+        .write(comp);
+    await db.syncDao.enqueueUpsert('funds_accounts', comp);
+  }
+}
+
+@DriftAccessor(tables: [FundDays, FundsAccounts, FundTransactions])
+class FundDaysDao extends DatabaseAccessor<AppDatabase>
+    with _$FundDaysDaoMixin, BusinessScopedDao<AppDatabase> {
+  FundDaysDao(super.db);
+
+  Future<FundDayData?> getDay(String storeId, String businessDate) {
+    return (select(fundDays)
+          ..where((t) =>
+              whereBusiness(t) &
+              t.storeId.equals(storeId) &
+              t.businessDate.equals(businessDate))
+          ..limit(1))
+        .getSingleOrNull();
+  }
+
+  /// THE POS gate (hard rule #10): true iff an open day exists for the store.
+  Stream<bool> watchIsDayOpen(String storeId, String businessDate) {
+    return (select(fundDays)
+          ..where((t) =>
+              whereBusiness(t) &
+              t.storeId.equals(storeId) &
+              t.businessDate.equals(businessDate) &
+              t.status.equals('open')))
+        .watch()
+        .map((rows) => rows.isNotEmpty);
+  }
+
+  /// Opens the day for [storeId] (§23.4): inserts the day header + an 'opening'
+  /// credit per active account (even 0, so every account has a day-zero marker)
+  /// in one transaction. Throws if the day is already open (also guarded by the
+  /// UNIQUE(store_id, business_date) constraint).
+  Future<void> openDay({
+    required String storeId,
+    required String businessDate,
+    required Map<String, int> perAccountOpeningKobo,
+    required String performedBy,
+  }) async {
+    await transaction(() async {
+      final existing = await getDay(storeId, businessDate);
+      if (existing != null) {
+        throw StateError('Day already opened for this store');
+      }
+      final now = DateTime.now();
+      final dayRow = FundDaysCompanion.insert(
+        id: Value(UuidV7.generate()),
+        businessId: requireBusinessId(),
+        storeId: storeId,
+        businessDate: businessDate,
+        status: const Value('open'),
+        openedBy: Value(performedBy),
+        openedAt: Value(now.toUtc()),
+        lastUpdatedAt: Value(now),
+      );
+      await into(fundDays).insert(dayRow);
+      await db.syncDao.enqueueUpsert('fund_days', dayRow);
+
+      final accounts = await (select(fundsAccounts)
+            ..where((t) =>
+                whereBusiness(t) &
+                t.storeId.equals(storeId) &
+                t.isDeleted.not()))
+          .get();
+      for (final acct in accounts) {
+        final opening = perAccountOpeningKobo[acct.id] ?? 0;
+        final txn = FundTransactionsCompanion.insert(
+          id: Value(UuidV7.generate()),
+          businessId: requireBusinessId(),
+          fundsAccountId: acct.id,
+          storeId: storeId,
+          businessDate: businessDate,
+          type: 'credit',
+          amountKobo: opening,
+          signedAmountKobo: opening,
+          referenceType: 'opening',
+          performedBy: Value(performedBy),
+          createdAt: Value(now),
+          lastUpdatedAt: Value(now),
+        );
+        await into(fundTransactions).insert(txn);
+        await db.syncDao.enqueueUpsert('fund_transactions', txn);
+      }
+
+      await db.activityLogDao.log(
+        action: 'funds.open_day',
+        description: 'Opened the day for store $storeId',
+        staffId: performedBy,
+        storeId: storeId,
+      );
+    });
+  }
+}
+
+@DriftAccessor(tables: [FundTransactions])
+class FundTransactionsDao extends DatabaseAccessor<AppDatabase>
+    with _$FundTransactionsDaoMixin, BusinessScopedDao<AppDatabase> {
+  FundTransactionsDao(super.db);
+
+  /// Appends a 'sale' credit for the cash/card/transfer that landed in
+  /// [fundsAccountId]. MUST be called inside an existing transaction (e.g.
+  /// OrdersDao.createOrder) — it does not open its own.
+  Future<void> creditSale({
+    required String fundsAccountId,
+    required String storeId,
+    required String businessDate,
+    required int amountKobo,
+    required String orderId,
+    String? paymentId,
+    String? performedBy,
+  }) async {
+    final now = DateTime.now();
+    final txn = FundTransactionsCompanion.insert(
+      id: Value(UuidV7.generate()),
+      businessId: requireBusinessId(),
+      fundsAccountId: fundsAccountId,
+      storeId: storeId,
+      businessDate: businessDate,
+      type: 'credit',
+      amountKobo: amountKobo,
+      signedAmountKobo: amountKobo,
+      referenceType: 'sale',
+      orderId: Value(orderId),
+      paymentId: Value(paymentId),
+      performedBy: Value(performedBy),
+      createdAt: Value(now),
+      lastUpdatedAt: Value(now),
+    );
+    await into(fundTransactions).insert(txn);
+    await db.syncDao.enqueueUpsert('fund_transactions', txn);
+  }
+
+  /// Expected balance for an account on a day = SUM(signed_amount_kobo) of
+  /// non-voided rows (void appends a compensating entry, so no IS NULL filter).
+  Future<int> getBalanceFor(String fundsAccountId, String businessDate) async {
+    final sumExpr = fundTransactions.signedAmountKobo.sum();
+    final query = selectOnly(fundTransactions)
+      ..addColumns([sumExpr])
+      ..where(
+        whereBusiness(fundTransactions) &
+            fundTransactions.fundsAccountId.equals(fundsAccountId) &
+            fundTransactions.businessDate.equals(businessDate),
+      );
+    final row = await query.getSingleOrNull();
+    return row?.read(sumExpr) ?? 0;
+  }
+
+  /// Live per-account expected balances for a store on [businessDate].
+  Stream<Map<String, int>> watchStoreBalancesForDay(
+    String storeId,
+    String businessDate,
+  ) {
+    final sumExpr = fundTransactions.signedAmountKobo.sum();
+    final query = selectOnly(fundTransactions)
+      ..addColumns([fundTransactions.fundsAccountId, sumExpr])
+      ..where(
+        whereBusiness(fundTransactions) &
+            fundTransactions.storeId.equals(storeId) &
+            fundTransactions.businessDate.equals(businessDate),
+      )
+      ..groupBy([fundTransactions.fundsAccountId]);
+    return query.watch().map((rows) {
+      final out = <String, int>{};
+      for (final r in rows) {
+        final aid = r.read(fundTransactions.fundsAccountId);
+        if (aid != null) out[aid] = r.read(sumExpr) ?? 0;
+      }
+      return out;
+    });
+  }
 }
 
 @DriftAccessor(tables: [ManufacturerCrateBalances, CrateSizeGroups])

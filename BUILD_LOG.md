@@ -100,6 +100,204 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 
 ---
 
+## Session 26 — 2026-05-30 — Funds Register Phase 1 (multi-account, §23)
+
+**Built today:**
+Funds Register pulled ahead of Checkout because the sales flow can't be correct
+without it (Checkout §14 needs an account to credit; hard rule #10 blocks sales
+until opening cash is set). Phase 1 is the multi-account model + the till gate.
+- **Money accounts per store.** Each store gets a Cash Till automatically; the CEO
+  can add POS machines and Bank accounts (and remove the ones they added). Cashier
+  and Stock keeper can't see the Funds Register at all.
+- **Open the day.** A Manager or CEO enters the starting balance for each account
+  and opens the day. Until that's done, the Point of Sale screen is blocked — a
+  Cashier is told to wait for a Manager/CEO; a Manager/CEO sees "Tap to enter" and
+  tapping jumps straight to the Open Day screen.
+- **Every paid sale lands in an account.** At checkout there's now a "Receiving
+  Account" step (defaults to Cash Till). The cash/card/transfer that actually
+  arrives is credited to the chosen account; wallet payments and credit sales move
+  no account money (they're the wallet's job). A live "today's balances" view shows
+  each account's running total.
+- **New Funds Register sidebar item** (Manager/CEO only), replacing the old Cash
+  Register concept (hard rule #8).
+
+**Files touched:**
+- lib/core/database/app_database.dart, app_database.g.dart (3 tables, registries, schema v20 migration)
+- lib/core/database/daos.dart (FundsAccountsDao, FundDaysDao, FundTransactionsDao; sale credit inside OrdersDao.createOrder)
+- lib/core/providers/stream_providers.dart (4 providers incl. todaysBusinessDateProvider)
+- lib/core/utils/business_time.dart (businessDateString helper)
+- lib/features/pos/screens/pos_home_screen.dart (Open-Day gate + role messages)
+- lib/features/pos/screens/checkout_page.dart + lib/shared/services/order_service.dart (Step-2 account picker; thread + enforce funds account)
+- lib/features/funds/screens/funds_register_screen.dart (new)
+- lib/shared/widgets/main_layout.dart, app_drawer.dart (Funds Register at index 11 + route)
+- supabase/migrations/0057_funds_register.sql (new)
+- test/funds/funds_register_dao_test.dart (new, 6 tests)
+
+**Database changes:**
+- Local schema v19 → v20: three new synced tenant tables — `funds_accounts`,
+  `fund_days` (daily open/close header = the gate), `fund_transactions` (append-only
+  ledger; opening balances are 'opening' ledger entries, balance = SUM(signed)).
+- Cloud `supabase/migrations/0057_funds_register.sql` — same three tables + RLS
+  tenant policies + realtime publication + the fund_transactions append-only
+  triggers. **Pushed and applied.**
+- No new permissions (funds.open_day / funds.close_day / funds.view already seeded +
+  granted to CEO/Manager). No new role.
+
+**Master plan sections covered:**
+- §23 Funds Register (Phase 1 subset), §14.2 Step 2 (receiving account), §30.3.
+- §3 build order amended: Funds Register moved ahead of Checkout (dated note).
+
+**Plan updates made during session:**
+- §3 reorder above. Phase 2 (Close Day, reconciliation, Funds History) deferred.
+
+**Tested:**
+- `flutter analyze lib/` clean. Full suite green: 203 passed / 58 skipped / 0 failed.
+- New DAO tests: ensureCashTill idempotent; openDay creates the header + an opening
+  credit per active account (even 0) and a double-open throws; the gate stream
+  flips on open; balances sum; every write enqueues (§5).
+- Cloud migration round-trips (pushed clean).
+
+**Known issues / left open:**
+- On-device pass still pending: open the day → POS unblocks → a cash sale to "POS 1"
+  raises that account; wallet/credit sales move no account.
+- **R1 (atomicity):** the fund credit is a separate enqueue row from the order/payment
+  (same per-table V1 model the existing payment/wallet writes already use); local
+  writes are one atomic transaction so on-device balances are always right.
+- **R2 (v2 flag):** the credit lives in the V1 sale path only. If
+  `feature.domain_rpcs_v2.record_sale` is ever turned on, the credit must move into
+  the pos_record_sale_v2 RPC (server mints the row). Flag is OFF today.
+- **R4 (cancel):** a same-day sale cancellation does not yet reverse its fund credit
+  (refund crediting is Phase 2).
+
+**Next session should:**
+- Funds Register Phase 2 (Close Day + reconciliation + Funds History), OR the
+  Checkout §14 formal re-pass now that it has accounts to credit.
+
+**Session 26 follow-ups (same working session) — bumped local schema v20 → v21:**
+These landed after the main entry above. Both 0058 and 0060 are the exact "new
+synced table" gaps the PIVOT_PLAN §1.5 checklist exists to prevent — bugs already
+solved earlier in this build, repeated for the funds tables:
+- **Pull side was missing (0060).** 0057 added the three funds tables to the push
+  side (`_syncedTenantTables`) + realtime, but NOT to the `pos_pull_snapshot` RPC
+  or the client `_restoreTableData` cases — so a CEO's Open Day synced UP to the
+  cloud but never came back DOWN to a staff till (POS stayed blocked on the second
+  device). Same one-sided-sync bug as `invite_codes` in Session 12. Fixed by
+  `supabase/migrations/0060_pull_funds_register.sql` (snapshot) + restore cases;
+  guarded by the new `test/sync/funds_restore_test.dart`.
+- **RLS used the pre-0051 pattern (0058).** 0057 wrote the funds RLS policies with
+  the membership-subquery pattern, which 42501-rejected authenticated writes. Same
+  fix 0050/0051 already applied to the membership tables. `0058_funds_rls_via_profiles.sql`
+  re-expresses the funds policies via `profiles`.
+- **Account number (0059 + schema v21).** POS machine / Bank accounts can carry an
+  optional account number / terminal id (Cash Till leaves it null). Local v20 → v21
+  adds the nullable `funds_accounts.account_number`; cloud `0059_funds_account_number.sql`
+  mirrors it.
+- **Deploy status of 0058–0060 is unconfirmed in this log** — verify they are pushed
+  to the linked Supabase project (0057 was). Until 0058/0060 are applied cloud-side,
+  funds writes 42501 from a second device and Open Day won't pull down.
+
+**Capture / git note (2026-05-30):** Sessions 24, 25, and 26 (+ these follow-ups)
+were committed together in a single commit off schema v19 — they were interleaved in
+the regenerated `*.g.dart` (final v21 shape), so a clean per-session split was not
+safely separable after the fact. Tree was analyzer-clean and the suite was green
+(204 passed / 0 failed, excl. integration) at commit time. Discipline going forward:
+commit per chunk, log before closing the session.
+
+---
+
+## Session 25 — 2026-05-30 — Product Details edit-in-place + 7 inventory fixes
+
+**Built today (post-emulator round 2 — 7 issues on Product Details + the Update Product form):**
+- All 7 changes below are code-complete; `flutter analyze` clean and the full test suite is green. On-device pass still to be done by the user.
+
+Covered two rounds of emulator feedback. Round 2 redesigned the Product Details
+edit model and fixed a Sales-Target sync bug.
+
+**Plan updates made during session (per CLAUDE.md, before any code):**
+- **Role model — "ignore this".** The "read-only below CEO" request was answered "ignore this" — editing stays on `products.edit_price` (CEO + Manager); Stock keeper keeps "Update Stock"; Cashier view-only. EXCEPT the **Sales Target is CEO-only** (Manager can't set it — explicit follow-up).
+- **master plan §16.5** — Empty Crate Value moves directly below Manufacturer and is **set at the manufacturer level** (`manufacturers.depositAmountKobo`): autofilled when a manufacturer is picked, saved back on save, mirrored to the product's `emptyCrateValueKobo` so cart math is untouched.
+- **master plan §16.6** — Product Details is now **view-only until a top "Edit" button is tapped** → all fields editable → one **"Save Product"** button (with success/error banner). Sales Target CEO-only. Quantity is read-only (changes via Add Product / Update Stock).
+- **master plan §16.8** — product deletions appear in the History tab (as stock-removal adjustments).
+
+**The changes:**
+1. Product Details shows **live stock** after an Update Stock adjustment (was a stale navigation snapshot).
+2. **Sales Target now syncs** across staff — it was lost to sync-queue coalescing (a separate `updateMonthlyTarget` upsert was overwritten by the product upsert for the same row). Fixed by folding the target into the single `updateProductDetails` payload. The target is now **CEO-only** (Manager sees it read-only).
+3. Role gating unchanged ("ignore this"), apart from the CEO-only target.
+4. Product Details **redesigned**: a top **Edit** toggle makes all fields editable; **"Save Product"** persists everything in one update with a success/error banner (fixes the old "save does nothing" + no-feedback). **Added the missing fields** (Description, Low Stock Alert, Supplier, Allow-fractional toggle, Track-empties toggle, editable Size, editable Expiry). **Quantity is read-only** here (changed via Add Product / Update Stock). **Stock keeper** gets a restricted view (no Edit button; Supplier + Buying hidden; keeps Update Stock).
+5. **Deleting a product** is tracked in History (remaining stock removed via adjustments; explicit "deleted product" record stays in Activity Logs).
+6. **Update Product** form header 4.7px right overflow fixed.
+7. **Empty crate value** moved directly below Manufacturer in both product forms, autofilled from + saved to the manufacturer level (reuses `manufacturers.depositAmountKobo` — no new column).
+
+**Database changes:**
+- No schema bump, no cloud migration. `CatalogDao.updateProductDetails` gained an optional `monthlyTargetUnits` param so the Sales Target rides the same `products` upsert. Otherwise reuses existing columns/DAOs (`manufacturers.depositAmountKobo`, `updateManufacturerEmptyCrateValue`, `adjustStock`).
+
+**Files touched:**
+- lib/features/inventory/screens/product_detail_screen.dart (major rework)
+- lib/features/inventory/widgets/update_product_sheet.dart
+- lib/features/inventory/screens/add_product_screen.dart
+- lib/core/database/daos.dart (`updateProductDetails` + `monthlyTargetUnits`)
+- reebaplus_master_plan.md (§16.5 / §16.6 / §16.8), BUILD_LOG.md (this entry)
+
+**Tested:**
+- `flutter analyze` clean (only pre-existing `avoid_print` infos in a test file); full suite green. On-device pass still to be done by the user.
+
+---
+
+## Session 24 — 2026-05-30 — Cart FAB → Cart fix + post-inventory review of §13
+
+**Built today:**
+- **Fixed the POS "Go to Cart" button opening Deliveries.** The floating cart
+  button on the Point of Sale screen jumped to screen slot 9 (Deliveries) instead
+  of slot 8 (the Cart) — a stale comment had hidden the off-by-one. One-line fix.
+  Verified it now matches the other two ways into the Cart (bottom-nav cart tab and
+  the sidebar), so all three agree.
+- **Reviewed the Session 20 Cart work after the Inventory rework (Sessions 21–23)
+  landed on top of it.** Everything still hangs together: the "Allow fractional
+  sales" toggle survived the move from the old add-product sheet to the new full
+  Add Product screen, and the price-column migrations carried it through; the cart
+  now reads the new Retailer price; per-line discounts still reach the recorded
+  sale; saved-cart privacy + 24h expiry intact. Full test suite green.
+
+**Corrections to earlier notes (running-memory hygiene):**
+- Server migration `0054_cart_step13.sql` **is pushed** and applied — Session 20 had
+  marked it "NOT YET PUSHED"; that note is now stale.
+- The fractional toggle's create-side home moved: `add_product_sheet.dart` was
+  deleted in the Inventory rework, so the toggle now lives in
+  `add_product_screen.dart` (Session 20's file list still names the old sheet). It
+  remains in `update_product_sheet.dart` for the edit path.
+- The Cashier login crash listed as a Cart "known issue" was the realtime
+  sync-ordering bug — **fixed in Session 23** (`_insertResilient` skips an orphaned
+  row instead of aborting the pull).
+
+**Files touched:**
+- lib/features/pos/screens/pos_home_screen.dart (cart FAB index 9 → 8)
+
+**Database changes:**
+- None.
+
+**Master plan sections covered:**
+- §13 Cart — bug fix only (no behaviour added beyond Session 20).
+
+**Plan updates made during session:**
+- None.
+
+**Tested:**
+- `flutter analyze` clean on the touched file; `flutter analyze lib/` clean overall.
+- Sync + orders + checkout suites green this session (76 passing locally).
+
+**Known issues / left open:**
+- Manual emulator walk-through of the Cart flows still pending — discount role
+  behaviour (Cashier blocked / Manager cap snap / CEO unlimited), fractional chips
+  on a fractional product, saved-cart privacy + expiry, Undo, and a discounted
+  sale's totals after sync. Now that the FAB actually reaches the Cart, this is
+  unblocked.
+
+**Next session should:**
+- Do the §13 emulator walk-through, then move to Checkout (§14) / Receipt (§15) per
+  the build order.
+
+---
+
 ## Session 23 — 2026-05-30 — Cashier crash fix (Phase 0) + expiry schema (Chunk 2 start)
 
 **Built today:**

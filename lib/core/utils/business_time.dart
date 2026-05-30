@@ -40,6 +40,16 @@ DateTime localDateUtc(int year, int month, int day, String tzName) {
   return TZDateTime(resolveLocation(tzName), year, month, day).toUtc();
 }
 
+/// The local business-day calendar date as `YYYY-MM-DD` for [instant] in
+/// [tzName]. The Funds Register keys its daily open/close + ledger buckets on
+/// this string so "today" is the business's local day, not the device clock's.
+String businessDateString(DateTime instant, String tzName) {
+  final l = TZDateTime.from(instant, resolveLocation(tzName));
+  final mm = l.month.toString().padLeft(2, '0');
+  final dd = l.day.toString().padLeft(2, '0');
+  return '${l.year}-$mm-$dd';
+}
+
 /// Returns the UTC half-open range `[utcStart, utcEnd)` covering the local
 /// calendar day that contains [localDay] in the business's timezone.
 ///

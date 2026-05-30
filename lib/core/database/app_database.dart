@@ -336,6 +336,98 @@ class WalletTransactions extends Table {
   ];
 }
 
+// ── Funds Register (master plan §23) ─────────────────────────────────────────
+// Per-store money accounts (Cash Till / POS machine / Bank), a daily open/close
+// header that gates the till, and an append-only ledger of money movements.
+@DataClassName('FundsAccountData')
+class FundsAccounts extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get storeId => text().references(Stores, #id)();
+  TextColumn get accountType => text()(); // cash_till | pos_machine | bank
+  TextColumn get name => text()();
+  TextColumn get accountNumber => text().nullable()(); // POS terminal / bank acct no.
+  BoolColumn get isActive => boolean().withDefault(const Constant(true))();
+  BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => [
+    "CHECK (account_type IN ('cash_till','pos_machine','bank'))",
+    'UNIQUE (store_id, account_type, name)',
+  ];
+}
+
+// Daily open/close header — one row per (store, business_date). Existence with
+// status='open' is the POS Opening-Cash gate (hard rule #10). Mutable on close
+// (Phase 2), so NOT a ledger.
+@DataClassName('FundDayData')
+class FundDays extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get storeId => text().references(Stores, #id)();
+  TextColumn get businessDate => text()(); // YYYY-MM-DD, local business day
+  TextColumn get status => text().withDefault(const Constant('open'))();
+  TextColumn get openedBy => text().nullable().references(Users, #id)();
+  DateTimeColumn get openedAt => dateTime().nullable()();
+  TextColumn get closedBy => text().nullable().references(Users, #id)();
+  DateTimeColumn get closedAt => dateTime().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => [
+    "CHECK (status IN ('open','closed'))",
+    'UNIQUE (store_id, business_date)',
+  ];
+}
+
+// Append-only ledger. Account balance for a day = SUM(signed_amount_kobo) of
+// non-voided rows. Opening balance is the day's first 'opening' credit.
+@DataClassName('FundTransactionData')
+class FundTransactions extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get fundsAccountId => text().references(FundsAccounts, #id)();
+  TextColumn get storeId => text().references(Stores, #id)();
+  TextColumn get businessDate => text()(); // YYYY-MM-DD
+  TextColumn get type => text()(); // credit | debit
+  IntColumn get amountKobo => integer()();
+  IntColumn get signedAmountKobo => integer()();
+  TextColumn get referenceType => text()(); // opening | sale | void
+  TextColumn get orderId => text().nullable().references(Orders, #id)();
+  TextColumn get paymentId =>
+      text().nullable().references(PaymentTransactions, #id)();
+  TextColumn get performedBy => text().nullable().references(Users, #id)();
+  DateTimeColumn get voidedAt => dateTime().nullable()();
+  TextColumn get voidedBy => text().nullable().references(Users, #id)();
+  TextColumn get voidReason => text().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => [
+    "CHECK (type IN ('credit','debit'))",
+    'CHECK (amount_kobo >= 0)',
+    "CHECK (reference_type IN ('opening','sale','void'))",
+    "CHECK ((type = 'credit' AND signed_amount_kobo >= 0) OR "
+        "(type = 'debit' AND signed_amount_kobo <= 0))",
+  ];
+}
+
 class CustomerCrateBalances extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
   TextColumn get businessId => text().references(Businesses, #id)();
@@ -1163,6 +1255,9 @@ class MigrationEvents extends Table {
     SavedCarts,
     PendingCrateReturns,
     PaymentTransactions,
+    FundsAccounts,
+    FundDays,
+    FundTransactions,
     ActivityLogs,
     Notifications,
     Settings,
@@ -1195,6 +1290,9 @@ class MigrationEvents extends Table {
     PendingCrateReturnsDao,
     SessionsDao,
     WalletTransactionsDao,
+    FundsAccountsDao,
+    FundDaysDao,
+    FundTransactionsDao,
     CustomerWalletsDao,
     CrateSizeGroupsDao,
     CustomerCrateBalancesDao,
@@ -1244,7 +1342,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 19;
+  int get schemaVersion => 21;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -2053,6 +2151,82 @@ class AppDatabase extends _$AppDatabase {
         // One nullable column, no rebuild and no data backfill.
         await m.addColumn(products, products.expiryDate);
       }
+      if (from < 20) {
+        // v20 (Reebaplus master plan §23: Funds Register). Three synced
+        // tenant tables. Mirrors supabase/migrations/0057_funds_register.sql.
+        // Same index/trigger shapes as the `_postCreateStatements` loops so a
+        // fresh install (onCreate) and an upgrade end up identical.
+        const newSynced = ['funds_accounts', 'fund_days', 'fund_transactions'];
+        await m.createTable(fundsAccounts);
+        await m.createTable(fundDays);
+        await m.createTable(fundTransactions);
+
+        for (final t in newSynced) {
+          await customStatement(
+            'CREATE INDEX idx_${t}_business_lua ON $t (business_id, last_updated_at)',
+          );
+        }
+        // funds_accounts is soft-deletable.
+        await customStatement(
+          'CREATE INDEX idx_funds_accounts_business_deleted ON funds_accounts (business_id, is_deleted)',
+        );
+        // Per-feature hot-path indexes (gate lookup + balance sums).
+        await customStatement(
+          'CREATE INDEX idx_funds_accounts_store ON funds_accounts (store_id)',
+        );
+        await customStatement(
+          'CREATE INDEX idx_fund_days_store_date ON fund_days (store_id, business_date)',
+        );
+        await customStatement(
+          'CREATE INDEX idx_fund_txn_account_date ON fund_transactions (funds_account_id, business_date)',
+        );
+
+        for (final t in newSynced) {
+          await customStatement(
+            'CREATE TRIGGER bump_${t}_last_updated_at '
+            'AFTER UPDATE ON $t '
+            'FOR EACH ROW '
+            'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+            'BEGIN '
+            "UPDATE $t SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+            'END',
+          );
+        }
+
+        // Append-only enforcement on the fund_transactions ledger — same
+        // immutable column set as the `_ledgerTables` entry above.
+        await customStatement(
+          'CREATE TRIGGER fund_transactions_immutable '
+          'BEFORE UPDATE ON fund_transactions '
+          'FOR EACH ROW '
+          'WHEN NEW.id IS NOT OLD.id OR NEW.business_id IS NOT OLD.business_id '
+          'OR NEW.funds_account_id IS NOT OLD.funds_account_id '
+          'OR NEW.store_id IS NOT OLD.store_id '
+          'OR NEW.business_date IS NOT OLD.business_date '
+          'OR NEW.type IS NOT OLD.type OR NEW.amount_kobo IS NOT OLD.amount_kobo '
+          'OR NEW.signed_amount_kobo IS NOT OLD.signed_amount_kobo '
+          'OR NEW.reference_type IS NOT OLD.reference_type '
+          'OR NEW.order_id IS NOT OLD.order_id '
+          'OR NEW.payment_id IS NOT OLD.payment_id '
+          'OR NEW.performed_by IS NOT OLD.performed_by '
+          'OR NEW.created_at IS NOT OLD.created_at '
+          'BEGIN '
+          "SELECT RAISE(ABORT, 'append-only: only voided_at/voided_by/void_reason may change'); "
+          'END',
+        );
+        await customStatement(
+          'CREATE TRIGGER fund_transactions_no_delete '
+          'BEFORE DELETE ON fund_transactions '
+          'BEGIN '
+          "SELECT RAISE(ABORT, 'append-only: deletion not permitted'); "
+          'END',
+        );
+      }
+      if (from < 21) {
+        // v21 (Funds Register): optional account number / terminal id on POS
+        // and Bank accounts. Mirrors supabase/migrations/0059_funds_account_number.sql.
+        await m.addColumn(fundsAccounts, fundsAccounts.accountNumber);
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -2169,6 +2343,10 @@ const List<String> _syncedTenantTables = [
   'saved_carts',
   'pending_crate_returns',
   'payment_transactions',
+  // v20 (master plan §23 Funds Register).
+  'funds_accounts',
+  'fund_days',
+  'fund_transactions',
   'expense_categories',
   'expenses',
   'activity_logs',
@@ -2294,6 +2472,9 @@ const List<String> _softDeletableTables = [
   // v13 additions.
   'roles',
   'invite_codes',
+  // v20 (Funds Register). Accounts soft-delete; fund_days / fund_transactions
+  // are not soft-deletable.
+  'funds_accounts',
 ];
 
 class _LedgerImmutability {
@@ -2373,6 +2554,22 @@ const List<_LedgerImmutability> _ledgerTables = [
     'performed_by',
     'created_at',
   ]),
+  // v20 (Funds Register). Everything except the void columns + last_updated_at.
+  _LedgerImmutability('fund_transactions', [
+    'id',
+    'business_id',
+    'funds_account_id',
+    'store_id',
+    'business_date',
+    'type',
+    'amount_kobo',
+    'signed_amount_kobo',
+    'reference_type',
+    'order_id',
+    'payment_id',
+    'performed_by',
+    'created_at',
+  ]),
 ];
 
 List<String> get _postCreateStatements {
@@ -2415,6 +2612,10 @@ List<String> get _postCreateStatements {
     'CREATE INDEX idx_payment_txn_business_type ON payment_transactions (business_id, type, created_at)',
     'CREATE INDEX idx_expenses_business_time ON expenses (business_id, created_at)',
     'CREATE INDEX idx_activity_logs_business_time ON activity_logs (business_id, created_at)',
+    // v20 (Funds Register) — gate lookup + per-account/day balance sums.
+    'CREATE INDEX idx_funds_accounts_store ON funds_accounts (store_id)',
+    'CREATE INDEX idx_fund_days_store_date ON fund_days (store_id, business_date)',
+    'CREATE INDEX idx_fund_txn_account_date ON fund_transactions (funds_account_id, business_date)',
   ]);
 
   // Enqueue-time coalescing: at most one pending sync_queue row per
