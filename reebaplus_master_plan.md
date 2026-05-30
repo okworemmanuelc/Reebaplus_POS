@@ -84,6 +84,12 @@ More keys can be added as features grow:
 - `activity_logs.view`, `settings.manage`
 - `funds.open_day`, `funds.close_day`, `funds.view`
 
+### 2.6 Live sync across devices
+
+The app is offline-first with cloud sync. Beyond pull-on-open, a change made on one device should appear on the other devices in the same business **live**, without a manual refresh — the CEO changing the business colour (§10.1), a price edit, a new sale, a stock adjustment. This live, cross-device behaviour is the reason the synced tables exist; it is a product requirement, not a nicety.
+
+**Known issue (flagged 2026-05-30):** live (realtime) delivery is currently broken — inbound changes only land when the user pulls to refresh. Pushing changes to the cloud is unaffected; this is purely the inbound realtime channel. Root cause (a malformed wildcard realtime subscription, not a publication gap) and the planned fix are tracked in the pivot plan's risk register (§7). To be fixed after the in-flight CEO Settings work lands.
+
 ---
 
 ## 3. Build Order
