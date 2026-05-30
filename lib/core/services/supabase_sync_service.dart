@@ -113,7 +113,7 @@ class JwtClaimSnapshot {
 class SupabaseSyncService {
   final AppDatabase _db;
   final SupabaseClient _supabase;
-  RealtimeChannel? _realtimeChannel;
+  final List<RealtimeChannel> _tableChannels = [];
   RealtimeChannel? _businessesChannel;
   StreamSubscription<int>? _autoPushSub;
   StreamSubscription<AuthState>? _authStateSub;
@@ -1741,52 +1741,79 @@ class SupabaseSyncService {
 
   /// Subscribes to real-time changes from Supabase for this business.
   void startRealtimeSync(String businessId) {
-    if (_realtimeChannel != null) return;
+    if (_tableChannels.isNotEmpty) return;
 
     debugPrint(
       '[SyncService] Starting real-time sync for business $businessId',
     );
 
-    // Wildcard subscription for all tables with a `business_id` column.
-    // The `businesses` table has no `business_id` and is handled separately.
-    // Per-table refactor deferred — wrap in try/catch so a single bad table
-    // doesn't kill the whole channel.
-    try {
-      _realtimeChannel =
-          _supabase
-              .channel('public:*')
-              .onPostgresChanges(
-                event: PostgresChangeEvent.all,
-                schema: 'public',
-                filter: PostgresChangeFilter(
-                  type: PostgresChangeFilterType.eq,
-                  column: 'business_id',
-                  value: businessId,
-                ),
-                callback: (payload) async {
-                  debugPrint(
-                    '[SyncService] Realtime Event: ${payload.eventType} on ${payload.table}',
-                  );
+    // One channel per synced tenant table, each with an explicit `table:` +
+    // `business_id` filter. The previous single `channel('public:*')` set a
+    // `business_id` filter but no `table:`; Supabase Realtime cannot honour a
+    // filtered postgres_changes binding without a table, so the server↔client
+    // binding reconciliation mismatched and the whole channel silently failed —
+    // no inbound realtime events for ANY tenant table (changes only ever landed
+    // via the snapshot pull). Per-table channels also isolate a bad table (e.g.
+    // one not in the `supabase_realtime` publication) to its own channel instead
+    // of tearing down every subscription. The permanent subscribe-status
+    // callback surfaces SUBSCRIBED / CHANNEL_ERROR / TIMED_OUT — the old
+    // `..subscribe()` had none, so the failure was invisible.
+    //
+    // `businesses` (no `business_id` column — its `id` IS the business id) is
+    // handled by the separate channel below; `system_config` is global (no
+    // `business_id`), so both are skipped here.
+    for (final table in _pullOrder) {
+      if (table == 'businesses' || table == 'system_config') continue;
+      try {
+        final channel =
+            _supabase
+                .channel('public:$table')
+                .onPostgresChanges(
+                  event: PostgresChangeEvent.all,
+                  schema: 'public',
+                  table: table,
+                  filter: PostgresChangeFilter(
+                    type: PostgresChangeFilterType.eq,
+                    column: 'business_id',
+                    value: businessId,
+                  ),
+                  callback: (payload) async {
+                    debugPrint(
+                      '[SyncService] Realtime Event: ${payload.eventType} on ${payload.table}',
+                    );
 
-                  final table = payload.table;
-                  final newRecord = payload.newRecord;
+                    final eventTable = payload.table;
+                    final newRecord = payload.newRecord;
 
-                  if (newRecord.isNotEmpty) {
-                    await _restoreTableData(table, [newRecord]);
-                    // Single-active-device sign-in: when our own session row
-                    // gets revoked by another device's fresh sign-in, ask
-                    // AuthService to fullLogout this device.
-                    if (table == 'sessions' &&
-                        newRecord['revoked_at'] != null &&
-                        newRecord['id'] == currentSessionIdResolver?.call()) {
-                      onCurrentSessionRevoked?.call();
+                    if (newRecord.isNotEmpty) {
+                      await _restoreTableData(eventTable, [newRecord]);
+                      // Single-active-device sign-in: when our own session row
+                      // gets revoked by another device's fresh sign-in, ask
+                      // AuthService to fullLogout this device.
+                      if (eventTable == 'sessions' &&
+                          newRecord['revoked_at'] != null &&
+                          newRecord['id'] ==
+                              currentSessionIdResolver?.call()) {
+                        onCurrentSessionRevoked?.call();
+                      }
                     }
-                  }
-                },
-              )
-            ..subscribe();
-    } catch (e) {
-      debugPrint('[SyncService] Wildcard realtime subscribe failed: $e');
+                  },
+                )
+              ..subscribe((status, error) {
+                if (status == RealtimeSubscribeStatus.channelError ||
+                    status == RealtimeSubscribeStatus.timedOut) {
+                  debugPrint(
+                    '[SyncService] Realtime channel "$table" $status'
+                    '${error != null ? ' — $error' : ''}',
+                  );
+                } else if (status == RealtimeSubscribeStatus.subscribed) {
+                  debugPrint('[SyncService] Realtime subscribed: $table');
+                }
+              });
+        _tableChannels.add(channel);
+      } catch (e) {
+        debugPrint('[SyncService] Realtime subscribe failed for "$table": $e');
+      }
     }
 
     // Separate channel for `businesses` filtered by `id` (no business_id column).
@@ -1822,10 +1849,10 @@ class SupabaseSyncService {
   /// Stops listening to real-time changes (e.g., on logout).
   void stopRealtimeSync() {
     debugPrint('[SyncService] Stopping real-time sync.');
-    if (_realtimeChannel != null) {
-      _supabase.removeChannel(_realtimeChannel!);
-      _realtimeChannel = null;
+    for (final channel in _tableChannels) {
+      _supabase.removeChannel(channel);
     }
+    _tableChannels.clear();
     if (_businessesChannel != null) {
       _supabase.removeChannel(_businessesChannel!);
       _businessesChannel = null;

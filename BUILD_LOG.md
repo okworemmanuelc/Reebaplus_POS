@@ -100,6 +100,61 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 
 ---
 
+## Session 27 — 2026-05-30 — Realtime cross-device sync fix (foundation)
+
+**Built today:**
+- **Fixed realtime cross-device sync — the foundation bug.** Before today, a change
+  made on one device (a sale, a new product, opening the day, a price/colour edit)
+  only reached other devices when they ran a manual/snapshot pull — live updates
+  never arrived. Cause: the app subscribed to every table through a single wildcard
+  channel (`public:*`) that set a `business_id` filter but named no `table:`, which
+  Supabase Realtime can't honour, so the whole subscription silently failed — and
+  `..subscribe()` had no status callback, so nothing logged it. The one table that
+  DID update live (Business Info) sat on a separate, correctly-formed channel; that
+  asymmetry was the tell.
+- Now each synced tenant table gets its own realtime channel with an explicit table
+  name + `business_id` filter, and each logs whether it `SUBSCRIBED` / `CHANNEL_ERROR`
+  / `TIMED_OUT`. A single bad table (e.g. one not in the realtime publication) no
+  longer tears down the rest. The working `businesses` channel and the
+  single-active-device `sessions`-revoke handling are preserved unchanged.
+
+**Files touched:**
+- lib/core/services/supabase_sync_service.dart (per-table realtime channels + status callback; `_realtimeChannel` → `_tableChannels` list)
+- PIVOT_PLAN.md (§7 risk register: realtime bullet marked RESOLVED)
+- BUILD_LOG.md (this entry)
+
+**Database changes:**
+- None. Client-only change. No schema bump, no cloud migration. The cloud realtime
+  publication already includes every synced table (migrations 0006 / 0042 / 0057).
+
+**Master plan sections covered:**
+- §2.6 (realtime delivery) — the cross-referenced foundation fix.
+
+**Plan updates made during session:**
+- PIVOT_PLAN §7 realtime risk bullet marked RESOLVED (was "deferred until CEO
+  Settings lands" — that work landed in Sessions 14–17, so the deferral had expired).
+
+**Tested:**
+- `flutter analyze` clean. Full suite (excl. integration) 204 passed / 0 failed.
+- Realtime channel wiring can't be unit-tested without a live Supabase server; the
+  restore path it feeds is unchanged and still covered by `funds_restore_test` +
+  the existing restore tests.
+
+**Known issues / left open:**
+- **Needs a 30-second two-device on-device check** to close the fix: edit a product /
+  open the day / change the CEO colour on device A → it lands on device B within a
+  tick with NO manual pull. (This is the only way to truly confirm realtime delivery.)
+- ~35 channels are opened on connect (one per `_pullOrder` tenant table) — within
+  Supabase limits, but worth watching the join logs on a real device.
+- Deploy status of cloud funds migrations 0058–0060 is still unconfirmed — if not
+  pushed, a second device 42501s on funds writes regardless of realtime.
+
+**Next session should:**
+- Do the two-device realtime confirmation, then burn down the on-device verification
+  backlog (POS / Cart / Inventory / Funds Register) before starting new features.
+
+---
+
 ## Session 26 — 2026-05-30 — Funds Register Phase 1 (multi-account, §23)
 
 **Built today:**
