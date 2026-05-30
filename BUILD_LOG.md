@@ -52,6 +52,12 @@ Keep this section updated at the top so it's easy to see what's done at a glance
 
 ### Phase 1 — In progress
 
+> **On-device verification (2026-05-30):** the features built through Session 26 —
+> POS (§12), Cart (§13), Inventory + Product Details (§16), and Funds Register Phase 1
+> (§23) — have been verified on-device by the user, clearing the standing emulator-pass
+> backlog noted across Sessions 19–26. Two-device realtime sync also confirmed
+> (Session 27). The per-session "on-device pass pending" notes below are superseded.
+
 **Foundation:**
 - [x] Database schema rebuild (section 2 of master plan) *(done in Session 2 — schema v13)*
 - [x] Role + permission seeding for new businesses *(done in Session 2)*
