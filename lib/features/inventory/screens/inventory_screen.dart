@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:reebaplus_pos/core/widgets/app_fab.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 
 import 'package:reebaplus_pos/core/theme/colors.dart';
 
@@ -24,10 +25,9 @@ import 'package:reebaplus_pos/features/inventory/screens/stock_count_screen.dart
 import 'package:reebaplus_pos/features/inventory/screens/product_detail_screen.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
-import 'package:reebaplus_pos/features/inventory/widgets/add_product_sheet.dart';
+import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/inventory_history_tab.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/update_product_sheet.dart';
-import 'package:reebaplus_pos/features/pos/widgets/category_filter_bar.dart';
 import 'package:reebaplus_pos/core/utils/product_name.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
@@ -41,7 +41,12 @@ class InventoryScreen extends ConsumerStatefulWidget {
 }
 
 class _InventoryScreenState extends ConsumerState<InventoryScreen>
-    with SingleTickerProviderStateMixin {
+    // TickerProviderStateMixin (plural): the tab set is dynamic (role /
+    // business-type guards), so the TabController is rebuilt when the visible
+    // count changes. SingleTickerProviderStateMixin permanently records its one
+    // ticker and would throw on the second controller — the plural mixin tracks
+    // tickers in a set and releases each on dispose.
+    with TickerProviderStateMixin {
   late TabController _tabController;
   late NavigationService _nav;
   int _currentTab = 0;
@@ -53,6 +58,10 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   List<ManufacturerData> _dbManufacturers = [];
   List<CategoryData> _dbCategories = [];
   String? _selectedCategoryId;
+  // Products-tab header search (§16.4, amended — reuses the POS toggle pattern).
+  bool _showSearch = false;
+  String _searchQuery = '';
+  final _searchCtrl = TextEditingController();
   Map<String, int> _fullCratesByMfr = {};
   Map<String, int> _emptyCratesByMfr = {};
   int _totalCrateAssetsSum = 0;
@@ -80,15 +89,111 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   List<CrateSizeGroupData> get _activeCrateSizeGroups =>
       _dbCrateSizeGroups.where((cg) => cg.emptyCrateStock > 0).toList();
 
+  void _onTabChanged() {
+    if (mounted && _tabController.index != _currentTab) {
+      setState(() => _currentTab = _tabController.index);
+    }
+  }
+
+  /// The tab keys visible for the current role / permissions / business type
+  /// (master plan §16.3 / §16.7 / §16.10):
+  ///  - products  — always.
+  ///  - suppliers — `suppliers.manage` (CEO; Manager if toggled on).
+  ///  - crates    — Bar / Beer distributor businesses only.
+  ///  - history   — CEO / Manager / Stock keeper (own store); Cashier hidden.
+  ///
+  /// Returns null until the role, its grants, and the business row have all
+  /// resolved locally. The caller shows a static loading state until then, so
+  /// the tab bar reveals its final set in one shot rather than popping the
+  /// extra tabs in a frame later (which read as a staged "entrance").
+  List<String>? _computeVisibleTabs(BuildContext context) {
+    final role = ref.watch(currentUserRoleProvider);
+    if (role == null) return null;
+    final grantsAsync = ref.watch(rolePermissionsProvider(role.id));
+    final businessesAsync = ref.watch(localBusinessesProvider);
+    if (!grantsAsync.hasValue || !businessesAsync.hasValue) return null;
+
+    final perms = grantsAsync.value!.map((g) => g.permissionKey).toSet();
+    final businessId = ref.read(authProvider).currentUser?.businessId;
+    final businessType = businessesAsync.value!
+        .where((b) => b.id == businessId)
+        .map((b) => b.type)
+        .firstOrNull;
+
+    final showSuppliers = perms.contains('suppliers.manage');
+    final showCrates =
+        businessType == 'Bar' || businessType == 'Beer distributor';
+    final showHistory = role.slug == 'ceo' ||
+        role.slug == 'manager' ||
+        role.slug == 'stock_keeper';
+
+    return [
+      'products',
+      if (showSuppliers) 'suppliers',
+      if (showCrates) 'crates',
+      if (showHistory) 'history',
+    ];
+  }
+
+  /// Keeps [_tabController] in sync with the visible-tab set. The labels and
+  /// bodies are rebuilt from [_tabKeys] every build, so the only thing the
+  /// controller actually pins is its *length* — we therefore recreate it only
+  /// when the tab count changes (tabs appear/disappear as role / business-type
+  /// data resolves), disposing the old one first to release its ticker.
+  void _syncTabController(List<String> keys) {
+    if (_listEquals(keys, _tabKeys)) return;
+    final priorKey =
+        _currentTab < _tabKeys.length ? _tabKeys[_currentTab] : 'products';
+    var newIndex = keys.indexOf(priorKey);
+    if (newIndex < 0) newIndex = 0;
+    _tabKeys = keys;
+    _currentTab = newIndex;
+    if (_tabController.length != keys.length) {
+      _tabController.removeListener(_onTabChanged);
+      _tabController.dispose();
+      _tabController = TabController(
+        length: keys.length,
+        vsync: this,
+        initialIndex: newIndex,
+      );
+      _tabController.addListener(_onTabChanged);
+    }
+  }
+
+  bool _listEquals(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  String _tabLabel(String key) => switch (key) {
+        'suppliers' => 'Suppliers',
+        'crates' => 'Empty Crates',
+        'history' => 'History',
+        _ => 'Products',
+      };
+
+  Widget _tabBody(BuildContext context, String key) => switch (key) {
+        'suppliers' => _buildSuppliersTab(context),
+        'crates' => _buildCratesTab(context),
+        'history' => InventoryHistoryTab(
+            storeId: _selectedStoreId == 'all' ? null : _selectedStoreId,
+          ),
+        _ => _buildProductsTab(context),
+      };
+
+  // Currently-visible tab keys, in order. Recomputed in build() from role /
+  // permission / business-type guards (§16.7 / §16.10); the TabController is
+  // rebuilt when this set changes. 'products' is always present.
+  List<String> _tabKeys = const ['products'];
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
-    _tabController.addListener(() {
-      if (mounted && _tabController.index != _currentTab) {
-        setState(() => _currentTab = _tabController.index);
-      }
-    });
+    _tabController = TabController(length: _tabKeys.length, vsync: this);
+    _tabController.addListener(_onTabChanged);
 
     _nav = ref.read(navigationProvider);
     _nav.selectedStoreId.addListener(_handleStoreNavigation);
@@ -104,7 +209,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       // device updates the dropdown without a manual refresh. The first
       // emission also seeds the initial store selection and kicks
       // off the products subscription.
-      _storesSub = db.select(db.stores).watch().listen((list) {
+      _storesSub = db.storesDao.watchActiveStores().listen((list) {
         if (!mounted) return;
         setState(() {
           _stores = list;
@@ -158,6 +263,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     _bottlesSub?.cancel();
     _emptyCratesSub?.cancel();
     _emptyCratesSumSub?.cancel();
+    _searchCtrl.dispose();
     _tabController.dispose();
     _nav.selectedStoreId.removeListener(_handleStoreNavigation);
     super.dispose();
@@ -206,11 +312,25 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Resolve the visible tabs (role / permission / business-type guards).
+    // Null = the gating data hasn't loaded yet → show a static loading state
+    // and don't touch the TabController, so the tab bar reveals its final set
+    // in one shot instead of popping extra tabs in a frame later.
+    final visibleTabs = _computeVisibleTabs(context);
+    final tabsReady = visibleTabs != null;
+    if (tabsReady) _syncTabController(visibleTabs);
+
+    final onProductsTab = tabsReady &&
+        _currentTab < _tabKeys.length &&
+        _tabKeys[_currentTab] == 'products';
+    // Add Product FAB is gated on `products.add` (§16.7) — CEO + Manager only.
+    final canAddProduct = hasPermission(ref, 'products.add');
+
     return SharedScaffold(
       activeRoute: 'inventory',
       backgroundColor: _bg,
       appBar: _buildAppBar(context),
-      floatingActionButton: _currentTab == 0
+      floatingActionButton: (onProductsTab && canAddProduct)
           ? AppFAB(
               onPressed: _showAddProductSheet,
               icon: FontAwesomeIcons.plus,
@@ -219,32 +339,28 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
           : null,
       body: SafeArea(
         top: false,
-        child: AppRefreshWrapper(
-          child: NestedScrollView(
-            headerSliverBuilder: (context, innerBoxIsScrolled) {
-              return [
-                SliverToBoxAdapter(child: _buildSummaryCards(context)),
-                SliverPersistentHeader(
-                  pinned: true,
-                  delegate: _StickyTabBarDelegate(child: _buildTabBar(context)),
+        child: !tabsReady
+            ? const Center(child: CircularProgressIndicator())
+            : AppRefreshWrapper(
+                child: NestedScrollView(
+                  headerSliverBuilder: (context, innerBoxIsScrolled) {
+                    return [
+                      SliverToBoxAdapter(child: _buildSummaryCards(context)),
+                      SliverPersistentHeader(
+                        pinned: true,
+                        delegate:
+                            _StickyTabBarDelegate(child: _buildTabBar(context)),
+                      ),
+                    ];
+                  },
+                  body: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      for (final key in _tabKeys) _tabBody(context, key),
+                    ],
+                  ),
                 ),
-              ];
-            },
-            body: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildProductsTab(context),
-                _buildSuppliersTab(context),
-                _buildCratesTab(context),
-                InventoryHistoryTab(
-                  storeId: _selectedStoreId == 'all'
-                      ? null
-                      : _selectedStoreId,
-                ),
-              ],
-            ),
-          ),
-        ),
+              ),
       ),
     );
   }
@@ -260,6 +376,19 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         subtitle: 'Stock Management',
       ),
       actions: [
+        // Search toggle — only meaningful on the Products tab (§16.4).
+        if (_currentTab == 0)
+          IconButton(
+            tooltip: _showSearch ? 'Close search' : 'Search products',
+            icon: Icon(_showSearch ? Icons.close : Icons.search),
+            onPressed: () => setState(() {
+              _showSearch = !_showSearch;
+              if (!_showSearch) {
+                _searchCtrl.clear();
+                _searchQuery = '';
+              }
+            }),
+          ),
         IconButton(
           tooltip: 'Daily Stock Count',
           icon: const Icon(Icons.fact_check_outlined),
@@ -333,24 +462,27 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
           _tabController.animateTo(0);
         }),
       ),
-      _summaryCard(
-        context,
-        'Total Crates',
-        '${totalCrates.toInt()}',
-        FontAwesomeIcons.beerMugEmpty,
-        success,
-        isActive: _tabController.index == 2,
-        onTap: () => setState(() {
-          _tabController.animateTo(2);
-        }),
-      ),
+      // Total Crates only when the Empty Crates tab is visible (Bar / Beer
+      // distributor — §16.10). Jumps to that tab by its dynamic index.
+      if (_tabKeys.contains('crates'))
+        _summaryCard(
+          context,
+          'Total Crates',
+          '${totalCrates.toInt()}',
+          FontAwesomeIcons.beerMugEmpty,
+          success,
+          isActive: _currentTab == _tabKeys.indexOf('crates'),
+          onTap: () => setState(() {
+            _tabController.animateTo(_tabKeys.indexOf('crates'));
+          }),
+        ),
     ];
 
     return Container(
       color: _surface,
       padding: EdgeInsets.only(
-        top: context.getRSize(12),
-        bottom: context.getRSize(16),
+        top: context.getRSize(8),
+        bottom: context.getRSize(10),
       ),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -361,10 +493,10 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
             final Widget card = entry.value;
             return Container(
               width: context.isPhone
-                  ? context.getRSize(130)
-                  : context.getRSize(180),
+                  ? context.getRSize(108)
+                  : context.getRSize(150),
               margin: EdgeInsets.only(
-                right: index < cards.length - 1 ? context.getRSize(12) : 0,
+                right: index < cards.length - 1 ? context.getRSize(10) : 0,
               ),
               child: card,
             );
@@ -386,7 +518,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: EdgeInsets.all(context.spacingM),
+        padding: EdgeInsets.all(context.getRSize(10)),
         decoration: BoxDecoration(
           color: Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(context.radiusM),
@@ -398,25 +530,30 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, size: context.getRSize(16), color: color),
-            SizedBox(height: context.getRSize(8)),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                value,
-                style: TextStyle(
-                  fontSize: rFontSize(context, 20),
-                  fontWeight: FontWeight.w800,
-                  color: _text,
+            Row(
+              children: [
+                Icon(icon, size: context.getRSize(13), color: color),
+                SizedBox(width: context.getRSize(6)),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    value,
+                    style: TextStyle(
+                      fontSize: rFontSize(context, 16),
+                      fontWeight: FontWeight.w800,
+                      color: _text,
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
-            SizedBox(height: context.spacingS),
+            SizedBox(height: context.getRSize(4)),
             Text(
               label,
               style: context.bodySmall.copyWith(
                 color: _subtext,
                 fontWeight: FontWeight.w600,
+                fontSize: context.getRFontSize(11),
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -450,11 +587,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         ),
         indicatorColor: Theme.of(context).colorScheme.primary,
         indicatorWeight: 3,
-        tabs: const [
-          Tab(text: 'Products'),
-          Tab(text: 'Suppliers'),
-          Tab(text: 'Empty Crates'),
-          Tab(text: 'History'),
+        tabs: [
+          for (final key in _tabKeys) Tab(text: _tabLabel(key)),
         ],
       ),
     );
@@ -490,31 +624,25 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
           .where((p) => p.product.categoryId == _selectedCategoryId)
           .toList();
     }
+    if (_searchQuery.isNotEmpty) {
+      final q = _searchQuery.toLowerCase();
+      list = list
+          .where(
+            (p) =>
+                p.product.name.toLowerCase().contains(q) ||
+                (p.product.subtitle?.toLowerCase().contains(q) ?? false),
+          )
+          .toList();
+    }
+    // Near-expiry surfacing (§16.4, amended): bubble flagged products
+    // (expired / within 30 days) to the top, soonest first; the rest keep
+    // their existing order.
+    list = _sortNearExpiryFirst(list);
 
     return Column(
       children: [
+        if (_showSearch) _buildSearchField(context),
         _buildSupplierFilter(context),
-        CategoryFilterBar(
-          categories: ['All', ..._dbCategories.map((c) => c.name)],
-          selectedCategory: _selectedCategoryId == null
-              ? 'All'
-              : _dbCategories
-                    .firstWhere((c) => c.id == _selectedCategoryId)
-                    .name,
-          onCategorySelected: (name) {
-            setState(() {
-              if (name == 'All') {
-                _selectedCategoryId = null;
-              } else {
-                _selectedCategoryId = _dbCategories
-                    .firstWhere((c) => c.name == name)
-                    .id;
-              }
-            });
-          },
-          textCol: _text,
-          borderCol: _border,
-        ),
         Expanded(
           child: list.isEmpty
               ? Center(
@@ -700,6 +828,37 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                         )),
           ),
           SizedBox(width: context.getRSize(12)),
+          // Category dropdown (§16.4, amended): replaces the old chip row,
+          // sits between Store and Manufacturer, drives `_selectedCategoryId`.
+          Expanded(
+            child: _isFirstLoad
+                ? const SizedBox.shrink()
+                : AppDropdown<String>(
+                    value: _selectedCategoryId ?? 'all',
+                    labelText: 'Category',
+                    items: [
+                      DropdownMenuItem(
+                        value: 'all',
+                        child: Text('All', style: TextStyle(color: _text)),
+                      ),
+                      ..._dbCategories.map(
+                        (c) => DropdownMenuItem(
+                          value: c.id,
+                          child: Text(
+                            c.name,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(color: _text),
+                          ),
+                        ),
+                      ),
+                    ],
+                    onChanged: (val) => setState(
+                      () => _selectedCategoryId =
+                          (val == null || val == 'all') ? null : val,
+                    ),
+                  ),
+          ),
+          SizedBox(width: context.getRSize(12)),
           Expanded(
             child: _isFirstLoad
                 ? const SizedBox.shrink()
@@ -771,6 +930,118 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     );
   }
 
+  Widget _buildSearchField(BuildContext context) {
+    return Container(
+      color: _surface,
+      padding: EdgeInsets.fromLTRB(
+        context.getRSize(16),
+        context.getRSize(12),
+        context.getRSize(16),
+        0,
+      ),
+      child: TextField(
+        controller: _searchCtrl,
+        autofocus: true,
+        onChanged: (v) => setState(() => _searchQuery = v.trim()),
+        style: TextStyle(color: _text, fontSize: context.getRFontSize(14)),
+        decoration: InputDecoration(
+          isDense: true,
+          hintText: 'Search products…',
+          prefixIcon: Icon(Icons.search, size: 18, color: _subtext),
+          suffixIcon: _searchQuery.isEmpty
+              ? null
+              : IconButton(
+                  icon: Icon(Icons.clear, size: 18, color: _subtext),
+                  onPressed: () => setState(() {
+                    _searchCtrl.clear();
+                    _searchQuery = '';
+                  }),
+                ),
+          filled: true,
+          fillColor: Theme.of(context).cardColor,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: _border),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: _border),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Days until [expiry] relative to today (negative = already expired).
+  int _daysToExpiry(DateTime expiry) {
+    final now = DateTime.now();
+    return DateTime(expiry.year, expiry.month, expiry.day)
+        .difference(DateTime(now.year, now.month, now.day))
+        .inDays;
+  }
+
+  /// A product is "flagged" when it has an expiry date that is past or within
+  /// the next 30 days (master plan §16.4).
+  bool _isNearExpiry(ProductData p) {
+    final e = p.expiryDate;
+    return e != null && _daysToExpiry(e) <= 30;
+  }
+
+  /// Stable sort that bubbles flagged (near/expired) products to the top,
+  /// soonest expiry first; everything else keeps its incoming order.
+  List<ProductDataWithStock> _sortNearExpiryFirst(
+    List<ProductDataWithStock> list,
+  ) {
+    final flagged = <ProductDataWithStock>[];
+    final rest = <ProductDataWithStock>[];
+    for (final p in list) {
+      (_isNearExpiry(p.product) ? flagged : rest).add(p);
+    }
+    if (flagged.isEmpty) return list;
+    flagged.sort(
+      (a, b) => _daysToExpiry(a.product.expiryDate!)
+          .compareTo(_daysToExpiry(b.product.expiryDate!)),
+    );
+    return [...flagged, ...rest];
+  }
+
+  /// Small expiry chip shown on a flagged product row (§16.4).
+  Widget? _expiryChip(BuildContext context, ProductData product) {
+    final e = product.expiryDate;
+    if (e == null) return null;
+    final days = _daysToExpiry(e);
+    String label;
+    Color color;
+    if (days < 0) {
+      label = 'Expired';
+      color = danger;
+    } else if (days <= 30) {
+      label = days == 0 ? 'Expires today' : 'Expires in ${days}d';
+      color = AppColors.warning;
+    } else {
+      return null;
+    }
+    return Container(
+      margin: EdgeInsets.only(top: context.getRSize(4)),
+      padding: EdgeInsets.symmetric(
+        horizontal: context.getRSize(8),
+        vertical: context.getRSize(2),
+      ),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: context.getRFontSize(10),
+          fontWeight: FontWeight.w700,
+          color: color,
+        ),
+      ),
+    );
+  }
+
   Widget _buildProductRow(BuildContext context, ProductDataWithStock item) {
     final product = item.product;
     final currentStock = item.totalStock;
@@ -817,14 +1088,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
           color: accent,
           storeStock: {'w1': item.totalStock.toDouble()},
           lowStockThreshold: product.lowStockThreshold.toDouble(),
-          sellingPrice: product.sellingPriceKobo / 100.0,
-          retailPrice: product.retailPriceKobo / 100.0,
-          bulkBreakerPrice: product.bulkBreakerPriceKobo != null
-              ? product.bulkBreakerPriceKobo! / 100.0
-              : null,
-          distributorPrice: product.distributorPriceKobo != null
-              ? product.distributorPriceKobo! / 100.0
-              : null,
+          retailerPrice: product.retailerPriceKobo / 100.0,
+          wholesalerPrice: product.wholesalerPriceKobo / 100.0,
           buyingPrice: product.buyingPriceKobo / 100.0,
           category: product.categoryId?.toString(),
           manufacturer: _dbManufacturers
@@ -935,6 +1200,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                         ),
                       ),
                     ],
+                    if (_expiryChip(context, product) case final chip?)
+                      Align(alignment: Alignment.centerLeft, child: chip),
                   ],
                 ),
               ),
@@ -1892,11 +2159,11 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   }
 
   void _showAddProductSheet() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => AddProductSheet(onProductAdded: () => setState(() {})),
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) =>
+            AddProductScreen(onProductAdded: () => setState(() {})),
+      ),
     );
   }
 

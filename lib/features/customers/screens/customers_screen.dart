@@ -38,7 +38,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
 
   Future<void> _loadStores() async {
     final db = ref.read(databaseProvider);
-    final ws = await db.select(db.stores).get();
+    final ws = await db.storesDao.getActiveStores();
 
     final nav = ref.read(navigationProvider);
     final oneShot = nav.customersInitialStoreId.value;

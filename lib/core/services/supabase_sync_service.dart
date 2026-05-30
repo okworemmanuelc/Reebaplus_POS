@@ -420,8 +420,12 @@ class SupabaseSyncService {
   /// Supabase client (the restore path only touches `_db`). The actual logic
   /// stays in `_restoreTableData` so the instance path and tests can't drift.
   @visibleForTesting
-  Future<void> restoreTableDataForTesting(String table, List<dynamic> data) =>
-      _restoreTableData(table, data);
+  Future<void> restoreTableDataForTesting(
+    String table,
+    List<dynamic> data, {
+    Set<String>? fkSkipped,
+  }) =>
+      _restoreTableData(table, data, fkSkipped: fkSkipped);
 
   /// Pushes all pending local changes to Supabase.
   Future<void> pushPending() async {
@@ -1313,13 +1317,22 @@ class SupabaseSyncService {
         await prefs.setString(key, DateTime.now().toUtc().toIso8601String());
         await prefs.remove(deferredKey);
       } else {
-        // Leaf-deferred pull. Holding the cursor forces the next pull to be a
-        // full pull so the deferred slices can catch up. Persist the latest
-        // deferred set so SyncIssues can show what's still pending.
+        // Deferred pull (leaf-deferred and/or FK-orphan skips). CLEAR the
+        // incremental cursor so the NEXT pull is a true full pull
+        // (`since == null`). A held non-null cursor would keep the next pull
+        // incremental and only re-send rows changed after it — so a parent
+        // created before the cursor (e.g. an unchanged categories /
+        // crate_size_groups row) is never re-fetched, and an FK-orphaned
+        // child (a product referencing it) could never catch up no matter how
+        // many times the user taps Retry. A full pull re-fetches every current
+        // cloud row, including those parents, after which the skipped child
+        // inserts cleanly. Persist the deferred set so SyncIssues can show
+        // what's still pending.
         debugPrint(
-          '[SyncService] Holding last_sync_timestamp; ${skipped.length} '
-          'deferred table(s): ${skipped.join(", ")}',
+          '[SyncService] Forcing full re-pull (cleared cursor); '
+          '${skipped.length} deferred table(s): ${skipped.join(", ")}',
         );
+        await prefs.remove(key);
         await prefs.setString(deferredKey, skipped.join(','));
       }
       // Clean run — reset consecutive-failure count and signal completion.
@@ -1568,14 +1581,26 @@ class SupabaseSyncService {
     if (pullStatus.value.stage == PullStage.background) {
       pullStatus.value = pullStatus.value.copyWith(tablesTotal: restoreTotal);
     }
+    // Collects tables that skipped one or more orphaned rows (a referenced
+    // parent slice was absent from this snapshot). Merged into `skipped`
+    // below so the caller holds the sync cursor and the next full pull
+    // retries those rows once their parent has arrived.
+    final fkSkipped = <String>{};
     for (final table in restoreList) {
       final data = snapshot[table]!;
       debugPrint('[SyncService] Syncing $table: ${data.length} rows');
-      await _restoreTableData(table, data);
+      await _restoreTableData(table, data, fkSkipped: fkSkipped);
       restoreDone++;
       if (pullStatus.value.stage == PullStage.background) {
         pullStatus.value = pullStatus.value.copyWith(tablesDone: restoreDone);
       }
+    }
+    if (fkSkipped.isNotEmpty) {
+      debugPrint(
+        '[SyncService] Restore skipped orphaned rows in: '
+        '${fkSkipped.join(", ")}. Holding cursor for retry.',
+      );
+      skipped = {...skipped, ...fkSkipped};
     }
     return skipped;
   }
@@ -2319,6 +2344,56 @@ class SupabaseSyncService {
     }).toList();
   }
 
+  /// True if [e] is a SQLite FOREIGN KEY constraint violation (extended
+  /// result code 787 / SQLITE_CONSTRAINT_FOREIGNKEY). Matched by message so
+  /// we don't depend on the concrete `SqliteException` type, which drift
+  /// surfaces differently across executors.
+  static bool _isForeignKeyViolation(Object e) {
+    final s = e.toString().toLowerCase();
+    return s.contains('foreign key constraint failed') ||
+        s.contains('sqlite_constraint_foreignkey') ||
+        s.contains('(787)');
+  }
+
+  /// Inserts one restore row, isolating FOREIGN KEY violations so a single
+  /// orphaned child can't abort the whole restore transaction and crash the
+  /// pull. An FK violation here means the referenced parent slice is
+  /// genuinely absent from THIS snapshot — a supplier/manufacturer/category
+  /// the CEO created inline that this device's pull didn't carry, or a parent
+  /// still pending push. A second in-pull pass wouldn't help: parents restore
+  /// before their children in [_pullOrder], so the parent isn't arriving in
+  /// this pull at all. We skip-and-log the row and record its table in
+  /// [fkSkipped]; the caller (pullChanges) holds the sync cursor so the next
+  /// full pull retries it once the parent has arrived, and SyncIssues surfaces
+  /// it in the "Catching up" card. Non-FK errors rethrow unchanged.
+  /// See CLAUDE.md §5 — restore is sync-exception #1, so no enqueue concerns.
+  Future<void> _insertResilient(
+    String table,
+    Map<String, dynamic> r,
+    Set<String>? fkSkipped,
+    Future<void> Function() doInsert,
+  ) async {
+    try {
+      await doInsert();
+    } catch (e) {
+      if (!_isForeignKeyViolation(e)) rethrow;
+      fkSkipped?.add(table);
+      // Surface the row's FK references (every camelCase key ending in `Id`,
+      // minus the row's own `id`) so triage can see which parent is missing
+      // without re-deriving it from logs. SQLite's FK error doesn't name the
+      // offending column, so this is the closest we get to "which parent".
+      final fkRefs = r.entries
+          .where((e) => e.key != 'id' && e.key.endsWith('Id'))
+          .map((e) => '${e.key}=${e.value}')
+          .join(', ');
+      debugPrint(
+        '[SyncService] Skipped orphaned $table row ${r['id']} during restore '
+        '— a referenced parent is absent locally [$fkRefs]. Cleared cursor; '
+        'the next pull is a full re-pull to fetch the missing parent. $e',
+      );
+    }
+  }
+
   /// Restore rows into an append-only ledger table (`_ledgerTables` in
   /// app_database.dart). Pull is catch-up only: a full upsert would trip the
   /// BEFORE UPDATE trigger because domain RPCs stamp `created_at` server-side,
@@ -2330,23 +2405,37 @@ class SupabaseSyncService {
   Future<void> _restoreLedgerTable<TableT extends Table,
       RowT extends Insertable<RowT>>(
     List<dynamic> rows, {
+    required String tableName,
     required TableInfo<TableT, RowT> table,
     required RowT Function(Map<String, dynamic>) fromJson,
     required DateTime? Function(RowT data) voidedAtOf,
     required Expression<bool> Function(TableT t, RowT data) whereNotYetVoided,
     required UpdateCompanion<RowT> Function(RowT data) buildVoidCompanion,
+    Set<String>? fkSkipped,
   }) async {
     for (var r in rows) {
-      final data = fromJson(r as Map<String, dynamic>);
-      await _db.into(table).insert(data, mode: InsertMode.insertOrIgnore);
-      if (voidedAtOf(data) != null) {
-        await (_db.update(table)..where((t) => whereNotYetVoided(t, data)))
-            .write(buildVoidCompanion(data));
-      }
+      final map = r as Map<String, dynamic>;
+      final data = fromJson(map);
+      // INSERT OR IGNORE absorbs PK/UNIQUE conflicts but NOT foreign-key
+      // violations (SQLite's conflict algorithm never applies to FKs), so a
+      // ledger row referencing an absent parent (e.g. a stock_transaction for
+      // a product whose supplier slice didn't arrive) would still abort the
+      // pull. Wrap it in the same skip-and-log resilience as the upsert path.
+      await _insertResilient(tableName, map, fkSkipped, () async {
+        await _db.into(table).insert(data, mode: InsertMode.insertOrIgnore);
+        if (voidedAtOf(data) != null) {
+          await (_db.update(table)..where((t) => whereNotYetVoided(t, data)))
+              .write(buildVoidCompanion(data));
+        }
+      });
     }
   }
 
-  Future<void> _restoreTableData(String table, List<dynamic> data) async {
+  Future<void> _restoreTableData(
+    String table,
+    List<dynamic> data, {
+    Set<String>? fkSkipped,
+  }) async {
     // `profiles` has no local mirror — the current user's row is upserted by
     // AuthService.upsertLocalUserFromProfile during auth. Bail before the LWW
     // guard tries to read from a table that doesn't exist locally.
@@ -2521,9 +2610,14 @@ class SupabaseSyncService {
           break;
         case 'products':
           for (var r in rows) {
-            await _db
-                .into(_db.products)
-                .insertOnConflictUpdate(ProductData.fromJson(r));
+            await _insertResilient(
+              'products',
+              r,
+              fkSkipped,
+              () => _db
+                  .into(_db.products)
+                  .insertOnConflictUpdate(ProductData.fromJson(r)),
+            );
           }
           break;
         case 'crate_size_groups':
@@ -2549,9 +2643,14 @@ class SupabaseSyncService {
           break;
         case 'inventory':
           for (var r in rows) {
-            await _db
-                .into(_db.inventory)
-                .insertOnConflictUpdate(InventoryData.fromJson(r));
+            await _insertResilient(
+              'inventory',
+              r,
+              fkSkipped,
+              () => _db
+                  .into(_db.inventory)
+                  .insertOnConflictUpdate(InventoryData.fromJson(r)),
+            );
           }
           break;
         case 'customers':
@@ -2570,24 +2669,44 @@ class SupabaseSyncService {
           break;
         case 'orders':
           for (var r in rows) {
-            await _db
-                .into(_db.orders)
-                .insertOnConflictUpdate(OrderData.fromJson(r));
+            // FK-resilient: an order references users(staff_id) /
+            // stores(store_id) / customers(customer_id). If a parent slice
+            // hasn't arrived yet, skip-and-defer instead of aborting the whole
+            // pull (the deferred set forces a full re-pull that catches it up).
+            await _insertResilient(
+              'orders',
+              r,
+              fkSkipped,
+              () => _db
+                  .into(_db.orders)
+                  .insertOnConflictUpdate(OrderData.fromJson(r)),
+            );
           }
           break;
         case 'order_items':
           for (var r in rows) {
             r['priceSnapshot'] = _stringifyJsonb(r['priceSnapshot']);
-            await _db
-                .into(_db.orderItems)
-                .insertOnConflictUpdate(OrderItemData.fromJson(r));
+            await _insertResilient(
+              'order_items',
+              r,
+              fkSkipped,
+              () => _db
+                  .into(_db.orderItems)
+                  .insertOnConflictUpdate(OrderItemData.fromJson(r)),
+            );
           }
           break;
         case 'expenses':
           for (var r in rows) {
-            await _db
-                .into(_db.expenses)
-                .insertOnConflictUpdate(ExpenseData.fromJson(r));
+            // FK-resilient: expenses reference users / stores / categories.
+            await _insertResilient(
+              'expenses',
+              r,
+              fkSkipped,
+              () => _db
+                  .into(_db.expenses)
+                  .insertOnConflictUpdate(ExpenseData.fromJson(r)),
+            );
           }
           break;
         case 'expense_categories':
@@ -2599,14 +2718,22 @@ class SupabaseSyncService {
           break;
         case 'manufacturer_crate_balances':
           for (var r in rows) {
-            await _db
-                .into(_db.manufacturerCrateBalances)
-                .insertOnConflictUpdate(ManufacturerCrateBalance.fromJson(r));
+            // FK-resilient: references manufacturers / crate_size_groups.
+            await _insertResilient(
+              'manufacturer_crate_balances',
+              r,
+              fkSkipped,
+              () => _db
+                  .into(_db.manufacturerCrateBalances)
+                  .insertOnConflictUpdate(ManufacturerCrateBalance.fromJson(r)),
+            );
           }
           break;
         case 'crate_ledger':
           await _restoreLedgerTable(
             rows,
+            tableName: 'crate_ledger',
+            fkSkipped: fkSkipped,
             table: _db.crateLedger,
             fromJson: CrateLedgerData.fromJson,
             voidedAtOf: (d) => d.voidedAt,
@@ -2637,16 +2764,27 @@ class SupabaseSyncService {
           break;
         case 'purchase_items':
           for (var r in rows) {
-            await _db
-                .into(_db.purchaseItems)
-                .insertOnConflictUpdate(PurchaseItemData.fromJson(r));
+            await _insertResilient(
+              'purchase_items',
+              r,
+              fkSkipped,
+              () => _db
+                  .into(_db.purchaseItems)
+                  .insertOnConflictUpdate(PurchaseItemData.fromJson(r)),
+            );
           }
           break;
         case 'customer_crate_balances':
           for (var r in rows) {
-            await _db
-                .into(_db.customerCrateBalances)
-                .insertOnConflictUpdate(CustomerCrateBalance.fromJson(r));
+            // FK-resilient: references customers / crate_size_groups.
+            await _insertResilient(
+              'customer_crate_balances',
+              r,
+              fkSkipped,
+              () => _db
+                  .into(_db.customerCrateBalances)
+                  .insertOnConflictUpdate(CustomerCrateBalance.fromJson(r)),
+            );
           }
           break;
         case 'delivery_receipts':
@@ -2665,14 +2803,21 @@ class SupabaseSyncService {
           break;
         case 'price_lists':
           for (var r in rows) {
-            await _db
-                .into(_db.priceLists)
-                .insertOnConflictUpdate(PriceListData.fromJson(r));
+            await _insertResilient(
+              'price_lists',
+              r,
+              fkSkipped,
+              () => _db
+                  .into(_db.priceLists)
+                  .insertOnConflictUpdate(PriceListData.fromJson(r)),
+            );
           }
           break;
         case 'payment_transactions':
           await _restoreLedgerTable(
             rows,
+            tableName: 'payment_transactions',
+            fkSkipped: fkSkipped,
             table: _db.paymentTransactions,
             fromJson: PaymentTransactionData.fromJson,
             voidedAtOf: (d) => d.voidedAt,
@@ -2688,21 +2833,33 @@ class SupabaseSyncService {
           break;
         case 'stock_transfers':
           for (var r in rows) {
-            await _db
-                .into(_db.stockTransfers)
-                .insertOnConflictUpdate(StockTransferData.fromJson(r));
+            await _insertResilient(
+              'stock_transfers',
+              r,
+              fkSkipped,
+              () => _db
+                  .into(_db.stockTransfers)
+                  .insertOnConflictUpdate(StockTransferData.fromJson(r)),
+            );
           }
           break;
         case 'stock_adjustments':
           for (var r in rows) {
-            await _db
-                .into(_db.stockAdjustments)
-                .insertOnConflictUpdate(StockAdjustmentData.fromJson(r));
+            await _insertResilient(
+              'stock_adjustments',
+              r,
+              fkSkipped,
+              () => _db
+                  .into(_db.stockAdjustments)
+                  .insertOnConflictUpdate(StockAdjustmentData.fromJson(r)),
+            );
           }
           break;
         case 'activity_logs':
           await _restoreLedgerTable(
             rows,
+            tableName: 'activity_logs',
+            fkSkipped: fkSkipped,
             table: _db.activityLogs,
             fromJson: ActivityLogData.fromJson,
             voidedAtOf: (d) => d.voidedAt,
@@ -2761,6 +2918,8 @@ class SupabaseSyncService {
         case 'stock_transactions':
           await _restoreLedgerTable(
             rows,
+            tableName: 'stock_transactions',
+            fkSkipped: fkSkipped,
             table: _db.stockTransactions,
             fromJson: StockTransactionData.fromJson,
             voidedAtOf: (d) => d.voidedAt,
@@ -2776,14 +2935,22 @@ class SupabaseSyncService {
           break;
         case 'customer_wallets':
           for (var r in rows) {
-            await _db
-                .into(_db.customerWallets)
-                .insertOnConflictUpdate(CustomerWalletData.fromJson(r));
+            // FK-resilient: references customers.
+            await _insertResilient(
+              'customer_wallets',
+              r,
+              fkSkipped,
+              () => _db
+                  .into(_db.customerWallets)
+                  .insertOnConflictUpdate(CustomerWalletData.fromJson(r)),
+            );
           }
           break;
         case 'wallet_transactions':
           await _restoreLedgerTable(
             rows,
+            tableName: 'wallet_transactions',
+            fkSkipped: fkSkipped,
             table: _db.walletTransactions,
             fromJson: WalletTransactionData.fromJson,
             voidedAtOf: (d) => d.voidedAt,
@@ -2807,9 +2974,14 @@ class SupabaseSyncService {
           break;
         case 'pending_crate_returns':
           for (var r in rows) {
-            await _db
-                .into(_db.pendingCrateReturns)
-                .insertOnConflictUpdate(PendingCrateReturnData.fromJson(r));
+            await _insertResilient(
+              'pending_crate_returns',
+              r,
+              fkSkipped,
+              () => _db
+                  .into(_db.pendingCrateReturns)
+                  .insertOnConflictUpdate(PendingCrateReturnData.fromJson(r)),
+            );
           }
           break;
         default:

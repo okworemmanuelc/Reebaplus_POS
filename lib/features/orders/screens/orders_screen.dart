@@ -90,7 +90,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
   Future<String?> _resolveBranchName(String? storeId) async {
     if (storeId == null) return null;
     final db = ref.read(databaseProvider);
-    final stores = await db.select(db.stores).get();
+    final stores = await db.storesDao.getActiveStores();
     return stores
         .where((w) => w.id == storeId)
         .map((w) => w.name)

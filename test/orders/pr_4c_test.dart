@@ -71,7 +71,7 @@ Future<_Seed> _seed(
           id: Value(productId),
           businessId: businessId,
           name: 'Test Beer',
-          sellingPriceKobo: Value(productPriceKobo),
+          retailerPriceKobo: Value(productPriceKobo),
         ),
       );
 
@@ -376,7 +376,7 @@ void main() {
       final cartLine = CartLineSnapshot(
         productId: s.productId,
         cartVersion: original.version,
-        cartUnitPriceKobo: original.sellingPriceKobo,
+        cartUnitPriceKobo: original.retailerPriceKobo,
       );
 
       // No drift yet.
@@ -385,7 +385,7 @@ void main() {
 
       // Bump price; the products UPDATE trigger increments version.
       await (db.update(db.products)..where((p) => p.id.equals(s.productId)))
-          .write(const ProductsCompanion(sellingPriceKobo: Value(75000)));
+          .write(const ProductsCompanion(retailerPriceKobo: Value(75000)));
 
       stale = await db.ordersDao.checkCartStaleness([cartLine]);
       expect(stale, hasLength(1));

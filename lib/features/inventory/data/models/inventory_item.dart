@@ -14,12 +14,10 @@ class InventoryItem {
   Map<String, double> storeStock; // storeId -> quantity
   double lowStockThreshold;
 
-  // Pricing fields
-  double? sellingPrice;
+  // Pricing fields (schema v18: buying / retailer / wholesaler — master plan §16.5)
   double? buyingPrice;
-  double? retailPrice;
-  double? bulkBreakerPrice;
-  double? distributorPrice;
+  double? retailerPrice;
+  double? wholesalerPrice;
 
   String? category;
   String? pairedCrateItemId;
@@ -39,11 +37,9 @@ class InventoryItem {
     required this.color,
     this.storeStock = const {},
     this.lowStockThreshold = 5,
-    this.sellingPrice,
     this.buyingPrice,
-    this.retailPrice,
-    this.bulkBreakerPrice,
-    this.distributorPrice,
+    this.retailerPrice,
+    this.wholesalerPrice,
     this.category,
     this.pairedCrateItemId,
     this.imagePath,
@@ -70,11 +66,9 @@ class InventoryItem {
     Color? color,
     Map<String, double>? storeStock,
     double? lowStockThreshold,
-    double? sellingPrice,
     double? buyingPrice,
-    double? retailPrice,
-    double? bulkBreakerPrice,
-    double? distributorPrice,
+    double? retailerPrice,
+    double? wholesalerPrice,
     String? category,
     String? pairedCrateItemId,
     String? imagePath,
@@ -93,11 +87,9 @@ class InventoryItem {
       color: color ?? this.color,
       storeStock: storeStock ?? this.storeStock,
       lowStockThreshold: lowStockThreshold ?? this.lowStockThreshold,
-      sellingPrice: sellingPrice ?? this.sellingPrice,
       buyingPrice: buyingPrice ?? this.buyingPrice,
-      retailPrice: retailPrice ?? this.retailPrice,
-      bulkBreakerPrice: bulkBreakerPrice ?? this.bulkBreakerPrice,
-      distributorPrice: distributorPrice ?? this.distributorPrice,
+      retailerPrice: retailerPrice ?? this.retailerPrice,
+      wholesalerPrice: wholesalerPrice ?? this.wholesalerPrice,
       category: category ?? this.category,
       pairedCrateItemId: pairedCrateItemId ?? this.pairedCrateItemId,
       imagePath: imagePath ?? this.imagePath,

@@ -67,8 +67,8 @@ Keep this section updated at the top so it's easy to see what's done at a glance
 - [x] Staff Management (section 9) *(done in Session 10)*
 - [x] CEO Settings (section 10) *(§10.1 menu + Business Info / Stores / Security / Activity Logs access done in Session 14; §10.2 Roles & Permissions done in Session 15; Appearance added to §10.1 in Session 17; §10.3 is Phase 2)*
 - [x] Home / Dashboard (section 11) *(role-aware cards, subtitle, store lock, Total SKUs — commit 8307314)*
-- [ ] Point of Sale (section 12)
-- [ ] Cart + Edit Quantity modal (section 13)
+- [x] Point of Sale (section 12) *(role guards — Session 19)*
+- [x] Cart + Edit Quantity modal (section 13) *(discount + role caps, fractional toggle, per-cashier saved carts, Undo — Session 20)*
 - [ ] Checkout (section 14)
 - [ ] Receipt (section 15)
 - [ ] Inventory + Product Details (section 16)
@@ -100,6 +100,180 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 
 ---
 
+## Session 23 — 2026-05-30 — Cashier crash fix (Phase 0) + expiry schema (Chunk 2 start)
+
+**Built today:**
+- **Phase 0 — Cashier sync-restore crash fixed.** Logging in as a Cashier could
+  abort the whole sync with "FOREIGN KEY constraint failed" while loading
+  products. Now, if a product (or any row that hangs off a product) arrives
+  before the supplier / manufacturer / category it points to, that single row is
+  quietly set aside and logged instead of crashing the app. The rest of the data
+  still loads; set-aside rows retry automatically on the next full sync and show
+  up in the Sync Issues "Catching up" card meanwhile.
+- **Chunk 2 (started) — product Expiry Date schema.** Products gained one optional
+  expiry date (all business types). Local schema v18 → v19 (one nullable column,
+  no rebuild); cloud `0056_product_expiry.sql` adds the column and threads
+  `p_expiry_date` through `pos_create_product_v2`; the create-product payload
+  builder forwards it. Cloud migration pushed and confirmed applied.
+
+**Files touched:**
+- lib/core/services/supabase_sync_service.dart
+- lib/core/database/app_database.dart, app_database.g.dart
+- lib/core/database/daos.dart
+- supabase/migrations/0056_product_expiry.sql (new)
+- reebaplus_master_plan.md (§16.2/16.4/16.5/16.6 amendments)
+- test/sync/restore_fk_resilience_test.dart (new)
+
+**Database changes:**
+- Local schema v19: `products.expiryDate` (nullable). Cloud 0056: `products.expiry_date timestamptz` + `pos_create_product_v2` gains `p_expiry_date`.
+
+**Master plan sections covered:**
+- Phase 0 is sync-layer robustness (no master-plan section).
+- §16 Inventory: amendments below cover §16.2/16.4/16.5/16.6.
+
+**Plan updates made during session:**
+- Per CLAUDE.md (update the plan before deviating code), amended master plan §16:
+  - §16.2 — stat cards are compact.
+  - §16.4 — Category chips → a dropdown (between Store and Manufacturer); added a header search toggle; list flags near/past-expiry products and can sort by soonest expiry.
+  - §16.5 — Add Product is a full screen (not a modal); added optional Expiry Date (all types); Color selector deferred (keep default `colorHex`, revisit with Boutique/Gadgets).
+  - §16.6 — Product Details shows Expiry Date + near-expiry badge.
+
+**Tested:**
+- Phase 0 unit tests (new): orphaned product skipped (no crash), good products land, the inventory cascade is also skipped, a fully-satisfiable batch flags nothing.
+- `flutter analyze` clean on touched files; sync + database suites pass (118), product-create + migration suites pass (53). `.g.dart` regenerated.
+- Still to verify on-device: two-device scenario (CEO creates a product with a brand-new supplier+manufacturer; Cashier on a second device loads with no crash, missing rows surface in Sync Issues).
+
+**Also built this session (Chunk 2 UI, part 1 — the two product forms):**
+- **Add Product is now a full screen** (`AddProductScreen`), replacing the bottom-sheet. The Inventory FAB and the post-onboarding auto-show now push the screen. Three prices: Retailer + Wholesaler (both required, the new Wholesaler input replaces the "mirrors retailer" stopgap), Buying (required, hidden unless the role has `products.edit_buying_price`). Empty Crate Value (₦) shows only when "Track empty crate returns" is on. Optional Expiry Date picker (all business types). Colour swatch picker removed (products keep the default colour).
+- **Update Product sheet** got the same treatment: editable Wholesaler input, Empty Crate Value, Expiry Date, buying gated by permission, colour picker removed. The Product Details "Update Product" button opens this sheet, so the detail edit surface inherits all of it.
+- `CatalogDao.updateProductDetails` gained an optional `expiryDate` param (sentinel-guarded like the other cosmetic fields).
+
+**Files touched (part 1):**
+- lib/features/inventory/screens/add_product_screen.dart (new; replaces widgets/add_product_sheet.dart, deleted)
+- lib/features/inventory/widgets/update_product_sheet.dart
+- lib/features/inventory/screens/inventory_screen.dart, lib/shared/widgets/main_layout.dart (push the screen instead of a modal)
+- lib/core/database/daos.dart (`updateProductDetails` + `expiryDate`)
+
+**Tested (part 1):** `flutter analyze` clean (0 errors/warnings); full suite 197 passed / 58 skipped / 0 failed.
+
+**Also built this session (Chunk 2 UI, part 2 — Product Details, inventory layout, tab guards):**
+- **Product Details (§16.6) is now role-aware.** `_canEdit` is derived from `products.edit_price` (CEO/Manager) instead of being hardwired true. Buying Price row is hidden unless `products.edit_buying_price`. Expiry Date row + a near-expiry badge (red "Expired" / amber "Expires soon") show when a date is set. Action button by role: CEO/Manager → "Update Product"; **Stock keeper → "Update Stock" modal** (Add/Remove, quantity, reason required on Remove [Damage/Theft/Expired/Other], optional notes → `adjustStock` + History log); Cashier → view-only.
+- **Inventory Products tab (§16.4):** category chip row replaced by a **Category dropdown** between Store and Manufacturer; **compact stat cards** (icon+value on one row, smaller); a **header search toggle** (filters name/subtitle); **near-expiry surfacing** — flagged products (expired / ≤30 days) bubble to the top soonest-first and carry an expiry chip.
+- **Tab + FAB guards (§16.7/§16.10):** Add Product FAB → `products.add`; tabs are now dynamic — Suppliers needs `suppliers.manage`, Empty Crates shows only for Bar / Beer distributor, History shows for CEO/Manager/Stock keeper and is hidden from Cashier (gated by role slug, as decided). The TabController rebuilds when the visible set resolves.
+
+**Files touched (part 2):**
+- lib/features/inventory/screens/product_detail_screen.dart
+- lib/features/inventory/screens/inventory_screen.dart
+
+**Tested (part 2):** `flutter analyze` clean (0 errors/warnings); full suite 197 passed / 58 skipped / 0 failed. Chunk 2 (the §16 Inventory restructure) is now feature-complete in code.
+
+**Follow-up fix (dynamic tabs):** the dynamic tab set recreated the `TabController`, which crashed under `SingleTickerProviderStateMixin` (it permanently records its one ticker, so a second controller throws). Switched to `TickerProviderStateMixin`, and `_syncTabController` now rebuilds the controller only when the tab *count* changes, disposing the old one first. Also gated the tab UI behind a "gating data resolved" check so the tab bar reveals its final set in one shot (no staged tab pop-in) — i.e. the screen loads statically like the others. (Note: searched the inventory files for fade-in/stagger/entrance animations — there are none; the only `animate` call is the tab-switch `animateTo`.)
+
+**Known issues / left open:**
+- On-device verification still pending (the user will do a manual pass at the end): Phase 0 two-device crash check; the new Add Product full screen + Update sheet (3 prices, empty-crate value, expiry, no colour, buying hidden for Stock keeper/Cashier); Product Details role behavior incl. the Stock keeper Update Stock modal; inventory category dropdown / compact cards / search / near-expiry; and the tab guards across the four roles + business types.
+- History tab store-scoping (Manager/Stock keeper "own store") relies on the existing store filter passed to `InventoryHistoryTab`; only tab *visibility* was gated this session.
+
+---
+
+## Session 22 — 2026-05-30 — Product price-column migration (pivot step 14, Chunk 1) — IN PROGRESS
+
+**Built today:**
+- (In progress — Chunk 1 of the Inventory work: the behind-the-scenes price-storage change.)
+- Plan-change ritual done first (see Plan updates below).
+
+**Plan updates made during session:**
+- **Decision Q4 revised — salvage-map instead of wipe.** Original plan said drop the four legacy price columns with NO data migration (re-enter prices by hand). User re-confirmed at the hard checkpoint to instead carry the data over: `retailPriceKobo → retailerPriceKobo`, `coalesce(distributorPriceKobo, retailPriceKobo) → wholesalerPriceKobo`; `sellingPriceKobo` + `bulkBreakerPriceKobo` dropped (no equivalent); `buyingPriceKobo` stays. Updated PIVOT_PLAN §1.3 products block + §8 step 14.
+- **§16.5 Add Product form gains an "Empty Crate Value (₦)" field**, shown only when "Track empty crate returns" is on, saved to the existing `products.emptyCrateValueKobo` column (column + DAO param already exist; UI-only gap). Updated master plan §16.5. Wired in Chunk 2 (step 15).
+- Corrected the step-14 schema version label in PIVOT_PLAN from the stale "v15" to **v18** (local schema is currently v17).
+
+**Next session should:**
+- Finish Chunk 1: local schema v18 (drop 4 legacy price cols, add retailer/wholesaler + nullable barcode, TableMigration salvage-map), regenerate `.g.dart`, cloud migration 0055 (+ rewrite `pos_create_product_v2`), rewire ~20 price-column call sites, `flutter analyze`/`test`. Then checkpoint before Chunk 2 (the §16 Inventory UI).
+
+---
+
+## Session 21 — 2026-05-30 — Re-sequence: Inventory + price migration ahead of the sales flow (docs only)
+
+**Built today:**
+- No code. Re-ordered the build plan so all product/pricing work is finished before the remaining POS/sales flow.
+- The destructive product price-column migration (drop the four legacy price columns, add buying / retailer / wholesaler) was already scheduled early as pivot step 14, but the Inventory rebuild — where the user re-enters prices after that migration — sat all the way down at step 20. That left step 14's own checkpoint ("re-enter prices in Inventory") with nowhere to actually do it. Inventory now moves up to step 15, directly behind the price migration.
+
+**Files touched:**
+- reebaplus_master_plan.md (§3 Build Order — split the combined "Cart and Checkout" bullet; Inventory now listed above Checkout)
+- PIVOT_PLAN.md (§8 — Inventory restructure moved from step 20 to step 15; old steps 15–19 shifted down one to 16–20; cross-references re-pointed)
+- BUILD_LOG.md (this entry + two "pivot step 16" → "step 17" reference fixes in Sessions 19/20)
+
+**Database changes:**
+- None.
+
+**Master plan sections covered:**
+- §3 Build Order (re-sequenced). No feature sections built.
+
+**Plan updates made during session:**
+- The re-sequence itself. Old → new pivot-step mapping (steps 1–14 and 21–34 unchanged):
+  - Inventory restructure: 20 → **15**
+  - Schema v16 Funds Register tables: 15 → 16
+  - Funds Register screens (Open Day, etc.): 16 → 17
+  - Checkout two-step payment UI: 17 → 18
+  - Wire every money path: 18 → 19
+  - Receipt rebuild: 19 → 20
+- Re-pointed the affected cross-references: PIVOT_PLAN §8 step-12 status note (Open Day "step 16" → 17); the two money-path references that cited "step 17" while describing the wire-every-path session (→ step 19); and the two Sessions 19/20 "pivot step 16" Open-Day references (→ step 17).
+
+**Tested:**
+- Re-read both plan docs top to bottom: PIVOT_PLAN §8 numbers run 1..34 with no gaps/dupes; Inventory (15) sits right after the price drop (14); master plan §3 shows Inventory above Checkout.
+
+**Known issues / left open:**
+- When pivot steps 14–15 are actually built, the destructive price migration removes the `sellingPriceKobo` / `retailPriceKobo` columns that the already-shipped POS (§12) and Cart (§13) code reads — those call sites will need a follow-up pass at that time.
+- Pre-existing: Session 19's "pivot step 40" barcode reference is stale (barcode is step 30); left untouched, outside this re-sequence's scope.
+
+**Next session should:**
+- Begin pivot step 14 — the destructive Schema v15 price-column drop (HARD CHECKPOINT: re-confirm with user before running), then step 15 Inventory restructure.
+
+---
+
+## Session 20 — 2026-05-30 — Cart: discounts, fractional sales, per-cashier saved carts (§13, pivot step 13)
+
+**Built today:**
+The Cart screen already existed; this session added the §13 behaviours that were missing.
+- **Per-item discounts in the Edit Quantity modal.** Tap a cart item → there's now an "Apply Discount" section with a % / ₦ toggle (% by default) and a live "Saving ₦X — new line total: ₦Y" readout. It respects each role's limit: a Cashier (0%) sees "Discounts not allowed at your role. Ask Manager." and can't type a discount; a Manager who goes over their cap is snapped back to the max with "Maximum discount is X%. Capped."; a CEO has no limit. The cap is read from the same per-role setting CEO Settings already saves.
+- **Discount shows on the cart line** — the old price with a strikethrough, the new price, a small "−10%" / "−₦500" badge, and a green "Saved: ₦X" line under the subtotal.
+- **Discounts reach the recorded sale.** The total a customer pays already had the discount taken off; now the sale itself stores the discount amount so the books are right. No server change was needed — the sale RPC already accepted a discount; we just started sending it.
+- **"Allow fractional sales" toggle on products.** New checkbox on the add/edit product sheets. The ±0.5 quantity chips in the Edit modal now only appear for products that have it switched on (before, they always showed).
+- **Saved carts are now private to each cashier and expire after 24 hours.** You only see carts you saved, and stale ones are cleared automatically when you open the Recall list.
+- **Undo on remove.** Removing an item shows a 5-second "Item removed. Undo" banner at the top; tapping Undo puts it back exactly as it was.
+
+**Files touched:**
+- lib/features/pos/widgets/edit_item_modal.dart (discount section, role caps, fractional-gated chips, return removed item)
+- lib/shared/services/cart_service.dart (per-line discount fields + setLineDiscount + discountTotalKobo + restoreLine)
+- lib/features/pos/screens/cart_screen.dart (line strikethrough/badge, Saved row, discount in total, per-cashier recall, Undo)
+- lib/shared/services/order_service.dart + checkout_page.dart (forward discount to the sale)
+- lib/features/inventory/widgets/add_product_sheet.dart, update_product_sheet.dart (fractional toggle)
+- lib/core/providers/stream_providers.dart (currentUserMaxDiscountPercentProvider)
+- lib/core/utils/notifications.dart (optional action + custom duration on the top notification)
+- lib/core/database/app_database.dart + daos.dart (schema v17, saved-cart filtering/expiry, product create/update wiring)
+
+**Database changes:**
+- Local schema bumped v16 → v17: `products.allow_fractional_sales`, `saved_carts.cashier_id`, `saved_carts.expires_at` (all nullable/defaulted so existing rows survive). Migration block added.
+- Server migration `supabase/migrations/0054_cart_step13.sql` adds the same three columns and threads `p_allow_fractional_sales` through the `pos_create_product_v2` RPC (parity with `track_empties`).
+- **NOT YET PUSHED.** Run `supabase db push` before relying on cross-device sync of these columns — the emulator works locally without it.
+
+**Master plan sections covered:**
+- §13.2 Edit Quantity modal (discount + role caps + fractional chips), §13.3 discount display, §13.5 per-cashier + 24h saved carts. §16.5 fractional-sales product toggle.
+
+**Decisions:**
+- Per-line discount is recorded at the **order level** (summed into `orders.discount_kobo` / `net_amount_kobo`), not per line item — the server RPC has no per-item discount field and this needed no server change. Receipts/reports show the total saved, not which line.
+- Note: `order_service.addOrder` keeps `netAmountKobo = totalAmountKobo` (the payable is already net of discount) — we do **not** re-subtract the discount locally, only forward it so the server records it. Re-subtracting would double-count.
+
+**Tested:**
+- `flutter analyze` — clean across all touched files (only pre-existing print infos in a test report remain).
+- Full suite (excl. integration): 191 passing. Added 3 saved-cart tests (24h stamp + payload, per-cashier/unexpired filter, deleteExpiredCarts) — all green.
+
+**Known issues / left open:**
+- Manual emulator walk-through still to do: Cashier blocked / Manager cap snap / CEO unlimited; fractional chips on a fractional product; saved-cart privacy + expiry; Undo; a discounted sale's totals after sync.
+- Server migration 0054 not pushed yet (see Database changes).
+- Block-POS-until-Open-Day (hard rule #10) still pending the Funds Register Open Day feature (pivot step 17).
+
+---
+
 ## Session 19 — 2026-05-30 — Point of Sale, guarded by role (§12, pivot step 12)
 
 **Built today:**
@@ -128,7 +302,7 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 
 **Known issues / left open:**
 - Barcode scan for Pharmacy/Supermarket (§12.6) — deferred to pivot step 40 (needs a camera package).
-- Block-POS-until-Open-Day (hard rule #10 / §12) — depends on the Funds Register Open Day feature, which doesn't exist yet (pivot step 16).
+- Block-POS-until-Open-Day (hard rule #10 / §12) — depends on the Funds Register Open Day feature, which doesn't exist yet (pivot step 17).
 - Role-based discount caps — they live in the Cart screen, pivot step 13.
 - The realtime inbound-sync bug (flagged 2026-05-30, §2.6 / pivot §7) was parked until POS landed — now eligible to fix.
 

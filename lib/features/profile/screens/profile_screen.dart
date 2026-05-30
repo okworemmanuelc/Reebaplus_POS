@@ -47,7 +47,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       final db = ref.read(databaseProvider);
 
       // Load stores once
-      db.select(db.stores).get().then((list) {
+      db.storesDao.getActiveStores().then((list) {
         if (mounted) setState(() => _stores = list);
       });
 

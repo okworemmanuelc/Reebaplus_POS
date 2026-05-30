@@ -91,7 +91,7 @@ class _ReceiveDeliverySheetState extends ConsumerState<ReceiveDeliverySheet> {
 
   Future<void> _loadStores() async {
     final db = ref.read(databaseProvider);
-    final whs = await db.select(db.stores).get();
+    final whs = await db.storesDao.getActiveStores();
     if (mounted) {
       setState(() {
         _stores = whs;
@@ -281,7 +281,7 @@ class _ReceiveDeliverySheetState extends ConsumerState<ReceiveDeliverySheet> {
             line.selectedProduct = selection;
             line.productCtrl.text = selection.name;
             line.selectedCategory = 'Other';
-            line.retailPriceCtrl.text = (selection.retailPriceKobo / 100)
+            line.retailPriceCtrl.text = (selection.retailerPriceKobo / 100)
                 .round()
                 .toString();
             // Pre-fill trackEmpties from the product's saved setting.

@@ -32,7 +32,7 @@ Future<({String storeId, String staffId, String productId})>
           id: Value(productId),
           businessId: businessId,
           name: 'Test Beer',
-          sellingPriceKobo: const Value(100000),
+          retailerPriceKobo: const Value(100000),
         ),
       );
   await db.into(db.inventory).insert(

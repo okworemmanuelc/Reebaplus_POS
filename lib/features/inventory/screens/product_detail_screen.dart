@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import 'package:reebaplus_pos/shared/widgets/auto_lock_wrapper.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
@@ -50,8 +51,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   late TextEditingController _quantityController;
   late TextEditingController _buyingPriceController;
   late TextEditingController _retailPriceController;
-  late TextEditingController _bulkBreakerPriceController;
-  late TextEditingController _distributorPriceController;
+  late TextEditingController _wholesalerPriceController;
   late TextEditingController _monthlyTargetController;
   late TextEditingController _emptyCratesController;
   late TextEditingController _emptyCrateValueController;
@@ -71,9 +71,21 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   LastShipmentInfo? _lastDelivery;
   bool _deliveryLoaded = false;
   bool _contentReady = false; // deferred load flag
-  bool _canEdit =
-      true; // false for managers viewing other-store products, and for staff
   String? _imagePath;
+
+  // ── Role gating (master plan §16.6 / §16.7) ────────────────────────────────
+  // Full edit (inline fields, "Update Product", delete) is CEO + Manager via
+  // `products.edit_price`. Buying price visibility is `products.edit_buying_price`
+  // (also CEO + Manager). Stock keeper can only adjust quantities via the
+  // "Update Stock" modal (`stock.adjust`). Cashier has none → view-only.
+  // Read (not watch) so these getters are safe to call from non-build handlers.
+  bool get _canEdit =>
+      ref.read(currentUserPermissionsProvider).contains('products.edit_price');
+  bool get _canEditBuying => ref
+      .read(currentUserPermissionsProvider)
+      .contains('products.edit_buying_price');
+  bool get _canAdjustStock =>
+      ref.read(currentUserPermissionsProvider).contains('stock.adjust');
 
   @override
   void initState() {
@@ -89,13 +101,10 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       text: fmtNumber(widget.item.buyingPrice ?? 0),
     );
     _retailPriceController = TextEditingController(
-      text: fmtNumber(widget.item.retailPrice ?? 0),
+      text: fmtNumber(widget.item.retailerPrice ?? 0),
     );
-    _bulkBreakerPriceController = TextEditingController(
-      text: fmtNumber(widget.item.bulkBreakerPrice ?? 0),
-    );
-    _distributorPriceController = TextEditingController(
-      text: fmtNumber(widget.item.distributorPrice ?? 0),
+    _wholesalerPriceController = TextEditingController(
+      text: fmtNumber(widget.item.wholesalerPrice ?? 0),
     );
     _monthlyTargetController = TextEditingController(text: '0');
     _emptyCratesController = TextEditingController(text: '0');
@@ -120,13 +129,11 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       return;
     }
 
-    // Lone owner: always editable.
     final db = ref.read(databaseProvider);
-    if (mounted) setState(() => _canEdit = true);
 
     // Load monthly target, categories, manufacturers from DB
     final product = await db.catalogDao.findById(productId);
-    final categories = await db.select(db.categories).get();
+    final categories = await db.inventoryDao.getAllCategories();
     final manufacturers = await db.inventoryDao.getAllManufacturers();
     final uniqueUnits = await db.catalogDao.getUniqueProductUnits();
 
@@ -204,8 +211,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     _quantityController.dispose();
     _buyingPriceController.dispose();
     _retailPriceController.dispose();
-    _bulkBreakerPriceController.dispose();
-    _distributorPriceController.dispose();
+    _wholesalerPriceController.dispose();
     _monthlyTargetController.dispose();
     _emptyCratesController.dispose();
     _emptyCrateValueController.dispose();
@@ -224,6 +230,10 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Subscribe to permission changes so the role-gated UI (buying row,
+    // action button) rebuilds when the role + its grants resolve locally.
+    // The `_canEdit` family of getters read the same provider.
+    ref.watch(currentUserPermissionsProvider);
     // Show shimmer skeleton while DB data loads (_contentReady becomes true
     // at the end of _loadProductData once all queries complete).
     if (!_contentReady) {
@@ -661,6 +671,18 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
               sizeLabel,
               const Color(0xFF8B5CF6),
             ),
+            // ── Expiry Date (if set) + near-expiry badge (§16.6) ───────
+            if (_productData?.expiryDate != null) ...[
+              _divider(context),
+              _infoRow(
+                context,
+                FontAwesomeIcons.calendarXmark,
+                'Expiry Date',
+                _formatDate(_productData!.expiryDate!),
+                const Color(0xFFF59E0B),
+                trailing: _expiryBadge(context, _productData!.expiryDate!),
+              ),
+            ],
           ]),
 
           SizedBox(height: context.getRSize(24)),
@@ -669,19 +691,23 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
           _sectionTitle(context, 'Pricing'),
           SizedBox(height: context.getRSize(12)),
           _infoCard(context, [
-            _infoRow(
-              context,
-              FontAwesomeIcons.dollarSign,
-              'Buying Price',
-              '',
-              const Color(0xFFF59E0B),
-              trailing: _inlinePriceInput(_buyingPriceController),
-            ),
-            _divider(context),
+            // Buying price is hidden from roles without `products.edit_buying_price`
+            // (Cashier, Stock keeper) — master plan §16.6 / §16.7.
+            if (_canEditBuying) ...[
+              _infoRow(
+                context,
+                FontAwesomeIcons.dollarSign,
+                'Buying Price',
+                '',
+                const Color(0xFFF59E0B),
+                trailing: _inlinePriceInput(_buyingPriceController),
+              ),
+              _divider(context),
+            ],
             _infoRow(
               context,
               FontAwesomeIcons.tag,
-              'Retail Price',
+              'Retailer Price',
               '',
               Theme.of(context).colorScheme.primary,
               trailing: _inlinePriceInput(_retailPriceController),
@@ -690,19 +716,10 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             _infoRow(
               context,
               FontAwesomeIcons.users,
-              'Bulk Breaker Price',
+              'Wholesaler Price',
               '',
               const Color(0xFF8B5CF6),
-              trailing: _inlinePriceInput(_bulkBreakerPriceController),
-            ),
-            _divider(context),
-            _infoRow(
-              context,
-              FontAwesomeIcons.truck,
-              'Distributor Price',
-              '',
-              const Color(0xFFEC4899),
-              trailing: _inlinePriceInput(_distributorPriceController),
+              trailing: _inlinePriceInput(_wholesalerPriceController),
             ),
             _divider(context),
             _infoRow(
@@ -737,7 +754,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
 
           SizedBox(height: context.getRSize(32)),
           if (_canEdit) ...[
-            // ── Action Button ─────────────────────────────────────────
+            // ── CEO / Manager: full edit ──────────────────────────────
             AppButton(
               text: 'Update Product',
               variant: AppButtonVariant.primary,
@@ -758,6 +775,15 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                         },
                       ),
                     ),
+            ),
+          ] else if (_canAdjustStock) ...[
+            // ── Stock keeper: quantity adjustments only (§16.6) ───────
+            AppButton(
+              text: 'Update Stock',
+              variant: AppButtonVariant.primary,
+              icon: FontAwesomeIcons.boxesStacked,
+              onPressed:
+                  _productData == null ? null : () => _showUpdateStockModal(),
             ),
           ] else ...[
             // ── Read-only notice ──────────────────────────────────────
@@ -1231,13 +1257,10 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
               manufacturerId: _selectedManufacturerId,
               buyingPriceKobo:
                   ((parseCurrency(_buyingPriceController.text)) * 100).round(),
-              retailPriceKobo:
+              retailerPriceKobo:
                   ((parseCurrency(_retailPriceController.text)) * 100).round(),
-              bulkBreakerPriceKobo:
-                  ((parseCurrency(_bulkBreakerPriceController.text)) * 100)
-                      .round(),
-              distributorPriceKobo:
-                  ((parseCurrency(_distributorPriceController.text)) * 100)
+              wholesalerPriceKobo:
+                  ((parseCurrency(_wholesalerPriceController.text)) * 100)
                       .round(),
               emptyCrateValueKobo:
                   (parseCurrency(_emptyCrateValueController.text) * 100)
@@ -1258,6 +1281,304 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         AppNotification.showError(context, 'Failed to pick image: $e');
       }
     }
+  }
+
+  String _formatDate(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}/'
+      '${d.month.toString().padLeft(2, '0')}/${d.year}';
+
+  /// Near-expiry badge (§16.6): red "Expired" once past, amber "Expires soon"
+  /// within 30 days, otherwise nothing (the date row alone is enough).
+  Widget? _expiryBadge(BuildContext context, DateTime expiry) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final days = DateTime(expiry.year, expiry.month, expiry.day)
+        .difference(today)
+        .inDays;
+    String label;
+    Color color;
+    if (days < 0) {
+      label = 'Expired';
+      color = danger;
+    } else if (days <= 30) {
+      label = days == 0 ? 'Expires today' : 'Expires soon';
+      color = const Color(0xFFF59E0B);
+    } else {
+      return null;
+    }
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: context.getRSize(10),
+        vertical: context.getRSize(4),
+      ),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: context.getRFontSize(11),
+          fontWeight: FontWeight.w700,
+          color: color,
+        ),
+      ),
+    );
+  }
+
+  /// Stock keeper "Update Stock" modal (master plan §16.6): add / remove a
+  /// quantity against a store, with a required reason on removal, optional
+  /// notes. Writes through `adjustStock` (so the cloud delta envelope is
+  /// enqueued) and logs to History.
+  Future<void> _showUpdateStockModal() async {
+    final product = _productData;
+    if (product == null) return;
+    final db = ref.read(databaseProvider);
+    final stores = await db.storesDao.getActiveStores();
+    if (!mounted) return;
+    if (stores.isEmpty) {
+      AppNotification.showError(context, 'No store to adjust stock against.');
+      return;
+    }
+
+    final qtyCtrl = TextEditingController();
+    final notesCtrl = TextEditingController();
+    var isRemove = false;
+    const reasons = ['Damage', 'Theft', 'Expired', 'Other'];
+    String? reason;
+    StoreData selectedStore = stores.cast<StoreData?>().firstWhere(
+          (s) => s?.id == widget.selectedStoreId,
+          orElse: () => stores.first,
+        )!;
+    var saving = false;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) {
+        return StatefulBuilder(
+          builder: (sheetCtx, setSheet) {
+            Future<void> doSave() async {
+              final qty = int.tryParse(qtyCtrl.text.trim()) ?? 0;
+              if (qty <= 0) {
+                AppNotification.showError(
+                  sheetCtx,
+                  'Quantity must be greater than 0.',
+                );
+                return;
+              }
+              if (isRemove && reason == null) {
+                AppNotification.showError(
+                  sheetCtx,
+                  'A reason is required when removing stock.',
+                );
+                return;
+              }
+              setSheet(() => saving = true);
+              final auth = ref.read(authProvider);
+              final actorName = auth.currentUser?.name ?? 'Unknown';
+              final notes = notesCtrl.text.trim();
+              final delta = isRemove ? -qty : qty;
+              final note = isRemove
+                  ? '${reason!}${notes.isEmpty ? '' : ': $notes'}'
+                  : (notes.isEmpty ? 'Stock added by $actorName' : notes);
+              try {
+                await db.inventoryDao.adjustStock(
+                  product.id,
+                  selectedStore.id,
+                  delta,
+                  note,
+                  auth.currentUser?.id,
+                );
+                await ref.read(activityLogProvider).logAction(
+                      'stock_adjustment',
+                      '$actorName ${isRemove ? 'removed' : 'added'} $qty '
+                          '${product.unit}(s) of ${product.name} '
+                          '(${selectedStore.name})'
+                          '${isRemove ? ' — ${reason!}' : ''}',
+                      productId: product.id,
+                      storeId: selectedStore.id,
+                    );
+                if (sheetCtx.mounted) Navigator.pop(sheetCtx);
+                widget.onUpdateStock();
+              } catch (e) {
+                debugPrint('UpdateStock modal save error: $e');
+                if (sheetCtx.mounted) {
+                  AppNotification.showError(
+                    sheetCtx,
+                    'Could not update stock: $e',
+                  );
+                }
+                setSheet(() => saving = false);
+              }
+            }
+
+            Widget modeChip(String label, bool removeMode) {
+              final selected = isRemove == removeMode;
+              final color = removeMode ? danger : success;
+              return Expanded(
+                child: GestureDetector(
+                  onTap: () => setSheet(() {
+                    isRemove = removeMode;
+                    if (!removeMode) reason = null;
+                  }),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? color.withValues(alpha: 0.15)
+                          : _surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: selected ? color : _border,
+                        width: selected ? 1.5 : 1,
+                      ),
+                    ),
+                    child: Center(
+                      child: Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: selected ? color : _subtext,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(sheetCtx).viewInsets.bottom,
+              ),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: _bg,
+                  borderRadius:
+                      const BorderRadius.vertical(top: Radius.circular(28)),
+                ),
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: _border,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Update Stock',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: _text,
+                      ),
+                    ),
+                    Text(
+                      product.name,
+                      style: TextStyle(fontSize: 13, color: _subtext),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        modeChip('Add stock', false),
+                        const SizedBox(width: 10),
+                        modeChip('Remove stock', true),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    if (stores.length > 1) ...[
+                      Text(
+                        'STORE',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: _subtext,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      AppDropdown<StoreData>(
+                        value: selectedStore,
+                        items: stores
+                            .map(
+                              (s) => DropdownMenuItem(
+                                value: s,
+                                child: Text(
+                                  s.name,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (v) =>
+                            setSheet(() => selectedStore = v ?? selectedStore),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
+                    AppInput(
+                      controller: qtyCtrl,
+                      labelText: 'Quantity *',
+                      hintText: '0',
+                      keyboardType: TextInputType.number,
+                    ),
+                    if (isRemove) ...[
+                      const SizedBox(height: 14),
+                      Text(
+                        'REASON *',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: _subtext,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      AppDropdown<String?>(
+                        value: reason,
+                        hintText: 'Select a reason',
+                        items: reasons
+                            .map(
+                              (r) =>
+                                  DropdownMenuItem(value: r, child: Text(r)),
+                            )
+                            .toList(),
+                        onChanged: (v) => setSheet(() => reason = v),
+                      ),
+                    ],
+                    const SizedBox(height: 14),
+                    AppInput(
+                      controller: notesCtrl,
+                      labelText: 'Notes (optional)',
+                      hintText: 'Any extra detail…',
+                    ),
+                    const SizedBox(height: 20),
+                    AppButton(
+                      text: isRemove ? 'Remove Stock' : 'Add Stock',
+                      variant: AppButtonVariant.primary,
+                      isLoading: saving,
+                      onPressed: doSave,
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+    qtyCtrl.dispose();
+    notesCtrl.dispose();
   }
 
   Widget _inlinePriceInput(TextEditingController controller) {

@@ -129,18 +129,12 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
             'p_subtitle': productJson['subtitle'],
           if (productJson.containsKey('sku')) 'p_sku': productJson['sku'],
           if (productJson.containsKey('size')) 'p_size': productJson['size'],
-          if (productJson.containsKey('retail_price_kobo'))
-            'p_retail_price_kobo': productJson['retail_price_kobo'],
-          if (productJson.containsKey('selling_price_kobo'))
-            'p_selling_price_kobo': productJson['selling_price_kobo'],
+          if (productJson.containsKey('retailer_price_kobo'))
+            'p_retailer_price_kobo': productJson['retailer_price_kobo'],
+          if (productJson.containsKey('wholesaler_price_kobo'))
+            'p_wholesaler_price_kobo': productJson['wholesaler_price_kobo'],
           if (productJson.containsKey('buying_price_kobo'))
             'p_buying_price_kobo': productJson['buying_price_kobo'],
-          if (productJson.containsKey('bulk_breaker_price_kobo'))
-            'p_bulk_breaker_price_kobo':
-                productJson['bulk_breaker_price_kobo'],
-          if (productJson.containsKey('distributor_price_kobo'))
-            'p_distributor_price_kobo':
-                productJson['distributor_price_kobo'],
           if (productJson.containsKey('category_id'))
             'p_category_id': productJson['category_id'],
           if (productJson.containsKey('crate_size_group_id'))
@@ -153,8 +147,13 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
             'p_low_stock_threshold': productJson['low_stock_threshold'],
           if (productJson.containsKey('track_empties'))
             'p_track_empties': productJson['track_empties'],
+          if (productJson.containsKey('allow_fractional_sales'))
+            'p_allow_fractional_sales':
+                productJson['allow_fractional_sales'],
           if (productJson.containsKey('image_path'))
             'p_image_path': productJson['image_path'],
+          if (productJson.containsKey('expiry_date'))
+            'p_expiry_date': productJson['expiry_date'],
           if (hasInitialStock)
             'p_initial_stock': <String, dynamic>{
               'store_id': storeId,
@@ -272,15 +271,23 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
   }
 
   Future<void> softDeleteProduct(String productId) async {
+    // Soft-delete: flip is_deleted and push it as an UPSERT, never a hard
+    // tombstone. A `products:delete` makes the cloud run `DELETE FROM products`,
+    // which violates `inventory_product_id_fkey` (inventory rows still
+    // reference the product) and the delete sticks in the queue retrying
+    // forever. Per CLAUDE.md §5 + hard rule #9, soft-deletes go through
+    // enqueueUpsert. The companion carries id + business_id so the cloud's
+    // partial upsert updates is_deleted on the existing row.
+    final comp = ProductsCompanion(
+      id: Value(productId),
+      businessId: Value(requireBusinessId()),
+      isDeleted: const Value(true),
+      lastUpdatedAt: Value(DateTime.now()),
+    );
     await (update(
       products,
-    )..where((t) => t.id.equals(productId) & whereBusiness(t))).write(
-      ProductsCompanion(
-        isDeleted: const Value(true),
-        lastUpdatedAt: Value(DateTime.now()),
-      ),
-    );
-    await db.syncDao.enqueueDelete('products', productId);
+    )..where((t) => t.id.equals(productId) & whereBusiness(t))).write(comp);
+    await db.syncDao.enqueueUpsert('products', comp);
   }
 
   Future<void> updateProductDetails(
@@ -288,13 +295,13 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
     required String name,
     String? manufacturerId,
     required int buyingPriceKobo,
-    required int retailPriceKobo,
-    int? bulkBreakerPriceKobo,
-    int? distributorPriceKobo,
+    required int retailerPriceKobo,
+    required int wholesalerPriceKobo,
     int? emptyCrateValueKobo,
     String? categoryId,
     String? unit,
     bool? trackEmpties,
+    bool? allowFractionalSales,
     int? lowStockThreshold,
     String? imagePath,
     // Optional cosmetic / metadata fields. Wrapped with present-check
@@ -305,6 +312,7 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
     Object? colorHex = _unset,
     Object? supplierId = _unset,
     Object? size = _unset,
+    Object? expiryDate = _unset,
   }) async {
     final now = DateTime.now();
     final comp = ProductsCompanion(
@@ -312,9 +320,8 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
       name: Value(name),
       manufacturerId: Value(manufacturerId),
       buyingPriceKobo: Value(buyingPriceKobo),
-      retailPriceKobo: Value(retailPriceKobo),
-      bulkBreakerPriceKobo: Value(bulkBreakerPriceKobo),
-      distributorPriceKobo: Value(distributorPriceKobo),
+      retailerPriceKobo: Value(retailerPriceKobo),
+      wholesalerPriceKobo: Value(wholesalerPriceKobo),
       emptyCrateValueKobo: emptyCrateValueKobo == null
           ? const Value.absent()
           : Value(emptyCrateValueKobo),
@@ -323,6 +330,9 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
       trackEmpties: trackEmpties == null
           ? const Value.absent()
           : Value(trackEmpties),
+      allowFractionalSales: allowFractionalSales == null
+          ? const Value.absent()
+          : Value(allowFractionalSales),
       lowStockThreshold: lowStockThreshold == null
           ? const Value.absent()
           : Value(lowStockThreshold),
@@ -339,6 +349,9 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
       size: identical(size, _unset)
           ? const Value.absent()
           : Value(size as String?),
+      expiryDate: identical(expiryDate, _unset)
+          ? const Value.absent()
+          : Value(expiryDate as DateTime?),
       lastUpdatedAt: Value(now),
     );
     await (update(
@@ -371,9 +384,9 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
   int getPriceForTier(ProductData product, String group) {
     switch (group) {
       case 'wholesaler':
-        return product.distributorPriceKobo ?? product.retailPriceKobo;
+        return product.wholesalerPriceKobo;
       default:
-        return product.retailPriceKobo;
+        return product.retailerPriceKobo;
     }
   }
 
@@ -699,6 +712,16 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
           ..where((t) => whereBusiness(t) & t.isDeleted.not())
           ..orderBy([(t) => OrderingTerm(expression: t.name)]))
         .watch();
+  }
+
+  /// One-shot business-scoped category list. Use for category pickers that
+  /// read once so a multi-business device can't surface — and FK-reference —
+  /// another business's category.
+  Future<List<CategoryData>> getAllCategories() {
+    return (select(categories)
+          ..where((t) => whereBusiness(t) & t.isDeleted.not())
+          ..orderBy([(t) => OrderingTerm(expression: t.name)]))
+        .get();
   }
 
   Stream<List<CrateSizeGroupData>> watchAllCrateSizeGroups() {
@@ -1482,9 +1505,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     for (final line in lines) {
       final p = byId[line.productId];
       if (p == null) continue; // product gone; UI handles separately
-      final currentPriceKobo = p.sellingPriceKobo > 0
-          ? p.sellingPriceKobo
-          : p.retailPriceKobo;
+      final currentPriceKobo = p.retailerPriceKobo;
       if (p.version != line.cartVersion ||
           currentPriceKobo != line.cartUnitPriceKobo) {
         stale.add(
@@ -1504,16 +1525,32 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
 
   // ── Saved Carts ────────────────────────────────────────────────────────────
 
-  Stream<List<SavedCartData>> watchSavedCarts() {
+  /// Saved carts visible to [cashierId] (§13.5): only that cashier's own,
+  /// and only those not yet expired (24h TTL). Legacy rows with a null
+  /// [cashierId]/expiresAt are treated as un-scoped, un-expiring so pre-v17
+  /// saved carts remain recallable.
+  Stream<List<SavedCartData>> watchSavedCarts(String? cashierId) {
+    final cutoff = DateTime.now();
     return (select(savedCarts)
-          ..where((c) => whereBusiness(c))
+          ..where(
+            (c) =>
+                whereBusiness(c) &
+                (c.cashierId.isNull() | c.cashierId.equals(cashierId ?? '')) &
+                (c.expiresAt.isNull() | c.expiresAt.isBiggerThanValue(cutoff)),
+          )
           ..orderBy([(c) => OrderingTerm.desc(c.createdAt)]))
         .watch();
   }
 
   Future<String> saveCart(SavedCartsCompanion companion) async {
     final id = companion.id.present ? companion.id.value : UuidV7.generate();
-    final row = companion.copyWith(id: Value(id));
+    // Stamp a 24h expiry (§13.5) unless the caller set one explicitly.
+    final withExpiry = companion.expiresAt.present
+        ? companion
+        : companion.copyWith(
+            expiresAt: Value(DateTime.now().add(const Duration(hours: 24))),
+          );
+    final row = withExpiry.copyWith(id: Value(id));
     await into(savedCarts).insert(row);
     // saved_carts is in `_syncedTenantTables` per app_database.dart, so the
     // §5 invariant requires the cloud to see this write. Without the
@@ -1525,6 +1562,24 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
   Future<void> deleteSavedCart(String id) async {
     await (delete(savedCarts)..where((c) => c.id.equals(id))).go();
     await db.syncDao.enqueueDelete('saved_carts', id);
+  }
+
+  /// Hard-deletes expired saved carts (§13.5) through [deleteSavedCart] so the
+  /// cloud forgets them too (enqueues a tombstone per row). Call opportunistically
+  /// — e.g. when the Recall list is opened.
+  Future<void> deleteExpiredCarts() async {
+    final cutoff = DateTime.now();
+    final expired = await (select(savedCarts)
+          ..where(
+            (c) =>
+                whereBusiness(c) &
+                c.expiresAt.isNotNull() &
+                c.expiresAt.isSmallerOrEqualValue(cutoff),
+          ))
+        .get();
+    for (final row in expired) {
+      await deleteSavedCart(row.id);
+    }
   }
 
   Future<SavedCartData?> getSavedCart(String id) {
@@ -2792,6 +2847,17 @@ class StoresDao extends DatabaseAccessor<AppDatabase>
         .watch();
   }
 
+  /// One-shot business-scoped variant of [watchActiveStores]. Use this for
+  /// store pickers that read once (initState / load) so a device holding more
+  /// than one business's data can't surface — and FK-reference — another
+  /// business's store.
+  Future<List<StoreData>> getActiveStores() {
+    return (select(stores)
+          ..where((t) => whereBusiness(t) & t.isDeleted.not())
+          ..orderBy([(t) => OrderingTerm(expression: t.name)]))
+        .get();
+  }
+
   Stream<StoreData?> watchStore(String id) {
     return (select(
       stores,
@@ -3052,9 +3118,7 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
       storeName: w?.name,
       referenceId: s.orderId ?? s.transferId ?? s.adjustmentId ?? s.shipmentId,
       createdAt: s.createdAt,
-      unitPriceKobo: p.sellingPriceKobo > 0
-          ? p.sellingPriceKobo
-          : p.retailPriceKobo,
+      unitPriceKobo: p.retailerPriceKobo,
     );
   }
 

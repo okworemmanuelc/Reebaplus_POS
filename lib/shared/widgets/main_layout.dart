@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/home_screen.dart';
-import 'package:reebaplus_pos/features/inventory/widgets/add_product_sheet.dart';
+import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart';
 import 'package:reebaplus_pos/features/pos/screens/pos_home_screen.dart';
 import 'package:reebaplus_pos/features/inventory/screens/inventory_screen.dart';
 import 'package:reebaplus_pos/features/orders/screens/orders_screen.dart';
@@ -115,18 +115,15 @@ class _MainLayoutState extends ConsumerState<MainLayout>
           if (mounted) setState(() => _pendingOrderCount = orders.length);
         });
 
-    // Consume the one-shot AddProductSheet flag set by SuccessDashboardEntryScreen.
+    // Consume the one-shot Add Product flag set by SuccessDashboardEntryScreen.
     // Defer to first post-frame so mainScaffoldKey is wired before showing.
     if (_nav.consumeAutoShowAddProductSheet()) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         final scaffoldCtx = _nav.mainScaffoldKey.currentContext;
         if (scaffoldCtx != null && scaffoldCtx.mounted) {
-          showModalBottomSheet(
-            context: scaffoldCtx,
-            isScrollControlled: true,
-            backgroundColor: Colors.transparent,
-            builder: (_) => const AddProductSheet(),
+          Navigator.of(scaffoldCtx).push(
+            MaterialPageRoute(builder: (_) => const AddProductScreen()),
           );
         }
       });

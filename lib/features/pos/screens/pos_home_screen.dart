@@ -58,7 +58,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
       // earlier one-shot `.get()` returned [] on a cold start and left
       // the store unlocked.
       final db = ref.read(databaseProvider);
-      final houses = await db.select(db.stores).watch().first;
+      final houses = await db.storesDao.watchActiveStores().first;
       if (houses.isNotEmpty && mounted) {
         ref.read(navigationProvider).setLockedStore(houses.first.id);
       }
@@ -490,7 +490,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
     Color subtextCol,
   ) async {
     final db = ref.read(databaseProvider);
-    final stores = await db.select(db.stores).get();
+    final stores = await db.storesDao.getActiveStores();
     if (!context.mounted) return;
     final surface = Theme.of(context).colorScheme.surface;
     final text = Theme.of(context).colorScheme.onSurface;

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
@@ -14,8 +16,13 @@ class EditItemModal extends ConsumerStatefulWidget {
   @override
   ConsumerState<EditItemModal> createState() => _EditItemModalState();
 
-  static Future<void> show(BuildContext context, Map<String, dynamic> item) {
-    return showModalBottomSheet(
+  /// Returns the removed line map when the user taps Remove (so the caller can
+  /// offer Undo, §13.2), or null on save/dismiss.
+  static Future<Map<String, dynamic>?> show(
+    BuildContext context,
+    Map<String, dynamic> item,
+  ) {
+    return showModalBottomSheet<Map<String, dynamic>>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -26,11 +33,23 @@ class EditItemModal extends ConsumerStatefulWidget {
 
 class _EditItemModalState extends ConsumerState<EditItemModal> {
   late TextEditingController _qtyCtrl;
+  late TextEditingController _discountCtrl;
+  // 'percent' (default) | 'naira' — §13.2.
+  late String _discountKind;
 
   @override
   void initState() {
     super.initState();
     _qtyCtrl = TextEditingController(text: widget.item['qty'].toString());
+
+    final existingValue = (widget.item['discountValue'] as num?) ?? 0;
+    _discountKind =
+        (widget.item['discountKind'] as String?) == 'naira' ? 'naira' : 'percent';
+    _discountCtrl = TextEditingController(
+      text: existingValue > 0 ? _trimNum(existingValue) : '',
+    );
+    _qtyCtrl.addListener(_onInputChanged);
+    _discountCtrl.addListener(_onInputChanged);
 
     // Auto-highlight text and show keyboard
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -41,9 +60,18 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
     });
   }
 
+  void _onInputChanged() => setState(() {});
+
+  /// Formats a number without trailing `.0` for display in the input.
+  static String _trimNum(num n) =>
+      n == n.toInt() ? n.toInt().toString() : n.toString();
+
   @override
   void dispose() {
+    _qtyCtrl.removeListener(_onInputChanged);
+    _discountCtrl.removeListener(_onInputChanged);
     _qtyCtrl.dispose();
+    _discountCtrl.dispose();
     super.dispose();
   }
 
@@ -62,12 +90,50 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
     );
   }
 
+  /// Resolves the live discount for the current inputs. Clamps to the role's
+  /// max percentage (§13.2) and never below zero / above the line total.
+  ({int discountKobo, bool cappedByRole}) _resolveDiscount({
+    required int lineTotalKobo,
+    required int maxPercent,
+  }) {
+    final entered = double.tryParse(_discountCtrl.text.trim()) ?? 0.0;
+    if (entered <= 0 || lineTotalKobo <= 0) {
+      return (discountKobo: 0, cappedByRole: false);
+    }
+    final rawKobo = _discountKind == 'percent'
+        ? (lineTotalKobo * entered / 100).round()
+        : (entered * 100).round();
+    final capKobo = (lineTotalKobo * maxPercent / 100).round();
+    final cappedByRole = rawKobo > capKobo;
+    final discountKobo = rawKobo.clamp(0, capKobo);
+    return (discountKobo: discountKobo, cappedByRole: cappedByRole);
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     final border = t.dividerColor;
     final text = t.colorScheme.onSurface;
     final primary = t.colorScheme.primary;
+
+    final maxPercent = ref.watch(currentUserMaxDiscountPercentProvider);
+    final canDiscount = maxPercent > 0;
+    final qty = double.tryParse(_qtyCtrl.text) ?? 1.0;
+    final unitPriceKobo = (widget.item['unitPriceKobo'] as num).toInt();
+    final lineTotalKobo = (unitPriceKobo * qty).round();
+    final resolved =
+        _resolveDiscount(lineTotalKobo: lineTotalKobo, maxPercent: maxPercent);
+
+    // Auto-snap the percent input to the role cap when exceeded (§13.2).
+    if (resolved.cappedByRole && _discountKind == 'percent') {
+      final capText = maxPercent.toString();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _discountCtrl.text == capText) return;
+        _discountCtrl.text = capText;
+        _discountCtrl.selection =
+            TextSelection.collapsed(offset: capText.length);
+      });
+    }
 
     return Container(
       padding: EdgeInsets.fromLTRB(
@@ -232,19 +298,32 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
               ],
             ),
           ),
-          SizedBox(height: context.getRSize(12)),
+          // Micro-adjustment chips — only when the product allows
+          // fractional sales (§13.2). Hidden entirely otherwise.
+          if (widget.item['allowFractionalSales'] == true) ...[
+            SizedBox(height: context.getRSize(12)),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _microAdjustChip('-0.5', () => _updateQty(-0.5)),
+                SizedBox(width: context.getRSize(12)),
+                _microAdjustChip('+0.5', () => _updateQty(0.5)),
+              ],
+            ),
+          ],
 
-          // Micro-adjustment chips
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _microAdjustChip('-0.5', () => _updateQty(-0.5)),
-              SizedBox(width: context.getRSize(12)),
-              _microAdjustChip('+0.5', () => _updateQty(0.5)),
-            ],
+          SizedBox(height: context.getRSize(28)),
+
+          // ── Apply Discount (§13.2) ────────────────────────────────────────
+          _discountSection(
+            canDiscount: canDiscount,
+            maxPercent: maxPercent,
+            lineTotalKobo: lineTotalKobo,
+            discountKobo: resolved.discountKobo,
+            cappedByRole: resolved.cappedByRole,
           ),
 
-          SizedBox(height: context.getRSize(40)),
+          SizedBox(height: context.getRSize(32)),
 
           // Action Buttons
           Row(
@@ -258,7 +337,8 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
                   height: context.getRSize(56),
                   onPressed: () {
                     ref.read(cartProvider).removeItem(widget.item['name']);
-                    Navigator.pop(context);
+                    // Return the removed line so the cart can offer Undo.
+                    Navigator.pop(context, widget.item);
                   },
                 ),
               ),
@@ -270,8 +350,18 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
                   variant: AppButtonVariant.primary,
                   height: context.getRSize(56),
                   onPressed: () {
+                    final cart = ref.read(cartProvider);
                     final qty = double.tryParse(_qtyCtrl.text) ?? 1.0;
-                    ref.read(cartProvider).updateQty(widget.item['name'], qty);
+                    cart.updateQty(widget.item['name'], qty);
+                    // Persist the resolved (role-capped) discount alongside qty.
+                    final entered =
+                        double.tryParse(_discountCtrl.text.trim()) ?? 0.0;
+                    cart.setLineDiscount(
+                      widget.item['name'],
+                      kind: _discountKind,
+                      enteredValue: entered,
+                      discountKobo: resolved.discountKobo,
+                    );
                     Navigator.pop(context);
                   },
                 ),
@@ -279,6 +369,149 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _discountSection({
+    required bool canDiscount,
+    required int maxPercent,
+    required int lineTotalKobo,
+    required int discountKobo,
+    required bool cappedByRole,
+  }) {
+    final t = Theme.of(context);
+    final text = t.colorScheme.onSurface;
+    final border = t.dividerColor;
+
+    // Cashier (or any role capped at 0%): blocked entirely (§13.2).
+    if (!canDiscount) {
+      return Container(
+        width: double.infinity,
+        padding: EdgeInsets.all(context.getRSize(14)),
+        decoration: BoxDecoration(
+          color: border.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: border.withValues(alpha: 0.15)),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              FontAwesomeIcons.lock,
+              size: context.getRSize(14),
+              color: text.withValues(alpha: 0.45),
+            ),
+            SizedBox(width: context.getRSize(10)),
+            Expanded(
+              child: Text(
+                'Discounts not allowed at your role. Ask Manager.',
+                style: TextStyle(
+                  fontSize: context.getRFontSize(13),
+                  fontWeight: FontWeight.w600,
+                  color: text.withValues(alpha: 0.6),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final newLineTotal = lineTotalKobo - discountKobo;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'APPLY DISCOUNT',
+          style: TextStyle(
+            fontSize: context.getRFontSize(12),
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.5,
+            color: text.withValues(alpha: 0.5),
+          ),
+        ),
+        SizedBox(height: context.getRSize(10)),
+        Row(
+          children: [
+            _kindChip('%', 'percent'),
+            SizedBox(width: context.getRSize(8)),
+            _kindChip('₦', 'naira'),
+            SizedBox(width: context.getRSize(12)),
+            Expanded(
+              child: AppInput(
+                controller: _discountCtrl,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                hintText: _discountKind == 'percent' ? '0%' : '₦0',
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: context.getRSize(10)),
+        if (discountKobo > 0)
+          Text(
+            'Saving ${formatCurrency(discountKobo / 100.0)} — '
+            'new line total: ${formatCurrency(newLineTotal / 100.0)}',
+            style: TextStyle(
+              fontSize: context.getRFontSize(13),
+              fontWeight: FontWeight.w700,
+              color: Colors.green.shade600,
+            ),
+          ),
+        if (cappedByRole)
+          Padding(
+            padding: EdgeInsets.only(top: context.getRSize(4)),
+            child: Text(
+              'Maximum discount is $maxPercent%. Capped.',
+              style: TextStyle(
+                fontSize: context.getRFontSize(12),
+                fontWeight: FontWeight.w600,
+                color: Colors.orange.shade700,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _kindChip(String label, String kind) {
+    final t = Theme.of(context);
+    final selected = _discountKind == kind;
+    final primary = t.colorScheme.primary;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => setState(() => _discountKind = kind),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: context.getRSize(44),
+          height: context.getRSize(44),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected
+                ? primary.withValues(alpha: 0.12)
+                : t.dividerColor.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: selected
+                  ? primary.withValues(alpha: 0.5)
+                  : t.dividerColor.withValues(alpha: 0.15),
+              width: selected ? 1.5 : 1,
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: context.getRFontSize(16),
+              fontWeight: FontWeight.w800,
+              color: selected ? primary : t.colorScheme.onSurface.withValues(
+                alpha: 0.6,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

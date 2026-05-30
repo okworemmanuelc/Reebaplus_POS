@@ -53,7 +53,7 @@ void main() {
         ProductsCompanion.insert(
           businessId: businessId,
           name: 'No-Stock Lager',
-          sellingPriceKobo: const Value(100000),
+          retailerPriceKobo: const Value(100000),
         ),
       );
 
@@ -79,7 +79,7 @@ void main() {
         ProductsCompanion.insert(
           businessId: businessId,
           name: 'Stocked Stout',
-          sellingPriceKobo: const Value(150000),
+          retailerPriceKobo: const Value(150000),
         ),
         initialStock: 24,
         storeId: fx.storeId,
@@ -111,7 +111,7 @@ void main() {
         ProductsCompanion.insert(
           businessId: businessId,
           name: 'Test Beer V2',
-          sellingPriceKobo: const Value(100000),
+          retailerPriceKobo: const Value(100000),
           buyingPriceKobo: const Value(60000),
           subtitle: const Value('5% ABV'),
           lowStockThreshold: const Value(10),
@@ -142,7 +142,7 @@ void main() {
       // Idempotency key — must match the local product row id.
       expect(payload['p_product_id'], productId);
       expect(payload['p_name'], 'Test Beer V2');
-      expect(payload['p_selling_price_kobo'], 100000);
+      expect(payload['p_retailer_price_kobo'], 100000);
       expect(payload['p_buying_price_kobo'], 60000);
       expect(payload['p_subtitle'], '5% ABV');
       expect(payload['p_low_stock_threshold'], 10);
@@ -172,7 +172,7 @@ void main() {
         ProductsCompanion.insert(
           businessId: businessId,
           name: 'Stockless Brew',
-          sellingPriceKobo: const Value(50000),
+          retailerPriceKobo: const Value(50000),
         ),
       );
 

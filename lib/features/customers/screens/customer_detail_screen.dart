@@ -392,7 +392,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     // Resolve branch name from store
     String? branchName;
     if (order.storeId != null) {
-      final stores = await db.select(db.stores).get();
+      final stores = await db.storesDao.getActiveStores();
       branchName = stores
           .where((w) => w.id == order.storeId)
           .map((w) => w.name)

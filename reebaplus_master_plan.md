@@ -101,9 +101,10 @@ Each step unlocks the next. Build in this order:
 - [x] Staff Management screen with invite flow.
 - [x] CEO Settings page.
 - [x] Home screen, role-aware.
-- [ ] Point of Sale, guarded by role.
-- [ ] Cart and Checkout flow with wallet integration.
-- [ ] Inventory and Product Details, role-aware.
+- [x] Point of Sale, guarded by role.
+- [x] Cart flow with discounts, role caps, fractional sales, per-cashier saved carts (§13). *(Session 20.)*
+- [ ] Inventory and Product Details, role-aware — includes the destructive product price-column migration (buying / retailer / wholesaler). *(moved ahead of Checkout 2026-05-30: products + prices must be finished before the sales flow.)*
+- [ ] Checkout flow with wallet integration (§14). *(Wallet flow pre-existing, not yet formally re-passed.)*
 - [ ] Customers screen with wallet.
 - [ ] Orders (Pending, Completed, Cancelled).
 - [ ] Daily Stock Count.
@@ -604,6 +605,7 @@ Bottom nav label "Stock" and sidebar item "Inventory" refer to the same screen. 
 
 - Total SKUs, Low Stock, Out of Stock.
 - For Empty Crates tab: Total Crates, Out of Stock (different color).
+- Cards are compact (reduced height/padding/font) so the product list gets more of the screen. (Amended 2026-05-30, pivot step 15.)
 
 ### 16.3 Tabs
 
@@ -614,13 +616,15 @@ Bottom nav label "Stock" and sidebar item "Inventory" refer to the same screen. 
 
 ### 16.4 Products tab
 
-- Filters: Store (renamed from Warehouse), Manufacturer.
-- Category chips.
-- Product list. Each product shows: name, in-stock badge, quantity, unit.
-- "Add Product" floating button — only visible to CEO and Manager.
+- Filters: Store (renamed from Warehouse), Category, Manufacturer — all three as dropdowns, in that order. (Amended 2026-05-30, pivot step 15: Category was previously a row of chips; it is now a dropdown placed between Store and Manufacturer.)
+- Search: a search toggle in the header (same pattern as Point of Sale) filters the product list by name/subtitle.
+- Product list. Each product shows: name, in-stock badge, quantity, unit. Products at or past their Expiry Date (§16.5) are flagged, and the list can be sorted by soonest expiry.
+- "Add Product" floating button — only visible to CEO and Manager. Opens the Add Product screen (§16.5).
 - Tap a product opens the Product Details screen.
 
 ### 16.5 Add Product form
+
+Add Product is a full screen (pushed route with an app bar and a pinned save button), not a bottom-sheet modal. (Amended 2026-05-30, pivot step 15: the form outgrew a modal.) The same form, prefilled, is the "Update Product" surface (§16.6).
 
 The four legacy price columns (retail / bulk breaker / distributor / selling) are dropped during the pivot. Products now hold exactly three prices: Buying Price (required, hidden from Cashier and Stock keeper), Retailer Price, Wholesaler Price.
 
@@ -640,12 +644,15 @@ Required fields:
 
 Optional fields:
 
-- Color.
+- Expiry Date — a single optional date (all business types; not per-batch — per-batch/FIFO stays Phase 2). Used to flag and sell-down the stock closest to expiry. Saved to the product's `expiryDate` (schema v19 + cloud `0056_product_expiry.sql`). Businesses that don't track expiry leave it blank. (Added 2026-05-30, pivot step 15.)
 - Size.
 - Supplier.
 - Allow fractional sales — toggle, default OFF. Controls whether −0.5 / +0.5 chips appear in the Edit Quantity modal.
 - Track empty crate returns — toggle, only shown for Bar / Beer Distributor businesses.
+- Empty Crate Value (₦) — shown only when "Track empty crate returns" is on. The value of one empty crate, saved to the product's `emptyCrateValueKobo`.
 - Barcode — optional text field with scan-via-camera helper. Only surfaced on Pharmacy and Supermarket businesses (see §16.11).
+
+Color selector is deferred (2026-05-30, pivot step 15): the 12-swatch picker is removed for now; products keep a default `colorHex`. It will be revisited when Boutique / Gadgets product types land, where colour is a real product attribute rather than a tile tint.
 
 ### 16.6 Product Details screen (tap a product)
 
@@ -659,7 +666,8 @@ Contents:
 - Manufacturer, Supplier.
 - Low Stock Alert threshold.
 - Allow fractional sales (read-only here).
-- Color, Size (if set).
+- Expiry Date (if set), with a near-expiry badge when the date is near or past.
+- Size (if set). (Color is deferred — see §16.5.)
 - Empty crate tracking status (if applicable).
 - Store assignment.
 - Last updated timestamp.

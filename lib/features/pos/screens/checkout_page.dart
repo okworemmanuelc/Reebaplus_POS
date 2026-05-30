@@ -127,11 +127,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     });
 
     if (storeId != null) {
-      _activeStoreSub = (db.select(db.stores)
-            ..where((t) => t.id.equals(storeId))
-            ..limit(1))
-          .watchSingleOrNull()
-          .listen((w) {
+      _activeStoreSub = db.storesDao.watchStore(storeId).listen((w) {
         if (!mounted) return;
         setState(() => _branchName = w?.name);
       });
@@ -679,6 +675,10 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             staffId: auth.currentUser?.id,
             storeId: storeId,
             crateDepositPaidKobo: (widget.crateDeposit * 100).round(),
+            discountKobo: widget.cart.fold<int>(
+              0,
+              (s, i) => s + ((i['discountKobo'] as int?) ?? 0),
+            ),
             paymentSubType: _isWalletPayment ? 'wallet' : 'cash',
           );
 

@@ -84,10 +84,10 @@ class _CartScreenState extends ConsumerState<CartScreen>
     final db = ref.read(databaseProvider);
     _cart.addListener(_onCartChanged);
     _cart.activeCustomer.addListener(_onActiveCustomerChanged);
-    db.select(db.stores).get().then((ws) {
+    db.storesDao.getActiveStores().then((ws) {
       if (mounted) setState(() => _stores = ws);
     });
-    db.select(db.manufacturers).watch().listen((data) {
+    db.inventoryDao.watchAllManufacturers().listen((data) {
       if (mounted) setState(() => _manufacturers = data);
     });
   }
@@ -170,6 +170,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
               name: name,
               customerId: drift.Value(_activeCustomer?.id),
               cartData: cartJson,
+              cashierId: drift.Value(ref.read(authProvider).currentUser?.id),
               createdAt: drift.Value(DateTime.now()),
               businessId: ref.read(authProvider).currentUser?.businessId ?? '',
             ),
@@ -187,6 +188,9 @@ class _CartScreenState extends ConsumerState<CartScreen>
     final db = ref.read(databaseProvider);
     final custSvc = ref.read(customerServiceProvider);
     final cartSvc = ref.read(cartProvider);
+    final cashierId = ref.read(authProvider).currentUser?.id;
+    // Opportunistically purge expired carts (§13.5) before showing the list.
+    db.ordersDao.deleteExpiredCarts();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -222,7 +226,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
               ),
               Expanded(
                 child: StreamBuilder<List<SavedCartData>>(
-                  stream: db.ordersDao.watchSavedCarts(),
+                  stream: db.ordersDao.watchSavedCarts(cashierId),
                   builder: (context, snapshot) {
                     if (!snapshot.hasData) {
                       return const Center(child: CircularProgressIndicator());
@@ -634,8 +638,17 @@ class _CartScreenState extends ConsumerState<CartScreen>
     );
   }
 
-  void _editItem(BuildContext ctx, Map<String, dynamic> item) {
-    EditItemModal.show(ctx, item);
+  Future<void> _editItem(BuildContext ctx, Map<String, dynamic> item) async {
+    final removed = await EditItemModal.show(ctx, item);
+    if (removed != null && mounted) {
+      // Offer a 5s Undo for the removed line (§13.2).
+      AppNotification.showAction(
+        context,
+        'Item removed.',
+        actionLabel: 'Undo',
+        onAction: () => ref.read(cartProvider).restoreLine(removed),
+      );
+    }
   }
 
   void _showEditCrateDeposit() {
@@ -778,6 +791,34 @@ class _CartScreenState extends ConsumerState<CartScreen>
     );
   }
 
+  /// Small "−10%" / "−₦500" badge on a discounted cart line (§13.3).
+  Widget _discountBadge(Map<String, dynamic> item) {
+    final kind = item['discountKind'] as String?;
+    final value = (item['discountValue'] as num?)?.toDouble() ?? 0.0;
+    final valueText = value == value.toInt()
+        ? value.toInt().toString()
+        : value.toStringAsFixed(1);
+    final label = kind == 'naira' ? '−₦$valueText' : '−$valueText%';
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: context.getRSize(8),
+        vertical: context.getRSize(2),
+      ),
+      decoration: BoxDecoration(
+        color: Colors.green.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: context.getRFontSize(11),
+          fontWeight: FontWeight.w800,
+          color: Colors.green.shade700,
+        ),
+      ),
+    );
+  }
+
   Widget _totalRow(
     String label,
     double value, {
@@ -910,9 +951,17 @@ class _CartScreenState extends ConsumerState<CartScreen>
       }
     }
 
-    // Total = Subtotal + Deposit Paid (manually entered) - Credit
+    // Per-line discounts (§13.3). Summed across the cart and subtracted from
+    // the payable total. discountKobo lives on each line (set in the Edit
+    // Quantity modal); converted to naira here to match `sub`.
+    final discountTotal = cartItems.fold<double>(
+      0.0,
+      (s, i) => s + (((i['discountKobo'] as int?) ?? 0) / 100.0),
+    );
+
+    // Total = Subtotal - Discounts + Deposit Paid (manually entered) - Credit
     // computedDeposit is informational only — not added to the payable total
-    final tot = sub + _crateDeposit - customerCrateCredit;
+    final tot = sub - discountTotal + _crateDeposit - customerCrateCredit;
 
     final customerName = _activeCustomer?.name ?? 'Walk-in Customer';
     final activeBalanceKobo = _activeCustomer == null
@@ -1222,28 +1271,65 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                                 color: _subtext,
                                               ),
                                             ),
+                                            if (((item['discountKobo']
+                                                        as int?) ??
+                                                    0) >
+                                                0) ...[
+                                              SizedBox(
+                                                height: context.getRSize(4),
+                                              ),
+                                              _discountBadge(item),
+                                            ],
                                           ],
                                         ),
                                       ),
-                                      FittedBox(
-                                        fit: BoxFit.scaleDown,
-                                        child: Text(
-                                          formatCurrency(
-                                            (((item['qty'] as num?)
-                                                        ?.toDouble() ??
-                                                    0.0) *
-                                                ((item['price'] as num?)
-                                                        ?.toDouble() ??
-                                                    0.0)),
-                                          ),
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w900,
-                                            fontSize: context.getRFontSize(16),
-                                            color: Theme.of(
-                                              context,
-                                            ).colorScheme.primary,
-                                          ),
-                                        ),
+                                      Builder(
+                                        builder: (context) {
+                                          final gross =
+                                              ((item['qty'] as num?)
+                                                      ?.toDouble() ??
+                                                  0.0) *
+                                              ((item['price'] as num?)
+                                                      ?.toDouble() ??
+                                                  0.0);
+                                          final discountKobo =
+                                              (item['discountKobo'] as int?) ??
+                                              0;
+                                          final net =
+                                              gross - discountKobo / 100.0;
+                                          return Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.end,
+                                            children: [
+                                              if (discountKobo > 0)
+                                                Text(
+                                                  formatCurrency(gross),
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.w600,
+                                                    fontSize: context
+                                                        .getRFontSize(12),
+                                                    color: _subtext,
+                                                    decoration: TextDecoration
+                                                        .lineThrough,
+                                                  ),
+                                                ),
+                                              FittedBox(
+                                                fit: BoxFit.scaleDown,
+                                                child: Text(
+                                                  formatCurrency(net),
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.w900,
+                                                    fontSize: context
+                                                        .getRFontSize(16),
+                                                    color: Theme.of(
+                                                      context,
+                                                    ).colorScheme.primary,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          );
+                                        },
                                       ),
                                     ],
                                   ),
@@ -1302,6 +1388,31 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                 child: Column(
                                   children: [
                                     _totalRow('Subtotal', sub, small: true),
+                                    if (discountTotal > 0) ...[
+                                      SizedBox(height: context.getRSize(6)),
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(
+                                            'Saved',
+                                            style: TextStyle(
+                                              fontSize: context.getRFontSize(14),
+                                              fontWeight: FontWeight.w600,
+                                              color: Colors.green.shade700,
+                                            ),
+                                          ),
+                                          Text(
+                                            '−${formatCurrency(discountTotal)}',
+                                            style: TextStyle(
+                                              fontSize: context.getRFontSize(15),
+                                              fontWeight: FontWeight.w800,
+                                              color: Colors.green.shade700,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
                                     SizedBox(height: context.getRSize(8)),
                                     if (hasBottles) ...[
                                       // ── Empty Crates section ──

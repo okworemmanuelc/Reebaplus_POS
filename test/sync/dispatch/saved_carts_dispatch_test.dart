@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 
@@ -59,6 +60,85 @@ void main() {
       final payload = decodePayload(pending.first);
       expect(payload['id'], cartId);
       expect(payload['is_deleted'], true);
+    });
+
+    test('saveCart stamps a 24h expiry and forwards cashier_id/expires_at',
+        () async {
+      final before = DateTime.now();
+      final id = await db.ordersDao.saveCart(
+        SavedCartsCompanion.insert(
+          businessId: businessId,
+          name: 'Test Cart',
+          cartData: '{"items": []}',
+          cashierId: const Value('cashier-1'),
+        ),
+      );
+
+      final row = await (db.select(db.savedCarts)
+            ..where((c) => c.id.equals(id)))
+          .getSingle();
+      expect(row.cashierId, 'cashier-1');
+      expect(row.expiresAt, isNotNull);
+      final minsToExpiry = row.expiresAt!.difference(before).inMinutes;
+      expect(minsToExpiry, inInclusiveRange(23 * 60, 24 * 60 + 1));
+
+      final payload = decodePayload((await getPendingQueue(db)).first);
+      expect(payload['cashier_id'], 'cashier-1');
+      expect(payload.containsKey('expires_at'), isTrue);
+    });
+
+    test('watchSavedCarts shows only the cashier\'s own, unexpired carts',
+        () async {
+      final now = DateTime.now();
+      Future<void> save(
+        String name, {
+        String? cashier,
+        DateTime? expires,
+      }) =>
+          db.ordersDao.saveCart(
+            SavedCartsCompanion.insert(
+              businessId: businessId,
+              name: name,
+              cartData: '{"items": []}',
+              cashierId: Value(cashier),
+              // Pass an explicit (possibly null) expiry so saveCart does not
+              // auto-stamp the 24h default.
+              expiresAt: Value(expires),
+            ),
+          );
+
+      await save('mine', cashier: 'me', expires: now.add(const Duration(hours: 1)));
+      await save('other', cashier: 'you', expires: now.add(const Duration(hours: 1)));
+      await save('expired', cashier: 'me', expires: now.subtract(const Duration(hours: 1)));
+      await save('legacy'); // null cashier + null expiry → visible to all
+
+      final names =
+          (await db.ordersDao.watchSavedCarts('me').first).map((c) => c.name).toSet();
+      expect(names, containsAll(<String>{'mine', 'legacy'}));
+      expect(names, isNot(contains('other')));
+      expect(names, isNot(contains('expired')));
+    });
+
+    test('deleteExpiredCarts tombstones only expired rows', () async {
+      final now = DateTime.now();
+      await db.ordersDao.saveCart(SavedCartsCompanion.insert(
+        businessId: businessId,
+        name: 'fresh',
+        cartData: '{"items": []}',
+        expiresAt: Value(now.add(const Duration(hours: 1))),
+      ));
+      await db.ordersDao.saveCart(SavedCartsCompanion.insert(
+        businessId: businessId,
+        name: 'stale',
+        cartData: '{"items": []}',
+        expiresAt: Value(now.subtract(const Duration(hours: 1))),
+      ));
+
+      await db.ordersDao.deleteExpiredCarts();
+
+      final remaining =
+          (await db.select(db.savedCarts).get()).map((c) => c.name).toList();
+      expect(remaining, equals(<String>['fresh']));
     });
 
     test('saveCart followed by deleteSavedCart coalesces correctly',

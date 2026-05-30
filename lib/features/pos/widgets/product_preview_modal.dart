@@ -190,23 +190,16 @@ class _ProductPreviewModalState extends ConsumerState<ProductPreviewModal>
                   _buildDetailRow(
                     context,
                     FontAwesomeIcons.tag,
-                    'Retail Price',
-                    formatCurrency(product.retailPriceKobo / 100),
+                    'Retailer Price',
+                    formatCurrency(product.retailerPriceKobo / 100),
                     theme.colorScheme.primary,
                   ),
                   _buildDetailRow(
                     context,
                     FontAwesomeIcons.users,
-                    'Bulk Price',
-                    formatCurrency((product.bulkBreakerPriceKobo ?? 0) / 100),
+                    'Wholesaler Price',
+                    formatCurrency(product.wholesalerPriceKobo / 100),
                     theme.colorScheme.secondary,
-                  ),
-                  _buildDetailRow(
-                    context,
-                    FontAwesomeIcons.truck,
-                    'Distributor Price',
-                    formatCurrency((product.distributorPriceKobo ?? 0) / 100),
-                    const Color(0xFF6366F1),
                   ),
                   const Divider(height: 24, thickness: 0.5),
                   _buildDetailRow(

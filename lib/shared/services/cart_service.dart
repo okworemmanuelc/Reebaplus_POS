@@ -83,9 +83,7 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
       if (maxStock != null) current[index]['maxStock'] = maxStock;
     } else {
       final int unitPriceKobo = product is ProductData
-          ? (product.sellingPriceKobo > 0
-                ? product.sellingPriceKobo
-                : product.retailPriceKobo)
+          ? product.retailerPriceKobo
           : (((product['price'] as num).toDouble() * 100).round());
       current.add({
         'id': id,
@@ -126,6 +124,15 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
         'trackEmpties': product is ProductData
             ? product.trackEmpties
             : (product['trackEmpties'] ?? false),
+        'allowFractionalSales': product is ProductData
+            ? product.allowFractionalSales
+            : (product['allowFractionalSales'] ?? false),
+        // Per-line discount (§13.2). discountKind: 'percent' | 'naira' | null;
+        // discountValue: the entered number (for the badge); discountKobo:
+        // the resolved amount off this line's gross total (source of truth).
+        'discountKind': null,
+        'discountValue': 0.0,
+        'discountKobo': 0,
         'maxStock': maxStock ?? (1 << 30),
       });
     }
@@ -153,15 +160,66 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
     final int cap = (current[index]['maxStock'] as int?) ?? (1 << 30);
     final double clamped = newQty > cap ? cap.toDouble() : newQty;
     current[index]['qty'] = clamped;
+    // Re-clamp any existing per-line discount to the new line total so a
+    // smaller qty can never produce a negative net (§13.2).
+    final existingDiscount = (current[index]['discountKobo'] as int?) ?? 0;
+    if (existingDiscount > 0) {
+      final lineTotalKobo = _lineTotalKobo(current[index]);
+      if (existingDiscount > lineTotalKobo) {
+        current[index]['discountKobo'] = lineTotalKobo;
+      }
+    }
     _userCarts[_uid] = current;
     value = List.from(current);
     return clamped >= newQty;
+  }
+
+  /// Gross total (kobo) for a cart line: unit price × quantity.
+  int _lineTotalKobo(Map<String, dynamic> item) =>
+      ((item['unitPriceKobo'] as num).toDouble() *
+              (item['qty'] as num).toDouble())
+          .round();
+
+  /// Applies a per-line discount (§13.2). [kind] is 'percent' or 'naira';
+  /// [value] is the entered number (kept for the badge); [discountKobo] is the
+  /// resolved amount off the line total, clamped to [0, lineTotal]. A resolved
+  /// amount of 0 clears the discount.
+  void setLineDiscount(
+    String productName, {
+    required String kind,
+    required double enteredValue,
+    required int discountKobo,
+  }) {
+    final current = List<Map<String, dynamic>>.from(_userCarts[_uid] ?? []);
+    final index = current.indexWhere((item) => item['name'] == productName);
+    if (index == -1) return;
+    final lineTotalKobo = _lineTotalKobo(current[index]);
+    final clamped = discountKobo.clamp(0, lineTotalKobo);
+    current[index]['discountKind'] = clamped == 0 ? null : kind;
+    current[index]['discountValue'] = clamped == 0 ? 0.0 : enteredValue;
+    current[index]['discountKobo'] = clamped;
+    _userCarts[_uid] = current;
+    value = List.from(current);
   }
 
   void removeItem(String productName) {
     final current = List<Map<String, dynamic>>.from(
       _userCarts[_uid] ?? [],
     ).where((item) => item['name'] != productName).toList();
+    _userCarts[_uid] = current;
+    value = List.from(current);
+  }
+
+  /// Re-inserts a previously removed cart line verbatim (qty, discount, etc.)
+  /// — backs the "Item removed. Undo" snackbar (§13.2). No-op if a line with
+  /// the same id+name is already present.
+  void restoreLine(Map<String, dynamic> item) {
+    final current = List<Map<String, dynamic>>.from(_userCarts[_uid] ?? []);
+    final exists = current.any(
+      (i) => i['id'] == item['id'] && i['name'] == item['name'],
+    );
+    if (exists) return;
+    current.add(Map<String, dynamic>.from(item));
     _userCarts[_uid] = current;
     value = List.from(current);
   }
@@ -239,6 +297,13 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
       value.fold(0, (sum, item) => sum + (item['qty'] as double));
 
   int get itemCount => value.length;
+
+  /// Sum of all per-line discounts (kobo) — drives the "Saved: ₦X" row and the
+  /// order-level discount persisted at checkout (§13.3).
+  int get discountTotalKobo => value.fold(
+    0,
+    (sum, item) => sum + ((item['discountKobo'] as int?) ?? 0),
+  );
 
   double get subtotal => value.fold(
     0,

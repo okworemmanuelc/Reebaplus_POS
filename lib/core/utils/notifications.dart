@@ -20,12 +20,42 @@ class AppNotification {
     _show(context, message, AppNotificationType.info);
   }
 
-  static void _show(BuildContext context, String message, AppNotificationType type) {
+  /// Shows a top notification with a tappable action (e.g. "Undo"). The action
+  /// dismisses the notification before running its callback. Defaults to a 5s
+  /// window — long enough for an Undo (master plan §13.2).
+  static void showAction(
+    BuildContext context,
+    String message, {
+    required String actionLabel,
+    required VoidCallback onAction,
+    AppNotificationType type = AppNotificationType.info,
+    Duration duration = const Duration(seconds: 5),
+  }) {
+    _show(
+      context,
+      message,
+      type,
+      actionLabel: actionLabel,
+      onAction: onAction,
+      duration: duration,
+    );
+  }
+
+  static void _show(
+    BuildContext context,
+    String message,
+    AppNotificationType type, {
+    String? actionLabel,
+    VoidCallback? onAction,
+    Duration duration = const Duration(seconds: 4),
+  }) {
     _dismissTimer?.cancel();
-    
+
     final data = _NotificationData(
       message: message,
       type: type,
+      actionLabel: actionLabel,
+      onAction: onAction,
     );
 
     if (_overlayEntry == null) {
@@ -37,7 +67,7 @@ class AppNotification {
 
     _state.value = data;
 
-    _dismissTimer = Timer(const Duration(seconds: 4), () {
+    _dismissTimer = Timer(duration, () {
       _state.value = null;
     });
   }
@@ -51,8 +81,15 @@ class AppNotification {
 class _NotificationData {
   final String message;
   final AppNotificationType type;
+  final String? actionLabel;
+  final VoidCallback? onAction;
 
-  _NotificationData({required this.message, required this.type});
+  _NotificationData({
+    required this.message,
+    required this.type,
+    this.actionLabel,
+    this.onAction,
+  });
 }
 
 class _NotificationOverlay extends StatefulWidget {
@@ -201,6 +238,33 @@ class _NotificationOverlayState extends State<_NotificationOverlay> with SingleT
                               ],
                             ),
                           ),
+                          if (_currentData?.actionLabel != null) ...[
+                            const SizedBox(width: 8),
+                            TextButton(
+                              onPressed: () {
+                                final cb = _currentData?.onAction;
+                                AppNotification.hide();
+                                cb?.call();
+                              },
+                              style: TextButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                ),
+                                minimumSize: const Size(0, 0),
+                                tapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              child: Text(
+                                _currentData!.actionLabel!,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 14,
+                                  decoration: TextDecoration.underline,
+                                ),
+                              ),
+                            ),
+                          ],
                           const SizedBox(width: 8),
                           const IconButton(
                             icon: Icon(Icons.close, color: Colors.white70, size: 20),

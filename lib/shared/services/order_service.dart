@@ -27,6 +27,7 @@ class OrderService {
     String? staffId,
     String? storeId,
     int crateDepositPaidKobo = 0,
+    int discountKobo = 0,
     String paymentSubType = 'cash',
   }) async {
     if (staffId == null || staffId.isEmpty) {
@@ -70,6 +71,14 @@ class OrderService {
       orderNumber: orderNumber,
       customerId: Value(customerId),
       totalAmountKobo: totalAmountKobo,
+      // [totalAmountKobo] is the payable the customer owes, already net of
+      // per-line discounts (the cart subtracts them before checkout). The
+      // server's pos_record_sale_v2 RPC recomputes the gross from p_items and
+      // derives net = gross − discount + crate_deposit, so we forward
+      // [discountKobo] as the order's discount but must NOT re-subtract it from
+      // the local net here — that would double-count. The server's response
+      // overwrites these mirror values on success (_applyDomainResponse).
+      discountKobo: Value(discountKobo),
       netAmountKobo: totalAmountKobo,
       amountPaidKobo: Value(amountPaidKobo),
       paymentType: dbPaymentType,

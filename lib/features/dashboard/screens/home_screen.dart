@@ -77,7 +77,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Future<void> _initializeData() async {
     // Stores for the filter dropdown
     final db = ref.read(databaseProvider);
-    _storesSub = db.select(db.stores).watch().listen((wh) {
+    _storesSub = db.storesDao.watchActiveStores().listen((wh) {
       if (mounted) {
         setState(() {
           _stores = wh;
@@ -129,7 +129,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           _totalStockValue = items.fold<double>(
             0,
             (sum, item) =>
-                sum + (item.totalStock * item.product.sellingPriceKobo / 100.0),
+                sum + (item.totalStock * item.product.retailerPriceKobo / 100.0),
           );
           _inventoryLoading = false;
         });

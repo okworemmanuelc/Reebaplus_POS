@@ -188,10 +188,14 @@ class Products extends Table {
   TextColumn get sku => text().nullable()();
   TextColumn get size => text().nullable()();
   TextColumn get unit => text().withDefault(const Constant('Bottle'))();
-  IntColumn get retailPriceKobo => integer().withDefault(const Constant(0))();
-  IntColumn get bulkBreakerPriceKobo => integer().nullable()();
-  IntColumn get distributorPriceKobo => integer().nullable()();
-  IntColumn get sellingPriceKobo => integer().withDefault(const Constant(0))();
+  // Reebaplus pivot step 14 (schema v18): the four legacy price columns
+  // (retail / bulk breaker / distributor / selling) were dropped; products
+  // now hold exactly three prices — buying (already here), retailer,
+  // wholesaler. See master plan §16.5.
+  IntColumn get retailerPriceKobo =>
+      integer().withDefault(const Constant(0))();
+  IntColumn get wholesalerPriceKobo =>
+      integer().withDefault(const Constant(0))();
   IntColumn get buyingPriceKobo => integer().withDefault(const Constant(0))();
   IntColumn get iconCodePoint => integer().nullable()();
   TextColumn get colorHex => text().nullable()();
@@ -206,6 +210,17 @@ class Products extends Table {
   IntColumn get emptyCrateValueKobo =>
       integer().withDefault(const Constant(0))();
   BoolColumn get trackEmpties => boolean().withDefault(const Constant(false))();
+  BoolColumn get allowFractionalSales =>
+      boolean().withDefault(const Constant(false))();
+  // Optional product barcode (schema v18). Surfaced in the UI only for
+  // Pharmacy / Supermarket businesses — that UI lands with the barcode
+  // scanner work (pivot step 30); the column ships now with the price drop.
+  TextColumn get barcode => text().nullable()();
+  // Optional single expiry date per product (schema v19, master plan §16.5).
+  // Not per-batch/FIFO (that stays Phase 2) — one date used to flag and
+  // sell-down the stock closest to expiry. Available for all business types;
+  // businesses that don't track expiry simply leave it null.
+  DateTimeColumn get expiryDate => dateTime().nullable()();
   TextColumn get imagePath => text().nullable()();
   IntColumn get version => integer().withDefault(const Constant(1))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
@@ -693,6 +708,8 @@ class SavedCarts extends Table {
   TextColumn get name => text()();
   TextColumn get customerId => text().nullable().references(Customers, #id)();
   TextColumn get cartData => text()();
+  TextColumn get cashierId => text().nullable()();
+  DateTimeColumn get expiresAt => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
       dateTime().withDefault(currentDateAndTime)();
@@ -1227,7 +1244,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 16;
+  int get schemaVersion => 19;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1937,6 +1954,104 @@ class AppDatabase extends _$AppDatabase {
           "WHERE status = 'pending' "
           "  AND json_extract(payload, '\$.p_crate_group_id') IS NOT NULL",
         );
+      }
+      if (from < 17) {
+        // v17 (Reebaplus pivot step 13: Cart). Mirrors
+        // supabase/migrations/0053_cart_step13.sql.
+        //   - products.allow_fractional_sales: gates the ±0.5 qty chips in
+        //     the Edit Quantity modal (§13.2). Defaults false.
+        //   - saved_carts.cashier_id / expires_at: per-cashier scoping and
+        //     24h auto-expire for Save Cart / Recall (§13.5). Both nullable
+        //     so pre-v17 saved carts survive (treated as un-expiring,
+        //     un-scoped legacy rows until overwritten).
+        await m.addColumn(products, products.allowFractionalSales);
+        await m.addColumn(savedCarts, savedCarts.cashierId);
+        await m.addColumn(savedCarts, savedCarts.expiresAt);
+      }
+      if (from < 18) {
+        // v18 (Reebaplus pivot step 14: product price columns). Mirrors
+        // supabase/migrations/0055_product_price_columns.sql.
+        //   - Drop the four legacy price columns (retail / bulk breaker /
+        //     distributor / selling). Products now hold three prices:
+        //     buying (already present), retailer, wholesaler.
+        //   - Salvage-map the data (decision Q4 revised 2026-05-30): copy
+        //     retail → retailer and coalesce(distributor, retail) →
+        //     wholesaler. selling + bulk breaker have no new equivalent and
+        //     are dropped. No manual re-entry needed.
+        //   - Add nullable `barcode` (UI lands with pivot step 30).
+        //
+        // Raw DROP COLUMN (not a TableMigration rebuild) keeps this block
+        // decoupled from the current Drift schema and leaves the products
+        // indexes / bump_products_version trigger untouched (none of them
+        // reference a price column). SQLite 3.35+ supports DROP COLUMN;
+        // bundled via sqlite3_flutter_libs. Same approach as the v12 users
+        // column drops above.
+
+        // 1. Add the new columns (they exist in the current Drift schema).
+        await m.addColumn(products, products.retailerPriceKobo);
+        await m.addColumn(products, products.wholesalerPriceKobo);
+        await m.addColumn(products, products.barcode);
+
+        // 2. Carry the old prices over before dropping them.
+        await customStatement(
+          'UPDATE products SET '
+          'retailer_price_kobo = retail_price_kobo, '
+          'wholesaler_price_kobo = COALESCE(distributor_price_kobo, retail_price_kobo)',
+        );
+
+        // 3. Drop the legacy columns. Try/catch each so a half-completed
+        //    earlier attempt re-runs cleanly (SQLite has no
+        //    DROP COLUMN IF EXISTS).
+        for (final col in const [
+          'retail_price_kobo',
+          'bulk_breaker_price_kobo',
+          'distributor_price_kobo',
+          'selling_price_kobo',
+        ]) {
+          try {
+            await customStatement('ALTER TABLE products DROP COLUMN $col');
+          } catch (_) {/* already gone */}
+        }
+
+        // 4. Forward pending sync_queue payloads so a push after the cloud
+        //    0055 deploy doesn't 42703 on the now-gone columns. Cloud 0055
+        //    renames retail→retailer and distributor→wholesaler and drops
+        //    selling / bulk breaker on both the products table and the
+        //    pos_create_product_v2 RPC params.
+        //    (a) per-table products upserts carry top-level snake_case cols.
+        await customStatement(
+          "UPDATE sync_queue "
+          "SET payload = json_remove("
+          "  json_set("
+          "    json_set(payload, '\$.retailer_price_kobo', "
+          "      COALESCE(json_extract(payload, '\$.retail_price_kobo'), 0)), "
+          "    '\$.wholesaler_price_kobo', "
+          "      COALESCE(json_extract(payload, '\$.distributor_price_kobo'), json_extract(payload, '\$.retail_price_kobo'), 0)), "
+          "  '\$.retail_price_kobo', '\$.bulk_breaker_price_kobo', '\$.distributor_price_kobo', '\$.selling_price_kobo'"
+          ") "
+          "WHERE status = 'pending' AND action_type = 'products:upsert' "
+          "  AND json_extract(payload, '\$.retail_price_kobo') IS NOT NULL",
+        );
+        //    (b) pos_create_product_v2 domain envelopes carry p_-prefixed args.
+        await customStatement(
+          "UPDATE sync_queue "
+          "SET payload = json_remove("
+          "  json_set("
+          "    json_set(payload, '\$.p_retailer_price_kobo', "
+          "      COALESCE(json_extract(payload, '\$.p_retail_price_kobo'), 0)), "
+          "    '\$.p_wholesaler_price_kobo', "
+          "      COALESCE(json_extract(payload, '\$.p_distributor_price_kobo'), json_extract(payload, '\$.p_retail_price_kobo'), 0)), "
+          "  '\$.p_retail_price_kobo', '\$.p_bulk_breaker_price_kobo', '\$.p_distributor_price_kobo', '\$.p_selling_price_kobo'"
+          ") "
+          "WHERE status = 'pending' AND action_type = 'domain:pos_create_product_v2' "
+          "  AND json_extract(payload, '\$.p_retail_price_kobo') IS NOT NULL",
+        );
+      }
+      if (from < 19) {
+        // v19 (Reebaplus pivot step 15, master plan §16.5): optional single
+        // product expiry date. Mirrors supabase/migrations/0056_product_expiry.sql.
+        // One nullable column, no rebuild and no data backfill.
+        await m.addColumn(products, products.expiryDate);
       }
     },
     beforeOpen: (details) async {

@@ -4351,44 +4351,23 @@ class $ProductsTable extends Products
     requiredDuringInsert: false,
     defaultValue: const Constant('Bottle'),
   );
-  static const VerificationMeta _retailPriceKoboMeta = const VerificationMeta(
-    'retailPriceKobo',
+  static const VerificationMeta _retailerPriceKoboMeta = const VerificationMeta(
+    'retailerPriceKobo',
   );
   @override
-  late final GeneratedColumn<int> retailPriceKobo = GeneratedColumn<int>(
-    'retail_price_kobo',
+  late final GeneratedColumn<int> retailerPriceKobo = GeneratedColumn<int>(
+    'retailer_price_kobo',
     aliasedName,
     false,
     type: DriftSqlType.int,
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
-  static const VerificationMeta _bulkBreakerPriceKoboMeta =
-      const VerificationMeta('bulkBreakerPriceKobo');
+  static const VerificationMeta _wholesalerPriceKoboMeta =
+      const VerificationMeta('wholesalerPriceKobo');
   @override
-  late final GeneratedColumn<int> bulkBreakerPriceKobo = GeneratedColumn<int>(
-    'bulk_breaker_price_kobo',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _distributorPriceKoboMeta =
-      const VerificationMeta('distributorPriceKobo');
-  @override
-  late final GeneratedColumn<int> distributorPriceKobo = GeneratedColumn<int>(
-    'distributor_price_kobo',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _sellingPriceKoboMeta = const VerificationMeta(
-    'sellingPriceKobo',
-  );
-  @override
-  late final GeneratedColumn<int> sellingPriceKobo = GeneratedColumn<int>(
-    'selling_price_kobo',
+  late final GeneratedColumn<int> wholesalerPriceKobo = GeneratedColumn<int>(
+    'wholesaler_price_kobo',
     aliasedName,
     false,
     type: DriftSqlType.int,
@@ -4544,6 +4523,42 @@ class $ProductsTable extends Products
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _allowFractionalSalesMeta =
+      const VerificationMeta('allowFractionalSales');
+  @override
+  late final GeneratedColumn<bool> allowFractionalSales = GeneratedColumn<bool>(
+    'allow_fractional_sales',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("allow_fractional_sales" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _barcodeMeta = const VerificationMeta(
+    'barcode',
+  );
+  @override
+  late final GeneratedColumn<String> barcode = GeneratedColumn<String>(
+    'barcode',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _expiryDateMeta = const VerificationMeta(
+    'expiryDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> expiryDate = GeneratedColumn<DateTime>(
+    'expiry_date',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _imagePathMeta = const VerificationMeta(
     'imagePath',
   );
@@ -4605,10 +4620,8 @@ class $ProductsTable extends Products
     sku,
     size,
     unit,
-    retailPriceKobo,
-    bulkBreakerPriceKobo,
-    distributorPriceKobo,
-    sellingPriceKobo,
+    retailerPriceKobo,
+    wholesalerPriceKobo,
     buyingPriceKobo,
     iconCodePoint,
     colorHex,
@@ -4621,6 +4634,9 @@ class $ProductsTable extends Products
     monthlyTargetUnits,
     emptyCrateValueKobo,
     trackEmpties,
+    allowFractionalSales,
+    barcode,
+    expiryDate,
     imagePath,
     version,
     createdAt,
@@ -4711,39 +4727,21 @@ class $ProductsTable extends Products
         unit.isAcceptableOrUnknown(data['unit']!, _unitMeta),
       );
     }
-    if (data.containsKey('retail_price_kobo')) {
+    if (data.containsKey('retailer_price_kobo')) {
       context.handle(
-        _retailPriceKoboMeta,
-        retailPriceKobo.isAcceptableOrUnknown(
-          data['retail_price_kobo']!,
-          _retailPriceKoboMeta,
+        _retailerPriceKoboMeta,
+        retailerPriceKobo.isAcceptableOrUnknown(
+          data['retailer_price_kobo']!,
+          _retailerPriceKoboMeta,
         ),
       );
     }
-    if (data.containsKey('bulk_breaker_price_kobo')) {
+    if (data.containsKey('wholesaler_price_kobo')) {
       context.handle(
-        _bulkBreakerPriceKoboMeta,
-        bulkBreakerPriceKobo.isAcceptableOrUnknown(
-          data['bulk_breaker_price_kobo']!,
-          _bulkBreakerPriceKoboMeta,
-        ),
-      );
-    }
-    if (data.containsKey('distributor_price_kobo')) {
-      context.handle(
-        _distributorPriceKoboMeta,
-        distributorPriceKobo.isAcceptableOrUnknown(
-          data['distributor_price_kobo']!,
-          _distributorPriceKoboMeta,
-        ),
-      );
-    }
-    if (data.containsKey('selling_price_kobo')) {
-      context.handle(
-        _sellingPriceKoboMeta,
-        sellingPriceKobo.isAcceptableOrUnknown(
-          data['selling_price_kobo']!,
-          _sellingPriceKoboMeta,
+        _wholesalerPriceKoboMeta,
+        wholesalerPriceKobo.isAcceptableOrUnknown(
+          data['wholesaler_price_kobo']!,
+          _wholesalerPriceKoboMeta,
         ),
       );
     }
@@ -4849,6 +4847,27 @@ class $ProductsTable extends Products
         ),
       );
     }
+    if (data.containsKey('allow_fractional_sales')) {
+      context.handle(
+        _allowFractionalSalesMeta,
+        allowFractionalSales.isAcceptableOrUnknown(
+          data['allow_fractional_sales']!,
+          _allowFractionalSalesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('barcode')) {
+      context.handle(
+        _barcodeMeta,
+        barcode.isAcceptableOrUnknown(data['barcode']!, _barcodeMeta),
+      );
+    }
+    if (data.containsKey('expiry_date')) {
+      context.handle(
+        _expiryDateMeta,
+        expiryDate.isAcceptableOrUnknown(data['expiry_date']!, _expiryDateMeta),
+      );
+    }
     if (data.containsKey('image_path')) {
       context.handle(
         _imagePathMeta,
@@ -4929,21 +4948,13 @@ class $ProductsTable extends Products
         DriftSqlType.string,
         data['${effectivePrefix}unit'],
       )!,
-      retailPriceKobo: attachedDatabase.typeMapping.read(
+      retailerPriceKobo: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
-        data['${effectivePrefix}retail_price_kobo'],
+        data['${effectivePrefix}retailer_price_kobo'],
       )!,
-      bulkBreakerPriceKobo: attachedDatabase.typeMapping.read(
+      wholesalerPriceKobo: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
-        data['${effectivePrefix}bulk_breaker_price_kobo'],
-      ),
-      distributorPriceKobo: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}distributor_price_kobo'],
-      ),
-      sellingPriceKobo: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}selling_price_kobo'],
+        data['${effectivePrefix}wholesaler_price_kobo'],
       )!,
       buyingPriceKobo: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
@@ -4993,6 +5004,18 @@ class $ProductsTable extends Products
         DriftSqlType.bool,
         data['${effectivePrefix}track_empties'],
       )!,
+      allowFractionalSales: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}allow_fractional_sales'],
+      )!,
+      barcode: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}barcode'],
+      ),
+      expiryDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}expiry_date'],
+      ),
       imagePath: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}image_path'],
@@ -5030,10 +5053,8 @@ class ProductData extends DataClass implements Insertable<ProductData> {
   final String? sku;
   final String? size;
   final String unit;
-  final int retailPriceKobo;
-  final int? bulkBreakerPriceKobo;
-  final int? distributorPriceKobo;
-  final int sellingPriceKobo;
+  final int retailerPriceKobo;
+  final int wholesalerPriceKobo;
   final int buyingPriceKobo;
   final int? iconCodePoint;
   final String? colorHex;
@@ -5046,6 +5067,9 @@ class ProductData extends DataClass implements Insertable<ProductData> {
   final int monthlyTargetUnits;
   final int emptyCrateValueKobo;
   final bool trackEmpties;
+  final bool allowFractionalSales;
+  final String? barcode;
+  final DateTime? expiryDate;
   final String? imagePath;
   final int version;
   final DateTime createdAt;
@@ -5062,10 +5086,8 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     this.sku,
     this.size,
     required this.unit,
-    required this.retailPriceKobo,
-    this.bulkBreakerPriceKobo,
-    this.distributorPriceKobo,
-    required this.sellingPriceKobo,
+    required this.retailerPriceKobo,
+    required this.wholesalerPriceKobo,
     required this.buyingPriceKobo,
     this.iconCodePoint,
     this.colorHex,
@@ -5078,6 +5100,9 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     required this.monthlyTargetUnits,
     required this.emptyCrateValueKobo,
     required this.trackEmpties,
+    required this.allowFractionalSales,
+    this.barcode,
+    this.expiryDate,
     this.imagePath,
     required this.version,
     required this.createdAt,
@@ -5111,14 +5136,8 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       map['size'] = Variable<String>(size);
     }
     map['unit'] = Variable<String>(unit);
-    map['retail_price_kobo'] = Variable<int>(retailPriceKobo);
-    if (!nullToAbsent || bulkBreakerPriceKobo != null) {
-      map['bulk_breaker_price_kobo'] = Variable<int>(bulkBreakerPriceKobo);
-    }
-    if (!nullToAbsent || distributorPriceKobo != null) {
-      map['distributor_price_kobo'] = Variable<int>(distributorPriceKobo);
-    }
-    map['selling_price_kobo'] = Variable<int>(sellingPriceKobo);
+    map['retailer_price_kobo'] = Variable<int>(retailerPriceKobo);
+    map['wholesaler_price_kobo'] = Variable<int>(wholesalerPriceKobo);
     map['buying_price_kobo'] = Variable<int>(buyingPriceKobo);
     if (!nullToAbsent || iconCodePoint != null) {
       map['icon_code_point'] = Variable<int>(iconCodePoint);
@@ -5135,6 +5154,13 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     map['monthly_target_units'] = Variable<int>(monthlyTargetUnits);
     map['empty_crate_value_kobo'] = Variable<int>(emptyCrateValueKobo);
     map['track_empties'] = Variable<bool>(trackEmpties);
+    map['allow_fractional_sales'] = Variable<bool>(allowFractionalSales);
+    if (!nullToAbsent || barcode != null) {
+      map['barcode'] = Variable<String>(barcode);
+    }
+    if (!nullToAbsent || expiryDate != null) {
+      map['expiry_date'] = Variable<DateTime>(expiryDate);
+    }
     if (!nullToAbsent || imagePath != null) {
       map['image_path'] = Variable<String>(imagePath);
     }
@@ -5167,14 +5193,8 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       sku: sku == null && nullToAbsent ? const Value.absent() : Value(sku),
       size: size == null && nullToAbsent ? const Value.absent() : Value(size),
       unit: Value(unit),
-      retailPriceKobo: Value(retailPriceKobo),
-      bulkBreakerPriceKobo: bulkBreakerPriceKobo == null && nullToAbsent
-          ? const Value.absent()
-          : Value(bulkBreakerPriceKobo),
-      distributorPriceKobo: distributorPriceKobo == null && nullToAbsent
-          ? const Value.absent()
-          : Value(distributorPriceKobo),
-      sellingPriceKobo: Value(sellingPriceKobo),
+      retailerPriceKobo: Value(retailerPriceKobo),
+      wholesalerPriceKobo: Value(wholesalerPriceKobo),
       buyingPriceKobo: Value(buyingPriceKobo),
       iconCodePoint: iconCodePoint == null && nullToAbsent
           ? const Value.absent()
@@ -5191,6 +5211,13 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       monthlyTargetUnits: Value(monthlyTargetUnits),
       emptyCrateValueKobo: Value(emptyCrateValueKobo),
       trackEmpties: Value(trackEmpties),
+      allowFractionalSales: Value(allowFractionalSales),
+      barcode: barcode == null && nullToAbsent
+          ? const Value.absent()
+          : Value(barcode),
+      expiryDate: expiryDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(expiryDate),
       imagePath: imagePath == null && nullToAbsent
           ? const Value.absent()
           : Value(imagePath),
@@ -5217,14 +5244,10 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       sku: serializer.fromJson<String?>(json['sku']),
       size: serializer.fromJson<String?>(json['size']),
       unit: serializer.fromJson<String>(json['unit']),
-      retailPriceKobo: serializer.fromJson<int>(json['retailPriceKobo']),
-      bulkBreakerPriceKobo: serializer.fromJson<int?>(
-        json['bulkBreakerPriceKobo'],
+      retailerPriceKobo: serializer.fromJson<int>(json['retailerPriceKobo']),
+      wholesalerPriceKobo: serializer.fromJson<int>(
+        json['wholesalerPriceKobo'],
       ),
-      distributorPriceKobo: serializer.fromJson<int?>(
-        json['distributorPriceKobo'],
-      ),
-      sellingPriceKobo: serializer.fromJson<int>(json['sellingPriceKobo']),
       buyingPriceKobo: serializer.fromJson<int>(json['buyingPriceKobo']),
       iconCodePoint: serializer.fromJson<int?>(json['iconCodePoint']),
       colorHex: serializer.fromJson<String?>(json['colorHex']),
@@ -5239,6 +5262,11 @@ class ProductData extends DataClass implements Insertable<ProductData> {
         json['emptyCrateValueKobo'],
       ),
       trackEmpties: serializer.fromJson<bool>(json['trackEmpties']),
+      allowFractionalSales: serializer.fromJson<bool>(
+        json['allowFractionalSales'],
+      ),
+      barcode: serializer.fromJson<String?>(json['barcode']),
+      expiryDate: serializer.fromJson<DateTime?>(json['expiryDate']),
       imagePath: serializer.fromJson<String?>(json['imagePath']),
       version: serializer.fromJson<int>(json['version']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -5260,10 +5288,8 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       'sku': serializer.toJson<String?>(sku),
       'size': serializer.toJson<String?>(size),
       'unit': serializer.toJson<String>(unit),
-      'retailPriceKobo': serializer.toJson<int>(retailPriceKobo),
-      'bulkBreakerPriceKobo': serializer.toJson<int?>(bulkBreakerPriceKobo),
-      'distributorPriceKobo': serializer.toJson<int?>(distributorPriceKobo),
-      'sellingPriceKobo': serializer.toJson<int>(sellingPriceKobo),
+      'retailerPriceKobo': serializer.toJson<int>(retailerPriceKobo),
+      'wholesalerPriceKobo': serializer.toJson<int>(wholesalerPriceKobo),
       'buyingPriceKobo': serializer.toJson<int>(buyingPriceKobo),
       'iconCodePoint': serializer.toJson<int?>(iconCodePoint),
       'colorHex': serializer.toJson<String?>(colorHex),
@@ -5276,6 +5302,9 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       'monthlyTargetUnits': serializer.toJson<int>(monthlyTargetUnits),
       'emptyCrateValueKobo': serializer.toJson<int>(emptyCrateValueKobo),
       'trackEmpties': serializer.toJson<bool>(trackEmpties),
+      'allowFractionalSales': serializer.toJson<bool>(allowFractionalSales),
+      'barcode': serializer.toJson<String?>(barcode),
+      'expiryDate': serializer.toJson<DateTime?>(expiryDate),
       'imagePath': serializer.toJson<String?>(imagePath),
       'version': serializer.toJson<int>(version),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -5295,10 +5324,8 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     Value<String?> sku = const Value.absent(),
     Value<String?> size = const Value.absent(),
     String? unit,
-    int? retailPriceKobo,
-    Value<int?> bulkBreakerPriceKobo = const Value.absent(),
-    Value<int?> distributorPriceKobo = const Value.absent(),
-    int? sellingPriceKobo,
+    int? retailerPriceKobo,
+    int? wholesalerPriceKobo,
     int? buyingPriceKobo,
     Value<int?> iconCodePoint = const Value.absent(),
     Value<String?> colorHex = const Value.absent(),
@@ -5311,6 +5338,9 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     int? monthlyTargetUnits,
     int? emptyCrateValueKobo,
     bool? trackEmpties,
+    bool? allowFractionalSales,
+    Value<String?> barcode = const Value.absent(),
+    Value<DateTime?> expiryDate = const Value.absent(),
     Value<String?> imagePath = const Value.absent(),
     int? version,
     DateTime? createdAt,
@@ -5331,14 +5361,8 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     sku: sku.present ? sku.value : this.sku,
     size: size.present ? size.value : this.size,
     unit: unit ?? this.unit,
-    retailPriceKobo: retailPriceKobo ?? this.retailPriceKobo,
-    bulkBreakerPriceKobo: bulkBreakerPriceKobo.present
-        ? bulkBreakerPriceKobo.value
-        : this.bulkBreakerPriceKobo,
-    distributorPriceKobo: distributorPriceKobo.present
-        ? distributorPriceKobo.value
-        : this.distributorPriceKobo,
-    sellingPriceKobo: sellingPriceKobo ?? this.sellingPriceKobo,
+    retailerPriceKobo: retailerPriceKobo ?? this.retailerPriceKobo,
+    wholesalerPriceKobo: wholesalerPriceKobo ?? this.wholesalerPriceKobo,
     buyingPriceKobo: buyingPriceKobo ?? this.buyingPriceKobo,
     iconCodePoint: iconCodePoint.present
         ? iconCodePoint.value
@@ -5353,6 +5377,9 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     monthlyTargetUnits: monthlyTargetUnits ?? this.monthlyTargetUnits,
     emptyCrateValueKobo: emptyCrateValueKobo ?? this.emptyCrateValueKobo,
     trackEmpties: trackEmpties ?? this.trackEmpties,
+    allowFractionalSales: allowFractionalSales ?? this.allowFractionalSales,
+    barcode: barcode.present ? barcode.value : this.barcode,
+    expiryDate: expiryDate.present ? expiryDate.value : this.expiryDate,
     imagePath: imagePath.present ? imagePath.value : this.imagePath,
     version: version ?? this.version,
     createdAt: createdAt ?? this.createdAt,
@@ -5381,18 +5408,12 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       sku: data.sku.present ? data.sku.value : this.sku,
       size: data.size.present ? data.size.value : this.size,
       unit: data.unit.present ? data.unit.value : this.unit,
-      retailPriceKobo: data.retailPriceKobo.present
-          ? data.retailPriceKobo.value
-          : this.retailPriceKobo,
-      bulkBreakerPriceKobo: data.bulkBreakerPriceKobo.present
-          ? data.bulkBreakerPriceKobo.value
-          : this.bulkBreakerPriceKobo,
-      distributorPriceKobo: data.distributorPriceKobo.present
-          ? data.distributorPriceKobo.value
-          : this.distributorPriceKobo,
-      sellingPriceKobo: data.sellingPriceKobo.present
-          ? data.sellingPriceKobo.value
-          : this.sellingPriceKobo,
+      retailerPriceKobo: data.retailerPriceKobo.present
+          ? data.retailerPriceKobo.value
+          : this.retailerPriceKobo,
+      wholesalerPriceKobo: data.wholesalerPriceKobo.present
+          ? data.wholesalerPriceKobo.value
+          : this.wholesalerPriceKobo,
       buyingPriceKobo: data.buyingPriceKobo.present
           ? data.buyingPriceKobo.value
           : this.buyingPriceKobo,
@@ -5425,6 +5446,13 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       trackEmpties: data.trackEmpties.present
           ? data.trackEmpties.value
           : this.trackEmpties,
+      allowFractionalSales: data.allowFractionalSales.present
+          ? data.allowFractionalSales.value
+          : this.allowFractionalSales,
+      barcode: data.barcode.present ? data.barcode.value : this.barcode,
+      expiryDate: data.expiryDate.present
+          ? data.expiryDate.value
+          : this.expiryDate,
       imagePath: data.imagePath.present ? data.imagePath.value : this.imagePath,
       version: data.version.present ? data.version.value : this.version,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
@@ -5448,10 +5476,8 @@ class ProductData extends DataClass implements Insertable<ProductData> {
           ..write('sku: $sku, ')
           ..write('size: $size, ')
           ..write('unit: $unit, ')
-          ..write('retailPriceKobo: $retailPriceKobo, ')
-          ..write('bulkBreakerPriceKobo: $bulkBreakerPriceKobo, ')
-          ..write('distributorPriceKobo: $distributorPriceKobo, ')
-          ..write('sellingPriceKobo: $sellingPriceKobo, ')
+          ..write('retailerPriceKobo: $retailerPriceKobo, ')
+          ..write('wholesalerPriceKobo: $wholesalerPriceKobo, ')
           ..write('buyingPriceKobo: $buyingPriceKobo, ')
           ..write('iconCodePoint: $iconCodePoint, ')
           ..write('colorHex: $colorHex, ')
@@ -5464,6 +5490,9 @@ class ProductData extends DataClass implements Insertable<ProductData> {
           ..write('monthlyTargetUnits: $monthlyTargetUnits, ')
           ..write('emptyCrateValueKobo: $emptyCrateValueKobo, ')
           ..write('trackEmpties: $trackEmpties, ')
+          ..write('allowFractionalSales: $allowFractionalSales, ')
+          ..write('barcode: $barcode, ')
+          ..write('expiryDate: $expiryDate, ')
           ..write('imagePath: $imagePath, ')
           ..write('version: $version, ')
           ..write('createdAt: $createdAt, ')
@@ -5485,10 +5514,8 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     sku,
     size,
     unit,
-    retailPriceKobo,
-    bulkBreakerPriceKobo,
-    distributorPriceKobo,
-    sellingPriceKobo,
+    retailerPriceKobo,
+    wholesalerPriceKobo,
     buyingPriceKobo,
     iconCodePoint,
     colorHex,
@@ -5501,6 +5528,9 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     monthlyTargetUnits,
     emptyCrateValueKobo,
     trackEmpties,
+    allowFractionalSales,
+    barcode,
+    expiryDate,
     imagePath,
     version,
     createdAt,
@@ -5521,10 +5551,8 @@ class ProductData extends DataClass implements Insertable<ProductData> {
           other.sku == this.sku &&
           other.size == this.size &&
           other.unit == this.unit &&
-          other.retailPriceKobo == this.retailPriceKobo &&
-          other.bulkBreakerPriceKobo == this.bulkBreakerPriceKobo &&
-          other.distributorPriceKobo == this.distributorPriceKobo &&
-          other.sellingPriceKobo == this.sellingPriceKobo &&
+          other.retailerPriceKobo == this.retailerPriceKobo &&
+          other.wholesalerPriceKobo == this.wholesalerPriceKobo &&
           other.buyingPriceKobo == this.buyingPriceKobo &&
           other.iconCodePoint == this.iconCodePoint &&
           other.colorHex == this.colorHex &&
@@ -5537,6 +5565,9 @@ class ProductData extends DataClass implements Insertable<ProductData> {
           other.monthlyTargetUnits == this.monthlyTargetUnits &&
           other.emptyCrateValueKobo == this.emptyCrateValueKobo &&
           other.trackEmpties == this.trackEmpties &&
+          other.allowFractionalSales == this.allowFractionalSales &&
+          other.barcode == this.barcode &&
+          other.expiryDate == this.expiryDate &&
           other.imagePath == this.imagePath &&
           other.version == this.version &&
           other.createdAt == this.createdAt &&
@@ -5555,10 +5586,8 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
   final Value<String?> sku;
   final Value<String?> size;
   final Value<String> unit;
-  final Value<int> retailPriceKobo;
-  final Value<int?> bulkBreakerPriceKobo;
-  final Value<int?> distributorPriceKobo;
-  final Value<int> sellingPriceKobo;
+  final Value<int> retailerPriceKobo;
+  final Value<int> wholesalerPriceKobo;
   final Value<int> buyingPriceKobo;
   final Value<int?> iconCodePoint;
   final Value<String?> colorHex;
@@ -5571,6 +5600,9 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
   final Value<int> monthlyTargetUnits;
   final Value<int> emptyCrateValueKobo;
   final Value<bool> trackEmpties;
+  final Value<bool> allowFractionalSales;
+  final Value<String?> barcode;
+  final Value<DateTime?> expiryDate;
   final Value<String?> imagePath;
   final Value<int> version;
   final Value<DateTime> createdAt;
@@ -5588,10 +5620,8 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     this.sku = const Value.absent(),
     this.size = const Value.absent(),
     this.unit = const Value.absent(),
-    this.retailPriceKobo = const Value.absent(),
-    this.bulkBreakerPriceKobo = const Value.absent(),
-    this.distributorPriceKobo = const Value.absent(),
-    this.sellingPriceKobo = const Value.absent(),
+    this.retailerPriceKobo = const Value.absent(),
+    this.wholesalerPriceKobo = const Value.absent(),
     this.buyingPriceKobo = const Value.absent(),
     this.iconCodePoint = const Value.absent(),
     this.colorHex = const Value.absent(),
@@ -5604,6 +5634,9 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     this.monthlyTargetUnits = const Value.absent(),
     this.emptyCrateValueKobo = const Value.absent(),
     this.trackEmpties = const Value.absent(),
+    this.allowFractionalSales = const Value.absent(),
+    this.barcode = const Value.absent(),
+    this.expiryDate = const Value.absent(),
     this.imagePath = const Value.absent(),
     this.version = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -5622,10 +5655,8 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     this.sku = const Value.absent(),
     this.size = const Value.absent(),
     this.unit = const Value.absent(),
-    this.retailPriceKobo = const Value.absent(),
-    this.bulkBreakerPriceKobo = const Value.absent(),
-    this.distributorPriceKobo = const Value.absent(),
-    this.sellingPriceKobo = const Value.absent(),
+    this.retailerPriceKobo = const Value.absent(),
+    this.wholesalerPriceKobo = const Value.absent(),
     this.buyingPriceKobo = const Value.absent(),
     this.iconCodePoint = const Value.absent(),
     this.colorHex = const Value.absent(),
@@ -5638,6 +5669,9 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     this.monthlyTargetUnits = const Value.absent(),
     this.emptyCrateValueKobo = const Value.absent(),
     this.trackEmpties = const Value.absent(),
+    this.allowFractionalSales = const Value.absent(),
+    this.barcode = const Value.absent(),
+    this.expiryDate = const Value.absent(),
     this.imagePath = const Value.absent(),
     this.version = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -5657,10 +5691,8 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     Expression<String>? sku,
     Expression<String>? size,
     Expression<String>? unit,
-    Expression<int>? retailPriceKobo,
-    Expression<int>? bulkBreakerPriceKobo,
-    Expression<int>? distributorPriceKobo,
-    Expression<int>? sellingPriceKobo,
+    Expression<int>? retailerPriceKobo,
+    Expression<int>? wholesalerPriceKobo,
     Expression<int>? buyingPriceKobo,
     Expression<int>? iconCodePoint,
     Expression<String>? colorHex,
@@ -5673,6 +5705,9 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     Expression<int>? monthlyTargetUnits,
     Expression<int>? emptyCrateValueKobo,
     Expression<bool>? trackEmpties,
+    Expression<bool>? allowFractionalSales,
+    Expression<String>? barcode,
+    Expression<DateTime>? expiryDate,
     Expression<String>? imagePath,
     Expression<int>? version,
     Expression<DateTime>? createdAt,
@@ -5691,12 +5726,9 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
       if (sku != null) 'sku': sku,
       if (size != null) 'size': size,
       if (unit != null) 'unit': unit,
-      if (retailPriceKobo != null) 'retail_price_kobo': retailPriceKobo,
-      if (bulkBreakerPriceKobo != null)
-        'bulk_breaker_price_kobo': bulkBreakerPriceKobo,
-      if (distributorPriceKobo != null)
-        'distributor_price_kobo': distributorPriceKobo,
-      if (sellingPriceKobo != null) 'selling_price_kobo': sellingPriceKobo,
+      if (retailerPriceKobo != null) 'retailer_price_kobo': retailerPriceKobo,
+      if (wholesalerPriceKobo != null)
+        'wholesaler_price_kobo': wholesalerPriceKobo,
       if (buyingPriceKobo != null) 'buying_price_kobo': buyingPriceKobo,
       if (iconCodePoint != null) 'icon_code_point': iconCodePoint,
       if (colorHex != null) 'color_hex': colorHex,
@@ -5711,6 +5743,10 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
       if (emptyCrateValueKobo != null)
         'empty_crate_value_kobo': emptyCrateValueKobo,
       if (trackEmpties != null) 'track_empties': trackEmpties,
+      if (allowFractionalSales != null)
+        'allow_fractional_sales': allowFractionalSales,
+      if (barcode != null) 'barcode': barcode,
+      if (expiryDate != null) 'expiry_date': expiryDate,
       if (imagePath != null) 'image_path': imagePath,
       if (version != null) 'version': version,
       if (createdAt != null) 'created_at': createdAt,
@@ -5731,10 +5767,8 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     Value<String?>? sku,
     Value<String?>? size,
     Value<String>? unit,
-    Value<int>? retailPriceKobo,
-    Value<int?>? bulkBreakerPriceKobo,
-    Value<int?>? distributorPriceKobo,
-    Value<int>? sellingPriceKobo,
+    Value<int>? retailerPriceKobo,
+    Value<int>? wholesalerPriceKobo,
     Value<int>? buyingPriceKobo,
     Value<int?>? iconCodePoint,
     Value<String?>? colorHex,
@@ -5747,6 +5781,9 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     Value<int>? monthlyTargetUnits,
     Value<int>? emptyCrateValueKobo,
     Value<bool>? trackEmpties,
+    Value<bool>? allowFractionalSales,
+    Value<String?>? barcode,
+    Value<DateTime?>? expiryDate,
     Value<String?>? imagePath,
     Value<int>? version,
     Value<DateTime>? createdAt,
@@ -5765,10 +5802,8 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
       sku: sku ?? this.sku,
       size: size ?? this.size,
       unit: unit ?? this.unit,
-      retailPriceKobo: retailPriceKobo ?? this.retailPriceKobo,
-      bulkBreakerPriceKobo: bulkBreakerPriceKobo ?? this.bulkBreakerPriceKobo,
-      distributorPriceKobo: distributorPriceKobo ?? this.distributorPriceKobo,
-      sellingPriceKobo: sellingPriceKobo ?? this.sellingPriceKobo,
+      retailerPriceKobo: retailerPriceKobo ?? this.retailerPriceKobo,
+      wholesalerPriceKobo: wholesalerPriceKobo ?? this.wholesalerPriceKobo,
       buyingPriceKobo: buyingPriceKobo ?? this.buyingPriceKobo,
       iconCodePoint: iconCodePoint ?? this.iconCodePoint,
       colorHex: colorHex ?? this.colorHex,
@@ -5781,6 +5816,9 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
       monthlyTargetUnits: monthlyTargetUnits ?? this.monthlyTargetUnits,
       emptyCrateValueKobo: emptyCrateValueKobo ?? this.emptyCrateValueKobo,
       trackEmpties: trackEmpties ?? this.trackEmpties,
+      allowFractionalSales: allowFractionalSales ?? this.allowFractionalSales,
+      barcode: barcode ?? this.barcode,
+      expiryDate: expiryDate ?? this.expiryDate,
       imagePath: imagePath ?? this.imagePath,
       version: version ?? this.version,
       createdAt: createdAt ?? this.createdAt,
@@ -5825,19 +5863,11 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     if (unit.present) {
       map['unit'] = Variable<String>(unit.value);
     }
-    if (retailPriceKobo.present) {
-      map['retail_price_kobo'] = Variable<int>(retailPriceKobo.value);
+    if (retailerPriceKobo.present) {
+      map['retailer_price_kobo'] = Variable<int>(retailerPriceKobo.value);
     }
-    if (bulkBreakerPriceKobo.present) {
-      map['bulk_breaker_price_kobo'] = Variable<int>(
-        bulkBreakerPriceKobo.value,
-      );
-    }
-    if (distributorPriceKobo.present) {
-      map['distributor_price_kobo'] = Variable<int>(distributorPriceKobo.value);
-    }
-    if (sellingPriceKobo.present) {
-      map['selling_price_kobo'] = Variable<int>(sellingPriceKobo.value);
+    if (wholesalerPriceKobo.present) {
+      map['wholesaler_price_kobo'] = Variable<int>(wholesalerPriceKobo.value);
     }
     if (buyingPriceKobo.present) {
       map['buying_price_kobo'] = Variable<int>(buyingPriceKobo.value);
@@ -5875,6 +5905,17 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     if (trackEmpties.present) {
       map['track_empties'] = Variable<bool>(trackEmpties.value);
     }
+    if (allowFractionalSales.present) {
+      map['allow_fractional_sales'] = Variable<bool>(
+        allowFractionalSales.value,
+      );
+    }
+    if (barcode.present) {
+      map['barcode'] = Variable<String>(barcode.value);
+    }
+    if (expiryDate.present) {
+      map['expiry_date'] = Variable<DateTime>(expiryDate.value);
+    }
     if (imagePath.present) {
       map['image_path'] = Variable<String>(imagePath.value);
     }
@@ -5907,10 +5948,8 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
           ..write('sku: $sku, ')
           ..write('size: $size, ')
           ..write('unit: $unit, ')
-          ..write('retailPriceKobo: $retailPriceKobo, ')
-          ..write('bulkBreakerPriceKobo: $bulkBreakerPriceKobo, ')
-          ..write('distributorPriceKobo: $distributorPriceKobo, ')
-          ..write('sellingPriceKobo: $sellingPriceKobo, ')
+          ..write('retailerPriceKobo: $retailerPriceKobo, ')
+          ..write('wholesalerPriceKobo: $wholesalerPriceKobo, ')
           ..write('buyingPriceKobo: $buyingPriceKobo, ')
           ..write('iconCodePoint: $iconCodePoint, ')
           ..write('colorHex: $colorHex, ')
@@ -5923,6 +5962,9 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
           ..write('monthlyTargetUnits: $monthlyTargetUnits, ')
           ..write('emptyCrateValueKobo: $emptyCrateValueKobo, ')
           ..write('trackEmpties: $trackEmpties, ')
+          ..write('allowFractionalSales: $allowFractionalSales, ')
+          ..write('barcode: $barcode, ')
+          ..write('expiryDate: $expiryDate, ')
           ..write('imagePath: $imagePath, ')
           ..write('version: $version, ')
           ..write('createdAt: $createdAt, ')
@@ -19532,6 +19574,28 @@ class $SavedCartsTable extends SavedCarts
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _cashierIdMeta = const VerificationMeta(
+    'cashierId',
+  );
+  @override
+  late final GeneratedColumn<String> cashierId = GeneratedColumn<String>(
+    'cashier_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _expiresAtMeta = const VerificationMeta(
+    'expiresAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> expiresAt = GeneratedColumn<DateTime>(
+    'expires_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -19564,6 +19628,8 @@ class $SavedCartsTable extends SavedCarts
     name,
     customerId,
     cartData,
+    cashierId,
+    expiresAt,
     createdAt,
     lastUpdatedAt,
   ];
@@ -19612,6 +19678,18 @@ class $SavedCartsTable extends SavedCarts
     } else if (isInserting) {
       context.missing(_cartDataMeta);
     }
+    if (data.containsKey('cashier_id')) {
+      context.handle(
+        _cashierIdMeta,
+        cashierId.isAcceptableOrUnknown(data['cashier_id']!, _cashierIdMeta),
+      );
+    }
+    if (data.containsKey('expires_at')) {
+      context.handle(
+        _expiresAtMeta,
+        expiresAt.isAcceptableOrUnknown(data['expires_at']!, _expiresAtMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -19656,6 +19734,14 @@ class $SavedCartsTable extends SavedCarts
         DriftSqlType.string,
         data['${effectivePrefix}cart_data'],
       )!,
+      cashierId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}cashier_id'],
+      ),
+      expiresAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}expires_at'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -19679,6 +19765,8 @@ class SavedCartData extends DataClass implements Insertable<SavedCartData> {
   final String name;
   final String? customerId;
   final String cartData;
+  final String? cashierId;
+  final DateTime? expiresAt;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
   const SavedCartData({
@@ -19687,6 +19775,8 @@ class SavedCartData extends DataClass implements Insertable<SavedCartData> {
     required this.name,
     this.customerId,
     required this.cartData,
+    this.cashierId,
+    this.expiresAt,
     required this.createdAt,
     required this.lastUpdatedAt,
   });
@@ -19700,6 +19790,12 @@ class SavedCartData extends DataClass implements Insertable<SavedCartData> {
       map['customer_id'] = Variable<String>(customerId);
     }
     map['cart_data'] = Variable<String>(cartData);
+    if (!nullToAbsent || cashierId != null) {
+      map['cashier_id'] = Variable<String>(cashierId);
+    }
+    if (!nullToAbsent || expiresAt != null) {
+      map['expires_at'] = Variable<DateTime>(expiresAt);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
     return map;
@@ -19714,6 +19810,12 @@ class SavedCartData extends DataClass implements Insertable<SavedCartData> {
           ? const Value.absent()
           : Value(customerId),
       cartData: Value(cartData),
+      cashierId: cashierId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(cashierId),
+      expiresAt: expiresAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(expiresAt),
       createdAt: Value(createdAt),
       lastUpdatedAt: Value(lastUpdatedAt),
     );
@@ -19730,6 +19832,8 @@ class SavedCartData extends DataClass implements Insertable<SavedCartData> {
       name: serializer.fromJson<String>(json['name']),
       customerId: serializer.fromJson<String?>(json['customerId']),
       cartData: serializer.fromJson<String>(json['cartData']),
+      cashierId: serializer.fromJson<String?>(json['cashierId']),
+      expiresAt: serializer.fromJson<DateTime?>(json['expiresAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
     );
@@ -19743,6 +19847,8 @@ class SavedCartData extends DataClass implements Insertable<SavedCartData> {
       'name': serializer.toJson<String>(name),
       'customerId': serializer.toJson<String?>(customerId),
       'cartData': serializer.toJson<String>(cartData),
+      'cashierId': serializer.toJson<String?>(cashierId),
+      'expiresAt': serializer.toJson<DateTime?>(expiresAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
     };
@@ -19754,6 +19860,8 @@ class SavedCartData extends DataClass implements Insertable<SavedCartData> {
     String? name,
     Value<String?> customerId = const Value.absent(),
     String? cartData,
+    Value<String?> cashierId = const Value.absent(),
+    Value<DateTime?> expiresAt = const Value.absent(),
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
   }) => SavedCartData(
@@ -19762,6 +19870,8 @@ class SavedCartData extends DataClass implements Insertable<SavedCartData> {
     name: name ?? this.name,
     customerId: customerId.present ? customerId.value : this.customerId,
     cartData: cartData ?? this.cartData,
+    cashierId: cashierId.present ? cashierId.value : this.cashierId,
+    expiresAt: expiresAt.present ? expiresAt.value : this.expiresAt,
     createdAt: createdAt ?? this.createdAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
   );
@@ -19776,6 +19886,8 @@ class SavedCartData extends DataClass implements Insertable<SavedCartData> {
           ? data.customerId.value
           : this.customerId,
       cartData: data.cartData.present ? data.cartData.value : this.cartData,
+      cashierId: data.cashierId.present ? data.cashierId.value : this.cashierId,
+      expiresAt: data.expiresAt.present ? data.expiresAt.value : this.expiresAt,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       lastUpdatedAt: data.lastUpdatedAt.present
           ? data.lastUpdatedAt.value
@@ -19791,6 +19903,8 @@ class SavedCartData extends DataClass implements Insertable<SavedCartData> {
           ..write('name: $name, ')
           ..write('customerId: $customerId, ')
           ..write('cartData: $cartData, ')
+          ..write('cashierId: $cashierId, ')
+          ..write('expiresAt: $expiresAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt')
           ..write(')'))
@@ -19804,6 +19918,8 @@ class SavedCartData extends DataClass implements Insertable<SavedCartData> {
     name,
     customerId,
     cartData,
+    cashierId,
+    expiresAt,
     createdAt,
     lastUpdatedAt,
   );
@@ -19816,6 +19932,8 @@ class SavedCartData extends DataClass implements Insertable<SavedCartData> {
           other.name == this.name &&
           other.customerId == this.customerId &&
           other.cartData == this.cartData &&
+          other.cashierId == this.cashierId &&
+          other.expiresAt == this.expiresAt &&
           other.createdAt == this.createdAt &&
           other.lastUpdatedAt == this.lastUpdatedAt);
 }
@@ -19826,6 +19944,8 @@ class SavedCartsCompanion extends UpdateCompanion<SavedCartData> {
   final Value<String> name;
   final Value<String?> customerId;
   final Value<String> cartData;
+  final Value<String?> cashierId;
+  final Value<DateTime?> expiresAt;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
   final Value<int> rowid;
@@ -19835,6 +19955,8 @@ class SavedCartsCompanion extends UpdateCompanion<SavedCartData> {
     this.name = const Value.absent(),
     this.customerId = const Value.absent(),
     this.cartData = const Value.absent(),
+    this.cashierId = const Value.absent(),
+    this.expiresAt = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -19845,6 +19967,8 @@ class SavedCartsCompanion extends UpdateCompanion<SavedCartData> {
     required String name,
     this.customerId = const Value.absent(),
     required String cartData,
+    this.cashierId = const Value.absent(),
+    this.expiresAt = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -19857,6 +19981,8 @@ class SavedCartsCompanion extends UpdateCompanion<SavedCartData> {
     Expression<String>? name,
     Expression<String>? customerId,
     Expression<String>? cartData,
+    Expression<String>? cashierId,
+    Expression<DateTime>? expiresAt,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
     Expression<int>? rowid,
@@ -19867,6 +19993,8 @@ class SavedCartsCompanion extends UpdateCompanion<SavedCartData> {
       if (name != null) 'name': name,
       if (customerId != null) 'customer_id': customerId,
       if (cartData != null) 'cart_data': cartData,
+      if (cashierId != null) 'cashier_id': cashierId,
+      if (expiresAt != null) 'expires_at': expiresAt,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -19879,6 +20007,8 @@ class SavedCartsCompanion extends UpdateCompanion<SavedCartData> {
     Value<String>? name,
     Value<String?>? customerId,
     Value<String>? cartData,
+    Value<String?>? cashierId,
+    Value<DateTime?>? expiresAt,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
     Value<int>? rowid,
@@ -19889,6 +20019,8 @@ class SavedCartsCompanion extends UpdateCompanion<SavedCartData> {
       name: name ?? this.name,
       customerId: customerId ?? this.customerId,
       cartData: cartData ?? this.cartData,
+      cashierId: cashierId ?? this.cashierId,
+      expiresAt: expiresAt ?? this.expiresAt,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
       rowid: rowid ?? this.rowid,
@@ -19913,6 +20045,12 @@ class SavedCartsCompanion extends UpdateCompanion<SavedCartData> {
     if (cartData.present) {
       map['cart_data'] = Variable<String>(cartData.value);
     }
+    if (cashierId.present) {
+      map['cashier_id'] = Variable<String>(cashierId.value);
+    }
+    if (expiresAt.present) {
+      map['expires_at'] = Variable<DateTime>(expiresAt.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -19933,6 +20071,8 @@ class SavedCartsCompanion extends UpdateCompanion<SavedCartData> {
           ..write('name: $name, ')
           ..write('customerId: $customerId, ')
           ..write('cartData: $cartData, ')
+          ..write('cashierId: $cashierId, ')
+          ..write('expiresAt: $expiresAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
           ..write('rowid: $rowid')
@@ -38917,10 +39057,8 @@ typedef $$ProductsTableCreateCompanionBuilder =
       Value<String?> sku,
       Value<String?> size,
       Value<String> unit,
-      Value<int> retailPriceKobo,
-      Value<int?> bulkBreakerPriceKobo,
-      Value<int?> distributorPriceKobo,
-      Value<int> sellingPriceKobo,
+      Value<int> retailerPriceKobo,
+      Value<int> wholesalerPriceKobo,
       Value<int> buyingPriceKobo,
       Value<int?> iconCodePoint,
       Value<String?> colorHex,
@@ -38933,6 +39071,9 @@ typedef $$ProductsTableCreateCompanionBuilder =
       Value<int> monthlyTargetUnits,
       Value<int> emptyCrateValueKobo,
       Value<bool> trackEmpties,
+      Value<bool> allowFractionalSales,
+      Value<String?> barcode,
+      Value<DateTime?> expiryDate,
       Value<String?> imagePath,
       Value<int> version,
       Value<DateTime> createdAt,
@@ -38952,10 +39093,8 @@ typedef $$ProductsTableUpdateCompanionBuilder =
       Value<String?> sku,
       Value<String?> size,
       Value<String> unit,
-      Value<int> retailPriceKobo,
-      Value<int?> bulkBreakerPriceKobo,
-      Value<int?> distributorPriceKobo,
-      Value<int> sellingPriceKobo,
+      Value<int> retailerPriceKobo,
+      Value<int> wholesalerPriceKobo,
       Value<int> buyingPriceKobo,
       Value<int?> iconCodePoint,
       Value<String?> colorHex,
@@ -38968,6 +39107,9 @@ typedef $$ProductsTableUpdateCompanionBuilder =
       Value<int> monthlyTargetUnits,
       Value<int> emptyCrateValueKobo,
       Value<bool> trackEmpties,
+      Value<bool> allowFractionalSales,
+      Value<String?> barcode,
+      Value<DateTime?> expiryDate,
       Value<String?> imagePath,
       Value<int> version,
       Value<DateTime> createdAt,
@@ -39278,23 +39420,13 @@ class $$ProductsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get retailPriceKobo => $composableBuilder(
-    column: $table.retailPriceKobo,
+  ColumnFilters<int> get retailerPriceKobo => $composableBuilder(
+    column: $table.retailerPriceKobo,
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get bulkBreakerPriceKobo => $composableBuilder(
-    column: $table.bulkBreakerPriceKobo,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get distributorPriceKobo => $composableBuilder(
-    column: $table.distributorPriceKobo,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get sellingPriceKobo => $composableBuilder(
-    column: $table.sellingPriceKobo,
+  ColumnFilters<int> get wholesalerPriceKobo => $composableBuilder(
+    column: $table.wholesalerPriceKobo,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -39355,6 +39487,21 @@ class $$ProductsTableFilterComposer
 
   ColumnFilters<bool> get trackEmpties => $composableBuilder(
     column: $table.trackEmpties,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get allowFractionalSales => $composableBuilder(
+    column: $table.allowFractionalSales,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get barcode => $composableBuilder(
+    column: $table.barcode,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get expiryDate => $composableBuilder(
+    column: $table.expiryDate,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -39733,23 +39880,13 @@ class $$ProductsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get retailPriceKobo => $composableBuilder(
-    column: $table.retailPriceKobo,
+  ColumnOrderings<int> get retailerPriceKobo => $composableBuilder(
+    column: $table.retailerPriceKobo,
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get bulkBreakerPriceKobo => $composableBuilder(
-    column: $table.bulkBreakerPriceKobo,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get distributorPriceKobo => $composableBuilder(
-    column: $table.distributorPriceKobo,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get sellingPriceKobo => $composableBuilder(
-    column: $table.sellingPriceKobo,
+  ColumnOrderings<int> get wholesalerPriceKobo => $composableBuilder(
+    column: $table.wholesalerPriceKobo,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -39810,6 +39947,21 @@ class $$ProductsTableOrderingComposer
 
   ColumnOrderings<bool> get trackEmpties => $composableBuilder(
     column: $table.trackEmpties,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get allowFractionalSales => $composableBuilder(
+    column: $table.allowFractionalSales,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get barcode => $composableBuilder(
+    column: $table.barcode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get expiryDate => $composableBuilder(
+    column: $table.expiryDate,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -39976,23 +40128,13 @@ class $$ProductsTableAnnotationComposer
   GeneratedColumn<String> get unit =>
       $composableBuilder(column: $table.unit, builder: (column) => column);
 
-  GeneratedColumn<int> get retailPriceKobo => $composableBuilder(
-    column: $table.retailPriceKobo,
+  GeneratedColumn<int> get retailerPriceKobo => $composableBuilder(
+    column: $table.retailerPriceKobo,
     builder: (column) => column,
   );
 
-  GeneratedColumn<int> get bulkBreakerPriceKobo => $composableBuilder(
-    column: $table.bulkBreakerPriceKobo,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<int> get distributorPriceKobo => $composableBuilder(
-    column: $table.distributorPriceKobo,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<int> get sellingPriceKobo => $composableBuilder(
-    column: $table.sellingPriceKobo,
+  GeneratedColumn<int> get wholesalerPriceKobo => $composableBuilder(
+    column: $table.wholesalerPriceKobo,
     builder: (column) => column,
   );
 
@@ -40049,6 +40191,19 @@ class $$ProductsTableAnnotationComposer
 
   GeneratedColumn<bool> get trackEmpties => $composableBuilder(
     column: $table.trackEmpties,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get allowFractionalSales => $composableBuilder(
+    column: $table.allowFractionalSales,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get barcode =>
+      $composableBuilder(column: $table.barcode, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get expiryDate => $composableBuilder(
+    column: $table.expiryDate,
     builder: (column) => column,
   );
 
@@ -40436,10 +40591,8 @@ class $$ProductsTableTableManager
                 Value<String?> sku = const Value.absent(),
                 Value<String?> size = const Value.absent(),
                 Value<String> unit = const Value.absent(),
-                Value<int> retailPriceKobo = const Value.absent(),
-                Value<int?> bulkBreakerPriceKobo = const Value.absent(),
-                Value<int?> distributorPriceKobo = const Value.absent(),
-                Value<int> sellingPriceKobo = const Value.absent(),
+                Value<int> retailerPriceKobo = const Value.absent(),
+                Value<int> wholesalerPriceKobo = const Value.absent(),
                 Value<int> buyingPriceKobo = const Value.absent(),
                 Value<int?> iconCodePoint = const Value.absent(),
                 Value<String?> colorHex = const Value.absent(),
@@ -40452,6 +40605,9 @@ class $$ProductsTableTableManager
                 Value<int> monthlyTargetUnits = const Value.absent(),
                 Value<int> emptyCrateValueKobo = const Value.absent(),
                 Value<bool> trackEmpties = const Value.absent(),
+                Value<bool> allowFractionalSales = const Value.absent(),
+                Value<String?> barcode = const Value.absent(),
+                Value<DateTime?> expiryDate = const Value.absent(),
                 Value<String?> imagePath = const Value.absent(),
                 Value<int> version = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -40469,10 +40625,8 @@ class $$ProductsTableTableManager
                 sku: sku,
                 size: size,
                 unit: unit,
-                retailPriceKobo: retailPriceKobo,
-                bulkBreakerPriceKobo: bulkBreakerPriceKobo,
-                distributorPriceKobo: distributorPriceKobo,
-                sellingPriceKobo: sellingPriceKobo,
+                retailerPriceKobo: retailerPriceKobo,
+                wholesalerPriceKobo: wholesalerPriceKobo,
                 buyingPriceKobo: buyingPriceKobo,
                 iconCodePoint: iconCodePoint,
                 colorHex: colorHex,
@@ -40485,6 +40639,9 @@ class $$ProductsTableTableManager
                 monthlyTargetUnits: monthlyTargetUnits,
                 emptyCrateValueKobo: emptyCrateValueKobo,
                 trackEmpties: trackEmpties,
+                allowFractionalSales: allowFractionalSales,
+                barcode: barcode,
+                expiryDate: expiryDate,
                 imagePath: imagePath,
                 version: version,
                 createdAt: createdAt,
@@ -40504,10 +40661,8 @@ class $$ProductsTableTableManager
                 Value<String?> sku = const Value.absent(),
                 Value<String?> size = const Value.absent(),
                 Value<String> unit = const Value.absent(),
-                Value<int> retailPriceKobo = const Value.absent(),
-                Value<int?> bulkBreakerPriceKobo = const Value.absent(),
-                Value<int?> distributorPriceKobo = const Value.absent(),
-                Value<int> sellingPriceKobo = const Value.absent(),
+                Value<int> retailerPriceKobo = const Value.absent(),
+                Value<int> wholesalerPriceKobo = const Value.absent(),
                 Value<int> buyingPriceKobo = const Value.absent(),
                 Value<int?> iconCodePoint = const Value.absent(),
                 Value<String?> colorHex = const Value.absent(),
@@ -40520,6 +40675,9 @@ class $$ProductsTableTableManager
                 Value<int> monthlyTargetUnits = const Value.absent(),
                 Value<int> emptyCrateValueKobo = const Value.absent(),
                 Value<bool> trackEmpties = const Value.absent(),
+                Value<bool> allowFractionalSales = const Value.absent(),
+                Value<String?> barcode = const Value.absent(),
+                Value<DateTime?> expiryDate = const Value.absent(),
                 Value<String?> imagePath = const Value.absent(),
                 Value<int> version = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -40537,10 +40695,8 @@ class $$ProductsTableTableManager
                 sku: sku,
                 size: size,
                 unit: unit,
-                retailPriceKobo: retailPriceKobo,
-                bulkBreakerPriceKobo: bulkBreakerPriceKobo,
-                distributorPriceKobo: distributorPriceKobo,
-                sellingPriceKobo: sellingPriceKobo,
+                retailerPriceKobo: retailerPriceKobo,
+                wholesalerPriceKobo: wholesalerPriceKobo,
                 buyingPriceKobo: buyingPriceKobo,
                 iconCodePoint: iconCodePoint,
                 colorHex: colorHex,
@@ -40553,6 +40709,9 @@ class $$ProductsTableTableManager
                 monthlyTargetUnits: monthlyTargetUnits,
                 emptyCrateValueKobo: emptyCrateValueKobo,
                 trackEmpties: trackEmpties,
+                allowFractionalSales: allowFractionalSales,
+                barcode: barcode,
+                expiryDate: expiryDate,
                 imagePath: imagePath,
                 version: version,
                 createdAt: createdAt,
@@ -58164,6 +58323,8 @@ typedef $$SavedCartsTableCreateCompanionBuilder =
       required String name,
       Value<String?> customerId,
       required String cartData,
+      Value<String?> cashierId,
+      Value<DateTime?> expiresAt,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
       Value<int> rowid,
@@ -58175,6 +58336,8 @@ typedef $$SavedCartsTableUpdateCompanionBuilder =
       Value<String> name,
       Value<String?> customerId,
       Value<String> cartData,
+      Value<String?> cashierId,
+      Value<DateTime?> expiresAt,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
       Value<int> rowid,
@@ -58244,6 +58407,16 @@ class $$SavedCartsTableFilterComposer
 
   ColumnFilters<String> get cartData => $composableBuilder(
     column: $table.cartData,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get cashierId => $composableBuilder(
+    column: $table.cashierId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get expiresAt => $composableBuilder(
+    column: $table.expiresAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -58328,6 +58501,16 @@ class $$SavedCartsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get cashierId => $composableBuilder(
+    column: $table.cashierId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get expiresAt => $composableBuilder(
+    column: $table.expiresAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -58402,6 +58585,12 @@ class $$SavedCartsTableAnnotationComposer
 
   GeneratedColumn<String> get cartData =>
       $composableBuilder(column: $table.cartData, builder: (column) => column);
+
+  GeneratedColumn<String> get cashierId =>
+      $composableBuilder(column: $table.cashierId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get expiresAt =>
+      $composableBuilder(column: $table.expiresAt, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -58491,6 +58680,8 @@ class $$SavedCartsTableTableManager
                 Value<String> name = const Value.absent(),
                 Value<String?> customerId = const Value.absent(),
                 Value<String> cartData = const Value.absent(),
+                Value<String?> cashierId = const Value.absent(),
+                Value<DateTime?> expiresAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -58500,6 +58691,8 @@ class $$SavedCartsTableTableManager
                 name: name,
                 customerId: customerId,
                 cartData: cartData,
+                cashierId: cashierId,
+                expiresAt: expiresAt,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
                 rowid: rowid,
@@ -58511,6 +58704,8 @@ class $$SavedCartsTableTableManager
                 required String name,
                 Value<String?> customerId = const Value.absent(),
                 required String cartData,
+                Value<String?> cashierId = const Value.absent(),
+                Value<DateTime?> expiresAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -58520,6 +58715,8 @@ class $$SavedCartsTableTableManager
                 name: name,
                 customerId: customerId,
                 cartData: cartData,
+                cashierId: cashierId,
+                expiresAt: expiresAt,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
                 rowid: rowid,

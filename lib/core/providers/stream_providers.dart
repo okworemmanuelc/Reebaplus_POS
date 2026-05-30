@@ -4,7 +4,6 @@
 /// automatically — Riverpod deduplicates by provider identity.
 library;
 
-import 'package:drift/drift.dart' show OrderingTerm;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -57,10 +56,9 @@ final allCategoriesProvider = StreamProvider<List<CategoryData>>((ref) {
 final allManufacturersProvider =
     StreamProvider<List<ManufacturerData>>((ref) {
   final db = ref.watch(databaseProvider);
-  return (db.select(db.manufacturers)
-        ..where((t) => t.isDeleted.equals(false))
-        ..orderBy([(t) => OrderingTerm(expression: t.name)]))
-      .watch();
+  // Business-scoped via the DAO so a device holding more than one business's
+  // data can't surface another business's manufacturers.
+  return db.inventoryDao.watchAllManufacturers();
 });
 
 // ── Store by id ─────────────────────────────────────────────────────────────
@@ -71,10 +69,8 @@ final allManufacturersProvider =
 final storeByIdProvider =
     StreamProvider.family<StoreData?, String>((ref, storeId) {
   final db = ref.watch(databaseProvider);
-  return (db.select(db.stores)
-        ..where((t) => t.id.equals(storeId))
-        ..limit(1))
-      .watchSingleOrNull();
+  // Business-scoped lookup (DAO filters by current business + id).
+  return db.storesDao.watchStore(storeId);
 });
 
 // ── Roles & permissions (master plan §2.4, schema v13) ─────────────────────
@@ -248,6 +244,41 @@ final currentUserPermissionsProvider = Provider<Set<String>>((ref) {
 bool hasPermission(WidgetRef ref, String key) {
   return ref.watch(currentUserPermissionsProvider).contains(key);
 }
+
+// ── Discount cap (master plan §12.6 / §13.2) ─────────────────────────────────
+
+/// `role_settings` key holding the max discount % a role may apply in the
+/// Cart. Stored on each role row by CEO Settings; shared here so the Cart
+/// reads the same key the settings screen writes.
+const kMaxDiscountPercentKey = 'max_discount_percent';
+
+/// The max discount percentage the currently logged-in user may apply on a
+/// cart line (§13.2). Reads the stored `max_discount_percent` on the user's
+/// role; falls back to the seed defaults (CEO 100, Manager 10, others 0) when
+/// the setting row hasn't been written yet. Returns 0 (no discount) until the
+/// role resolves locally — the safe default for an unresolved role.
+final currentUserMaxDiscountPercentProvider = Provider<int>((ref) {
+  final role = ref.watch(currentUserRoleProvider);
+  if (role == null) return 0;
+  int seedDefault() {
+    switch (role.slug) {
+      case 'ceo':
+        return 100;
+      case 'manager':
+        return 10;
+      default:
+        return 0;
+    }
+  }
+
+  final settings = ref.watch(roleSettingsProvider(role.id)).valueOrNull;
+  if (settings == null) return seedDefault();
+  final stored = settings
+      .where((s) => s.settingKey == kMaxDiscountPercentKey)
+      .map((s) => s.settingValue)
+      .firstOrNull;
+  return int.tryParse(stored ?? '') ?? seedDefault();
+});
 
 // ── Manager cross-store view toggle (master plan §11.2 / §10.2) ──────────────
 

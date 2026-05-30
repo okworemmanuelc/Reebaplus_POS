@@ -42,7 +42,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
   void initState() {
     super.initState();
     final db = ref.read(databaseProvider);
-    _storesSub = db.select(db.stores).watch().listen((data) {
+    _storesSub = db.storesDao.watchActiveStores().listen((data) {
       if (mounted) setState(() => _stores = data);
     });
   }

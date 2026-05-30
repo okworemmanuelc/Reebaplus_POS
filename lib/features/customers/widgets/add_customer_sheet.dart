@@ -44,7 +44,7 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
   void initState() {
     super.initState();
     final db = ref.read(databaseProvider);
-    db.select(db.stores).get().then((wh) {
+    db.storesDao.getActiveStores().then((wh) {
       if (mounted) setState(() => _stores = wh);
     });
   }

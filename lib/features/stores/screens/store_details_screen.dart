@@ -74,7 +74,7 @@ class _StoreDetailsScreenState
     final totalStock = _inventory.fold<int>(0, (sum, p) => sum + p.totalStock);
     final totalValue = _inventory.fold<double>(
       0.0,
-      (sum, p) => sum + (p.totalStock * (p.product.sellingPriceKobo / 100.0)),
+      (sum, p) => sum + (p.totalStock * (p.product.retailerPriceKobo / 100.0)),
     );
     final activeProducts = _inventory.where((p) => p.totalStock > 0).length;
     final lowStock = _inventory

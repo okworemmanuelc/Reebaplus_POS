@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -38,7 +39,9 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
   late final TextEditingController _nameCtrl;
   late final TextEditingController _subtitleCtrl;
   late final TextEditingController _retailPriceCtrl;
+  late final TextEditingController _wholesalePriceCtrl;
   late final TextEditingController _buyingPriceCtrl;
+  late final TextEditingController _emptyCrateValueCtrl;
   late final TextEditingController _lowStockCtrl;
   late final TextEditingController _qtyToAddCtrl;
   late final TextEditingController _supplierCtrl;
@@ -46,8 +49,10 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
 
   late String _unit;
   late bool _trackEmpties;
+  late bool _allowFractionalSales;
   late String _colorHex;
   late String? _size;
+  DateTime? _expiryDate;
   StoreData? _selectedStore;
   SupplierData? _selectedSupplier;
   CategoryData? _selectedCategory;
@@ -67,22 +72,31 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
   static const _units = ['Crate', 'Bottle', 'Pack', 'Carton', 'Keg', 'Can'];
   List<String> _dynamicUnits = _units;
 
-  static const _colors = [
-    '#3B82F6',
-    '#EF4444',
-    '#10B981',
-    '#F59E0B',
-    '#8B5CF6',
-    '#EC4899',
-    '#06B6D4',
-    '#F97316',
-    '#14B8A6',
-    '#6366F1',
-    '#334155',
-    '#64748B',
-  ];
+  /// Whether the current role may see / edit the buying price (§16.5 / §16.7).
+  /// Reads (not watches) so it is safe to call from `_save`.
+  bool get _canEditBuying => ref
+      .read(currentUserPermissionsProvider)
+      .contains('products.edit_buying_price');
 
-  bool get _isStockKeeper => false;
+  /// Empty-crate value in kobo, or null when not tracking empties / left blank.
+  int? get _emptyCrateValueKobo {
+    if (!(_trackEmpties && _unit.toLowerCase() == 'bottle')) return null;
+    final raw = _emptyCrateValueCtrl.text.trim();
+    if (raw.isEmpty) return null;
+    return (parseCurrency(raw) * 100).round();
+  }
+
+  Future<void> _pickExpiryDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _expiryDate ?? now,
+      firstDate: DateTime(now.year - 1),
+      lastDate: DateTime(now.year + 20),
+      helpText: 'Select expiry date',
+    );
+    if (picked != null) setState(() => _expiryDate = picked);
+  }
 
   @override
   void initState() {
@@ -91,10 +105,18 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
     _nameCtrl = TextEditingController(text: p.name);
     _subtitleCtrl = TextEditingController(text: p.subtitle ?? '');
     _retailPriceCtrl = TextEditingController(
-      text: (p.retailPriceKobo / 100).toStringAsFixed(2),
+      text: (p.retailerPriceKobo / 100).toStringAsFixed(2),
+    );
+    _wholesalePriceCtrl = TextEditingController(
+      text: (p.wholesalerPriceKobo / 100).toStringAsFixed(2),
     );
     _buyingPriceCtrl = TextEditingController(
       text: (p.buyingPriceKobo / 100).toStringAsFixed(2),
+    );
+    _emptyCrateValueCtrl = TextEditingController(
+      text: p.emptyCrateValueKobo > 0
+          ? (p.emptyCrateValueKobo / 100).toStringAsFixed(2)
+          : '',
     );
     _lowStockCtrl = TextEditingController(text: p.lowStockThreshold.toString());
     _qtyToAddCtrl = TextEditingController(text: '0');
@@ -105,22 +127,22 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
 
     _unit = p.unit;
     _trackEmpties = p.trackEmpties;
+    _allowFractionalSales = p.allowFractionalSales;
     _size = p.size;
-    // Restore saved color or default
-    final savedColor = p.colorHex;
-    _colorHex = (savedColor != null && _colors.contains(savedColor))
-        ? savedColor
-        : '#3B82F6';
+    _expiryDate = p.expiryDate;
+    // Colour selector is deferred (§16.5); preserve whatever the product
+    // already has (or the default) without exposing a picker.
+    _colorHex = p.colorHex ?? '#3B82F6';
 
     _loadData();
   }
 
   Future<void> _loadData() async {
     final db = ref.read(databaseProvider);
-    final whs = await db.select(db.stores).get();
+    final whs = await db.storesDao.getActiveStores();
     final suppliers = await db.catalogDao.getAllSuppliers();
     final manufacturers = await db.inventoryDao.getAllManufacturers();
-    final cats = await db.select(db.categories).get();
+    final cats = await db.inventoryDao.getAllCategories();
     final uniqueUnits = await db.catalogDao.getUniqueProductUnits();
 
     if (!mounted) return;
@@ -175,7 +197,9 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
     _nameCtrl.dispose();
     _subtitleCtrl.dispose();
     _retailPriceCtrl.dispose();
+    _wholesalePriceCtrl.dispose();
     _buyingPriceCtrl.dispose();
+    _emptyCrateValueCtrl.dispose();
     _lowStockCtrl.dispose();
     _qtyToAddCtrl.dispose();
     _supplierCtrl.dispose();
@@ -304,6 +328,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
     final auth = ref.read(authProvider);
     setState(() => _errorMessage = null);
 
+    final canEditBuying = _canEditBuying;
     final name = _nameCtrl.text.trim();
     String? missingField;
     if (name.isEmpty) {
@@ -311,8 +336,10 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
     } else if (_selectedCategory == null) {
       missingField = 'Category';
     } else if (_retailPriceCtrl.text.trim().isEmpty) {
-      missingField = 'Retail Price';
-    } else if (!_isStockKeeper && _buyingPriceCtrl.text.trim().isEmpty) {
+      missingField = 'Retailer Price';
+    } else if (_wholesalePriceCtrl.text.trim().isEmpty) {
+      missingField = 'Wholesaler Price';
+    } else if (canEditBuying && _buyingPriceCtrl.text.trim().isEmpty) {
       missingField = 'Buying Price';
     } else if (_selectedStore == null) {
       missingField = 'Store';
@@ -324,13 +351,18 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
     }
 
     final retailPrice = parseCurrency(_retailPriceCtrl.text);
-    final buyingPrice = parseCurrency(_buyingPriceCtrl.text);
+    final wholesalePrice = parseCurrency(_wholesalePriceCtrl.text);
+    // Buying price stays hidden (and untouched) for roles without the
+    // permission — preserve the stored value rather than zeroing it.
+    final buyingPrice = canEditBuying
+        ? parseCurrency(_buyingPriceCtrl.text)
+        : widget.product.buyingPriceKobo / 100;
     final qtyToAdd = int.tryParse(_qtyToAddCtrl.text) ?? 0;
 
     if (buyingPrice > retailPrice) {
       setState(
-        () =>
-            _errorMessage = 'Buying price cannot be higher than retail price.',
+        () => _errorMessage =
+            'Buying price cannot be higher than retailer price.',
       );
       return;
     }
@@ -353,6 +385,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
       }
 
       final retailKobo = (retailPrice * 100).round();
+      final wholesaleKobo = (wholesalePrice * 100).round();
       final buyingKobo = (buyingPrice * 100).round();
       final lowStock = int.tryParse(_lowStockCtrl.text) ?? 5;
 
@@ -362,10 +395,13 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
         name: name,
         manufacturerId: _selectedManufacturer?.id,
         buyingPriceKobo: buyingKobo,
-        retailPriceKobo: retailKobo,
+        retailerPriceKobo: retailKobo,
+        wholesalerPriceKobo: wholesaleKobo,
+        emptyCrateValueKobo: _emptyCrateValueKobo,
         categoryId: _selectedCategory?.id,
         unit: _unit,
         trackEmpties: _trackEmpties,
+        allowFractionalSales: _allowFractionalSales,
         imagePath: _imagePath,
         lowStockThreshold: lowStock,
         subtitle: _subtitleCtrl.text.trim().isEmpty
@@ -374,6 +410,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
         colorHex: _colorHex,
         supplierId: _selectedSupplier?.id,
         size: _size,
+        expiryDate: _expiryDate,
       );
 
       // 3. Add stock if quantity entered
@@ -639,7 +676,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                         Expanded(
                           child: AppInput(
                             controller: _retailPriceCtrl,
-                            labelText: 'Retail Price (₦)',
+                            labelText: 'Retailer Price (₦) *',
                             hintText: 'e.g. 500',
                             keyboardType: const TextInputType.numberWithOptions(
                               decimal: true,
@@ -648,20 +685,31 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                           ),
                         ),
                         const SizedBox(width: 12),
-                        if (!_isStockKeeper)
-                          Expanded(
-                            child: AppInput(
-                              controller: _buyingPriceCtrl,
-                              labelText: 'Buying Price (₦) *',
-                              hintText: '0.00',
-                              keyboardType:
-                                  const TextInputType.numberWithOptions(
-                                    decimal: true,
-                                  ),
+                        Expanded(
+                          child: AppInput(
+                            controller: _wholesalePriceCtrl,
+                            labelText: 'Wholesaler Price (₦) *',
+                            hintText: '0.00',
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
                             ),
+                            inputFormatters: [CurrencyInputFormatter()],
                           ),
+                        ),
                       ],
                     ),
+                    if (_canEditBuying) ...[
+                      const SizedBox(height: 14),
+                      AppInput(
+                        controller: _buyingPriceCtrl,
+                        labelText: 'Buying Price (₦) *',
+                        hintText: '0.00',
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        inputFormatters: [CurrencyInputFormatter()],
+                      ),
+                    ],
                     const SizedBox(height: 14),
 
                     // ── LOW STOCK ALERT ──────────────────────────────────────
@@ -699,7 +747,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                     const SizedBox(height: 8),
 
                     // ── TRACK EMPTIES ────────────────────────────────────────
-                    if (_unit.toLowerCase() == 'bottle')
+                    if (_unit.toLowerCase() == 'bottle') ...[
                       CheckboxListTile(
                         value: _trackEmpties,
                         onChanged: (v) =>
@@ -712,49 +760,50 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                         contentPadding: EdgeInsets.zero,
                         dense: true,
                       ),
+                      // ── EMPTY CRATE VALUE (only when tracking empties) ─────
+                      if (_trackEmpties) ...[
+                        const SizedBox(height: 6),
+                        AppInput(
+                          controller: _emptyCrateValueCtrl,
+                          labelText: 'Empty Crate Value (₦)',
+                          hintText: '0.00',
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          inputFormatters: [CurrencyInputFormatter()],
+                        ),
+                        const SizedBox(height: 4),
+                      ],
+                    ],
+
+                    // ── ALLOW FRACTIONAL SALES ───────────────────────────────
+                    CheckboxListTile(
+                      value: _allowFractionalSales,
+                      onChanged: (v) =>
+                          setState(() => _allowFractionalSales = v ?? false),
+                      title: const Text('Allow fractional sales'),
+                      subtitle: const Text(
+                        'Enables ±0.5 quantity steps when selling this product',
+                      ),
+                      controlAffinity: ListTileControlAffinity.leading,
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                    ),
                     const SizedBox(height: 8),
 
-                    // ── COLOR ────────────────────────────────────────────────
-                    _sectionLabel('COLOR', subtext),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: _colors.map((hex) {
-                        final color = Color(
-                          int.parse(hex.replaceFirst('#', '0xFF')),
-                        );
-                        final sel = hex == _colorHex;
-                        return GestureDetector(
-                          onTap: () => setState(() => _colorHex = hex),
-                          child: Container(
-                            width: 32,
-                            height: 32,
-                            decoration: BoxDecoration(
-                              color: color,
-                              shape: BoxShape.circle,
-                              border: sel
-                                  ? Border.all(color: Colors.white, width: 3)
-                                  : null,
-                              boxShadow: sel
-                                  ? [
-                                      BoxShadow(
-                                        color: color.withValues(alpha: 0.5),
-                                        blurRadius: 8,
-                                      ),
-                                    ]
-                                  : null,
-                            ),
-                            child: sel
-                                ? const Icon(
-                                    Icons.check,
-                                    color: Colors.white,
-                                    size: 16,
-                                  )
-                                : null,
-                          ),
-                        );
-                      }).toList(),
+                    // ── EXPIRY DATE (optional, all business types) ───────────
+                    _sectionLabel('EXPIRY DATE', subtext),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Optional — used to flag stock nearing expiry',
+                      style: TextStyle(fontSize: 11, color: subtext),
+                    ),
+                    const SizedBox(height: 8),
+                    _expiryField(
+                      card: card,
+                      border: border,
+                      subtext: subtext,
+                      textColor: textColor,
                     ),
                     const SizedBox(height: 16),
 
@@ -979,6 +1028,55 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                 onPressed: _save,
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _expiryField({
+    required Color card,
+    required Color border,
+    required Color subtext,
+    required Color textColor,
+  }) {
+    final hasDate = _expiryDate != null;
+    String label() {
+      final d = _expiryDate!;
+      return '${d.day.toString().padLeft(2, '0')}/'
+          '${d.month.toString().padLeft(2, '0')}/${d.year}';
+    }
+
+    return InkWell(
+      onTap: _pickExpiryDate,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: card,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: border),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.event_outlined, size: 18, color: subtext),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                hasDate ? label() : 'No expiry date',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: hasDate ? textColor : subtext,
+                  fontWeight: hasDate ? FontWeight.w600 : FontWeight.w400,
+                ),
+              ),
+            ),
+            if (hasDate)
+              GestureDetector(
+                onTap: () => setState(() => _expiryDate = null),
+                child: Icon(Icons.close, size: 16, color: subtext),
+              ),
           ],
         ),
       ),

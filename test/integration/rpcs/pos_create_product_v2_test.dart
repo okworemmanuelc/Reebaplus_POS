@@ -63,7 +63,7 @@ void main() {
           'p_actor_id': clients.env.userId,
           'p_product_id': productId,
           'p_name': 'Round-Trip Beer',
-          'p_selling_price_kobo': 80000,
+          'p_retailer_price_kobo': 80000,
           'p_buying_price_kobo': 50000,
         },
       );
@@ -75,7 +75,7 @@ void main() {
       final product = map['product'] as Map;
       expect(product['id'], productId);
       expect(product['name'], 'Round-Trip Beer');
-      expect(product['selling_price_kobo'], 80000);
+      expect(product['retailer_price_kobo'], 80000);
       expect(product['buying_price_kobo'], 50000);
       // Server defaults — confirm they kicked in for omitted client params.
       expect(product['unit'], 'Bottle');
@@ -110,7 +110,7 @@ void main() {
           'p_actor_id': clients.env.userId,
           'p_product_id': productId,
           'p_name': 'Stocked Beer V2',
-          'p_selling_price_kobo': 100000,
+          'p_retailer_price_kobo': 100000,
           'p_initial_stock': {
             'store_id': storeId,
             'quantity': 24,
@@ -148,7 +148,7 @@ void main() {
             'p_actor_id': clients.env.userId,
             'p_product_id': productId,
             'p_name': 'Replay Beer',
-            'p_selling_price_kobo': 60000,
+            'p_retailer_price_kobo': 60000,
             'p_initial_stock': {
               'store_id': storeId,
               'quantity': 10,
