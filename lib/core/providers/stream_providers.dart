@@ -213,3 +213,28 @@ final currentUserPermissionsProvider = Provider<Set<String>>((ref) {
 bool hasPermission(WidgetRef ref, String key) {
   return ref.watch(currentUserPermissionsProvider).contains(key);
 }
+
+// ── Manager cross-store view toggle (master plan §11.2 / §10.2) ──────────────
+
+/// `role_settings` key for the CEO toggle that unlocks the Home store picker
+/// for Managers. Stored on the Manager role row; value is `'true'`/`'false'`.
+/// Shared by the settings toggle and the Home screen so both agree on the key.
+const kManagerViewAllStoresKey = 'manager_view_all_stores';
+
+/// Whether the currently logged-in Manager may view other stores on Home.
+/// True only when the current user's role is Manager AND the CEO has flipped
+/// [kManagerViewAllStoresKey] ON. Other roles get false here — their store
+/// access is decided by Home directly from the role slug (the CEO always gets
+/// the free picker; Cashier/Stock keeper are always locked).
+final managerCanViewAllStoresProvider = Provider<bool>((ref) {
+  final role = ref.watch(currentUserRoleProvider);
+  if (role == null || role.slug != 'manager') return false;
+  final settings = ref.watch(roleSettingsProvider(role.id)).valueOrNull;
+  if (settings == null) return false;
+  for (final s in settings) {
+    if (s.settingKey == kManagerViewAllStoresKey) {
+      return s.settingValue == 'true';
+    }
+  }
+  return false;
+});

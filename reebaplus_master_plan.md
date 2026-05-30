@@ -332,6 +332,9 @@ Where the CEO tunes everything about the business. Menu screen with tappable sec
   - Max discount % (per role). Default: Manager 10%, Cashier 0%.
   - Max expense approval amount (per role). Default: Manager amount set by CEO.
   - Can change product prices (toggle). Default: Manager ON, others OFF.
+  - Allow viewing other stores (Manager role only). Default OFF. When ON, the Manager's Home store
+    picker is unlocked (see §11.2) so they can view other stores and request restock. Stored per role
+    in `role_settings` (key `manager_view_all_stores`).
 
 ### 10.3 Phase 2 (deferred)
 
@@ -354,8 +357,13 @@ Renamed from Dashboard to match the bottom nav. Role-aware screen showing busine
 
 - Store dropdown (renamed from "All Warehouses" → "All Stores").
   - CEO: can pick any store or All Stores.
-  - Manager: locked to assigned store (toggleable in CEO Settings).
-  - Cashier and Stock keeper: locked to own store.
+  - Manager: locked to assigned store by default. The CEO can flip a per-role toggle — "Allow viewing
+    other stores" in Roles & Permissions → Manager (§10.2) — that unlocks the full store picker for
+    Managers, so a Manager can check another store's stock and request restock when running low. Built
+    in Phase 1.
+  - Cashier and Stock keeper: locked to own store (no toggle).
+  - A locked user assigned to more than one store gets a dropdown limited to their assigned stores
+    (no "All Stores" entry).
 - Day/period dropdown stays as is.
 
 ### 11.3 Reports button

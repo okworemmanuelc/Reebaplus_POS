@@ -65,7 +65,7 @@ Keep this section updated at the top so it's easy to see what's done at a glance
 
 **Core screens:**
 - [x] Staff Management (section 9) *(done in Session 10)*
-- [x] CEO Settings (section 10) *(§10.1 menu + Business Info / Stores / Security / Activity Logs access done in Session 14; §10.2 Roles & Permissions deferred — routes to Coming Soon)*
+- [x] CEO Settings (section 10) *(§10.1 menu + Business Info / Stores / Security / Activity Logs access done in Session 14; §10.2 Roles & Permissions done in Session 15; §10.3 is Phase 2)*
 - [ ] Home / Dashboard (section 11)
 - [ ] Point of Sale (section 12)
 - [ ] Cart + Edit Quantity modal (section 13)
@@ -97,6 +97,83 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 ## Session entries
 
 (New entries go below this line. Most recent at the top.)
+
+---
+
+## Session 16 — 2026-05-30 — Home screen made role-aware (§11)
+
+**Built today:**
+- The Home screen used to show every card to everyone. Now it follows the master plan: each person only sees the cards meant for their role. A CEO sees everything (Total Sales, Net Profit, Pending Orders, Expenses, Stock Value, Customer Wallet, Staff Sales). A Manager sees the same minus Net Profit. A Cashier sees only their own sales total, Pending Orders, Customer Wallet, and a new "Total SKUs" card. A Stock keeper sees just Pending Orders and the Total SKUs card.
+- The header subtitle now changes by role: CEO/Manager see "Business Overview", a Cashier sees "Today's Sales", a Stock keeper sees "Stock Overview".
+- New "Total SKUs" card (for Cashier and Stock keeper) — tap it to expand a breakdown of how many products each manufacturer has.
+- The store filter at the top is now locked for everyone except the CEO. A Cashier or Stock keeper is pinned to their own store. A Manager is pinned to their store too — unless the CEO turns on a new switch.
+- New CEO switch: in CEO Settings → Roles & Permissions → Manager, there's now an "Allow viewing other stores" toggle. When on, a Manager can switch stores on Home to check another store's stock and request restock when running low. Off by default.
+
+**Files touched:**
+- lib/features/dashboard/screens/home_screen.dart
+- lib/core/settings/role_permissions_detail_screen.dart
+- lib/core/providers/stream_providers.dart
+- reebaplus_MASTER_PLAN.md
+- test/settings/role_permissions_detail_test.dart
+
+**Database changes:**
+- None. The new Manager toggle is stored in the existing `role_settings` table (key `manager_view_all_stores`), the same place the max-discount and max-expense limits already live. Writes route through the existing DAO, so it syncs to the cloud like the other role settings.
+
+**Master plan sections covered:**
+- Section 11 (11.1 subtitle, 11.2 store-filter lock, 11.4 cards by role, 11.5 Total SKUs) — Home made role-aware.
+
+**Plan updates made during session:**
+- §11.2 and §10.2 were refined to spell out the Manager "Allow viewing other stores" toggle: that it's built in Phase 1, lives in Roles & Permissions → Manager, defaults off, and unlocks the Home store picker (rationale: a Manager checking another store's stock to request restock). The toggle was already named in §11.2; this pins down its exact behaviour and where it lives, per the no-verbal-only-changes rule.
+
+**Tested:**
+- `flutter analyze` clean (no new issues). Full `flutter test` suite green: 184 passed, 0 failed.
+- New tests: the Manager toggle defaults off, persists to `role_settings` as `'true'`, and enqueues a sync upsert; the toggle is hidden for CEO and Cashier roles; and the `managerCanViewAllStoresProvider` reads false by default and flips true once the CEO enables it.
+
+**Known issues / left open:**
+- The Reports button badge is still a hardcoded "3" placeholder — its real alert count depends on the §21 Reports work, deferred by decision.
+- Per-card visibility toggles per role remain Phase-2-deferred (§11.4, §28).
+- End-to-end check on the emulator (logging in as each role) not yet done this session — recommended before merge.
+
+---
+
+## Session 15 — 2026-05-29 — Roles & Permissions sub-page (§10.2)
+
+**Built today:**
+- The last piece of CEO Settings. The "Roles & Permissions" menu row no longer opens a "coming soon" placeholder — it now opens a real screen listing the four roles (CEO, Manager, Cashier, Stock keeper) as colour-coded cards, each showing how many of the 30 permissions it has. Tap a role to open its detail page.
+- The role detail page shows every permission as an on/off switch, grouped by category (Sales, Products, Stock, Expenses, Reports, Customers, Suppliers, Staff, System, Funds — in that master-plan order). Flipping a switch grants or removes that permission for the role and syncs to the cloud.
+- The CEO role is locked: all its switches are on and greyed-out, and its limits read "unlimited" — the CEO's access can never be accidentally removed.
+- Below the switches are the two role limits: a **maximum discount %** slider (0–100) and a **maximum expense approval** amount (in naira). Both save when you finish adjusting them and sync to the cloud. For the CEO they show "100% (unlimited)" and "Unlimited".
+- "Can change product prices" is simply the existing **Edit product prices** permission toggle in the Products group (it already had the right default: Manager on, others off) — so there's no duplicate control and no database change was needed.
+
+**Plan decisions made this session (with the user):**
+- "Can change product prices" is represented by the existing `products.edit_price` permission toggle, not a separate new setting — avoids a duplicate control and a migration.
+
+**Files touched:**
+- lib/core/settings/roles_permissions_screen.dart (new — the four role cards)
+- lib/core/settings/role_permissions_detail_screen.dart (new — grouped toggles + the two limits, CEO locked)
+- lib/core/settings/settings_screen.dart (route Roles & Permissions to the new screen; dropped the Coming Soon placeholder)
+- test/settings/role_permissions_detail_test.dart (new)
+- test/settings/roles_permissions_screen_test.dart (new)
+
+**Database changes:**
+- None. No migration, no schema/version bump. Permissions use the existing role_permissions grant/revoke; limits use the existing role_settings `set` (both already sync). The 30-permission catalog and the seeded limit defaults were already in place.
+
+**Master plan sections covered:**
+- §10.2 — Roles & Permissions per-role page (permission toggles by category + max discount % and max expense approval limits; CEO locked).
+- §10.3 (custom roles, custom permission groups, more limits) remains Phase 2.
+
+**Plan updates made during session:**
+- None.
+
+**Tested:**
+- 2 new test files (7 tests), all green: CEO detail shows all 30 toggles locked-on with read-only limits; toggling a Cashier permission on grants it (sync upsert) and off revokes it (sync delete); editing the expense limit stores the right kobo value and syncs; dragging the discount slider stores a new percent and syncs; the role list renders four cards with correct counts and navigates to the detail on tap.
+- Full suite green: `flutter analyze` clean for all touched files; `flutter test --exclude-tags=integration` → all passed (180, 2 env-gated skips).
+
+**Known issues / left open:**
+- Section 10 (CEO Settings) is now fully done for Phase 1. The role limits (max discount, max expense approval, edit-price permission) are stored + synced but not yet *enforced* anywhere — the screens that would honour them (POS discount, Expenses approval, Product price editing) are later sections.
+
+**Next session should:**
+- Move on to the next core screen (Home / Dashboard, §11) or another pending section.
 
 ---
 

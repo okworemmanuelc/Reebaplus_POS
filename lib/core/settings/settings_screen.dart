@@ -4,17 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/activity_logs_access_screen.dart';
 import 'package:reebaplus_pos/core/settings/business_info_screen.dart';
+import 'package:reebaplus_pos/core/settings/roles_permissions_screen.dart';
 import 'package:reebaplus_pos/core/settings/security_settings_screen.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
 import 'package:reebaplus_pos/core/settings/stores_settings_screen.dart';
-import 'package:reebaplus_pos/features/auth/screens/coming_soon_screen.dart';
 
 /// CEO Settings menu (§10.1). Each row opens its own sub-page. Reached from the
 /// drawer, which already hides this for non-CEO roles; the guard below is
 /// defense-in-depth (hard rule #6).
-///
-/// Roles & Permissions (§10.2) is deferred — it routes to a Coming Soon
-/// placeholder for now.
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
@@ -70,14 +67,8 @@ class SettingsScreen extends ConsumerWidget {
                     title: 'Roles & Permissions',
                     subtitle: 'What each role can do',
                     trailing: _chevron(context),
-                    onTap: () => _open(
-                      context,
-                      const ComingSoonScreen(
-                        title: 'Roles & Permissions',
-                        message:
-                            'Fine-grained role controls are coming in a future update.',
-                      ),
-                    ),
+                    onTap: () =>
+                        _open(context, const RolesPermissionsScreen()),
                   ),
                   const SizedBox(height: 16),
                   SettingsTile(
