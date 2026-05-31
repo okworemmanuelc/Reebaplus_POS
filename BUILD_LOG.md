@@ -79,7 +79,7 @@ Keep this section updated at the top so it's easy to see what's done at a glance
 - [~] Receipt (section 15) *(QR code removed — §15.3 / hard rule #8 — and §15.1 wallet-info display wired in Session 30; full §15 pass (refund button, Completed-tab specifics) still pending)*
 - [ ] Inventory + Product Details (section 16)
 - [ ] Daily Stock Count (section 17)
-- [ ] Customers + Customer Profile (section 18)
+- [~] Customers + Customer Profile (section 18) *(Session 31: soft-delete, Crates-tab gate, required phone, customers.set_debt_limit permission. Open: Edit flow, GPS capture, Add-Funds payment method)*
 - [ ] Orders (section 19)
 - [ ] Expenses + Pending Approval flow (section 20)
 - [ ] Supplier Accounts (section 21)
@@ -103,6 +103,68 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 ## Session entries
 
 (New entries go below this line. Most recent at the top.)
+
+---
+
+## Session 31 — 2026-05-31 — Customers (§18) re-pass, part 1
+
+**Built today:**
+- Soft-delete for customers (§18.4/§18.5). New CustomersDao.softDeleteCustomer
+  flips is_deleted and enqueues the FULL row (customers.name is NOT NULL, so a
+  partial upsert would 23502 and never sync). CustomerService forwards + writes
+  an activity log. A trash button now sits in the customer-detail AppBar, shown
+  only to CEO/Manager (customers.delete). Confirm dialog notes that sales/wallet
+  history stays intact (soft-delete only, hard rule #9).
+- The customer Crates tab now only appears for Bar / Beer Distributor businesses
+  (§18.3) — same business-type gate the Inventory screen uses.
+- Phone is now required in the Add Customer form (§18.2; was optional).
+- New permission customers.set_debt_limit (§18.4). "Set debt limit" is CEO/Manager
+  only — but there was no permission for it, so a Cashier could set limits. The
+  Set Limit button now requires the new permission; Add Funds requires
+  customers.wallet.update.
+
+**Files touched:**
+- lib/core/database/daos.dart (softDeleteCustomer + _enqueueFullCustomer)
+- lib/features/customers/data/services/customer_service.dart (softDeleteCustomer + log)
+- lib/features/customers/screens/customer_detail_screen.dart (delete action, Crates-tab gate, Set Limit/Add Funds permission gates)
+- lib/features/customers/widgets/add_customer_sheet.dart (required phone)
+- lib/core/database/app_database.dart (_defaultPermissionRows + schema v21→v22 catalog seed)
+- supabase/migrations/0061_customers_set_debt_limit_permission.sql (NEW — deployed)
+- test/sync/dispatch/customer_soft_delete_test.dart (NEW); migration_upgrade_test.dart (v21→v22); roles_v13_seed / roles_permissions_screen / role_permissions_detail tests (count 30→31)
+
+**Database changes:**
+- Schema v21 → v22: inserts customers.set_debt_limit into the local permissions
+  catalog (idempotent; the role grant itself arrives via cloud pull).
+- Cloud migration 0061 (deployed via db push): adds the permission, updates
+  seed_default_roles_for_business to grant Manager (CEO auto), and backfills every
+  existing CEO/Manager role with last_updated_at stamped for the 0048 pull.
+
+**Master plan sections covered:**
+- §18.2 (required phone), §18.3 (Crates tab gate), §18.4/§18.5 (soft-delete + Set
+  Limit permission). §18 marked [~] — partial.
+
+**Plan updates made during session:**
+- None to plan text. Build order + status checklist marked §18 [~].
+
+**Tested:**
+- New customer_soft_delete_test (full-row upsert not a tombstone; hidden from list).
+- migration_upgrade_test: new v21→v22 case re-seeds the catalog row.
+- Full suite 220 passed / 58 skipped. analyze clean (18 pre-existing avoid_print).
+
+**Known issues / left open:**
+- Edit Customer flow: CustomerService.updateCustomer is a logging-only STUB — it
+  doesn't write to the DB. A real updateCustomerDetails DAO method (that enqueues)
+  + an edit form (reuse the add sheet) are still needed (§18.3).
+- GPS location capture (§18.2): user chose geolocator capture over a Maps picker;
+  not yet added (needs the geolocator dep + Android manifest perms; best verified
+  against an emulator build).
+- Add Funds payment-method selector (§18.3: Cash/Transfer/POS card/Other) not yet
+  added; need to confirm the wallet write also credits a Funds Register account (§23).
+- On-device verification of this session's changes still pending.
+- barcode_widget remains unused in lib/ (from Session 30) — dependency not removed.
+
+**Next session should:**
+- Finish §18: real Edit flow, GPS capture, Add-Funds payment method — then on-device pass.
 
 ---
 

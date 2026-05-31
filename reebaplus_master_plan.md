@@ -106,7 +106,7 @@ Each step unlocks the next. Build in this order:
 - [ ] Inventory and Product Details, role-aware — includes the destructive product price-column migration (buying / retailer / wholesaler). *(moved ahead of Checkout 2026-05-30: products + prices must be finished before the sales flow.)*
 - [~] Funds Register (new — multi-account model). Phase 1 done: accounts (Cash Till auto + CEO adds POS/Bank), Open Day, the POS Opening-Cash gate, and crediting the chosen account on each sale (§23). *(moved ahead of Checkout 2026-05-30: §14 Step-2 "pick receiving account" + hard rule #10 both require it. Phase 2 — Close Day, reconciliation, Funds History — deferred.)*
 - [x] Checkout flow with wallet integration (§14). *(Two-step payment + receiving account with Funds Register, Session 26; "Add wallet info to receipt" checkbox added Session 30. §14 complete.)*
-- [ ] Customers screen with wallet.
+- [~] Customers screen with wallet (§18). *(Re-pass Session 31: soft-delete CEO/Manager, Crates-tab gated to Bar/Beer, required phone, new customers.set_debt_limit permission. Still open: Edit flow (updateCustomer is a stub), GPS location capture, Add-Funds payment-method selector.)*
 - [ ] Orders (Pending, Completed, Cancelled).
 - [ ] Daily Stock Count.
 - [ ] Expenses with pending approval flow.
