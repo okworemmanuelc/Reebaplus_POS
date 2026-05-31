@@ -892,8 +892,11 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
           ),
           centerTitle: false,
           actions: [
-            // §18.4 — soft-delete, CEO/Manager only (customers.delete).
-            if (_customerId != null && hasPermission(ref, 'customers.delete'))
+            // §18.4 — soft-delete, CEO/Manager only (customers.delete). Never
+            // for the synthetic walk-in (its id is non-null Customer.walkInId).
+            if (_customerId != null &&
+                _customerId != Customer.walkInId &&
+                hasPermission(ref, 'customers.delete'))
               IconButton(
                 icon: Icon(
                   FontAwesomeIcons.trashCan,

@@ -4159,7 +4159,9 @@ class FundDaysDao extends DatabaseAccessor<AppDatabase>
 
       await db.activityLogDao.log(
         action: 'funds.open_day',
-        description: 'Opened the day for store $storeId',
+        // No raw UUID in user-facing text (hard rule #4); the store is already
+        // carried in the structured storeId field below.
+        description: 'Opened the day',
         staffId: performedBy,
         storeId: storeId,
       );

@@ -93,7 +93,8 @@ class _InviteStaffSheetState extends ConsumerState<InviteStaffSheet> {
 
     // Duplicate guard: an email already belonging to an active staff member
     // of this business can't be invited again (master plan §9.4).
-    final existing = await db.storesDao.getUserByEmail(email);
+    final existing =
+        await db.storesDao.getUserByEmail(email, preferredBusinessId: businessId);
     if (existing != null) {
       final membership = await db.userBusinessesDao
           .getForUserInBusiness(existing.id, businessId);

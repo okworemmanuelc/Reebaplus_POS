@@ -106,6 +106,161 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 
 ---
 
+## Session 34 — 2026-05-31 — Build-order re-sequencing (docs only, no code)
+
+**Built today:**
+A docs-only re-sequencing pass — no code. Validated a 7-part adversarial audit
+against the live code and confirmed the findings are real: the wholesaler-tier
+price bug at cart_service.dart:85-86 (wholesale customers see the wholesale price
+but are charged the retailer price), Close Day is entirely absent (only the
+seeded funds.close_day permission exists), the funds model in the planning docs
+has drifted from the code, updateCustomer and _processRefund are still stubs, and
+activity logging still sits on the old per-entity-FK shape. Then re-grouped all
+remaining pivot work into Rings 0-3 (money-correctness first; logging,
+notifications and funds-debit handled as per-feature invariants rather than late
+end-passes), and resolved the four plan contradictions C1-C4 below.
+
+**Files touched:**
+- PIVOT_PLAN.md (new §8.0 re-sequence block + step-19 checkpoint fix + §9 decisions)
+- reebaplus_master_plan.md (§3 build-order re-group + §23 Close Day reconciliation note)
+- BUILD_LOG.md (this entry)
+- NO code files touched.
+
+**Database changes:**
+- None.
+
+**Master plan sections covered:**
+- §3 (build order), §16 (POS/pricing), §23 (Funds Register / Close Day / §23.6 /
+  §23.8), §26.4 (notifications), §1.3 (notifications.severity), Q2/Q6 decisions.
+
+**Plan updates made during session:**
+Re-sequenced the pivot build order into Ring 0/1/2/3 (money-correctness first;
+logging/notifications/funds-debit as per-feature invariants), and resolved four
+plan contradictions:
+
+- **C1 — Close Day + reconciliation: restored to Phase 1.** Three-way
+  contradiction: master plan §23.6/§23.8 (lines 1083-1106) specify Close Day +
+  expected-vs-actual reconciliation as core Phase-1 spec with NO Phase-2 marker;
+  pivot §8 step 17 and §23.2 sidebar list Open/Close/History/Accounts as one
+  Phase-1 deliverable; but the §3 build-order parenthetical (line 107, dated
+  2026-05-30) defers Close Day, reconciliation, and Funds History to Phase 2 —
+  and the code matches the deferral (zero Close Day code, only the seeded
+  funds.close_day permission at app_database.dart:2514). RESOLUTION: restore
+  Close Day + reconciliation to Phase 1 (§23.6 is the source-of-truth chapter and
+  carries no Phase-2 tag; reconciliation is the highest-value money control and
+  the linchpin every money-reversing path debits into). Edit master plan line 107
+  to move Close Day + reconciliation back into Phase 1; keep Funds History
+  deferred to Phase 2 as an explicitly-marked lower-value view. Schedule Close Day
+  as Ring 1's FIRST item so the funds-debit primitive exists before any reversal
+  path. The FundDays table already has closedBy/closedAt/status scaffolding
+  (app_database.dart:370-391); only closing-amount columns, a closeDay DAO method,
+  and the reconciliation UI/math are missing. REVERSIBLE: if the user prefers
+  Close Day in Phase 2, revert line 107, add an explicit "*(Phase 2)*" marker to
+  §23.6/§23.8 so the chapter stops contradicting the index, remove the Ring 1
+  Close Day item + the Ring 3 Daily Reconciliation Report, and drop the §26.4
+  "previous-day-not-closed" / "mismatch-at-close" notifications.
+
+- **C2 — Inventory mark is stale; Checkout overstated.** §3 marks Inventory "[ ]"
+  (not started, line 106) while declaring it a Checkout prerequisite, yet Checkout
+  is "[x]" done (line 108). Inventory is in fact substantially built (Add Product,
+  Inventory list, Product Detail screens; tier price columns migrated in v18 and
+  written from the form), so "[ ]" is stale; and the tier-pricing path is broken
+  end-to-end (cart_service.dart:85-86 always seeds retailerPriceKobo, so wholesale
+  customers are charged retail). RESOLUTION: re-mark Inventory "[~]" (built except
+  the tier-price-at-sale defect); add a Ring 0 item "POS/Cart wholesaler-tier
+  price fix"; keep Checkout "[x]" for its wallet/two-step/account integration but
+  cross-reference the Ring 0 tier fix. The fix touches cart_service.dart addItem
+  (accept + seed tier price), pos_home_screen.dart _addToCart (pass selected
+  tier), and daos.dart:1592 checkCartStaleness + the order/checkout re-price paths
+  (respect tier instead of hardcoding retailerPriceKobo). REVERSIBLE: if the user
+  wants retailer-only pricing for now, drop the Ring 0 item, make the POS tier
+  dropdown retailer-only (or hide it), and note in §16 that wholesaler pricing is
+  deferred — but flag that this leaves the displayed-vs-charged mismatch live.
+
+- **C3 — step-19 "wire every money path" is unsatisfiable where it sits.** The
+  step-19 checkpoint ("expected balance matches across all touchpoints") names
+  touchpoints (Refund=step 22, Expense=step 23, Supplier payment=step 24) that do
+  not exist at step 19's position; today expense_service.dart and
+  payment_service.dart are in-memory ValueNotifier stubs that never touch the DB,
+  and markCancelled never reverses the funds credit. RESOLUTION: dissolve step 19
+  as a milestone and redefine money-path wiring as a PER-FEATURE INVARIANT — every
+  money-movement feature (Cancel, Refund, Expense, Supplier payment, Add Funds,
+  Wallet top-up) credits/debits the correct funds account AND passes the
+  order_service-style guard as part of its own definition-of-done. Rewrite
+  step-19's checkpoint to scope it to the forward credits that exist when it runs
+  (sale + wallet top-up post to the chosen account; live expected balance equals
+  SUM(signed_amount_kobo) for those paths). The forward case is already enforced
+  at the service boundary (order_service.dart:47-63). REVERSIBLE: re-add step 19
+  AFTER steps 22-24 as a consolidated "money-path reconciliation audit" that can
+  genuinely exercise all touchpoints; the per-feature invariants remain either way.
+
+- **C4 — activity logging + notifications are late end-passes but are per-write
+  invariants.** Pivot §8 step 26 (Activity Logs generic-schema migration) and step
+  29 (Notifications wiring) are single late passes, yet CLAUDE.md coding rule #3
+  makes activity logging a per-write invariant, §26.4 notification triggers are
+  owned by features in steps 17-28, and PIVOT_PLAN.md:409 itself says
+  notifications are "spread across multiple sessions — each feature wires its own"
+  (contradicting its own step-29 monolith). Building features before step 26
+  forces inline logging on the old per-entity-FK schema that the migration must
+  later rewrite. RESOLUTION: split into (a) an EARLY Ring 0 schema migration that
+  lands the generic activity_logs shape (entityType/entityId/before/after,
+  decision Q6, row-copied from the old FK columns) PLUS the missing
+  notifications.severity column (§1.3) and small logActivity()/fireNotification()
+  helpers; then (b) make "writes its activity log (with before/after) AND fires
+  its §26.4 notification(s)" part of every later feature's definition-of-done.
+  Keep a lightweight Ring 3 "Notifications verification pass" (verify each §26.4
+  event fires) and demote step 29 to verification. The generic migration also
+  removes ActivityLogs.deliveryId, untangling the FK and unblocking the
+  deliveries-table drop. REVERSIBLE: leave the migration at step 26 and
+  notifications at step 29, accept that earlier features log on the old FK columns
+  and get re-touched at migration time, and drop the per-feature "inline log +
+  notify" invariant — at the cost of guaranteed rework on Cancel/Refund/Expense/
+  Supplier logging.
+
+**Tested:**
+- None — docs only. Existing suite unchanged at 222 pass / 58 skip.
+
+**Known issues / left open:**
+Carrying forward the Session 33 items (BUILD_LOG.md:148-157) with their new
+homes in the ring schedule:
+- "Add Funds" on the customer screen bypasses the Funds Register
+  (CustomerService.updateWalletBalance writes only wallet_transactions, loses the
+  actor) — now scheduled as a Ring 1 item.
+- Account add/remove not written to activity_logs (coding rule 3) — now covered
+  by the Ring 0 logActivity() helper plus the per-feature log-and-notify invariant.
+- LOW items still deferred: walk-in delete-button guard checks wrong condition,
+  Crates-tab 2→3 flicker, reprints never show wallet info, raw store UUID in funds
+  activity-log text (Hard Rule #4), raw order UUID in some snackbars.
+
+New this session:
+- The funds-model planning-doc drift vs code is still live — Q2 and steps 16 & 18
+  in the planning docs need correcting against the actual code.
+- The v2 domain-RPC sale path omits the funds account (daos.dart:1248-1251) —
+  latent today but would drop the ledger credit if the v2 flag is flipped on.
+- OrderService and CheckoutPage have no executing test coverage — to be addressed
+  by the Ring 0 regression net.
+
+**Next session should:**
+- Session 34 (this one): DOCS ONLY — apply the three edits (PIVOT_PLAN §8.0
+  re-sequence block + step-19 checkpoint fix + §9 C1/C3/C4 decisions; master plan
+  §3 re-group + §23 Close Day reconciliation per C1; this BUILD_LOG entry). No
+  code. Get user sign-off on the C1 recommendation (restore Close Day to Phase 1)
+  before any Ring 1 coding.
+- Session 35 (first code session, Ring 0): land the wholesaler-tier price fix
+  (cart_service.dart:85-86 + pos_home_screen _addToCart + daos.dart:1592 +
+  order/checkout re-price) with a tier-pricing unit test, AND start the
+  activity_logs generic-schema migration (entityType/entityId/before/after
+  row-copy) + notifications.severity column + logActivity()/fireNotification()
+  helpers with a migration round-trip test. Both Ring 0 items are independent and
+  both unblock the rest. Defer the OrderService regression-test net to the same
+  Ring 0 window if time permits, else Session 36.
+- Session 36 (Ring 1 start): Funds Register Close Day + reconciliation math (new
+  closing-amount columns on fund_days, closeDay DAO method, §23.8 new-day-blocked
+  guard, wire the dead funds.close_day permission) — the primitive every
+  subsequent money-reversal path debits into.
+
+---
+
 ## Session 33 — 2026-05-31 — Bug-hunt pass: Funds/POS HIGH+MED fixes
 
 **Built today:**
@@ -170,11 +325,22 @@ as-is. Then fixed the highest-impact bugs the review surfaced:
 - Full suite: 225 passed / 0 failed (was 220; +5 new tests), 58 skipped.
 - migration_upgrade_test green: v17/v19/v21 → v23 upgrades all pass the audit.
 
-**Known issues / left open:**
-- LOW items deferred: walk-in delete-button guard checks wrong condition (not
-  reachable today), Crates-tab 2→3 flicker, reprints never show wallet info,
-  raw store UUID in funds activity-log text (Hard Rule #4), account add/remove
-  not written to activity_logs (coding rule 3), raw order UUID in some snackbars.
+**Also fixed this session (LOW / follow-ups):**
+- Walk-in delete-button guard now excludes `Customer.walkInId` (was `!= null`
+  only — latent logic defect, not reachable today).
+- Funds "open day" activity-log description no longer embeds a raw store UUID
+  (Hard Rule #4); the store is carried in the structured storeId field.
+- S32 follow-up: invite_staff duplicate-guard passes `preferredBusinessId` so a
+  multi-business email resolves to the active business's user row.
+
+**Known issues / left open (LOW, still deferred):**
+- Crates-tab 2→3 flicker on profile open (cosmetic).
+- Reprints never show wallet info even if the original had it — needs the
+  showWalletInfo choice persisted on the order (schema change + design call).
+- Account add/remove not written to activity_logs (coding rule 3) — needs
+  staffId threaded through createAccount + avoiding ensureCashTill log noise.
+- Raw order UUID in some Orders-screen snackbars/dialogs (Hard Rule #4) —
+  pre-existing, outside the recently-changed scope.
 
 ---
 
