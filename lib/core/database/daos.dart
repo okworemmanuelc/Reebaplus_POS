@@ -1898,6 +1898,34 @@ class CustomersDao extends DatabaseAccessor<AppDatabase>
     return customerId;
   }
 
+  /// §18.4 / §18.5 + hard rule #9: soft-delete only. Flip is_deleted and push
+  /// it as an UPSERT (never a hard tombstone — wallet and order history still
+  /// FK-reference the customer). Full-row enqueue: a partial customers upsert
+  /// omits the NOT NULL name → 23502 and would never sync.
+  Future<void> softDeleteCustomer(String customerId) async {
+    await (update(customers)..where(
+          (t) => t.id.equals(customerId) & whereBusiness(t),
+        ))
+        .write(
+          CustomersCompanion(
+            isDeleted: const Value(true),
+            lastUpdatedAt: Value(DateTime.now()),
+          ),
+        );
+    await _enqueueFullCustomer(customerId);
+  }
+
+  /// Re-reads the full customer row (no is_deleted filter — it's used right
+  /// after a soft-delete) and enqueues it as a complete upsert.
+  Future<void> _enqueueFullCustomer(String id) async {
+    final row = await (select(
+      customers,
+    )..where((t) => t.id.equals(id) & whereBusiness(t))).getSingleOrNull();
+    if (row != null) {
+      await db.syncDao.enqueueUpsert('customers', row.toCompanion(true));
+    }
+  }
+
   // ── Wallet forwarders ────────────────────────────────────────────────────
   // Balance is derived from the WalletTransactions ledger; the legacy
   // `customers.wallet_balance_kobo` cache column is gone. These forwarders

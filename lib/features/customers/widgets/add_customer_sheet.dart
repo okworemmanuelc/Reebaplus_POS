@@ -226,10 +226,13 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
                             validator: (v) => (v == null || v.trim().isEmpty) ? 'This field is required' : null,
                           ),
                           AppInput(
-                            labelText: 'Phone Number (Optional)',
+                            labelText: 'Phone Number',
                             controller: _phoneCtrl,
                             hintText: 'e.g. 08012345678',
                             keyboardType: TextInputType.phone,
+                            validator: (v) => (v == null || v.trim().isEmpty)
+                                ? 'This field is required'
+                                : null,
                           ),
                         ],
                       ),

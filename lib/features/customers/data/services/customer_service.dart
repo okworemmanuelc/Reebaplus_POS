@@ -63,6 +63,18 @@ class CustomerService extends ValueNotifier<List<Customer>> {
     );
   }
 
+  /// §18.4 / §18.5 — soft-delete a customer (CEO/Manager only, gated at the
+  /// UI). Routes through the DAO (which enqueues the full row) and logs.
+  Future<void> softDeleteCustomer(String customerId) async {
+    final customer = getById(customerId);
+    await _db.customersDao.softDeleteCustomer(customerId);
+    await _log.logAction(
+      'Customer Deleted',
+      'Soft-deleted customer: ${customer?.name ?? customerId}',
+      customerId: customerId,
+    );
+  }
+
   Future<void> addPayment(String customerId, Payment payment) async {
     final customer = getById(customerId);
     if (customer == null) return;

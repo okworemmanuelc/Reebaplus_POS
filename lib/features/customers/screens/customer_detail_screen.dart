@@ -10,6 +10,7 @@ import 'package:screenshot/screenshot.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/core/utils/business_time.dart';
@@ -373,6 +374,44 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     );
   }
 
+  /// §18.4 / §18.5 — confirm, then soft-delete the customer. History stays
+  /// intact (soft-delete only); on success we pop back to the list.
+  Future<void> _confirmAndDelete() async {
+    final id = _customerId;
+    if (id == null) return;
+    final theme = Theme.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: theme.colorScheme.surface,
+        title: const Text('Delete customer?'),
+        content: Text(
+          '$_name will be removed from your customer list. '
+          'Their sales and wallet history stay intact.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete', style: TextStyle(color: danger)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final name = _name;
+    await ref.read(customerServiceProvider).softDeleteCustomer(id);
+    if (!mounted) return;
+    Navigator.pop(context); // back to the customers list
+    messenger.showSnackBar(
+      SnackBar(content: Text('$name deleted'), backgroundColor: success),
+    );
+  }
+
   void _showReceipt(OrderData order) async {
     final db = ref.read(databaseProvider);
     final itemRows = await (db.select(db.orderItems).join([
@@ -644,12 +683,26 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
 
   // ── Build ──────────────────────────────────────────────────────────────────
 
+  /// §18.3 — the Crates tab only shows for Bar / Beer Distributor businesses.
+  /// Same business-type gate the Inventory screen uses for its Empty Crates tab.
+  bool _showCratesTab() {
+    final businessesAsync = ref.watch(localBusinessesProvider);
+    if (!businessesAsync.hasValue) return false;
+    final businessId = ref.read(authProvider).currentUser?.businessId;
+    final type = businessesAsync.value!
+        .where((b) => b.id == businessId)
+        .map((b) => b.type)
+        .firstOrNull;
+    return type == 'Bar' || type == 'Beer distributor';
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final showCrates = _showCratesTab();
 
     return DefaultTabController(
-      length: 3,
+      length: showCrates ? 3 : 2,
       child: Scaffold(
         backgroundColor: theme.scaffoldBackgroundColor,
         appBar: AppBar(
@@ -708,6 +761,17 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
           ),
           centerTitle: false,
           actions: [
+            // §18.4 — soft-delete, CEO/Manager only (customers.delete).
+            if (_customerId != null && hasPermission(ref, 'customers.delete'))
+              IconButton(
+                icon: Icon(
+                  FontAwesomeIcons.trashCan,
+                  size: context.getRSize(18),
+                  color: danger,
+                ),
+                tooltip: 'Delete customer',
+                onPressed: _confirmAndDelete,
+              ),
             const NotificationBell(),
             SizedBox(width: context.getRSize(8)),
           ],
@@ -719,14 +783,14 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
           },
           color: theme.colorScheme.primary,
           child: _contentReady
-              ? _buildContent(theme)
+              ? _buildContent(theme, showCrates)
               : const Center(child: CircularProgressIndicator()),
         ),
       ),
     );
   }
 
-  Widget _buildContent(ThemeData theme) {
+  Widget _buildContent(ThemeData theme, bool showCrates) {
     return NestedScrollView(
       headerSliverBuilder: (context, innerBoxIsScrolled) {
         return [
@@ -738,7 +802,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
               child: Container(
                 color: theme.scaffoldBackgroundColor,
                 padding: EdgeInsets.symmetric(horizontal: context.getRSize(20)),
-                child: _buildTabBar(theme),
+                child: _buildTabBar(theme, showCrates),
               ),
             ),
           ),
@@ -748,7 +812,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
         children: [
           _buildWalletHistoryTab(theme),
           _buildOrdersTab(theme),
-          _buildCratesTab(theme),
+          if (showCrates) _buildCratesTab(theme),
         ],
       ),
     );
@@ -995,7 +1059,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
 
   // ── Tab Bar ─────────────────────────────────────────────────────────────────
 
-  Widget _buildTabBar(ThemeData theme) {
+  Widget _buildTabBar(ThemeData theme, bool showCrates) {
     return TabBar(
       labelColor: theme.colorScheme.primary,
       unselectedLabelColor: theme.colorScheme.onSurface.withAlpha(115),
@@ -1005,13 +1069,20 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
         fontSize: context.getRFontSize(13),
         fontWeight: FontWeight.w700,
       ),
-      tabs: const [
-        Tab(
+      tabs: [
+        const Tab(
           icon: Icon(FontAwesomeIcons.clockRotateLeft, size: 16),
           text: 'Wallet',
         ),
-        Tab(icon: Icon(FontAwesomeIcons.fileLines, size: 16), text: 'Orders'),
-        Tab(icon: Icon(FontAwesomeIcons.boxOpen, size: 16), text: 'Crates'),
+        const Tab(
+          icon: Icon(FontAwesomeIcons.fileLines, size: 16),
+          text: 'Orders',
+        ),
+        if (showCrates)
+          const Tab(
+            icon: Icon(FontAwesomeIcons.boxOpen, size: 16),
+            text: 'Crates',
+          ),
       ],
     );
   }
