@@ -106,6 +106,58 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 
 ---
 
+## Session 33 — 2026-05-31 — Bug-hunt pass: Funds/POS HIGH+MED fixes
+
+**Built today:**
+A code review of the recently-touched areas (Customers §18, Checkout §14/15,
+Funds §23, plus the Session 32 sync fix). Session 32 verified safe and committed
+as-is. Then fixed the highest-impact bugs the review surfaced:
+
+1. **HIGH — midnight rollover on an always-on till.** `todaysBusinessDateProvider`
+   was a `FutureProvider` computed once and cached forever, so a till left
+   running past midnight kept selling into the new day without a fresh Open Day,
+   and new sales bucketed under yesterday's date. Now self-invalidates just
+   after the next business-day boundary (new `untilNextBusinessDay` tz helper),
+   so "today" rolls over and the POS gate + ledger re-key on the new day.
+2. **MED — a paid sale could silently skip the Funds Register credit** when
+   `businessDate` was null (the credit needs both account AND date, but the
+   entry guard only checked the account). Now `OrderService.addOrder` rejects a
+   paid sale with a null/empty businessDate instead of dropping the ledger entry.
+3. **MED — re-adding a soft-deleted account name crashed** (UNIQUE ignores
+   is_deleted, no try/catch). `createAccount` now reactivates the soft-deleted
+   row (and updates its number); an *active* duplicate throws a friendly
+   StateError the screen shows as a snackbar.
+4. **MED — POS opening-cash gate cold-start race.** The gate read `lockedStoreId`
+   without watching it, so it could render unblocked in the window before the
+   store locked. `_initStore` now forces one rebuild after locking the store.
+
+**Files touched:**
+- lib/core/utils/business_time.dart (new `untilNextBusinessDay`)
+- lib/core/providers/stream_providers.dart (self-invalidating today provider)
+- lib/shared/services/order_service.dart (businessDate guard on paid sale)
+- lib/core/database/daos.dart (createAccount reactivation)
+- lib/features/funds/screens/funds_register_screen.dart (add-account try/catch)
+- lib/features/pos/screens/pos_home_screen.dart (rebuild after store lock)
+- test/funds/funds_register_dao_test.dart (+2 reactivation regression tests)
+
+**Tested:**
+- flutter analyze on the 6 changed files: clean.
+- Full suite: 222 passed / 0 failed (was 220; +2 new funds tests), 58 skipped.
+
+**Known issues / left open (still need a decision):**
+- **MED — "Add Funds" on the customer screen bypasses the Funds Register.**
+  `CustomerService.updateWalletBalance` writes only `wallet_transactions`; the
+  cash handed over never lands in a Funds account (coding rule 5), and it loses
+  the actor (`staffId: ''`). The correct path is `WalletService.topup` (writes
+  wallet + payment rows) but it needs a payment-method + account picker in the
+  Add Funds sheet, which is a UI/plan change — NOT done, awaiting sign-off.
+- LOW items deferred: walk-in delete-button guard checks wrong condition (not
+  reachable today), Crates-tab 2→3 flicker, reprints never show wallet info,
+  raw store UUID in funds activity-log text (Hard Rule #4), account add/remove
+  not written to activity_logs (coding rule 3), raw order UUID in some snackbars.
+
+---
+
 ## Session 32 — 2026-05-31 — Fix cross-business sync lockout / data-leak (Tier 1)
 
 **Built today:**

@@ -40,6 +40,18 @@ DateTime localDateUtc(int year, int month, int day, String tzName) {
   return TZDateTime(resolveLocation(tzName), year, month, day).toUtc();
 }
 
+/// Duration from [instant] until the start of the NEXT local calendar day in
+/// [tzName] (the next business-day boundary). Used to self-invalidate "today"
+/// on an always-on till so it re-gates and re-buckets sales across midnight
+/// instead of staying stuck on the day the app was opened.
+Duration untilNextBusinessDay(DateTime instant, String tzName) {
+  final loc = resolveLocation(tzName);
+  final l = TZDateTime.from(instant, loc);
+  final nextMidnight =
+      TZDateTime(loc, l.year, l.month, l.day).add(const Duration(days: 1));
+  return nextMidnight.difference(l);
+}
+
 /// The local business-day calendar date as `YYYY-MM-DD` for [instant] in
 /// [tzName]. The Funds Register keys its daily open/close + ledger buckets on
 /// this string so "today" is the business's local day, not the device clock's.

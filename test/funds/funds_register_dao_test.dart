@@ -72,6 +72,48 @@ void main() {
       final active = await db.fundsAccountsDao.getActiveAccountsForStore(storeId);
       expect(active.where((x) => x.id == id), isEmpty);
     });
+
+    test('re-adding a soft-deleted name reactivates the same row, not a crash',
+        () async {
+      final id = await db.fundsAccountsDao.createAccount(
+        storeId: storeId,
+        accountType: 'pos_machine',
+        name: 'POS 1',
+      );
+      await db.fundsAccountsDao.softDeleteAccount(id);
+
+      // UNIQUE(store_id, account_type, name) ignores is_deleted, so a naive
+      // insert would throw. Instead it reactivates the same row + new number.
+      final readded = await db.fundsAccountsDao.createAccount(
+        storeId: storeId,
+        accountType: 'pos_machine',
+        name: 'POS 1',
+        accountNumber: 'T-999',
+      );
+      expect(readded, id);
+
+      final active = await db.fundsAccountsDao.getActiveAccountsForStore(storeId);
+      final row = active.singleWhere((x) => x.id == id);
+      expect(row.isDeleted, isFalse);
+      expect(row.accountNumber, 'T-999');
+    });
+
+    test('re-adding an ACTIVE duplicate name throws a friendly StateError',
+        () async {
+      await db.fundsAccountsDao.createAccount(
+        storeId: storeId,
+        accountType: 'pos_machine',
+        name: 'POS 1',
+      );
+      expect(
+        () => db.fundsAccountsDao.createAccount(
+          storeId: storeId,
+          accountType: 'pos_machine',
+          name: 'POS 1',
+        ),
+        throwsA(isA<StateError>()),
+      );
+    });
   });
 
   group('FundDaysDao.openDay', () {

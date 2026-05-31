@@ -130,12 +130,21 @@ class _FundsRegisterScreenState extends ConsumerState<FundsRegisterScreen> {
     final name = nameCtrl.text.trim();
     if (name.isEmpty) return;
     final number = numberCtrl.text.trim();
-    await ref.read(databaseProvider).fundsAccountsDao.createAccount(
-          storeId: storeId,
-          accountType: accountType,
-          name: name,
-          accountNumber: number.isEmpty ? null : number,
+    try {
+      await ref.read(databaseProvider).fundsAccountsDao.createAccount(
+            storeId: storeId,
+            accountType: accountType,
+            name: name,
+            accountNumber: number.isEmpty ? null : number,
+          );
+    } catch (e) {
+      if (mounted) {
+        AppNotification.showError(
+          context,
+          e is StateError ? e.message : 'Could not add the account',
         );
+      }
+    }
   }
 
   @override

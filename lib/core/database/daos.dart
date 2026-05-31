@@ -3998,12 +3998,44 @@ class FundsAccountsDao extends DatabaseAccessor<AppDatabase>
   }
 
   /// Creates an account (cash_till | pos_machine | bank) + enqueues the upsert.
+  ///
+  /// UNIQUE(store_id, account_type, name) ignores is_deleted, so re-adding a
+  /// name that was soft-deleted earlier would violate it and crash. Treat that
+  /// as "bring the account back": reactivate the existing row instead. An
+  /// *active* duplicate is a genuine user error and throws a friendly message
+  /// for the caller to surface.
   Future<String> createAccount({
     required String storeId,
     required String accountType,
     required String name,
     String? accountNumber,
   }) async {
+    final existing = await (select(fundsAccounts)
+          ..where((t) =>
+              whereBusiness(t) &
+              t.storeId.equals(storeId) &
+              t.accountType.equals(accountType) &
+              t.name.equals(name))
+          ..limit(1))
+        .getSingleOrNull();
+    if (existing != null) {
+      if (!existing.isDeleted) {
+        throw StateError('An account named "$name" already exists');
+      }
+      await (update(fundsAccounts)
+            ..where((t) => t.id.equals(existing.id) & whereBusiness(t)))
+          .write(FundsAccountsCompanion(
+        isDeleted: const Value(false),
+        accountNumber: Value(accountNumber),
+        lastUpdatedAt: Value(DateTime.now()),
+      ));
+      final reactivated = await (select(fundsAccounts)
+            ..where((t) => t.id.equals(existing.id) & whereBusiness(t)))
+          .getSingle();
+      await db.syncDao
+          .enqueueUpsert('funds_accounts', reactivated.toCompanion(true));
+      return existing.id;
+    }
     final id = UuidV7.generate();
     final row = FundsAccountsCompanion.insert(
       id: Value(id),

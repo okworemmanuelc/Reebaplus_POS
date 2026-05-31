@@ -61,6 +61,11 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
       final houses = await db.storesDao.watchActiveStores().first;
       if (houses.isNotEmpty && mounted) {
         ref.read(navigationProvider).setLockedStore(houses.first.id);
+        // build() reads lockedStoreId via .read (a ValueNotifier, not watched),
+        // so the day-open gate would otherwise not re-evaluate when the store
+        // locks after first paint — leaving a cold-start window where POS shows
+        // unblocked. Force one rebuild so the gate runs with the locked store.
+        setState(() {});
       }
     }
   }

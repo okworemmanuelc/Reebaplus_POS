@@ -44,10 +44,22 @@ class OrderService {
     // Hard rule #5: any money that actually arrives (cash / card / transfer)
     // must land in a Funds Register account. Wallet and credit sales pay 0 now
     // and route through the wallet, so they don't need one.
-    if (amountPaidKobo > 0 && (fundsAccountId == null || fundsAccountId.isEmpty)) {
-      throw ArgumentError(
-        'A paid sale must credit a Funds Register account (fundsAccountId)',
-      );
+    if (amountPaidKobo > 0) {
+      if (fundsAccountId == null || fundsAccountId.isEmpty) {
+        throw ArgumentError(
+          'A paid sale must credit a Funds Register account (fundsAccountId)',
+        );
+      }
+      // The Funds credit in OrdersDao.createOrder only fires when BOTH the
+      // account and the businessDate are present. If businessDate were null
+      // (e.g. todaysBusinessDateProvider not yet resolved) the payment row
+      // would still be written but the money would never land in any account.
+      // Fail loudly here instead of silently dropping the ledger entry.
+      if (businessDate == null || businessDate.isEmpty) {
+        throw ArgumentError(
+          'A paid sale must carry a businessDate to bucket the Funds credit',
+        );
+      }
     }
 
     final orderId = UuidV7.generate();

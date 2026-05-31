@@ -4,6 +4,8 @@
 /// automatically — Riverpod deduplicates by provider identity.
 library;
 
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -333,7 +335,19 @@ final todaysBusinessDateProvider = FutureProvider<String>((ref) async {
   final db = ref.watch(databaseProvider);
   final bizId = db.currentBusinessId;
   final tz = bizId == null ? 'UTC' : await getBusinessTimezone(db, bizId);
-  return businessDateString(DateTime.now(), tz);
+  final now = DateTime.now();
+  // An always-on shared till must re-gate and re-bucket sales when the local
+  // day rolls over. A FutureProvider caches its value forever, so without this
+  // the till stays stuck on the day it was opened — POS keeps selling into the
+  // new calendar day without a fresh Open Day, and sales bucket under the old
+  // date (Hard Rule #11 / Funds plan R3). Self-invalidate just after the next
+  // business-day boundary so watchers recompute "today".
+  final timer = Timer(
+    untilNextBusinessDay(now, tz) + const Duration(seconds: 2),
+    ref.invalidateSelf,
+  );
+  ref.onDispose(timer.cancel);
+  return businessDateString(now, tz);
 });
 
 /// Active funds accounts for a store (Cash Till first). Drives the Accounts
