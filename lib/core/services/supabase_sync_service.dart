@@ -2499,6 +2499,33 @@ class SupabaseSyncService {
         '[SyncService] LWW filtered $filtered/${allRows.length} rows for $table',
       );
     }
+
+    // Defense-in-depth business isolation: when a session is bound, never write
+    // a row belonging to a DIFFERENT business into the shared local DB (the
+    // device can physically hold >1 business's rows). The pull/realtime fetch
+    // is already server-scoped (`.eq` filter + RLS), so this only ever rejects
+    // rows that should never have arrived — a no-op on the happy path, and a
+    // backstop against an upstream filter regression or snapshot over-fetch.
+    // `businesses` is id-keyed (no business_id column) and exempt; global tables
+    // (system_config / permissions) carry no businessId so they pass the
+    // containsKey check untouched. During the syncMinimumLogin bootstrap
+    // (currentBusinessId == null, before setCurrentUser binds) the guard is a
+    // no-op so the 4 login tables still restore.
+    final boundBiz = _db.currentBusinessId;
+    if (boundBiz != null && table != 'businesses') {
+      final before = rows.length;
+      rows.removeWhere(
+        (r) => r.containsKey('businessId') && r['businessId'] != boundBiz,
+      );
+      final droppedBiz = before - rows.length;
+      if (droppedBiz > 0) {
+        debugPrint(
+          '[SyncService] business_id guard dropped $droppedBiz/$before '
+          'cross-business rows for $table (bound=$boundBiz)',
+        );
+      }
+    }
+
     if (rows.isEmpty) return;
     debugPrint('[SyncService] restored $table: ${rows.length} rows');
 

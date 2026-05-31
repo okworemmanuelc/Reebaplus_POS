@@ -106,6 +106,83 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 
 ---
 
+## Session 32 — 2026-05-31 — Fix cross-business sync lockout / data-leak (Tier 1)
+
+**Built today:**
+- Investigated a Sync Issues error: editing the business name/type was rejected
+  by the cloud forever ("new row violates row-level security policy", code 42501).
+  Root cause: the cloud decides "which business are you allowed to touch" from a
+  single pointer on your profile. Three flows (starting/finishing onboarding a
+  second business, or joining another business via invite) silently move that
+  pointer to the other business — and then the cloud locks you out of editing the
+  FIRST business you actually own, even though you still own it. The same single
+  pointer is also the only thing scoping data on the device, and the device never
+  wipes the old business's rows, so a second business's data could sit alongside
+  the first.
+- Fix shipped (Tier 1 — keeps Phase-1 "one business at a time", no new switcher UI):
+  1. Cloud: a CEO can now always read/edit a business they OWN, regardless of
+     where the pointer drifted (owner escape-hatch on the businesses security
+     rules). This directly fixes the reported error and lets the stuck edit flush.
+  2. Device: editing-by-email no longer crashes when one email legitimately has a
+     row for more than one business — it picks the row for the active business.
+  3. Device: a safety net so the sync engine never writes another business's rows
+     into the local database while you're signed into a different one.
+  4. Device: the role badge now resolves against the business you're actually in,
+     not an arbitrary one.
+
+**Files touched:**
+- supabase/migrations/0062_businesses_owner_fallback_rls.sql (new — applied to remote)
+- lib/core/database/daos.dart (getUserByEmail multi-row tolerance)
+- lib/shared/services/auth_service.dart (thread preferredBusinessId through)
+- lib/core/providers/stream_providers.dart (userRoleProvider scoped to bound business)
+- lib/core/services/supabase_sync_service.dart (_restoreTableData business_id guard)
+
+**Database changes:**
+- Migration 0062: businesses_select / businesses_update RLS now allow
+  `id = business_id() OR owner_id = auth.uid()`. businesses_insert unchanged.
+  Additive, backward-compatible, idempotent. Pushed to remote (confirmed on
+  migration list). No local schema change → no Drift version bump.
+
+**Master plan sections covered:**
+- §1.1 / §7.1 / §7.2 / §8.3 — confirmed: multi-business is by design, but Phase 1
+  is "one business at a time" and the in-app business-switcher PICKER is Phase 2.
+  This session fixed the Phase-1 isolation/lockout bug only.
+
+**Plan updates made during session:**
+- None. The fix stays strictly inside Phase 1. (The Tier-2 hardening of the
+  invite-redemption pointer move touches a §6.2 Phase-2 flow and was NOT done —
+  it needs explicit sign-off + a plan note first.)
+
+**Tested:**
+- flutter analyze on the 4 changed files: clean.
+- Ran restore, auth/email-scoping, businesses-dispatch, onUpgrade, and payload
+  whitelist tests: all green. Restore tests that bind a business before restoring
+  confirm the new guard is a no-op on the happy path.
+- Two independent adversarial reviews of the diff: both SHIP, no real bugs.
+
+**Known issues / left open:**
+- Full belt-and-suspanders leak fix (wiping the previous business's local rows on
+  a business switch, + recover-on-empty-pull) was DEFERRED. It clears the local
+  DB including the offline-write queue, so it has a real "lose un-synced offline
+  writes" tradeoff that is the user's call. Awaiting a decision on how to handle
+  pending un-synced writes before implementing. The read-scoping invariant +
+  getUserByEmail fix + restore guard already mitigate the practical leak.
+- Residual (accepted, tracked in 0062 header): cloud RLS still trusts the profile
+  pointer as the sole authority for the 31 tenant tables — a removed/suspended
+  staff whose pointer still points at a business keeps tenant read access until
+  the pointer moves. Closing this fully is the Phase-2 membership-set RLS work.
+- Owner-fallback assumes ownership is never transferred (true in Phase 1). Revisit
+  if an ownership-transfer feature is ever added.
+
+**Next session should:**
+- Get the user's decision on the deferred eviction-on-switch tradeoff (drop
+  un-synced outgoing writes vs preserve-and-orphan), then implement #5/#6 if wanted.
+- The Phase-2 in-app business switcher (picker UI + set_active_business RPC +
+  membership-set RLS revert + in-place realtime rebind) remains deferred pending a
+  master-plan update.
+
+---
+
 ## Session 31 — 2026-05-31 — Customers (§18) re-pass, part 1
 
 **Built today:**

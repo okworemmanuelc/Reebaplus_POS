@@ -201,7 +201,24 @@ final userRoleProvider = Provider.family<RoleData?, String>((ref, userId) {
   final roles = ref.watch(_allRolesUnscopedProvider).valueOrNull;
   final memberships = ref.watch(_userMembershipsProvider(userId)).valueOrNull;
   if (roles == null || memberships == null || memberships.isEmpty) return null;
-  final roleId = memberships.first.roleId;
+
+  // Once a business is bound, resolve the role for THAT business — never an
+  // arbitrary membership. A multi-business email can have >1 membership locally;
+  // picking `memberships.first` could surface another business's role under the
+  // active one. Before bind (shared-PIN Who's-Working picker, §8.4) fall back to
+  // the first membership (Phase-1: one membership per user on the happy path).
+  final boundBusinessId = ref.watch(authProvider).currentUser?.businessId;
+  UserBusinessData? membership;
+  if (boundBusinessId != null) {
+    for (final m in memberships) {
+      if (m.businessId == boundBusinessId) {
+        membership = m;
+        break;
+      }
+    }
+  }
+  membership ??= memberships.first;
+  final roleId = membership.roleId;
   for (final r in roles) {
     if (r.id == roleId) return r;
   }

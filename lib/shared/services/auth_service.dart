@@ -323,7 +323,7 @@ class AuthService extends ValueNotifier<UserData?> {
     final email = authUser.email!;
 
     if (businessId == null) return null;
-    final existing = await getUserByEmail(email);
+    final existing = await getUserByEmail(email, preferredBusinessId: businessId);
     if (existing != null) {
       await (_db.update(
         _db.users,
@@ -478,9 +478,11 @@ class AuthService extends ValueNotifier<UserData?> {
   }
 
   /// Looks up a user in the local database by email.
-  Future<UserData?> getUserByEmail(String email) {
+  Future<UserData?> getUserByEmail(String email, {String? preferredBusinessId}) {
     debugPrint('[AuthService] Querying local user for $email...');
-    return _db.storesDao.getUserByEmail(email).then((u) {
+    return _db.storesDao
+        .getUserByEmail(email, preferredBusinessId: preferredBusinessId)
+        .then((u) {
       debugPrint('[AuthService] Query done for $email. Found: ${u != null}');
       return u;
     });

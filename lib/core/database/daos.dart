@@ -2987,11 +2987,24 @@ class StoresDao extends DatabaseAccessor<AppDatabase>
     return (select(users)..where((t) => t.id.equals(id))).getSingleOrNull();
   }
 
-  Future<UserData?> getUserByEmail(String email) {
-    // deliberately not businessId-scoped
-    return (select(
-      users,
-    )..where((t) => t.email.equals(email))).getSingleOrNull();
+  Future<UserData?> getUserByEmail(String email, {String? preferredBusinessId}) async {
+    // Deliberately NOT businessId-scoped — login happens before a session
+    // exists. Users has UNIQUE(business_id, email), so a single email can hold
+    // one local row PER business (multi-business account / staff re-invite).
+    // Tolerate >1 row instead of crashing (getSingleOrNull throws on multi-row,
+    // which would kill the sign-in / upsertLocalUserFromProfile rebuild): prefer
+    // the row for the active/cloud business, else the most-recently-updated.
+    final rows =
+        await (select(users)..where((t) => t.email.equals(email))).get();
+    if (rows.isEmpty) return null;
+    if (rows.length == 1) return rows.first;
+    if (preferredBusinessId != null) {
+      for (final r in rows) {
+        if (r.businessId == preferredBusinessId) return r;
+      }
+    }
+    rows.sort((a, b) => b.lastUpdatedAt.compareTo(a.lastUpdatedAt));
+    return rows.first;
   }
 }
 
