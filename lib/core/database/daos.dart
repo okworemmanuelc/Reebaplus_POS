@@ -4205,6 +4205,39 @@ class FundTransactionsDao extends DatabaseAccessor<AppDatabase>
     await db.syncDao.enqueueUpsert('fund_transactions', txn);
   }
 
+  /// Appends a 'topup' credit for the cash/transfer a customer handed over to
+  /// top up their wallet — the money physically lands in [fundsAccountId], so
+  /// the Funds Register must reflect it (§18 / coding rule 5). MUST be called
+  /// inside an existing transaction (WalletService.topup) — it does not open
+  /// its own. Mirrors [creditSale] but keys on the payment, not an order.
+  Future<void> creditTopup({
+    required String fundsAccountId,
+    required String storeId,
+    required String businessDate,
+    required int amountKobo,
+    required String paymentId,
+    String? performedBy,
+  }) async {
+    final now = DateTime.now();
+    final txn = FundTransactionsCompanion.insert(
+      id: Value(UuidV7.generate()),
+      businessId: requireBusinessId(),
+      fundsAccountId: fundsAccountId,
+      storeId: storeId,
+      businessDate: businessDate,
+      type: 'credit',
+      amountKobo: amountKobo,
+      signedAmountKobo: amountKobo,
+      referenceType: 'topup',
+      paymentId: Value(paymentId),
+      performedBy: Value(performedBy),
+      createdAt: Value(now),
+      lastUpdatedAt: Value(now),
+    );
+    await into(fundTransactions).insert(txn);
+    await db.syncDao.enqueueUpsert('fund_transactions', txn);
+  }
+
   /// Expected balance for an account on a day = SUM(signed_amount_kobo) of
   /// non-voided rows (void appends a compensating entry, so no IS NULL filter).
   Future<int> getBalanceFor(String fundsAccountId, String businessDate) async {

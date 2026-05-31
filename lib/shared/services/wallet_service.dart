@@ -14,12 +14,18 @@ class WalletService {
 
   /// Top up a customer's wallet.
   ///
-  /// Creates a WalletTransaction (credit) and a corresponding PaymentTransaction (wallet_topup).
+  /// Creates a WalletTransaction (credit) and a corresponding PaymentTransaction
+  /// (wallet_topup). When [fundsAccountId] + [storeId] + [businessDate] are
+  /// supplied, the cash/transfer also lands in that Funds Register account
+  /// (§18 Add Funds / coding rule 5) — atomically, in the same transaction.
   Future<void> topup({
     required String customerId,
     required int amountKobo,
     required String method, // 'cash' or 'transfer'
     required String staffId,
+    String? fundsAccountId,
+    String? storeId,
+    String? businessDate,
   }) async {
     final businessId = _walletTxDao.requireBusinessId();
     final wallet = await _customerWalletsDao.getByCustomerId(customerId);
@@ -65,6 +71,9 @@ class WalletService {
       await _db.into(_db.paymentTransactions).insert(paymentComp);
 
       if (useDomainRpc) {
+        // V2 path: the server's pos_wallet_topup RPC must mint the
+        // fund_transactions credit itself (same R2 caveat as pos_record_sale_v2
+        // — see OrdersDao.createOrder). The flag defaults false in Phase 1.
         final payload = <String, dynamic>{
           'p_business_id': businessId,
           'p_actor_id': staffId,
@@ -80,6 +89,21 @@ class WalletService {
       } else {
         await _db.syncDao.enqueueUpsert('wallet_transactions', walletComp);
         await _db.syncDao.enqueueUpsert('payment_transactions', paymentComp);
+
+        // The money physically entered a Funds Register account — credit it so
+        // the daily expected balance stays accurate (§23 / coding rule 5).
+        if (fundsAccountId != null &&
+            storeId != null &&
+            businessDate != null) {
+          await _db.fundTransactionsDao.creditTopup(
+            fundsAccountId: fundsAccountId,
+            storeId: storeId,
+            businessDate: businessDate,
+            amountKobo: amountKobo,
+            paymentId: paymentTxnId,
+            performedBy: staffId,
+          );
+        }
       }
     });
   }

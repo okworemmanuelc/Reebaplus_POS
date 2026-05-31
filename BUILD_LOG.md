@@ -130,27 +130,47 @@ as-is. Then fixed the highest-impact bugs the review surfaced:
 4. **MED — POS opening-cash gate cold-start race.** The gate read `lockedStoreId`
    without watching it, so it could render unblocked in the window before the
    store locked. `_initStore` now forces one rebuild after locking the store.
+5. **MED — "Add Funds" on the customer screen bypassed the Funds Register**
+   (coding rule 5). FIXED with the user-approved full fix (§18.779 method
+   selector + receiving-account picker): the Add Funds sheet now lets you pick
+   the receiving funds account (Cash Till / POS / Bank, account type → cash
+   /transfer), and the top-up writes the wallet credit + `payment_transactions`
+   + a `fund_transactions` 'topup' credit atomically, with the real staff id.
+   Required a new `'topup'` reference_type on `fund_transactions` — a schema
+   change on BOTH sides (Drift v22→v23 table rebuild + cloud migration 0063).
 
 **Files touched:**
 - lib/core/utils/business_time.dart (new `untilNextBusinessDay`)
 - lib/core/providers/stream_providers.dart (self-invalidating today provider)
 - lib/shared/services/order_service.dart (businessDate guard on paid sale)
-- lib/core/database/daos.dart (createAccount reactivation)
+- lib/core/database/daos.dart (createAccount reactivation; new `creditTopup`)
 - lib/features/funds/screens/funds_register_screen.dart (add-account try/catch)
 - lib/features/pos/screens/pos_home_screen.dart (rebuild after store lock)
+- lib/core/database/app_database.dart (v23: 'topup' CHECK + table-rebuild migration)
+- lib/shared/services/wallet_service.dart (topup credits the chosen funds account)
+- lib/features/customers/data/services/customer_service.dart (new `topUpWallet`)
+- lib/features/customers/screens/customer_detail_screen.dart (Add Funds account picker)
+- supabase/migrations/0063_fund_transactions_topup_reference_type.sql (new — pushed to remote)
 - test/funds/funds_register_dao_test.dart (+2 reactivation regression tests)
+- test/funds/wallet_topup_funds_test.dart (new — +3 topup→funds tests)
+
+**Database changes:**
+- Drift schema v22 → v23: `fund_transactions.reference_type` CHECK widened to
+  include `'topup'`. SQLite can't ALTER a CHECK, so onUpgrade `from < 23`
+  rebuilds the table via `m.alterTable(TableMigration(fundTransactions))` —
+  which preserves the table's indexes + append-only triggers, verified by
+  migration_upgrade_test's schema audit.
+- Cloud migration 0063: drops the inline reference_type CHECK (by definition
+  lookup, name-agnostic) and re-adds it with `'topup'`. Additive, idempotent.
+  Applied to remote via `supabase db push` (confirmed; 0062 already present).
 
 **Tested:**
-- flutter analyze on the 6 changed files: clean.
-- Full suite: 222 passed / 0 failed (was 220; +2 new funds tests), 58 skipped.
+- flutter analyze (full project): clean (only the 18 pre-existing test-report
+  avoid_print infos).
+- Full suite: 225 passed / 0 failed (was 220; +5 new tests), 58 skipped.
+- migration_upgrade_test green: v17/v19/v21 → v23 upgrades all pass the audit.
 
-**Known issues / left open (still need a decision):**
-- **MED — "Add Funds" on the customer screen bypasses the Funds Register.**
-  `CustomerService.updateWalletBalance` writes only `wallet_transactions`; the
-  cash handed over never lands in a Funds account (coding rule 5), and it loses
-  the actor (`staffId: ''`). The correct path is `WalletService.topup` (writes
-  wallet + payment rows) but it needs a payment-method + account picker in the
-  Add Funds sheet, which is a UI/plan change — NOT done, awaiting sign-off.
+**Known issues / left open:**
 - LOW items deferred: walk-in delete-button guard checks wrong condition (not
   reachable today), Crates-tab 2→3 flicker, reprints never show wallet info,
   raw store UUID in funds activity-log text (Hard Rule #4), account add/remove

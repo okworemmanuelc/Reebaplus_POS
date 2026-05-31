@@ -204,88 +204,219 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
   // ── Sheets ─────────────────────────────────────────────────────────────────
 
   void _showAddFundsSheet() {
+    final id = _customerId;
+    if (id == null) return;
+
+    // §18 / coding rule 5: the top-up money lands in a Funds Register account,
+    // so we need the working store, the actor, and today's business date — the
+    // same context checkout uses to credit a sale.
+    final storeId = ref.read(navigationProvider).lockedStoreId.value ??
+        ref.read(authProvider).currentUser?.storeId;
+    final staffId = ref.read(authProvider).currentUser?.id;
+    final businessDate = ref.read(todaysBusinessDateProvider).valueOrNull;
+    if (storeId == null || staffId == null || businessDate == null) {
+      AppNotification.showError(
+        context,
+        'Could not start a top-up yet — no active store or session.',
+      );
+      return;
+    }
+
     final amountCtrl = TextEditingController();
     final noteCtrl = TextEditingController();
     final formKey = GlobalKey<FormState>();
+    String? selectedAccountId;
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => _SheetContainer(
-        scrollController: ScrollController(),
-        child: Form(
-          key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const _SheetHandle(),
-              Text(
-                'Add Funds',
-                style: TextStyle(
-                  fontSize: ctx.getRFontSize(18),
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              SizedBox(height: ctx.getRSize(4)),
-              Text(
-                'Top up $_name\'s wallet',
-                style: TextStyle(
-                  fontSize: ctx.getRFontSize(13),
-                  color: Theme.of(ctx).colorScheme.onSurface.withAlpha(128),
-                ),
-              ),
-              SizedBox(height: ctx.getRSize(24)),
-              _SheetField(
-                controller: amountCtrl,
-                label: 'Amount (₦)',
-                keyboard: const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [CurrencyInputFormatter()],
-                validator: (v) {
-                  final n = parseCurrency(v ?? '');
-                  if (n <= 0) return 'Enter a valid amount';
-                  return null;
-                },
-              ),
-              SizedBox(height: ctx.getRSize(16)),
-              _SheetField(
-                controller: noteCtrl,
-                label: 'Note (optional)',
-                keyboard: TextInputType.text,
-              ),
-              SizedBox(height: ctx.getRSize(24)),
-              AmberButton(
-                label: 'Add Funds',
-                icon: Icons.add,
-                onPressed: () async {
-                  if (!formKey.currentState!.validate()) return;
-                  final amount = parseCurrency(amountCtrl.text);
-                  final note = noteCtrl.text.trim().isEmpty
-                      ? 'Manual top-up'
-                      : noteCtrl.text.trim();
-                  final id = _customerId;
-                  if (id == null) return;
-                  final messenger = ScaffoldMessenger.of(context);
-                  Navigator.pop(ctx);
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Consumer(
+          builder: (ctx, sheetRef, _) {
+            final accounts = sheetRef
+                    .watch(fundsAccountsForStoreProvider(storeId))
+                    .valueOrNull ??
+                const <FundsAccountData>[];
+            final cashTill =
+                accounts.where((a) => a.accountType == 'cash_till');
+            selectedAccountId ??= cashTill.isNotEmpty
+                ? cashTill.first.id
+                : (accounts.isNotEmpty ? accounts.first.id : null);
+            final accent = Theme.of(ctx).colorScheme.primary;
+            final onSurface = Theme.of(ctx).colorScheme.onSurface;
 
-                  await ref
-                      .read(customerServiceProvider)
-                      .updateWalletBalance(id, amount, note);
-                  messenger.showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        '₦${amount.toStringAsFixed(0)} added to wallet',
+            return _SheetContainer(
+              scrollController: ScrollController(),
+              child: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const _SheetHandle(),
+                    Text(
+                      'Add Funds',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: ctx.getRFontSize(18),
+                        fontWeight: FontWeight.w700,
                       ),
-                      backgroundColor: success,
                     ),
-                  );
-                },
+                    SizedBox(height: ctx.getRSize(4)),
+                    Text(
+                      'Top up $_name\'s wallet',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: ctx.getRFontSize(13),
+                        color: onSurface.withAlpha(128),
+                      ),
+                    ),
+                    SizedBox(height: ctx.getRSize(24)),
+                    _SheetField(
+                      controller: amountCtrl,
+                      label: 'Amount (₦)',
+                      keyboard:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [CurrencyInputFormatter()],
+                      validator: (v) {
+                        final n = parseCurrency(v ?? '');
+                        if (n <= 0) return 'Enter a valid amount';
+                        return null;
+                      },
+                    ),
+                    SizedBox(height: ctx.getRSize(16)),
+                    Text(
+                      'Receiving account',
+                      style: TextStyle(
+                        fontSize: ctx.getRFontSize(13),
+                        fontWeight: FontWeight.w600,
+                        color: onSurface.withAlpha(178),
+                      ),
+                    ),
+                    SizedBox(height: ctx.getRSize(8)),
+                    if (accounts.isEmpty)
+                      Text(
+                        'Set up a Funds Register account first.',
+                        style: TextStyle(
+                          fontSize: ctx.getRFontSize(13),
+                          color: onSurface.withAlpha(128),
+                        ),
+                      )
+                    else
+                      ...accounts.map((a) {
+                        final isSel = a.id == selectedAccountId;
+                        final label =
+                            a.accountType == 'cash_till' ? 'Cash Till' : a.name;
+                        return GestureDetector(
+                          onTap: () => setSheetState(
+                            () => selectedAccountId = a.id,
+                          ),
+                          child: Container(
+                            margin:
+                                EdgeInsets.only(bottom: ctx.getRSize(8)),
+                            padding: EdgeInsets.all(ctx.getRSize(14)),
+                            decoration: BoxDecoration(
+                              color: isSel
+                                  ? accent.withValues(alpha: 0.08)
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: isSel
+                                    ? accent
+                                    : onSurface.withAlpha(40),
+                                width: isSel ? 1.5 : 1,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  isSel
+                                      ? Icons.radio_button_checked
+                                      : Icons.radio_button_unchecked,
+                                  size: ctx.getRSize(20),
+                                  color: isSel
+                                      ? accent
+                                      : onSurface.withAlpha(128),
+                                ),
+                                SizedBox(width: ctx.getRSize(12)),
+                                Text(
+                                  label,
+                                  style: TextStyle(
+                                    fontSize: ctx.getRFontSize(14),
+                                    fontWeight: FontWeight.w600,
+                                    color: onSurface,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }),
+                    SizedBox(height: ctx.getRSize(16)),
+                    _SheetField(
+                      controller: noteCtrl,
+                      label: 'Note (optional)',
+                      keyboard: TextInputType.text,
+                    ),
+                    SizedBox(height: ctx.getRSize(24)),
+                    AmberButton(
+                      label: 'Add Funds',
+                      icon: Icons.add,
+                      onPressed: accounts.isEmpty
+                          ? null
+                          : () async {
+                              if (!formKey.currentState!.validate()) return;
+                              final acctId = selectedAccountId;
+                              if (acctId == null) return;
+                              final amount = parseCurrency(amountCtrl.text);
+                              final note = noteCtrl.text.trim();
+                              final acct =
+                                  accounts.firstWhere((a) => a.id == acctId);
+                              final method = acct.accountType == 'cash_till'
+                                  ? 'cash'
+                                  : 'transfer';
+                              final messenger = ScaffoldMessenger.of(context);
+                              Navigator.pop(ctx);
+                              try {
+                                await ref
+                                    .read(customerServiceProvider)
+                                    .topUpWallet(
+                                      customerId: id,
+                                      amountKobo: (amount * 100).round(),
+                                      fundsAccountId: acctId,
+                                      storeId: storeId,
+                                      businessDate: businessDate,
+                                      method: method,
+                                      staffId: staffId,
+                                      note: note.isEmpty ? null : note,
+                                    );
+                                messenger.showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      '₦${amount.toStringAsFixed(0)} added to wallet',
+                                    ),
+                                    backgroundColor: success,
+                                  ),
+                                );
+                              } catch (_) {
+                                messenger.showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Could not add funds'),
+                                  ),
+                                );
+                              }
+                            },
+                    ),
+                    SizedBox(
+                      height: MediaQuery.of(ctx).viewInsets.bottom +
+                          ctx.getRSize(16),
+                    ),
+                  ],
+                ),
               ),
-              SizedBox(
-                height: MediaQuery.of(ctx).viewInsets.bottom + ctx.getRSize(16),
-              ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );

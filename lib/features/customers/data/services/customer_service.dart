@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:drift/drift.dart';
 import 'package:reebaplus_pos/shared/services/activity_log_service.dart';
+import 'package:reebaplus_pos/shared/services/wallet_service.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/customers/data/models/payment.dart';
@@ -123,6 +124,38 @@ class CustomerService extends ValueNotifier<List<Customer>> {
         customerId: customer.id,
       );
     }
+  }
+
+  /// §18 Add Funds — top up a registered customer's wallet AND credit the cash
+  /// /transfer into the chosen Funds Register account (coding rule 5). All three
+  /// ledger writes (wallet, payment, funds) are atomic via WalletService.topup.
+  Future<void> topUpWallet({
+    required String customerId,
+    required int amountKobo,
+    required String fundsAccountId,
+    required String storeId,
+    required String businessDate,
+    required String method, // 'cash' | 'transfer'
+    required String staffId,
+    String? note,
+  }) async {
+    final customer = getById(customerId);
+    await WalletService(_db).topup(
+      customerId: customerId,
+      amountKobo: amountKobo,
+      method: method,
+      staffId: staffId,
+      fundsAccountId: fundsAccountId,
+      storeId: storeId,
+      businessDate: businessDate,
+    );
+    final naira = (amountKobo / 100).round();
+    await _log.logAction(
+      'Payment Added',
+      'Topped up ₦$naira to ${customer?.name ?? customerId}\'s wallet'
+          '${note != null && note.isNotEmpty ? '. Note: $note' : ''}',
+      customerId: customerId,
+    );
   }
 
   Future<void> updateWalletLimit(String customerId, double newLimit) async {

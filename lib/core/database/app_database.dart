@@ -403,7 +403,7 @@ class FundTransactions extends Table {
   TextColumn get type => text()(); // credit | debit
   IntColumn get amountKobo => integer()();
   IntColumn get signedAmountKobo => integer()();
-  TextColumn get referenceType => text()(); // opening | sale | void
+  TextColumn get referenceType => text()(); // opening | sale | void | topup
   TextColumn get orderId => text().nullable().references(Orders, #id)();
   TextColumn get paymentId =>
       text().nullable().references(PaymentTransactions, #id)();
@@ -422,7 +422,7 @@ class FundTransactions extends Table {
   List<String> get customConstraints => [
     "CHECK (type IN ('credit','debit'))",
     'CHECK (amount_kobo >= 0)',
-    "CHECK (reference_type IN ('opening','sale','void'))",
+    "CHECK (reference_type IN ('opening','sale','void','topup'))",
     "CHECK ((type = 'credit' AND signed_amount_kobo >= 0) OR "
         "(type = 'debit' AND signed_amount_kobo <= 0))",
   ];
@@ -1342,7 +1342,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 22;
+  int get schemaVersion => 23;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -2250,6 +2250,17 @@ class AppDatabase extends _$AppDatabase {
           "VALUES ('customers.set_debt_limit', "
           "'Set a customer''s debt limit', 'Customers')",
         );
+      }
+      if (from < 23) {
+        // v23 (§18 Add Funds → Funds Register): a wallet top-up now credits the
+        // chosen funds account, so fund_transactions.reference_type must allow
+        // 'topup'. SQLite can't ALTER a CHECK in place — rebuild the table from
+        // the current Drift schema (new CHECK included) and copy every row.
+        // alterTable preserves the table's indexes and the bump/append-only
+        // triggers (re-creates them from sqlite_master), so — unlike the v16
+        // block which renamed the table — nothing here needs manual recreation.
+        // Mirrors supabase/migrations/0063_fund_transactions_topup_reference_type.sql.
+        await m.alterTable(TableMigration(fundTransactions));
       }
     },
     beforeOpen: (details) async {
