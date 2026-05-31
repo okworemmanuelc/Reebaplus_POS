@@ -213,4 +213,34 @@ void main() {
       expect(payload.contains('distributor_price_kobo'), isFalse);
     });
   });
+
+  group('onUpgrade v21 → v22 (customers.set_debt_limit permission)', () {
+    test('re-seeds the permission row on a DB that lacks it', () async {
+      Future<int> permCount(AppDatabase db) async {
+        final r = await db
+            .customSelect(
+              "SELECT COUNT(*) c FROM permissions "
+              "WHERE key = 'customers.set_debt_limit'",
+            )
+            .getSingle();
+        return r.read<int>('c');
+      }
+
+      // Fresh DB already seeds the key in onCreate (it's in _defaultPermissionRows).
+      // Delete it + revert to v21 so the re-open's v22 block has work to do.
+      final db1 = await openAndInit();
+      await db1.customStatement(
+        "DELETE FROM permissions WHERE key = 'customers.set_debt_limit'",
+      );
+      expect(await permCount(db1), 0);
+      await db1.customStatement('PRAGMA user_version = 21');
+      await db1.close();
+
+      // Re-open → onUpgrade(21 → 22) must re-insert the catalog row.
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+      expect(await permCount(db2), 1,
+          reason: 'v22 block must seed customers.set_debt_limit');
+    });
+  });
 }

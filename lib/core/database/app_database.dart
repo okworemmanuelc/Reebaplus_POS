@@ -1342,7 +1342,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 21;
+  int get schemaVersion => 22;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -2240,6 +2240,17 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(fundsAccounts, fundsAccounts.accountNumber);
         }
       }
+      if (from < 22) {
+        // v22 (§18.4): add the customers.set_debt_limit permission to the local
+        // catalog so the Roles & Permissions settings screen lists it. The
+        // actual role grants arrive from the cloud via pull (the CEO/Manager
+        // backfill in supabase/migrations/0061). Idempotent — key is the PK.
+        await customStatement(
+          "INSERT OR IGNORE INTO permissions (key, description, category) "
+          "VALUES ('customers.set_debt_limit', "
+          "'Set a customer''s debt limit', 'Customers')",
+        );
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -2436,6 +2447,7 @@ const List<List<String>> _defaultPermissionRows = [
   ['customers.update', 'Update customer details', 'Customers'],
   ['customers.delete', 'Soft-delete a customer', 'Customers'],
   ['customers.wallet.update', 'Add funds to customer wallets', 'Customers'],
+  ['customers.set_debt_limit', 'Set a customer\'s debt limit', 'Customers'],
   // Suppliers / Shipments
   ['suppliers.manage', 'Manage suppliers and payments', 'Suppliers'],
   ['shipments.manage', 'Manage incoming shipments', 'Suppliers'],

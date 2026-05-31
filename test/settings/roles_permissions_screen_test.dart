@@ -83,7 +83,7 @@ void main() {
             permissionKey: 'settings.manage',
           ),
         );
-    // Cashier: two grants → its card subtitle should read "2 of 30 permissions".
+    // Cashier: two grants → its card subtitle should read "2 of 31 permissions".
     for (final key in ['sales.make', 'stock.view']) {
       await db.into(db.rolePermissions).insert(
             RolePermissionsCompanion.insert(
@@ -121,8 +121,8 @@ void main() {
     expect(find.text('Cashier'), findsOneWidget);
     expect(find.text('Stock keeper'), findsOneWidget);
 
-    expect(find.text('All 30 permissions'), findsOneWidget); // CEO, locked
-    expect(find.text('2 of 30 permissions'), findsOneWidget); // Cashier
+    expect(find.text('All 31 permissions'), findsOneWidget); // CEO, locked
+    expect(find.text('2 of 31 permissions'), findsOneWidget); // Cashier
   });
 
   testWidgets('tapping a role card opens its detail', (tester) async {

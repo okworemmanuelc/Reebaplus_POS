@@ -2,18 +2,18 @@
 //
 // Verifies schema v13 (PIVOT_PLAN step 2):
 //   * The seven new tables exist.
-//   * The global `permissions` table is seeded with 30 rows.
-//   * A fresh business gets 4 roles (with the right slugs), 63
-//     role_permissions (CEO 30 / Manager 24 / Cashier 6 / Stock keeper 3),
+//   * The global `permissions` table is seeded with 31 rows.
+//   * A fresh business gets 4 roles (with the right slugs), 65
+//     role_permissions (CEO 31 / Manager 25 / Cashier 6 / Stock keeper 3),
 //     8 role_settings (with the right default values), 1 user_businesses
 //     row, and 1 user_stores row.
 //   * The same seed logic works for a pre-existing business (backfill
 //     scenario from cloud migration 0043).
 //
 // Live cloud is not in scope for unit tests, so the seed logic from
-// cloud migrations 0043/0044 is mirrored in this file's
-// `_seedDefaultRolesForBusiness` helper. The DDL it produces must
-// match what 0043's `seed_default_roles_for_business` SQL function
+// cloud migrations 0043/0044 (+ 0061's customers.set_debt_limit grant) is
+// mirrored in this file's `_seedDefaultRolesForBusiness` helper. The DDL it
+// produces must match what the `seed_default_roles_for_business` SQL function
 // produces — the assertions below check both row counts and slugs/
 // keys/values, which is the contract.
 
@@ -60,10 +60,10 @@ void main() {
       );
     });
 
-    test('permissions table seeded with 30 default rows on fresh install',
+    test('permissions table seeded with 31 default rows on fresh install',
         () async {
       final perms = await db.permissionsDao.getAll();
-      expect(perms.length, equals(30));
+      expect(perms.length, equals(31));
 
       // Spot-check a few keys + categories.
       final keys = perms.map((p) => p.key).toSet();
@@ -82,7 +82,7 @@ void main() {
       );
     });
 
-    test('fresh business seed: 4 roles / 63 role_permissions / 8 settings',
+    test('fresh business seed: 4 roles / 65 role_permissions / 8 settings',
         () async {
       final report = await _seedAndReport(
         db,
@@ -110,7 +110,7 @@ void main() {
       final totalUserStores = await _countAll(db, 'user_stores');
 
       expect(totalRoles, equals(8));
-      expect(totalPerms, equals(126));
+      expect(totalPerms, equals(130)); // 65 grants × 2 businesses
       expect(totalSettings, equals(16));
       expect(totalUserBiz, equals(2));
       expect(totalUserStores, equals(2));
@@ -265,8 +265,8 @@ void _expectSeedShape(_SeedReport r) {
   // Top-level row counts (master plan §2.4 + the corrected matrix).
   expect(r.roles.length, equals(4),
       reason: 'CEO, Manager, Cashier, Stock keeper');
-  expect(r.permissions.length, equals(63),
-      reason: 'CEO 30 + Manager 24 + Cashier 6 + Stock keeper 3');
+  expect(r.permissions.length, equals(65),
+      reason: 'CEO 31 + Manager 25 + Cashier 6 + Stock keeper 3');
   expect(r.settings.length, equals(8),
       reason: '2 settings × 4 roles');
   expect(r.userBusinesses.length, equals(1),
@@ -280,8 +280,8 @@ void _expectSeedShape(_SeedReport r) {
     final role = r.roles.firstWhere((rl) => rl.id == perm.roleId);
     perRole[role.slug] = (perRole[role.slug] ?? 0) + 1;
   }
-  expect(perRole['ceo'], equals(30));
-  expect(perRole['manager'], equals(24));
+  expect(perRole['ceo'], equals(31));
+  expect(perRole['manager'], equals(25));
   expect(perRole['cashier'], equals(6));
   expect(perRole['stock_keeper'], equals(3));
 
@@ -336,6 +336,7 @@ Future<void> _seedDefaultRolesForBusiness(
         'expenses.create','expenses.approve',
         'reports.see_sales','reports.see_profit','reports.see_cost_prices','reports.see_expenses',
         'customers.add','customers.update','customers.delete','customers.wallet.update',
+        'customers.set_debt_limit',
         'suppliers.manage','shipments.manage',
         'staff.invite','staff.suspend','staff.change_role',
         'activity_logs.view','settings.manage',
@@ -348,6 +349,7 @@ Future<void> _seedDefaultRolesForBusiness(
         'expenses.create',
         'reports.see_sales','reports.see_cost_prices','reports.see_expenses',
         'customers.add','customers.update','customers.delete','customers.wallet.update',
+        'customers.set_debt_limit',
         'staff.invite','staff.suspend','staff.change_role',
         'funds.open_day','funds.close_day','funds.view',
       ],
