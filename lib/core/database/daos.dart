@@ -1589,7 +1589,11 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     for (final line in lines) {
       final p = byId[line.productId];
       if (p == null) continue; // product gone; UI handles separately
-      final currentPriceKobo = p.retailerPriceKobo;
+      // Re-price against the SAME tier the line was priced at, so a correct
+      // wholesaler line is not falsely flagged stale and reverted to retailer.
+      final currentPriceKobo = line.priceTier == 'wholesaler'
+          ? p.wholesalerPriceKobo
+          : p.retailerPriceKobo;
       if (p.version != line.cartVersion ||
           currentPriceKobo != line.cartUnitPriceKobo) {
         stale.add(
@@ -1747,10 +1751,16 @@ class CartLineSnapshot {
   final String productId;
   final int cartVersion;
   final int cartUnitPriceKobo;
+
+  /// The price tier the line was priced at ('retailer' | 'wholesaler').
+  /// Defaults to 'retailer' so pre-tier callers/tests stay valid and legacy
+  /// or Quick-Sale lines compare against the retailer column.
+  final String priceTier;
   const CartLineSnapshot({
     required this.productId,
     required this.cartVersion,
     required this.cartUnitPriceKobo,
+    this.priceTier = 'retailer',
   });
 }
 

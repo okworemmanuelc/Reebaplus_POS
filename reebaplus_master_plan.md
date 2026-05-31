@@ -103,18 +103,20 @@ Each step unlocks the next. Build in this order:
 - [x] Home screen, role-aware.
 - [x] Point of Sale, guarded by role.
 - [x] Cart flow with discounts, role caps, fractional sales, per-cashier saved carts (§13). *(Session 20.)*
-- [ ] Inventory and Product Details, role-aware — includes the destructive product price-column migration (buying / retailer / wholesaler). *(moved ahead of Checkout 2026-05-30: products + prices must be finished before the sales flow.)*
-- [~] Funds Register (new — multi-account model). Phase 1 done: accounts (Cash Till auto + CEO adds POS/Bank), Open Day, the POS Opening-Cash gate, and crediting the chosen account on each sale (§23). *(moved ahead of Checkout 2026-05-30: §14 Step-2 "pick receiving account" + hard rule #10 both require it. Phase 2 — Close Day, reconciliation, Funds History — deferred.)*
+- [~] Inventory and Product Details, role-aware — includes the destructive product price-column migration (buying / retailer / wholesaler). *(moved ahead of Checkout 2026-05-30: products + prices must be finished before the sales flow.)* *(screens + v18 tier-price migration built; tier-price-at-sale fix landed Session 35 — POS/Cart now charge the selected tier. Remaining: barcode field UI is Ring 3.)*
+- [~] Funds Register (new — multi-account model). Phase 1 done: accounts (Cash Till auto + CEO adds POS/Bank), Open Day, the POS Opening-Cash gate, and crediting the chosen account on each sale (§23). Phase 1 remaining: Close Day + expected-vs-actual reconciliation (§23.6/§23.8) — confirmed Phase 1 per decision C1 (2026-05-31). *(moved ahead of Checkout 2026-05-30: §14 Step-2 "pick receiving account" + hard rule #10 both require it. Phase 2 — Funds History (§23.2) — deferred.)*
 - [x] Checkout flow with wallet integration (§14). *(Two-step payment + receiving account with Funds Register, Session 26; "Add wallet info to receipt" checkbox added Session 30. §14 complete.)*
 - [~] Customers screen with wallet (§18). *(Re-pass Session 31: soft-delete CEO/Manager, Crates-tab gated to Bar/Beer, required phone, new customers.set_debt_limit permission. Still open: Edit flow (updateCustomer is a stub), GPS location capture, Add-Funds payment-method selector.)*
-- [ ] Orders (Pending, Completed, Cancelled).
-- [ ] Daily Stock Count.
-- [ ] Expenses with pending approval flow.
+- [~] Orders (Pending, Completed, Cancelled).
+- [~] Daily Stock Count.
+- [~] Expenses with pending approval flow.
 - [ ] Supplier Accounts.
 - [ ] Track Shipments (new).
-- [ ] Activity Logs.
-- [ ] Reports.
+- [~] Activity Logs.
+- [~] Reports.
 - [ ] Notifications.
+
+> **Remaining work re-grouped 2026-05-31 into Rings 0-3 — see PIVOT_PLAN.md §8.0.** Ring order: Ring 0 (foundation invariants) — POS/Cart wholesaler-tier price fix, Activity Logs generic-schema migration + notifications.severity column + logActivity()/fireNotification() helpers, money-math consistency regression net. Ring 1 (close the money loop) — Funds Register Close Day + reconciliation (built first; the funds-debit primitive), Orders Cancel reversal, Orders Refund, Customers Add Funds via WalletService.topup, Expenses approval/stats/budget, Supplier Accounts + Track Shipments (shared payments+shipments model). Ring 2 (operational daily loop) — Customers Edit (real DAO write), Customers GPS capture, Daily Stock Count + Record Damages. Ring 3 (reporting & cross-cutting verification) — Funds History, Daily Reconciliation Report, Notifications verification pass, Activity Logs feature screen, Reports hub + missing reports, barcode scanner, Deliveries removal, loading-state fade-in sweep, sync regression test, end-to-end QA.
 
 ---
 
@@ -1090,6 +1092,8 @@ Manager/CEO enters per store:
 
 App calculates expected vs actual for each account. Mismatches go into the reconciliation report along with the stock reconciliation.
 
+> Confirmed Phase 1 (2026-05-31, decision C1) — the earlier §3 build-order parenthetical that deferred this to Phase 2 is superseded; Funds History (§23.2) remains Phase 2.
+
 ### 23.7 Role access
 
 - CEO: any store.
@@ -1104,6 +1108,8 @@ App calculates expected vs actual for each account. Mismatches go into the recon
 - New day blocked until previous day's Close Day is entered.
 - Notifications fire to CEO and Manager every morning the previous day remains unclosed.
 - Big banner shown when entering the screen if a previous day is unclosed.
+
+> Confirmed Phase 1 (2026-05-31, decision C1) — the earlier §3 build-order parenthetical that deferred this to Phase 2 is superseded; Funds History (§23.2) remains Phase 2.
 
 ---
 

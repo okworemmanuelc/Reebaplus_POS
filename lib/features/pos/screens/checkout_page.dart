@@ -498,12 +498,14 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       final unitPriceKobo =
           (item['unitPriceKobo'] as int?) ??
           ((item['price'] as num).toDouble() * 100).round();
+      final priceTier = (item['priceTier'] as String?) ?? 'retailer';
       if (version == null) continue; // Pre-versioning entry; skip check.
       lines.add(
         CartLineSnapshot(
           productId: id,
           cartVersion: version,
           cartUnitPriceKobo: unitPriceKobo,
+          priceTier: priceTier,
         ),
       );
     }

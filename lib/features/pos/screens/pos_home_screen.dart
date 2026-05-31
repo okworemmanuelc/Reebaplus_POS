@@ -508,6 +508,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
           item.product,
           qty: 1.0,
           maxStock: item.totalStock,
+          tier: _controller!.selectedGroup,
         );
     if (accepted) {
       AppNotification.showSuccess(

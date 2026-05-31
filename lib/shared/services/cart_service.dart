@@ -54,7 +54,12 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
   ///
   /// Pass [maxStock] as a very large number (or omit) for legacy Map products
   /// (Quick Sale), which have no inventory tracking.
-  bool addItem(dynamic product, {double qty = 1.0, int? maxStock}) {
+  bool addItem(
+    dynamic product, {
+    double qty = 1.0,
+    int? maxStock,
+    PriceTier tier = PriceTier.retailer,
+  }) {
     // Handling both legacy Map (Quick Sale) and new ProductData class
     final String name = product is ProductData ? product.name : product['name'];
     final String? id = product is ProductData ? product.id : null;
@@ -83,7 +88,9 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
       if (maxStock != null) current[index]['maxStock'] = maxStock;
     } else {
       final int unitPriceKobo = product is ProductData
-          ? product.retailerPriceKobo
+          ? (tier == PriceTier.wholesaler
+                ? product.wholesalerPriceKobo
+                : product.retailerPriceKobo)
           : (((product['price'] as num).toDouble() * 100).round());
       current.add({
         'id': id,
@@ -93,6 +100,11 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
             : product['subtitle'],
         'price': unitPriceKobo / 100.0,
         'unitPriceKobo': unitPriceKobo,
+        // Tier the line was priced at (§12.2). Used by checkout staleness so a
+        // wholesaler line is re-priced against the wholesaler column, not
+        // silently reverted to retailer. Quick-Sale (Map) lines default to
+        // 'retailer' and are skipped by staleness (no DB product id).
+        'priceTier': product is ProductData ? tier.name : 'retailer',
         'version': product is ProductData ? product.version : null,
         'qty': allowed,
         'icon': product is ProductData

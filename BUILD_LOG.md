@@ -106,6 +106,71 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 
 ---
 
+## Session 35 — 2026-05-31 — Ring 0: wholesaler-tier price fix (§12.2/§16)
+
+**Built today:**
+Fixed the shipped money bug where a wholesale customer was *shown* the
+wholesale price but *charged* the retailer price. The cart was blind to the
+active price tier: `CartService.addItem` always seeded the retailer price, and
+the checkout staleness check re-priced every line against the retailer column —
+so even a correctly-priced wholesaler line would have been silently reverted to
+retailer at checkout. Threaded the selected tier end-to-end so the line is
+priced, re-priced, and recorded at the right tier. First item of Ring 0 in the
+re-sequenced build order (PIVOT_PLAN §8.0).
+
+**Files touched (code):**
+- `lib/shared/services/cart_service.dart` — `addItem` gained an optional
+  `PriceTier tier` param; the ProductData branch now seeds
+  `wholesalerPriceKobo` vs `retailerPriceKobo` by tier; the cart line Map now
+  carries `'priceTier'` so it is self-describing through save/recall.
+- `lib/features/pos/screens/pos_home_screen.dart` — `_addToCart` passes
+  `tier: _controller!.selectedGroup` (the only real-product caller; covers both
+  the CEO/Manager dropdown and customer auto-apply).
+- `lib/core/database/daos.dart` — `CartLineSnapshot` gained a `priceTier`
+  field (default `'retailer'`); `checkCartStaleness` re-prices against the
+  line's own tier instead of the hardcoded `p.retailerPriceKobo`.
+- `lib/features/pos/screens/checkout_page.dart` — `_detectCartStaleness` reads
+  `item['priceTier']` and passes it into the snapshot.
+
+**Files touched (test):**
+- `test/pos/cart_tier_pricing_test.dart` (new) — 6 cases: wholesaler seed,
+  retailer default + explicit, staleness re-prices against the wholesaler
+  column (never retailer), wholesaler-customer tier, and discount clamps
+  against the wholesaler line total.
+
+**Database changes:**
+- None. The tier rides inside the in-memory cart Map and the existing
+  `saved_carts.cartData` JSON blob — no schema/migration, no new synced column.
+  Quick Sale (legacy Map) lines are untouched and stay tier-agnostic.
+
+**Master plan sections covered:**
+- §12.2 (price tier auto-apply / dropdown) and §16 (Retailer/Wholesaler prices)
+  now hold at the point of sale, not just on the product card.
+
+**Tested:**
+- `flutter analyze` on the 4 changed files + the new test — no issues.
+- `flutter test` full suite — 231 passing / 58 skipped / 0 failing (the 58
+  skips are pre-existing, incl. the two skip:true checkout widget tests).
+
+**Known issues / left open:**
+- `daos.dart` `StockTransactionDao._mapRow` still maps the Inventory History
+  row's display `unitPriceKobo` to `p.retailerPriceKobo`. This is a
+  reporting/display value on the stock-movement History tab, NOT a charge — out
+  of scope for this charging bug. Flagged as a display-only follow-up for the
+  Ring 3 Reports/History pass (a sale-driven movement arguably ought to show the
+  actual sold price).
+- `CartService.refreshProduct` is currently uncalled (dead) — its latent
+  retailer-only refresh risk is moot until a caller is added.
+
+**Next session should:**
+- Continue Ring 0: land the generic `activity_logs` schema migration
+  (entityType/entityId/before/after, row-copy) + `notifications.severity`
+  column + `logActivity()`/`fireNotification()` helpers (with a migration
+  round-trip test), and the OrderService/funds money-math regression net.
+  Then Ring 1 starts with Funds Register Close Day + reconciliation.
+
+---
+
 ## Session 34 — 2026-05-31 — Build-order re-sequencing (docs only, no code)
 
 **Built today:**
