@@ -12,6 +12,7 @@ import 'package:reebaplus_pos/features/stores/data/models/store.dart';
 import 'package:reebaplus_pos/shared/widgets/app_drawer.dart';
 import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 
 class ActivityLogScreen extends ConsumerStatefulWidget {
   const ActivityLogScreen({super.key});
@@ -26,6 +27,29 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // §27.3 / hard rules #6 (every screen checks permissions) and #7 (hide,
+    // don't grey): Activity Logs is gated to roles holding `activity_logs.view`.
+    // The sidebar item is already hidden without it; this is defense-in-depth
+    // against deep-links / direct navigation. Message style mirrors
+    // pos_home_screen's no-access block.
+    if (!hasPermission(ref, 'activity_logs.view')) {
+      return Scaffold(
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        body: SafeArea(
+          child: Center(
+            child: Text(
+              'You don\'t have access to Activity Logs.',
+              style: TextStyle(
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     final bgCol = Theme.of(context).scaffoldBackgroundColor;
         final surfaceCol = Theme.of(context).colorScheme.surface;
         final textCol = Theme.of(context).colorScheme.onSurface;

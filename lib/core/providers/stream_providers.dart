@@ -50,6 +50,18 @@ final productsByStoreProvider =
       .watchProductDatasWithStockByStore(storeId);
 });
 
+/// Products with stock totals for a store scope, where the key may be null to
+/// mean "All Stores". Drives the Product Details screen's realtime refresh so a
+/// product edit / stock change syncing in from another device updates the open
+/// detail view live (§5).
+final productsWithStockProvider =
+    StreamProvider.family<List<ProductDataWithStock>, String?>((ref, storeId) {
+  return ref
+      .watch(databaseProvider)
+      .inventoryDao
+      .watchProductsWithStock(storeId: storeId);
+});
+
 // ── Categories ──────────────────────────────────────────────────────────────
 final allCategoriesProvider = StreamProvider<List<CategoryData>>((ref) {
   return ref.watch(databaseProvider).inventoryDao.watchAllCategories();

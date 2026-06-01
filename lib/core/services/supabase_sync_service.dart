@@ -427,6 +427,53 @@ class SupabaseSyncService {
   }) =>
       _restoreTableData(table, data, fkSkipped: fkSkipped);
 
+  /// Exposes the realtime DELETE handler to unit tests — same rationale as
+  /// [restoreTableDataForTesting]: replay a DELETE payload against `_db`
+  /// without a live Supabase client.
+  @visibleForTesting
+  Future<void> deleteLocalRowByIdForTesting(String table, String id) =>
+      _deleteLocalRowById(table, id);
+
+  /// Exposes `_reconcileHardDeletes` to unit tests so the full-snapshot
+  /// delete-aware reconcile can be exercised without a SupabaseClient (it only
+  /// touches `_db`). The reconcile logic stays in `_reconcileHardDeletes` so the
+  /// pull path and tests can't drift; pass a full-snapshot map exactly as
+  /// [pullInitialData] builds it.
+  @visibleForTesting
+  Future<void> reconcileHardDeletesForTesting(
+    String businessId,
+    Map<String, List<dynamic>> snapshot,
+  ) =>
+      _reconcileHardDeletes(businessId, snapshot);
+
+  /// Applies an incoming realtime DELETE locally. The cloud is the source of
+  /// truth for the removal, so this deletes the local row WITHOUT enqueueing
+  /// (§5 exception #1 — same contract as [_restoreTableData]; re-pushing would
+  /// loop). Only the three hard-delete tables (the `enqueueDelete` call sites)
+  /// ever emit a true DELETE; soft-deletes arrive as UPDATEs and flow through
+  /// [_restoreTableData]. Typed deletes keep Drift stream queries (e.g. the
+  /// role-permission toggle) reactive. Unknown tables are logged, not applied.
+  Future<void> _deleteLocalRowById(String table, String id) async {
+    switch (table) {
+      case 'role_permissions':
+        await (_db.delete(_db.rolePermissions)..where((t) => t.id.equals(id)))
+            .go();
+        break;
+      case 'saved_carts':
+        await (_db.delete(_db.savedCarts)..where((t) => t.id.equals(id))).go();
+        break;
+      case 'notifications':
+        await (_db.delete(_db.notifications)..where((t) => t.id.equals(id)))
+            .go();
+        break;
+      default:
+        debugPrint(
+          '[SyncService] Realtime DELETE on "$table" id=$id not applied '
+          'locally (no hard-delete handler for this table)',
+        );
+    }
+  }
+
   /// Pushes all pending local changes to Supabase.
   Future<void> pushPending() async {
     // Without an authenticated session the server sees auth.uid() as NULL,
@@ -1614,7 +1661,106 @@ class SupabaseSyncService {
       );
       skipped = {...skipped, ...fkSkipped};
     }
+
+    // Delete-aware reconciliation for the three hard-delete tables only
+    // (role_permissions, saved_carts, notifications). Realtime delivers DELETEs
+    // only to a live-subscribed device — Supabase never replays a missed DELETE
+    // — and the restore path above is upsert-only (an incoming row absent
+    // locally is kept). So a device that missed a live DELETE (offline,
+    // backgrounded, or pre-fix) keeps a phantom row that nothing self-heals:
+    // e.g. a revoked role permission that lingers forever. Reconcile removes any
+    // local row whose id is not in this snapshot's id set for that table.
+    //
+    // ONLY valid on a COMPLETE snapshot (since == null): there "absent" means
+    // "deleted". An incremental delta (since != null) returns only rows changed
+    // after the cursor, where "absent" means "unchanged" — reconciling it would
+    // wipe live rows. We therefore gate strictly on `since == null`.
+    if (since == null) {
+      await _reconcileHardDeletes(businessId, snapshot);
+    }
     return skipped;
+  }
+
+  /// Hard-delete tables (the only `enqueueDelete` call sites): a revoke/delete
+  /// is a true row removal the cloud forgets, so a delete that a device missed
+  /// has no upsert to self-heal it. Restricted to this set — soft-delete tables
+  /// carry `is_deleted` and must NEVER be hard-removed by a reconcile.
+  static const _hardDeleteReconcileTables = {
+    'role_permissions',
+    'saved_carts',
+    'notifications',
+  };
+
+  /// Delete local rows of the three hard-delete tables whose id is absent from a
+  /// COMPLETE [snapshot] for [businessId]. LOCAL-ONLY: applies cloud truth, so
+  /// it never enqueues anything (§5 exception #1 — same contract as
+  /// [_restoreTableData]; pushing the deletes back would loop).
+  ///
+  /// Caller MUST only invoke this on a full snapshot (`since == null`).
+  ///
+  /// Edge cases:
+  /// - A table KEY present with an empty list legitimately means "the cloud has
+  ///   no rows for this business" → delete all local rows for it. We use the
+  ///   id-set built from the (possibly empty) slice.
+  /// - A table ABSENT from the snapshot payload (e.g. a partial/failed snapshot
+  ///   that never included the key) is left alone — we must not wipe data on the
+  ///   strength of a slice that simply didn't arrive. Only tables whose key is
+  ///   present in [snapshot] are reconciled.
+  /// - Every delete is business-scoped (the device may hold more than one
+  ///   business's data — see the business-scoping invariant).
+  Future<void> _reconcileHardDeletes(
+    String businessId,
+    Map<String, List<dynamic>> snapshot,
+  ) async {
+    for (final table in _hardDeleteReconcileTables) {
+      // Absent key ⇒ slice didn't arrive ⇒ do not reconcile (no wipe).
+      if (!snapshot.containsKey(table)) continue;
+      final cloudIds = <String>{
+        for (final r in snapshot[table]!)
+          if (r is Map && r['id'] != null) r['id'].toString(),
+      };
+      final removed = await _deleteLocalRowsNotIn(table, businessId, cloudIds);
+      if (removed > 0) {
+        debugPrint(
+          '[SyncService] Reconcile $table: removed $removed local row(s) '
+          'absent from the cloud snapshot for $businessId',
+        );
+      }
+    }
+  }
+
+  /// Business-scoped hard-delete of [table] rows whose id is not in [cloudIds].
+  /// Returns the number of rows removed. Typed deletes (not raw SQL) so Drift
+  /// stream queries refresh. LOCAL-ONLY (§5 exception #1 — never enqueues).
+  Future<int> _deleteLocalRowsNotIn(
+    String table,
+    String businessId,
+    Set<String> cloudIds,
+  ) async {
+    // Drift exposes `isIn`; negate with `.not()` for "not in" (same idiom as
+    // SavedCartsDao.pruneExcept). An empty `ids` makes `isIn([])` false, so
+    // `.not()` is true for every row → all of this business's rows are removed,
+    // which is exactly right when the cloud's slice for that table is empty.
+    final ids = cloudIds.toList();
+    switch (table) {
+      case 'role_permissions':
+        return (_db.delete(_db.rolePermissions)
+              ..where((t) =>
+                  t.businessId.equals(businessId) & t.id.isIn(ids).not()))
+            .go();
+      case 'saved_carts':
+        return (_db.delete(_db.savedCarts)
+              ..where((t) =>
+                  t.businessId.equals(businessId) & t.id.isIn(ids).not()))
+            .go();
+      case 'notifications':
+        return (_db.delete(_db.notifications)
+              ..where((t) =>
+                  t.businessId.equals(businessId) & t.id.isIn(ids).not()))
+            .go();
+      default:
+        return 0;
+    }
   }
 
   /// Per-table parallel fetch — the original pull path. Used as a fallback
@@ -1790,6 +1936,25 @@ class SupabaseSyncService {
                     );
 
                     final eventTable = payload.table;
+
+                    // DELETE: the cloud removed a hard-deleted row
+                    // (role_permissions / saved_carts / notifications — the
+                    // only `enqueueDelete` tables). Apply the removal locally,
+                    // else the row lingers and a stale INSERT/UPDATE echo can
+                    // resurrect it permanently (e.g. revoking a role permission
+                    // that then re-appears). DELETE payloads carry the row in
+                    // `oldRecord`, not `newRecord`, so the upsert path below
+                    // never saw them. Incoming cloud event: delete locally
+                    // only, never re-enqueue (§5 exception #1, same contract as
+                    // _restoreTableData — re-pushing would loop).
+                    if (payload.eventType == PostgresChangeEvent.delete) {
+                      final id = payload.oldRecord['id'] as String?;
+                      if (id != null) {
+                        await _deleteLocalRowById(eventTable, id);
+                      }
+                      return;
+                    }
+
                     final newRecord = payload.newRecord;
 
                     if (newRecord.isNotEmpty) {
@@ -2636,9 +2801,23 @@ class SupabaseSyncService {
           break;
         case 'role_permissions':
           for (var r in rows) {
-            await _db
-                .into(_db.rolePermissions)
-                .insertOnConflictUpdate(RolePermissionData.fromJson(r));
+            final row = RolePermissionData.fromJson(r);
+            // `id` is a random per-grant UUID, but the LOGICAL identity is
+            // (role_id, permission_key) — enforced by UNIQUE(role_id,
+            // permission_key). A grant→revoke→re-grant cycle or two devices
+            // granting the same permission mint different ids for the same
+            // pair, so upserting on `id` alone trips that unique constraint
+            // (SqliteException 2067). Drop any local row with the same logical
+            // key but a different id first, so the incoming cloud row applies
+            // cleanly and the device converges on the cloud's id. Restore path
+            // — local only, never enqueue (§5 exception #1; re-pushing loops).
+            await (_db.delete(_db.rolePermissions)
+                  ..where((t) =>
+                      t.roleId.equals(row.roleId) &
+                      t.permissionKey.equals(row.permissionKey) &
+                      t.id.equals(row.id).not()))
+                .go();
+            await _db.into(_db.rolePermissions).insertOnConflictUpdate(row);
           }
           break;
         case 'role_settings':

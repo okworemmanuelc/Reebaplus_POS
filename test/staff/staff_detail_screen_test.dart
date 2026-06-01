@@ -61,13 +61,21 @@ void main() {
     await db.into(db.roles).insert(RolesCompanion.insert(
         id: Value(ceoRoleId), businessId: biz, name: 'CEO', slug: 'ceo'));
     // Grant the CEO role staff-management access so the bound viewer passes the
-    // manage-buttons permission gate (hard rule #6).
-    await db.into(db.rolePermissions).insert(RolePermissionsCompanion.insert(
-          id: Value(UuidV7.generate()),
-          businessId: biz,
-          roleId: ceoRoleId,
-          permissionKey: 'staff.invite',
-        ));
+    // manage-buttons permission gates (hard rule #6). Change role and Suspend
+    // now check their own permissions (staff.change_role / staff.suspend),
+    // separate from staff.invite — all three are CEO defaults.
+    for (final key in const [
+      'staff.invite',
+      'staff.change_role',
+      'staff.suspend',
+    ]) {
+      await db.into(db.rolePermissions).insert(RolePermissionsCompanion.insert(
+            id: Value(UuidV7.generate()),
+            businessId: biz,
+            roleId: ceoRoleId,
+            permissionKey: key,
+          ));
+    }
 
     ceoUserId = UuidV7.generate();
     await db.into(db.users).insert(UsersCompanion.insert(

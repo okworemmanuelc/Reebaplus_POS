@@ -70,7 +70,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   bool _isSaving = false;
   String? _errorMessage;
 
-  static const _units = ['Crate', 'Bottle', 'Pack', 'Carton', 'Keg', 'Can'];
+  static const _units = kProductUnits;
   List<String> _dynamicUnits = _units;
 
   /// Whether the current role may see / set the buying price (master plan

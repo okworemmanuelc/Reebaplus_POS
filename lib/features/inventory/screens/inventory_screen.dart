@@ -52,7 +52,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   int _currentTab = 0;
   String _selectedManufacturer = 'all';
   String _selectedStoreId = 'all';
-  String _stockFilter = 'all'; // 'all' | 'low' | 'out' | 'empty_crates'
+  String _stockFilter = 'all'; // 'all' | 'low' | 'out' | 'expiry'
   List<StoreData> _stores = [];
   List<ProductDataWithStock> _dbProducts = [];
   List<ManufacturerData> _dbManufacturers = [];
@@ -312,6 +312,34 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Defense-in-depth (hard rules #6/#7): Inventory is gated on stock.view
+    // (§16.7). The drawer item and bottom-nav Stock tab already hide without it;
+    // this guards a deep-link / programmatic switch to the tab. SharedScaffold
+    // keeps the drawer + bottom nav so the user can navigate away.
+    if (!hasPermission(ref, 'stock.view')) {
+      return SharedScaffold(
+        activeRoute: 'inventory',
+        backgroundColor: _bg,
+        appBar: AppBar(
+          title: const Text(
+            'Inventory',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          centerTitle: true,
+        ),
+        body: Center(
+          child: Text(
+            'You don\'t have access to Inventory.',
+            style: TextStyle(
+              color:
+                  Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+            ),
+          ),
+        ),
+      );
+    }
     // Resolve the visible tabs (role / permission / business-type guards).
     // Null = the gating data hasn't loaded yet → show a static loading state
     // and don't touch the TabController, so the tab bar reveals its final set
@@ -422,6 +450,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         )
         .length;
     final outOfStock = products.where((p) => p.totalStock == 0).length;
+    // Near-expiry surfacing (§16.4 / §16.5): products expired or within 30 days.
+    final nearExpiry = products.where((p) => _isNearExpiry(p.product)).length;
 
     final totalCrates = _totalCrateAssetsSum.toDouble();
 
@@ -476,6 +506,21 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
             _tabController.animateTo(_tabKeys.indexOf('crates'));
           }),
         ),
+      // Near Expiry — last card; available for all business types (§16.5).
+      // Tapping filters the Products list to flagged items, which already
+      // sort soonest-expiry first.
+      _summaryCard(
+        context,
+        'Near Expiry',
+        '$nearExpiry',
+        FontAwesomeIcons.hourglassHalf,
+        AppColors.warning,
+        isActive: _stockFilter == 'expiry',
+        onTap: () => setState(() {
+          _stockFilter = 'expiry';
+          _tabController.animateTo(0);
+        }),
+      ),
     ];
 
     return Container(
@@ -610,6 +655,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
           .toList();
     } else if (_stockFilter == 'out') {
       list = list.where((p) => p.totalStock == 0).toList();
+    } else if (_stockFilter == 'expiry') {
+      list = list.where((p) => _isNearExpiry(p.product)).toList();
     }
 
     if (_selectedManufacturer != 'all') {

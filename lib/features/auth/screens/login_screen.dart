@@ -34,7 +34,7 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   bool _checking = false;
   final ValueNotifier<String> _pinNotifier = ValueNotifier<String>('');
   bool _biometricsAvailable = false;
@@ -57,6 +57,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _checkAnim = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 350),
@@ -72,6 +73,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     );
 
     _initUserAndLockoutState();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Re-check on resume so the biometric button recovers if the first check
+    // hit a transient platform error, and so it reflects Security Settings
+    // changes made while this screen was in the background.
+    if (state == AppLifecycleState.resumed) {
+      _checkBiometricAvailability();
+    }
   }
 
   Future<void> _initUserAndLockoutState() async {
@@ -118,8 +129,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   Future<void> _checkBiometricAvailability() async {
     try {
       final auth = LocalAuthentication();
-      final available =
-          await auth.canCheckBiometrics || await auth.isDeviceSupported();
+      // Evaluate the two capability checks independently. canCheckBiometrics can
+      // transiently throw or return false (cold start, temporary lockout); if it
+      // threw it would abort before isDeviceSupported() — the stable signal on a
+      // device with a secure lock screen — and the silent catch below would then
+      // leave the button hidden for the rest of this screen's life. Guarding each
+      // call keeps a flake on one from masking the other.
+      bool canCheck = false;
+      try {
+        canCheck = await auth.canCheckBiometrics;
+      } catch (_) {}
+      bool deviceSupported = false;
+      try {
+        deviceSupported = await auth.isDeviceSupported();
+      } catch (_) {}
+      final available = canCheck || deviceSupported;
       final prefs = await SharedPreferences.getInstance();
 
       // One-time migration: old onboarding key → unified key
@@ -214,6 +238,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _checkAnim.dispose();
     _emailController.dispose();
     _pinNotifier.dispose();

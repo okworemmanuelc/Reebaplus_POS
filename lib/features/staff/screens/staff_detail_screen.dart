@@ -74,9 +74,10 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
     RoleData? currentRole,
     List<RoleData> options,
   ) async {
-    // Defense-in-depth (hard rule #6): re-check the manage permission at the
-    // start, not only at button render.
-    if (!ref.read(currentUserPermissionsProvider).contains('staff.invite')) {
+    // Defense-in-depth (hard rule #6): re-check the specific permission at the
+    // start, not only at button render. Change-role has its own permission
+    // (§9), separate from invite/suspend.
+    if (!ref.read(currentUserPermissionsProvider).contains('staff.change_role')) {
       return;
     }
     final picked = await showDialog<RoleData>(
@@ -136,8 +137,9 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
   }
 
   Future<void> _toggleSuspend(UserBusinessData membership) async {
-    // Defense-in-depth (hard rule #6): re-check before running.
-    if (!ref.read(currentUserPermissionsProvider).contains('staff.invite')) {
+    // Defense-in-depth (hard rule #6): re-check the specific permission before
+    // running. Suspend/reactivate has its own permission (§9).
+    if (!ref.read(currentUserPermissionsProvider).contains('staff.suspend')) {
       return;
     }
     final suspending = membership.status == 'active';
@@ -308,29 +310,37 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                       : DateFormat('MMM d, y • h:mm a')
                           .format(membership.lastLoginAt!),
                 ),
-                // Manage actions — hidden in view-only (own card) and gated by
-                // the staff-management permission (hard rule #6 defense-in-depth;
-                // CEO + Manager hold it). The manageable→readOnly logic already
+                // Manage actions — hidden in view-only (own card). Each action
+                // has its OWN permission (§9): Change role -> staff.change_role,
+                // Suspend/Reactivate -> staff.suspend (both CEO + Manager by
+                // default; the CEO can revoke either independently). Hidden, not
+                // greyed (hard rule #7). The manageable→readOnly logic already
                 // restricts which staff a viewer can act on.
-                if (!widget.readOnly && hasPermission(ref, 'staff.invite')) ...[
+                if (!widget.readOnly &&
+                    (hasPermission(ref, 'staff.change_role') ||
+                        hasPermission(ref, 'staff.suspend'))) ...[
                   SizedBox(height: context.getRSize(28)),
-                  AppButton(
-                    text: 'Change role',
-                    icon: FontAwesomeIcons.userGear,
-                    variant: AppButtonVariant.secondary,
-                    onPressed: () => _changeRole(membership, role, roleOptions),
-                  ),
-                  SizedBox(height: context.getRSize(12)),
-                  AppButton(
-                    text: suspended ? 'Reactivate' : 'Suspend',
-                    icon: suspended
-                        ? FontAwesomeIcons.userCheck
-                        : FontAwesomeIcons.userSlash,
-                    variant: suspended
-                        ? AppButtonVariant.success
-                        : AppButtonVariant.danger,
-                    onPressed: () => _toggleSuspend(membership),
-                  ),
+                  if (hasPermission(ref, 'staff.change_role')) ...[
+                    AppButton(
+                      text: 'Change role',
+                      icon: FontAwesomeIcons.userGear,
+                      variant: AppButtonVariant.secondary,
+                      onPressed: () =>
+                          _changeRole(membership, role, roleOptions),
+                    ),
+                    SizedBox(height: context.getRSize(12)),
+                  ],
+                  if (hasPermission(ref, 'staff.suspend'))
+                    AppButton(
+                      text: suspended ? 'Reactivate' : 'Suspend',
+                      icon: suspended
+                          ? FontAwesomeIcons.userCheck
+                          : FontAwesomeIcons.userSlash,
+                      variant: suspended
+                          ? AppButtonVariant.success
+                          : AppButtonVariant.danger,
+                      onPressed: () => _toggleSuspend(membership),
+                    ),
                 ],
               ],
             ),

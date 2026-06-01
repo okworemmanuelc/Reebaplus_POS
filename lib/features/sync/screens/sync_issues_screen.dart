@@ -10,6 +10,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/diagnostics/sync_diagnostic.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -219,6 +220,33 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
+    // Defense-in-depth (hard rules #6/#7): Sync Issues is a CEO-only
+    // troubleshooting screen, gated on `settings.manage` (the same gate as CEO
+    // Settings and Stores). The sidebar item, sync badge, and banner already
+    // hide the entry points without it; this guards a deep-link / direct push.
+    // Keep the AppBar so the back button still works on this pushed route.
+    if (!hasPermission(ref, 'settings.manage')) {
+      return Scaffold(
+        backgroundColor: t.scaffoldBackgroundColor,
+        appBar: AppBar(
+          title: const Text(
+            'Sync Issues',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          centerTitle: true,
+        ),
+        body: Center(
+          child: Text(
+            'You don\'t have access to Sync Issues.',
+            style: TextStyle(
+              color: t.colorScheme.onSurface.withValues(alpha: 0.6),
+            ),
+          ),
+        ),
+      );
+    }
     final pendingAsync = ref.watch(pendingQueueItemsProvider);
     final failedAsync = ref.watch(failedQueueItemsProvider);
     final orphanAsync = ref.watch(orphanQueueItemsProvider);

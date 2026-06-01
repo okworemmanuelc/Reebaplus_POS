@@ -82,19 +82,31 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   String? _imagePath;
 
   // ── Role gating (master plan §16.6 / §16.7) ────────────────────────────────
-  // The screen is view-only until a CEO/Manager taps Edit (top bar). Editing +
-  // delete is CEO + Manager via `products.edit_price`. The Sales Target is
-  // CEO-only (`_isCeo`). Buying price visibility is `products.edit_buying_price`
+  // The screen is view-only until a CEO/Manager taps Edit (top bar). Editing is
+  // CEO + Manager via `products.edit_price`; delete is gated SEPARATELY on
+  // `products.delete` (see `_canDelete`). The Sales Target is CEO-only
+  // (`_isCeo`). Buying price visibility is `products.edit_buying_price`
   // (CEO + Manager). Stock keeper can only adjust quantities via the "Update
   // Stock" modal (`stock.adjust`) and sees a restricted view. Cashier: view-only.
   // Read (not watch) so these getters are safe to call from non-build handlers.
   bool get _canEdit =>
       ref.read(currentUserPermissionsProvider).contains('products.edit_price');
+  // Delete is its own permission, not edit. Granted to CEO + Manager by default;
+  // the CEO can revoke it per role in Roles & Permissions and the change applies
+  // live (build() watches currentUserPermissionsProvider, so the screen rebuilds
+  // and this getter re-reads).
+  bool get _canDelete =>
+      ref.read(currentUserPermissionsProvider).contains('products.delete');
   bool get _canEditBuying => ref
       .read(currentUserPermissionsProvider)
       .contains('products.edit_buying_price');
   bool get _canAdjustStock =>
       ref.read(currentUserPermissionsProvider).contains('stock.adjust');
+  // Add-stock is its own permission (§16.7), separate from adjust/remove. The
+  // Update-Stock modal opens if the viewer holds either; the Add and Remove
+  // modes inside are gated individually (stock.add vs stock.adjust).
+  bool get _canAddStock =>
+      ref.read(currentUserPermissionsProvider).contains('stock.add');
   // Sales Target is CEO-only (a Manager may edit everything else but not the
   // target — explicit user requirement).
   bool get _isCeo => ref.read(currentUserRoleProvider)?.slug == 'ceo';
@@ -159,12 +171,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         _allManufacturers = manufacturers;
         _allSuppliers = suppliers;
         _allUnits = {
-          'Bottle',
-          'Crate',
-          'Pack',
-          'Carton',
-          'Keg',
-          'Can',
+          ...kProductUnits,
           if (_selectedUnit != null) _selectedUnit!,
           ...uniqueUnits,
         }.toList()..sort();
@@ -270,6 +277,49 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         _imagePath = product.imagePath;
       }
     });
+  }
+
+  /// Re-seed the displayed (non-editing) fields from a freshly-synced product
+  /// row so a realtime cloud edit reflects immediately (§5). Synchronous — the
+  /// caller wraps it in setState. Never called while `_editMode` is true.
+  void _seedFieldsFrom(ProductData product) {
+    _nameController.text = product.name;
+    _subtitleController.text = product.subtitle ?? '';
+    _buyingPriceController.text =
+        (product.buyingPriceKobo / 100).toStringAsFixed(0);
+    _retailPriceController.text =
+        (product.retailerPriceKobo / 100).toStringAsFixed(0);
+    _wholesalerPriceController.text =
+        (product.wholesalerPriceKobo / 100).toStringAsFixed(0);
+    _emptyCrateValueController.text =
+        (product.emptyCrateValueKobo / 100).toStringAsFixed(0);
+    _lowStockController.text = product.lowStockThreshold.toString();
+    _monthlyTarget = product.monthlyTargetUnits;
+    _monthlyTargetController.text = _monthlyTarget.toString();
+    _selectedCategoryId = product.categoryId;
+    _selectedManufacturerId = product.manufacturerId;
+    _selectedSupplierId = product.supplierId;
+    _selectedUnit = product.unit;
+    _allowFractionalSales = product.allowFractionalSales;
+    _trackEmpties = product.trackEmpties;
+    _size = product.size;
+    _expiryDate = product.expiryDate;
+    _imagePath = product.imagePath;
+    // Keep the unit dropdown inclusive of a (possibly new) synced unit value.
+    if (!_allUnits.contains(product.unit)) {
+      _allUnits = ({..._allUnits, product.unit}.toList())..sort();
+    }
+  }
+
+  /// Re-read the derived blocks (Sales Summary + Last Delivery) after a stock
+  /// change syncs in, so they stay live alongside the product fields.
+  Future<void> _reloadDerived() async {
+    final db = ref.read(databaseProvider);
+    final id = widget.item.id;
+    final summary = await db.ordersDao.getSalesSummaryForProduct(id);
+    if (mounted) setState(() => _salesSummary = summary);
+    final delivery = await db.shipmentsDao.getLastShipmentForProduct(id);
+    if (mounted) setState(() => _lastDelivery = delivery);
   }
 
   Future<void> _pickExpiry() async {
@@ -405,6 +455,39 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     // action button) rebuilds when the role + its grants resolve locally.
     // The `_canEdit` family of getters read the same provider.
     ref.watch(currentUserPermissionsProvider);
+
+    // Realtime sync (§5): watch this product's row + stock so an edit or stock
+    // change on another device reflects here live, without leaving the screen.
+    // The stream's LEFT join always carries the product row (even with 0 stock
+    // in the selected store), so `match.product` gives every field its current
+    // synced value. Stock (a non-editable field here) updates even mid-edit;
+    // editable fields are re-seeded only when NOT editing, so an incoming sync
+    // never clobbers the user's unsaved input.
+    ref.listen<AsyncValue<List<ProductDataWithStock>>>(
+      productsWithStockProvider(widget.selectedStoreId),
+      (prev, next) {
+        final rows = next.valueOrNull;
+        if (rows == null || !mounted) return;
+        final match =
+            rows.where((r) => r.product.id == widget.item.id).firstOrNull;
+        if (match == null) return;
+        final p = match.product;
+        final newStock = match.totalStock.toDouble();
+        final stockChanged = newStock != _liveStock;
+        setState(() {
+          _liveStock = newStock;
+          _productData = p; // keep the edit baseline fresh
+          if (!_editMode) _seedFieldsFrom(p);
+        });
+        if (!_editMode && p.manufacturerId != null) {
+          _loadEmptyCrateStock(p.manufacturerId!);
+        }
+        // A stock change for this product means a sale/adjustment landed —
+        // refresh the Sales Summary + Last Delivery so those blocks stay live.
+        if (stockChanged) _reloadDerived();
+      },
+    );
+
     // Show shimmer skeleton while DB data loads (_contentReady becomes true
     // at the end of _loadProductData once all queries complete).
     if (!_contentReady) {
@@ -492,7 +575,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
               ),
             ),
           ),
-        if (_canEdit)
+        if (_canDelete)
           IconButton(
             onPressed: () => _confirmDelete(context),
             icon: Container(
@@ -1023,7 +1106,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
               isLoading: _savingChanges,
               onPressed: _productData == null ? null : _saveChanges,
             ),
-          ] else if (_canAdjustStock && !_canEdit) ...[
+          ] else if ((_canAddStock || _canAdjustStock) && !_canEdit) ...[
             // ── Stock keeper: quantity adjustments only (§16.6) ───────
             AppButton(
               text: 'Update Stock',
@@ -1590,7 +1673,12 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
 
     final qtyCtrl = TextEditingController();
     final notesCtrl = TextEditingController();
-    var isRemove = false;
+    // Add and Remove are gated separately (stock.add vs stock.adjust). The modal
+    // only opened because the viewer holds at least one; start in whichever mode
+    // is allowed (Add by default).
+    final canAdd = _canAddStock;
+    final canRemove = _canAdjustStock;
+    var isRemove = !canAdd && canRemove;
     const reasons = ['Damage', 'Theft', 'Expired', 'Other'];
     String? reason;
     StoreData selectedStore = stores.cast<StoreData?>().firstWhere(
@@ -1620,6 +1708,18 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                   sheetCtx,
                   'A reason is required when removing stock.',
                 );
+                return;
+              }
+              // Defense-in-depth (hard rule #6): re-check the mode's permission
+              // live, in case it was revoked while the sheet was open.
+              if (isRemove && !_canAdjustStock) {
+                AppNotification.showError(
+                    sheetCtx, 'You don\'t have permission to remove stock.');
+                return;
+              }
+              if (!isRemove && !_canAddStock) {
+                AppNotification.showError(
+                    sheetCtx, 'You don\'t have permission to add stock.');
                 return;
               }
               setSheet(() => saving = true);
@@ -1740,9 +1840,9 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                     const SizedBox(height: 16),
                     Row(
                       children: [
-                        modeChip('Add stock', false),
-                        const SizedBox(width: 10),
-                        modeChip('Remove stock', true),
+                        if (canAdd) modeChip('Add stock', false),
+                        if (canAdd && canRemove) const SizedBox(width: 10),
+                        if (canRemove) modeChip('Remove stock', true),
                       ],
                     ),
                     const SizedBox(height: 14),

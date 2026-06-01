@@ -106,6 +106,340 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 
 ---
 
+## Session 41 — 2026-06-01 — Biometric button intermittently missing on PIN login
+
+**Built today:**
+- Fixed the fingerprint/biometric button sometimes disappearing from the PIN
+  entry login screen even though biometrics were enabled. It now stays put, and
+  recovers on its own if it ever does drop (no app restart needed).
+
+**Files touched:**
+- lib/features/auth/screens/login_screen.dart
+
+**Database changes:**
+- None.
+
+**Master plan sections covered:**
+- §7 (Login flow) — biometric sign-in affordance.
+
+**Plan updates made during session:**
+- None.
+
+**Tested:**
+- `flutter analyze` on login_screen.dart — clean.
+- Auth widget test (who_is_working_screen_test.dart) — passes.
+- Root cause: the availability check ran `canCheckBiometrics || isDeviceSupported()`
+  with `canCheckBiometrics` first. That call can transiently throw on cold start
+  or during a temporary biometric lockout; the throw hit a silent catch before
+  the stable `isDeviceSupported()` check could run, so the flag stayed false and
+  the button vanished for the rest of the screen's life. Fix evaluates the two
+  checks independently (a flake on one can't mask the other) and re-checks on
+  app resume via a WidgetsBindingObserver.
+
+**Known issues / left open:**
+- On-device confirmation pending (verify on emulator with biometrics enabled).
+
+**Next session should:**
+- Confirm the button stays visible across cold starts / resume on the emulator.
+
+---
+
+## Session 40 — 2026-05-31 — Product unit CHECK widen (non-bottle units reach inventory) + Near Expiry card
+
+**Built today:**
+- Fixed the bug where only Bottle-unit products could be added to inventory. The Add / Edit Product form offered units (Can, Keg, …) that the database refused, so saving a non-bottle product silently failed the insert and it never showed up in stock. Widened the allowed unit list — Bottle, Can, PET, Sachet, Keg, Crate, Pack, Carton, Piece, Bag, Box, Tin, Other — and made the dropdowns and the database agree (one shared `kProductUnits` list).
+- Added a "Near Expiry" card at the end of the Inventory summary-card row (the scrollable row at the top, all business types). It shows how many products are expired or within 30 days; tapping it filters the product list to those, soonest-expiry first.
+
+**Files touched:**
+- lib/core/database/app_database.dart (new `kProductUnits` list, widened `unit` CHECK, schemaVersion 23→24, `from < 24` table-rebuild migration)
+- lib/features/inventory/screens/add_product_screen.dart (unit dropdown uses `kProductUnits`)
+- lib/features/inventory/screens/product_detail_screen.dart (edit-mode unit dropdown uses `kProductUnits`)
+- lib/features/inventory/screens/inventory_screen.dart (Near Expiry card + `'expiry'` list filter)
+- supabase/migrations/0065_widen_product_unit_check.sql (new)
+- reebaplus_master_plan.md (§16.4 summary cards + Near Expiry; §16.5 unit list)
+
+**Database changes:**
+- `products.unit` CHECK widened to the 13-value list above. Local: schema v24 rebuilds the products table (`alterTable`) to apply the new CHECK. Cloud: `0065_widen_product_unit_check.sql` drops + re-adds `products_unit_check`.
+- DEPLOYED 2026-06-01: `supabase db push` applied 0065 to the remote (0064 was already on remote from its own session, so only 0065 went up). Triggered by the user reporting a Can product that saved locally but failed to push — the cloud `products_unit_check` was still rejecting non-bottle units until this deploy. The failed sync-queue item clears on the next sync / retry.
+
+**Tested:**
+- `flutter analyze` clean on all four changed Dart files (full-project run shows only pre-existing `avoid_print` infos in test/database/roles_v13_report.dart).
+
+**Known issues / left open:**
+- Runtime confirmed 2026-06-01: a Can product saved locally (v24 fix works); the push failed only because cloud 0065 wasn't deployed yet. Now deployed — the stuck sync-queue item should push on the next sync / a manual retry from the Sync Issues screen.
+
+**Next session should:**
+- Confirm the previously-failed Can product now pushes (Sync Issues screen → retry) and syncs across devices.
+
+---
+
+## Session 39 — 2026-05-31 — Permission-toggle audit + wiring (dead/mis-wired toggles)
+
+**Why this session:**
+After the realtime-delete fix, the user found more permission toggles that did
+nothing. Ran a wiring audit of all 29 permission keys (grep every key across
+`lib/`, classify wired / dead / mis-wired). Findings + fixes:
+
+**Mis-wired (toggle did nothing because it was tied to the wrong control):**
+- **Product delete** was gated on `products.edit_price` (via `_canEdit`), so the
+  `products.delete` toggle had no effect and turning off "edit prices" also hid
+  the delete button. Added a `_canDelete` getter and gated the delete button on
+  `products.delete`. Edit and delete are now independent. (Manager has both by
+  default, so no behaviour change; the toggles now work.)
+
+**Dead toggles on built features — now wired (user-approved):**
+- **`staff.suspend` / `staff.change_role`** — Suspend and Change-role were both
+  gated by `staff.invite` (the two perms were only used as activity-log labels).
+  Split: Change role → `staff.change_role`, Suspend → `staff.suspend`, each
+  button + its action guard. Both are CEO+Manager defaults (same set as
+  `staff.invite`), so no default-visibility change.
+- **`stock.view`** — now gates Inventory visibility: the sidebar item, the
+  bottom-nav "Stock" tab (rewrote the hardcoded 5-way index math into a
+  data-driven `tabOrder` list so a hidden tab can't desync the indices), and a
+  screen-level guard. On for every role by default.
+- **`stock.add`** — now gates the "Add stock" mode of the Update-Stock modal,
+  separate from `stock.adjust` (which gates "Remove/adjust"). The modal opens if
+  either is held; each mode chip shows only if permitted; save re-checks live.
+  Defaults unchanged (Stock keeper + Manager hold both).
+
+**Also gated this session (separate user request):**
+- **Sync Issues** screen — was reachable by every role. Now CEO-only
+  (`settings.manage`): the sidebar item, the drawer sync badge, and the sync
+  banner's navigation are all gated, plus a screen-level guard. Mirrors the
+  Activity Logs gating pattern.
+
+**Dead toggles left as-is (feature not built yet — can't wire without building
+out-of-scope Ring 1–3 work):** `customers.update`, `expenses.approve`,
+`funds.close_day`, `reports.see_*` (4), `sales.cancel`, `shipments.manage`.
+Noted for when those screens land. `customers.add` still doubles as the
+Customers sidebar visibility gate (no separate `customers.view` exists) — left
+as a known limitation.
+
+**Files touched:**
+- `lib/features/inventory/screens/product_detail_screen.dart` — `_canDelete`
+  (products.delete) gate; `_canAddStock` + split Update-Stock modal.
+- `lib/features/staff/screens/staff_detail_screen.dart` — split suspend /
+  change-role gates.
+- `lib/shared/widgets/app_drawer.dart` — Inventory gated on stock.view; Sync
+  Issues item + sync badge gated on settings.manage.
+- `lib/shared/widgets/main_layout.dart` — data-driven bottom nav; Stock tab
+  gated on stock.view.
+- `lib/shared/widgets/sync_banner.dart` — Sync Issues nav gated on settings.manage.
+- `lib/features/inventory/screens/inventory_screen.dart` — stock.view guard.
+- `lib/features/sync/screens/sync_issues_screen.dart` — settings.manage guard.
+- `test/staff/staff_detail_screen_test.dart` — seed the split staff perms.
+
+**Database changes:** none.
+
+**Master plan updates:** §16.7 — added "Delete product" row, split "Update stock"
+into "Add stock" / "Remove / adjust stock", documented each row's permission key
+incl. `stock.view` gating Inventory visibility. §9.5 — Change-role / Suspend
+gated by their own permissions, separate from `staff.invite`.
+
+**Tested:** `flutter analyze` clean (only the 18 pre-existing avoid_print infos);
+full unit+widget suite **244 pass / 2 skip / 0 fail** (staff widget test updated
+for the split). On-device nav verification of the bottom-nav refactor still
+recommended.
+
+**Known issues / left open:**
+- Bottom-nav refactor (data-driven tabOrder) covered by tests + analyze; a quick
+  on-device pass switching tabs (and as a role lacking stock.view) is worth doing.
+- Dead toggles for unbuilt features remain (listed above).
+
+---
+
+## Session 38 — 2026-05-31 — Recall saved carts when the cart is empty (§13)
+
+**Built today:**
+- Fixed the Cart screen so a saved cart can be recalled even when the current
+  cart has no items. Before, the "Save Cart" and "Recall" buttons only appeared
+  once the cart already had items in it, so a cashier who opened an empty cart
+  had no way to load a cart they saved earlier. The empty-cart view now shows a
+  "Recall" button under the "Cart is empty" message. (The "Save Cart" button
+  stays in the items view only, since saving an empty cart is blocked anyway.)
+
+**Files touched:**
+- lib/features/pos/screens/cart_screen.dart
+
+**Database changes:**
+- None.
+
+**Master plan sections covered:**
+- §13 — Cart (per-cashier saved carts / recall).
+
+**Plan updates made during session:**
+- None.
+
+**Tested:**
+- `flutter analyze` on the changed file: no issues. On-device emulator check of
+  the empty-cart Recall flow still pending user confirmation.
+
+**Known issues / left open:**
+- None from this change.
+
+**Next session should:**
+- Pick up whatever the user prioritizes next.
+
+---
+
+## Session 37 — 2026-05-31 — Cloud completion of the realtime-DELETE fix (replica identity)
+
+**Why this session:**
+Continuing the Session 36 role-permission delete-sync fix. The user re-tested
+the original symptom **across two devices/sessions**: CEO revokes a role's
+"Activity Logs access" on device A, but the Manager on device B can still open
+Activity Logs. Session 36's Dart-side realtime DELETE handler should have caught
+this — so we traced why the live DELETE never arrives on device B.
+
+**Root cause Session 36 missed (cloud-side):**
+Supabase Realtime authorizes every change against the row's RLS SELECT policy
+before broadcasting. For a DELETE, only the columns in the table's REPLICA
+IDENTITY are present in the old record. The three hard-delete tables
+(`role_permissions`, `saved_carts`, `notifications`) all have RLS policies that
+filter by `business_id`, but their replica identity was the Postgres default =
+primary key (`id`) only. So `business_id` is absent from a delete's old record,
+the RLS check runs against NULL, fails, and Realtime **drops the DELETE event**
+before any client sees it. Session 36's `_deleteLocalRowById` handler was
+therefore effectively dead-on-arrival in production for these tables — the row
+only cleared on the *other* device after a full snapshot reconcile (app
+restart), never live. (Session 36 logged "Database changes: none" and did not
+identify this.)
+
+**Verified on the live DB before fixing** (via `supabase db query --linked`):
+all three tables were in the `supabase_realtime` publication ✓ but on
+`replica_identity = default(PK-only)` ✗ — confirming the gap was real, not a
+guess.
+
+**Fix (migration 0064):**
+`ALTER TABLE … REPLICA IDENTITY FULL` on `role_permissions`, `saved_carts`,
+`notifications`. The old record now carries `business_id` (and every column), so
+Realtime can authorize the DELETE and deliver it live; Session 36's handler then
+removes the row on the other device in real time. Soft-delete tables are
+unaffected (they sync as UPDATEs, whose *new* record is always full). Pushed and
+re-queried: all three now report `replica_identity = FULL`.
+
+**Files touched:**
+- `supabase/migrations/0064_replica_identity_full_hard_delete_tables.sql` (new).
+
+**Database changes:**
+- Remote: replica identity set to FULL on `role_permissions`, `saved_carts`,
+  `notifications`. No schema/column/data change; additive and reversible.
+  Remote migration head now 0064.
+
+**Master plan sections covered:**
+- §10.1/§10.2 (Activity Logs access + Roles & Permissions toggles), CLAUDE.md §5
+  (sync invariants — incoming cloud DELETE applied local-only, no enqueue).
+
+**Tested:**
+- Live remote query confirms replica identity = FULL on all three tables.
+- Session 36's Dart suite still green (the 3 new sync/divergence + snapshot-
+  reconcile test files pass; full unit+widget suite 231 pass / 2 skip / 0 fail
+  with `--exclude-tags=integration`).
+- **Confirmed live (two-device):** CEO revokes the Manager's Activity Logs
+  access on device A → the Manager loses it on device B. Bug resolved
+  end-to-end.
+
+**Known issues / left open:**
+- After a replica-identity change, an already-running app may need to
+  re-subscribe (app restart) before realtime picks up the new identity — worth
+  remembering for any future replica-identity change.
+- The Session 36 "cloud push conflicts on `id` for `role_permissions`" and
+  `role_settings` divergence items remain open (unchanged by this session).
+- The Dart-side work from Session 36 (+ the snapshot-reconcile additions) is
+  still **uncommitted** — should be committed alongside migration 0064.
+
+**Answer to "are there other settings with the same enable-works/disable-doesn't
+asymmetry?":** Only writes that *hard-delete* a row can have it, and the app's
+only `enqueueDelete` call sites are these same three tables. Of those, the only
+settings-facing one is `role_permissions` — i.e. **every** Roles & Permissions
+toggle and the Activity Logs access toggle, all fixed together here. The
+`role_settings` limits (max discount / max expense / "allow viewing other
+stores"), Appearance colour, auto-lock interval, and currency are **upserts**
+(set a value), so their "disable" always propagated and was never affected.
+Biometric login is intentionally device-local (never synced).
+
+---
+
+## Session 36 — 2026-05-31 — Debugging: role-permission toggle sync bugs
+
+**Reported symptom:**
+As CEO, granting a role access (e.g. "Activity Logs access" / a Roles &
+Permissions toggle) worked, but **disabling it didn't stick** — the toggle
+snapped back on. Then, on a follow-up toggle, the app **crashed** with
+`SqliteException(2067): UNIQUE constraint failed: role_permissions.role_id,
+role_permissions.permission_key`.
+
+**Two distinct root causes found and fixed:**
+
+**Bug 1 — realtime DELETE events were silently dropped (the "won't disable"
+symptom).** `SupabaseSyncService.startRealtimeSync` subscribed to
+`PostgresChangeEvent.all` but only ever processed `payload.newRecord` (an
+upsert via `_restoreTableData`). A DELETE event carries the row in `oldRecord`
+with an EMPTY `newRecord`, so DELETEs were never applied locally. Asymmetry was
+the tell: INSERT/UPDATE echoes applied (enable stuck) but DELETE echoes dropped
+(disable didn't). A revoke deleted the row locally, but a stale INSERT echo of
+the prior grant resurrected it and nothing cleaned it up.
+- *Fix:* the realtime callback now branches on `eventType`; a DELETE deletes
+  the local row by `oldRecord['id']` via new `_deleteLocalRowById`, handling
+  only the three hard-delete (`enqueueDelete`) tables — `role_permissions`,
+  `saved_carts`, `notifications` — with typed Drift deletes (stream-reactive),
+  and a logged no-op for any other table. Deletes locally WITHOUT enqueueing
+  (§5 exception #1 — incoming cloud event; re-pushing loops). Also fixes a
+  quieter bug: a revoke on one device now propagates to others over realtime,
+  not only on the next full snapshot pull.
+
+**Bug 2 — `role_permissions` keyed on a random per-grant `id` instead of its
+logical identity (the 2067 crash).** A row's real identity is
+`(role_id, permission_key)` (a UNIQUE constraint), but `id` is a fresh UUID per
+grant. A grant→revoke→re-grant cycle (or two devices) mint different ids for the
+same pair; the restore path's `insertOnConflictUpdate` keys on `id`, so a
+divergent cloud id collided with `UNIQUE(role_id, permission_key)` and threw.
+- *Fix A:* `RolePermissionsDao.grant` is now idempotent on
+  `(role_id, permission_key)` — if the pair is already granted it's a no-op,
+  so the blind insert can't itself throw 2067.
+- *Fix B:* `_restoreTableData('role_permissions', ...)` drops any local row with
+  the same `(role_id, permission_key)` but a different id before applying the
+  incoming row, so the device converges on the cloud's id instead of crashing.
+  Local-only, no enqueue (§5 exception #1).
+
+**Files touched (code):**
+- `lib/core/services/supabase_sync_service.dart` — realtime DELETE handling +
+  `_deleteLocalRowById` (+ `@visibleForTesting` seam); restore reconciliation
+  for `role_permissions`.
+- `lib/core/database/daos.dart` — `RolePermissionsDao.grant` idempotency.
+
+**Files touched (test):**
+- `test/sync/realtime_delete_test.dart` (new) — 5 cases: DELETE applied for each
+  hard-delete table, resurrection-race convergence, safe no-op default.
+- `test/database/role_permissions_id_divergence_test.dart` (new) — 3 cases:
+  grant idempotency, divergent-id restore converges (no 2067), same-id restore
+  idempotent.
+
+**Database changes:** none.
+
+**Tested:** `flutter analyze` clean; full suite **239 passing / 58 skipped /
+0 failing** (was 236 — +3 divergence tests; the 5 realtime-delete tests landed
+in this session's earlier pass that took the suite 231→236).
+
+**Known issues / left open (flagged, not fixed):**
+- **Cloud push still conflicts on `id` for `role_permissions`.**
+  `enqueueUpsert('role_permissions', row)` passes no conflict target, so the
+  batched cloud upsert (`supabase_sync_service.dart` ~line 685) defaults to
+  ON CONFLICT(id). If a divergent id is ever pushed, the cloud's
+  `UNIQUE(role_id, permission_key)` rejects it (a caught, non-crashing push
+  error — surfaces in Sync Issues). Fix A+B largely prevent divergence
+  single-device; the durable fix is to key `role_permissions` on
+  `(role_id, permission_key)` end-to-end (push conflict target, and/or
+  deterministic ids derived from the pair). Deferred — needs a sync-behaviour
+  change + possibly a re-key migration; out of scope for this hotfix.
+- **`role_settings` has the same `id` + `UNIQUE(role_id, setting_key)` shape.**
+  Its `set()` is already idempotent (reuses the existing id), so single-device
+  divergence won't occur, but cross-device divergence could hit the same
+  restore collision. Same restore reconciliation would harden it; not applied
+  (no reported failure, keeping this surgical).
+
+---
+
 ## Session 35 — 2026-05-31 — Ring 0: wholesaler-tier price fix (§12.2/§16)
 
 **Built today:**

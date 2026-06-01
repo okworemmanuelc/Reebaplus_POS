@@ -1162,6 +1162,16 @@ class _CartScreenState extends ConsumerState<CartScreen>
                               fontSize: context.getRFontSize(16),
                             ),
                           ),
+                          SizedBox(height: context.getRSize(20)),
+                          // Recall stays reachable with an empty cart so a
+                          // saved cart can be restored before adding items.
+                          AppButton(
+                            text: 'Recall',
+                            variant: AppButtonVariant.outline,
+                            icon: FontAwesomeIcons.clockRotateLeft,
+                            isFullWidth: false,
+                            onPressed: _viewSavedCarts,
+                          ),
                         ],
                       ),
                     )

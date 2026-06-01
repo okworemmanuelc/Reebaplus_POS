@@ -130,10 +130,12 @@ class AppDrawer extends ConsumerWidget {
           SizedBox(height: context.getRSize(16)),
           // Sync status indicator. Three signals nested so the badge reflects
           // pending, failed, and online state; tap opens Sync Issues.
-          // Skip while logged out — the inline DAO streams below build a fresh
-          // tenant-scoped query on every rebuild and would otherwise hit
-          // requireBusinessId() with no current business.
-          if (user == null)
+          // CEO-only (settings.manage) — same gate as the Sync Issues screen and
+          // its sidebar item, so non-CEO roles never tap into a screen they
+          // can't open (hard rule #7). Skip while logged out — the inline DAO
+          // streams below build a fresh tenant-scoped query on every rebuild and
+          // would otherwise hit requireBusinessId() with no current business.
+          if (user == null || !hasPermission(ref, 'settings.manage'))
             const SizedBox.shrink()
           else StreamBuilder<int>(
             stream: ref.read(databaseProvider).syncDao.watchPendingCount(),
@@ -304,14 +306,17 @@ class AppDrawer extends ConsumerWidget {
             active: activeRoute == 'pos',
             onTap: () => _navigateTo(context, ref, 'pos'),
           ),
-        // Inventory & Orders — visible to all four roles (§27.3).
-        _navItem(
-          context,
-          FontAwesomeIcons.boxesStacked,
-          'Inventory',
-          active: activeRoute == 'inventory',
-          onTap: () => _navigateTo(context, ref, 'inventory'),
-        ),
+        // Inventory — gated on stock.view (§16.7). Held by all four roles by
+        // default, so visible to all unless the CEO revokes it for a role.
+        if (hasPermission(ref, 'stock.view'))
+          _navItem(
+            context,
+            FontAwesomeIcons.boxesStacked,
+            'Inventory',
+            active: activeRoute == 'inventory',
+            onTap: () => _navigateTo(context, ref, 'inventory'),
+          ),
+        // Orders — visible to all four roles (§27.3).
         _navItem(
           context,
           FontAwesomeIcons.truckFast,
@@ -419,18 +424,22 @@ class AppDrawer extends ConsumerWidget {
               ).push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
             },
           ),
-        _navItem(
-          context,
-          FontAwesomeIcons.cloudArrowUp,
-          'Sync Issues',
-          active: false,
-          onTap: () {
-            Navigator.pop(context);
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const SyncIssuesScreen()),
-            );
-          },
-        ),
+        // Sync Issues — CEO-only troubleshooting screen, gated on
+        // settings.manage (same gate as CEO Settings / Stores). Hidden entirely
+        // for other roles (hard rule #7), mirroring the gates above.
+        if (hasPermission(ref, 'settings.manage'))
+          _navItem(
+            context,
+            FontAwesomeIcons.cloudArrowUp,
+            'Sync Issues',
+            active: false,
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const SyncIssuesScreen()),
+              );
+            },
+          ),
         // Pro Tips removed from the sidebar (decision Q7 — not surfaced in
         // Phase 1; UserTipsModal stays in code for Phase 2).
         SizedBox(height: context.getRSize(12)),

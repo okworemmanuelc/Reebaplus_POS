@@ -605,6 +605,11 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
   Stream<List<ProductDataWithStock>> watchAllProductDatasWithStock() =>
       _watchProductsWithStock();
 
+  /// Live products-with-stock for a store scope where null = All Stores. Lets
+  /// the Product Details screen refresh in real time across either scope (§5).
+  Stream<List<ProductDataWithStock>> watchProductsWithStock({String? storeId}) =>
+      _watchProductsWithStock(storeId: storeId);
+
   Stream<List<ProductDataWithStock>> watchLowStockProductDatas() =>
       _watchProductsWithStock(lowStockOnly: true);
 
@@ -4798,9 +4803,21 @@ class RolePermissionsDao extends DatabaseAccessor<AppDatabase>
     return row.read(rolePermissions.id.count()) ?? 0;
   }
 
-  /// Grant a permission to a role. UNIQUE (role_id, permission_key)
-  /// guards against duplicates.
+  /// Grant a permission to a role. Idempotent on the logical identity
+  /// (role_id, permission_key): if the pair is already granted, this is a
+  /// no-op. A blind `insert` with a fresh UUID would trip
+  /// UNIQUE(role_id, permission_key) (SqliteException 2067) whenever a row for
+  /// the pair already exists — e.g. a stale toggle, or a row that arrived from
+  /// the cloud since the UI last built.
   Future<void> grant(String roleId, String permissionKey) async {
+    final existing = await (select(rolePermissions)
+          ..where((t) =>
+              whereBusiness(t) &
+              t.roleId.equals(roleId) &
+              t.permissionKey.equals(permissionKey))
+          ..limit(1))
+        .getSingleOrNull();
+    if (existing != null) return; // already granted — nothing to do
     final row = RolePermissionsCompanion.insert(
       id: Value(UuidV7.generate()),
       businessId: requireBusinessId(),

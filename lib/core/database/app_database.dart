@@ -173,6 +173,20 @@ class Suppliers extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// The unit types a product can be measured / sold in — the single source of
+/// truth for the Add / Edit Product dropdowns AND the `products.unit` CHECK
+/// constraint on the [Products] table below. Kept in lock-step so the UI can
+/// never offer a value the database rejects (the old mismatch silently failed
+/// the insert for Can / Keg products — they never reached inventory). See
+/// §16.5. Widening this is a schema change: also widen the CHECK below, bump
+/// `schemaVersion`, add the matching `onUpgrade` table rebuild, and ship the
+/// cloud migration that widens the Supabase CHECK.
+const List<String> kProductUnits = [
+  'Bottle', 'Can', 'PET', 'Sachet', 'Keg',
+  'Crate', 'Pack', 'Carton', 'Piece', 'Bag',
+  'Box', 'Tin', 'Other',
+];
+
 @DataClassName('ProductData')
 class Products extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
@@ -233,7 +247,8 @@ class Products extends Table {
   @override
   List<String> get customConstraints => [
     "CHECK (size IS NULL OR size IN ('big','medium','small'))",
-    "CHECK (unit IN ('Bottle','Crate','Pack','Carton','Piece','Bag','Other'))",
+    // Keep in lock-step with [kProductUnits] above.
+    "CHECK (unit IN ('Bottle','Can','PET','Sachet','Keg','Crate','Pack','Carton','Piece','Bag','Box','Tin','Other'))",
   ];
 }
 
@@ -1342,7 +1357,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 23;
+  int get schemaVersion => 24;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -2261,6 +2276,19 @@ class AppDatabase extends _$AppDatabase {
         // block which renamed the table — nothing here needs manual recreation.
         // Mirrors supabase/migrations/0063_fund_transactions_topup_reference_type.sql.
         await m.alterTable(TableMigration(fundTransactions));
+      }
+      if (from < 24) {
+        // v24 (§16.5): widen products.unit so non-bottle units (Can, PET,
+        // Sachet, Keg, Box, Tin, …) can be saved. The Add / Edit Product
+        // dropdown offered units the old CHECK rejected, so creating a
+        // non-bottle product silently failed the insert and the product never
+        // reached inventory. SQLite can't ALTER a CHECK in place — rebuild the
+        // table from the current Drift schema (new CHECK included) and copy
+        // every row. alterTable preserves the table's indexes and the
+        // bump_products_version trigger (re-creates them from sqlite_master),
+        // so nothing here needs manual recreation. Mirrors
+        // supabase/migrations/0065_widen_product_unit_check.sql.
+        await m.alterTable(TableMigration(products));
       }
     },
     beforeOpen: (details) async {

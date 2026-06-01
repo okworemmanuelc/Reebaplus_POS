@@ -305,7 +305,11 @@ Each code can be used by only one person, expires after 7 days, can be revoked a
 - Avatar, name, role, status, assigned store (shows "Store 1" for now).
 - Total sales made.
 - Last 5 logins.
-- Action buttons: Change role, Suspend (or Reactivate if suspended).
+- Action buttons: Change role, Suspend (or Reactivate if suspended). Each is
+  gated by its own permission — Change role = `staff.change_role`, Suspend =
+  `staff.suspend` (both CEO + Manager by default, revocable per role; separate
+  from `staff.invite`, which gates the Invites tab). Each button is hidden
+  entirely without its permission (hard rule #7).
 
 ### 9.6 Confirmations
 
@@ -620,6 +624,7 @@ Bottom nav label "Stock" and sidebar item "Inventory" refer to the same screen. 
 
 - Filters: Store (renamed from Warehouse), Category, Manufacturer — all three as dropdowns, in that order. (Amended 2026-05-30, pivot step 15: Category was previously a row of chips; it is now a dropdown placed between Store and Manufacturer.)
 - Search: a search toggle in the header (same pattern as Point of Sale) filters the product list by name/subtitle.
+- Summary cards: a horizontally-scrollable row of tap-to-filter stat cards above the list — Total SKUs, Low Stock, Out of Stock, (Total Crates for Bar / Beer Distributor only), and **Near Expiry**. Near Expiry shows the count of products expired or within 30 days; tapping it filters the list to those, soonest-expiry first. Shown for all business types. (Near Expiry card added 2026-05-31.)
 - Product list. Each product shows: name, in-stock badge, quantity, unit. Products at or past their Expiry Date (§16.5) are flagged, and the list can be sorted by soonest expiry.
 - "Add Product" floating button — only visible to CEO and Manager. Opens the Add Product screen (§16.5).
 - Tap a product opens the Product Details screen.
@@ -639,7 +644,7 @@ Required fields:
 - Wholesaler Price (new — added next to Retailer Price).
 - Buying Price (required — products cannot be added without it; blocks save without a value).
 - Low Stock Alert.
-- Product Unit.
+- Product Unit — chosen from a fixed list: Bottle, Can, PET, Sachet, Keg, Crate, Pack, Carton, Piece, Bag, Box, Tin, Other. The list is DB-enforced (a CHECK on `products.unit`, mirrored local + cloud); widening it is a schema change. (Widened 2026-05-31 so non-bottle units — Can / PET / etc. — actually save; the old list rejected them and the product silently never reached inventory.)
 - Manufacturer (searchable).
 - Store.
 - Initial Quantity.
@@ -693,11 +698,25 @@ Action buttons by role:
 | View Inventory | All | Own store | Own store (view only) | Own store |
 | Add product | Yes | Yes (if toggle on) | No | No |
 | Edit product (full) | Yes | Yes | No | No |
-| Update stock (qty only) | Yes | Yes | No | Yes |
+| Delete product | Yes | Yes | No | No |
+| Add stock | Yes | Yes | No | Yes |
+| Remove / adjust stock | Yes | Yes | No | Yes |
 | See buying price | Yes | Yes | Hidden | Hidden |
 | See Suppliers tab | Yes | If toggled | Hidden | Hidden |
 | See History tab | All stores | Own store | Hidden | Own store |
 | See Empty Crates tab | Bar/Beer only | Bar/Beer only | Bar/Beer only | Bar/Beer only |
+
+Each row is gated by a permission the CEO can revoke per role in Roles &
+Permissions (defaults shown above):
+- **View Inventory** = `stock.view` — also gates the sidebar item and the
+  bottom-nav "Stock" tab. On for every role by default; revoking it hides
+  Inventory entirely for that role.
+- **Add product** = `products.add`; **Edit product** = `products.edit_price`;
+  **Delete product** = `products.delete` (its own permission, not edit).
+- **Add stock** = `stock.add` and **Remove / adjust stock** = `stock.adjust` —
+  the two modes of the Update-Stock modal, gated independently.
+- **See buying price** = `products.edit_buying_price`;
+  **See Suppliers** = `suppliers.manage`.
 
 ### 16.8 History tab
 

@@ -15,6 +15,7 @@ import 'package:reebaplus_pos/features/deliveries/screens/deliveries_screen.dart
 import 'package:reebaplus_pos/features/funds/screens/funds_register_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/activity_log_screen.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/shared/models/order.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/widgets/sync_banner.dart';
@@ -210,17 +211,15 @@ class _MainLayoutState extends ConsumerState<MainLayout>
               final iconColor =
                   t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
 
-              // Lone-owner nav: Home(0), Stock(2), POS(1), Orders(3), Cart(8)
-              final bool isNavTab = [0, 1, 2, 3, 8].contains(currentIndex);
-              final int navIndex = currentIndex == 0
-                  ? 0
-                  : (currentIndex == 2
-                        ? 1
-                        : (currentIndex == 1
-                              ? 2
-                              : (currentIndex == 3
-                                    ? 3
-                                    : (currentIndex == 8 ? 4 : 0))));
+              // Nav tabs in bar order. Stock (Inventory, tab 2) is gated on
+              // stock.view (§16.7) — held by all roles by default. Driving the
+              // index math AND the items list from one list keeps a hidden tab
+              // from desyncing them. Home(0), Stock(2), POS(1), Orders(3), Cart(8).
+              final showStock = hasPermission(ref, 'stock.view');
+              final tabOrder = <int>[0, if (showStock) 2, 1, 3, 8];
+              final bool isNavTab = tabOrder.contains(currentIndex);
+              final int navIndex =
+                  isNavTab ? tabOrder.indexOf(currentIndex) : 0;
 
               return ValueListenableBuilder<bool>(
                 valueListenable: nav.currentTabCanPop,
@@ -231,24 +230,9 @@ class _MainLayoutState extends ConsumerState<MainLayout>
                 selectedItemColor: isNavTab ? t.colorScheme.primary : iconColor,
                 unselectedItemColor: iconColor,
                 onTap: (index) {
-                  int indexToSet = 0;
-                  switch (index) {
-                    case 0:
-                      indexToSet = 0;
-                      break;
-                    case 1:
-                      indexToSet = 2;
-                      break;
-                    case 2:
-                      indexToSet = 1;
-                      break;
-                    case 3:
-                      indexToSet = 3;
-                      break;
-                    case 4:
-                      indexToSet = 8;
-                      break;
-                  }
+                  // tabOrder maps a bottom-bar slot to its underlying tab index,
+                  // so it stays correct whether or not the Stock tab is present.
+                  final indexToSet = tabOrder[index];
 
                   if (currentIndex == indexToSet) {
                     // Tap current tab: pop all detail screens to root
@@ -268,13 +252,16 @@ class _MainLayoutState extends ConsumerState<MainLayout>
                     ),
                     label: 'Home',
                   ),
-                  BottomNavigationBarItem(
-                    icon: const Icon(Icons.inventory_2_outlined),
-                    activeIcon: Icon(
-                      isNavTab ? Icons.inventory_2 : Icons.inventory_2_outlined,
+                  if (showStock)
+                    BottomNavigationBarItem(
+                      icon: const Icon(Icons.inventory_2_outlined),
+                      activeIcon: Icon(
+                        isNavTab
+                            ? Icons.inventory_2
+                            : Icons.inventory_2_outlined,
+                      ),
+                      label: 'Stock',
                     ),
-                    label: 'Stock',
-                  ),
                   BottomNavigationBarItem(
                     icon: const Icon(Icons.point_of_sale_outlined),
                     activeIcon: Icon(

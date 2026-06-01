@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 import 'package:reebaplus_pos/features/sync/screens/sync_issues_screen.dart';
 
@@ -101,6 +102,10 @@ class _SyncBannerState extends ConsumerState<SyncBanner> {
     }
 
     final t = Theme.of(context);
+    // Sync Issues is CEO-only (settings.manage); non-CEO roles must not be able
+    // to tap the banner through to it (hard rule #7). The retry action stays —
+    // it's a harmless pull and useful for everyone.
+    final canOpenSync = hasPermission(ref, 'settings.manage');
     final Widget child;
     // Once the 3s window has elapsed for the current stage, collapse.
     // Ongoing sync state is still surfaced via the drawer sync badge
@@ -132,7 +137,7 @@ class _SyncBannerState extends ConsumerState<SyncBanner> {
             icon: Icons.cloud_sync_outlined,
             tint: t.colorScheme.primary,
             message: label,
-            onTap: _openSyncIssues,
+            onTap: canOpenSync ? _openSyncIssues : null,
             progress: progress,
             showProgress: true,
           ),
@@ -141,7 +146,7 @@ class _SyncBannerState extends ConsumerState<SyncBanner> {
       case PullStage.failed:
         final String label;
         VoidCallback onTap;
-        if (_failureCount >= 10) {
+        if (_failureCount >= 10 && canOpenSync) {
           label =
               "Catch-up sync hasn't completed in $_failureCount attempts. Tap for details.";
           onTap = _openSyncIssues;

@@ -89,8 +89,6 @@ class PosController extends ChangeNotifier {
 
     final storeId = _navigationService.lockedStoreId.value;
 
-    final minLoading = Future.delayed(const Duration(seconds: 2));
-
     if (storeId != null) {
       // Fetch store name
       _database.storesDao.getStore(storeId).then((w) {
@@ -101,8 +99,7 @@ class PosController extends ChangeNotifier {
 
       _productsSub = _database.inventoryDao
           .watchProductDatasWithStockByStore(storeId)
-          .listen((data) async {
-            await minLoading;
+          .listen((data) {
             if (_disposed) return;
             allProducts = data;
             isLoading = false;
@@ -112,8 +109,7 @@ class PosController extends ChangeNotifier {
       currentStoreName = null;
       _productsSub = _database.inventoryDao
           .watchProductsByCategory(selectedCategoryId)
-          .listen((data) async {
-            await minLoading;
+          .listen((data) {
             if (_disposed) return;
             allProducts = data;
             isLoading = false;
