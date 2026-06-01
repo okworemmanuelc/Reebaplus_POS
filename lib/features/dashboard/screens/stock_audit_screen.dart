@@ -576,7 +576,7 @@ class _StockAuditScreenState extends ConsumerState<StockAuditScreen> {
         context.spacingM,
         0,
         context.spacingM,
-        context.bottomInset,
+        context.deviceBottomInset,
       ),
       itemCount: _transactions.length,
       itemBuilder: (context, index) {

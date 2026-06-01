@@ -6,6 +6,7 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/role_permissions_detail_screen.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/utils/role_display.dart';
 
 /// CEO Settings > Roles & Permissions (§10.1/§10.2). Lists the four system
@@ -44,7 +45,8 @@ class RolesPermissionsScreen extends ConsumerWidget {
               ),
               data: (list) => SettingsFadeIn(
                 child: ListView(
-                  padding: const EdgeInsets.all(24),
+                  padding: EdgeInsets.fromLTRB(
+                      24, 24, 24, 24 + context.deviceBottomInset),
                   children: [
                     Text(
                       'Tap a role to set what it can do.',

@@ -378,7 +378,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
                     context.getRSize(16),
                     0,
                     context.getRSize(16),
-                    context.getRSize(120) + context.bottomInset,
+                    context.getRSize(120) + context.deviceBottomInset,
                   ),
                   itemCount: suppliers.length,
                   itemBuilder: (_, i) {
@@ -465,7 +465,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
       backgroundColor: Colors.transparent,
       builder: (_) => StatefulBuilder(
         builder: (ctx, setB) => Padding(
-          padding: EdgeInsets.only(bottom: ctx.bottomInset),
+          padding: EdgeInsets.only(bottom: ctx.deviceBottomInset),
           child: Container(
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surface,
@@ -598,7 +598,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
     return ListView.builder(
       padding: EdgeInsets.all(
         context.getRSize(16),
-      ).copyWith(bottom: context.getRSize(100) + context.bottomInset),
+      ).copyWith(bottom: context.getRSize(100) + context.deviceBottomInset),
       itemCount: list.length,
       itemBuilder: (context, index) {
         final payment = list[index];

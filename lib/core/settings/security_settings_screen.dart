@@ -8,6 +8,7 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
 
 /// CEO Settings > Security (§10.1). Auto-lock interval (synced, business-wide)
 /// + biometric login (device-local).
@@ -136,7 +137,8 @@ class _SecuritySettingsScreenState
           ? const SizedBox.shrink()
           : SettingsFadeIn(
               child: ListView(
-                padding: const EdgeInsets.all(24),
+                padding: EdgeInsets.fromLTRB(
+                    24, 24, 24, 24 + context.deviceBottomInset),
                 children: [
                   _autoLockCard(context),
                   const SizedBox(height: 16),

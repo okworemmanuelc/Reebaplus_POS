@@ -954,6 +954,7 @@ class ManufacturerCrateStats {
     PaymentTransactions,
     WalletTransactions,
     CustomerWallets,
+    FundTransactions,
     Businesses,
   ],
 )
@@ -1479,6 +1480,41 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         );
         await into(walletTransactions).insert(refundComp);
         await db.syncDao.enqueueUpsert('wallet_transactions', refundComp);
+      }
+
+      // Funds Register reversal (§19.7 / hard rule #5): the sale credited the
+      // cash/card/transfer portion to a funds account (OrdersDao.createOrder →
+      // creditSale). Cancelling/refunding it must take that money back out, or
+      // the account's expected balance stays inflated and Close Day (§23.6)
+      // would report a phantom surplus. fund_transactions is append-only, so we
+      // append a compensating 'void' debit per original 'sale' credit (same
+      // account + business_date) rather than mutating the credit. (v1 path; if
+      // feature.domain_rpcs_v2.cancel_order is ever enabled, pos_cancel_order
+      // must mint this debit server-side instead — mirror of createOrder R2.)
+      final saleCredits = await (select(fundTransactions)
+            ..where((t) =>
+                whereBusiness(t) &
+                t.orderId.equals(orderId) &
+                t.referenceType.equals('sale')))
+          .get();
+      for (final credit in saleCredits) {
+        final voidComp = FundTransactionsCompanion.insert(
+          id: Value(UuidV7.generate()),
+          businessId: requireBusinessId(),
+          fundsAccountId: credit.fundsAccountId,
+          storeId: credit.storeId,
+          businessDate: credit.businessDate,
+          type: 'debit',
+          amountKobo: credit.amountKobo,
+          signedAmountKobo: -credit.amountKobo,
+          referenceType: 'void',
+          orderId: Value(orderId),
+          paymentId: Value(credit.paymentId),
+          performedBy: Value(staffId),
+          lastUpdatedAt: Value(now),
+        );
+        await into(fundTransactions).insert(voidComp);
+        await db.syncDao.enqueueUpsert('fund_transactions', voidComp);
       }
     });
   }
@@ -2163,7 +2199,8 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
         userId: Value(recordedBy),
         action: 'expense_created',
         description: 'Recorded expense: $description ($categoryName)',
-        expenseId: Value(expenseId),
+        entityType: const Value('expense'),
+        entityId: Value(expenseId),
         storeId: Value(storeId),
         lastUpdatedAt: Value(DateTime.now()),
       );
@@ -2811,6 +2848,42 @@ class ActivityLogDao extends DatabaseAccessor<AppDatabase>
     with _$ActivityLogDaoMixin, BusinessScopedDao<AppDatabase> {
   ActivityLogDao(super.db);
 
+  /// Canonical activity-log write (Ring 0 #2, §24.4). Stores a generic
+  /// (entityType, entityId) reference plus optional before/after JSON snapshots
+  /// for the detail view. Routes through enqueueUpsert (synced append-only
+  /// ledger). New features should call this directly.
+  Future<void> logActivity({
+    required String action,
+    required String description,
+    String? staffId,
+    String? storeId,
+    String? entityType,
+    String? entityId,
+    Map<String, dynamic>? before,
+    Map<String, dynamic>? after,
+  }) async {
+    final row = ActivityLogsCompanion.insert(
+      id: Value(UuidV7.generate()),
+      businessId: requireBusinessId(),
+      userId: Value(staffId),
+      action: action,
+      description: description,
+      entityType: Value(entityType),
+      entityId: Value(entityId),
+      beforeJson: Value(before == null ? null : jsonEncode(before)),
+      afterJson: Value(after == null ? null : jsonEncode(after)),
+      storeId: Value(storeId),
+      lastUpdatedAt: Value(DateTime.now()),
+    );
+    await into(activityLogs).insert(row);
+    await db.syncDao.enqueueUpsert('activity_logs', row);
+  }
+
+  /// Back-compat convenience over [logActivity]: the legacy per-entity params
+  /// fold onto the generic (entityType, entityId) pair (the old "<=1 set" CHECK
+  /// guaranteed at most one was set). Existing callers and [ActivityLogService]
+  /// keep working unchanged; new code should prefer [logActivity] so it can
+  /// carry before/after snapshots.
   Future<void> log({
     required String action,
     required String description,
@@ -2823,24 +2896,35 @@ class ActivityLogDao extends DatabaseAccessor<AppDatabase>
     String? deliveryId,
     String? walletTxnId,
   }) async {
-    final id = UuidV7.generate();
-    final row = ActivityLogsCompanion.insert(
-      id: Value(id),
-      businessId: requireBusinessId(),
-      userId: Value(staffId),
+    String? entityType;
+    String? entityId;
+    if (orderId != null) {
+      entityType = 'order';
+      entityId = orderId;
+    } else if (productId != null) {
+      entityType = 'product';
+      entityId = productId;
+    } else if (customerId != null) {
+      entityType = 'customer';
+      entityId = customerId;
+    } else if (expenseId != null) {
+      entityType = 'expense';
+      entityId = expenseId;
+    } else if (deliveryId != null) {
+      entityType = 'delivery';
+      entityId = deliveryId;
+    } else if (walletTxnId != null) {
+      entityType = 'wallet_transaction';
+      entityId = walletTxnId;
+    }
+    await logActivity(
       action: action,
       description: description,
-      orderId: Value(orderId),
-      productId: Value(productId),
-      customerId: Value(customerId),
-      expenseId: Value(expenseId),
-      deliveryId: Value(deliveryId),
-      walletTxnId: Value(walletTxnId),
-      storeId: Value(storeId),
-      lastUpdatedAt: Value(DateTime.now()),
+      staffId: staffId,
+      storeId: storeId,
+      entityType: entityType,
+      entityId: entityId,
     );
-    await into(activityLogs).insert(row);
-    await db.syncDao.enqueueUpsert('activity_logs', row);
   }
 
   Stream<List<ActivityLogData>> watchRecent({int limit = 100}) {
@@ -2859,7 +2943,8 @@ class ActivityLogDao extends DatabaseAccessor<AppDatabase>
           ..where(
             (t) =>
                 whereBusiness(t) &
-                t.orderId.equals(orderId) &
+                t.entityType.equals('order') &
+                t.entityId.equals(orderId) &
                 t.voidedAt.isNull(),
           )
           ..orderBy([
@@ -2874,7 +2959,8 @@ class ActivityLogDao extends DatabaseAccessor<AppDatabase>
           ..where(
             (t) =>
                 whereBusiness(t) &
-                t.productId.equals(productId) &
+                t.entityType.equals('product') &
+                t.entityId.equals(productId) &
                 t.voidedAt.isNull(),
           )
           ..orderBy([
@@ -2889,7 +2975,8 @@ class ActivityLogDao extends DatabaseAccessor<AppDatabase>
           ..where(
             (t) =>
                 whereBusiness(t) &
-                t.customerId.equals(customerId) &
+                t.entityType.equals('customer') &
+                t.entityId.equals(customerId) &
                 t.voidedAt.isNull(),
           )
           ..orderBy([
@@ -2904,7 +2991,8 @@ class ActivityLogDao extends DatabaseAccessor<AppDatabase>
           ..where(
             (t) =>
                 whereBusiness(t) &
-                t.expenseId.equals(expenseId) &
+                t.entityType.equals('expense') &
+                t.entityId.equals(expenseId) &
                 t.voidedAt.isNull(),
           )
           ..orderBy([
@@ -2919,7 +3007,8 @@ class ActivityLogDao extends DatabaseAccessor<AppDatabase>
           ..where(
             (t) =>
                 whereBusiness(t) &
-                t.deliveryId.equals(deliveryId) &
+                t.entityType.equals('delivery') &
+                t.entityId.equals(deliveryId) &
                 t.voidedAt.isNull(),
           )
           ..orderBy([
@@ -2934,7 +3023,8 @@ class ActivityLogDao extends DatabaseAccessor<AppDatabase>
           ..where(
             (t) =>
                 whereBusiness(t) &
-                t.walletTxnId.equals(walletTxnId) &
+                t.entityType.equals('wallet_transaction') &
+                t.entityId.equals(walletTxnId) &
                 t.voidedAt.isNull(),
           )
           ..orderBy([
@@ -3050,6 +3140,31 @@ class NotificationsDao extends DatabaseAccessor<AppDatabase>
       businessId: requireBusinessId(),
       type: type,
       message: message,
+      linkedRecordId: Value(linkedRecordId),
+      recipientUserId: Value(recipientUserId),
+      lastUpdatedAt: Value(DateTime.now()),
+    );
+    await into(notifications).insert(row);
+    await db.syncDao.enqueueUpsert('notifications', row);
+  }
+
+  /// Canonical notification write (Ring 0 #2, §26.2/§26.4). Sets [severity]
+  /// (info/warning/alert) for the card colour; [recipientUserId] null =
+  /// broadcast to every member. Routes through enqueueUpsert (synced). New
+  /// features fire their §26.4 events through this helper.
+  Future<void> fireNotification({
+    required String type,
+    required String message,
+    String severity = 'info',
+    String? linkedRecordId,
+    String? recipientUserId,
+  }) async {
+    final row = NotificationsCompanion.insert(
+      id: Value(UuidV7.generate()),
+      businessId: requireBusinessId(),
+      type: type,
+      message: message,
+      severity: Value(severity),
       linkedRecordId: Value(linkedRecordId),
       recipientUserId: Value(recipientUserId),
       lastUpdatedAt: Value(DateTime.now()),
@@ -4090,7 +4205,7 @@ class FundsAccountsDao extends DatabaseAccessor<AppDatabase>
   }
 }
 
-@DriftAccessor(tables: [FundDays, FundsAccounts, FundTransactions])
+@DriftAccessor(tables: [FundDays, FundsAccounts, FundTransactions, FundDayClosings])
 class FundDaysDao extends DatabaseAccessor<AppDatabase>
     with _$FundDaysDaoMixin, BusinessScopedDao<AppDatabase> {
   FundDaysDao(super.db);
@@ -4131,6 +4246,17 @@ class FundDaysDao extends DatabaseAccessor<AppDatabase>
       final existing = await getDay(storeId, businessDate);
       if (existing != null) {
         throw StateError('Day already opened for this store');
+      }
+      // §23.8: a new day cannot open while a previous day for this store is
+      // still unclosed. The Close Day flow flips that prior day to 'closed';
+      // until then opening the next day is blocked (and the screen shows the
+      // unclosed-day banner). businessDate is YYYY-MM-DD, so a lexicographic
+      // compare is chronological.
+      final unclosed = await getUnclosedDayBefore(storeId, businessDate);
+      if (unclosed != null) {
+        throw StateError(
+          'Previous day not closed — close ${unclosed.businessDate} first',
+        );
       }
       final now = DateTime.now();
       final dayRow = FundDaysCompanion.insert(
@@ -4181,6 +4307,159 @@ class FundDaysDao extends DatabaseAccessor<AppDatabase>
         storeId: storeId,
       );
     });
+  }
+
+  /// The most recent still-open day for [storeId] strictly before
+  /// [businessDate], or null. Powers the §23.8 "new day blocked until previous
+  /// Close Day" guard and the unclosed-day banner. businessDate is YYYY-MM-DD,
+  /// so the string compare is chronological.
+  Future<FundDayData?> getUnclosedDayBefore(
+    String storeId,
+    String businessDate,
+  ) {
+    return (select(fundDays)
+          ..where((t) =>
+              whereBusiness(t) &
+              t.storeId.equals(storeId) &
+              t.businessDate.isSmallerThanValue(businessDate) &
+              t.status.equals('open'))
+          ..orderBy([(t) => OrderingTerm.desc(t.businessDate)])
+          ..limit(1))
+        .getSingleOrNull();
+  }
+
+  /// Closes the day for [storeId] (§23.6). For each active account it records a
+  /// reconciliation snapshot — `expected` = the account's running balance
+  /// (SUM signed_amount_kobo) at close, `counted` = the actual the user entered
+  /// (cash counted for the till, amount withdrawn for POS/bank), `variance` =
+  /// counted − expected — then flips the day header to status='closed', logs
+  /// the close, and (when any account is off) fires the §26.4 mismatch alert to
+  /// the CEO. All in one transaction. Throws if the day isn't open / is already
+  /// closed. [perAccountCountedKobo] maps each active account id to its counted
+  /// amount; a missing account defaults to 0.
+  Future<void> closeDay({
+    required String storeId,
+    required String businessDate,
+    required Map<String, int> perAccountCountedKobo,
+    required String performedBy,
+  }) async {
+    await transaction(() async {
+      final day = await getDay(storeId, businessDate);
+      if (day == null) {
+        throw StateError('No day open for this store to close');
+      }
+      if (day.status == 'closed') {
+        throw StateError('Day already closed');
+      }
+
+      final accounts = await (select(fundsAccounts)
+            ..where((t) =>
+                whereBusiness(t) &
+                t.storeId.equals(storeId) &
+                t.isDeleted.not()))
+          .get();
+
+      final now = DateTime.now();
+      var anyMismatch = false;
+
+      for (final acct in accounts) {
+        final expected =
+            await db.fundTransactionsDao.getBalanceFor(acct.id, businessDate);
+        final counted = perAccountCountedKobo[acct.id] ?? 0;
+        final variance = counted - expected;
+        if (variance != 0) anyMismatch = true;
+
+        final closing = FundDayClosingsCompanion.insert(
+          id: Value(UuidV7.generate()),
+          businessId: requireBusinessId(),
+          fundDayId: day.id,
+          fundsAccountId: acct.id,
+          storeId: storeId,
+          businessDate: businessDate,
+          accountType: acct.accountType,
+          expectedKobo: expected,
+          countedKobo: counted,
+          varianceKobo: variance,
+          performedBy: Value(performedBy),
+          createdAt: Value(now),
+          lastUpdatedAt: Value(now),
+        );
+        await into(fundDayClosings).insert(closing);
+        await db.syncDao.enqueueUpsert('fund_day_closings', closing);
+      }
+
+      // Flip the header to closed (the FundDays row is mutable on close — not a
+      // ledger). Explicit lastUpdatedAt so the bump trigger stays a no-op and
+      // the enqueued row carries a deterministic timestamp.
+      await (update(fundDays)..where((t) => t.id.equals(day.id))).write(
+        FundDaysCompanion(
+          status: const Value('closed'),
+          closedBy: Value(performedBy),
+          closedAt: Value(now.toUtc()),
+          lastUpdatedAt: Value(now),
+        ),
+      );
+      final closedRow =
+          await (select(fundDays)..where((t) => t.id.equals(day.id)))
+              .getSingle();
+      await db.syncDao
+          .enqueueUpsert('fund_days', closedRow.toCompanion(true));
+
+      await db.activityLogDao.log(
+        action: 'funds.close_day',
+        description: anyMismatch
+            ? 'Closed the day — funds mismatch flagged'
+            : 'Closed the day',
+        staffId: performedBy,
+        storeId: storeId,
+      );
+
+      // §26.4: a mismatch at close fires to the CEO. Falls back to the closer
+      // (Manager/CEO — both may view Funds) if no CEO is resolved locally, so
+      // the alert is never broadcast to roles that can't see the Funds Register.
+      if (anyMismatch) {
+        final ceoUserId = await db.userBusinessesDao.getCeoUserId();
+        await db.notificationsDao.fireNotification(
+          type: 'funds_mismatch',
+          message:
+              'Funds Register mismatch flagged at close for $businessDate.',
+          severity: 'alert',
+          recipientUserId: ceoUserId ?? performedBy,
+        );
+      }
+    });
+  }
+}
+
+@DriftAccessor(tables: [FundDayClosings])
+class FundDayClosingsDao extends DatabaseAccessor<AppDatabase>
+    with _$FundDayClosingsDaoMixin, BusinessScopedDao<AppDatabase> {
+  FundDayClosingsDao(super.db);
+
+  /// Per-account Close Day reconciliation snapshots for a store's day — the
+  /// cash-audit rows the Daily Reconciliation Report (§25.9) renders.
+  Stream<List<FundDayClosingData>> watchForDay(
+    String storeId,
+    String businessDate,
+  ) {
+    return (select(fundDayClosings)
+          ..where((t) =>
+              whereBusiness(t) &
+              t.storeId.equals(storeId) &
+              t.businessDate.equals(businessDate)))
+        .watch();
+  }
+
+  Future<List<FundDayClosingData>> getForDay(
+    String storeId,
+    String businessDate,
+  ) {
+    return (select(fundDayClosings)
+          ..where((t) =>
+              whereBusiness(t) &
+              t.storeId.equals(storeId) &
+              t.businessDate.equals(businessDate)))
+        .get();
   }
 }
 
@@ -4927,6 +5206,22 @@ class WhoIsWorkingEntry {
 class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
     with _$UserBusinessesDaoMixin, BusinessScopedDao<AppDatabase> {
   UserBusinessesDao(super.db);
+
+  /// The user id of this business's CEO (the single owner, CLAUDE.md), or null
+  /// if none is resolved locally. Used to route §26.4 CEO-only notifications
+  /// (e.g. the Funds Register mismatch-at-close alert).
+  Future<String?> getCeoUserId() async {
+    final ceoRole = await db.rolesDao.getBySlug('ceo');
+    if (ceoRole == null) return null;
+    final row = await (select(userBusinesses)
+          ..where((t) =>
+              whereBusiness(t) &
+              t.roleId.equals(ceoRole.id) &
+              t.status.equals('active'))
+          ..limit(1))
+        .getSingleOrNull();
+    return row?.userId;
+  }
 
   /// All active memberships for the current business. Drives the
   /// Staff Management list and the Who Is Working picker.

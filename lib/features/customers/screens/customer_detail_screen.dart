@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:screenshot/screenshot.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:reebaplus_pos/core/data/business_types.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -409,8 +410,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                             },
                     ),
                     SizedBox(
-                      height: MediaQuery.of(ctx).viewInsets.bottom +
-                          ctx.getRSize(16),
+                      height: ctx.deviceBottomInset + ctx.getRSize(16),
                     ),
                   ],
                 ),
@@ -496,7 +496,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                 },
               ),
               SizedBox(
-                height: MediaQuery.of(ctx).viewInsets.bottom + ctx.getRSize(16),
+                height: ctx.deviceBottomInset + ctx.getRSize(16),
               ),
             ],
           ),
@@ -638,53 +638,57 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                       ),
                     ),
                   ),
-                  SafeArea(
-                    top: false,
-                    child: Padding(
-                      padding: EdgeInsets.all(ctx.getRSize(16)),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: AppButton(
-                              text: 'Print',
-                              icon: FontAwesomeIcons.print,
-                              onPressed: () {
-                                setModalState(
-                                  () => reprintDate = DateTime.now(),
-                                );
-                                _printReceiptFromDetail(
+                  // useSafeArea: true wraps the sheet in SafeArea(bottom: false)
+                  // (no bottom inset), and MainLayout's Scaffold zeroes
+                  // padding.bottom for everything under it — so ctx.bottomInset
+                  // reads 0 here. deviceBottomInset reads the real nav inset from
+                  // the raw view so the button bar clears the system nav.
+                  Padding(
+                    padding: EdgeInsets.all(ctx.getRSize(16)).add(
+                      EdgeInsets.only(bottom: ctx.deviceBottomInset),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: AppButton(
+                            text: 'Print',
+                            icon: FontAwesomeIcons.print,
+                            onPressed: () {
+                              setModalState(
+                                () => reprintDate = DateTime.now(),
+                              );
+                              _printReceiptFromDetail(
+                                ctx,
+                                order,
+                                items,
+                                branchName,
+                              );
+                            },
+                          ),
+                        ),
+                        SizedBox(width: ctx.getRSize(12)),
+                        Expanded(
+                          child: AppButton(
+                            text: 'Share',
+                            icon: FontAwesomeIcons.shareNodes,
+                            variant: AppButtonVariant.secondary,
+                            onPressed: () async {
+                              setModalState(
+                                () => reshareDate = DateTime.now(),
+                              );
+                              await Future.delayed(
+                                const Duration(milliseconds: 100),
+                              );
+                              if (ctx.mounted) {
+                                _shareReceiptFromDetail(
                                   ctx,
-                                  order,
-                                  items,
-                                  branchName,
+                                  order.orderNumber,
                                 );
-                              },
-                            ),
+                              }
+                            },
                           ),
-                          SizedBox(width: ctx.getRSize(12)),
-                          Expanded(
-                            child: AppButton(
-                              text: 'Share',
-                              icon: FontAwesomeIcons.shareNodes,
-                              variant: AppButtonVariant.secondary,
-                              onPressed: () async {
-                                setModalState(
-                                  () => reshareDate = DateTime.now(),
-                                );
-                                await Future.delayed(
-                                  const Duration(milliseconds: 100),
-                                );
-                                if (ctx.mounted) {
-                                  _shareReceiptFromDetail(
-                                    ctx,
-                                    order.orderNumber,
-                                  );
-                                }
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -824,7 +828,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
         .where((b) => b.id == businessId)
         .map((b) => b.type)
         .firstOrNull;
-    return type == 'Bar' || type == 'Beer distributor';
+    return isCrateBusiness(type);
   }
 
   @override
@@ -1342,7 +1346,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                     context.getRSize(20),
                     context.getRSize(12),
                     context.getRSize(20),
-                    context.getRSize(20) + context.bottomInset,
+                    context.getRSize(20) + context.deviceBottomInset,
                   ),
                   itemCount: filtered.length,
                   itemBuilder: (ctx, i) {
@@ -1432,7 +1436,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
         context.getRSize(20),
         context.getRSize(12),
         context.getRSize(20),
-        context.getRSize(20) + context.bottomInset,
+        context.getRSize(20) + context.deviceBottomInset,
       ),
       itemCount: _orders.length,
       itemBuilder: (ctx, i) {
@@ -1529,7 +1533,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
         context.getRSize(20),
         context.getRSize(12),
         context.getRSize(20),
-        context.getRSize(20) + context.bottomInset,
+        context.getRSize(20) + context.deviceBottomInset,
       ),
       itemCount: _crateBalances.length,
       itemBuilder: (ctx, i) {

@@ -602,7 +602,7 @@ class _ReceiveDeliverySheetState extends ConsumerState<ReceiveDeliverySheet> {
         context.getRSize(16),
         context.getRSize(12),
         context.getRSize(16),
-        context.bottomInset + context.getRSize(16),
+        context.deviceBottomInset + context.getRSize(16),
       ),
       decoration: BoxDecoration(
         color: _surface,
@@ -615,53 +615,50 @@ class _ReceiveDeliverySheetState extends ConsumerState<ReceiveDeliverySheet> {
           ),
         ],
       ),
-      child: SafeArea(
-        top: false,
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Grand Total',
-                      style: TextStyle(
-                        color: _subtext,
-                        fontSize: context.getRFontSize(14),
-                      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Grand Total',
+                    style: TextStyle(
+                      color: _subtext,
+                      fontSize: context.getRFontSize(14),
                     ),
-                    Text(
-                      formatCurrency(grandTotal),
-                      style: TextStyle(
-                        color: _text,
-                        fontWeight: FontWeight.w800,
-                        fontSize: context.getRFontSize(22),
-                      ),
+                  ),
+                  Text(
+                    formatCurrency(grandTotal),
+                    style: TextStyle(
+                      color: _text,
+                      fontWeight: FontWeight.w800,
+                      fontSize: context.getRFontSize(22),
                     ),
-                  ],
-                ),
-                AppButton(
-                  text: 'Add Item',
-                  icon: FontAwesomeIcons.plus,
-                  variant: AppButtonVariant.ghost,
-                  isFullWidth: false,
-                  onPressed: () => _addLine(scrollController),
-                ),
-              ],
-            ),
-            SizedBox(height: context.getRSize(16)),
-            SizedBox(
-              width: double.infinity,
-              child: AppButton(
-                text: 'Confirm Delivery',
-                size: AppButtonSize.large,
-                onPressed: _submit,
+                  ),
+                ],
               ),
+              AppButton(
+                text: 'Add Item',
+                icon: FontAwesomeIcons.plus,
+                variant: AppButtonVariant.ghost,
+                isFullWidth: false,
+                onPressed: () => _addLine(scrollController),
+              ),
+            ],
+          ),
+          SizedBox(height: context.getRSize(16)),
+          SizedBox(
+            width: double.infinity,
+            child: AppButton(
+              text: 'Confirm Delivery',
+              size: AppButtonSize.large,
+              onPressed: _submit,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

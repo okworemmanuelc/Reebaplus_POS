@@ -237,7 +237,9 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
       body: user == null
           ? const Center(child: Text('Loading…'))
           : ListView(
-              padding: EdgeInsets.all(context.getRSize(16)),
+              padding: EdgeInsets.all(context.getRSize(16)).copyWith(
+                bottom: context.getRSize(16) + context.deviceBottomInset,
+              ),
               children: [
                 Center(
                   child: Column(

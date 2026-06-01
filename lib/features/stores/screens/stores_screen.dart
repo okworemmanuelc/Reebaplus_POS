@@ -68,7 +68,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
       backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheet) => Padding(
-          padding: EdgeInsets.only(bottom: ctx.bottomInset),
+          padding: EdgeInsets.only(bottom: ctx.deviceBottomInset),
           child: Container(
             decoration: BoxDecoration(
               color: _surface,
@@ -252,7 +252,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
       backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheet) => Padding(
-          padding: EdgeInsets.only(bottom: ctx.bottomInset),
+          padding: EdgeInsets.only(bottom: ctx.deviceBottomInset),
           child: Container(
             decoration: BoxDecoration(
               color: _surface,
@@ -555,7 +555,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
               rSize(context, 16),
               rSize(context, 16),
               rSize(context, 16),
-              rSize(context, 100) + context.bottomInset,
+              rSize(context, 100) + context.deviceBottomInset,
             ),
             itemCount: stores.length,
             itemBuilder: (context, index) =>

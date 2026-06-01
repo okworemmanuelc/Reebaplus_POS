@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:reebaplus_pos/core/widgets/app_fab.dart';
+import 'package:reebaplus_pos/core/data/business_types.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 
@@ -121,8 +122,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         .firstOrNull;
 
     final showSuppliers = perms.contains('suppliers.manage');
-    final showCrates =
-        businessType == 'Bar' || businessType == 'Beer distributor';
+    final showCrates = isCrateBusiness(businessType);
     final showHistory = role.slug == 'ceo' ||
         role.slug == 'manager' ||
         role.slug == 'stock_keeper';
@@ -1653,7 +1653,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
             24,
             24,
             24,
-            24 + MediaQuery.of(ctx).padding.bottom,
+            24 + context.deviceBottomInset,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1765,7 +1765,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
               24,
               24,
               24,
-              24 + MediaQuery.of(ctx).padding.bottom,
+              24 + context.deviceBottomInset,
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -2157,7 +2157,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
             24,
             24,
             24,
-            24 + MediaQuery.of(ctx).padding.bottom,
+            24 + context.deviceBottomInset,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -2233,7 +2233,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
             24,
             24,
             24,
-            24 + MediaQuery.of(ctx).padding.bottom,
+            24 + context.deviceBottomInset,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,

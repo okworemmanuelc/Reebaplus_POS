@@ -9,6 +9,7 @@ import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
 
 const _kMaxDiscount = 'max_discount_percent';
 const _kMaxExpenseKobo = 'max_expense_approval_kobo';
@@ -233,7 +234,8 @@ class _RolePermissionsDetailScreenState
 
     return SettingsFadeIn(
       child: ListView(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.fromLTRB(
+            24, 24, 24, 24 + context.deviceBottomInset),
         children: [
           if (_isCeo)
             Padding(

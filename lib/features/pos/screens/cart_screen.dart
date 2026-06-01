@@ -241,6 +241,9 @@ class _CartScreenState extends ConsumerState<CartScreen>
                       );
                     }
                     return ListView.builder(
+                      padding: EdgeInsets.only(
+                        bottom: modalCtx.deviceBottomInset,
+                      ),
                       itemCount: carts.length,
                       itemBuilder: (context, index) {
                         final cart = carts[index];
@@ -513,7 +516,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                     modalCtx.getRSize(20),
                                     0,
                                     modalCtx.getRSize(20),
-                                    modalCtx.bottomInset + 20,
+                                    modalCtx.deviceBottomInset + 20,
                                   ),
                                   children: [
                                     _buildCustomerTile(null, modalCtx),
@@ -683,7 +686,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                     context.getRSize(24),
                     context.getRSize(16),
                     context.getRSize(24),
-                    context.bottomInset + 24,
+                    context.deviceBottomInset + 24,
                   ),
                   child: ListView(
                     controller: scrollController,

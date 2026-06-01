@@ -90,4 +90,27 @@ extension ResponsiveHelper on BuildContext {
   double get bottomInset =>
       (MediaQuery.maybeOf(this)?.padding.bottom ?? 0) +
       (MediaQuery.maybeOf(this)?.viewInsets.bottom ?? 0);
+
+  /// The true bottom inset (system nav + keyboard), read from the raw OS view so
+  /// an ancestor Scaffold cannot zero it out.
+  ///
+  /// A Scaffold strips `padding.bottom` from its WHOLE body whenever it has a
+  /// `bottomNavigationBar` — even a zero-height one (Flutter scaffold.dart:
+  /// `removeBottomPadding: widget.bottomNavigationBar != null`). `MainLayout`'s
+  /// app nav bar is never null (it renders `SizedBox.shrink()` when hidden), so
+  /// every screen and modal under MainLayout sees `MediaQuery.padding.bottom == 0`
+  /// and [bottomInset] reads 0 even though the system nav physically overlaps —
+  /// which is why bottom-anchored content paints under the nav bar. Recomputing
+  /// from the raw FlutterView bypasses that consumption.
+  ///
+  /// Use this for bottom-anchored content that reaches the PHYSICAL screen
+  /// bottom: modals, bottom-sheet footers, and pushed-screen footers. Do NOT use
+  /// it for tab-root content that sits ABOVE the visible bottom nav bar — the bar
+  /// already insets those; this would add a spurious gap.
+  double get deviceBottomInset {
+    final view = View.maybeOf(this);
+    if (view == null) return bottomInset;
+    final raw = MediaQueryData.fromView(view);
+    return raw.padding.bottom + raw.viewInsets.bottom;
+  }
 }

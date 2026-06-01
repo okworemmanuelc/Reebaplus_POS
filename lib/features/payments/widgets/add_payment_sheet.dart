@@ -417,7 +417,7 @@ class _AddPaymentSheetState extends ConsumerState<AddPaymentSheet> {
                         context.getRSize(20),
                         context.getRSize(16),
                         context.getRSize(20),
-                        context.bottomInset + context.getRSize(16),
+                        context.deviceBottomInset + context.getRSize(16),
                       ),
                       child: AppButton(
                         text: 'Save Payment',

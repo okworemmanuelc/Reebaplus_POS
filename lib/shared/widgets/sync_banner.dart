@@ -102,10 +102,10 @@ class _SyncBannerState extends ConsumerState<SyncBanner> {
     }
 
     final t = Theme.of(context);
-    // Sync Issues is CEO-only (settings.manage); non-CEO roles must not be able
-    // to tap the banner through to it (hard rule #7). The retry action stays —
-    // it's a harmless pull and useful for everyone.
-    final canOpenSync = hasPermission(ref, 'settings.manage');
+    // Sync Issues is gated on sync.view (CEO always + whoever the CEO granted
+    // it); other roles must not tap the banner through to it (hard rule #7).
+    // The retry action stays — it's a harmless pull and useful for everyone.
+    final canOpenSync = canViewSyncIssues(ref);
     final Widget child;
     // Once the 3s window has elapsed for the current stage, collapse.
     // Ongoing sync state is still surfaced via the drawer sync badge

@@ -8,13 +8,15 @@ class ActivityLog {
   final String? storeId;
   final String? userId;
 
-  // Typed FKs (PR 4)
-  final String? orderId;
-  final String? productId;
-  final String? customerId;
-  final String? expenseId;
-  final String? deliveryId;
-  final String? walletTxnId;
+  // Generic entity reference (§24.4) — replaces the six per-entity FK fields.
+  // entityType is one of 'order'/'product'/'customer'/'expense'/'delivery'/
+  // 'wallet_transaction' (or null); entityId is the referenced row's id.
+  final String? entityType;
+  final String? entityId;
+
+  // Before/after JSON snapshots for the §24.4 detail view (null when N/A).
+  final String? beforeJson;
+  final String? afterJson;
 
   ActivityLog({
     required this.id,
@@ -23,12 +25,10 @@ class ActivityLog {
     required this.timestamp,
     this.storeId,
     this.userId,
-    this.orderId,
-    this.productId,
-    this.customerId,
-    this.expenseId,
-    this.deliveryId,
-    this.walletTxnId,
+    this.entityType,
+    this.entityId,
+    this.beforeJson,
+    this.afterJson,
   });
 
   factory ActivityLog.fromDb(ActivityLogData data) {
@@ -39,13 +39,10 @@ class ActivityLog {
       timestamp: data.createdAt,
       storeId: data.storeId,
       userId: data.userId,
-      orderId: data.orderId,
-      productId: data.productId,
-      customerId: data.customerId,
-      expenseId: data.expenseId,
-      deliveryId: data.deliveryId,
-      walletTxnId: data.walletTxnId,
+      entityType: data.entityType,
+      entityId: data.entityId,
+      beforeJson: data.beforeJson,
+      afterJson: data.afterJson,
     );
   }
 }
-

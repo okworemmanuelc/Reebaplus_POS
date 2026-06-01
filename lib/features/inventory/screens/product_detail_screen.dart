@@ -488,6 +488,32 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       },
     );
 
+    // A sale records an order (and its stock delta). The stock listener above
+    // only refreshes the Sales Summary when THIS store's total changes, so a
+    // sale in another store — or any timing where the stock tick is missed —
+    // wouldn't update the numbers. Watch the orders stream directly so every
+    // sale (this device or synced from another) refreshes the summary live.
+    ref.listen(allOrdersProvider, (prev, next) {
+      if (next.valueOrNull == null || !mounted) return;
+      _reloadDerived();
+    });
+
+    // Keep the dropdown OPTION lists live (§5): a category / manufacturer /
+    // supplier added or renamed on another device relabels here without a
+    // reopen. The existing dropdowns read these instance fields directly.
+    ref.listen(allCategoriesProvider, (prev, next) {
+      final v = next.valueOrNull;
+      if (v != null && mounted) setState(() => _allCategories = v);
+    });
+    ref.listen(allManufacturersProvider, (prev, next) {
+      final v = next.valueOrNull;
+      if (v != null && mounted) setState(() => _allManufacturers = v);
+    });
+    ref.listen(allSuppliersProvider, (prev, next) {
+      final v = next.valueOrNull;
+      if (v != null && mounted) setState(() => _allSuppliers = v);
+    });
+
     // Show shimmer skeleton while DB data loads (_contentReady becomes true
     // at the end of _loadProductData once all queries complete).
     if (!_contentReady) {
@@ -746,7 +772,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         context.getRSize(20),
         context.getRSize(16),
         context.getRSize(20),
-        context.getRSize(16) + context.bottomInset,
+        context.getRSize(16) + context.deviceBottomInset,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1809,7 +1835,12 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                   borderRadius:
                       const BorderRadius.vertical(top: Radius.circular(28)),
                 ),
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  16,
+                  20,
+                  20 + sheetCtx.deviceBottomInset,
+                ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,

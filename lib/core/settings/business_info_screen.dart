@@ -8,6 +8,7 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
 
 /// CEO Settings > Business Info (§10.1). Edits the business name, type, and
 /// currency. Name/type persist to the `businesses` row via [BusinessesDao];
@@ -120,7 +121,8 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
           ? const SizedBox.shrink()
           : SettingsFadeIn(
               child: ListView(
-                padding: const EdgeInsets.all(24),
+                padding: EdgeInsets.fromLTRB(
+                    24, 24, 24, 24 + context.deviceBottomInset),
                 children: [
                   const SettingsSectionTitle('Business'),
                   const SizedBox(height: 16),

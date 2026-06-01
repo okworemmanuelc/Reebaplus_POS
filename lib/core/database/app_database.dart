@@ -380,7 +380,8 @@ class FundsAccounts extends Table {
 
 // Daily open/close header — one row per (store, business_date). Existence with
 // status='open' is the POS Opening-Cash gate (hard rule #10). Mutable on close
-// (Phase 2), so NOT a ledger.
+// (Phase 1 Close Day, §23.6/§23.8 — sets status='closed' + closedBy/closedAt),
+// so NOT a ledger.
 @DataClassName('FundDayData')
 class FundDays extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
@@ -440,6 +441,42 @@ class FundTransactions extends Table {
     "CHECK (reference_type IN ('opening','sale','void','topup'))",
     "CHECK ((type = 'credit' AND signed_amount_kobo >= 0) OR "
         "(type = 'debit' AND signed_amount_kobo <= 0))",
+  ];
+}
+
+// Per-account Close Day reconciliation snapshot (§23.6/§25.2). One row per
+// (fund_day, account), written when the day is closed. `expected_kobo` is the
+// account's running balance (SUM signed_amount_kobo) at close; `counted_kobo`
+// is the actual the user entered (cash counted for the till, amount withdrawn
+// for POS/bank); `variance_kobo` = counted − expected (a non-zero value is a
+// shortage/surplus that flags a mismatch). This is the cash-audit half the
+// Daily Reconciliation Report (Ring 3, §25.9) reads. Written once per close
+// (closeDay throws if the day is already closed), so it's a normal synced
+// table, not an append-only ledger.
+@DataClassName('FundDayClosingData')
+class FundDayClosings extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get fundDayId => text().references(FundDays, #id)();
+  TextColumn get fundsAccountId => text().references(FundsAccounts, #id)();
+  TextColumn get storeId => text().references(Stores, #id)();
+  TextColumn get businessDate => text()(); // YYYY-MM-DD
+  TextColumn get accountType => text()(); // cash_till | pos_machine | bank
+  IntColumn get expectedKobo => integer()();
+  IntColumn get countedKobo => integer()();
+  IntColumn get varianceKobo => integer()(); // counted − expected
+  TextColumn get performedBy => text().nullable().references(Users, #id)();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => [
+    "CHECK (account_type IN ('cash_till','pos_machine','bank'))",
+    'UNIQUE (fund_day_id, funds_account_id)',
   ];
 }
 
@@ -905,14 +942,16 @@ class ActivityLogs extends Table {
   TextColumn get userId => text().nullable().references(Users, #id)();
   TextColumn get action => text()();
   TextColumn get description => text()();
-  TextColumn get orderId => text().nullable().references(Orders, #id)();
-  TextColumn get productId => text().nullable().references(Products, #id)();
-  TextColumn get customerId => text().nullable().references(Customers, #id)();
-  TextColumn get expenseId => text().nullable().references(Expenses, #id)();
-  TextColumn get deliveryId =>
-      text().nullable().references(DeliveryReceipts, #id)();
-  TextColumn get walletTxnId =>
-      text().nullable().references(WalletTransactions, #id)();
+  // Generic entity reference (§24.4): which record this log is about, by type
+  // + id. Replaces the six per-entity FK columns (order/product/customer/
+  // expense/delivery/wallet_txn) so any future feature logs against one shape.
+  // entity_id is polymorphic — intentionally NOT a foreign key. store_id stays
+  // a real FK because the §24.2 Activity Logs store filter reads it.
+  TextColumn get entityType => text().nullable()();
+  TextColumn get entityId => text().nullable()();
+  // Before/after snapshots (JSON) for the §24.4 detail view.
+  TextColumn get beforeJson => text().nullable()();
+  TextColumn get afterJson => text().nullable()();
   TextColumn get storeId => text().nullable().references(Stores, #id)();
   DateTimeColumn get voidedAt => dateTime().nullable()();
   TextColumn get voidedBy => text().nullable().references(Users, #id)();
@@ -923,18 +962,6 @@ class ActivityLogs extends Table {
 
   @override
   Set<Column> get primaryKey => {id};
-
-  @override
-  List<String> get customConstraints => [
-    '''CHECK (
-          (CASE WHEN order_id IS NOT NULL THEN 1 ELSE 0 END) +
-          (CASE WHEN product_id IS NOT NULL THEN 1 ELSE 0 END) +
-          (CASE WHEN customer_id IS NOT NULL THEN 1 ELSE 0 END) +
-          (CASE WHEN expense_id IS NOT NULL THEN 1 ELSE 0 END) +
-          (CASE WHEN delivery_id IS NOT NULL THEN 1 ELSE 0 END) +
-          (CASE WHEN wallet_txn_id IS NOT NULL THEN 1 ELSE 0 END) <= 1
-        )''',
-  ];
 }
 
 @DataClassName('NotificationData')
@@ -943,6 +970,9 @@ class Notifications extends Table {
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get type => text()();
   TextColumn get message => text()();
+  // §26.2 / §1.3 card colour: blue 'info' / yellow 'warning' / red 'alert'.
+  // Replaces overloading `type` for severity. Defaults to 'info'.
+  TextColumn get severity => text().withDefault(const Constant('info'))();
   BoolColumn get isRead => boolean().withDefault(const Constant(false))();
   TextColumn get linkedRecordId => text().nullable()();
   // NULL = broadcast (visible to every member); set = targeted at one user
@@ -956,6 +986,10 @@ class Notifications extends Table {
 
   @override
   Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints =>
+      ["CHECK (severity IN ('info', 'warning', 'alert'))"];
 }
 
 @DataClassName('SettingData')
@@ -1273,6 +1307,7 @@ class MigrationEvents extends Table {
     FundsAccounts,
     FundDays,
     FundTransactions,
+    FundDayClosings,
     ActivityLogs,
     Notifications,
     Settings,
@@ -1308,6 +1343,7 @@ class MigrationEvents extends Table {
     FundsAccountsDao,
     FundDaysDao,
     FundTransactionsDao,
+    FundDayClosingsDao,
     CustomerWalletsDao,
     CrateSizeGroupsDao,
     CustomerCrateBalancesDao,
@@ -1357,7 +1393,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 24;
+  int get schemaVersion => 27;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -2290,6 +2326,118 @@ class AppDatabase extends _$AppDatabase {
         // supabase/migrations/0065_widen_product_unit_check.sql.
         await m.alterTable(TableMigration(products));
       }
+      if (from < 25) {
+        // v25 (Ring 0 #2, §24.4/§26.2): activity_logs generic shape +
+        // notifications.severity. Mirrors supabase/migrations/0066.
+        //
+        // Drop the append-only triggers FIRST: alterTable re-creates a table's
+        // triggers from sqlite_master, and the old `activity_logs_immutable`
+        // trigger references the per-entity FK columns we're about to drop, so
+        // it would fail to re-create. Rebuild activity_logs (drop the 6 FK
+        // columns + the "<=1 set" CHECK, add entity_type/entity_id/before_json/
+        // after_json, keep store_id) backfilling entity_type/entity_id from
+        // whichever FK was set, then re-create the triggers from the NEW
+        // immutable column set.
+        // Each rebuild is guarded on the OLD shape still being present, so the
+        // block is idempotent — safe when a DB is already partly on the new
+        // shape (e.g. the revert-then-re-upgrade migration tests, which revert
+        // only specific deltas and leave activity_logs/notifications current).
+        Future<bool> hasColumn(String table, String col) async {
+          final rows = await customSelect('PRAGMA table_info($table)').get();
+          return rows.any((r) => r.read<String>('name') == col);
+        }
+
+        if (await hasColumn('activity_logs', 'order_id')) {
+          await customStatement(
+              'DROP TRIGGER IF EXISTS activity_logs_immutable');
+          await customStatement(
+              'DROP TRIGGER IF EXISTS activity_logs_no_delete');
+          await m.alterTable(TableMigration(
+            activityLogs,
+            columnTransformer: {
+              activityLogs.entityType: const CustomExpression<String>(
+                "CASE "
+                "WHEN order_id IS NOT NULL THEN 'order' "
+                "WHEN product_id IS NOT NULL THEN 'product' "
+                "WHEN customer_id IS NOT NULL THEN 'customer' "
+                "WHEN expense_id IS NOT NULL THEN 'expense' "
+                "WHEN delivery_id IS NOT NULL THEN 'delivery' "
+                "WHEN wallet_txn_id IS NOT NULL THEN 'wallet_transaction' "
+                "END",
+              ),
+              activityLogs.entityId: const CustomExpression<String>(
+                "COALESCE(order_id, product_id, customer_id, expense_id, "
+                "delivery_id, wallet_txn_id)",
+              ),
+            },
+            newColumns: [
+              activityLogs.entityType,
+              activityLogs.entityId,
+              activityLogs.beforeJson,
+              activityLogs.afterJson,
+            ],
+          ));
+          for (final stmt in _ledgerTriggerStatements(
+            _ledgerTables.firstWhere((l) => l.table == 'activity_logs'),
+          )) {
+            await customStatement(stmt);
+          }
+        }
+        // notifications: add severity (default 'info') + its CHECK via rebuild.
+        if (!await hasColumn('notifications', 'severity')) {
+          await m.alterTable(TableMigration(
+            notifications,
+            newColumns: [notifications.severity],
+          ));
+        }
+      }
+      if (from < 26) {
+        // v26 (Sync Issues access): add the sync.view permission to the local
+        // catalog so the Roles & Permissions list + the Sync Issues access
+        // screen show it. The CEO always has Sync Issues access via a role
+        // check in code; other roles get it through the per-role toggle (a
+        // synced role_permissions grant). Idempotent — key is the PK.
+        await customStatement(
+          "INSERT OR IGNORE INTO permissions (key, description, category) "
+          "VALUES ('sync.view', 'View sync issues', 'System')",
+        );
+      }
+      if (from < 27) {
+        // v27 (master plan §23.6 Close Day): the per-account reconciliation
+        // snapshot table. One new synced tenant table. Mirrors
+        // supabase/migrations/0068_fund_day_closings.sql. Same index/trigger
+        // shapes as the `_postCreateStatements` loops so a fresh install
+        // (onCreate) and an upgrade end up identical.
+        //
+        // Idempotency guard (like the v21 block): the revert-then-re-upgrade
+        // migration tests revert only specific deltas, so a DB stepped back to
+        // < 27 may still carry fund_day_closings; a blind createTable would
+        // throw "table already exists". Only build it when genuinely absent.
+        final exists = await customSelect(
+          "SELECT 1 FROM sqlite_master WHERE type='table' "
+          "AND name='fund_day_closings'",
+        ).get();
+        if (exists.isEmpty) {
+          await m.createTable(fundDayClosings);
+          await customStatement(
+            'CREATE INDEX idx_fund_day_closings_business_lua '
+            'ON fund_day_closings (business_id, last_updated_at)',
+          );
+          await customStatement(
+            'CREATE INDEX idx_fund_day_closings_store_date '
+            'ON fund_day_closings (store_id, business_date)',
+          );
+          await customStatement(
+            'CREATE TRIGGER bump_fund_day_closings_last_updated_at '
+            'AFTER UPDATE ON fund_day_closings '
+            'FOR EACH ROW '
+            'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+            'BEGIN '
+            "UPDATE fund_day_closings SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+            'END',
+          );
+        }
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -2410,6 +2558,8 @@ const List<String> _syncedTenantTables = [
   'funds_accounts',
   'fund_days',
   'fund_transactions',
+  // v27 (master plan §23.6 Close Day reconciliation).
+  'fund_day_closings',
   'expense_categories',
   'expenses',
   'activity_logs',
@@ -2496,6 +2646,7 @@ const List<List<String>> _defaultPermissionRows = [
   ['staff.change_role', 'Change a staff member\'s role', 'Staff'],
   // System
   ['activity_logs.view', 'View activity logs', 'System'],
+  ['sync.view', 'View sync issues', 'System'],
   ['settings.manage', 'Manage business settings', 'System'],
   // Funds Register
   ['funds.open_day', 'Open the day in Funds Register', 'Funds'],
@@ -2547,6 +2698,30 @@ class _LedgerImmutability {
   const _LedgerImmutability(this.table, this.immutableColumns);
 }
 
+/// The two append-only triggers for a ledger table: an immutable-columns guard
+/// (only voided_at/voided_by/void_reason may change) and a no-delete guard.
+/// Shared by `_postCreateStatements` and the v25 activity_logs rebuild so the
+/// trigger SQL can't drift between the two sites.
+List<String> _ledgerTriggerStatements(_LedgerImmutability ledger) {
+  final whenClause = ledger.immutableColumns
+      .map((c) => 'NEW.$c IS NOT OLD.$c')
+      .join(' OR ');
+  return [
+    'CREATE TRIGGER ${ledger.table}_immutable '
+    'BEFORE UPDATE ON ${ledger.table} '
+    'FOR EACH ROW '
+    'WHEN $whenClause '
+    'BEGIN '
+    "SELECT RAISE(ABORT, 'append-only: only voided_at/voided_by/void_reason may change'); "
+    'END',
+    'CREATE TRIGGER ${ledger.table}_no_delete '
+    'BEFORE DELETE ON ${ledger.table} '
+    'BEGIN '
+    "SELECT RAISE(ABORT, 'append-only: deletion not permitted'); "
+    'END',
+  ];
+}
+
 const List<_LedgerImmutability> _ledgerTables = [
   _LedgerImmutability('stock_transactions', [
     'id',
@@ -2596,12 +2771,10 @@ const List<_LedgerImmutability> _ledgerTables = [
     'user_id',
     'action',
     'description',
-    'order_id',
-    'product_id',
-    'customer_id',
-    'expense_id',
-    'delivery_id',
-    'wallet_txn_id',
+    'entity_type',
+    'entity_id',
+    'before_json',
+    'after_json',
     'store_id',
     'created_at',
   ]),
@@ -2680,6 +2853,8 @@ List<String> get _postCreateStatements {
     'CREATE INDEX idx_funds_accounts_store ON funds_accounts (store_id)',
     'CREATE INDEX idx_fund_days_store_date ON fund_days (store_id, business_date)',
     'CREATE INDEX idx_fund_txn_account_date ON fund_transactions (funds_account_id, business_date)',
+    // v27 (Close Day) — read closings per store/day for the reconciliation report.
+    'CREATE INDEX idx_fund_day_closings_store_date ON fund_day_closings (store_id, business_date)',
   ]);
 
   // Enqueue-time coalescing: at most one pending sync_queue row per
@@ -2741,25 +2916,7 @@ List<String> get _postCreateStatements {
 
   // -- Append-only enforcement on ledgers --
   for (final ledger in _ledgerTables) {
-    final whenClause = ledger.immutableColumns
-        .map((c) => 'NEW.$c IS NOT OLD.$c')
-        .join(' OR ');
-    stmts.add(
-      'CREATE TRIGGER ${ledger.table}_immutable '
-      'BEFORE UPDATE ON ${ledger.table} '
-      'FOR EACH ROW '
-      'WHEN $whenClause '
-      'BEGIN '
-      "SELECT RAISE(ABORT, 'append-only: only voided_at/voided_by/void_reason may change'); "
-      'END',
-    );
-    stmts.add(
-      'CREATE TRIGGER ${ledger.table}_no_delete '
-      'BEFORE DELETE ON ${ledger.table} '
-      'BEGIN '
-      "SELECT RAISE(ABORT, 'append-only: deletion not permitted'); "
-      'END',
-    );
+    stmts.addAll(_ledgerTriggerStatements(ledger));
   }
 
   // -- v13 (master plan §2.4) hot-path indexes for the new tables.

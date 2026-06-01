@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -86,17 +85,12 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen>
       ),
       // Pushed full-screen route with no bottomNavigationBar, so lift the FAB
       // clear of the Android gesture/nav bar (the system bottom inset). The
-      // Builder reads MediaQuery from inside the Scaffold subtree, and we fall
-      // back to the physical view inset (never stripped by the widget tree)
-      // so the lift still works if MediaQuery padding resolves to 0 here.
+      // Builder reads the physical view inset (never stripped by the widget
+      // tree) so the lift still works if MediaQuery padding resolves to 0 here.
       floatingActionButton: Builder(
         builder: (context) {
-          final mq = MediaQuery.of(context);
-          final view = View.of(context);
-          final physBottom = view.viewPadding.bottom / view.devicePixelRatio;
-          final inset = math.max(mq.viewPadding.bottom, physBottom);
           return Padding(
-            padding: EdgeInsets.only(bottom: inset),
+            padding: EdgeInsets.only(bottom: context.deviceBottomInset),
             child: AppFAB(
               heroTag: 'staff_fab',
               onPressed: () => InviteStaffSheet.show(context),
@@ -255,7 +249,7 @@ class _StaffTabState extends ConsumerState<_StaffTab> {
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
               padding: EdgeInsets.only(
-                bottom: context.getRSize(100) + context.bottomInset,
+                bottom: context.getRSize(100) + context.deviceBottomInset,
               ),
               children: rows.isEmpty
                   ? [
@@ -586,7 +580,7 @@ class _InvitesTabState extends ConsumerState<_InvitesTab> {
                 : ListView.builder(
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: EdgeInsets.only(
-                      bottom: context.getRSize(100) + context.bottomInset,
+                      bottom: context.getRSize(100) + context.deviceBottomInset,
                     ),
                     itemCount: filtered.length,
                     itemBuilder: (context, i) {

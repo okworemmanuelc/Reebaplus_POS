@@ -224,8 +224,11 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                 Expanded(
                   child: ListView.separated(
                     controller: scrollCtrl,
-                    padding: EdgeInsets.symmetric(
-                      vertical: context.getRSize(8),
+                    padding: EdgeInsets.fromLTRB(
+                      0,
+                      context.getRSize(8),
+                      0,
+                      context.getRSize(8) + context.deviceBottomInset,
                     ),
                     itemCount: dates.length,
                     separatorBuilder: (_, __) => Divider(
@@ -379,9 +382,11 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
               Expanded(
                 child: ListView.separated(
                   controller: scrollCtrl,
-                  padding: EdgeInsets.symmetric(
-                    vertical: context.getRSize(12),
-                    horizontal: context.getRSize(16),
+                  padding: EdgeInsets.fromLTRB(
+                    context.getRSize(16),
+                    context.getRSize(12),
+                    context.getRSize(16),
+                    context.getRSize(12) + context.deviceBottomInset,
                   ),
                   itemCount: logs.length,
                   separatorBuilder: (_, __) =>
@@ -602,7 +607,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
           child: ListView.builder(
             padding: EdgeInsets.only(
               bottom:
-                  context.getRSize(24) + MediaQuery.of(context).padding.bottom,
+                  context.getRSize(24) + context.deviceBottomInset,
             ),
             itemCount: displayItems.length,
             itemBuilder: (_, idx) {

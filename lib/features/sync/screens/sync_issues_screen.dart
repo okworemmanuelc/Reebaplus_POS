@@ -220,12 +220,12 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    // Defense-in-depth (hard rules #6/#7): Sync Issues is a CEO-only
-    // troubleshooting screen, gated on `settings.manage` (the same gate as CEO
-    // Settings and Stores). The sidebar item, sync badge, and banner already
-    // hide the entry points without it; this guards a deep-link / direct push.
-    // Keep the AppBar so the back button still works on this pushed route.
-    if (!hasPermission(ref, 'settings.manage')) {
+    // Defense-in-depth (hard rules #6/#7): Sync Issues is gated on
+    // `sync.view` — the CEO always (implicit owner) plus any role the CEO has
+    // granted it via CEO Settings → Sync Issues access. The sidebar item, sync
+    // badge, and banner already hide the entry points without it; this guards a
+    // deep-link / direct push. Keep the AppBar so the back button still works.
+    if (!canViewSyncIssues(ref)) {
       return Scaffold(
         backgroundColor: t.scaffoldBackgroundColor,
         appBar: AppBar(
@@ -268,7 +268,7 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
         centerTitle: true,
       ),
       body: ListView(
-        padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + context.bottomInset),
+        padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + context.deviceBottomInset),
         children: [
           _sectionHeader(t, 'Health'),
           const SizedBox(height: 12),

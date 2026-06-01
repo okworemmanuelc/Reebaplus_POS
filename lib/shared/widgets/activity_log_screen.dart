@@ -188,7 +188,13 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
                     }
 
                     return ListView.separated(
-                      padding: context.rPadding(16),
+                      padding: context
+                          .rPadding(16)
+                          .add(
+                            EdgeInsets.only(
+                              bottom: context.deviceBottomInset,
+                            ),
+                          ),
                       itemCount: filteredLogs.length,
                       separatorBuilder: (context, index) =>
                           SizedBox(height: context.getRSize(12)),
@@ -255,9 +261,9 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
     return logs.where((log) {
       final isStoreScoped =
           log.storeId != null ||
-          log.productId != null ||
-          log.deliveryId != null ||
-          log.orderId != null ||
+          log.entityType == 'product' ||
+          log.entityType == 'order' ||
+          log.entityType == 'delivery' ||
           log.action.toLowerCase().contains('inventory') ||
           log.action.toLowerCase().contains('stock') ||
           log.action.toLowerCase().contains('delivery');

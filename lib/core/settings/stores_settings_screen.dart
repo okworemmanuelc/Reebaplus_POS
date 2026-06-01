@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
 
 /// CEO Settings > Stores (§10.1). Read-only this phase: shows the business's
 /// store(s). Adding more stores is Phase 2.
@@ -41,7 +42,8 @@ class StoresSettingsScreen extends ConsumerWidget {
         ),
         data: (list) => SettingsFadeIn(
           child: ListView(
-            padding: const EdgeInsets.all(24),
+            padding: EdgeInsets.fromLTRB(
+                24, 24, 24, 24 + context.deviceBottomInset),
             children: [
               for (final store in list) ...[
                 SettingsTile(

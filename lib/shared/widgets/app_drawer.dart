@@ -130,12 +130,12 @@ class AppDrawer extends ConsumerWidget {
           SizedBox(height: context.getRSize(16)),
           // Sync status indicator. Three signals nested so the badge reflects
           // pending, failed, and online state; tap opens Sync Issues.
-          // CEO-only (settings.manage) — same gate as the Sync Issues screen and
-          // its sidebar item, so non-CEO roles never tap into a screen they
-          // can't open (hard rule #7). Skip while logged out — the inline DAO
-          // streams below build a fresh tenant-scoped query on every rebuild and
-          // would otherwise hit requireBusinessId() with no current business.
-          if (user == null || !hasPermission(ref, 'settings.manage'))
+          // Gated on sync.view (CEO always + whoever the CEO granted it), so
+          // non-permitted roles never tap into a screen they can't open (hard
+          // rule #7). Skip while logged out — the inline DAO streams below build
+          // a fresh tenant-scoped query on every rebuild and would otherwise hit
+          // requireBusinessId() with no current business.
+          if (user == null || !canViewSyncIssues(ref))
             const SizedBox.shrink()
           else StreamBuilder<int>(
             stream: ref.read(databaseProvider).syncDao.watchPendingCount(),
@@ -424,10 +424,10 @@ class AppDrawer extends ConsumerWidget {
               ).push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
             },
           ),
-        // Sync Issues — CEO-only troubleshooting screen, gated on
-        // settings.manage (same gate as CEO Settings / Stores). Hidden entirely
-        // for other roles (hard rule #7), mirroring the gates above.
-        if (hasPermission(ref, 'settings.manage'))
+        // Sync Issues — troubleshooting screen gated on sync.view (CEO always +
+        // whoever the CEO granted it via Sync Issues access). Hidden entirely
+        // for other roles (hard rule #7).
+        if (canViewSyncIssues(ref))
           _navItem(
             context,
             FontAwesomeIcons.cloudArrowUp,
@@ -466,7 +466,7 @@ class AppDrawer extends ConsumerWidget {
         _buildAppearanceTile(context),
         // Extra space for system navigation bar
         SizedBox(
-          height: MediaQuery.of(context).padding.bottom + context.getRSize(20),
+          height: context.deviceBottomInset + context.getRSize(20),
         ),
       ],
     );

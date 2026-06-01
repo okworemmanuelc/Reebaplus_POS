@@ -7,6 +7,7 @@ import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/core/theme/theme_notifier.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
 
 /// CEO Settings > Appearance (§10.1). The CEO picks the **business** accent
 /// colour — synced via the `business_design_system` setting and applied to
@@ -62,7 +63,8 @@ class AppearanceSettingsScreen extends ConsumerWidget {
           ? const SettingsNoAccess()
           : SettingsFadeIn(
               child: ListView(
-                padding: const EdgeInsets.all(24),
+                padding: EdgeInsets.fromLTRB(
+                    24, 24, 24, 24 + context.deviceBottomInset),
                 children: [
                   Text(
                     'Pick the colour for the whole business. It applies to every '

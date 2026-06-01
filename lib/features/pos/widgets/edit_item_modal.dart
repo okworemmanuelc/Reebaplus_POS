@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
@@ -11,7 +13,22 @@ import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 class EditItemModal extends ConsumerStatefulWidget {
   final Map<String, dynamic> item;
 
-  const EditItemModal({super.key, required this.item});
+  /// When non-null the modal runs in "add to cart" mode: the primary button
+  /// adds [newProduct] (with the chosen qty + discount) instead of editing an
+  /// existing cart line. Backs the long-press flow on the POS product grid.
+  final ProductData? newProduct;
+  final int maxStock;
+  final PriceTier tier;
+
+  const EditItemModal({
+    super.key,
+    required this.item,
+    this.newProduct,
+    this.maxStock = 1 << 30,
+    this.tier = PriceTier.retailer,
+  });
+
+  bool get isNew => newProduct != null;
 
   @override
   ConsumerState<EditItemModal> createState() => _EditItemModalState();
@@ -29,6 +46,42 @@ class EditItemModal extends ConsumerStatefulWidget {
       builder: (context) => EditItemModal(item: item),
     );
   }
+
+  /// Opens the modal in "add to cart" mode for a product on the POS grid.
+  /// Returns true if the requested qty was fully accepted, false if it was
+  /// clamped / rejected by stock, or null if the user dismissed without adding.
+  static Future<bool?> showForProduct(
+    BuildContext context, {
+    required ProductData product,
+    required int maxStock,
+    required PriceTier tier,
+  }) {
+    final unitPriceKobo = tier == PriceTier.wholesaler
+        ? product.wholesalerPriceKobo
+        : product.retailerPriceKobo;
+    // Synthetic line shaped like a cart map so the build() reads below work
+    // unchanged. Only the fields the modal reads are needed.
+    final item = <String, dynamic>{
+      'id': product.id,
+      'name': product.name,
+      'qty': 1,
+      'unitPriceKobo': unitPriceKobo,
+      'discountKind': null,
+      'discountValue': 0.0,
+      'allowFractionalSales': product.allowFractionalSales,
+    };
+    return showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => EditItemModal(
+        item: item,
+        newProduct: product,
+        maxStock: maxStock,
+        tier: tier,
+      ),
+    );
+  }
 }
 
 class _EditItemModalState extends ConsumerState<EditItemModal> {
@@ -40,7 +93,7 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
   @override
   void initState() {
     super.initState();
-    _qtyCtrl = TextEditingController(text: widget.item['qty'].toString());
+    _qtyCtrl = TextEditingController(text: _initialQtyText());
 
     final existingValue = (widget.item['discountValue'] as num?) ?? 0;
     _discountKind =
@@ -66,6 +119,27 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
   static String _trimNum(num n) =>
       n == n.toInt() ? n.toInt().toString() : n.toString();
 
+  /// Upper bound for the quantity field: the product's available stock — the
+  /// count shown on the POS card. Quantity can never go above this. In add
+  /// mode that's the card stock; in edit mode it's the line's stored max stock.
+  double get _maxQty => widget.isNew
+      ? widget.maxStock.toDouble()
+      : (((widget.item['maxStock'] as int?) ?? (1 << 30)).toDouble());
+
+  /// Initial quantity text. Add mode shows the product's current cart quantity
+  /// (so the field is the new total, capped at stock) or 1 if it isn't in the
+  /// cart yet; edit mode shows the existing line quantity.
+  String _initialQtyText() {
+    if (!widget.isNew) return widget.item['qty'].toString();
+    final id = widget.newProduct!.id;
+    final inCart = ref
+        .read(cartProvider)
+        .value
+        .where((i) => i['id'] == id)
+        .fold<double>(0, (s, i) => s + (i['qty'] as num).toDouble());
+    return _trimNum(inCart > 0 ? inCart : 1.0);
+  }
+
   @override
   void dispose() {
     _qtyCtrl.removeListener(_onInputChanged);
@@ -77,7 +151,8 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
 
   void _updateQty(double delta) {
     final v = double.tryParse(_qtyCtrl.text) ?? 1.0;
-    final newValue = (v + delta).clamp(0.5, 999.0);
+    final upper = _maxQty < 0.5 ? 0.5 : _maxQty;
+    final newValue = (v + delta).clamp(0.5, upper);
     setState(() {
       _qtyCtrl.text = newValue.toStringAsFixed(
         newValue == newValue.toInt() ? 0 : 1,
@@ -118,7 +193,18 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
 
     final maxPercent = ref.watch(currentUserMaxDiscountPercentProvider);
     final canDiscount = maxPercent > 0;
-    final qty = double.tryParse(_qtyCtrl.text) ?? 1.0;
+    final rawQty = double.tryParse(_qtyCtrl.text) ?? 1.0;
+    // Quantity can't exceed available stock (the POS card count). Snap an
+    // over-limit entry back down to the cap, same pattern as the discount cap.
+    if (rawQty > _maxQty) {
+      final capText = _trimNum(_maxQty);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _qtyCtrl.text == capText) return;
+        _qtyCtrl.text = capText;
+        _qtyCtrl.selection = TextSelection.collapsed(offset: capText.length);
+      });
+    }
+    final qty = rawQty > _maxQty ? _maxQty : rawQty;
     final unitPriceKobo = (widget.item['unitPriceKobo'] as num).toInt();
     final lineTotalKobo = (unitPriceKobo * qty).round();
     final resolved =
@@ -140,7 +226,7 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
         context.getRSize(24),
         context.getRSize(16),
         context.getRSize(24),
-        context.bottomInset + context.getRSize(24),
+        context.deviceBottomInset + context.getRSize(24),
       ),
       decoration: BoxDecoration(
         color: t.colorScheme.surface,
@@ -197,7 +283,7 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Edit Quantity',
+                      widget.isNew ? 'Add to Cart' : 'Edit Quantity',
                       style: TextStyle(
                         fontSize: context.getRFontSize(20),
                         fontWeight: FontWeight.w900,
@@ -311,6 +397,18 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
               ],
             ),
           ],
+          // Available-stock cap hint — only in add mode (§16).
+          if (widget.isNew) ...[
+            SizedBox(height: context.getRSize(10)),
+            Text(
+              '${_trimNum(widget.maxStock)} in stock — quantity can\'t exceed this',
+              style: TextStyle(
+                fontSize: context.getRFontSize(12),
+                fontWeight: FontWeight.w600,
+                color: text.withValues(alpha: 0.5),
+              ),
+            ),
+          ],
 
           SizedBox(height: context.getRSize(28)),
 
@@ -326,48 +424,106 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
           SizedBox(height: context.getRSize(32)),
 
           // Action Buttons
-          Row(
-            children: [
-              Expanded(
-                flex: 2,
-                child: AppButton(
-                  text: 'Remove',
-                  variant: AppButtonVariant.danger,
-                  icon: FontAwesomeIcons.trashCan,
-                  height: context.getRSize(56),
-                  onPressed: () {
-                    ref.read(cartProvider).removeItem(widget.item['name']);
-                    // Return the removed line so the cart can offer Undo.
-                    Navigator.pop(context, widget.item);
-                  },
+          if (widget.isNew)
+            Row(
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: AppButton(
+                    text: 'Cancel',
+                    variant: AppButtonVariant.ghost,
+                    height: context.getRSize(56),
+                    onPressed: () => Navigator.pop(context),
+                  ),
                 ),
-              ),
-              SizedBox(width: context.getRSize(16)),
-              Expanded(
-                flex: 3,
-                child: AppButton(
-                  text: 'Save Changes',
-                  variant: AppButtonVariant.primary,
-                  height: context.getRSize(56),
-                  onPressed: () {
-                    final cart = ref.read(cartProvider);
-                    final qty = double.tryParse(_qtyCtrl.text) ?? 1.0;
-                    cart.updateQty(widget.item['name'], qty);
-                    // Persist the resolved (role-capped) discount alongside qty.
-                    final entered =
-                        double.tryParse(_discountCtrl.text.trim()) ?? 0.0;
-                    cart.setLineDiscount(
-                      widget.item['name'],
-                      kind: _discountKind,
-                      enteredValue: entered,
-                      discountKobo: resolved.discountKobo,
-                    );
-                    Navigator.pop(context);
-                  },
+                SizedBox(width: context.getRSize(16)),
+                Expanded(
+                  flex: 3,
+                  child: AppButton(
+                    text: 'Add to Cart',
+                    variant: AppButtonVariant.primary,
+                    height: context.getRSize(56),
+                    onPressed: () {
+                      final cart = ref.read(cartProvider);
+                      final id = widget.newProduct!.id;
+                      // Never exceed available stock (the POS card count).
+                      final upper = _maxQty < 0.5 ? 0.5 : _maxQty;
+                      final qtyVal =
+                          (double.tryParse(_qtyCtrl.text) ?? 1.0).clamp(
+                        0.5,
+                        upper,
+                      );
+                      // Set the line to this total (matches the cart editor):
+                      // update if the product is already in the cart, else add.
+                      final exists = cart.value.any((i) => i['id'] == id);
+                      final accepted = exists
+                          ? cart.updateQty(widget.item['name'], qtyVal)
+                          : cart.addItem(
+                              widget.newProduct!,
+                              qty: qtyVal,
+                              maxStock: widget.maxStock,
+                              tier: widget.tier,
+                            );
+                      // Apply the resolved (role-capped) discount to the line.
+                      if (resolved.discountKobo > 0) {
+                        final entered =
+                            double.tryParse(_discountCtrl.text.trim()) ?? 0.0;
+                        cart.setLineDiscount(
+                          widget.item['name'],
+                          kind: _discountKind,
+                          enteredValue: entered,
+                          discountKobo: resolved.discountKobo,
+                        );
+                      }
+                      Navigator.pop(context, accepted);
+                    },
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            )
+          else
+            Row(
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: AppButton(
+                    text: 'Remove',
+                    variant: AppButtonVariant.danger,
+                    icon: FontAwesomeIcons.trashCan,
+                    height: context.getRSize(56),
+                    onPressed: () {
+                      ref.read(cartProvider).removeItem(widget.item['name']);
+                      // Return the removed line so the cart can offer Undo.
+                      Navigator.pop(context, widget.item);
+                    },
+                  ),
+                ),
+                SizedBox(width: context.getRSize(16)),
+                Expanded(
+                  flex: 3,
+                  child: AppButton(
+                    text: 'Save Changes',
+                    variant: AppButtonVariant.primary,
+                    height: context.getRSize(56),
+                    onPressed: () {
+                      final cart = ref.read(cartProvider);
+                      final qty = double.tryParse(_qtyCtrl.text) ?? 1.0;
+                      cart.updateQty(widget.item['name'], qty);
+                      // Persist the resolved (role-capped) discount alongside qty.
+                      final entered =
+                          double.tryParse(_discountCtrl.text.trim()) ?? 0.0;
+                      cart.setLineDiscount(
+                        widget.item['name'],
+                        kind: _discountKind,
+                        enteredValue: entered,
+                        discountKobo: resolved.discountKobo,
+                      );
+                      Navigator.pop(context);
+                    },
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
     );

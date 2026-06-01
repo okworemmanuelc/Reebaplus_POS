@@ -18,7 +18,7 @@
 
 import 'dart:io';
 
-import 'package:drift/drift.dart';
+import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -241,6 +241,167 @@ void main() {
       addTearDown(db2.close);
       expect(await permCount(db2), 1,
           reason: 'v22 block must seed customers.set_debt_limit');
+    });
+  });
+
+  group('onUpgrade v24 → v25 (activity_logs generic shape + notif severity)', () {
+    test(
+        'backfills entity_type/entity_id, drops the FK columns, adds severity, '
+        'and re-creates the append-only trigger', () async {
+      final businessId = UuidV7.generate();
+      final orderId = UuidV7.generate();
+      final logWithEntity = UuidV7.generate();
+      final logNoEntity = UuidV7.generate();
+      final notifId = UuidV7.generate();
+
+      final db1 = await openAndInit();
+      await db1.into(db1.businesses).insert(
+            BusinessesCompanion.insert(id: Value(businessId), name: 'Biz'),
+          );
+
+      // --- Revert activity_logs to the v24 shape ---
+      // Drop the v25 append-only triggers first (they reference the new cols).
+      await db1
+          .customStatement('DROP TRIGGER IF EXISTS activity_logs_immutable');
+      await db1
+          .customStatement('DROP TRIGGER IF EXISTS activity_logs_no_delete');
+      for (final c in const [
+        'entity_type',
+        'entity_id',
+        'before_json',
+        'after_json',
+      ]) {
+        await db1.customStatement('ALTER TABLE activity_logs DROP COLUMN $c');
+      }
+      for (final c in const [
+        'order_id',
+        'product_id',
+        'customer_id',
+        'expense_id',
+        'delivery_id',
+        'wallet_txn_id',
+      ]) {
+        await db1.customStatement('ALTER TABLE activity_logs ADD COLUMN $c TEXT');
+      }
+      // Two v24-shape rows: one carrying order_id, one with no entity.
+      await db1.customStatement(
+        'INSERT INTO activity_logs (id, business_id, action, description, '
+        'order_id, created_at, last_updated_at) '
+        "VALUES (?, ?, 'order_action', 'has order', ?, 0, 0)",
+        [logWithEntity, businessId, orderId],
+      );
+      await db1.customStatement(
+        'INSERT INTO activity_logs (id, business_id, action, description, '
+        'created_at, last_updated_at) '
+        "VALUES (?, ?, 'plain', 'no entity', 0, 0)",
+        [logNoEntity, businessId],
+      );
+
+      // --- Revert notifications to the v24 shape (no severity / no CHECK) ---
+      await db1.customStatement('PRAGMA foreign_keys = OFF');
+      await db1.customStatement(
+        'CREATE TABLE notifications_v24 AS SELECT id, business_id, type, '
+        'message, is_read, linked_record_id, recipient_user_id, created_at, '
+        'last_updated_at FROM notifications',
+      );
+      await db1.customStatement('DROP TABLE notifications');
+      await db1.customStatement(
+          'ALTER TABLE notifications_v24 RENAME TO notifications');
+      await db1.customStatement('PRAGMA foreign_keys = ON');
+      await db1.customStatement(
+        'INSERT INTO notifications (id, business_id, type, message, is_read, '
+        'created_at, last_updated_at) '
+        "VALUES (?, ?, 'low_stock', 'msg', 0, 0, 0)",
+        [notifId, businessId],
+      );
+
+      await db1.customStatement('PRAGMA user_version = 24');
+      await db1.close();
+
+      // Re-open → onUpgrade(24 → 25).
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+
+      // activity_logs: column shape migrated.
+      final cols = await columnsOf(db2, 'activity_logs');
+      expect(cols.contains('entity_type'), isTrue);
+      expect(cols.contains('entity_id'), isTrue);
+      expect(cols.contains('before_json'), isTrue);
+      expect(cols.contains('after_json'), isTrue);
+      expect(cols.contains('store_id'), isTrue,
+          reason: 'store_id kept for the §24.2 store filter');
+      expect(cols.contains('order_id'), isFalse);
+      expect(cols.contains('wallet_txn_id'), isFalse);
+
+      // Backfill: the order row → ('order', orderId); the plain row → null.
+      final rows = await db2
+          .customSelect(
+            'SELECT id, entity_type, entity_id FROM activity_logs ORDER BY id',
+          )
+          .get();
+      final byId = {for (final r in rows) r.read<String>('id'): r};
+      expect(byId[logWithEntity]!.read<String?>('entity_type'), 'order');
+      expect(byId[logWithEntity]!.read<String?>('entity_id'), orderId);
+      expect(byId[logNoEntity]!.read<String?>('entity_type'), isNull);
+
+      // notifications.severity present + the pre-existing row defaulted to info.
+      final ncols = await columnsOf(db2, 'notifications');
+      expect(ncols.contains('severity'), isTrue);
+      final n = await db2
+          .customSelect(
+            'SELECT severity FROM notifications WHERE id = ?',
+            variables: [Variable<String>(notifId)],
+          )
+          .getSingle();
+      expect(n.read<String>('severity'), 'info');
+
+      // The append-only trigger was re-created on the new shape: mutating a
+      // non-void column aborts.
+      await expectLater(
+        db2.customStatement(
+          "UPDATE activity_logs SET action = 'tampered' WHERE id = ?",
+          [logNoEntity],
+        ),
+        throwsA(anything),
+      );
+    });
+  });
+
+  group('onUpgrade v26 → v27 (fund_day_closings table)', () {
+    test('creates fund_day_closings with the expected columns', () async {
+      // Build a fresh v27 DB, then revert the v27 delta: drop the new table
+      // (its index + bump trigger drop with it) and step user_version back.
+      final db1 = await openAndInit();
+      await db1.customStatement('PRAGMA foreign_keys = OFF');
+      await db1.customStatement('DROP TABLE IF EXISTS fund_day_closings');
+      await db1.customStatement('PRAGMA foreign_keys = ON');
+      await db1.customStatement('PRAGMA user_version = 26');
+      await db1.close();
+
+      // Re-open → onUpgrade(26 → 27) recreates the table from the v27 block.
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+
+      expect(await tableExists(db2, 'fund_day_closings'), isTrue);
+      final cols = await columnsOf(db2, 'fund_day_closings');
+      expect(
+        cols,
+        containsAll(<String>{
+          'id',
+          'business_id',
+          'fund_day_id',
+          'funds_account_id',
+          'store_id',
+          'business_date',
+          'account_type',
+          'expected_kobo',
+          'counted_kobo',
+          'variance_kobo',
+          'performed_by',
+          'created_at',
+          'last_updated_at',
+        }),
+      );
     });
   });
 }

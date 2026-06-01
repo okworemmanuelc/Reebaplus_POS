@@ -288,7 +288,7 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
                   context.getRSize(20),
                   context.getRSize(12),
                   context.getRSize(20),
-                  context.getRSize(20) + context.bottomInset,
+                  context.getRSize(20) + context.deviceBottomInset,
                 ),
                 child: Row(
                   children: [

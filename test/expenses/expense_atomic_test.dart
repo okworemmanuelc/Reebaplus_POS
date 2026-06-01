@@ -51,7 +51,8 @@ void main() {
       final logRows = await db.activityLogDao.getForExpense(expense.id);
       expect(logRows.length, equals(1));
       expect(logRows.first.action, equals('expense_created'));
-      expect(logRows.first.expenseId, equals(expense.id));
+      expect(logRows.first.entityType, equals('expense'));
+      expect(logRows.first.entityId, equals(expense.id));
 
       // Verify payment transaction
       final paymentRows = await db.select(db.paymentTransactions).get();

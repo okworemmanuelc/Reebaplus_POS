@@ -592,7 +592,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
         filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
         child: Container(
           padding: EdgeInsets.only(
-            bottom: ctx.bottomInset + 20,
+            bottom: ctx.deviceBottomInset + 20,
             top: 10,
             left: 20,
             right: 20,

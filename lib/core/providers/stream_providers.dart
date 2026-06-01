@@ -76,6 +76,13 @@ final allManufacturersProvider =
   return db.inventoryDao.watchAllManufacturers();
 });
 
+// ── Suppliers ────────────────────────────────────────────────────────────────
+/// All (non-deleted) suppliers for the current business. Lets screens keep the
+/// supplier dropdown live so an add / rename on another device reflects (§5).
+final allSuppliersProvider = StreamProvider<List<SupplierData>>((ref) {
+  return ref.watch(databaseProvider).catalogDao.watchAllSupplierDatas();
+});
+
 // ── Store by id ─────────────────────────────────────────────────────────────
 /// Streams a single store row keyed by id. Returns null when the
 /// store hasn't loaded yet or has been (soft-)deleted. Used wherever
@@ -277,6 +284,16 @@ bool hasPermission(WidgetRef ref, String key) {
   return ref.watch(currentUserPermissionsProvider).contains(key);
 }
 
+/// True if the current user may open the Sync Issues troubleshooting screen.
+/// The CEO always can (implicit owner of this infra screen — they may not hold
+/// the `sync.view` grant itself); other roles only if the CEO has granted them
+/// `sync.view` via CEO Settings → Sync Issues access. Used by the screen guard,
+/// the sidebar item, the sync badge, and the sync banner.
+bool canViewSyncIssues(WidgetRef ref) {
+  return ref.watch(currentUserPermissionsProvider).contains('sync.view') ||
+      ref.watch(currentUserRoleProvider)?.slug == 'ceo';
+}
+
 // ── Discount cap (master plan §12.6 / §13.2) ─────────────────────────────────
 
 /// `role_settings` key holding the max discount % a role may apply in the
@@ -389,4 +406,14 @@ final fundDayBalancesProvider = StreamProvider.family<Map<String, int>,
       .watch(databaseProvider)
       .fundTransactionsDao
       .watchStoreBalancesForDay(key.storeId, key.businessDate);
+});
+
+/// Per-account Close Day reconciliation snapshots for (store, businessDate) —
+/// the cash-audit rows the Daily Reconciliation Report (§25.9) renders.
+final fundDayClosingsProvider = StreamProvider.family<List<FundDayClosingData>,
+    ({String storeId, String businessDate})>((ref, key) {
+  return ref
+      .watch(databaseProvider)
+      .fundDayClosingsDao
+      .watchForDay(key.storeId, key.businessDate);
 });

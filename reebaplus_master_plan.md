@@ -327,7 +327,7 @@ Note: there is no permanent delete option, because deleting a staff would break 
 
 ## 10. CEO Settings Page
 
-Where the CEO tunes everything about the business. Menu screen with tappable sections. Each section opens into its own sub-page.
+Where the CEO tunes everything about the business. Menu screen with tappable sections. Each section opens into its own sub-page. A **search box** at the top of the menu filters the sections by name/description so a specific setting is quick to find.
 
 ### 10.1 Sections from day one
 
@@ -336,6 +336,7 @@ Where the CEO tunes everything about the business. Menu screen with tappable sec
 - Security — auto-lock timer with preset chips: 1, 3, 5, 10, 15, 30 minutes (default 5).
 - Roles & Permissions — four role cards (CEO, Manager, Cashier, Stock keeper). Tap to open.
 - Activity Logs access — toggle for which roles can view activity logs (CEO only by default).
+- Sync Issues access — toggle for which roles can open the Sync Issues troubleshooting screen (gated by the `sync.view` permission). The CEO always has access; other roles default off. (Sync Issues is an infra/troubleshooting screen, not otherwise in the role tables.)
 - Appearance — CEO picks the business colour (accent): Amber, Blue, Purple, or Green. Synced, so it applies to every device in the business. Light/dark/system mode is NOT here — that stays a per-device comfort choice, set from "Display" in the side menu. Default colour: amber.
 
 ### 10.2 Roles & Permissions sub-page (per role)
@@ -858,19 +859,28 @@ Uses short Order ID (e.g., ORD-000001), not the long UUID. Shows customer name, 
 
 Wrong items → cancel and create a new order. When an order is in Pending, the sale is already complete and just waiting for confirmation.
 
-### 19.7 Cancel (Pending tab) — Manager and CEO only
+### 19.7 Refund (Pending tab) — Manager and CEO only
 
-- Reason required.
-- Inventory restored.
-- Full refund — choice of wallet (auto) or cash (logged manually).
+> Decision (2026-06-01, user): the Pending order's reversal action is a single
+> **Refund** button — it **replaces** the former Cancel button. There is no
+> separate Cancel. Refund on the Completed tab is removed (§19.8).
 
-### 19.8 Refund (Completed tab) — Manager and CEO only
-
-- Refund button on the receipt modal.
 - Reason required.
 - Inventory restored.
 - Full refund only — choice of wallet (auto) or cash (logged manually).
-- For partial returns: customer places a new order.
+- Reverses the sale's Funds Register credit: a compensating `fund_transactions`
+  'void' debit so the chosen account returns to its pre-sale balance.
+- The order moves to the Cancelled tab (which tracks Refunds Issued, §19.2).
+- Logs the refund (before/after) and fires the §26.4 'sale cancelled/refunded'
+  notification.
+
+### 19.8 Refund on the Completed tab — removed
+
+> Decision (2026-06-01, user): the Completed tab is read-only (receipt view) and
+> has **no** Refund button. All refunds happen from the Pending tab (§19.7),
+> before an order is confirmed. Tradeoff: once an order is confirmed → Completed
+> it can't be refunded in-app; a post-completion return means the customer places
+> a new order. (Was: "Refund button on the receipt modal" — superseded.)
 
 ---
 
@@ -1198,7 +1208,7 @@ CSV/PDF export with selectable time frame. Deferred to Phase 3.
 ### 25.2 Reports list
 
 - Sales Report — revenue, volume, top items, top staff, by period and store.
-- Daily Reconciliation Report — auto-generated when stock take is saved. Stock audit + cash audit + sales summary + best staff + top item.
+- Daily Reconciliation Report — auto-generated when the stock take is saved. The day's roll-up: total SKUs/items sold, the Close Day cash audit (expected vs actual per account, **fund shortages / misappropriations flagged**), empty crates details (Bar/Beer Distributor only), outstanding customer debts, and expenses recorded that day — plus the stock audit, sales summary, best staff, and top item. Opens via the period drill-down cards (§25.9). Draws its debt/expense figures from the existing Customer Ledger / Expense Tracker subsystems (a summary, not a duplicate). Depends on Close Day + Daily Stock Count, so it is built after both (Ring 3).
 - Expense Tracker — by category, trend, vs budget.
 - Stock Audit — stock levels, low stock, out of stock, stock value, movement summary.
 - Customer Ledger — wallet balances, top debtors, top credit balances.
@@ -1245,6 +1255,19 @@ CSV from day one. PDF in Phase 3.
 ### 25.8 Empty state
 
 "No data for this period."
+
+### 25.9 Daily Reconciliation drill-down (period cards)
+
+The Daily Reconciliation Report does not open straight to a single detail screen; it opens to a list of **tappable period cards**, driven by the global period filter (§25.5):
+
+- Period = **Day** → one card per calendar day. Tapping opens that day's reconciliation.
+- Period = **Week / Month / Year** → one card per week / month / year. Tapping opens the reconciliation aggregated over that span (sums SKUs/items sold, expenses, and debts; lists each day's Close Day cash audit and any shortage / misappropriation flags inside the span).
+- Each card shows a headline (e.g. items sold, net cash variance) and a **mismatch indicator** when any day in the span had a Close Day shortage or unaccounted funds.
+- Role visibility follows §25.3 (Cashier & Stock keeper never see this report). CSV export per §25.6 / §25.7.
+
+This per-period drill-down is specific to the Daily Reconciliation Report; the other reports keep the §25.6 single detail-screen + period-filter model.
+
+> Confirmed Phase 1 (2026-06-01) — the Daily Reconciliation Report's content roll-up (SKUs sold, closing-day cash audit, empty crates, debts, expenses, fund-shortage flags) and the period-card drill-down were added on user request. The Sales Report card is **kept** (a distinct report). Build order unchanged: this stays a Ring 3 item, after Close Day (Ring 0/1) and Daily Stock Count (Ring 2) produce its data.
 
 ---
 

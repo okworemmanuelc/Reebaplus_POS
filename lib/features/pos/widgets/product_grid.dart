@@ -13,7 +13,7 @@ import 'package:reebaplus_pos/core/utils/product_name.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/pos/controllers/pos_controller.dart';
-import 'package:reebaplus_pos/features/pos/widgets/product_preview_modal.dart';
+import 'package:reebaplus_pos/features/pos/widgets/edit_item_modal.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 
 class ProductGrid extends StatelessWidget {
@@ -118,35 +118,36 @@ class _ProductCardState extends ConsumerState<_ProductCard>
     with TickerProviderStateMixin {
   AnimationController? _flingCtrl;
   OverlayEntry? _overlayEntry;
-  OverlayEntry? _previewEntry;
 
   @override
   void dispose() {
     _flingCtrl?.dispose();
     _overlayEntry?.remove();
     _overlayEntry = null;
-    _previewEntry?.remove();
-    _previewEntry = null;
     super.dispose();
   }
 
-  void _showPreview() {
-    if (_previewEntry != null) return;
-    _previewEntry = OverlayEntry(
-      builder: (_) => ProductPreviewModal(
-        product: widget.item.product,
-        totalStock: widget.item.totalStock,
-        cardCol: widget.cardCol,
-        textCol: widget.textCol,
-        subtextCol: widget.subtextCol,
-      ),
+  /// Long-press opens the qty + discount sheet (the same editor used for cart
+  /// lines), letting the user add the product with a chosen quantity/discount.
+  Future<void> _openAddModal() async {
+    final accepted = await EditItemModal.showForProduct(
+      context,
+      product: widget.item.product,
+      maxStock: widget.item.totalStock,
+      tier: widget.controller.selectedGroup,
     );
-    Overlay.of(context).insert(_previewEntry!);
-  }
-
-  void _hidePreview() {
-    _previewEntry?.remove();
-    _previewEntry = null;
+    if (!mounted || accepted == null) return;
+    if (accepted) {
+      AppNotification.showSuccess(
+        context,
+        '${widget.item.product.name} added to cart',
+      );
+    } else {
+      AppNotification.showError(
+        context,
+        'Stock limit reached for ${widget.item.product.name}',
+      );
+    }
   }
 
   void _handleTap() {
@@ -278,9 +279,7 @@ class _ProductCardState extends ConsumerState<_ProductCard>
             Opacity(
               opacity: isOutOfStock ? 0.45 : 1.0,
               child: GestureDetector(
-                onLongPressStart: isOutOfStock ? null : (_) => _showPreview(),
-                onLongPressEnd: isOutOfStock ? null : (_) => _hidePreview(),
-                onLongPressCancel: isOutOfStock ? null : () => _hidePreview(),
+                onLongPress: isOutOfStock ? null : _openAddModal,
                 child: InkWell(
                   onTap: isOutOfStock
                       ? null

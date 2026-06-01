@@ -244,9 +244,7 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
                           context.getRSize(20),
                           context.getRSize(16),
                           context.getRSize(20),
-                          context.getRSize(
-                            context.bottomInset + 16,
-                          ),
+                          context.deviceBottomInset + context.getRSize(16),
                         ),
                       child: AppButton(
                         text: 'Save Customer',

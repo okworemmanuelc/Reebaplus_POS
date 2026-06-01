@@ -161,7 +161,7 @@ class _CrateReturnApprovalScreenState
                 16,
                 16,
                 16,
-                16 + context.bottomInset,
+                16 + context.deviceBottomInset,
               ),
               itemCount: sortedKeys.length,
               itemBuilder: (context, index) {

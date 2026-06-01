@@ -74,7 +74,7 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
         child: GridView.count(
           crossAxisCount: 2,
           padding: EdgeInsets.all(context.spacingM).copyWith(
-            bottom: context.spacingM + context.bottomInset,
+            bottom: context.spacingM + context.deviceBottomInset,
           ),
           mainAxisSpacing: context.spacingM,
           crossAxisSpacing: context.spacingM,

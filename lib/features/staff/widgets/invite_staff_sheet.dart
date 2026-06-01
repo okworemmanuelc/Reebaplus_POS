@@ -195,7 +195,7 @@ class _InviteStaffSheetState extends ConsumerState<InviteStaffSheet> {
           context.getRSize(20),
           context.getRSize(16),
           context.getRSize(20),
-          context.getRSize(20) + MediaQuery.of(context).padding.bottom,
+          context.getRSize(20) + context.deviceBottomInset,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,

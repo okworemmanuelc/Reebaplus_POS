@@ -473,7 +473,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
     final border = Theme.of(context).dividerColor;
 
     return Padding(
-      padding: EdgeInsets.only(bottom: context.bottomInset),
+      padding: EdgeInsets.only(bottom: context.deviceBottomInset),
       child: Container(
         constraints: BoxConstraints(
           maxHeight: MediaQuery.of(context).size.height * 0.92,

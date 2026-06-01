@@ -37,6 +37,10 @@ Do not invent new roles. Phase 2 will add custom roles — until then, only thes
 
 ---
 
+## 0. Echo the Request First
+
+Whenever the user types a prompt, first explain it back to them briefly — one or two sentences — so they can see you've understood what they're asking before you act on it. Then proceed.
+
 ## 1. Think Before Coding
 
 Don't assume. Don't hide confusion. Surface tradeoffs.
@@ -154,6 +158,33 @@ Adding a package has a cost beyond installing it: bundle size, security surface,
 5. Every money movement for any customer affects the relevant Funds Register account (Cash Till, POS machine, or Bank account).
 6. Every loading state uses fade-in transitions. No rotating spinners.
 7. Every synced-table write goes through a DAO. See section 5.
+8. Every screen respects the bottom system-navigation inset. The app runs edge-to-edge (Android 15 / `targetSdk 35`), so any widget pinned to the bottom that ignores the inset paints **under** the nav bar or the gesture pill. See "Safe-area / system-navigation insets" below. This is permanent — every new screen follows it from day one, the same way permission guards do.
+
+### Safe-area / system-navigation insets
+
+This convention does not change. New screens, modals, and bottom sheets must follow it.
+
+**Why:** The app is edge-to-edge on Android 15 (`targetSdk 35`); the OS reserves no space for the bottom system nav. Bottom-anchored content that ignores the inset is drawn beneath the 3-button nav bar, the gesture pill, or the iPhone home indicator.
+
+**The trap that makes the obvious fix fail (proven on-device — do not relearn it):** A `Scaffold` strips `padding.bottom` from its **entire body** whenever it has a `bottomNavigationBar` — even a zero-height one (`scaffold.dart`: `removeBottomPadding: widget.bottomNavigationBar != null`, plus `removeViewInsets`). `MainLayout`'s app nav bar is **never null** — when hidden it renders `SizedBox.shrink()`. So **everything under `MainLayout`** (every screen, pushed route, and modal on a tab Navigator) sees `MediaQuery.padding.bottom == 0` **and** `viewInsets.bottom == 0`. That means all of these silently read **0** there: `MediaQuery.padding.bottom`, `context.bottomInset`, and `SafeArea(top: false)` / `SafeArea(bottom: true)`. Content paints under the nav bar even when "fixed" with them.
+
+**The reliable inset:** **`context.deviceBottomInset`** (in [responsive.dart](lib/core/utils/responsive.dart)). It recomputes from the raw `FlutterView` (`MediaQueryData.fromView(View.of(context))`), which **no `Scaffold` can zero out**, and already includes the keyboard inset. Correct on 3-button nav (large), gesture nav (thin pill), and iOS.
+
+**The decision rule — ask: "when this widget is on screen, does it reach the PHYSICAL screen bottom?"**
+
+- **YES → use `context.deviceBottomInset`.** Covers: anything inside `showModalBottomSheet` / `showDialog` / `DraggableScrollableSheet` (modals always hide the bar); pushed detail screens (footers, scrollable bottoms); and drawer-accessed tab roots where the bottom nav bar is hidden — Customers, Payments, Expenses, Stores, Deliveries, Activity Log, Funds Register.
+- **NO → leave it (0 is correct).** This is **only** the body of the five bottom-nav tab roots rendered above the visible bar — **Home, POS, Inventory, Orders (list), Cart**. The bar already insets them; adding `deviceBottomInset` makes a **gap above the bar**. Their existing `context.bottomInset` reads 0 there, which is correct — do **not** convert it. (But modals opened *from* these files still use `deviceBottomInset`.)
+- **Auth / onboarding screens** (`lib/features/auth/**`) run **before** `MainLayout`, so their `padding.bottom` / `context.bottomInset` already works — leave them.
+
+**`showModalBottomSheet` — the `useSafeArea` trap (also a real bug):** `useSafeArea: true` wraps the sheet in `SafeArea(bottom: false)` — it protects top/left/right only and **does NOT inset the bottom**. Combined with the trap above (even a nested `SafeArea(bottom)` reads 0 under `MainLayout`), the bottom is **always** your job — put `context.deviceBottomInset` on the footer padding.
+
+**Never:**
+
+- Use `MediaQuery.padding.bottom`, `context.bottomInset`, or a bottom `SafeArea` for bottom-anchored content under `MainLayout` — they read **0**. Use `context.deviceBottomInset`.
+- Add `deviceBottomInset` to the **body** of one of the five bottom-nav tab roots (Home / POS / Inventory / Orders / Cart) — it creates a gap above the bar. (Their modals are fine.)
+- Assume `showModalBottomSheet(useSafeArea: true)` insets the bottom — it doesn't (`SafeArea(bottom: false)`).
+- Double-pad: don't add an inset to content already in a Scaffold's `bottomNavigationBar` / `persistentFooterButtons` / `floatingActionButton` / `bottomSheet` slot, and don't stack `deviceBottomInset` with a separate `viewInsets.bottom` on the same edge (`deviceBottomInset` already includes the keyboard).
+- Run the raw inset through the size scaler (`getRSize(deviceBottomInset + …)`). Apply the raw inset and scale only the fixed gap: `context.deviceBottomInset + context.getRSize(16)`.
 
 ---
 

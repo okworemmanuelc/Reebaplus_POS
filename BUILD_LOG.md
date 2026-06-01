@@ -106,6 +106,560 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 
 ---
 
+## Session 50 — 2026-06-01 — Ring 0 #5: Orders refund — Funds Register reversal (data layer) + §19 plan change
+
+**Built today (data layer + plan; Orders UI is the next step):**
+- **Funds Register reversal on cancel/refund (Ring 0 #5, §19.7).** `markCancelled`
+  already restored inventory, voided the payment, and refunded the wallet — but
+  never took the money back out of the Funds Register account the sale credited.
+  Added a compensating **`fund_transactions` 'void' debit** per original 'sale'
+  credit (same account + business_date; the ledger is append-only, so we append
+  rather than mutate). The account's expected balance returns to pre-sale, so
+  Close Day (§23.6) no longer reports a phantom surplus. v1 path only — noted
+  that the v2 `pos_cancel_order` RPC must mint this server-side if that flag is
+  ever enabled (mirror of createOrder's R2).
+- `OrdersDao` gained `FundTransactions` in its accessor (for the void append).
+
+**Plan change (user, 2026-06-01) — §19 Orders:**
+- §19.7: the Pending order's reversal action is a single **Refund** button that
+  **replaces** the former Cancel. Reason required; inventory restored; full
+  refund (wallet auto / cash logged); reverses the funds credit; order → Cancelled.
+- §19.8: **Refund removed from the Completed tab** — Completed is read-only; all
+  refunds happen from Pending before confirm. Post-completion return = new order.
+- Rider (per user): Phase 1 = name shown on the receipt only; logistics Phase 3
+  (already what §19.5 said — no change needed).
+
+**Findings while scoping the Orders screen (for the UI step):**
+- The **Confirm flow + Empty Crates modal already exist** — Pending's
+  "mark delivered" opens `CrateReturnModal` then `markAsCompleted` (§19.5 built).
+- The current **Refund button on the Cancelled tab is a no-op stub**
+  (`_processRefund` just shows a toast — no DAO write). The *real* reversal is
+  `markCancelled`, fired by the Pending **Cancel** button.
+- **`addOrder` creates orders as `'completed'`**, so the Pending tab is currently
+  never populated — diverges from §14.4/§19.5 ("order lands in Pending"). The
+  checkout→Pending lifecycle fix is the prerequisite for the Pending-tab UI to
+  matter. `markCompleted` already owns `completedAt`, so the fix is: addOrder →
+  `'pending'` + no completedAt; Confirm sets it.
+
+**Open (next focused step — Orders UI + lifecycle):** swap Pending's Cancel
+button for a Refund button (reason + wallet/cash, calling the now-complete
+`markCancelled`; fix the raw-UUID/empty-staffId/hardcoded-reason bugs the PIVOT
+flagged); delete the no-op Cancelled-tab refund stub; flip `addOrder` to create
+`'pending'`. Flagged for review before the lifecycle change lands.
+
+**Tested:** analyze clean (lib/ clean; 18 pre-existing test-helper infos).
+`flutter test`: **266 passed, 58 skipped, 0 failed** (+3 = the new cancel/refund
+funds-reversal tests in order_service_money_math_test.dart).
+
+**NOT committed** per the standing instruction.
+
+---
+
+## Session 49 — 2026-06-01 — Ring 0 #4: Funds Register Close Day + reconciliation
+
+**Built today:**
+- **Close Day (§23.6) — the day-close + per-account cash reconciliation.** When a
+  Manager/CEO closes a day, for each active account the app records a
+  reconciliation snapshot: **expected** (the account's running balance =
+  SUM(signed_amount_kobo) at close), **counted** (what they entered — cash
+  counted for the Cash Till, amount withdrawn for POS/bank), and **variance**
+  (counted − expected; non-zero = shortage/surplus). The day header flips to
+  `status='closed'` with `closedBy`/`closedAt`. All in one transaction.
+- **New synced table `fund_day_closings`** (schema **v27**) holds those
+  per-account snapshots — the cash-audit half the Daily Reconciliation Report
+  (§25.9, Ring 3) will read. One row per (day, account), `UNIQUE(fund_day_id,
+  funds_account_id)`. Wired into `_syncedTenantTables`, `_pullOrder`, a hot-path
+  index, the bump trigger, and a `fundDayClosingsProvider` stream.
+- **New-day-blocked guard (§23.8).** `openDay` now throws if a previous day for
+  the store is still unclosed (`getUnclosedDayBefore`) — the Open-Day twin of
+  the existing already-open guard. A closed prior day unblocks the next.
+- **Mismatch notification (§26.4).** When any account's variance is non-zero,
+  closeDay fires a `funds_mismatch` alert (severity `alert`) to the CEO (new
+  `UserBusinessesDao.getCeoUserId`); falls back to the closer if no CEO resolves
+  locally, so the alert is never broadcast to roles that can't see Funds.
+- **Activity log.** closeDay writes a `funds.close_day` log (the permission was
+  previously seeded-but-dead) — "Closed the day", or "… — funds mismatch
+  flagged" when off.
+
+**Files touched:**
+- lib/core/database/app_database.dart (new `FundDayClosings` table; @DriftDatabase
+  table + dao registration; `_syncedTenantTables`; hot-path index; schemaVersion
+  26→27; v27 onUpgrade block, idempotent like v21)
+- lib/core/database/daos.dart (`FundDaysDao.closeDay` + `getUnclosedDayBefore` +
+  openDay guard; new `FundDayClosingsDao`; `UserBusinessesDao.getCeoUserId`)
+- lib/core/providers/stream_providers.dart (`fundDayClosingsProvider`)
+- lib/core/services/supabase_sync_service.dart (`_pullOrder` += fund_day_closings)
+- app_database.g.dart / daos.g.dart (drift codegen)
+- supabase/migrations/0068_fund_day_closings.sql (NEW — see below)
+- test/funds/funds_register_dao_test.dart (+8: closeDay math, shortage→mismatch
+  notification, sync enqueue, the §23.8 block/unblock guards, error guards)
+- test/database/migration_upgrade_test.dart (+1: v26→v27 table creation)
+
+**Database changes:**
+- Local: schema **v27** adds `fund_day_closings` (additive; no rebuild of
+  existing tables). `FundDays` comment corrected — it IS mutable on close in
+  Phase 1 now (not Phase 2).
+- Cloud: **0068_fund_day_closings.sql written but NOT pushed** — additive table +
+  RLS + realtime + appends the table to `pos_pull_snapshot`. **DEPLOY ORDER: it
+  must be pushed before the v27 app reaches a device**, or the fund_day_closings
+  upserts would 42P01 cloud-side (the same class as the v25/0066 issue). Left for
+  review.
+
+**No UI yet.** This is the data layer + reconciliation math + guards (the Ring
+0/1 "funds-debit/close primitive"). The Close Day *screen* and the Daily
+Reconciliation Report (§25.9) are later items.
+
+**Tested:** `flutter analyze` clean (18 pre-existing `avoid_print` infos in a test
+helper). `flutter test`: **263 passed, 58 skipped, 0 failed** (+8 = the new Close
+Day + migration tests).
+
+**NOT committed** per the standing instruction — left in the working tree for
+review. Cloud 0068 is NOT pushed (deploy-order note above).
+
+---
+
+## Session 48 — 2026-06-01 — Ring 0 #3: money-math regression net + sync.view real-time fix
+
+**Built today:**
+- **Fixed: the Sync Issues access toggle didn't sync in real time across devices.**
+  Granting `sync.view` to a non-CEO role worked locally but never reached other
+  devices. Root cause was cloud-side, not UI: `role_permissions.permission_key`
+  has a FK to `permissions(key)` (migration 0042), and `sync.view` was in the
+  LOCAL catalogue (v26) but NOT the cloud — migration 0067 had been left unpushed
+  as "optional." So the grant's enqueued upsert was rejected on the FK and sat
+  erroring in the queue. Confirmed by diffing the local default permission keys
+  against the live cloud table: `sync.view` was the ONLY local-only key. Fix:
+  **pushed 0067** (additive, idempotent); verified present. The errored grant now
+  lands on the next queue retry. No Dart change — the local catalogue, grant/
+  revoke enqueue, and the reactive provider chain were all already correct.
+- **Money-math consistency regression net (Ring 0 #3).** `OrderService.addOrder`
+  — the production cart entry point — had zero test coverage. Added
+  service-layer tests that drive `addOrder` and assert the real persisted rows
+  (orders, payment_transactions, wallet_transactions, fund_transactions):
+  - **cash / mixed / credit / wallet** classification via `_resolvePaymentType`.
+  - **partial payment → wallet debit == total − paid** (the `_resolveWalletDebit`
+    residual), with the cash portion crediting the Funds account.
+  - **fully-paid registered cash sale writes ZERO wallet rows** (net-zero).
+  - credit & wallet sales credit NO Funds account and write NO payment row.
+  - money-invariant guards: a paid sale with no Funds account / no businessDate
+    throws; a wallet/credit sale with no customer throws (hard rules #5 / #14).
+  - **funds expected balance:** open day (opening credit) + a sale credit →
+    `getBalanceFor == 700,000 == SUM(signed_amount_kobo)` over the account/day.
+
+**Files touched:**
+- test/orders/order_service_money_math_test.dart (new — 8 tests, all green)
+- test/checkout_page_test.dart (the 2 render smoke-tests stay skipped — see below)
+- supabase/migrations/0067_sync_view_permission.sql (comment corrected: REQUIRED,
+  not optional, because of the FK — and pushed)
+- BUILD_LOG.md, Session 44 notes corrected (0067 is now pushed)
+
+**Database changes:**
+- Cloud only: pushed 0067 → `public.permissions` now has the `sync.view` row.
+  No local schema change (still v26).
+
+**Tested:**
+- `flutter analyze` clean (18 pre-existing `avoid_print` infos in a test report
+  helper — untouched).
+- `flutter test`: **255 passed, 58 skipped, 0 failed** — the +8 over the prior
+  baseline are exactly the new money-math tests. (The "2 skip" noted in an
+  earlier summary undercounted; the whole-suite skip total is and was 58.)
+
+**Decision — the 2 `checkout_page_test` widget tests stay skipped.** PIVOT line
+554 cited them as evidence of the OrderService coverage gap. I attempted to
+un-skip them (disposed the ProviderContainer before `db.close` to cancel the
+`walletBalancesKoboProvider` stream), but the current — much larger — CheckoutPage
+still deadlocks in a bare harness: other DB-backed streams need full data
+scaffolding (seeded business/store/funds + a populated cartProvider) to settle.
+These are render smoke-tests with zero money-math value, so resurrecting them is
+a widget-harness chore, not part of the regression net. The coverage they stood
+in for now lives in order_service_money_math_test.dart. Re-skipped with an honest
+updated comment (the old "unblocks after PR 5" note was stale).
+
+**Still open:** Ring 0 #4 — Funds Register Close Day + expected-vs-actual
+reconciliation (the next Ring 0 item; needs closing-amount columns + a `closeDay`
+DAO + the "new day blocked until previous Close Day" guard).
+
+**Plan update (mid-session, no code):** at the user's request, expanded master
+plan §25 — the **Daily Reconciliation Report** now spells out the daily roll-up
+(SKUs sold, Close Day cash audit with fund-shortage/misappropriation flags,
+empty crates, debts, expenses) and a new **§25.9 period-card drill-down** (tap a
+Day/Week/Month/Year card to open that span's reconciliation). The **Sales Report
+card is kept** (the user initially suggested removing it — flagged that it's a
+distinct planned report; they agreed to keep). Build order unchanged: this stays
+a **Ring 3** item, after Close Day (in progress) and Daily Stock Count produce
+its data — so no feature code was written, only the plan was updated.
+
+**NOT committed** per the standing instruction — left in the working tree for
+review. Cloud-side, 0067 IS pushed (it fixed the live real-time bug).
+
+---
+
+## Session 47 — 2026-06-01 — Empty Crates tab hidden by a business-type casing mismatch
+
+**Built today:**
+- Fixed a bug where the Empty Crates tab (and the "Total Crates" summary card) never showed for a Beer-distributor business — first noticed because a Manager couldn't see it.
+- Real root cause (found with an on-device diagnostic, NOT roles or sync): the business's stored type was `Beer Distributor` (capital D), but the tab's gate compared exactly against `Beer distributor` (lowercase d, the canonical value in `business_types.dart`). Capital-D ≠ lowercase-d, so the gate was false for everyone in that business, regardless of role. The value came from an older onboarding build — current builds store the canonical lowercase, so no live code path still produces it; it's legacy data.
+- Fix: added one shared helper `isCrateBusiness(String? type)` in `business_types.dart` that compares case-insensitively (trimmed), and routed both crate gates through it (Inventory Empty Crates tab + Customer detail Crates tab). Resilient to the legacy casing without a risky data migration of synced `businesses` rows.
+- Non-Bar/Beer businesses still never see crate features (§13 preserved) — the helper only matches Bar / Beer distributor.
+- Note: an earlier guess this session (a membership-aware business-id provider for a stale-`businessId`-pointer theory) was REVERTED — the diagnostic showed the pointer resolved correctly, so that change was unrelated and not kept.
+
+**Files touched:**
+- lib/core/data/business_types.dart (new `isCrateBusiness` helper)
+- lib/features/inventory/screens/inventory_screen.dart (gate uses the helper)
+- lib/features/customers/screens/customer_detail_screen.dart (gate uses the helper)
+
+**Database changes:**
+- None. (The drifted `Beer Distributor` row was left as-is; the gate is now casing-tolerant.)
+
+**Tested:**
+- `flutter analyze` on all changed files — no issues.
+- On-device (user, 2026-06-01): Empty Crates tab now appears in the Beer-distributor business. Confirmed working.
+
+**Known issues / left open:**
+- Latent data-casing issue: that business's stored type is `Beer Distributor`, which is NOT in `kBusinessTypes`, so CEO Settings > Business Info may not pre-select it correctly. Not fixed here (would need a normalisation of the synced row). Flag for a later session if it bites.
+
+**Next session should:**
+- Confirm the fix on-device, then continue Funds Register Phase 1 work.
+
+---
+
+## Session 46 — 2026-06-01 — System-nav overflow sweep (edge-to-edge safe areas)
+
+**Built today:**
+- Fixed widgets that were painting *underneath* the phone's bottom system-navigation
+  area on real devices. The app runs edge-to-edge on Android 15 (targetSdk 35), which
+  no longer reserves space for the nav bar, so anything pinned to the bottom that didn't
+  account for the safe-area inset slid under it.
+- The fix keys off the device's actual bottom inset (`MediaQuery.padding.bottom`, via
+  `SafeArea` or the project's `context.bottomInset` helper), so it self-adjusts: a big
+  gap on phones with the 3-button nav bar, a thin gap on phones using swipe-to-home
+  gestures, and the home-indicator height on iPhone. One fix, both nav styles.
+- Ran as a multi-agent audit across every screen cluster (POS, inventory, orders,
+  customers/payments/expenses/funds, dashboard, stores/staff, auth, settings, sync,
+  shared dialogs). 4 clusters were already inset-safe (root layout, dashboard, auth,
+  sync/diagnostics); 7 had real overflows.
+- Two pre-existing layout bugs were caught and fixed along the way: the Receive Delivery
+  sheet was padding its bottom bar twice (a `SafeArea` on top of an inset that already
+  included it), and the Add Customer sheet was running the raw inset through the
+  font/size scaler so it stretched or shrank depending on screen width.
+
+**Follow-up — modal sweep (same day):**
+- Re-audited every modal / dialog / bottom sheet app-wide (65 entry points across 27
+  files), orders screen first. Fixed the orders-screen receipt sheet and the
+  customer-detail receipt sheet (footers sat under the nav), and aligned two shared
+  modals (notifications, user tips) to the project inset idiom.
+- IMPORTANT LESSON (now permanent in CLAUDE.md): `showModalBottomSheet(useSafeArea: true)`
+  wraps the sheet in `SafeArea(bottom: false)` — it protects top/left/right but does NOT
+  inset the bottom. A sweep agent wrongly assumed it covered the bottom and deleted the
+  nested `SafeArea(top: false)` from the two receipt sheets, which would have RE-broken
+  them. Caught by reading the Flutter source (bottom_sheet.dart line 1121), then fixed
+  both by adding `context.bottomInset` to the footer padding instead. flutter analyze clean.
+
+**Follow-up 2 — REAL root cause + full sweep (same day, user-confirmed on-device):**
+- The receipt buttons were STILL under the system nav on a physical device even after
+  the `context.bottomInset` fix. Root cause (proven via Flutter source + screenshot): a
+  `Scaffold` zeroes `padding.bottom` for its WHOLE body whenever it has a
+  `bottomNavigationBar` — even a zero-height one (`scaffold.dart`:
+  `removeBottomPadding: widget.bottomNavigationBar != null`). `MainLayout`'s app nav bar
+  is never null (renders `SizedBox.shrink()` when hidden), so EVERYTHING under MainLayout
+  reads `MediaQuery.padding.bottom == 0`. That means `context.bottomInset`,
+  `MediaQuery.padding.bottom`, and bottom `SafeArea` ALL silently read 0 there — every
+  earlier "fix" was a no-op on-device.
+- Fix: added `context.deviceBottomInset` (responsive.dart) — reads the inset from the raw
+  `FlutterView` (`MediaQueryData.fromView(View.of(context))`), which no Scaffold can zero.
+  User confirmed the orders receipt now clears the nav on a physical device.
+- Swept all screens & modals (workflow, 8 clusters, ~62 fixes) to `deviceBottomInset` for
+  any content that reaches the physical screen bottom (modals, pushed detail screens,
+  drawer-accessed tabs). LEFT ALONE: the five bottom-nav tab-root BODIES (Home, POS,
+  Inventory, Orders list, Cart) — the visible bar already insets them, so converting them
+  would add a gap above the bar; and auth screens (they run before MainLayout). Caught two
+  missed screens (sync_issues, profile). flutter analyze: No issues found.
+- CLAUDE.md "Safe-area" section rewritten with the corrected root cause + `deviceBottomInset`
+  decision rule.
+
+**Files touched (layout-only, 19 + 4 modal):**
+- lib/features/pos/screens/cart_screen.dart (saved-carts list)
+- lib/features/inventory/screens/product_detail_screen.dart (Update Stock sheet button)
+- lib/features/inventory/screens/stock_count_screen.dart (history sheets)
+- lib/features/deliveries/widgets/receive_delivery_sheet.dart (removed double-padding)
+- lib/features/customers/screens/customer_detail_screen.dart (Add Funds / Set Limit sheets)
+- lib/features/customers/widgets/add_customer_sheet.dart (fixed scaled-inset bug)
+- lib/features/staff/screens/staff_detail_screen.dart (action buttons in list)
+- lib/shared/widgets/activity_log_screen.dart, lib/shared/widgets/notifications_modal.dart
+- lib/core/settings/*.dart (9 list screens) + lib/core/theme/theme_settings_screen.dart
+
+**Database changes:**
+- None.
+
+**Master plan sections covered:**
+- None — cross-cutting UI polish, no feature scope change.
+
+**Plan updates made during session:**
+- None.
+
+**Tested:**
+- `flutter analyze lib` → No issues found. Diffs spot-checked by hand and a regression
+  pass confirmed no double-padding, no top/status-bar changes, no logic changes.
+- Not yet confirmed on a physical device by the user (the actual symptom is device-only).
+
+**Known issues / left open:**
+- On-device confirmation pending — verify on a 3-button-nav phone AND a gesture-nav phone.
+- The working tree still carries Session 45's POS long-press feature (edit_item_modal,
+  product_grid, product_preview_modal deletion) plus DB/sync/permission work from
+  Sessions 43–45. This layout pass did NOT touch those; commit the inset fix separately
+  if you want a clean, layout-only commit.
+
+**Next session should:**
+- After on-device confirmation, decide how to split/commit the layout fix vs. the
+  pending Session 45 POS feature work.
+
+---
+
+## Session 45 — 2026-06-01 — POS long-press: persistent add-to-cart sheet + faster grid load
+
+**Built today:**
+- **Removed the 2-second loading delay on the POS screen.** The product grid had a
+  hard-coded "minimum loading" timer that held the screen in its loading state for a
+  full 2 seconds even after products were ready. Products now appear the moment the
+  data arrives (the gentle 250ms fade-in stays).
+- **Reworked the long-press modal on a product in POS.** Before, holding a product
+  showed a read-only info card that vanished the instant you lifted your finger
+  ("Release to close"). Now holding a product opens the same quantity + discount sheet
+  used when you tap a line in the cart: it stays open until you confirm or cancel, has
+  the quantity box with −/+ (and ±0.5 for products sold in fractions), the %/₦ discount
+  field (role-capped, same as the cart), and "Add to Cart" / "Cancel" buttons. Adding
+  is fully wired — it sets the cart to the chosen quantity, applies the discount, and
+  shows the usual added / stock-limit message.
+- **Capped the quantity at available stock.** You can't put more of a product in the
+  cart than the count shown on its POS card. The quantity field represents the new
+  total for that product (pre-filled with whatever's already in the cart), the −/+ and
+  ±0.5 buttons stop at the stock count, and a typed-in over-limit number snaps back
+  down. A caption shows "X in stock — quantity can't exceed this." The same live cap
+  was applied to the cart's tap-to-edit sheet for consistency (it previously only
+  clamped silently on Save).
+
+**Files touched:**
+- lib/features/pos/controllers/pos_controller.dart
+- lib/features/pos/widgets/edit_item_modal.dart
+- lib/features/pos/widgets/product_grid.dart
+- lib/features/pos/widgets/product_preview_modal.dart (deleted — replaced by the edit sheet)
+
+**Database changes:**
+- None.
+
+**Master plan sections covered:**
+- §12 (POS), §13.2 (per-line discount + role cap) — reused the existing cart-edit modal.
+
+**Plan updates made during session:**
+- None.
+
+**Tested:**
+- `flutter analyze` clean on the touched files and the wider POS feature. On-device
+  pass still pending.
+
+**Known issues / left open:**
+- Long-press → Add to Cart *sets* the product's cart quantity (it doesn't add on top of
+  what's there) — same behaviour as the cart's tap-to-edit sheet. Worth a glance
+  on-device to confirm it reads naturally from the grid.
+
+**Next session should:**
+- Verify the new long-press sheet on the emulator (qty, ±0.5 visibility, discount cap,
+  the stock cap / snap-back, and the "X in stock" caption), then move on.
+
+---
+
+## Session 44 — 2026-06-01 — Sync-error fix (deploy 0066) + Sync Issues access toggle + CEO Settings search
+
+**1. Fixed the live sync error (PGRST204 "could not find after_json").** The v25
+app was pushing activity_logs rows with the new generic columns, but cloud
+migration **0066 had not been pushed** (it was left for review). Pushed it.
+While applying, hit a second issue: the cloud `enforce_append_only` trigger on
+activity_logs still listed **`warehouse_id`** in its immutable-column args
+(renamed to store_id in 0045, never updated), so the backfill UPDATE raised
+42703. Updated 0066 to drop that trigger before the backfill and re-create it
+with the corrected new-shape column list (store_id + the generic columns) —
+which also repairs that **latent pre-existing bug** (any future activity_logs
+void/update would have hit it). Re-pushed; verified cloud now has
+entity_type/entity_id/before_json/after_json + notifications.severity, and the
+trigger no longer references warehouse_id. The failing queue items now succeed.
+
+**2. Sync Issues access toggle (CEO Settings).** Previously Sync Issues was
+gated CEO-only on `settings.manage` with no way to grant it to others. Added a
+new `sync.view` permission (catalogue + schema **v26** local re-seed migration;
+cloud **0067** adds the key to the cloud catalogue — **pushed**, see fix #4). New
+`canViewSyncIssues(ref)` helper = `sync.view` grant **OR** current user is CEO
+(CEO always has access without needing the grant; avoids a migration-time
+grant + sync-leak). Re-gated all four entry points (screen guard, sidebar item,
+sync badge, banner) to it. New **Sync Issues access** toggle screen (mirrors
+Activity Logs access — CEO locked on, other roles toggle the synced sync.view
+grant) + a tile in CEO Settings.
+
+**3. CEO Settings search.** The CEO Settings menu is now a stateful screen with
+a search box at the top that filters the section tiles by title/subtitle.
+
+**4. Fixed: Sync Issues toggle didn't update in real time across devices.**
+Granting `sync.view` to a non-CEO role worked locally but never reached other
+devices. Root cause: cloud `role_permissions.permission_key` has an FK
+(`REFERENCES public.permissions(key) ON DELETE RESTRICT`, from 0042). The local
+catalogue had `sync.view` (v26) but the **cloud catalogue did not** — 0067 was
+left unpushed as "optional." So the grant's enqueued upsert was **rejected
+cloud-side on the FK** and sat erroring in the queue; the other device never saw
+it. Confirmed by diffing the local default permission keys against the live
+cloud `permissions` table — `sync.view` was the only local-only key (the Session
+43 staff/stock split keys were all already in the cloud, so they were unaffected).
+Fix: **pushed 0067** (additive, idempotent) so the cloud has `sync.view`;
+verified present. The previously-errored grant upsert now succeeds on the next
+queue retry. Corrected 0067's header comment — it is **required**, not optional,
+precisely because of that FK. No Dart change: the local catalogue, grant/revoke
+enqueue, and the reactive provider chain were already correct.
+
+**Master plan:** §10.1 documents the Sync Issues access toggle + the settings
+search box.
+
+**Tested:** analyze clean (18 pre-existing infos); full suite **247 pass / 2
+skip / 0 fail** (bumped three permission-count assertions 31→32 for the new
+`sync.view` catalogue row; CEO *grant* count unchanged at 31 — the isCEO gate
+covers it). No Drift codegen needed (catalogue row + version getter only).
+
+**NOT committed** per the standing instruction — left in the working tree for
+review (still interleaved with the parallel Sessions 40–43 work + the Session 43
+Ring 0 #2 changes). Cloud-side, **0066 and 0067 ARE pushed** (each fixed a live
+bug — 0066 the PGRST204, 0067 the real-time toggle). No local git commits yet.
+
+---
+
+## Session 43 — 2026-06-01 — Ring 0 #2: Activity Logs generic schema + notification severity + log/notify helpers
+
+**Goal (PIVOT_PLAN §8.0 Ring 0 #2):** land the FINAL activity_logs shape and the
+notifications.severity column + thin helpers BEFORE building any Ring 1 feature
+that logs/notifies, so each feature satisfies the log+notify invariant in one
+call and never needs a re-migration.
+
+**Schema v25 (local) + cloud 0066 (NOT pushed — see deploy note):**
+- `activity_logs` (§24.4): added generic `entity_type` / `entity_id` +
+  `before_json` / `after_json`; **locally dropped** the six per-entity FK columns
+  (order/product/customer/expense/delivery/wallet_txn) + the "<=1 set" CHECK,
+  backfilling `entity_type`/`entity_id` from whichever FK was set. Kept
+  `store_id` (the §24.2 store filter needs it). The local drop also removes the
+  `delivery_id` FK that blocks the future Deliveries-table removal (Ring 3).
+- `notifications` (§26.2/§1.3): added `severity` ('info'/'warning'/'alert',
+  default 'info', CHECK) for the card colour.
+- onUpgrade v24→v25 drops the activity_logs append-only triggers first (they
+  reference the columns being dropped), rebuilds via `TableMigration` with a
+  column-transformer backfill, then re-creates the triggers from the NEW
+  immutable column set. **Idempotent** — each rebuild is guarded on the old
+  shape still being present, so it's safe on partial-state DBs (and the
+  revert-then-re-upgrade migration tests, which leave activity_logs current).
+- Extracted `_ledgerTriggerStatements()` so onCreate and the v25 rebuild share
+  one trigger definition. Updated the `_LedgerImmutability('activity_logs', …)`
+  column list to the new shape.
+
+**Helpers (DAOs):**
+- `ActivityLogDao.logActivity({action, description, staffId, storeId,
+  entityType, entityId, before, after})` — canonical; serializes before/after to
+  JSON; enqueueUpsert. The legacy `log({orderId, productId, …})` is kept as a
+  thin wrapper that folds the per-entity params onto (entityType, entityId), so
+  all ~56 existing call sites + `ActivityLogService.logAction` keep working
+  unchanged. `getForOrder/Product/Customer/Expense/Delivery/WalletTxn` rewritten
+  to query (entity_type, entity_id).
+- `NotificationsDao.fireNotification({type, message, severity, recipientUserId,
+  linkedRecordId})` — canonical; Ring 1 features fire §26.4 events through it.
+- Updated `ActivityLog` model + `activity_log_screen` filter + `addExpense`'s
+  inlined activity-log companion to the generic shape.
+
+**⚠️ Deviation flagged (cloud side):** cloud 0066 is **additive only** — it adds
+the generic columns + backfills + adds severity, but does NOT drop the six
+cloud FK columns. Reason: the `pos_record_expense` RPC (0011/0045) still INSERTs
+`activity_logs(…, expense_id, …)`, so dropping `expense_id` cloud-side would
+break it, and re-defining a production RPC unsupervised was not safe. The local
+schema is the final shape; the cloud column drop + RPC rewrite is a deliberate
+follow-up to bundle with the Ring 1 Expenses RPC pass / Ring 3 Deliveries
+removal. Sync is unaffected (activity_logs/notifications aren't in the push
+column whitelist; the v25 app pushes the new column set and ignores the
+vestigial cloud columns on pull). One minor consequence: expense logs created
+via the *RPC* path sync back with `entity_type` NULL until the RPC is updated
+(cosmetic; the "View record" jump for expenses is Ring 3 anyway).
+
+**Tested:** `flutter analyze` clean (18 pre-existing avoid_print infos only);
+full unit+widget suite **247 pass / 2 skip / 0 fail**. New tests: v24→v25
+migration upgrade (backfill + column shape + severity default + re-created
+append-only trigger), logActivity entity/before/after round-trip,
+fireNotification severity (stored / defaulted / CHECK-rejected).
+
+**DEPLOY ORDER (for the morning):** push cloud `0066` (`supabase db push`)
+BEFORE running the v25 app build on any device — the new app's payload includes
+entity_type/severity, which must already exist cloud-side. Then rebuild the
+emulator/devices.
+
+**NOT committed / NOT pushed** per the standing instruction — left in the
+working tree for review. (Note: the tree also carries parallel Sessions 40–42
+work — product-unit widen, biometric fix, Product Details realtime sync — e.g.
+`stream_providers.allSuppliersProvider` and co-edits in `product_detail_screen`
+— none of which is mine.)
+
+**Known follow-ups:** (1) drop the vestigial cloud activity_logs FK columns +
+rewrite `pos_record_expense` to set entity_type/entity_id; (2) Ring 0 #3 (the
+money-math regression net) is next before Ring 1.
+
+---
+
+## Session 42 — 2026-06-01 — Product Details: full realtime sync (fields, sales, dropdowns)
+
+**Why this session:**
+The Product Details screen didn't update in real time. It loaded everything once
+into local state via one-shot queries and never watched a stream, so an edit /
+stock change / sale on another device never reflected on an open detail screen
+(the §5 anti-pattern). Three rounds: (1) make every field live, (2) make the
+category/manufacturer/supplier dropdown lists live, (3) make a sale register live.
+
+**Built today:**
+- Every product field now syncs live. A single products-with-stock stream (LEFT
+  join, so the row is always present even at 0 stock in the selected store) drives
+  a `ref.listen` that re-seeds name, description, all prices, manufacturer,
+  supplier, category, unit, low-stock, size, expiry, the fractional + track-empties
+  toggles, crate value, image, sales target, plus live quantity / status badge /
+  stock value. Mid-edit safe: stock still updates while editing, but editable
+  fields are re-seeded only when NOT editing, so an incoming sync never clobbers
+  unsaved input; the edit baseline is kept fresh so Cancel reverts to synced values.
+- Dropdown OPTION lists (categories / manufacturers / suppliers) are live — an add
+  or rename on another device relabels without reopening the screen.
+- Sales register live. The Sales Summary refreshes the moment an order is recorded
+  or synced in (driven off the orders stream, not just stock-total changes, so an
+  other-store sale or a missed stock tick still updates the numbers). Stock quantity
+  was already live (a sale writes a `stock_transactions` row the products stream
+  watches).
+
+**Files touched:**
+- lib/core/database/daos.dart (`watchProductsWithStock({String? storeId})`)
+- lib/core/providers/stream_providers.dart (`productsWithStockProvider`, `allSuppliersProvider`)
+- lib/features/inventory/screens/product_detail_screen.dart (4 `ref.listen`s in build + `_seedFieldsFrom` / `_reloadDerived` helpers)
+
+**Database changes:**
+- No new schema from this feature work. BUT the working tree had uncommitted schema
+  v25 changes (someone's Ring 0 #2 / §24.4 / §26.2 work — activity_logs generic
+  entity shape + notifications.severity, mirroring migration 0066) where
+  app_database.dart was edited but `build_runner` had never been re-run, so
+  app_database.g.dart was stale and the project did NOT compile (TextColumn type
+  errors on the new activity_logs columns). Ran `dart run build_runner build
+  --delete-conflicting-outputs` (user-approved) to regenerate against v25 + the
+  locked drift 2.28.2. Build is now clean. That regenerated app_database.g.dart /
+  daos.g.dart diff belongs with whoever commits the v25 schema, not this feature.
+
+**Tested:**
+- `flutter analyze lib/` → No issues found.
+
+**Known issues / left open:**
+- On-device check pending: with the detail screen open on two devices, edit a field
+  / make a sale / rename a manufacturer on one and confirm the other updates live.
+- NOTE: the working tree is carrying several other people's uncommitted changes
+  (biometric-login fix, the v25 schema, a debug print in login_screen.dart) — keep
+  this feature's commit scoped to the three files above (+ the regen if needed).
+
+**Next session should:**
+- Verify the realtime updates on the emulator across two devices.
+
+---
+
 ## Session 41 — 2026-06-01 — Biometric button intermittently missing on PIN login
 
 **Built today:**

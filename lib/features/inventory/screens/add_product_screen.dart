@@ -1141,7 +1141,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         ),
       ),
       bottomNavigationBar: Padding(
-        padding: EdgeInsets.fromLTRB(20, 8, 20, 12 + context.bottomInset),
+        padding: EdgeInsets.fromLTRB(20, 8, 20, 12 + context.deviceBottomInset),
         child: AppButton(
           text: isExisting ? 'Add Stock' : 'Add Product',
           variant: AppButtonVariant.primary,

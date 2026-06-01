@@ -1467,6 +1467,9 @@ class SupabaseSyncService {
     'funds_accounts',
     'fund_days',
     'fund_transactions',
+    // fund_day_closings references fund_days + funds_accounts + stores + users,
+    // all pulled above, so it's FK-safe here (§23.6 Close Day).
+    'fund_day_closings',
     'sessions',
     'settings',
   ];

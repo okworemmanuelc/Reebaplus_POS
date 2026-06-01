@@ -796,7 +796,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                   _processRefund(order, toWallet: false);
                 },
               ),
-              SizedBox(height: context.getRSize(20)),
+              SizedBox(height: context.getRSize(20) + context.deviceBottomInset),
             ],
           ),
         ),
@@ -898,75 +898,74 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                       ),
                     ),
                   ),
-                  SafeArea(
-                    top: false,
-                    child: Padding(
-                      padding: EdgeInsets.all(context.getRSize(16)),
-                      child: Row(
-                        children: [
+                  Padding(
+                    padding: EdgeInsets.all(context.getRSize(16)).add(
+                      EdgeInsets.only(bottom: context.deviceBottomInset),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: AppButton(
+                            text: 'Print',
+                            icon: FontAwesomeIcons.print,
+                            onPressed: () {
+                              setModalState(() {
+                                reprintDate = DateTime.now();
+                                reshareDate = null;
+                              });
+                              _printReceipt(
+                                context,
+                                richOrder,
+                                branchName: branchName,
+                              );
+                            },
+                          ),
+                        ),
+                        SizedBox(width: context.getRSize(12)),
+                        if (currentOrder.status == 'cancelled')
                           Expanded(
                             child: AppButton(
-                              text: 'Print',
-                              icon: FontAwesomeIcons.print,
-                              onPressed: () {
-                                setModalState(() {
-                                  reprintDate = DateTime.now();
-                                  reshareDate = null;
-                                });
-                                _printReceipt(
+                              text: 'Refund',
+                              icon: FontAwesomeIcons.rotateLeft,
+                              variant: AppButtonVariant.danger,
+                              onPressed:
+                                  (currentOrder.paymentType == 'Credit')
+                                  ? null
+                                  : () {
+                                      Navigator.pop(modalCtx);
+                                      _showRefundChoice(
+                                        context,
+                                        currentOrder,
+                                      );
+                                    },
+                            ),
+                          ),
+                        if (currentOrder.status == 'cancelled')
+                          SizedBox(width: context.getRSize(12)),
+                        Expanded(
+                          child: AppButton(
+                            text: 'Share',
+                            icon: FontAwesomeIcons.shareNodes,
+                            variant: AppButtonVariant.secondary,
+                            onPressed: () async {
+                              setModalState(() {
+                                reshareDate = DateTime.now();
+                                reprintDate = null;
+                              });
+                              await Future.delayed(
+                                const Duration(milliseconds: 100),
+                              );
+                              if (context.mounted) {
+                                _shareReceipt(
                                   context,
                                   richOrder,
-                                  branchName: branchName,
+                                  reshareDate: reshareDate,
                                 );
-                              },
-                            ),
+                              }
+                            },
                           ),
-                          SizedBox(width: context.getRSize(12)),
-                          if (currentOrder.status == 'cancelled')
-                            Expanded(
-                              child: AppButton(
-                                text: 'Refund',
-                                icon: FontAwesomeIcons.rotateLeft,
-                                variant: AppButtonVariant.danger,
-                                onPressed:
-                                    (currentOrder.paymentType == 'Credit')
-                                    ? null
-                                    : () {
-                                        Navigator.pop(modalCtx);
-                                        _showRefundChoice(
-                                          context,
-                                          currentOrder,
-                                        );
-                                      },
-                              ),
-                            ),
-                          if (currentOrder.status == 'cancelled')
-                            SizedBox(width: context.getRSize(12)),
-                          Expanded(
-                            child: AppButton(
-                              text: 'Share',
-                              icon: FontAwesomeIcons.shareNodes,
-                              variant: AppButtonVariant.secondary,
-                              onPressed: () async {
-                                setModalState(() {
-                                  reshareDate = DateTime.now();
-                                  reprintDate = null;
-                                });
-                                await Future.delayed(
-                                  const Duration(milliseconds: 100),
-                                );
-                                if (context.mounted) {
-                                  _shareReceipt(
-                                    context,
-                                    richOrder,
-                                    reshareDate: reshareDate,
-                                  );
-                                }
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
                 ],

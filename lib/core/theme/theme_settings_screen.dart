@@ -21,9 +21,11 @@ class ThemeSettingsScreen extends StatelessWidget {
         listenable: themeController,
         builder: (_, __) {
           return ListView(
-            padding: EdgeInsets.symmetric(
-              horizontal: context.getRSize(20),
-              vertical: context.getRSize(24),
+            padding: EdgeInsets.fromLTRB(
+              context.getRSize(20),
+              context.getRSize(24),
+              context.getRSize(20),
+              context.getRSize(24) + context.deviceBottomInset,
             ),
             children: [
               Text(

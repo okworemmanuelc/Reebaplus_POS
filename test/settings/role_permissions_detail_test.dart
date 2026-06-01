@@ -155,7 +155,7 @@ void main() {
 
     final switches =
         tester.widgetList<SwitchListTile>(find.byType(SwitchListTile)).toList();
-    expect(switches.length, 31, reason: 'all 31 permissions shown');
+    expect(switches.length, 32, reason: 'all 32 permissions shown');
     expect(
       switches.every((s) => s.onChanged == null && s.value == true),
       isTrue,

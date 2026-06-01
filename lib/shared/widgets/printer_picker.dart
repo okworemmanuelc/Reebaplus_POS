@@ -40,8 +40,8 @@ class _PrinterPickerState extends ConsumerState<PrinterPicker> {
     final subtext = Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey;
     final border = Theme.of(context).dividerColor;
 
-    return SafeArea(
-      top: false,
+    return Padding(
+      padding: EdgeInsets.only(bottom: context.deviceBottomInset),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [

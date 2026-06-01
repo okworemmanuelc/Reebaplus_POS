@@ -9,18 +9,97 @@ import 'package:reebaplus_pos/core/settings/roles_permissions_screen.dart';
 import 'package:reebaplus_pos/core/settings/security_settings_screen.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
 import 'package:reebaplus_pos/core/settings/stores_settings_screen.dart';
+import 'package:reebaplus_pos/core/settings/sync_issues_access_screen.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
+
+/// One row in the CEO Settings menu.
+typedef _SettingEntry = ({
+  IconData icon,
+  String title,
+  String subtitle,
+  Widget screen,
+});
 
 /// CEO Settings menu (§10.1). Each row opens its own sub-page. Reached from the
 /// drawer, which already hides this for non-CEO roles; the guard below is
-/// defense-in-depth (hard rule #6).
-class SettingsScreen extends ConsumerWidget {
+/// defense-in-depth (hard rule #6). A search box filters the rows by title /
+/// subtitle so a specific setting is quick to find.
+class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final t = Theme.of(context);
+  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
+}
 
+class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  final _searchCtrl = TextEditingController();
+  String _query = '';
+
+  // Const instances are canonicalised (no per-build construction cost).
+  static const List<_SettingEntry> _entries = [
+    (
+      icon: Icons.business_rounded,
+      title: 'Business Info',
+      subtitle: 'Name, type, and currency',
+      screen: BusinessInfoScreen(),
+    ),
+    (
+      icon: Icons.store_rounded,
+      title: 'Stores',
+      subtitle: 'Your store locations',
+      screen: StoresSettingsScreen(),
+    ),
+    (
+      icon: Icons.lock_rounded,
+      title: 'Security',
+      subtitle: 'Auto-lock and biometric login',
+      screen: SecuritySettingsScreen(),
+    ),
+    (
+      icon: Icons.admin_panel_settings_rounded,
+      title: 'Roles & Permissions',
+      subtitle: 'What each role can do',
+      screen: RolesPermissionsScreen(),
+    ),
+    (
+      icon: Icons.fact_check_rounded,
+      title: 'Activity Logs access',
+      subtitle: 'Which roles can view activity logs',
+      screen: ActivityLogsAccessScreen(),
+    ),
+    (
+      icon: Icons.cloud_sync_rounded,
+      title: 'Sync Issues access',
+      subtitle: 'Which roles can open Sync Issues',
+      screen: SyncIssuesAccessScreen(),
+    ),
+    (
+      icon: Icons.palette_rounded,
+      title: 'Appearance',
+      subtitle: 'Business colour (applies to all devices)',
+      screen: AppearanceSettingsScreen(),
+    ),
+  ];
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
     final canManage = hasPermission(ref, 'settings.manage');
+
+    final q = _query.trim().toLowerCase();
+    final filtered = q.isEmpty
+        ? _entries
+        : _entries
+            .where((e) =>
+                e.title.toLowerCase().contains(q) ||
+                e.subtitle.toLowerCase().contains(q))
+            .toList();
 
     return Scaffold(
       backgroundColor: t.scaffoldBackgroundColor,
@@ -37,58 +116,56 @@ class SettingsScreen extends ConsumerWidget {
           ? const SettingsNoAccess()
           : SettingsFadeIn(
               child: ListView(
-                padding: const EdgeInsets.all(24),
+                padding: EdgeInsets.fromLTRB(
+                    24, 24, 24, 24 + context.deviceBottomInset),
                 children: [
-                  SettingsTile(
-                    icon: Icons.business_rounded,
-                    title: 'Business Info',
-                    subtitle: 'Name, type, and currency',
-                    trailing: _chevron(context),
-                    onTap: () => _open(context, const BusinessInfoScreen()),
+                  TextField(
+                    controller: _searchCtrl,
+                    onChanged: (v) => setState(() => _query = v),
+                    textInputAction: TextInputAction.search,
+                    decoration: InputDecoration(
+                      hintText: 'Search settings',
+                      prefixIcon: const Icon(Icons.search_rounded),
+                      suffixIcon: q.isEmpty
+                          ? null
+                          : IconButton(
+                              icon: const Icon(Icons.close_rounded),
+                              tooltip: 'Clear',
+                              onPressed: () {
+                                _searchCtrl.clear();
+                                setState(() => _query = '');
+                              },
+                            ),
+                      isDense: true,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
                   ),
-                  const SizedBox(height: 16),
-                  SettingsTile(
-                    icon: Icons.store_rounded,
-                    title: 'Stores',
-                    subtitle: 'Your store locations',
-                    trailing: _chevron(context),
-                    onTap: () => _open(context, const StoresSettingsScreen()),
-                  ),
-                  const SizedBox(height: 16),
-                  SettingsTile(
-                    icon: Icons.lock_rounded,
-                    title: 'Security',
-                    subtitle: 'Auto-lock and biometric login',
-                    trailing: _chevron(context),
-                    onTap: () => _open(context, const SecuritySettingsScreen()),
-                  ),
-                  const SizedBox(height: 16),
-                  SettingsTile(
-                    icon: Icons.admin_panel_settings_rounded,
-                    title: 'Roles & Permissions',
-                    subtitle: 'What each role can do',
-                    trailing: _chevron(context),
-                    onTap: () =>
-                        _open(context, const RolesPermissionsScreen()),
-                  ),
-                  const SizedBox(height: 16),
-                  SettingsTile(
-                    icon: Icons.fact_check_rounded,
-                    title: 'Activity Logs access',
-                    subtitle: 'Which roles can view activity logs',
-                    trailing: _chevron(context),
-                    onTap: () =>
-                        _open(context, const ActivityLogsAccessScreen()),
-                  ),
-                  const SizedBox(height: 16),
-                  SettingsTile(
-                    icon: Icons.palette_rounded,
-                    title: 'Appearance',
-                    subtitle: 'Business colour (applies to all devices)',
-                    trailing: _chevron(context),
-                    onTap: () =>
-                        _open(context, const AppearanceSettingsScreen()),
-                  ),
+                  const SizedBox(height: 20),
+                  if (filtered.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 24),
+                      child: Center(
+                        child: Text(
+                          'No settings match "${_query.trim()}".',
+                          style: TextStyle(
+                            color:
+                                t.colorScheme.onSurface.withValues(alpha: 0.6),
+                          ),
+                        ),
+                      ),
+                    ),
+                  for (final e in filtered) ...[
+                    SettingsTile(
+                      icon: e.icon,
+                      title: e.title,
+                      subtitle: e.subtitle,
+                      trailing: _chevron(context),
+                      onTap: () => _open(context, e.screen),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                 ],
               ),
             ),

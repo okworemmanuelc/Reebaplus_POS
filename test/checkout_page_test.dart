@@ -32,8 +32,14 @@ void main() {
 
   tearDown(() => db.close());
 
-  // Skip: unblocks after PR 5 — walletBalancesKoboProvider stream deadlocks
-  // with db.close in teardown; needs proper provider isolation.
+  // Skip: these are render smoke-tests, not money-math coverage. Rendering the
+  // current CheckoutPage in a bare harness hangs — disposing the container
+  // (below) cancels the walletBalancesKoboProvider stream but other DB-backed
+  // streams in the now-much-larger screen still deadlock against db.close
+  // without full data scaffolding (seeded business/store/funds + a populated
+  // cartProvider). Resurrecting them is a widget-harness task with no money
+  // value: the OrderService money-math regression net they stood in for now
+  // lives in test/orders/order_service_money_math_test.dart (Ring 0 #3).
   testWidgets('CheckoutPage renders correctly with different cart items', skip: true, (WidgetTester tester) async {
     final cart = [
       {
@@ -61,6 +67,10 @@ void main() {
         databaseProvider.overrideWithValue(db),
       ],
     );
+    // Dispose the container (cancels the walletBalancesKoboProvider stream sub)
+    // before the tearDown's db.close — otherwise the live stream deadlocks the
+    // close. addTearDown runs ahead of the group tearDown.
+    addTearDown(container.dispose);
 
     // Seed the auth state BEFORE pumping so CheckoutPage.initState sees it
     container.read(authProvider).value = UserData(
@@ -96,6 +106,7 @@ void main() {
     expect(find.text('Quick Sale Item'), findsOneWidget);
   });
 
+  // Skip: same reason as above — render smoke-test, harness deadlocks.
   testWidgets('CheckoutPage handles null/malformed icon or color gracefully', skip: true, (WidgetTester tester) async {
     final cart = [
       {
@@ -123,6 +134,7 @@ void main() {
         databaseProvider.overrideWithValue(db),
       ],
     );
+    addTearDown(container.dispose);
 
     // Seed the auth state BEFORE pumping so CheckoutPage.initState sees it
     container.read(authProvider).value = UserData(
