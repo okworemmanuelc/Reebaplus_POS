@@ -6,13 +6,14 @@ import 'package:reebaplus_pos/shared/services/crate_return_approval_service.dart
 
 import '../../helpers/dispatch_test_utils.dart';
 
-/// Seeds: staff (FK target for submittedBy/approvedBy), customer,
-/// crate_group, and a pending_crate_returns row with status='pending'.
-Future<({String staffId, String customerId, String crateSizeGroupId, String pendingId, int quantity})>
+/// Seeds: staff (FK target for submittedBy/approvedBy), customer, manufacturer,
+/// and a pending_crate_returns row with status='pending'. v29: crate returns
+/// are keyed by manufacturer.
+Future<({String staffId, String customerId, String manufacturerId, String pendingId, int quantity})>
     _seedApproveFixtures(AppDatabase db, String businessId) async {
   final staffId = UuidV7.generate();
   final customerId = UuidV7.generate();
-  final crateSizeGroupId = UuidV7.generate();
+  final manufacturerId = UuidV7.generate();
   final pendingId = UuidV7.generate();
   const quantity = 5;
 
@@ -31,12 +32,11 @@ Future<({String staffId, String customerId, String crateSizeGroupId, String pend
           name: 'Returner Rita',
         ),
       );
-  await db.into(db.crateSizeGroups).insert(
-        CrateSizeGroupsCompanion.insert(
-          id: Value(crateSizeGroupId),
+  await db.into(db.manufacturers).insert(
+        ManufacturersCompanion.insert(
+          id: Value(manufacturerId),
           businessId: businessId,
-          name: 'Crate-A',
-          crateSizeLabel: const Value('small'),
+          name: 'Crate Manco',
         ),
       );
   await db.into(db.pendingCrateReturns).insert(
@@ -44,7 +44,7 @@ Future<({String staffId, String customerId, String crateSizeGroupId, String pend
           id: Value(pendingId),
           businessId: businessId,
           customerId: customerId,
-          crateSizeGroupId: crateSizeGroupId,
+          manufacturerId: manufacturerId,
           quantity: quantity,
           submittedBy: staffId,
         ),
@@ -52,7 +52,7 @@ Future<({String staffId, String customerId, String crateSizeGroupId, String pend
   return (
     staffId: staffId,
     customerId: customerId,
-    crateSizeGroupId: crateSizeGroupId,
+    manufacturerId: manufacturerId,
     pendingId: pendingId,
     quantity: quantity,
   );

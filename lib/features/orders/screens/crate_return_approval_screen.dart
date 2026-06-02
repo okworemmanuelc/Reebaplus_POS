@@ -265,7 +265,7 @@ class _SubmissionBatchTile extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            item.crateGroup.name,
+                            item.manufacturer.name,
                             style: const TextStyle(fontWeight: FontWeight.w500),
                           ),
                           Text(

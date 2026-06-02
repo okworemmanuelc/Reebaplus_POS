@@ -9990,18 +9990,18 @@ class $CustomerCrateBalancesTable extends CustomerCrateBalances
       'REFERENCES customers (id)',
     ),
   );
-  static const VerificationMeta _crateSizeGroupIdMeta = const VerificationMeta(
-    'crateSizeGroupId',
+  static const VerificationMeta _manufacturerIdMeta = const VerificationMeta(
+    'manufacturerId',
   );
   @override
-  late final GeneratedColumn<String> crateSizeGroupId = GeneratedColumn<String>(
-    'crate_size_group_id',
+  late final GeneratedColumn<String> manufacturerId = GeneratedColumn<String>(
+    'manufacturer_id',
     aliasedName,
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: true,
     defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'REFERENCES crate_size_groups (id)',
+      'REFERENCES manufacturers (id)',
     ),
   );
   static const VerificationMeta _balanceMeta = const VerificationMeta(
@@ -10046,7 +10046,7 @@ class $CustomerCrateBalancesTable extends CustomerCrateBalances
     id,
     businessId,
     customerId,
-    crateSizeGroupId,
+    manufacturerId,
     balance,
     createdAt,
     lastUpdatedAt,
@@ -10082,16 +10082,16 @@ class $CustomerCrateBalancesTable extends CustomerCrateBalances
     } else if (isInserting) {
       context.missing(_customerIdMeta);
     }
-    if (data.containsKey('crate_size_group_id')) {
+    if (data.containsKey('manufacturer_id')) {
       context.handle(
-        _crateSizeGroupIdMeta,
-        crateSizeGroupId.isAcceptableOrUnknown(
-          data['crate_size_group_id']!,
-          _crateSizeGroupIdMeta,
+        _manufacturerIdMeta,
+        manufacturerId.isAcceptableOrUnknown(
+          data['manufacturer_id']!,
+          _manufacturerIdMeta,
         ),
       );
     } else if (isInserting) {
-      context.missing(_crateSizeGroupIdMeta);
+      context.missing(_manufacturerIdMeta);
     }
     if (data.containsKey('balance')) {
       context.handle(
@@ -10135,9 +10135,9 @@ class $CustomerCrateBalancesTable extends CustomerCrateBalances
         DriftSqlType.string,
         data['${effectivePrefix}customer_id'],
       )!,
-      crateSizeGroupId: attachedDatabase.typeMapping.read(
+      manufacturerId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
-        data['${effectivePrefix}crate_size_group_id'],
+        data['${effectivePrefix}manufacturer_id'],
       )!,
       balance: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
@@ -10165,7 +10165,7 @@ class CustomerCrateBalance extends DataClass
   final String id;
   final String businessId;
   final String customerId;
-  final String crateSizeGroupId;
+  final String manufacturerId;
   final int balance;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
@@ -10173,7 +10173,7 @@ class CustomerCrateBalance extends DataClass
     required this.id,
     required this.businessId,
     required this.customerId,
-    required this.crateSizeGroupId,
+    required this.manufacturerId,
     required this.balance,
     required this.createdAt,
     required this.lastUpdatedAt,
@@ -10184,7 +10184,7 @@ class CustomerCrateBalance extends DataClass
     map['id'] = Variable<String>(id);
     map['business_id'] = Variable<String>(businessId);
     map['customer_id'] = Variable<String>(customerId);
-    map['crate_size_group_id'] = Variable<String>(crateSizeGroupId);
+    map['manufacturer_id'] = Variable<String>(manufacturerId);
     map['balance'] = Variable<int>(balance);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
@@ -10196,7 +10196,7 @@ class CustomerCrateBalance extends DataClass
       id: Value(id),
       businessId: Value(businessId),
       customerId: Value(customerId),
-      crateSizeGroupId: Value(crateSizeGroupId),
+      manufacturerId: Value(manufacturerId),
       balance: Value(balance),
       createdAt: Value(createdAt),
       lastUpdatedAt: Value(lastUpdatedAt),
@@ -10212,7 +10212,7 @@ class CustomerCrateBalance extends DataClass
       id: serializer.fromJson<String>(json['id']),
       businessId: serializer.fromJson<String>(json['businessId']),
       customerId: serializer.fromJson<String>(json['customerId']),
-      crateSizeGroupId: serializer.fromJson<String>(json['crateSizeGroupId']),
+      manufacturerId: serializer.fromJson<String>(json['manufacturerId']),
       balance: serializer.fromJson<int>(json['balance']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
@@ -10225,7 +10225,7 @@ class CustomerCrateBalance extends DataClass
       'id': serializer.toJson<String>(id),
       'businessId': serializer.toJson<String>(businessId),
       'customerId': serializer.toJson<String>(customerId),
-      'crateSizeGroupId': serializer.toJson<String>(crateSizeGroupId),
+      'manufacturerId': serializer.toJson<String>(manufacturerId),
       'balance': serializer.toJson<int>(balance),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
@@ -10236,7 +10236,7 @@ class CustomerCrateBalance extends DataClass
     String? id,
     String? businessId,
     String? customerId,
-    String? crateSizeGroupId,
+    String? manufacturerId,
     int? balance,
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
@@ -10244,7 +10244,7 @@ class CustomerCrateBalance extends DataClass
     id: id ?? this.id,
     businessId: businessId ?? this.businessId,
     customerId: customerId ?? this.customerId,
-    crateSizeGroupId: crateSizeGroupId ?? this.crateSizeGroupId,
+    manufacturerId: manufacturerId ?? this.manufacturerId,
     balance: balance ?? this.balance,
     createdAt: createdAt ?? this.createdAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -10258,9 +10258,9 @@ class CustomerCrateBalance extends DataClass
       customerId: data.customerId.present
           ? data.customerId.value
           : this.customerId,
-      crateSizeGroupId: data.crateSizeGroupId.present
-          ? data.crateSizeGroupId.value
-          : this.crateSizeGroupId,
+      manufacturerId: data.manufacturerId.present
+          ? data.manufacturerId.value
+          : this.manufacturerId,
       balance: data.balance.present ? data.balance.value : this.balance,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       lastUpdatedAt: data.lastUpdatedAt.present
@@ -10275,7 +10275,7 @@ class CustomerCrateBalance extends DataClass
           ..write('id: $id, ')
           ..write('businessId: $businessId, ')
           ..write('customerId: $customerId, ')
-          ..write('crateSizeGroupId: $crateSizeGroupId, ')
+          ..write('manufacturerId: $manufacturerId, ')
           ..write('balance: $balance, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt')
@@ -10288,7 +10288,7 @@ class CustomerCrateBalance extends DataClass
     id,
     businessId,
     customerId,
-    crateSizeGroupId,
+    manufacturerId,
     balance,
     createdAt,
     lastUpdatedAt,
@@ -10300,7 +10300,7 @@ class CustomerCrateBalance extends DataClass
           other.id == this.id &&
           other.businessId == this.businessId &&
           other.customerId == this.customerId &&
-          other.crateSizeGroupId == this.crateSizeGroupId &&
+          other.manufacturerId == this.manufacturerId &&
           other.balance == this.balance &&
           other.createdAt == this.createdAt &&
           other.lastUpdatedAt == this.lastUpdatedAt);
@@ -10311,7 +10311,7 @@ class CustomerCrateBalancesCompanion
   final Value<String> id;
   final Value<String> businessId;
   final Value<String> customerId;
-  final Value<String> crateSizeGroupId;
+  final Value<String> manufacturerId;
   final Value<int> balance;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
@@ -10320,7 +10320,7 @@ class CustomerCrateBalancesCompanion
     this.id = const Value.absent(),
     this.businessId = const Value.absent(),
     this.customerId = const Value.absent(),
-    this.crateSizeGroupId = const Value.absent(),
+    this.manufacturerId = const Value.absent(),
     this.balance = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -10330,19 +10330,19 @@ class CustomerCrateBalancesCompanion
     this.id = const Value.absent(),
     required String businessId,
     required String customerId,
-    required String crateSizeGroupId,
+    required String manufacturerId,
     this.balance = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : businessId = Value(businessId),
        customerId = Value(customerId),
-       crateSizeGroupId = Value(crateSizeGroupId);
+       manufacturerId = Value(manufacturerId);
   static Insertable<CustomerCrateBalance> custom({
     Expression<String>? id,
     Expression<String>? businessId,
     Expression<String>? customerId,
-    Expression<String>? crateSizeGroupId,
+    Expression<String>? manufacturerId,
     Expression<int>? balance,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
@@ -10352,7 +10352,7 @@ class CustomerCrateBalancesCompanion
       if (id != null) 'id': id,
       if (businessId != null) 'business_id': businessId,
       if (customerId != null) 'customer_id': customerId,
-      if (crateSizeGroupId != null) 'crate_size_group_id': crateSizeGroupId,
+      if (manufacturerId != null) 'manufacturer_id': manufacturerId,
       if (balance != null) 'balance': balance,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
@@ -10364,7 +10364,7 @@ class CustomerCrateBalancesCompanion
     Value<String>? id,
     Value<String>? businessId,
     Value<String>? customerId,
-    Value<String>? crateSizeGroupId,
+    Value<String>? manufacturerId,
     Value<int>? balance,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
@@ -10374,7 +10374,7 @@ class CustomerCrateBalancesCompanion
       id: id ?? this.id,
       businessId: businessId ?? this.businessId,
       customerId: customerId ?? this.customerId,
-      crateSizeGroupId: crateSizeGroupId ?? this.crateSizeGroupId,
+      manufacturerId: manufacturerId ?? this.manufacturerId,
       balance: balance ?? this.balance,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -10394,8 +10394,8 @@ class CustomerCrateBalancesCompanion
     if (customerId.present) {
       map['customer_id'] = Variable<String>(customerId.value);
     }
-    if (crateSizeGroupId.present) {
-      map['crate_size_group_id'] = Variable<String>(crateSizeGroupId.value);
+    if (manufacturerId.present) {
+      map['manufacturer_id'] = Variable<String>(manufacturerId.value);
     }
     if (balance.present) {
       map['balance'] = Variable<int>(balance.value);
@@ -10418,7 +10418,7 @@ class CustomerCrateBalancesCompanion
           ..write('id: $id, ')
           ..write('businessId: $businessId, ')
           ..write('customerId: $customerId, ')
-          ..write('crateSizeGroupId: $crateSizeGroupId, ')
+          ..write('manufacturerId: $manufacturerId, ')
           ..write('balance: $balance, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
@@ -10472,20 +10472,6 @@ class $ManufacturerCrateBalancesTable extends ManufacturerCrateBalances
       'REFERENCES manufacturers (id)',
     ),
   );
-  static const VerificationMeta _crateSizeGroupIdMeta = const VerificationMeta(
-    'crateSizeGroupId',
-  );
-  @override
-  late final GeneratedColumn<String> crateSizeGroupId = GeneratedColumn<String>(
-    'crate_size_group_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'REFERENCES crate_size_groups (id)',
-    ),
-  );
   static const VerificationMeta _balanceMeta = const VerificationMeta(
     'balance',
   );
@@ -10528,7 +10514,6 @@ class $ManufacturerCrateBalancesTable extends ManufacturerCrateBalances
     id,
     businessId,
     manufacturerId,
-    crateSizeGroupId,
     balance,
     createdAt,
     lastUpdatedAt,
@@ -10566,17 +10551,6 @@ class $ManufacturerCrateBalancesTable extends ManufacturerCrateBalances
       );
     } else if (isInserting) {
       context.missing(_manufacturerIdMeta);
-    }
-    if (data.containsKey('crate_size_group_id')) {
-      context.handle(
-        _crateSizeGroupIdMeta,
-        crateSizeGroupId.isAcceptableOrUnknown(
-          data['crate_size_group_id']!,
-          _crateSizeGroupIdMeta,
-        ),
-      );
-    } else if (isInserting) {
-      context.missing(_crateSizeGroupIdMeta);
     }
     if (data.containsKey('balance')) {
       context.handle(
@@ -10623,10 +10597,6 @@ class $ManufacturerCrateBalancesTable extends ManufacturerCrateBalances
         DriftSqlType.string,
         data['${effectivePrefix}manufacturer_id'],
       )!,
-      crateSizeGroupId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}crate_size_group_id'],
-      )!,
       balance: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}balance'],
@@ -10653,7 +10623,6 @@ class ManufacturerCrateBalance extends DataClass
   final String id;
   final String businessId;
   final String manufacturerId;
-  final String crateSizeGroupId;
   final int balance;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
@@ -10661,7 +10630,6 @@ class ManufacturerCrateBalance extends DataClass
     required this.id,
     required this.businessId,
     required this.manufacturerId,
-    required this.crateSizeGroupId,
     required this.balance,
     required this.createdAt,
     required this.lastUpdatedAt,
@@ -10672,7 +10640,6 @@ class ManufacturerCrateBalance extends DataClass
     map['id'] = Variable<String>(id);
     map['business_id'] = Variable<String>(businessId);
     map['manufacturer_id'] = Variable<String>(manufacturerId);
-    map['crate_size_group_id'] = Variable<String>(crateSizeGroupId);
     map['balance'] = Variable<int>(balance);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
@@ -10684,7 +10651,6 @@ class ManufacturerCrateBalance extends DataClass
       id: Value(id),
       businessId: Value(businessId),
       manufacturerId: Value(manufacturerId),
-      crateSizeGroupId: Value(crateSizeGroupId),
       balance: Value(balance),
       createdAt: Value(createdAt),
       lastUpdatedAt: Value(lastUpdatedAt),
@@ -10700,7 +10666,6 @@ class ManufacturerCrateBalance extends DataClass
       id: serializer.fromJson<String>(json['id']),
       businessId: serializer.fromJson<String>(json['businessId']),
       manufacturerId: serializer.fromJson<String>(json['manufacturerId']),
-      crateSizeGroupId: serializer.fromJson<String>(json['crateSizeGroupId']),
       balance: serializer.fromJson<int>(json['balance']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
@@ -10713,7 +10678,6 @@ class ManufacturerCrateBalance extends DataClass
       'id': serializer.toJson<String>(id),
       'businessId': serializer.toJson<String>(businessId),
       'manufacturerId': serializer.toJson<String>(manufacturerId),
-      'crateSizeGroupId': serializer.toJson<String>(crateSizeGroupId),
       'balance': serializer.toJson<int>(balance),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
@@ -10724,7 +10688,6 @@ class ManufacturerCrateBalance extends DataClass
     String? id,
     String? businessId,
     String? manufacturerId,
-    String? crateSizeGroupId,
     int? balance,
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
@@ -10732,7 +10695,6 @@ class ManufacturerCrateBalance extends DataClass
     id: id ?? this.id,
     businessId: businessId ?? this.businessId,
     manufacturerId: manufacturerId ?? this.manufacturerId,
-    crateSizeGroupId: crateSizeGroupId ?? this.crateSizeGroupId,
     balance: balance ?? this.balance,
     createdAt: createdAt ?? this.createdAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -10748,9 +10710,6 @@ class ManufacturerCrateBalance extends DataClass
       manufacturerId: data.manufacturerId.present
           ? data.manufacturerId.value
           : this.manufacturerId,
-      crateSizeGroupId: data.crateSizeGroupId.present
-          ? data.crateSizeGroupId.value
-          : this.crateSizeGroupId,
       balance: data.balance.present ? data.balance.value : this.balance,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       lastUpdatedAt: data.lastUpdatedAt.present
@@ -10765,7 +10724,6 @@ class ManufacturerCrateBalance extends DataClass
           ..write('id: $id, ')
           ..write('businessId: $businessId, ')
           ..write('manufacturerId: $manufacturerId, ')
-          ..write('crateSizeGroupId: $crateSizeGroupId, ')
           ..write('balance: $balance, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt')
@@ -10778,7 +10736,6 @@ class ManufacturerCrateBalance extends DataClass
     id,
     businessId,
     manufacturerId,
-    crateSizeGroupId,
     balance,
     createdAt,
     lastUpdatedAt,
@@ -10790,7 +10747,6 @@ class ManufacturerCrateBalance extends DataClass
           other.id == this.id &&
           other.businessId == this.businessId &&
           other.manufacturerId == this.manufacturerId &&
-          other.crateSizeGroupId == this.crateSizeGroupId &&
           other.balance == this.balance &&
           other.createdAt == this.createdAt &&
           other.lastUpdatedAt == this.lastUpdatedAt);
@@ -10801,7 +10757,6 @@ class ManufacturerCrateBalancesCompanion
   final Value<String> id;
   final Value<String> businessId;
   final Value<String> manufacturerId;
-  final Value<String> crateSizeGroupId;
   final Value<int> balance;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
@@ -10810,7 +10765,6 @@ class ManufacturerCrateBalancesCompanion
     this.id = const Value.absent(),
     this.businessId = const Value.absent(),
     this.manufacturerId = const Value.absent(),
-    this.crateSizeGroupId = const Value.absent(),
     this.balance = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -10820,19 +10774,16 @@ class ManufacturerCrateBalancesCompanion
     this.id = const Value.absent(),
     required String businessId,
     required String manufacturerId,
-    required String crateSizeGroupId,
     this.balance = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : businessId = Value(businessId),
-       manufacturerId = Value(manufacturerId),
-       crateSizeGroupId = Value(crateSizeGroupId);
+       manufacturerId = Value(manufacturerId);
   static Insertable<ManufacturerCrateBalance> custom({
     Expression<String>? id,
     Expression<String>? businessId,
     Expression<String>? manufacturerId,
-    Expression<String>? crateSizeGroupId,
     Expression<int>? balance,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
@@ -10842,7 +10793,6 @@ class ManufacturerCrateBalancesCompanion
       if (id != null) 'id': id,
       if (businessId != null) 'business_id': businessId,
       if (manufacturerId != null) 'manufacturer_id': manufacturerId,
-      if (crateSizeGroupId != null) 'crate_size_group_id': crateSizeGroupId,
       if (balance != null) 'balance': balance,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
@@ -10854,7 +10804,6 @@ class ManufacturerCrateBalancesCompanion
     Value<String>? id,
     Value<String>? businessId,
     Value<String>? manufacturerId,
-    Value<String>? crateSizeGroupId,
     Value<int>? balance,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
@@ -10864,7 +10813,6 @@ class ManufacturerCrateBalancesCompanion
       id: id ?? this.id,
       businessId: businessId ?? this.businessId,
       manufacturerId: manufacturerId ?? this.manufacturerId,
-      crateSizeGroupId: crateSizeGroupId ?? this.crateSizeGroupId,
       balance: balance ?? this.balance,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -10883,9 +10831,6 @@ class ManufacturerCrateBalancesCompanion
     }
     if (manufacturerId.present) {
       map['manufacturer_id'] = Variable<String>(manufacturerId.value);
-    }
-    if (crateSizeGroupId.present) {
-      map['crate_size_group_id'] = Variable<String>(crateSizeGroupId.value);
     }
     if (balance.present) {
       map['balance'] = Variable<int>(balance.value);
@@ -10908,7 +10853,6 @@ class ManufacturerCrateBalancesCompanion
           ..write('id: $id, ')
           ..write('businessId: $businessId, ')
           ..write('manufacturerId: $manufacturerId, ')
-          ..write('crateSizeGroupId: $crateSizeGroupId, ')
           ..write('balance: $balance, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
@@ -10976,18 +10920,18 @@ class $PendingCrateReturnsTable extends PendingCrateReturns
       'REFERENCES customers (id)',
     ),
   );
-  static const VerificationMeta _crateSizeGroupIdMeta = const VerificationMeta(
-    'crateSizeGroupId',
+  static const VerificationMeta _manufacturerIdMeta = const VerificationMeta(
+    'manufacturerId',
   );
   @override
-  late final GeneratedColumn<String> crateSizeGroupId = GeneratedColumn<String>(
-    'crate_size_group_id',
+  late final GeneratedColumn<String> manufacturerId = GeneratedColumn<String>(
+    'manufacturer_id',
     aliasedName,
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: true,
     defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'REFERENCES crate_size_groups (id)',
+      'REFERENCES manufacturers (id)',
     ),
   );
   static const VerificationMeta _quantityMeta = const VerificationMeta(
@@ -11104,7 +11048,7 @@ class $PendingCrateReturnsTable extends PendingCrateReturns
     businessId,
     orderId,
     customerId,
-    crateSizeGroupId,
+    manufacturerId,
     quantity,
     submittedBy,
     submittedAt,
@@ -11152,16 +11096,16 @@ class $PendingCrateReturnsTable extends PendingCrateReturns
     } else if (isInserting) {
       context.missing(_customerIdMeta);
     }
-    if (data.containsKey('crate_size_group_id')) {
+    if (data.containsKey('manufacturer_id')) {
       context.handle(
-        _crateSizeGroupIdMeta,
-        crateSizeGroupId.isAcceptableOrUnknown(
-          data['crate_size_group_id']!,
-          _crateSizeGroupIdMeta,
+        _manufacturerIdMeta,
+        manufacturerId.isAcceptableOrUnknown(
+          data['manufacturer_id']!,
+          _manufacturerIdMeta,
         ),
       );
     } else if (isInserting) {
-      context.missing(_crateSizeGroupIdMeta);
+      context.missing(_manufacturerIdMeta);
     }
     if (data.containsKey('quantity')) {
       context.handle(
@@ -11258,9 +11202,9 @@ class $PendingCrateReturnsTable extends PendingCrateReturns
         DriftSqlType.string,
         data['${effectivePrefix}customer_id'],
       )!,
-      crateSizeGroupId: attachedDatabase.typeMapping.read(
+      manufacturerId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
-        data['${effectivePrefix}crate_size_group_id'],
+        data['${effectivePrefix}manufacturer_id'],
       )!,
       quantity: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
@@ -11313,7 +11257,7 @@ class PendingCrateReturnData extends DataClass
   final String businessId;
   final String? orderId;
   final String customerId;
-  final String crateSizeGroupId;
+  final String manufacturerId;
   final int quantity;
   final String submittedBy;
   final DateTime submittedAt;
@@ -11328,7 +11272,7 @@ class PendingCrateReturnData extends DataClass
     required this.businessId,
     this.orderId,
     required this.customerId,
-    required this.crateSizeGroupId,
+    required this.manufacturerId,
     required this.quantity,
     required this.submittedBy,
     required this.submittedAt,
@@ -11348,7 +11292,7 @@ class PendingCrateReturnData extends DataClass
       map['order_id'] = Variable<String>(orderId);
     }
     map['customer_id'] = Variable<String>(customerId);
-    map['crate_size_group_id'] = Variable<String>(crateSizeGroupId);
+    map['manufacturer_id'] = Variable<String>(manufacturerId);
     map['quantity'] = Variable<int>(quantity);
     map['submitted_by'] = Variable<String>(submittedBy);
     map['submitted_at'] = Variable<DateTime>(submittedAt);
@@ -11375,7 +11319,7 @@ class PendingCrateReturnData extends DataClass
           ? const Value.absent()
           : Value(orderId),
       customerId: Value(customerId),
-      crateSizeGroupId: Value(crateSizeGroupId),
+      manufacturerId: Value(manufacturerId),
       quantity: Value(quantity),
       submittedBy: Value(submittedBy),
       submittedAt: Value(submittedAt),
@@ -11404,7 +11348,7 @@ class PendingCrateReturnData extends DataClass
       businessId: serializer.fromJson<String>(json['businessId']),
       orderId: serializer.fromJson<String?>(json['orderId']),
       customerId: serializer.fromJson<String>(json['customerId']),
-      crateSizeGroupId: serializer.fromJson<String>(json['crateSizeGroupId']),
+      manufacturerId: serializer.fromJson<String>(json['manufacturerId']),
       quantity: serializer.fromJson<int>(json['quantity']),
       submittedBy: serializer.fromJson<String>(json['submittedBy']),
       submittedAt: serializer.fromJson<DateTime>(json['submittedAt']),
@@ -11424,7 +11368,7 @@ class PendingCrateReturnData extends DataClass
       'businessId': serializer.toJson<String>(businessId),
       'orderId': serializer.toJson<String?>(orderId),
       'customerId': serializer.toJson<String>(customerId),
-      'crateSizeGroupId': serializer.toJson<String>(crateSizeGroupId),
+      'manufacturerId': serializer.toJson<String>(manufacturerId),
       'quantity': serializer.toJson<int>(quantity),
       'submittedBy': serializer.toJson<String>(submittedBy),
       'submittedAt': serializer.toJson<DateTime>(submittedAt),
@@ -11442,7 +11386,7 @@ class PendingCrateReturnData extends DataClass
     String? businessId,
     Value<String?> orderId = const Value.absent(),
     String? customerId,
-    String? crateSizeGroupId,
+    String? manufacturerId,
     int? quantity,
     String? submittedBy,
     DateTime? submittedAt,
@@ -11457,7 +11401,7 @@ class PendingCrateReturnData extends DataClass
     businessId: businessId ?? this.businessId,
     orderId: orderId.present ? orderId.value : this.orderId,
     customerId: customerId ?? this.customerId,
-    crateSizeGroupId: crateSizeGroupId ?? this.crateSizeGroupId,
+    manufacturerId: manufacturerId ?? this.manufacturerId,
     quantity: quantity ?? this.quantity,
     submittedBy: submittedBy ?? this.submittedBy,
     submittedAt: submittedAt ?? this.submittedAt,
@@ -11480,9 +11424,9 @@ class PendingCrateReturnData extends DataClass
       customerId: data.customerId.present
           ? data.customerId.value
           : this.customerId,
-      crateSizeGroupId: data.crateSizeGroupId.present
-          ? data.crateSizeGroupId.value
-          : this.crateSizeGroupId,
+      manufacturerId: data.manufacturerId.present
+          ? data.manufacturerId.value
+          : this.manufacturerId,
       quantity: data.quantity.present ? data.quantity.value : this.quantity,
       submittedBy: data.submittedBy.present
           ? data.submittedBy.value
@@ -11514,7 +11458,7 @@ class PendingCrateReturnData extends DataClass
           ..write('businessId: $businessId, ')
           ..write('orderId: $orderId, ')
           ..write('customerId: $customerId, ')
-          ..write('crateSizeGroupId: $crateSizeGroupId, ')
+          ..write('manufacturerId: $manufacturerId, ')
           ..write('quantity: $quantity, ')
           ..write('submittedBy: $submittedBy, ')
           ..write('submittedAt: $submittedAt, ')
@@ -11534,7 +11478,7 @@ class PendingCrateReturnData extends DataClass
     businessId,
     orderId,
     customerId,
-    crateSizeGroupId,
+    manufacturerId,
     quantity,
     submittedBy,
     submittedAt,
@@ -11553,7 +11497,7 @@ class PendingCrateReturnData extends DataClass
           other.businessId == this.businessId &&
           other.orderId == this.orderId &&
           other.customerId == this.customerId &&
-          other.crateSizeGroupId == this.crateSizeGroupId &&
+          other.manufacturerId == this.manufacturerId &&
           other.quantity == this.quantity &&
           other.submittedBy == this.submittedBy &&
           other.submittedAt == this.submittedAt &&
@@ -11571,7 +11515,7 @@ class PendingCrateReturnsCompanion
   final Value<String> businessId;
   final Value<String?> orderId;
   final Value<String> customerId;
-  final Value<String> crateSizeGroupId;
+  final Value<String> manufacturerId;
   final Value<int> quantity;
   final Value<String> submittedBy;
   final Value<DateTime> submittedAt;
@@ -11587,7 +11531,7 @@ class PendingCrateReturnsCompanion
     this.businessId = const Value.absent(),
     this.orderId = const Value.absent(),
     this.customerId = const Value.absent(),
-    this.crateSizeGroupId = const Value.absent(),
+    this.manufacturerId = const Value.absent(),
     this.quantity = const Value.absent(),
     this.submittedBy = const Value.absent(),
     this.submittedAt = const Value.absent(),
@@ -11604,7 +11548,7 @@ class PendingCrateReturnsCompanion
     required String businessId,
     this.orderId = const Value.absent(),
     required String customerId,
-    required String crateSizeGroupId,
+    required String manufacturerId,
     required int quantity,
     required String submittedBy,
     this.submittedAt = const Value.absent(),
@@ -11617,7 +11561,7 @@ class PendingCrateReturnsCompanion
     this.rowid = const Value.absent(),
   }) : businessId = Value(businessId),
        customerId = Value(customerId),
-       crateSizeGroupId = Value(crateSizeGroupId),
+       manufacturerId = Value(manufacturerId),
        quantity = Value(quantity),
        submittedBy = Value(submittedBy);
   static Insertable<PendingCrateReturnData> custom({
@@ -11625,7 +11569,7 @@ class PendingCrateReturnsCompanion
     Expression<String>? businessId,
     Expression<String>? orderId,
     Expression<String>? customerId,
-    Expression<String>? crateSizeGroupId,
+    Expression<String>? manufacturerId,
     Expression<int>? quantity,
     Expression<String>? submittedBy,
     Expression<DateTime>? submittedAt,
@@ -11642,7 +11586,7 @@ class PendingCrateReturnsCompanion
       if (businessId != null) 'business_id': businessId,
       if (orderId != null) 'order_id': orderId,
       if (customerId != null) 'customer_id': customerId,
-      if (crateSizeGroupId != null) 'crate_size_group_id': crateSizeGroupId,
+      if (manufacturerId != null) 'manufacturer_id': manufacturerId,
       if (quantity != null) 'quantity': quantity,
       if (submittedBy != null) 'submitted_by': submittedBy,
       if (submittedAt != null) 'submitted_at': submittedAt,
@@ -11661,7 +11605,7 @@ class PendingCrateReturnsCompanion
     Value<String>? businessId,
     Value<String?>? orderId,
     Value<String>? customerId,
-    Value<String>? crateSizeGroupId,
+    Value<String>? manufacturerId,
     Value<int>? quantity,
     Value<String>? submittedBy,
     Value<DateTime>? submittedAt,
@@ -11678,7 +11622,7 @@ class PendingCrateReturnsCompanion
       businessId: businessId ?? this.businessId,
       orderId: orderId ?? this.orderId,
       customerId: customerId ?? this.customerId,
-      crateSizeGroupId: crateSizeGroupId ?? this.crateSizeGroupId,
+      manufacturerId: manufacturerId ?? this.manufacturerId,
       quantity: quantity ?? this.quantity,
       submittedBy: submittedBy ?? this.submittedBy,
       submittedAt: submittedAt ?? this.submittedAt,
@@ -11707,8 +11651,8 @@ class PendingCrateReturnsCompanion
     if (customerId.present) {
       map['customer_id'] = Variable<String>(customerId.value);
     }
-    if (crateSizeGroupId.present) {
-      map['crate_size_group_id'] = Variable<String>(crateSizeGroupId.value);
+    if (manufacturerId.present) {
+      map['manufacturer_id'] = Variable<String>(manufacturerId.value);
     }
     if (quantity.present) {
       map['quantity'] = Variable<int>(quantity.value);
@@ -11750,7 +11694,7 @@ class PendingCrateReturnsCompanion
           ..write('businessId: $businessId, ')
           ..write('orderId: $orderId, ')
           ..write('customerId: $customerId, ')
-          ..write('crateSizeGroupId: $crateSizeGroupId, ')
+          ..write('manufacturerId: $manufacturerId, ')
           ..write('quantity: $quantity, ')
           ..write('submittedBy: $submittedBy, ')
           ..write('submittedAt: $submittedAt, ')
@@ -11831,9 +11775,9 @@ class $CrateLedgerTable extends CrateLedger
   late final GeneratedColumn<String> crateSizeGroupId = GeneratedColumn<String>(
     'crate_size_group_id',
     aliasedName,
-    false,
+    true,
     type: DriftSqlType.string,
-    requiredDuringInsert: true,
+    requiredDuringInsert: false,
     defaultConstraints: GeneratedColumn.constraintIsAlways(
       'REFERENCES crate_size_groups (id)',
     ),
@@ -12032,8 +11976,6 @@ class $CrateLedgerTable extends CrateLedger
           _crateSizeGroupIdMeta,
         ),
       );
-    } else if (isInserting) {
-      context.missing(_crateSizeGroupIdMeta);
     }
     if (data.containsKey('quantity_delta')) {
       context.handle(
@@ -12145,7 +12087,7 @@ class $CrateLedgerTable extends CrateLedger
       crateSizeGroupId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}crate_size_group_id'],
-      )!,
+      ),
       quantityDelta: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}quantity_delta'],
@@ -12200,7 +12142,7 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
   final String businessId;
   final String? customerId;
   final String? manufacturerId;
-  final String crateSizeGroupId;
+  final String? crateSizeGroupId;
   final int quantityDelta;
   final String movementType;
   final String? referenceOrderId;
@@ -12216,7 +12158,7 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
     required this.businessId,
     this.customerId,
     this.manufacturerId,
-    required this.crateSizeGroupId,
+    this.crateSizeGroupId,
     required this.quantityDelta,
     required this.movementType,
     this.referenceOrderId,
@@ -12239,7 +12181,9 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
     if (!nullToAbsent || manufacturerId != null) {
       map['manufacturer_id'] = Variable<String>(manufacturerId);
     }
-    map['crate_size_group_id'] = Variable<String>(crateSizeGroupId);
+    if (!nullToAbsent || crateSizeGroupId != null) {
+      map['crate_size_group_id'] = Variable<String>(crateSizeGroupId);
+    }
     map['quantity_delta'] = Variable<int>(quantityDelta);
     map['movement_type'] = Variable<String>(movementType);
     if (!nullToAbsent || referenceOrderId != null) {
@@ -12275,7 +12219,9 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
       manufacturerId: manufacturerId == null && nullToAbsent
           ? const Value.absent()
           : Value(manufacturerId),
-      crateSizeGroupId: Value(crateSizeGroupId),
+      crateSizeGroupId: crateSizeGroupId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(crateSizeGroupId),
       quantityDelta: Value(quantityDelta),
       movementType: Value(movementType),
       referenceOrderId: referenceOrderId == null && nullToAbsent
@@ -12311,7 +12257,7 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
       businessId: serializer.fromJson<String>(json['businessId']),
       customerId: serializer.fromJson<String?>(json['customerId']),
       manufacturerId: serializer.fromJson<String?>(json['manufacturerId']),
-      crateSizeGroupId: serializer.fromJson<String>(json['crateSizeGroupId']),
+      crateSizeGroupId: serializer.fromJson<String?>(json['crateSizeGroupId']),
       quantityDelta: serializer.fromJson<int>(json['quantityDelta']),
       movementType: serializer.fromJson<String>(json['movementType']),
       referenceOrderId: serializer.fromJson<String?>(json['referenceOrderId']),
@@ -12334,7 +12280,7 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
       'businessId': serializer.toJson<String>(businessId),
       'customerId': serializer.toJson<String?>(customerId),
       'manufacturerId': serializer.toJson<String?>(manufacturerId),
-      'crateSizeGroupId': serializer.toJson<String>(crateSizeGroupId),
+      'crateSizeGroupId': serializer.toJson<String?>(crateSizeGroupId),
       'quantityDelta': serializer.toJson<int>(quantityDelta),
       'movementType': serializer.toJson<String>(movementType),
       'referenceOrderId': serializer.toJson<String?>(referenceOrderId),
@@ -12353,7 +12299,7 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
     String? businessId,
     Value<String?> customerId = const Value.absent(),
     Value<String?> manufacturerId = const Value.absent(),
-    String? crateSizeGroupId,
+    Value<String?> crateSizeGroupId = const Value.absent(),
     int? quantityDelta,
     String? movementType,
     Value<String?> referenceOrderId = const Value.absent(),
@@ -12371,7 +12317,9 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
     manufacturerId: manufacturerId.present
         ? manufacturerId.value
         : this.manufacturerId,
-    crateSizeGroupId: crateSizeGroupId ?? this.crateSizeGroupId,
+    crateSizeGroupId: crateSizeGroupId.present
+        ? crateSizeGroupId.value
+        : this.crateSizeGroupId,
     quantityDelta: quantityDelta ?? this.quantityDelta,
     movementType: movementType ?? this.movementType,
     referenceOrderId: referenceOrderId.present
@@ -12495,7 +12443,7 @@ class CrateLedgerCompanion extends UpdateCompanion<CrateLedgerData> {
   final Value<String> businessId;
   final Value<String?> customerId;
   final Value<String?> manufacturerId;
-  final Value<String> crateSizeGroupId;
+  final Value<String?> crateSizeGroupId;
   final Value<int> quantityDelta;
   final Value<String> movementType;
   final Value<String?> referenceOrderId;
@@ -12530,7 +12478,7 @@ class CrateLedgerCompanion extends UpdateCompanion<CrateLedgerData> {
     required String businessId,
     this.customerId = const Value.absent(),
     this.manufacturerId = const Value.absent(),
-    required String crateSizeGroupId,
+    this.crateSizeGroupId = const Value.absent(),
     required int quantityDelta,
     required String movementType,
     this.referenceOrderId = const Value.absent(),
@@ -12543,7 +12491,6 @@ class CrateLedgerCompanion extends UpdateCompanion<CrateLedgerData> {
     this.lastUpdatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : businessId = Value(businessId),
-       crateSizeGroupId = Value(crateSizeGroupId),
        quantityDelta = Value(quantityDelta),
        movementType = Value(movementType);
   static Insertable<CrateLedgerData> custom({
@@ -12589,7 +12536,7 @@ class CrateLedgerCompanion extends UpdateCompanion<CrateLedgerData> {
     Value<String>? businessId,
     Value<String?>? customerId,
     Value<String?>? manufacturerId,
-    Value<String>? crateSizeGroupId,
+    Value<String?>? crateSizeGroupId,
     Value<int>? quantityDelta,
     Value<String>? movementType,
     Value<String?>? referenceOrderId,
@@ -37012,98 +36959,6 @@ final class $$CrateSizeGroupsTableReferences
     );
   }
 
-  static MultiTypedResultKey<
-    $CustomerCrateBalancesTable,
-    List<CustomerCrateBalance>
-  >
-  _customerCrateBalancesRefsTable(_$AppDatabase db) =>
-      MultiTypedResultKey.fromTable(
-        db.customerCrateBalances,
-        aliasName: $_aliasNameGenerator(
-          db.crateSizeGroups.id,
-          db.customerCrateBalances.crateSizeGroupId,
-        ),
-      );
-
-  $$CustomerCrateBalancesTableProcessedTableManager
-  get customerCrateBalancesRefs {
-    final manager =
-        $$CustomerCrateBalancesTableTableManager(
-          $_db,
-          $_db.customerCrateBalances,
-        ).filter(
-          (f) => f.crateSizeGroupId.id.sqlEquals($_itemColumn<String>('id')!),
-        );
-
-    final cache = $_typedResult.readTableOrNull(
-      _customerCrateBalancesRefsTable($_db),
-    );
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: cache),
-    );
-  }
-
-  static MultiTypedResultKey<
-    $ManufacturerCrateBalancesTable,
-    List<ManufacturerCrateBalance>
-  >
-  _manufacturerCrateBalancesRefsTable(_$AppDatabase db) =>
-      MultiTypedResultKey.fromTable(
-        db.manufacturerCrateBalances,
-        aliasName: $_aliasNameGenerator(
-          db.crateSizeGroups.id,
-          db.manufacturerCrateBalances.crateSizeGroupId,
-        ),
-      );
-
-  $$ManufacturerCrateBalancesTableProcessedTableManager
-  get manufacturerCrateBalancesRefs {
-    final manager =
-        $$ManufacturerCrateBalancesTableTableManager(
-          $_db,
-          $_db.manufacturerCrateBalances,
-        ).filter(
-          (f) => f.crateSizeGroupId.id.sqlEquals($_itemColumn<String>('id')!),
-        );
-
-    final cache = $_typedResult.readTableOrNull(
-      _manufacturerCrateBalancesRefsTable($_db),
-    );
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: cache),
-    );
-  }
-
-  static MultiTypedResultKey<
-    $PendingCrateReturnsTable,
-    List<PendingCrateReturnData>
-  >
-  _pendingCrateReturnsRefsTable(_$AppDatabase db) =>
-      MultiTypedResultKey.fromTable(
-        db.pendingCrateReturns,
-        aliasName: $_aliasNameGenerator(
-          db.crateSizeGroups.id,
-          db.pendingCrateReturns.crateSizeGroupId,
-        ),
-      );
-
-  $$PendingCrateReturnsTableProcessedTableManager get pendingCrateReturnsRefs {
-    final manager =
-        $$PendingCrateReturnsTableTableManager(
-          $_db,
-          $_db.pendingCrateReturns,
-        ).filter(
-          (f) => f.crateSizeGroupId.id.sqlEquals($_itemColumn<String>('id')!),
-        );
-
-    final cache = $_typedResult.readTableOrNull(
-      _pendingCrateReturnsRefsTable($_db),
-    );
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: cache),
-    );
-  }
-
   static MultiTypedResultKey<$CrateLedgerTable, List<CrateLedgerData>>
   _crateLedgerRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.crateLedger,
@@ -37239,84 +37094,6 @@ class $$CrateSizeGroupsTableFilterComposer
           }) => $$ProductsTableFilterComposer(
             $db: $db,
             $table: $db.products,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-
-  Expression<bool> customerCrateBalancesRefs(
-    Expression<bool> Function($$CustomerCrateBalancesTableFilterComposer f) f,
-  ) {
-    final $$CustomerCrateBalancesTableFilterComposer composer =
-        $composerBuilder(
-          composer: this,
-          getCurrentColumn: (t) => t.id,
-          referencedTable: $db.customerCrateBalances,
-          getReferencedColumn: (t) => t.crateSizeGroupId,
-          builder:
-              (
-                joinBuilder, {
-                $addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer,
-              }) => $$CustomerCrateBalancesTableFilterComposer(
-                $db: $db,
-                $table: $db.customerCrateBalances,
-                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-                joinBuilder: joinBuilder,
-                $removeJoinBuilderFromRootComposer:
-                    $removeJoinBuilderFromRootComposer,
-              ),
-        );
-    return f(composer);
-  }
-
-  Expression<bool> manufacturerCrateBalancesRefs(
-    Expression<bool> Function($$ManufacturerCrateBalancesTableFilterComposer f)
-    f,
-  ) {
-    final $$ManufacturerCrateBalancesTableFilterComposer composer =
-        $composerBuilder(
-          composer: this,
-          getCurrentColumn: (t) => t.id,
-          referencedTable: $db.manufacturerCrateBalances,
-          getReferencedColumn: (t) => t.crateSizeGroupId,
-          builder:
-              (
-                joinBuilder, {
-                $addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer,
-              }) => $$ManufacturerCrateBalancesTableFilterComposer(
-                $db: $db,
-                $table: $db.manufacturerCrateBalances,
-                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-                joinBuilder: joinBuilder,
-                $removeJoinBuilderFromRootComposer:
-                    $removeJoinBuilderFromRootComposer,
-              ),
-        );
-    return f(composer);
-  }
-
-  Expression<bool> pendingCrateReturnsRefs(
-    Expression<bool> Function($$PendingCrateReturnsTableFilterComposer f) f,
-  ) {
-    final $$PendingCrateReturnsTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.pendingCrateReturns,
-      getReferencedColumn: (t) => t.crateSizeGroupId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$PendingCrateReturnsTableFilterComposer(
-            $db: $db,
-            $table: $db.pendingCrateReturns,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -37539,85 +37316,6 @@ class $$CrateSizeGroupsTableAnnotationComposer
     return f(composer);
   }
 
-  Expression<T> customerCrateBalancesRefs<T extends Object>(
-    Expression<T> Function($$CustomerCrateBalancesTableAnnotationComposer a) f,
-  ) {
-    final $$CustomerCrateBalancesTableAnnotationComposer composer =
-        $composerBuilder(
-          composer: this,
-          getCurrentColumn: (t) => t.id,
-          referencedTable: $db.customerCrateBalances,
-          getReferencedColumn: (t) => t.crateSizeGroupId,
-          builder:
-              (
-                joinBuilder, {
-                $addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer,
-              }) => $$CustomerCrateBalancesTableAnnotationComposer(
-                $db: $db,
-                $table: $db.customerCrateBalances,
-                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-                joinBuilder: joinBuilder,
-                $removeJoinBuilderFromRootComposer:
-                    $removeJoinBuilderFromRootComposer,
-              ),
-        );
-    return f(composer);
-  }
-
-  Expression<T> manufacturerCrateBalancesRefs<T extends Object>(
-    Expression<T> Function($$ManufacturerCrateBalancesTableAnnotationComposer a)
-    f,
-  ) {
-    final $$ManufacturerCrateBalancesTableAnnotationComposer composer =
-        $composerBuilder(
-          composer: this,
-          getCurrentColumn: (t) => t.id,
-          referencedTable: $db.manufacturerCrateBalances,
-          getReferencedColumn: (t) => t.crateSizeGroupId,
-          builder:
-              (
-                joinBuilder, {
-                $addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer,
-              }) => $$ManufacturerCrateBalancesTableAnnotationComposer(
-                $db: $db,
-                $table: $db.manufacturerCrateBalances,
-                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-                joinBuilder: joinBuilder,
-                $removeJoinBuilderFromRootComposer:
-                    $removeJoinBuilderFromRootComposer,
-              ),
-        );
-    return f(composer);
-  }
-
-  Expression<T> pendingCrateReturnsRefs<T extends Object>(
-    Expression<T> Function($$PendingCrateReturnsTableAnnotationComposer a) f,
-  ) {
-    final $$PendingCrateReturnsTableAnnotationComposer composer =
-        $composerBuilder(
-          composer: this,
-          getCurrentColumn: (t) => t.id,
-          referencedTable: $db.pendingCrateReturns,
-          getReferencedColumn: (t) => t.crateSizeGroupId,
-          builder:
-              (
-                joinBuilder, {
-                $addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer,
-              }) => $$PendingCrateReturnsTableAnnotationComposer(
-                $db: $db,
-                $table: $db.pendingCrateReturns,
-                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-                joinBuilder: joinBuilder,
-                $removeJoinBuilderFromRootComposer:
-                    $removeJoinBuilderFromRootComposer,
-              ),
-        );
-    return f(composer);
-  }
-
   Expression<T> crateLedgerRefs<T extends Object>(
     Expression<T> Function($$CrateLedgerTableAnnotationComposer a) f,
   ) {
@@ -37661,9 +37359,6 @@ class $$CrateSizeGroupsTableTableManager
             bool businessId,
             bool suppliersRefs,
             bool productsRefs,
-            bool customerCrateBalancesRefs,
-            bool manufacturerCrateBalancesRefs,
-            bool pendingCrateReturnsRefs,
             bool crateLedgerRefs,
           })
         > {
@@ -37741,9 +37436,6 @@ class $$CrateSizeGroupsTableTableManager
                 businessId = false,
                 suppliersRefs = false,
                 productsRefs = false,
-                customerCrateBalancesRefs = false,
-                manufacturerCrateBalancesRefs = false,
-                pendingCrateReturnsRefs = false,
                 crateLedgerRefs = false,
               }) {
                 return PrefetchHooks(
@@ -37751,10 +37443,6 @@ class $$CrateSizeGroupsTableTableManager
                   explicitlyWatchedTables: [
                     if (suppliersRefs) db.suppliers,
                     if (productsRefs) db.products,
-                    if (customerCrateBalancesRefs) db.customerCrateBalances,
-                    if (manufacturerCrateBalancesRefs)
-                      db.manufacturerCrateBalances,
-                    if (pendingCrateReturnsRefs) db.pendingCrateReturns,
                     if (crateLedgerRefs) db.crateLedger,
                   ],
                   addJoins:
@@ -37835,69 +37523,6 @@ class $$CrateSizeGroupsTableTableManager
                               ),
                           typedResults: items,
                         ),
-                      if (customerCrateBalancesRefs)
-                        await $_getPrefetchedData<
-                          CrateSizeGroupData,
-                          $CrateSizeGroupsTable,
-                          CustomerCrateBalance
-                        >(
-                          currentTable: table,
-                          referencedTable: $$CrateSizeGroupsTableReferences
-                              ._customerCrateBalancesRefsTable(db),
-                          managerFromTypedResult: (p0) =>
-                              $$CrateSizeGroupsTableReferences(
-                                db,
-                                table,
-                                p0,
-                              ).customerCrateBalancesRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.crateSizeGroupId == item.id,
-                              ),
-                          typedResults: items,
-                        ),
-                      if (manufacturerCrateBalancesRefs)
-                        await $_getPrefetchedData<
-                          CrateSizeGroupData,
-                          $CrateSizeGroupsTable,
-                          ManufacturerCrateBalance
-                        >(
-                          currentTable: table,
-                          referencedTable: $$CrateSizeGroupsTableReferences
-                              ._manufacturerCrateBalancesRefsTable(db),
-                          managerFromTypedResult: (p0) =>
-                              $$CrateSizeGroupsTableReferences(
-                                db,
-                                table,
-                                p0,
-                              ).manufacturerCrateBalancesRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.crateSizeGroupId == item.id,
-                              ),
-                          typedResults: items,
-                        ),
-                      if (pendingCrateReturnsRefs)
-                        await $_getPrefetchedData<
-                          CrateSizeGroupData,
-                          $CrateSizeGroupsTable,
-                          PendingCrateReturnData
-                        >(
-                          currentTable: table,
-                          referencedTable: $$CrateSizeGroupsTableReferences
-                              ._pendingCrateReturnsRefsTable(db),
-                          managerFromTypedResult: (p0) =>
-                              $$CrateSizeGroupsTableReferences(
-                                db,
-                                table,
-                                p0,
-                              ).pendingCrateReturnsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.crateSizeGroupId == item.id,
-                              ),
-                          typedResults: items,
-                        ),
                       if (crateLedgerRefs)
                         await $_getPrefetchedData<
                           CrateSizeGroupData,
@@ -37943,9 +37568,6 @@ typedef $$CrateSizeGroupsTableProcessedTableManager =
         bool businessId,
         bool suppliersRefs,
         bool productsRefs,
-        bool customerCrateBalancesRefs,
-        bool manufacturerCrateBalancesRefs,
-        bool pendingCrateReturnsRefs,
         bool crateLedgerRefs,
       })
     >;
@@ -38024,6 +37646,34 @@ final class $$ManufacturersTableReferences
   }
 
   static MultiTypedResultKey<
+    $CustomerCrateBalancesTable,
+    List<CustomerCrateBalance>
+  >
+  _customerCrateBalancesRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.customerCrateBalances,
+        aliasName: $_aliasNameGenerator(
+          db.manufacturers.id,
+          db.customerCrateBalances.manufacturerId,
+        ),
+      );
+
+  $$CustomerCrateBalancesTableProcessedTableManager
+  get customerCrateBalancesRefs {
+    final manager = $$CustomerCrateBalancesTableTableManager(
+      $_db,
+      $_db.customerCrateBalances,
+    ).filter((f) => f.manufacturerId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _customerCrateBalancesRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
     $ManufacturerCrateBalancesTable,
     List<ManufacturerCrateBalance>
   >
@@ -38045,6 +37695,33 @@ final class $$ManufacturersTableReferences
 
     final cache = $_typedResult.readTableOrNull(
       _manufacturerCrateBalancesRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $PendingCrateReturnsTable,
+    List<PendingCrateReturnData>
+  >
+  _pendingCrateReturnsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.pendingCrateReturns,
+        aliasName: $_aliasNameGenerator(
+          db.manufacturers.id,
+          db.pendingCrateReturns.manufacturerId,
+        ),
+      );
+
+  $$PendingCrateReturnsTableProcessedTableManager get pendingCrateReturnsRefs {
+    final manager = $$PendingCrateReturnsTableTableManager(
+      $_db,
+      $_db.pendingCrateReturns,
+    ).filter((f) => f.manufacturerId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _pendingCrateReturnsRefsTable($_db),
     );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
@@ -38165,6 +37842,32 @@ class $$ManufacturersTableFilterComposer
     return f(composer);
   }
 
+  Expression<bool> customerCrateBalancesRefs(
+    Expression<bool> Function($$CustomerCrateBalancesTableFilterComposer f) f,
+  ) {
+    final $$CustomerCrateBalancesTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.customerCrateBalances,
+          getReferencedColumn: (t) => t.manufacturerId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$CustomerCrateBalancesTableFilterComposer(
+                $db: $db,
+                $table: $db.customerCrateBalances,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
   Expression<bool> manufacturerCrateBalancesRefs(
     Expression<bool> Function($$ManufacturerCrateBalancesTableFilterComposer f)
     f,
@@ -38189,6 +37892,31 @@ class $$ManufacturersTableFilterComposer
                     $removeJoinBuilderFromRootComposer,
               ),
         );
+    return f(composer);
+  }
+
+  Expression<bool> pendingCrateReturnsRefs(
+    Expression<bool> Function($$PendingCrateReturnsTableFilterComposer f) f,
+  ) {
+    final $$PendingCrateReturnsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.pendingCrateReturns,
+      getReferencedColumn: (t) => t.manufacturerId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PendingCrateReturnsTableFilterComposer(
+            $db: $db,
+            $table: $db.pendingCrateReturns,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
     return f(composer);
   }
 
@@ -38370,6 +38098,32 @@ class $$ManufacturersTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> customerCrateBalancesRefs<T extends Object>(
+    Expression<T> Function($$CustomerCrateBalancesTableAnnotationComposer a) f,
+  ) {
+    final $$CustomerCrateBalancesTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.customerCrateBalances,
+          getReferencedColumn: (t) => t.manufacturerId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$CustomerCrateBalancesTableAnnotationComposer(
+                $db: $db,
+                $table: $db.customerCrateBalances,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
   Expression<T> manufacturerCrateBalancesRefs<T extends Object>(
     Expression<T> Function($$ManufacturerCrateBalancesTableAnnotationComposer a)
     f,
@@ -38388,6 +38142,32 @@ class $$ManufacturersTableAnnotationComposer
               }) => $$ManufacturerCrateBalancesTableAnnotationComposer(
                 $db: $db,
                 $table: $db.manufacturerCrateBalances,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> pendingCrateReturnsRefs<T extends Object>(
+    Expression<T> Function($$PendingCrateReturnsTableAnnotationComposer a) f,
+  ) {
+    final $$PendingCrateReturnsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.pendingCrateReturns,
+          getReferencedColumn: (t) => t.manufacturerId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$PendingCrateReturnsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.pendingCrateReturns,
                 $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
                 joinBuilder: joinBuilder,
                 $removeJoinBuilderFromRootComposer:
@@ -38439,7 +38219,9 @@ class $$ManufacturersTableTableManager
           PrefetchHooks Function({
             bool businessId,
             bool productsRefs,
+            bool customerCrateBalancesRefs,
             bool manufacturerCrateBalancesRefs,
+            bool pendingCrateReturnsRefs,
             bool crateLedgerRefs,
           })
         > {
@@ -38510,15 +38292,19 @@ class $$ManufacturersTableTableManager
               ({
                 businessId = false,
                 productsRefs = false,
+                customerCrateBalancesRefs = false,
                 manufacturerCrateBalancesRefs = false,
+                pendingCrateReturnsRefs = false,
                 crateLedgerRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
                     if (productsRefs) db.products,
+                    if (customerCrateBalancesRefs) db.customerCrateBalances,
                     if (manufacturerCrateBalancesRefs)
                       db.manufacturerCrateBalances,
+                    if (pendingCrateReturnsRefs) db.pendingCrateReturns,
                     if (crateLedgerRefs) db.crateLedger,
                   ],
                   addJoins:
@@ -38578,6 +38364,27 @@ class $$ManufacturersTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (customerCrateBalancesRefs)
+                        await $_getPrefetchedData<
+                          ManufacturerData,
+                          $ManufacturersTable,
+                          CustomerCrateBalance
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ManufacturersTableReferences
+                              ._customerCrateBalancesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ManufacturersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).customerCrateBalancesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.manufacturerId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (manufacturerCrateBalancesRefs)
                         await $_getPrefetchedData<
                           ManufacturerData,
@@ -38593,6 +38400,27 @@ class $$ManufacturersTableTableManager
                                 table,
                                 p0,
                               ).manufacturerCrateBalancesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.manufacturerId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (pendingCrateReturnsRefs)
+                        await $_getPrefetchedData<
+                          ManufacturerData,
+                          $ManufacturersTable,
+                          PendingCrateReturnData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ManufacturersTableReferences
+                              ._pendingCrateReturnsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ManufacturersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).pendingCrateReturnsRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.manufacturerId == item.id,
@@ -38643,7 +38471,9 @@ typedef $$ManufacturersTableProcessedTableManager =
       PrefetchHooks Function({
         bool businessId,
         bool productsRefs,
+        bool customerCrateBalancesRefs,
         bool manufacturerCrateBalancesRefs,
+        bool pendingCrateReturnsRefs,
         bool crateLedgerRefs,
       })
     >;
@@ -50052,7 +49882,7 @@ typedef $$CustomerCrateBalancesTableCreateCompanionBuilder =
       Value<String> id,
       required String businessId,
       required String customerId,
-      required String crateSizeGroupId,
+      required String manufacturerId,
       Value<int> balance,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -50063,7 +49893,7 @@ typedef $$CustomerCrateBalancesTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> businessId,
       Value<String> customerId,
-      Value<String> crateSizeGroupId,
+      Value<String> manufacturerId,
       Value<int> balance,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -50127,22 +49957,22 @@ final class $$CustomerCrateBalancesTableReferences
     );
   }
 
-  static $CrateSizeGroupsTable _crateSizeGroupIdTable(_$AppDatabase db) =>
-      db.crateSizeGroups.createAlias(
+  static $ManufacturersTable _manufacturerIdTable(_$AppDatabase db) =>
+      db.manufacturers.createAlias(
         $_aliasNameGenerator(
-          db.customerCrateBalances.crateSizeGroupId,
-          db.crateSizeGroups.id,
+          db.customerCrateBalances.manufacturerId,
+          db.manufacturers.id,
         ),
       );
 
-  $$CrateSizeGroupsTableProcessedTableManager get crateSizeGroupId {
-    final $_column = $_itemColumn<String>('crate_size_group_id')!;
+  $$ManufacturersTableProcessedTableManager get manufacturerId {
+    final $_column = $_itemColumn<String>('manufacturer_id')!;
 
-    final manager = $$CrateSizeGroupsTableTableManager(
+    final manager = $$ManufacturersTableTableManager(
       $_db,
-      $_db.crateSizeGroups,
+      $_db.manufacturers,
     ).filter((f) => f.id.sqlEquals($_column));
-    final item = $_typedResult.readTableOrNull(_crateSizeGroupIdTable($_db));
+    final item = $_typedResult.readTableOrNull(_manufacturerIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -50225,20 +50055,20 @@ class $$CustomerCrateBalancesTableFilterComposer
     return composer;
   }
 
-  $$CrateSizeGroupsTableFilterComposer get crateSizeGroupId {
-    final $$CrateSizeGroupsTableFilterComposer composer = $composerBuilder(
+  $$ManufacturersTableFilterComposer get manufacturerId {
+    final $$ManufacturersTableFilterComposer composer = $composerBuilder(
       composer: this,
-      getCurrentColumn: (t) => t.crateSizeGroupId,
-      referencedTable: $db.crateSizeGroups,
+      getCurrentColumn: (t) => t.manufacturerId,
+      referencedTable: $db.manufacturers,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$CrateSizeGroupsTableFilterComposer(
+          }) => $$ManufacturersTableFilterComposer(
             $db: $db,
-            $table: $db.crateSizeGroups,
+            $table: $db.manufacturers,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -50324,20 +50154,20 @@ class $$CustomerCrateBalancesTableOrderingComposer
     return composer;
   }
 
-  $$CrateSizeGroupsTableOrderingComposer get crateSizeGroupId {
-    final $$CrateSizeGroupsTableOrderingComposer composer = $composerBuilder(
+  $$ManufacturersTableOrderingComposer get manufacturerId {
+    final $$ManufacturersTableOrderingComposer composer = $composerBuilder(
       composer: this,
-      getCurrentColumn: (t) => t.crateSizeGroupId,
-      referencedTable: $db.crateSizeGroups,
+      getCurrentColumn: (t) => t.manufacturerId,
+      referencedTable: $db.manufacturers,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$CrateSizeGroupsTableOrderingComposer(
+          }) => $$ManufacturersTableOrderingComposer(
             $db: $db,
-            $table: $db.crateSizeGroups,
+            $table: $db.manufacturers,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -50417,20 +50247,20 @@ class $$CustomerCrateBalancesTableAnnotationComposer
     return composer;
   }
 
-  $$CrateSizeGroupsTableAnnotationComposer get crateSizeGroupId {
-    final $$CrateSizeGroupsTableAnnotationComposer composer = $composerBuilder(
+  $$ManufacturersTableAnnotationComposer get manufacturerId {
+    final $$ManufacturersTableAnnotationComposer composer = $composerBuilder(
       composer: this,
-      getCurrentColumn: (t) => t.crateSizeGroupId,
-      referencedTable: $db.crateSizeGroups,
+      getCurrentColumn: (t) => t.manufacturerId,
+      referencedTable: $db.manufacturers,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$CrateSizeGroupsTableAnnotationComposer(
+          }) => $$ManufacturersTableAnnotationComposer(
             $db: $db,
-            $table: $db.crateSizeGroups,
+            $table: $db.manufacturers,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -50457,7 +50287,7 @@ class $$CustomerCrateBalancesTableTableManager
           PrefetchHooks Function({
             bool businessId,
             bool customerId,
-            bool crateSizeGroupId,
+            bool manufacturerId,
           })
         > {
   $$CustomerCrateBalancesTableTableManager(
@@ -50487,7 +50317,7 @@ class $$CustomerCrateBalancesTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> businessId = const Value.absent(),
                 Value<String> customerId = const Value.absent(),
-                Value<String> crateSizeGroupId = const Value.absent(),
+                Value<String> manufacturerId = const Value.absent(),
                 Value<int> balance = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -50496,7 +50326,7 @@ class $$CustomerCrateBalancesTableTableManager
                 id: id,
                 businessId: businessId,
                 customerId: customerId,
-                crateSizeGroupId: crateSizeGroupId,
+                manufacturerId: manufacturerId,
                 balance: balance,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
@@ -50507,7 +50337,7 @@ class $$CustomerCrateBalancesTableTableManager
                 Value<String> id = const Value.absent(),
                 required String businessId,
                 required String customerId,
-                required String crateSizeGroupId,
+                required String manufacturerId,
                 Value<int> balance = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -50516,7 +50346,7 @@ class $$CustomerCrateBalancesTableTableManager
                 id: id,
                 businessId: businessId,
                 customerId: customerId,
-                crateSizeGroupId: crateSizeGroupId,
+                manufacturerId: manufacturerId,
                 balance: balance,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
@@ -50534,7 +50364,7 @@ class $$CustomerCrateBalancesTableTableManager
               ({
                 businessId = false,
                 customerId = false,
-                crateSizeGroupId = false,
+                manufacturerId = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -50585,17 +50415,17 @@ class $$CustomerCrateBalancesTableTableManager
                                   )
                                   as T;
                         }
-                        if (crateSizeGroupId) {
+                        if (manufacturerId) {
                           state =
                               state.withJoin(
                                     currentTable: table,
-                                    currentColumn: table.crateSizeGroupId,
+                                    currentColumn: table.manufacturerId,
                                     referencedTable:
                                         $$CustomerCrateBalancesTableReferences
-                                            ._crateSizeGroupIdTable(db),
+                                            ._manufacturerIdTable(db),
                                     referencedColumn:
                                         $$CustomerCrateBalancesTableReferences
-                                            ._crateSizeGroupIdTable(db)
+                                            ._manufacturerIdTable(db)
                                             .id,
                                   )
                                   as T;
@@ -50627,7 +50457,7 @@ typedef $$CustomerCrateBalancesTableProcessedTableManager =
       PrefetchHooks Function({
         bool businessId,
         bool customerId,
-        bool crateSizeGroupId,
+        bool manufacturerId,
       })
     >;
 typedef $$ManufacturerCrateBalancesTableCreateCompanionBuilder =
@@ -50635,7 +50465,6 @@ typedef $$ManufacturerCrateBalancesTableCreateCompanionBuilder =
       Value<String> id,
       required String businessId,
       required String manufacturerId,
-      required String crateSizeGroupId,
       Value<int> balance,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -50646,7 +50475,6 @@ typedef $$ManufacturerCrateBalancesTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> businessId,
       Value<String> manufacturerId,
-      Value<String> crateSizeGroupId,
       Value<int> balance,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -50704,28 +50532,6 @@ final class $$ManufacturerCrateBalancesTableReferences
       $_db.manufacturers,
     ).filter((f) => f.id.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_manufacturerIdTable($_db));
-    if (item == null) return manager;
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: [item]),
-    );
-  }
-
-  static $CrateSizeGroupsTable _crateSizeGroupIdTable(_$AppDatabase db) =>
-      db.crateSizeGroups.createAlias(
-        $_aliasNameGenerator(
-          db.manufacturerCrateBalances.crateSizeGroupId,
-          db.crateSizeGroups.id,
-        ),
-      );
-
-  $$CrateSizeGroupsTableProcessedTableManager get crateSizeGroupId {
-    final $_column = $_itemColumn<String>('crate_size_group_id')!;
-
-    final manager = $$CrateSizeGroupsTableTableManager(
-      $_db,
-      $_db.crateSizeGroups,
-    ).filter((f) => f.id.sqlEquals($_column));
-    final item = $_typedResult.readTableOrNull(_crateSizeGroupIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -50799,29 +50605,6 @@ class $$ManufacturerCrateBalancesTableFilterComposer
           }) => $$ManufacturersTableFilterComposer(
             $db: $db,
             $table: $db.manufacturers,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
-
-  $$CrateSizeGroupsTableFilterComposer get crateSizeGroupId {
-    final $$CrateSizeGroupsTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.crateSizeGroupId,
-      referencedTable: $db.crateSizeGroups,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$CrateSizeGroupsTableFilterComposer(
-            $db: $db,
-            $table: $db.crateSizeGroups,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -50906,29 +50689,6 @@ class $$ManufacturerCrateBalancesTableOrderingComposer
     );
     return composer;
   }
-
-  $$CrateSizeGroupsTableOrderingComposer get crateSizeGroupId {
-    final $$CrateSizeGroupsTableOrderingComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.crateSizeGroupId,
-      referencedTable: $db.crateSizeGroups,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$CrateSizeGroupsTableOrderingComposer(
-            $db: $db,
-            $table: $db.crateSizeGroups,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
 }
 
 class $$ManufacturerCrateBalancesTableAnnotationComposer
@@ -50999,29 +50759,6 @@ class $$ManufacturerCrateBalancesTableAnnotationComposer
     );
     return composer;
   }
-
-  $$CrateSizeGroupsTableAnnotationComposer get crateSizeGroupId {
-    final $$CrateSizeGroupsTableAnnotationComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.crateSizeGroupId,
-      referencedTable: $db.crateSizeGroups,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$CrateSizeGroupsTableAnnotationComposer(
-            $db: $db,
-            $table: $db.crateSizeGroups,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
 }
 
 class $$ManufacturerCrateBalancesTableTableManager
@@ -51040,11 +50777,7 @@ class $$ManufacturerCrateBalancesTableTableManager
             $$ManufacturerCrateBalancesTableReferences,
           ),
           ManufacturerCrateBalance,
-          PrefetchHooks Function({
-            bool businessId,
-            bool manufacturerId,
-            bool crateSizeGroupId,
-          })
+          PrefetchHooks Function({bool businessId, bool manufacturerId})
         > {
   $$ManufacturerCrateBalancesTableTableManager(
     _$AppDatabase db,
@@ -51073,7 +50806,6 @@ class $$ManufacturerCrateBalancesTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> businessId = const Value.absent(),
                 Value<String> manufacturerId = const Value.absent(),
-                Value<String> crateSizeGroupId = const Value.absent(),
                 Value<int> balance = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -51082,7 +50814,6 @@ class $$ManufacturerCrateBalancesTableTableManager
                 id: id,
                 businessId: businessId,
                 manufacturerId: manufacturerId,
-                crateSizeGroupId: crateSizeGroupId,
                 balance: balance,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
@@ -51093,7 +50824,6 @@ class $$ManufacturerCrateBalancesTableTableManager
                 Value<String> id = const Value.absent(),
                 required String businessId,
                 required String manufacturerId,
-                required String crateSizeGroupId,
                 Value<int> balance = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -51102,7 +50832,6 @@ class $$ManufacturerCrateBalancesTableTableManager
                 id: id,
                 businessId: businessId,
                 manufacturerId: manufacturerId,
-                crateSizeGroupId: crateSizeGroupId,
                 balance: balance,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
@@ -51116,84 +50845,64 @@ class $$ManufacturerCrateBalancesTableTableManager
                 ),
               )
               .toList(),
-          prefetchHooksCallback:
-              ({
-                businessId = false,
-                manufacturerId = false,
-                crateSizeGroupId = false,
-              }) {
-                return PrefetchHooks(
-                  db: db,
-                  explicitlyWatchedTables: [],
-                  addJoins:
-                      <
-                        T extends TableManagerState<
-                          dynamic,
-                          dynamic,
-                          dynamic,
-                          dynamic,
-                          dynamic,
-                          dynamic,
-                          dynamic,
-                          dynamic,
-                          dynamic,
-                          dynamic,
-                          dynamic
-                        >
-                      >(state) {
-                        if (businessId) {
-                          state =
-                              state.withJoin(
-                                    currentTable: table,
-                                    currentColumn: table.businessId,
-                                    referencedTable:
-                                        $$ManufacturerCrateBalancesTableReferences
-                                            ._businessIdTable(db),
-                                    referencedColumn:
-                                        $$ManufacturerCrateBalancesTableReferences
-                                            ._businessIdTable(db)
-                                            .id,
-                                  )
-                                  as T;
-                        }
-                        if (manufacturerId) {
-                          state =
-                              state.withJoin(
-                                    currentTable: table,
-                                    currentColumn: table.manufacturerId,
-                                    referencedTable:
-                                        $$ManufacturerCrateBalancesTableReferences
-                                            ._manufacturerIdTable(db),
-                                    referencedColumn:
-                                        $$ManufacturerCrateBalancesTableReferences
-                                            ._manufacturerIdTable(db)
-                                            .id,
-                                  )
-                                  as T;
-                        }
-                        if (crateSizeGroupId) {
-                          state =
-                              state.withJoin(
-                                    currentTable: table,
-                                    currentColumn: table.crateSizeGroupId,
-                                    referencedTable:
-                                        $$ManufacturerCrateBalancesTableReferences
-                                            ._crateSizeGroupIdTable(db),
-                                    referencedColumn:
-                                        $$ManufacturerCrateBalancesTableReferences
-                                            ._crateSizeGroupIdTable(db)
-                                            .id,
-                                  )
-                                  as T;
-                        }
+          prefetchHooksCallback: ({businessId = false, manufacturerId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (businessId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.businessId,
+                                referencedTable:
+                                    $$ManufacturerCrateBalancesTableReferences
+                                        ._businessIdTable(db),
+                                referencedColumn:
+                                    $$ManufacturerCrateBalancesTableReferences
+                                        ._businessIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+                    if (manufacturerId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.manufacturerId,
+                                referencedTable:
+                                    $$ManufacturerCrateBalancesTableReferences
+                                        ._manufacturerIdTable(db),
+                                referencedColumn:
+                                    $$ManufacturerCrateBalancesTableReferences
+                                        ._manufacturerIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
 
-                        return state;
-                      },
-                  getPrefetchedDataCallback: (items) async {
-                    return [];
+                    return state;
                   },
-                );
+              getPrefetchedDataCallback: (items) async {
+                return [];
               },
+            );
+          },
         ),
       );
 }
@@ -51210,11 +50919,7 @@ typedef $$ManufacturerCrateBalancesTableProcessedTableManager =
       $$ManufacturerCrateBalancesTableUpdateCompanionBuilder,
       (ManufacturerCrateBalance, $$ManufacturerCrateBalancesTableReferences),
       ManufacturerCrateBalance,
-      PrefetchHooks Function({
-        bool businessId,
-        bool manufacturerId,
-        bool crateSizeGroupId,
-      })
+      PrefetchHooks Function({bool businessId, bool manufacturerId})
     >;
 typedef $$PendingCrateReturnsTableCreateCompanionBuilder =
     PendingCrateReturnsCompanion Function({
@@ -51222,7 +50927,7 @@ typedef $$PendingCrateReturnsTableCreateCompanionBuilder =
       required String businessId,
       Value<String?> orderId,
       required String customerId,
-      required String crateSizeGroupId,
+      required String manufacturerId,
       required int quantity,
       required String submittedBy,
       Value<DateTime> submittedAt,
@@ -51240,7 +50945,7 @@ typedef $$PendingCrateReturnsTableUpdateCompanionBuilder =
       Value<String> businessId,
       Value<String?> orderId,
       Value<String> customerId,
-      Value<String> crateSizeGroupId,
+      Value<String> manufacturerId,
       Value<int> quantity,
       Value<String> submittedBy,
       Value<DateTime> submittedAt,
@@ -51328,22 +51033,22 @@ final class $$PendingCrateReturnsTableReferences
     );
   }
 
-  static $CrateSizeGroupsTable _crateSizeGroupIdTable(_$AppDatabase db) =>
-      db.crateSizeGroups.createAlias(
+  static $ManufacturersTable _manufacturerIdTable(_$AppDatabase db) =>
+      db.manufacturers.createAlias(
         $_aliasNameGenerator(
-          db.pendingCrateReturns.crateSizeGroupId,
-          db.crateSizeGroups.id,
+          db.pendingCrateReturns.manufacturerId,
+          db.manufacturers.id,
         ),
       );
 
-  $$CrateSizeGroupsTableProcessedTableManager get crateSizeGroupId {
-    final $_column = $_itemColumn<String>('crate_size_group_id')!;
+  $$ManufacturersTableProcessedTableManager get manufacturerId {
+    final $_column = $_itemColumn<String>('manufacturer_id')!;
 
-    final manager = $$CrateSizeGroupsTableTableManager(
+    final manager = $$ManufacturersTableTableManager(
       $_db,
-      $_db.crateSizeGroups,
+      $_db.manufacturers,
     ).filter((f) => f.id.sqlEquals($_column));
-    final item = $_typedResult.readTableOrNull(_crateSizeGroupIdTable($_db));
+    final item = $_typedResult.readTableOrNull(_manufacturerIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -51527,20 +51232,20 @@ class $$PendingCrateReturnsTableFilterComposer
     return composer;
   }
 
-  $$CrateSizeGroupsTableFilterComposer get crateSizeGroupId {
-    final $$CrateSizeGroupsTableFilterComposer composer = $composerBuilder(
+  $$ManufacturersTableFilterComposer get manufacturerId {
+    final $$ManufacturersTableFilterComposer composer = $composerBuilder(
       composer: this,
-      getCurrentColumn: (t) => t.crateSizeGroupId,
-      referencedTable: $db.crateSizeGroups,
+      getCurrentColumn: (t) => t.manufacturerId,
+      referencedTable: $db.manufacturers,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$CrateSizeGroupsTableFilterComposer(
+          }) => $$ManufacturersTableFilterComposer(
             $db: $db,
-            $table: $db.crateSizeGroups,
+            $table: $db.manufacturers,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -51740,20 +51445,20 @@ class $$PendingCrateReturnsTableOrderingComposer
     return composer;
   }
 
-  $$CrateSizeGroupsTableOrderingComposer get crateSizeGroupId {
-    final $$CrateSizeGroupsTableOrderingComposer composer = $composerBuilder(
+  $$ManufacturersTableOrderingComposer get manufacturerId {
+    final $$ManufacturersTableOrderingComposer composer = $composerBuilder(
       composer: this,
-      getCurrentColumn: (t) => t.crateSizeGroupId,
-      referencedTable: $db.crateSizeGroups,
+      getCurrentColumn: (t) => t.manufacturerId,
+      referencedTable: $db.manufacturers,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$CrateSizeGroupsTableOrderingComposer(
+          }) => $$ManufacturersTableOrderingComposer(
             $db: $db,
-            $table: $db.crateSizeGroups,
+            $table: $db.manufacturers,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -51920,20 +51625,20 @@ class $$PendingCrateReturnsTableAnnotationComposer
     return composer;
   }
 
-  $$CrateSizeGroupsTableAnnotationComposer get crateSizeGroupId {
-    final $$CrateSizeGroupsTableAnnotationComposer composer = $composerBuilder(
+  $$ManufacturersTableAnnotationComposer get manufacturerId {
+    final $$ManufacturersTableAnnotationComposer composer = $composerBuilder(
       composer: this,
-      getCurrentColumn: (t) => t.crateSizeGroupId,
-      referencedTable: $db.crateSizeGroups,
+      getCurrentColumn: (t) => t.manufacturerId,
+      referencedTable: $db.manufacturers,
       getReferencedColumn: (t) => t.id,
       builder:
           (
             joinBuilder, {
             $addJoinBuilderToRootComposer,
             $removeJoinBuilderFromRootComposer,
-          }) => $$CrateSizeGroupsTableAnnotationComposer(
+          }) => $$ManufacturersTableAnnotationComposer(
             $db: $db,
-            $table: $db.crateSizeGroups,
+            $table: $db.manufacturers,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -52032,7 +51737,7 @@ class $$PendingCrateReturnsTableTableManager
             bool businessId,
             bool orderId,
             bool customerId,
-            bool crateSizeGroupId,
+            bool manufacturerId,
             bool submittedBy,
             bool approvedBy,
             bool crateLedgerRefs,
@@ -52063,7 +51768,7 @@ class $$PendingCrateReturnsTableTableManager
                 Value<String> businessId = const Value.absent(),
                 Value<String?> orderId = const Value.absent(),
                 Value<String> customerId = const Value.absent(),
-                Value<String> crateSizeGroupId = const Value.absent(),
+                Value<String> manufacturerId = const Value.absent(),
                 Value<int> quantity = const Value.absent(),
                 Value<String> submittedBy = const Value.absent(),
                 Value<DateTime> submittedAt = const Value.absent(),
@@ -52079,7 +51784,7 @@ class $$PendingCrateReturnsTableTableManager
                 businessId: businessId,
                 orderId: orderId,
                 customerId: customerId,
-                crateSizeGroupId: crateSizeGroupId,
+                manufacturerId: manufacturerId,
                 quantity: quantity,
                 submittedBy: submittedBy,
                 submittedAt: submittedAt,
@@ -52097,7 +51802,7 @@ class $$PendingCrateReturnsTableTableManager
                 required String businessId,
                 Value<String?> orderId = const Value.absent(),
                 required String customerId,
-                required String crateSizeGroupId,
+                required String manufacturerId,
                 required int quantity,
                 required String submittedBy,
                 Value<DateTime> submittedAt = const Value.absent(),
@@ -52113,7 +51818,7 @@ class $$PendingCrateReturnsTableTableManager
                 businessId: businessId,
                 orderId: orderId,
                 customerId: customerId,
-                crateSizeGroupId: crateSizeGroupId,
+                manufacturerId: manufacturerId,
                 quantity: quantity,
                 submittedBy: submittedBy,
                 submittedAt: submittedAt,
@@ -52138,7 +51843,7 @@ class $$PendingCrateReturnsTableTableManager
                 businessId = false,
                 orderId = false,
                 customerId = false,
-                crateSizeGroupId = false,
+                manufacturerId = false,
                 submittedBy = false,
                 approvedBy = false,
                 crateLedgerRefs = false,
@@ -52209,17 +51914,17 @@ class $$PendingCrateReturnsTableTableManager
                                   )
                                   as T;
                         }
-                        if (crateSizeGroupId) {
+                        if (manufacturerId) {
                           state =
                               state.withJoin(
                                     currentTable: table,
-                                    currentColumn: table.crateSizeGroupId,
+                                    currentColumn: table.manufacturerId,
                                     referencedTable:
                                         $$PendingCrateReturnsTableReferences
-                                            ._crateSizeGroupIdTable(db),
+                                            ._manufacturerIdTable(db),
                                     referencedColumn:
                                         $$PendingCrateReturnsTableReferences
-                                            ._crateSizeGroupIdTable(db)
+                                            ._manufacturerIdTable(db)
                                             .id,
                                   )
                                   as T;
@@ -52304,7 +52009,7 @@ typedef $$PendingCrateReturnsTableProcessedTableManager =
         bool businessId,
         bool orderId,
         bool customerId,
-        bool crateSizeGroupId,
+        bool manufacturerId,
         bool submittedBy,
         bool approvedBy,
         bool crateLedgerRefs,
@@ -52316,7 +52021,7 @@ typedef $$CrateLedgerTableCreateCompanionBuilder =
       required String businessId,
       Value<String?> customerId,
       Value<String?> manufacturerId,
-      required String crateSizeGroupId,
+      Value<String?> crateSizeGroupId,
       required int quantityDelta,
       required String movementType,
       Value<String?> referenceOrderId,
@@ -52335,7 +52040,7 @@ typedef $$CrateLedgerTableUpdateCompanionBuilder =
       Value<String> businessId,
       Value<String?> customerId,
       Value<String?> manufacturerId,
-      Value<String> crateSizeGroupId,
+      Value<String?> crateSizeGroupId,
       Value<int> quantityDelta,
       Value<String> movementType,
       Value<String?> referenceOrderId,
@@ -52421,9 +52126,9 @@ final class $$CrateLedgerTableReferences
         ),
       );
 
-  $$CrateSizeGroupsTableProcessedTableManager get crateSizeGroupId {
-    final $_column = $_itemColumn<String>('crate_size_group_id')!;
-
+  $$CrateSizeGroupsTableProcessedTableManager? get crateSizeGroupId {
+    final $_column = $_itemColumn<String>('crate_size_group_id');
+    if ($_column == null) return null;
     final manager = $$CrateSizeGroupsTableTableManager(
       $_db,
       $_db.crateSizeGroups,
@@ -53238,7 +52943,7 @@ class $$CrateLedgerTableTableManager
                 Value<String> businessId = const Value.absent(),
                 Value<String?> customerId = const Value.absent(),
                 Value<String?> manufacturerId = const Value.absent(),
-                Value<String> crateSizeGroupId = const Value.absent(),
+                Value<String?> crateSizeGroupId = const Value.absent(),
                 Value<int> quantityDelta = const Value.absent(),
                 Value<String> movementType = const Value.absent(),
                 Value<String?> referenceOrderId = const Value.absent(),
@@ -53274,7 +52979,7 @@ class $$CrateLedgerTableTableManager
                 required String businessId,
                 Value<String?> customerId = const Value.absent(),
                 Value<String?> manufacturerId = const Value.absent(),
-                required String crateSizeGroupId,
+                Value<String?> crateSizeGroupId = const Value.absent(),
                 required int quantityDelta,
                 required String movementType,
                 Value<String?> referenceOrderId = const Value.absent(),

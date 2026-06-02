@@ -45,12 +45,13 @@ class CrateReturnApprovalService {
             ..where((t) => t.id.equals(returnId)))
           .write(pcrComp);
 
+      // v29: a customer crate row sets both customer_id (owner) and
+      // manufacturer_id (whose crates); keyed by manufacturer.
       final ledgerComp = CrateLedgerCompanion.insert(
         id: Value(ledgerId),
         businessId: pending.businessId,
         customerId: Value(pending.customerId),
-        manufacturerId: const Value.absent(),
-        crateSizeGroupId: pending.crateSizeGroupId,
+        manufacturerId: Value(pending.manufacturerId),
         quantityDelta: delta,
         movementType: 'returned',
         referenceReturnId: Value(returnId),
@@ -60,15 +61,16 @@ class CrateReturnApprovalService {
       await db.into(db.crateLedger).insert(ledgerComp);
 
       await db.customStatement(
-        'INSERT INTO customer_crate_balances (id, business_id, customer_id, crate_size_group_id, balance) '
+        'INSERT INTO customer_crate_balances (id, business_id, customer_id, manufacturer_id, balance) '
         'VALUES (?, ?, ?, ?, ?) '
-        'ON CONFLICT(business_id, customer_id, crate_size_group_id) DO UPDATE SET '
-        'balance = balance + excluded.balance, last_updated_at = CURRENT_TIMESTAMP',
+        'ON CONFLICT(business_id, customer_id, manufacturer_id) DO UPDATE SET '
+        'balance = balance + excluded.balance, '
+        'last_updated_at = CAST(strftime(\'%s\', CURRENT_TIMESTAMP) AS INTEGER)',
         [
           UuidV7.generate(),
           pending.businessId,
           pending.customerId,
-          pending.crateSizeGroupId,
+          pending.manufacturerId,
           delta
         ],
       );
@@ -84,7 +86,7 @@ class CrateReturnApprovalService {
             .enqueue('domain:pos_approve_crate_return', jsonEncode(payload));
       } else {
         // Full-row enqueue: a partial pending_crate_returns upsert omits NOT NULL
-        // customer_id / crate_size_group_id / quantity / submitted_by → 23502.
+        // customer_id / manufacturer_id / quantity / submitted_by → 23502.
         await db.syncDao.enqueueUpsert(
           'pending_crate_returns',
           pending.toCompanion(true).copyWith(
@@ -99,7 +101,7 @@ class CrateReturnApprovalService {
               ..where((t) =>
                   t.businessId.equals(pending.businessId) &
                   t.customerId.equals(pending.customerId) &
-                  t.crateSizeGroupId.equals(pending.crateSizeGroupId)))
+                  t.manufacturerId.equals(pending.manufacturerId)))
             .getSingle();
         await db.syncDao.enqueueUpsert('customer_crate_balances', balRow);
       }

@@ -813,7 +813,7 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
     if (quantity == 0) return;
     await customUpdate(
       'UPDATE manufacturers SET empty_crate_stock = empty_crate_stock + ?, '
-      'last_updated_at = CURRENT_TIMESTAMP '
+      'last_updated_at = CAST(strftime(\'%s\', CURRENT_TIMESTAMP) AS INTEGER) '
       'WHERE id = ? AND business_id = ?',
       variables: [
         Variable(quantity),
@@ -1806,12 +1806,13 @@ class CartLineSnapshot {
 }
 
 class CrateBalanceEntry {
-  final String crateSizeGroupId;
-  final String groupName;
+  // v28/v29: crate balances are keyed by manufacturer (§13.4), not crate size.
+  final String manufacturerId;
+  final String manufacturerName;
   final int balance;
   CrateBalanceEntry({
-    required this.crateSizeGroupId,
-    required this.groupName,
+    required this.manufacturerId,
+    required this.manufacturerName,
     required this.balance,
   });
 }
@@ -1822,7 +1823,7 @@ class CrateBalanceEntry {
     CustomerCrateBalances,
     CustomerWallets,
     WalletTransactions,
-    CrateSizeGroups,
+    Manufacturers,
   ],
 )
 class CustomersDao extends DatabaseAccessor<AppDatabase>
@@ -1877,8 +1878,8 @@ class CustomersDao extends DatabaseAccessor<AppDatabase>
     final query =
         select(customerCrateBalances).join([
           innerJoin(
-            crateSizeGroups,
-            crateSizeGroups.id.equalsExp(customerCrateBalances.crateSizeGroupId),
+            manufacturers,
+            manufacturers.id.equalsExp(customerCrateBalances.manufacturerId),
           ),
         ])..where(
           whereBusiness(customerCrateBalances) &
@@ -1888,8 +1889,9 @@ class CustomersDao extends DatabaseAccessor<AppDatabase>
       (rows) => rows
           .map(
             (r) => CrateBalanceEntry(
-              crateSizeGroupId: r.readTable(customerCrateBalances).crateSizeGroupId,
-              groupName: r.readTable(crateSizeGroups).name,
+              manufacturerId:
+                  r.readTable(customerCrateBalances).manufacturerId,
+              manufacturerName: r.readTable(manufacturers).name,
               balance: r.readTable(customerCrateBalances).balance,
             ),
           )
@@ -3698,7 +3700,7 @@ class PendingCrateReturnsDao extends DatabaseAccessor<AppDatabase>
     required String? orderId,
     required String customerId,
     required String submittedBy,
-    required String crateSizeGroupId,
+    required String manufacturerId,
     required int quantity,
   }) async {
     final id = UuidV7.generate();
@@ -3707,7 +3709,7 @@ class PendingCrateReturnsDao extends DatabaseAccessor<AppDatabase>
       businessId: requireBusinessId(),
       orderId: Value(orderId),
       customerId: customerId,
-      crateSizeGroupId: crateSizeGroupId,
+      manufacturerId: manufacturerId,
       quantity: quantity,
       submittedBy: submittedBy,
       lastUpdatedAt: Value(DateTime.now()),
@@ -4039,18 +4041,18 @@ class CrateSizeGroupsDao extends DatabaseAccessor<AppDatabase>
   }
 }
 
-@DriftAccessor(tables: [CustomerCrateBalances, CrateSizeGroups])
+@DriftAccessor(tables: [CustomerCrateBalances, Manufacturers])
 class CustomerCrateBalancesDao extends DatabaseAccessor<AppDatabase>
     with _$CustomerCrateBalancesDaoMixin, BusinessScopedDao<AppDatabase> {
   CustomerCrateBalancesDao(super.db);
 
-  Stream<List<CustomerCrateBalanceWithGroup>> watchByCustomer(
+  Stream<List<CustomerCrateBalanceWithManufacturer>> watchByCustomer(
     String customerId,
   ) {
     final query = select(customerCrateBalances).join([
       innerJoin(
-        crateSizeGroups,
-        crateSizeGroups.id.equalsExp(customerCrateBalances.crateSizeGroupId),
+        manufacturers,
+        manufacturers.id.equalsExp(customerCrateBalances.manufacturerId),
       ),
     ]);
     query.where(
@@ -4060,19 +4062,22 @@ class CustomerCrateBalancesDao extends DatabaseAccessor<AppDatabase>
 
     return query.watch().map((rows) {
       return rows.map((row) {
-        return CustomerCrateBalanceWithGroup(
+        return CustomerCrateBalanceWithManufacturer(
           balance: row.readTable(customerCrateBalances),
-          group: row.readTable(crateSizeGroups),
+          manufacturer: row.readTable(manufacturers),
         );
       }).toList();
     });
   }
 }
 
-class CustomerCrateBalanceWithGroup {
+class CustomerCrateBalanceWithManufacturer {
   final CustomerCrateBalance balance;
-  final CrateSizeGroupData group;
-  CustomerCrateBalanceWithGroup({required this.balance, required this.group});
+  final ManufacturerData manufacturer;
+  CustomerCrateBalanceWithManufacturer({
+    required this.balance,
+    required this.manufacturer,
+  });
 }
 
 // ── Funds Register DAOs (master plan §23) ────────────────────────────────────
@@ -4574,43 +4579,20 @@ class FundTransactionsDao extends DatabaseAccessor<AppDatabase>
   }
 }
 
-@DriftAccessor(tables: [ManufacturerCrateBalances, CrateSizeGroups])
+@DriftAccessor(tables: [ManufacturerCrateBalances])
 class ManufacturerCrateBalancesDao extends DatabaseAccessor<AppDatabase>
     with _$ManufacturerCrateBalancesDaoMixin, BusinessScopedDao<AppDatabase> {
   ManufacturerCrateBalancesDao(super.db);
 
-  Stream<List<ManufacturerCrateBalanceWithGroup>> watchByManufacturer(
+  /// v29: one balance per manufacturer (the crate-size dimension was dropped).
+  Stream<List<ManufacturerCrateBalance>> watchByManufacturer(
     String manufacturerId,
   ) {
-    final query = select(manufacturerCrateBalances).join([
-      innerJoin(
-        crateSizeGroups,
-        crateSizeGroups.id.equalsExp(manufacturerCrateBalances.crateSizeGroupId),
-      ),
-    ]);
-    query.where(
-      whereBusiness(manufacturerCrateBalances) &
-          manufacturerCrateBalances.manufacturerId.equals(manufacturerId),
-    );
-
-    return query.watch().map((rows) {
-      return rows.map((row) {
-        return ManufacturerCrateBalanceWithGroup(
-          balance: row.readTable(manufacturerCrateBalances),
-          group: row.readTable(crateSizeGroups),
-        );
-      }).toList();
-    });
+    return (select(manufacturerCrateBalances)
+          ..where((t) =>
+              whereBusiness(t) & t.manufacturerId.equals(manufacturerId)))
+        .watch();
   }
-}
-
-class ManufacturerCrateBalanceWithGroup {
-  final ManufacturerCrateBalance balance;
-  final CrateSizeGroupData group;
-  ManufacturerCrateBalanceWithGroup({
-    required this.balance,
-    required this.group,
-  });
 }
 
 @DriftAccessor(
@@ -4622,7 +4604,6 @@ class CrateLedgerDao extends DatabaseAccessor<AppDatabase>
 
   Future<void> recordCrateReturnByManufacturer({
     required String manufacturerId,
-    required String crateSizeGroupId,
     required int quantity,
     required String performedBy,
   }) async {
@@ -4633,13 +4614,13 @@ class CrateLedgerDao extends DatabaseAccessor<AppDatabase>
     final useDomainRpc = flagValue == 'true' || flagValue == '"true"';
 
     await transaction(() async {
-      // 1. Append crate_ledger entry
+      // 1. Append crate_ledger entry. v29: keyed by manufacturer (owner =
+      // manufacturer here, so customer_id is null); crate_size_group_id null.
       final ledgerId = UuidV7.generate();
       final ledgerComp = CrateLedgerCompanion.insert(
         id: Value(ledgerId),
         businessId: requireBusinessId(),
         manufacturerId: Value(manufacturerId),
-        crateSizeGroupId: crateSizeGroupId,
         quantityDelta: delta,
         movementType: 'returned',
         performedBy: Value(performedBy),
@@ -4649,15 +4630,15 @@ class CrateLedgerDao extends DatabaseAccessor<AppDatabase>
 
       // 2. Update manufacturer_crate_balances cache (always — UI reads this)
       await customStatement(
-        'INSERT INTO manufacturer_crate_balances (id, business_id, manufacturer_id, crate_size_group_id, balance) '
-        'VALUES (?, ?, ?, ?, ?) '
-        'ON CONFLICT(business_id, manufacturer_id, crate_size_group_id) DO UPDATE SET '
-        'balance = balance + excluded.balance, last_updated_at = CURRENT_TIMESTAMP',
+        'INSERT INTO manufacturer_crate_balances (id, business_id, manufacturer_id, balance) '
+        'VALUES (?, ?, ?, ?) '
+        'ON CONFLICT(business_id, manufacturer_id) DO UPDATE SET '
+        'balance = balance + excluded.balance, '
+        'last_updated_at = CAST(strftime(\'%s\', CURRENT_TIMESTAMP) AS INTEGER)',
         [
           UuidV7.generate(),
           requireBusinessId(),
           manufacturerId,
-          crateSizeGroupId,
           delta,
         ],
       );
@@ -4669,7 +4650,7 @@ class CrateLedgerDao extends DatabaseAccessor<AppDatabase>
           'p_ledger_id': ledgerId,
           'p_owner_kind': 'manufacturer',
           'p_owner_id': manufacturerId,
-          'p_crate_size_group_id': crateSizeGroupId,
+          'p_manufacturer_id': manufacturerId,
           'p_quantity_delta': delta,
           'p_movement_type': 'returned',
         };
@@ -4682,8 +4663,7 @@ class CrateLedgerDao extends DatabaseAccessor<AppDatabase>
                   ..where(
                     (t) =>
                         whereBusiness(t) &
-                        t.manufacturerId.equals(manufacturerId) &
-                        t.crateSizeGroupId.equals(crateSizeGroupId),
+                        t.manufacturerId.equals(manufacturerId),
                   )
                   ..limit(1))
                 .getSingle();
@@ -4697,7 +4677,7 @@ class CrateLedgerDao extends DatabaseAccessor<AppDatabase>
 
   Future<void> recordCrateReturnByCustomer({
     required String customerId,
-    required String crateSizeGroupId,
+    required String manufacturerId,
     required int quantity,
     required String performedBy,
     String? orderId,
@@ -4709,13 +4689,15 @@ class CrateLedgerDao extends DatabaseAccessor<AppDatabase>
     final useDomainRpc = flagValue == 'true' || flagValue == '"true"';
 
     await transaction(() async {
+      // v29: a customer crate row sets BOTH customer_id (owner) AND
+      // manufacturer_id (whose crates), keyed by manufacturer. crate_size_group
+      // is null (vestigial).
       final ledgerId = UuidV7.generate();
       final ledgerComp = CrateLedgerCompanion.insert(
         id: Value(ledgerId),
         businessId: requireBusinessId(),
         customerId: Value(customerId),
-        manufacturerId: const Value.absent(),
-        crateSizeGroupId: crateSizeGroupId,
+        manufacturerId: Value(manufacturerId),
         quantityDelta: delta,
         movementType: 'returned',
         referenceOrderId: Value(orderId),
@@ -4725,15 +4707,16 @@ class CrateLedgerDao extends DatabaseAccessor<AppDatabase>
       await into(crateLedger).insert(ledgerComp);
 
       await customStatement(
-        'INSERT INTO customer_crate_balances (id, business_id, customer_id, crate_size_group_id, balance) '
+        'INSERT INTO customer_crate_balances (id, business_id, customer_id, manufacturer_id, balance) '
         'VALUES (?, ?, ?, ?, ?) '
-        'ON CONFLICT(business_id, customer_id, crate_size_group_id) DO UPDATE SET '
-        'balance = balance + excluded.balance, last_updated_at = CURRENT_TIMESTAMP',
+        'ON CONFLICT(business_id, customer_id, manufacturer_id) DO UPDATE SET '
+        'balance = balance + excluded.balance, '
+        'last_updated_at = CAST(strftime(\'%s\', CURRENT_TIMESTAMP) AS INTEGER)',
         [
           UuidV7.generate(),
           requireBusinessId(),
           customerId,
-          crateSizeGroupId,
+          manufacturerId,
           delta,
         ],
       );
@@ -4745,7 +4728,7 @@ class CrateLedgerDao extends DatabaseAccessor<AppDatabase>
           'p_ledger_id': ledgerId,
           'p_owner_kind': 'customer',
           'p_owner_id': customerId,
-          'p_crate_size_group_id': crateSizeGroupId,
+          'p_manufacturer_id': manufacturerId,
           'p_quantity_delta': delta,
           'p_movement_type': 'returned',
           if (orderId != null) 'p_reference_order_id': orderId,
@@ -4760,7 +4743,7 @@ class CrateLedgerDao extends DatabaseAccessor<AppDatabase>
                     (t) =>
                         whereBusiness(t) &
                         t.customerId.equals(customerId) &
-                        t.crateSizeGroupId.equals(crateSizeGroupId),
+                        t.manufacturerId.equals(manufacturerId),
                   )
                   ..limit(1))
                 .getSingle();
@@ -4773,31 +4756,37 @@ class CrateLedgerDao extends DatabaseAccessor<AppDatabase>
   /// Verification logic to ensure cache tables match ledger sums.
   /// To be scheduled nightly or run on-demand.
   Future<void> verifyCrateReconciliation() async {
-    // 1. Reconcile Customers
+    // v29: crate balances are keyed by manufacturer. A customer crate row sets
+    // BOTH customer_id and manufacturer_id; a business/manufacturer-stock row
+    // sets only manufacturer_id (customer_id null).
+    //
+    // 1. Reconcile Customers — rows with a customer owner, by (customer,
+    // manufacturer).
     final customerLedgerSums =
         await (selectOnly(crateLedger)
               ..addColumns([
                 crateLedger.customerId,
-                crateLedger.crateSizeGroupId,
+                crateLedger.manufacturerId,
                 crateLedger.quantityDelta.sum(),
               ])
               ..where(
                 whereBusiness(crateLedger) & crateLedger.customerId.isNotNull(),
               )
-              ..groupBy([crateLedger.customerId, crateLedger.crateSizeGroupId]))
+              ..groupBy([crateLedger.customerId, crateLedger.manufacturerId]))
             .get();
 
     for (final row in customerLedgerSums) {
       final custId = row.read(crateLedger.customerId)!;
-      final cgId = row.read(crateLedger.crateSizeGroupId)!;
+      final mfrId = row.read(crateLedger.manufacturerId);
       final sum = row.read(crateLedger.quantityDelta.sum()) ?? 0;
+      if (mfrId == null) continue; // legacy pre-v29 row without a manufacturer
 
       final cache =
           await (select(customerCrateBalances)..where(
                 (t) =>
                     whereBusiness(t) &
                     t.customerId.equals(custId) &
-                    t.crateSizeGroupId.equals(cgId),
+                    t.manufacturerId.equals(mfrId),
               ))
               .getSingleOrNull();
 
@@ -4805,44 +4794,43 @@ class CrateLedgerDao extends DatabaseAccessor<AppDatabase>
         // Log mismatch or trigger auto-fix (logging for now)
         // ignore: avoid_print
         print(
-          'CRATE MISMATCH [Customer]: $custId, Group: $cgId, Ledger: $sum, Cache: ${cache?.balance}',
+          'CRATE MISMATCH [Customer]: $custId, Manufacturer: $mfrId, Ledger: $sum, Cache: ${cache?.balance}',
         );
       }
     }
 
-    // 2. Reconcile Manufacturers
+    // 2. Reconcile Manufacturers — business-side stock rows only (no customer
+    // owner), by manufacturer.
     final manufacturerLedgerSums =
         await (selectOnly(crateLedger)
               ..addColumns([
                 crateLedger.manufacturerId,
-                crateLedger.crateSizeGroupId,
                 crateLedger.quantityDelta.sum(),
               ])
               ..where(
                 whereBusiness(crateLedger) &
-                    crateLedger.manufacturerId.isNotNull(),
+                    crateLedger.manufacturerId.isNotNull() &
+                    crateLedger.customerId.isNull(),
               )
-              ..groupBy([crateLedger.manufacturerId, crateLedger.crateSizeGroupId]))
+              ..groupBy([crateLedger.manufacturerId]))
             .get();
 
     for (final row in manufacturerLedgerSums) {
       final mfrId = row.read(crateLedger.manufacturerId)!;
-      final cgId = row.read(crateLedger.crateSizeGroupId)!;
       final sum = row.read(crateLedger.quantityDelta.sum()) ?? 0;
 
       final cache =
           await (select(manufacturerCrateBalances)..where(
                 (t) =>
                     whereBusiness(t) &
-                    t.manufacturerId.equals(mfrId) &
-                    t.crateSizeGroupId.equals(cgId),
+                    t.manufacturerId.equals(mfrId),
               ))
               .getSingleOrNull();
 
       if (cache == null || cache.balance != sum.toInt()) {
         // ignore: avoid_print
         print(
-          'CRATE MISMATCH [Manufacturer]: $mfrId, Group: $cgId, Ledger: $sum, Cache: ${cache?.balance}',
+          'CRATE MISMATCH [Manufacturer]: $mfrId, Ledger: $sum, Cache: ${cache?.balance}',
         );
       }
     }

@@ -1116,30 +1116,31 @@ class SupabaseSyncService {
         final balance = balanceRow['balance'];
         final lua = balanceRow['last_updated_at'] as String?;
         final parsed = lua != null ? DateTime.tryParse(lua) : null;
-        final crateSizeGroupId = balanceRow['crate_size_group_id'] as String?;
+        // v29: crate balances are keyed by manufacturer (§13.4). A customer
+        // balance row carries both customer_id and manufacturer_id; a
+        // manufacturer-stock row carries only manufacturer_id.
+        final manufacturerId = balanceRow['manufacturer_id'] as String?;
         final businessIdStr = balanceRow['business_id'] as String?;
         if (balance is int &&
             parsed != null &&
-            crateSizeGroupId != null &&
+            manufacturerId != null &&
             businessIdStr != null) {
           final customerId = balanceRow['customer_id'] as String?;
-          final manufacturerId = balanceRow['manufacturer_id'] as String?;
           if (customerId != null) {
             await (_db.update(_db.customerCrateBalances)
                   ..where((t) =>
                       t.businessId.equals(businessIdStr) &
                       t.customerId.equals(customerId) &
-                      t.crateSizeGroupId.equals(crateSizeGroupId)))
+                      t.manufacturerId.equals(manufacturerId)))
                 .write(CustomerCrateBalancesCompanion(
               balance: Value(balance),
               lastUpdatedAt: Value(parsed),
             ));
-          } else if (manufacturerId != null) {
+          } else {
             await (_db.update(_db.manufacturerCrateBalances)
                   ..where((t) =>
                       t.businessId.equals(businessIdStr) &
-                      t.manufacturerId.equals(manufacturerId) &
-                      t.crateSizeGroupId.equals(crateSizeGroupId)))
+                      t.manufacturerId.equals(manufacturerId)))
                 .write(ManufacturerCrateBalancesCompanion(
               balance: Value(balance),
               lastUpdatedAt: Value(parsed),

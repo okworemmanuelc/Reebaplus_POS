@@ -102,27 +102,25 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
       if (product.unit.toLowerCase() != 'bottle') continue;
       if (!product.trackEmpties) continue;
 
+      // v29: crates are tracked by manufacturer (§13.4). Group by the product's
+      // manufacturer — no longer gated on a crate size group (which products
+      // were never assigned, leaving this modal empty).
       final mfId = product.manufacturerId ?? '';
-      final mfName = mfrNames[mfId] ??
-          (mfId.isEmpty ? 'Unknown Manufacturer' : 'Manufacturer $mfId');
-      final cgId = product.crateSizeGroupId ?? '';
-      if (cgId.isEmpty) continue; // Skip if no crate group linked
+      if (mfId.isEmpty) continue; // can't track crates without a manufacturer
+      final mfName = mfrNames[mfId] ?? 'Manufacturer $mfId';
 
       final qty = ri.item.quantity;
-      final key = '$mfId:$cgId';
-
       accum.putIfAbsent(
-        key,
-        () => _ManufacturerAccum(id: mfId, name: mfName, crateSizeGroupId: cgId),
+        mfId,
+        () => _ManufacturerAccum(id: mfId, name: mfName),
       );
-      accum[key]!.totalQty += qty;
+      accum[mfId]!.totalQty += qty;
     }
 
     final rows = accum.values
         .map(
           (a) => _ManufacturerRow(
             manufacturerId: a.id,
-            crateSizeGroupId: a.crateSizeGroupId,
             name: a.name,
             expectedQty: a.totalQty,
             controller: TextEditingController(text: a.totalQty.toString()),
@@ -181,11 +179,11 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
           await db.inventoryDao.addEmptyCrates(row.manufacturerId, returned);
         }
 
-        // 2. Record in ledger and update customer cache
-        if (returned > 0 && row.crateSizeGroupId.isNotEmpty) {
+        // 2. Record in ledger and update customer cache (keyed by manufacturer)
+        if (returned > 0 && row.manufacturerId.isNotEmpty) {
           await db.crateLedgerDao.recordCrateReturnByCustomer(
             customerId: customer.id,
-            crateSizeGroupId: row.crateSizeGroupId,
+            manufacturerId: row.manufacturerId,
             quantity: returned,
             performedBy: auth.currentUser?.id ?? '',
             orderId: order.id,
@@ -416,14 +414,12 @@ class _ManufacturerReturnTile extends StatelessWidget {
 
 class _ManufacturerRow {
   final String manufacturerId;
-  final String crateSizeGroupId;
   final String name;
   final int expectedQty;
   final TextEditingController controller;
 
   _ManufacturerRow({
     required this.manufacturerId,
-    required this.crateSizeGroupId,
     required this.name,
     required this.expectedQty,
     required this.controller,
@@ -433,12 +429,10 @@ class _ManufacturerRow {
 class _ManufacturerAccum {
   final String id;
   final String name;
-  final String crateSizeGroupId;
   int totalQty = 0;
 
   _ManufacturerAccum({
     required this.id,
     required this.name,
-    required this.crateSizeGroupId,
   });
 }

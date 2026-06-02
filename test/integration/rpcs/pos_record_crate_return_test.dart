@@ -35,49 +35,40 @@ void main() {
   // Each test seeds its own customer / manufacturer / crate_group so
   // balance composites are fresh and assertions don't tangle with prior
   // runs' values. We track them only for the cache-balance cleanup.
-  final createdCustomers = <({String customerId, String crateSizeGroupId})>[];
-  final createdManufacturers = <({String manufacturerId, String crateSizeGroupId})>[];
+  // v29: crate tracking is keyed by manufacturer (§13.4).
+  final createdCustomers = <({String customerId, String manufacturerId})>[];
+  final createdManufacturers = <({String manufacturerId})>[];
 
-  Future<({String customerId, String crateSizeGroupId})>
-      seedCustomerAndCrateGroup() async {
+  Future<({String customerId, String manufacturerId})>
+      seedCustomerAndManufacturer() async {
     final customerId = UuidV7.generate();
     final walletId = UuidV7.generate();
-    final crateSizeGroupId = UuidV7.generate();
+    final manufacturerId = UuidV7.generate();
     await clients.userClient.rpc('pos_create_customer', params: {
       'p_business_id': clients.env.businessId,
       'p_customer_id': customerId,
       'p_wallet_id': walletId,
       'p_name': 'Crate Test Customer',
     });
-    // crate_size_groups has no v2 RPC yet — insert via service role.
-    await clients.adminClient.from('crate_size_groups').insert({
-      'id': crateSizeGroupId,
+    await clients.adminClient.from('manufacturers').insert({
+      'id': manufacturerId,
       'business_id': clients.env.businessId,
-      'name': 'Crate Test Pack',
-      'crate_size_label': 'small',
+      'name': 'Crate Test Manco C',
     });
-    createdCustomers.add((customerId: customerId, crateSizeGroupId: crateSizeGroupId));
-    return (customerId: customerId, crateSizeGroupId: crateSizeGroupId);
+    createdCustomers
+        .add((customerId: customerId, manufacturerId: manufacturerId));
+    return (customerId: customerId, manufacturerId: manufacturerId);
   }
 
-  Future<({String manufacturerId, String crateSizeGroupId})>
-      seedManufacturerAndCrateGroup() async {
+  Future<({String manufacturerId})> seedManufacturer() async {
     final manufacturerId = UuidV7.generate();
-    final crateSizeGroupId = UuidV7.generate();
     await clients.adminClient.from('manufacturers').insert({
       'id': manufacturerId,
       'business_id': clients.env.businessId,
       'name': 'Crate Test Manco',
     });
-    await clients.adminClient.from('crate_size_groups').insert({
-      'id': crateSizeGroupId,
-      'business_id': clients.env.businessId,
-      'name': 'Crate Test Pack M',
-      'crate_size_label': 'small',
-    });
-    createdManufacturers
-        .add((manufacturerId: manufacturerId, crateSizeGroupId: crateSizeGroupId));
-    return (manufacturerId: manufacturerId, crateSizeGroupId: crateSizeGroupId);
+    createdManufacturers.add((manufacturerId: manufacturerId));
+    return (manufacturerId: manufacturerId);
   }
 
   setUpAll(() async {
@@ -91,14 +82,13 @@ void main() {
     for (final c in createdCustomers) {
       await fixture.deleteCustomerCrateBalance(
         customerId: c.customerId,
-        crateSizeGroupId: c.crateSizeGroupId,
+        manufacturerId: c.manufacturerId,
       );
     }
     createdCustomers.clear();
     for (final m in createdManufacturers) {
       await fixture.deleteManufacturerCrateBalance(
         manufacturerId: m.manufacturerId,
-        crateSizeGroupId: m.crateSizeGroupId,
       );
     }
     createdManufacturers.clear();
@@ -111,7 +101,7 @@ void main() {
 
   group('pos_record_crate_return (Tier 2)', () {
     test('round-trip (customer): response shape + cloud rows match', () async {
-      final s = await seedCustomerAndCrateGroup();
+      final s = await seedCustomerAndManufacturer();
       final ledgerId = UuidV7.generate();
 
       final response = await clients.userClient.rpc(
@@ -122,7 +112,7 @@ void main() {
           'p_ledger_id': ledgerId,
           'p_owner_kind': 'customer',
           'p_owner_id': s.customerId,
-          'p_crate_size_group_id': s.crateSizeGroupId,
+          'p_manufacturer_id': s.manufacturerId,
           'p_quantity_delta': -5, // customer returning 5 reduces our liability
           'p_movement_type': 'returned',
         },
@@ -135,16 +125,14 @@ void main() {
       final ledger = map['crate_ledger_row'] as Map;
       expect(ledger['id'], ledgerId);
       expect(ledger['customer_id'], s.customerId);
-      expect(ledger['manufacturer_id'], isNull);
-      expect(ledger['crate_size_group_id'], s.crateSizeGroupId);
+      expect(ledger['manufacturer_id'], s.manufacturerId);
       expect(ledger['quantity_delta'], -5);
       expect(ledger['movement_type'], 'returned');
       expect(ledger['voided_at'], isNull);
 
       final bal = map['balance_row'] as Map;
       expect(bal['customer_id'], s.customerId);
-      expect(bal['manufacturer_id'], isNull);
-      expect(bal['crate_size_group_id'], s.crateSizeGroupId);
+      expect(bal['manufacturer_id'], s.manufacturerId);
       expect(bal['balance'], -5,
           reason: 'fresh composite — first delta IS the balance');
 
@@ -159,14 +147,14 @@ void main() {
 
       final cloudBal = await fixture.readCustomerCrateBalance(
         customerId: s.customerId,
-        crateSizeGroupId: s.crateSizeGroupId,
+        manufacturerId: s.manufacturerId,
       );
       expect(cloudBal, -5);
     }, skip: _skipReason);
 
     test('round-trip (manufacturer): owner_kind=manufacturer wires the right cache',
         () async {
-      final s = await seedManufacturerAndCrateGroup();
+      final s = await seedManufacturer();
       final ledgerId = UuidV7.generate();
 
       final response = await clients.userClient.rpc(
@@ -177,7 +165,7 @@ void main() {
           'p_ledger_id': ledgerId,
           'p_owner_kind': 'manufacturer',
           'p_owner_id': s.manufacturerId,
-          'p_crate_size_group_id': s.crateSizeGroupId,
+          'p_manufacturer_id': s.manufacturerId,
           'p_quantity_delta': 8, // we received 8 empties from the manufacturer
           'p_movement_type': 'returned',
         },
@@ -199,13 +187,13 @@ void main() {
           .from('customer_crate_balances')
           .select('id')
           .eq('business_id', clients.env.businessId)
-          .eq('crate_size_group_id', s.crateSizeGroupId);
+          .eq('manufacturer_id', s.manufacturerId);
       expect(customerSideRows, isEmpty);
     }, skip: _skipReason);
 
     test('replay: same ledger id twice → replayed=true, balance unchanged',
         () async {
-      final s = await seedCustomerAndCrateGroup();
+      final s = await seedCustomerAndManufacturer();
       final ledgerId = UuidV7.generate();
 
       Map<String, dynamic> params() => {
@@ -214,7 +202,7 @@ void main() {
             'p_ledger_id': ledgerId,
             'p_owner_kind': 'customer',
             'p_owner_id': s.customerId,
-            'p_crate_size_group_id': s.crateSizeGroupId,
+            'p_manufacturer_id': s.manufacturerId,
             'p_quantity_delta': -3,
             'p_movement_type': 'returned',
           };
@@ -235,7 +223,7 @@ void main() {
 
       final cloudBal = await fixture.readCustomerCrateBalance(
         customerId: s.customerId,
-        crateSizeGroupId: s.crateSizeGroupId,
+        manufacturerId: s.manufacturerId,
       );
       expect(cloudBal, -3);
 
@@ -260,7 +248,7 @@ void main() {
           'p_ledger_id': ledgerId,
           'p_owner_kind': 'customer',
           'p_owner_id': UuidV7.generate(),
-          'p_crate_size_group_id': UuidV7.generate(),
+          'p_manufacturer_id': UuidV7.generate(),
           'p_quantity_delta': -1,
           'p_movement_type': 'returned',
         });
@@ -274,7 +262,7 @@ void main() {
     test(
         'atomicity (validation): invalid p_owner_kind raises before any write',
         () async {
-      final s = await seedCustomerAndCrateGroup();
+      final s = await seedCustomerAndManufacturer();
       final ledgerId = UuidV7.generate();
 
       Object? caught;
@@ -285,7 +273,7 @@ void main() {
           'p_ledger_id': ledgerId,
           'p_owner_kind': 'driver', // not in {customer, manufacturer}
           'p_owner_id': s.customerId,
-          'p_crate_size_group_id': s.crateSizeGroupId,
+          'p_manufacturer_id': s.manufacturerId,
           'p_quantity_delta': -1,
           'p_movement_type': 'returned',
         });
@@ -298,7 +286,7 @@ void main() {
       // Balance row also must not exist (no partial write).
       final cloudBal = await fixture.readCustomerCrateBalance(
         customerId: s.customerId,
-        crateSizeGroupId: s.crateSizeGroupId,
+        manufacturerId: s.manufacturerId,
       );
       expect(cloudBal, isNull,
           reason: 'failed RPC must not have created a balance row');
@@ -307,7 +295,7 @@ void main() {
     test(
         'atomicity (validation): invalid p_movement_type raises, no rows',
         () async {
-      final s = await seedCustomerAndCrateGroup();
+      final s = await seedCustomerAndManufacturer();
       final ledgerId = UuidV7.generate();
 
       Object? caught;
@@ -318,7 +306,7 @@ void main() {
           'p_ledger_id': ledgerId,
           'p_owner_kind': 'customer',
           'p_owner_id': s.customerId,
-          'p_crate_size_group_id': s.crateSizeGroupId,
+          'p_manufacturer_id': s.manufacturerId,
           'p_quantity_delta': -1,
           'p_movement_type': 'lost_to_god', // not in CHECK list
         });

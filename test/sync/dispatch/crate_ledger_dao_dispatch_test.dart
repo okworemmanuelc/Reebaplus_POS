@@ -6,15 +6,13 @@ import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import '../../helpers/dispatch_test_utils.dart';
 
 /// Seeds: staff (FK target for performed_by), customer + manufacturer
-/// (FK targets for crate_ledger.{customer_id,manufacturer_id}), and a
-/// crate_group (FK target for both balance caches and the ledger row).
-/// Returns ids needed by the test bodies.
+/// (FK targets for crate_ledger.{customer_id,manufacturer_id} — v29 keys crate
+/// tracking by manufacturer). Returns ids needed by the test bodies.
 Future<
     ({
       String staffId,
       String customerId,
       String manufacturerId,
-      String crateSizeGroupId,
     })> _seedCrateFixtures(
   AppDatabase db,
   String businessId,
@@ -22,7 +20,6 @@ Future<
   final staffId = UuidV7.generate();
   final customerId = UuidV7.generate();
   final manufacturerId = UuidV7.generate();
-  final crateSizeGroupId = UuidV7.generate();
 
   await db.into(db.users).insert(
         UsersCompanion.insert(
@@ -46,19 +43,10 @@ Future<
           name: 'Crate Manco',
         ),
       );
-  await db.into(db.crateSizeGroups).insert(
-        CrateSizeGroupsCompanion.insert(
-          id: Value(crateSizeGroupId),
-          businessId: businessId,
-          name: '12-pack',
-          crateSizeLabel: const Value('small'),
-        ),
-      );
   return (
     staffId: staffId,
     customerId: customerId,
     manufacturerId: manufacturerId,
-    crateSizeGroupId: crateSizeGroupId,
   );
 }
 
@@ -82,7 +70,7 @@ void main() {
 
       await db.crateLedgerDao.recordCrateReturnByCustomer(
         customerId: fx.customerId,
-        crateSizeGroupId: fx.crateSizeGroupId,
+        manufacturerId: fx.manufacturerId,
         quantity: 5,
         performedBy: fx.staffId,
       );
@@ -109,7 +97,7 @@ void main() {
 
       await db.crateLedgerDao.recordCrateReturnByCustomer(
         customerId: fx.customerId,
-        crateSizeGroupId: fx.crateSizeGroupId,
+        manufacturerId: fx.manufacturerId,
         quantity: 3,
         performedBy: fx.staffId,
       );
@@ -131,7 +119,7 @@ void main() {
       expect(payload['p_actor_id'], fx.staffId);
       expect(payload['p_owner_kind'], 'customer');
       expect(payload['p_owner_id'], fx.customerId);
-      expect(payload['p_crate_size_group_id'], fx.crateSizeGroupId);
+      expect(payload['p_manufacturer_id'], fx.manufacturerId);
       expect(payload['p_quantity_delta'], -3);
       expect(payload['p_movement_type'], 'returned');
 
@@ -164,7 +152,7 @@ void main() {
 
       await db.crateLedgerDao.recordCrateReturnByCustomer(
         customerId: fx.customerId,
-        crateSizeGroupId: fx.crateSizeGroupId,
+        manufacturerId: fx.manufacturerId,
         quantity: 1,
         performedBy: fx.staffId,
         orderId: orderId,
@@ -184,7 +172,6 @@ void main() {
 
       await db.crateLedgerDao.recordCrateReturnByManufacturer(
         manufacturerId: fx.manufacturerId,
-        crateSizeGroupId: fx.crateSizeGroupId,
         quantity: 7,
         performedBy: fx.staffId,
       );
@@ -207,7 +194,6 @@ void main() {
 
       await db.crateLedgerDao.recordCrateReturnByManufacturer(
         manufacturerId: fx.manufacturerId,
-        crateSizeGroupId: fx.crateSizeGroupId,
         quantity: 4,
         performedBy: fx.staffId,
       );

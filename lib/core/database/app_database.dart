@@ -484,7 +484,9 @@ class CustomerCrateBalances extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get customerId => text().references(Customers, #id)();
-  TextColumn get crateSizeGroupId => text().references(CrateSizeGroups, #id)();
+  // v28: crate tracking re-keyed from crate size group to manufacturer
+  // (§13.4). A customer's crate debt is one balance per manufacturer.
+  TextColumn get manufacturerId => text().references(Manufacturers, #id)();
   IntColumn get balance => integer().withDefault(const Constant(0))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
@@ -495,7 +497,7 @@ class CustomerCrateBalances extends Table {
 
   @override
   List<String> get customConstraints => [
-    'UNIQUE (business_id, customer_id, crate_size_group_id)',
+    'UNIQUE (business_id, customer_id, manufacturer_id)',
   ];
 }
 
@@ -503,7 +505,8 @@ class ManufacturerCrateBalances extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get manufacturerId => text().references(Manufacturers, #id)();
-  TextColumn get crateSizeGroupId => text().references(CrateSizeGroups, #id)();
+  // v28: the crate-size-group dimension was dropped — one balance per
+  // manufacturer (§13.4).
   IntColumn get balance => integer().withDefault(const Constant(0))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
@@ -514,7 +517,7 @@ class ManufacturerCrateBalances extends Table {
 
   @override
   List<String> get customConstraints => [
-    'UNIQUE (business_id, manufacturer_id, crate_size_group_id)',
+    'UNIQUE (business_id, manufacturer_id)',
   ];
 }
 
@@ -525,7 +528,15 @@ class CrateLedger extends Table {
   TextColumn get customerId => text().nullable().references(Customers, #id)();
   TextColumn get manufacturerId =>
       text().nullable().references(Manufacturers, #id)();
-  TextColumn get crateSizeGroupId => text().references(CrateSizeGroups, #id)();
+  // v28: crate tracking re-keyed to manufacturer (§13.4). For a CUSTOMER crate
+  // movement, customer_id is the owner AND manufacturer_id names whose crates
+  // they hold (both set). For a business/manufacturer-stock movement, only
+  // manufacturer_id is set. crate_size_group_id is now nullable + vestigial
+  // (the size-group table stays for inventory display, but no longer keys
+  // tracking — products were never assigned one, which left the §19.5 modal
+  // empty).
+  TextColumn get crateSizeGroupId =>
+      text().nullable().references(CrateSizeGroups, #id)();
   IntColumn get quantityDelta => integer()();
   TextColumn get movementType => text().withLength(min: 1, max: 32)();
   TextColumn get referenceOrderId =>
@@ -546,10 +557,11 @@ class CrateLedger extends Table {
   @override
   List<String> get customConstraints => [
     "CHECK (movement_type IN ('issued','returned','damaged','adjusted','transferred_in','transferred_out'))",
-    '''CHECK (
-          (CASE WHEN customer_id IS NOT NULL THEN 1 ELSE 0 END) +
-          (CASE WHEN manufacturer_id IS NOT NULL THEN 1 ELSE 0 END) = 1
-        )''',
+    // v28: relaxed from a customer⊕manufacturer XOR to "at least one owner".
+    // A customer crate row now sets BOTH customer_id (owner) and
+    // manufacturer_id (whose crates); a business/manufacturer-stock row sets
+    // only manufacturer_id. Neither-set is still rejected.
+    '''CHECK (customer_id IS NOT NULL OR manufacturer_id IS NOT NULL)''',
   ];
 }
 
@@ -871,7 +883,9 @@ class PendingCrateReturns extends Table {
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get orderId => text().nullable().references(Orders, #id)();
   TextColumn get customerId => text().references(Customers, #id)();
-  TextColumn get crateSizeGroupId => text().references(CrateSizeGroups, #id)();
+  // v28: re-keyed from crate size group to manufacturer (§13.4) — which
+  // manufacturer's crates the customer is returning.
+  TextColumn get manufacturerId => text().references(Manufacturers, #id)();
   IntColumn get quantity => integer()();
   TextColumn get submittedBy => text().references(Users, #id)();
   DateTimeColumn get submittedAt =>
@@ -1393,7 +1407,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 27;
+  int get schemaVersion => 29;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -2438,6 +2452,150 @@ class AppDatabase extends _$AppDatabase {
           );
         }
       }
+      if (from < 28) {
+        // v28 (§18.4): add the customers.wallet.totals.view permission to the
+        // local catalog so the Roles & Permissions settings screen lists it.
+        // Total In / Total Out on a customer's Wallet tab are hidden for roles
+        // below Manager unless the CEO grants this key. Manager + CEO see the
+        // tiles regardless (a role-rank check in code). The grants arrive from
+        // the cloud via pull (CEO/Manager backfill in supabase/migrations/0069).
+        // Idempotent — key is the PK.
+        await customStatement(
+          "INSERT OR IGNORE INTO permissions (key, description, category) "
+          "VALUES ('customers.wallet.totals.view', "
+          "'View wallet Total In / Total Out on a customer', 'Customers')",
+        );
+      }
+      if (from < 29) {
+        // v29 (§13.4): re-key empty-crate CUSTOMER tracking from crate size
+        // group to MANUFACTURER. Products were never assigned a crate size
+        // group, which left the §19.5 crate-return modal empty. Mirrors
+        // supabase/migrations/0070_crate_tracking_by_manufacturer.sql.
+        //   - customer_crate_balances: crate_size_group_id → manufacturer_id,
+        //     UNIQUE (business, customer, manufacturer). CACHE → rebuilt empty.
+        //   - manufacturer_crate_balances: drop crate_size_group_id,
+        //     UNIQUE (business, manufacturer). CACHE → rebuilt empty.
+        //   - pending_crate_returns: crate_size_group_id → manufacturer_id.
+        //   - crate_ledger: crate_size_group_id NOT NULL → nullable, owner
+        //     CHECK relaxed from customer⊕manufacturer to "at least one set" so
+        //     a customer row can also name the manufacturer whose crates it
+        //     holds. The crate_size_groups TABLE stays (it still powers the
+        //     Empty Crates inventory tab + deliveries + suppliers).
+        //
+        // Idempotency-guarded on the OLD shape (revert-then-re-upgrade tests).
+        Future<bool> hasCol(String table, String col) async {
+          final rows = await customSelect('PRAGMA table_info($table)').get();
+          return rows.any((r) => r.read<String>('name') == col);
+        }
+
+        // 1+2. The two balance CACHES are never pushed (not in
+        // _syncedTenantTables) — written only by the cloud domain-response /
+        // snapshot restore. No derivable size→manufacturer mapping and nothing
+        // to preserve: drop + recreate fresh in the new shape; they rehydrate
+        // from the cloud. No LUA index / bump trigger (caches).
+        if (await hasCol('customer_crate_balances', 'crate_size_group_id')) {
+          await customStatement('DROP TABLE IF EXISTS customer_crate_balances');
+          await m.createTable(customerCrateBalances);
+        }
+        if (await hasCol('manufacturer_crate_balances', 'crate_size_group_id')) {
+          await customStatement(
+              'DROP TABLE IF EXISTS manufacturer_crate_balances');
+          await m.createTable(manufacturerCrateBalances);
+        }
+
+        // 3. pending_crate_returns: re-key to manufacturer. Transient approval
+        // requests; the size→manufacturer value isn't derivable, so clear them
+        // (FK enforcement is OFF during onUpgrade). Recreate the LUA + status
+        // indexes + bump trigger (synced table).
+        if (await hasCol('pending_crate_returns', 'crate_size_group_id')) {
+          await customStatement('DELETE FROM pending_crate_returns');
+          await customStatement('DROP TABLE IF EXISTS pending_crate_returns');
+          await m.createTable(pendingCrateReturns);
+          await customStatement(
+            'CREATE INDEX idx_pending_crate_returns_business_lua '
+            'ON pending_crate_returns (business_id, last_updated_at)',
+          );
+          await customStatement(
+            'CREATE INDEX idx_pcr_business_status '
+            'ON pending_crate_returns (business_id, status)',
+          );
+          await customStatement(
+            'CREATE TRIGGER bump_pending_crate_returns_last_updated_at '
+            'AFTER UPDATE ON pending_crate_returns '
+            'FOR EACH ROW '
+            'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+            'BEGIN '
+            "UPDATE pending_crate_returns SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+            'END',
+          );
+        }
+
+        // 4. crate_ledger (append-only): crate_size_group_id NOT NULL →
+        // nullable + relaxed owner CHECK. Rebuild PRESERVES rows (they satisfy
+        // the relaxed CHECK; the size group survives as a now-nullable value).
+        // Drop the immutability + no-delete triggers first (alterTable
+        // re-creates table triggers from sqlite_master), rebuild, then recreate
+        // the LUA + owner-group indexes, the bump trigger, and the ledger
+        // triggers from the (unchanged) _ledgerTables immutable column set.
+        final cgInfo = (await customSelect('PRAGMA table_info(crate_ledger)')
+                .get())
+            .where((r) => r.read<String>('name') == 'crate_size_group_id')
+            .toList();
+        final cgIsNotNull =
+            cgInfo.isNotEmpty && cgInfo.first.read<int>('notnull') == 1;
+        if (cgIsNotNull) {
+          await customStatement('DROP TRIGGER IF EXISTS crate_ledger_immutable');
+          await customStatement('DROP TRIGGER IF EXISTS crate_ledger_no_delete');
+          await m.alterTable(TableMigration(crateLedger));
+          // drift's alterTable re-applies the rebuilt table's existing indexes
+          // (with their OLD definitions), so DROP-then-CREATE here: it makes the
+          // CREATEs idempotent AND swaps idx_crate_ledger_owner_group to its new
+          // shape (without crate_size_group_id). Triggers are NOT re-applied by
+          // alterTable, but DROP IF EXISTS keeps a partial re-run safe.
+          await customStatement(
+              'DROP INDEX IF EXISTS idx_crate_ledger_business_lua');
+          await customStatement(
+            'CREATE INDEX idx_crate_ledger_business_lua '
+            'ON crate_ledger (business_id, last_updated_at)',
+          );
+          await customStatement(
+              'DROP INDEX IF EXISTS idx_crate_ledger_owner_group');
+          await customStatement(
+            'CREATE INDEX idx_crate_ledger_owner_group '
+            'ON crate_ledger (business_id, customer_id, manufacturer_id, created_at)',
+          );
+          await customStatement(
+              'DROP TRIGGER IF EXISTS bump_crate_ledger_last_updated_at');
+          await customStatement(
+            'CREATE TRIGGER bump_crate_ledger_last_updated_at '
+            'AFTER UPDATE ON crate_ledger '
+            'FOR EACH ROW '
+            'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+            'BEGIN '
+            "UPDATE crate_ledger SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+            'END',
+          );
+          await customStatement('DROP TRIGGER IF EXISTS crate_ledger_immutable');
+          await customStatement('DROP TRIGGER IF EXISTS crate_ledger_no_delete');
+          for (final stmt in _ledgerTriggerStatements(
+            _ledgerTables.firstWhere((l) => l.table == 'crate_ledger'),
+          )) {
+            await customStatement(stmt);
+          }
+        }
+
+        // 5. Drop stale pending sync_queue rows carrying the old crate-size
+        // keying — the cloud RPCs (0070) now take p_manufacturer_id and
+        // pending_crate_returns upserts no longer carry crate_size_group_id.
+        // The size→manufacturer value isn't translatable; the crate flow was
+        // broken so these are empty in practice.
+        await customStatement(
+          "DELETE FROM sync_queue WHERE status = 'pending' AND action_type IN ("
+          "'pending_crate_returns:upsert', 'customer_crate_balances:upsert', "
+          "'manufacturer_crate_balances:upsert', "
+          "'domain:pos_record_crate_return', 'domain:pos_approve_crate_return')",
+        );
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -2837,7 +2995,7 @@ List<String> get _postCreateStatements {
     'CREATE INDEX idx_price_lists_product ON price_lists (product_id, effective_from)',
     'CREATE INDEX idx_customers_business_phone ON customers (business_id, phone)',
     'CREATE INDEX idx_wallet_txn_business_cust_time ON wallet_transactions (business_id, customer_id, created_at)',
-    'CREATE INDEX idx_crate_ledger_owner_group ON crate_ledger (business_id, customer_id, manufacturer_id, crate_size_group_id, created_at)',
+    'CREATE INDEX idx_crate_ledger_owner_group ON crate_ledger (business_id, customer_id, manufacturer_id, created_at)',
     'CREATE INDEX idx_inventory_business_ps ON inventory (business_id, product_id, store_id)',
     'CREATE INDEX idx_stock_txn_prod_loc_time ON stock_transactions (product_id, location_id, created_at)',
     'CREATE INDEX idx_orders_business_time ON orders (business_id, created_at)',

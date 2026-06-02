@@ -64,40 +64,38 @@ class TestBusinessFixture {
   /// test business periodically if rows accumulate.
   Future<void> deleteCustomerCrateBalance({
     required String customerId,
-    required String crateSizeGroupId,
+    required String manufacturerId,
   }) async {
     await admin
         .from('customer_crate_balances')
         .delete()
         .eq('business_id', businessId)
         .eq('customer_id', customerId)
-        .eq('crate_size_group_id', crateSizeGroupId);
+        .eq('manufacturer_id', manufacturerId);
   }
 
   Future<void> deleteManufacturerCrateBalance({
     required String manufacturerId,
-    required String crateSizeGroupId,
   }) async {
     await admin
         .from('manufacturer_crate_balances')
         .delete()
         .eq('business_id', businessId)
-        .eq('manufacturer_id', manufacturerId)
-        .eq('crate_size_group_id', crateSizeGroupId);
+        .eq('manufacturer_id', manufacturerId);
   }
 
   /// Reads the balance value for assertions. Returns null if the row
   /// doesn't exist (used to verify zero-rows on failed RPC paths).
   Future<int?> readCustomerCrateBalance({
     required String customerId,
-    required String crateSizeGroupId,
+    required String manufacturerId,
   }) async {
     final rows = await admin
         .from('customer_crate_balances')
         .select('balance')
         .eq('business_id', businessId)
         .eq('customer_id', customerId)
-        .eq('crate_size_group_id', crateSizeGroupId);
+        .eq('manufacturer_id', manufacturerId);
     final list = rows as List;
     if (list.isEmpty) return null;
     return (list.first as Map)['balance'] as int;

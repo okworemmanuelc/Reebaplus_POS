@@ -31,10 +31,11 @@ void main() {
   late TestBusinessFixture fixture;
 
   final createdCustomerIds = <String>[];
+  // v29: crate tracking keyed by manufacturer (§13.4).
   final createdBalances =
-      <({String customerId, String crateSizeGroupId})>[];
+      <({String customerId, String manufacturerId})>[];
 
-  Future<({String customerId, String crateSizeGroupId, String pendingId, int quantity})>
+  Future<({String customerId, String manufacturerId, String pendingId, int quantity})>
       seedPendingReturn({int quantity = 5}) async {
     final customerId = UuidV7.generate();
     final walletId = UuidV7.generate();
@@ -46,12 +47,11 @@ void main() {
     });
     createdCustomerIds.add(customerId);
 
-    final crateSizeGroupId = UuidV7.generate();
-    await clients.adminClient.from('crate_size_groups').insert({
-      'id': crateSizeGroupId,
+    final manufacturerId = UuidV7.generate();
+    await clients.adminClient.from('manufacturers').insert({
+      'id': manufacturerId,
       'business_id': clients.env.businessId,
-      'name': 'Test Crate Group ${UuidV7.generate().substring(0, 8)}',
-      'crate_size_label': 'small',
+      'name': 'Approve Test Manco ${UuidV7.generate().substring(0, 8)}',
     });
 
     final pendingId = UuidV7.generate();
@@ -59,18 +59,18 @@ void main() {
       'id': pendingId,
       'business_id': clients.env.businessId,
       'customer_id': customerId,
-      'crate_size_group_id': crateSizeGroupId,
+      'manufacturer_id': manufacturerId,
       'quantity': quantity,
       'submitted_by': clients.env.userId,
       'status': 'pending',
     });
 
     createdBalances
-        .add((customerId: customerId, crateSizeGroupId: crateSizeGroupId));
+        .add((customerId: customerId, manufacturerId: manufacturerId));
 
     return (
       customerId: customerId,
-      crateSizeGroupId: crateSizeGroupId,
+      manufacturerId: manufacturerId,
       pendingId: pendingId,
       quantity: quantity,
     );
@@ -87,7 +87,7 @@ void main() {
     for (final b in createdBalances) {
       await fixture.deleteCustomerCrateBalance(
         customerId: b.customerId,
-        crateSizeGroupId: b.crateSizeGroupId,
+        manufacturerId: b.manufacturerId,
       );
     }
     createdBalances.clear();
@@ -140,7 +140,7 @@ void main() {
       expect(balance['balance'], -s.quantity,
           reason: 'cache must decrement by the returned quantity');
       expect(balance['customer_id'], s.customerId);
-      expect(balance['crate_size_group_id'], s.crateSizeGroupId);
+      expect(balance['manufacturer_id'], s.manufacturerId);
 
       // Cloud-side verification.
       final cloudPcr = await clients.adminClient
@@ -163,7 +163,7 @@ void main() {
           .select()
           .eq('business_id', clients.env.businessId)
           .eq('customer_id', s.customerId)
-          .eq('crate_size_group_id', s.crateSizeGroupId)
+          .eq('manufacturer_id', s.manufacturerId)
           .single();
       expect(cloudBalance['balance'], -s.quantity);
     }, skip: _skipReason);
@@ -201,7 +201,7 @@ void main() {
           .select('balance')
           .eq('business_id', clients.env.businessId)
           .eq('customer_id', s.customerId)
-          .eq('crate_size_group_id', s.crateSizeGroupId)
+          .eq('manufacturer_id', s.manufacturerId)
           .single();
       expect(cloudBalance['balance'], -s.quantity,
           reason: 'replay must not double-debit the cache');
