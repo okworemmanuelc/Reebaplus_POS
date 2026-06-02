@@ -419,7 +419,8 @@ class FundTransactions extends Table {
   TextColumn get type => text()(); // credit | debit
   IntColumn get amountKobo => integer()();
   IntColumn get signedAmountKobo => integer()();
-  TextColumn get referenceType => text()(); // opening | sale | void | topup
+  TextColumn get referenceType =>
+      text()(); // opening | sale | void | topup | expense
   TextColumn get orderId => text().nullable().references(Orders, #id)();
   TextColumn get paymentId =>
       text().nullable().references(PaymentTransactions, #id)();
@@ -438,7 +439,7 @@ class FundTransactions extends Table {
   List<String> get customConstraints => [
     "CHECK (type IN ('credit','debit'))",
     'CHECK (amount_kobo >= 0)',
-    "CHECK (reference_type IN ('opening','sale','void','topup'))",
+    "CHECK (reference_type IN ('opening','sale','void','topup','expense'))",
     "CHECK ((type = 'credit' AND signed_amount_kobo >= 0) OR "
         "(type = 'debit' AND signed_amount_kobo <= 0))",
   ];
@@ -478,6 +479,38 @@ class FundDayClosings extends Table {
     "CHECK (account_type IN ('cash_till','pos_machine','bank'))",
     'UNIQUE (fund_day_id, funds_account_id)',
   ];
+}
+
+// Daily Stock Count session snapshot (§17). One row per saved count (Save
+// Count). `products_counted` is how many products were in the session;
+// `shortage_*`/`surplus_*` are the roll-up the Daily Reconciliation Report
+// (Ring 3, §25.9) reads; `lines_json` is the itemized CHANGED products
+// [{p,n,s,a,d}] = product id / name / system / actual / diff (matched lines
+// are omitted to bound size — productsCounted still records the full total).
+// This is the stock-audit half of that report, symmetric to FundDayClosings
+// (the cash-audit half). Written once per Save Count, so a normal synced
+// table, not an append-only ledger. store_id is nullable: an all-stores count
+// (the grouped view) has no single store. Mirrors
+// supabase/migrations/0072_stock_counts.sql.
+@DataClassName('StockCountData')
+class StockCounts extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get storeId => text().nullable().references(Stores, #id)();
+  TextColumn get businessDate => text()(); // YYYY-MM-DD
+  IntColumn get productsCounted => integer()();
+  IntColumn get shortageCount => integer()(); // # products short (diff<0)
+  IntColumn get surplusCount => integer()(); // # products over (diff>0)
+  IntColumn get shortageUnits => integer()(); // sum |diff| where diff<0
+  IntColumn get surplusUnits => integer()(); // sum  diff  where diff>0
+  TextColumn get linesJson => text()(); // [{p,n,s,a,d}] changed lines
+  TextColumn get countedBy => text().nullable().references(Users, #id)();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
 }
 
 class CustomerCrateBalances extends Table {
@@ -805,6 +838,25 @@ class Expenses extends Table {
   TextColumn get recordedBy => text().nullable().references(Users, #id)();
   TextColumn get reference => text().nullable()();
   TextColumn get storeId => text().nullable().references(Stores, #id)();
+  // §20.5 — the Funds Register account this expense debits (Cash Till / Bank /
+  // POS machine). Chosen at record time, persisted so an approval can debit the
+  // right account later. Null for 'other'-method expenses (no tracked balance).
+  TextColumn get fundsAccountId =>
+      text().nullable().references(FundsAccounts, #id)();
+  // §20.4 approval flow. 'approved' (CEO, or Manager within limit — counts in
+  // budget and debits funds immediately), 'pending' (Manager over limit — awaits
+  // CEO, no funds movement yet), 'rejected' (CEO declined — never touches funds).
+  TextColumn get status => text().withDefault(const Constant('approved'))();
+  TextColumn get rejectionReason => text().nullable()();
+  TextColumn get approvedBy => text().nullable().references(Users, #id)();
+  DateTimeColumn get approvedAt => dateTime().nullable()();
+  // The user-picked expense date (§20.2 date picker), distinct from createdAt.
+  // Display/reporting only — the funds debit always dates to the open funds day
+  // it posts on (§20.5/§19.7), never the picked date.
+  DateTimeColumn get expenseDate => dateTime().withDefault(currentDateAndTime)();
+  // Local file path of the receipt photo (§20.2). Phase 1 is local-only; cloud
+  // upload + cross-device sync of the image is deferred.
+  TextColumn get receiptPath => text().nullable()();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
@@ -817,7 +869,32 @@ class Expenses extends Table {
   List<String> get customConstraints => [
     'CHECK (amount_kobo > 0)',
     "CHECK (payment_method IS NULL OR payment_method IN ('cash','transfer','card','pos','other'))",
+    "CHECK (status IN ('approved','pending','rejected'))",
   ];
+}
+
+// §20.1/§20.3 monthly budget goal. One row per (business, store-or-null):
+// store_id NULL = the business-wide monthly goal; a store_id = that store's
+// goal. The Expenses budget bar resolves by the viewer's scope, falling back
+// to the business-wide goal when a store has none. Uniqueness is enforced by
+// the two partial indexes in `_postCreateStatements`; the DAO upserts by
+// looking up the existing (business, store) row.
+@DataClassName('ExpenseBudgetData')
+class ExpenseBudgets extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get storeId => text().nullable().references(Stores, #id)();
+  IntColumn get amountKobo => integer()();
+  BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => ['CHECK (amount_kobo >= 0)'];
 }
 
 @DataClassName('DriverData')
@@ -1313,6 +1390,7 @@ class MigrationEvents extends Table {
     PurchaseItems,
     ExpenseCategories,
     Expenses,
+    ExpenseBudgets,
     Drivers,
     DeliveryReceipts,
     SavedCarts,
@@ -1322,6 +1400,7 @@ class MigrationEvents extends Table {
     FundDays,
     FundTransactions,
     FundDayClosings,
+    StockCounts,
     ActivityLogs,
     Notifications,
     Settings,
@@ -1345,6 +1424,7 @@ class MigrationEvents extends Table {
     CustomersDao,
     ShipmentsDao,
     ExpensesDao,
+    ExpenseBudgetsDao,
     SyncDao,
     ActivityLogDao,
     NotificationsDao,
@@ -1358,6 +1438,7 @@ class MigrationEvents extends Table {
     FundDaysDao,
     FundTransactionsDao,
     FundDayClosingsDao,
+    StockCountsDao,
     CustomerWalletsDao,
     CrateSizeGroupsDao,
     CustomerCrateBalancesDao,
@@ -1407,7 +1488,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 29;
+  int get schemaVersion => 31;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -2596,6 +2677,183 @@ class AppDatabase extends _$AppDatabase {
           "'domain:pos_record_crate_return', 'domain:pos_approve_crate_return')",
         );
       }
+      if (from < 30) {
+        // v30 (master plan §17 Daily Stock Count): the per-session stock-audit
+        // snapshot table. One new synced tenant table. Mirrors
+        // supabase/migrations/0072_stock_counts.sql. Same index/trigger shapes
+        // as the `_postCreateStatements` loops so a fresh install (onCreate)
+        // and an upgrade end up identical.
+        //
+        // Idempotency guard (like the v27 block): revert-then-re-upgrade tests
+        // revert only specific deltas, so a DB stepped back to < 30 may still
+        // carry stock_counts; a blind createTable would throw "table already
+        // exists". Only build it when genuinely absent.
+        final exists = await customSelect(
+          "SELECT 1 FROM sqlite_master WHERE type='table' "
+          "AND name='stock_counts'",
+        ).get();
+        if (exists.isEmpty) {
+          await m.createTable(stockCounts);
+          await customStatement(
+            'CREATE INDEX idx_stock_counts_business_lua '
+            'ON stock_counts (business_id, last_updated_at)',
+          );
+          await customStatement(
+            'CREATE INDEX idx_stock_counts_store_date '
+            'ON stock_counts (store_id, business_date)',
+          );
+          await customStatement(
+            'CREATE TRIGGER bump_stock_counts_last_updated_at '
+            'AFTER UPDATE ON stock_counts '
+            'FOR EACH ROW '
+            'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+            'BEGIN '
+            "UPDATE stock_counts SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+            'END',
+          );
+        }
+      }
+      if (from < 31) {
+        // v31 (master plan §20 Expenses — full implementation). Mirrors
+        // supabase/migrations/0073_expenses_full.sql. Three deltas:
+        //   1. expenses: add the §20.4 approval columns (status / rejection /
+        //      approver / approved_at), the §20.2 user-picked expense_date, and
+        //      the §20.2 local receipt_path + a status CHECK.
+        //   2. fund_transactions: widen the reference_type CHECK to allow
+        //      'expense' (§20.5 funds debit). Append-only ledger — same dance
+        //      as the v29 crate_ledger rebuild.
+        //   3. expense_budgets: new synced tenant table (§20.1/§20.3 budget).
+        //
+        // Each step is guarded so a revert-then-re-upgrade test (which reverts
+        // only specific deltas) doesn't double-apply.
+        Future<bool> hasCol(String table, String col) async {
+          final rows = await customSelect('PRAGMA table_info($table)').get();
+          return rows.any((r) => r.read<String>('name') == col);
+        }
+
+        Future<String> tableSql(String table) async {
+          final row = await customSelect(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
+            variables: [Variable.withString(table)],
+          ).getSingleOrNull();
+          return row?.read<String>('sql') ?? '';
+        }
+
+        // 1. expenses — add the approval / date / receipt columns. Rebuild
+        // (rather than ADD COLUMN) so the new table-level status CHECK lands and
+        // the live shape matches the Dart definition. drift's alterTable
+        // re-applies the table's existing indexes; recreate the bump trigger
+        // (alterTable does not re-apply triggers). Backfill the new
+        // expense_date from the existing created_at.
+        if (!await hasCol('expenses', 'status')) {
+          await m.alterTable(TableMigration(
+            expenses,
+            newColumns: [
+              expenses.fundsAccountId,
+              expenses.status,
+              expenses.rejectionReason,
+              expenses.approvedBy,
+              expenses.approvedAt,
+              expenses.expenseDate,
+              expenses.receiptPath,
+            ],
+            columnTransformer: {
+              expenses.expenseDate: expenses.createdAt,
+            },
+          ));
+          await customStatement(
+              'DROP TRIGGER IF EXISTS bump_expenses_last_updated_at');
+          await customStatement(
+            'CREATE TRIGGER bump_expenses_last_updated_at '
+            'AFTER UPDATE ON expenses '
+            'FOR EACH ROW '
+            'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+            'BEGIN '
+            "UPDATE expenses SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+            'END',
+          );
+        }
+
+        // 2. fund_transactions — widen reference_type CHECK to add 'expense'.
+        // Append-only ledger: drop the immutability + no-delete triggers, rebuild
+        // via alterTable (re-applies indexes), then recreate the LUA + hot-path
+        // indexes (DROP+CREATE for idempotency), the bump trigger, and the ledger
+        // triggers from the (unchanged) _ledgerTables set.
+        if (!(await tableSql('fund_transactions')).contains("'expense'")) {
+          await customStatement(
+              'DROP TRIGGER IF EXISTS fund_transactions_immutable');
+          await customStatement(
+              'DROP TRIGGER IF EXISTS fund_transactions_no_delete');
+          await m.alterTable(TableMigration(fundTransactions));
+          await customStatement(
+              'DROP INDEX IF EXISTS idx_fund_transactions_business_lua');
+          await customStatement(
+            'CREATE INDEX idx_fund_transactions_business_lua '
+            'ON fund_transactions (business_id, last_updated_at)',
+          );
+          await customStatement(
+              'DROP INDEX IF EXISTS idx_fund_txn_account_date');
+          await customStatement(
+            'CREATE INDEX idx_fund_txn_account_date '
+            'ON fund_transactions (funds_account_id, business_date)',
+          );
+          await customStatement(
+              'DROP TRIGGER IF EXISTS bump_fund_transactions_last_updated_at');
+          await customStatement(
+            'CREATE TRIGGER bump_fund_transactions_last_updated_at '
+            'AFTER UPDATE ON fund_transactions '
+            'FOR EACH ROW '
+            'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+            'BEGIN '
+            "UPDATE fund_transactions SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+            'END',
+          );
+          for (final stmt in _ledgerTriggerStatements(
+            _ledgerTables.firstWhere((l) => l.table == 'fund_transactions'),
+          )) {
+            await customStatement(stmt);
+          }
+        }
+
+        // 3. expense_budgets — new synced tenant table. Same index/trigger
+        // shapes as the `_postCreateStatements` loops (LUA + soft-delete +
+        // bump) plus the two partial unique indexes (one live goal per
+        // business / store).
+        final ebExists = await customSelect(
+          "SELECT 1 FROM sqlite_master WHERE type='table' "
+          "AND name='expense_budgets'",
+        ).get();
+        if (ebExists.isEmpty) {
+          await m.createTable(expenseBudgets);
+          await customStatement(
+            'CREATE INDEX idx_expense_budgets_business_lua '
+            'ON expense_budgets (business_id, last_updated_at)',
+          );
+          await customStatement(
+            'CREATE INDEX idx_expense_budgets_business_deleted '
+            'ON expense_budgets (business_id, is_deleted)',
+          );
+          await customStatement(
+            'CREATE UNIQUE INDEX uq_expense_budgets_business '
+            'ON expense_budgets (business_id) '
+            'WHERE store_id IS NULL AND is_deleted = 0',
+          );
+          await customStatement(
+            'CREATE UNIQUE INDEX uq_expense_budgets_store '
+            'ON expense_budgets (business_id, store_id) '
+            'WHERE store_id IS NOT NULL AND is_deleted = 0',
+          );
+          await customStatement(
+            'CREATE TRIGGER bump_expense_budgets_last_updated_at '
+            'AFTER UPDATE ON expense_budgets '
+            'FOR EACH ROW '
+            'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+            'BEGIN '
+            "UPDATE expense_budgets SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+            'END',
+          );
+        }
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -2718,8 +2976,12 @@ const List<String> _syncedTenantTables = [
   'fund_transactions',
   // v27 (master plan §23.6 Close Day reconciliation).
   'fund_day_closings',
+  // v30 (master plan §17 Daily Stock Count) — per-session stock-audit snapshot.
+  'stock_counts',
   'expense_categories',
   'expenses',
+  // v31 (master plan §20.1/§20.3) — monthly budget goal, per business / store.
+  'expense_budgets',
   'activity_logs',
   'notifications',
   'settings',
@@ -2847,6 +3109,7 @@ const List<String> _softDeletableTables = [
   'drivers',
   'expense_categories',
   'expenses',
+  'expense_budgets',
   // v13 additions.
   'roles',
   'invite_codes',
@@ -3018,6 +3281,13 @@ List<String> get _postCreateStatements {
     'CREATE INDEX idx_fund_txn_account_date ON fund_transactions (funds_account_id, business_date)',
     // v27 (Close Day) — read closings per store/day for the reconciliation report.
     'CREATE INDEX idx_fund_day_closings_store_date ON fund_day_closings (store_id, business_date)',
+    // v30 (Daily Stock Count) — read counts per store/day for the reconciliation report.
+    'CREATE INDEX idx_stock_counts_store_date ON stock_counts (store_id, business_date)',
+    // v31 (Expenses budget) — one live goal per (business, store-or-null).
+    'CREATE UNIQUE INDEX uq_expense_budgets_business ON expense_budgets '
+        '(business_id) WHERE store_id IS NULL AND is_deleted = 0',
+    'CREATE UNIQUE INDEX uq_expense_budgets_store ON expense_budgets '
+        '(business_id, store_id) WHERE store_id IS NOT NULL AND is_deleted = 0',
   ]);
 
   // Enqueue-time coalescing: at most one pending sync_queue row per

@@ -234,9 +234,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         .toList();
 
     // Store filtering is handled at the SQL level by _subscribeExpenses;
-    // here we only need the period filter.
+    // here we only need the period filter. Total Expenses counts APPROVED
+    // expenses only (§20.1) — pending/rejected aren't actual spend yet.
     final filteredExpenses = _allExpenses
-        .where((e) => _isDateInPeriod(e.expense.createdAt, _selectedPeriod))
+        .where((e) =>
+            e.expense.status == 'approved' &&
+            _isDateInPeriod(e.expense.expenseDate, _selectedPeriod))
         .toList();
 
 

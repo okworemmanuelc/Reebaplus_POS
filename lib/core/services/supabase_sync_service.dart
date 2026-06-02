@@ -1446,6 +1446,11 @@ class SupabaseSyncService {
     'purchase_items',
     'expense_categories',
     'expenses',
+    // expense_budgets references businesses + stores (both pulled above), so
+    // it's FK-safe here (§20.1/§20.3 monthly budget). Without this entry the
+    // pull/restore/realtime loops never ingest it and a budget set on one
+    // device never reaches the others.
+    'expense_budgets',
     'customer_crate_balances',
     'delivery_receipts',
     'drivers',
@@ -1471,6 +1476,11 @@ class SupabaseSyncService {
     // fund_day_closings references fund_days + funds_accounts + stores + users,
     // all pulled above, so it's FK-safe here (§23.6 Close Day).
     'fund_day_closings',
+    // stock_counts references businesses + stores + users (all pulled above),
+    // so it's FK-safe here (§17 Daily Stock Count). Added in this pass — it was
+    // missing from the ingest loops since Session 58, so saved counts never
+    // reached other devices.
+    'stock_counts',
     'sessions',
     'settings',
   ];
@@ -2963,6 +2973,32 @@ class SupabaseSyncService {
             await _db
                 .into(_db.expenseCategories)
                 .insertOnConflictUpdate(ExpenseCategoryData.fromJson(r));
+          }
+          break;
+        case 'expense_budgets':
+          for (var r in rows) {
+            // FK-resilient: references businesses / stores.
+            await _insertResilient(
+              'expense_budgets',
+              r,
+              fkSkipped,
+              () => _db
+                  .into(_db.expenseBudgets)
+                  .insertOnConflictUpdate(ExpenseBudgetData.fromJson(r)),
+            );
+          }
+          break;
+        case 'stock_counts':
+          for (var r in rows) {
+            // FK-resilient: references businesses / stores / users.
+            await _insertResilient(
+              'stock_counts',
+              r,
+              fkSkipped,
+              () => _db
+                  .into(_db.stockCounts)
+                  .insertOnConflictUpdate(StockCountData.fromJson(r)),
+            );
           }
           break;
         case 'manufacturer_crate_balances':

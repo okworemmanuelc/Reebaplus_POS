@@ -126,6 +126,7 @@ mixin _$OrdersDaoMixin on DatabaseAccessor<AppDatabase> {
       attachedDatabase.stockTransactions;
   $ExpenseCategoriesTable get expenseCategories =>
       attachedDatabase.expenseCategories;
+  $FundsAccountsTable get fundsAccounts => attachedDatabase.fundsAccounts;
   $ExpensesTable get expenses => attachedDatabase.expenses;
   $CustomerWalletsTable get customerWallets => attachedDatabase.customerWallets;
   $WalletTransactionsTable get walletTransactions =>
@@ -135,7 +136,6 @@ mixin _$OrdersDaoMixin on DatabaseAccessor<AppDatabase> {
       attachedDatabase.deliveryReceipts;
   $PaymentTransactionsTable get paymentTransactions =>
       attachedDatabase.paymentTransactions;
-  $FundsAccountsTable get fundsAccounts => attachedDatabase.fundsAccounts;
   $FundTransactionsTable get fundTransactions =>
       attachedDatabase.fundTransactions;
   OrdersDaoManager get managers => OrdersDaoManager(this);
@@ -195,6 +195,8 @@ class OrdersDaoManager {
         _db.attachedDatabase,
         _db.expenseCategories,
       );
+  $$FundsAccountsTableTableManager get fundsAccounts =>
+      $$FundsAccountsTableTableManager(_db.attachedDatabase, _db.fundsAccounts);
   $$ExpensesTableTableManager get expenses =>
       $$ExpensesTableTableManager(_db.attachedDatabase, _db.expenses);
   $$CustomerWalletsTableTableManager get customerWallets =>
@@ -219,8 +221,6 @@ class OrdersDaoManager {
         _db.attachedDatabase,
         _db.paymentTransactions,
       );
-  $$FundsAccountsTableTableManager get fundsAccounts =>
-      $$FundsAccountsTableTableManager(_db.attachedDatabase, _db.fundsAccounts);
   $$FundTransactionsTableTableManager get fundTransactions =>
       $$FundTransactionsTableTableManager(
         _db.attachedDatabase,
@@ -240,7 +240,6 @@ mixin _$CustomersDaoMixin on DatabaseAccessor<AppDatabase> {
   $OrdersTable get orders => attachedDatabase.orders;
   $WalletTransactionsTable get walletTransactions =>
       attachedDatabase.walletTransactions;
-  $CrateSizeGroupsTable get crateSizeGroups => attachedDatabase.crateSizeGroups;
   CustomersDaoManager get managers => CustomersDaoManager(this);
 }
 
@@ -273,11 +272,6 @@ class CustomersDaoManager {
       $$WalletTransactionsTableTableManager(
         _db.attachedDatabase,
         _db.walletTransactions,
-      );
-  $$CrateSizeGroupsTableTableManager get crateSizeGroups =>
-      $$CrateSizeGroupsTableTableManager(
-        _db.attachedDatabase,
-        _db.crateSizeGroups,
       );
 }
 
@@ -323,6 +317,7 @@ mixin _$ExpensesDaoMixin on DatabaseAccessor<AppDatabase> {
       attachedDatabase.expenseCategories;
   $StoresTable get stores => attachedDatabase.stores;
   $UsersTable get users => attachedDatabase.users;
+  $FundsAccountsTable get fundsAccounts => attachedDatabase.fundsAccounts;
   $ExpensesTable get expenses => attachedDatabase.expenses;
   $ActivityLogsTable get activityLogs => attachedDatabase.activityLogs;
   $CustomersTable get customers => attachedDatabase.customers;
@@ -338,6 +333,8 @@ mixin _$ExpensesDaoMixin on DatabaseAccessor<AppDatabase> {
       attachedDatabase.deliveryReceipts;
   $PaymentTransactionsTable get paymentTransactions =>
       attachedDatabase.paymentTransactions;
+  $FundTransactionsTable get fundTransactions =>
+      attachedDatabase.fundTransactions;
   ExpensesDaoManager get managers => ExpensesDaoManager(this);
 }
 
@@ -355,6 +352,8 @@ class ExpensesDaoManager {
       $$StoresTableTableManager(_db.attachedDatabase, _db.stores);
   $$UsersTableTableManager get users =>
       $$UsersTableTableManager(_db.attachedDatabase, _db.users);
+  $$FundsAccountsTableTableManager get fundsAccounts =>
+      $$FundsAccountsTableTableManager(_db.attachedDatabase, _db.fundsAccounts);
   $$ExpensesTableTableManager get expenses =>
       $$ExpensesTableTableManager(_db.attachedDatabase, _db.expenses);
   $$ActivityLogsTableTableManager get activityLogs =>
@@ -393,6 +392,32 @@ class ExpensesDaoManager {
       $$PaymentTransactionsTableTableManager(
         _db.attachedDatabase,
         _db.paymentTransactions,
+      );
+  $$FundTransactionsTableTableManager get fundTransactions =>
+      $$FundTransactionsTableTableManager(
+        _db.attachedDatabase,
+        _db.fundTransactions,
+      );
+}
+
+mixin _$ExpenseBudgetsDaoMixin on DatabaseAccessor<AppDatabase> {
+  $BusinessesTable get businesses => attachedDatabase.businesses;
+  $StoresTable get stores => attachedDatabase.stores;
+  $ExpenseBudgetsTable get expenseBudgets => attachedDatabase.expenseBudgets;
+  ExpenseBudgetsDaoManager get managers => ExpenseBudgetsDaoManager(this);
+}
+
+class ExpenseBudgetsDaoManager {
+  final _$ExpenseBudgetsDaoMixin _db;
+  ExpenseBudgetsDaoManager(this._db);
+  $$BusinessesTableTableManager get businesses =>
+      $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$StoresTableTableManager get stores =>
+      $$StoresTableTableManager(_db.attachedDatabase, _db.stores);
+  $$ExpenseBudgetsTableTableManager get expenseBudgets =>
+      $$ExpenseBudgetsTableTableManager(
+        _db.attachedDatabase,
+        _db.expenseBudgets,
       );
 }
 
@@ -705,6 +730,7 @@ mixin _$WalletTransactionsDaoMixin on DatabaseAccessor<AppDatabase> {
   $ShipmentsTable get shipments => attachedDatabase.shipments;
   $ExpenseCategoriesTable get expenseCategories =>
       attachedDatabase.expenseCategories;
+  $FundsAccountsTable get fundsAccounts => attachedDatabase.fundsAccounts;
   $ExpensesTable get expenses => attachedDatabase.expenses;
   $DriversTable get drivers => attachedDatabase.drivers;
   $DeliveryReceiptsTable get deliveryReceipts =>
@@ -752,6 +778,8 @@ class WalletTransactionsDaoManager {
         _db.attachedDatabase,
         _db.expenseCategories,
       );
+  $$FundsAccountsTableTableManager get fundsAccounts =>
+      $$FundsAccountsTableTableManager(_db.attachedDatabase, _db.fundsAccounts);
   $$ExpensesTableTableManager get expenses =>
       $$ExpensesTableTableManager(_db.attachedDatabase, _db.expenses);
   $$DriversTableTableManager get drivers =>
@@ -793,7 +821,6 @@ mixin _$CustomerCrateBalancesDaoMixin on DatabaseAccessor<AppDatabase> {
   $ManufacturersTable get manufacturers => attachedDatabase.manufacturers;
   $CustomerCrateBalancesTable get customerCrateBalances =>
       attachedDatabase.customerCrateBalances;
-  $CrateSizeGroupsTable get crateSizeGroups => attachedDatabase.crateSizeGroups;
   CustomerCrateBalancesDaoManager get managers =>
       CustomerCrateBalancesDaoManager(this);
 }
@@ -813,11 +840,6 @@ class CustomerCrateBalancesDaoManager {
       $$CustomerCrateBalancesTableTableManager(
         _db.attachedDatabase,
         _db.customerCrateBalances,
-      );
-  $$CrateSizeGroupsTableTableManager get crateSizeGroups =>
-      $$CrateSizeGroupsTableTableManager(
-        _db.attachedDatabase,
-        _db.crateSizeGroups,
       );
 }
 
@@ -964,6 +986,27 @@ class FundDayClosingsDaoManager {
       );
 }
 
+mixin _$StockCountsDaoMixin on DatabaseAccessor<AppDatabase> {
+  $BusinessesTable get businesses => attachedDatabase.businesses;
+  $StoresTable get stores => attachedDatabase.stores;
+  $UsersTable get users => attachedDatabase.users;
+  $StockCountsTable get stockCounts => attachedDatabase.stockCounts;
+  StockCountsDaoManager get managers => StockCountsDaoManager(this);
+}
+
+class StockCountsDaoManager {
+  final _$StockCountsDaoMixin _db;
+  StockCountsDaoManager(this._db);
+  $$BusinessesTableTableManager get businesses =>
+      $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$StoresTableTableManager get stores =>
+      $$StoresTableTableManager(_db.attachedDatabase, _db.stores);
+  $$UsersTableTableManager get users =>
+      $$UsersTableTableManager(_db.attachedDatabase, _db.users);
+  $$StockCountsTableTableManager get stockCounts =>
+      $$StockCountsTableTableManager(_db.attachedDatabase, _db.stockCounts);
+}
+
 mixin _$FundTransactionsDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
   $StoresTable get stores => attachedDatabase.stores;
@@ -1055,7 +1098,6 @@ mixin _$ManufacturerCrateBalancesDaoMixin on DatabaseAccessor<AppDatabase> {
   $ManufacturersTable get manufacturers => attachedDatabase.manufacturers;
   $ManufacturerCrateBalancesTable get manufacturerCrateBalances =>
       attachedDatabase.manufacturerCrateBalances;
-  $CrateSizeGroupsTable get crateSizeGroups => attachedDatabase.crateSizeGroups;
   ManufacturerCrateBalancesDaoManager get managers =>
       ManufacturerCrateBalancesDaoManager(this);
 }
@@ -1071,11 +1113,6 @@ class ManufacturerCrateBalancesDaoManager {
       $$ManufacturerCrateBalancesTableTableManager(
         _db.attachedDatabase,
         _db.manufacturerCrateBalances,
-      );
-  $$CrateSizeGroupsTableTableManager get crateSizeGroups =>
-      $$CrateSizeGroupsTableTableManager(
-        _db.attachedDatabase,
-        _db.crateSizeGroups,
       );
 }
 

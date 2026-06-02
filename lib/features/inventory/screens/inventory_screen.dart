@@ -417,21 +417,26 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
               }
             }),
           ),
-        IconButton(
-          tooltip: 'Daily Stock Count',
-          icon: const Icon(Icons.fact_check_outlined),
-          onPressed: () => Navigator.push(
-            context,
-            slideDownRoute(
-              StockCountScreen(
-                storeId: ref
-                    .read(navigationProvider)
-                    .lockedStoreId
-                    .value,
+        // Stock Take icon (§16.1) → Daily Stock Count. §17.4 access: Stock
+        // keeper, Manager, CEO. Cashier blocked — hide the icon entirely (hard
+        // rule #7: hide, don't disable).
+        if (const {'ceo', 'manager', 'stock_keeper'}
+            .contains(ref.watch(currentUserRoleProvider)?.slug))
+          IconButton(
+            tooltip: 'Daily Stock Count',
+            icon: const Icon(Icons.fact_check_outlined),
+            onPressed: () => Navigator.push(
+              context,
+              slideDownRoute(
+                StockCountScreen(
+                  storeId: ref
+                      .read(navigationProvider)
+                      .lockedStoreId
+                      .value,
+                ),
               ),
             ),
           ),
-        ),
         const NotificationBell(),
         const SizedBox(width: AppSpacing.s),
       ],

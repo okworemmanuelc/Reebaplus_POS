@@ -109,7 +109,7 @@ Each step unlocks the next. Build in this order:
 - [~] Customers screen with wallet (§18). *(Re-pass Session 31: soft-delete CEO/Manager, Crates-tab gated to Bar/Beer, required phone, new customers.set_debt_limit permission. Still open: Edit flow (updateCustomer is a stub), GPS location capture, Add-Funds payment-method selector.)*
 - [~] Orders (Pending, Completed, Cancelled).
 - [~] Daily Stock Count.
-- [~] Expenses with pending approval flow.
+- [x] Expenses with pending approval flow. *(Full impl Session 59: approval flow, Funds Register debit-on-approve + reversal, searchable categories, per-business/per-store monthly budget, edit/delete, stats. Cloud 0073 pending deploy.)*
 - [ ] Supplier Accounts.
 - [ ] Track Shipments (new).
 - [~] Activity Logs.
@@ -815,16 +815,18 @@ Accessed from the Stock Take icon at the top of the Inventory screen.
 - Back button, title "Daily Stock Count", subtitle = store name only (no warehouse ID).
 - Store icon replaces warehouse icon.
 - Stock Count History icon (top right).
+- **Per store (2026-06-02, user):** a count is taken for **one store at a time** — there is no combined all-stores count. When the screen is opened with a store lock it is fixed to that store; when opened unscoped (e.g. a CEO with no store lock) a **Store picker** chooses which store to count (hidden when the business has a single store).
 
 ### 17.2 Body
 
 - Columns: Product, System (current), Actual (editable), Diff (auto-calculated, red if negative).
-- Save Count button.
+- Save Count button. **Save Count shows a confirmation** summarising the adjustments (and any shortages) before it commits, since saving updates live stock (2026-06-02, user).
 - Record Damages button — opens form: product, quantity, reason (broken/expired/spilled/theft/other). Submitting logs to History and reduces system stock.
 
 ### 17.3 Behaviour
 
 - Multiple counts per day allowed, each with timestamp.
+- Each saved count is recorded as a session (store, date, products counted, the per-product shortages/surpluses). The **Stock Count History** lists these per store, newest first — every saved count appears, including one with no changes.
 - Saving triggers the daily reconciliation report → goes to CEO and Manager in Reports tab.
 - Reconciliation report includes: shortages/unaccounted items, items sold, best-selling item, best-performing staff, cash balance, empty crates balance (Bar/Beer Distributor only).
 
@@ -992,11 +994,17 @@ Wrong items → cancel and create a new order. When an order is in Pending, the 
 - 2 tabs: Expenses, Stats.
 - Total Expenses card with period selector (default "Last 30 days"; canonical chip set, §30.11).
 - Budget Activity bar (Spent vs Goal) — only counts approved expenses. Small text below shows "₦X pending approval" if any.
+  - **Always visible (2026-06-02, user):** the budget is a **monthly** goal, so the bar is shown on **every** period selection (not gated to the "Last 30 days" view). Its Spent/pending figures always reflect the **last-30-days window**, independent of the period selector above the list (which only filters the expense list and the "Total Expenses" headline).
+  - **Budget scope (2026-06-02, user):** the monthly budget goal is set **overall for the business and, optionally, per store** within the business. A store with no goal of its own falls back to the business-wide goal. The bar resolves the goal by the viewer's scope — CEO viewing all stores sees the business-wide goal; a store-scoped view (Manager, or a CEO filtered to one store) sees that store's goal. Stored in an `expense_budgets` table (`business_id`, nullable `store_id`, `amount_kobo`); set via the CEO-only "Set monthly budget" action (§20.3).
 - Pending Approvals section at top (CEO only, shows when there are pending items).
 - Expense list with status badges (Approved, Pending CEO approval, Rejected).
 - "Add Expense" floating button.
 
 ### 20.2 Record Expense form
+
+> **Presentation (2026-06-02, user):** the Add/Record Expense form opens as a
+> full **screen** (pushed route), not a bottom-sheet modal. Same fields and
+> rules below; only the presentation changed.
 
 - Category — searchable dropdown. Pre-seeded with Fuel, Salary, Rent, Maintenance, Utilities, Supplies, Others. New categories are saved to the database on the fly. Anyone who can record expenses can create new ones.
 - Amount.
@@ -1036,6 +1044,19 @@ Wrong items → cancel and create a new order. When an order is in Pending, the 
 - Bank Transfer reduces selected Bank Account balance.
 - POS card reduces selected POS machine balance.
 - Other does not affect any tracked balance.
+
+> **When the money leaves the account (2026-06-02, user):** the Funds Register
+> debit is posted **when the expense becomes approved**, never while it is
+> Pending. An auto-approved expense (CEO, or a Manager within their limit) debits
+> immediately at record time; a Pending expense (Manager over limit) debits only
+> when the CEO **approves** it; a **Rejected** expense never touches funds. The
+> debit is dated to the **open funds day on which it posts** (today), mirroring
+> the refund-day rule (§19.7) — a closed day is never reopened. Like a refund,
+> recording/approving an expense that moves a tracked account (Cash / Bank / POS)
+> **requires an open funds day** (§23.8); blocked with a clear message otherwise.
+> "Other"-method expenses move no tracked account, so they do not need an open
+> day. The receipt photo (§20.2) is stored as a **local file path** in Phase 1;
+> cloud upload + cross-device sync of the image is deferred.
 
 ### 20.6 Stats tab
 
@@ -1335,14 +1356,22 @@ Note: there is no Pending Approvals card on Reports. Pending approvals live on t
 
 | Report | CEO | Manager | Cashier | Stock keeper |
 |--------|-----|---------|---------|--------------|
-| Sales | All | Own store | Own sales | Hidden |
+| Sales | All | Own store | Hidden | Hidden |
 | Daily Reconciliation | All | Own store | Hidden | Hidden |
 | Expense Tracker | All | Own store | Hidden | Hidden |
-| Stock Audit | All | Own store | Hidden | Own store (no money) |
+| Stock Audit | All | Own store | Hidden | Hidden |
 | Customer Ledger | All | Own store | Hidden | Hidden |
 | Supplier Accounts | All | If toggled | Hidden | Hidden |
 | Funds Register | All | Own store | Hidden | Hidden |
 | Profit Report | Yes | Hidden | Hidden | Hidden |
+
+> Reconciled 2026-06-02 (user) — the Reports hub is **CEO + Manager only**, per
+> §11.3 / §27.3. Earlier drafts of this matrix gave Cashier an "Own sales" Sales
+> report and Stock keeper an "Own store (no money)" Stock Audit; those contradicted
+> §11.3's "Cashier, Stock keeper do not see it" and the §27.3 sidebar. Resolved in
+> favour of §11.3: Cashier and Stock keeper are **Hidden** for every report. A
+> cashier's own-sales summary lives on Home / Orders, not in the Reports hub; a
+> stock keeper's stock view lives in Inventory.
 
 ### 25.4 Reports badge on Home
 
@@ -1517,7 +1546,7 @@ Hardcoded for now. Custom notification settings = Phase 2.
 | Customers | Yes | Yes | Yes | Hidden |
 | Staff Management | Yes | Limited | Hidden | Hidden |
 | Stores | Yes | Hidden | Hidden | Hidden |
-| Reports | Yes | Yes | Own sales | Hidden |
+| Reports | Yes | Yes | Hidden | Hidden |
 | Activity Logs | Yes | If toggled | Hidden | Hidden |
 | CEO Settings | Yes | Hidden | Hidden | Hidden |
 

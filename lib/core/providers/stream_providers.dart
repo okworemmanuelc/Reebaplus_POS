@@ -41,6 +41,49 @@ final expenseCategoryNamesProvider =
       .map((cats) => {for (final c in cats) c.id: c.name});
 });
 
+/// Count of expenses awaiting CEO approval (§20.1 — bell badge + the pending
+/// section header). Business-scoped.
+final pendingExpensesCountProvider = StreamProvider<int>((ref) {
+  return ref.watch(databaseProvider).expensesDao.watchPendingCount();
+});
+
+/// Expenses visible to the current viewer (§20.3): a CEO sees all stores; every
+/// other role is scoped to their own store. Mirrors the Home store lock (§11.2)
+/// — the Expenses screen must NOT show one store's costs to another store's
+/// Manager, and the budget bar's spend must use the same scope as its goal.
+final viewerScopedExpensesProvider =
+    Provider<List<ExpenseWithCategory>>((ref) {
+  final all = ref.watch(allExpensesProvider).valueOrNull ?? const [];
+  final role = ref.watch(currentUserRoleProvider);
+  if (role?.slug == 'ceo') return all;
+  final storeId = ref.watch(authProvider).currentUser?.storeId;
+  return all.where((e) => e.expense.storeId == storeId).toList();
+});
+
+/// All live monthly budget goals for the business (§20.1/§20.3). The
+/// business-wide goal is the row with a null store_id; per-store goals carry a
+/// store_id. Use [resolveMonthlyBudgetKobo] to pick the goal for a view's scope.
+final expenseBudgetsProvider = StreamProvider<List<ExpenseBudgetData>>((ref) {
+  return ref.watch(databaseProvider).expenseBudgetsDao.watchAll();
+});
+
+/// Resolves the monthly budget goal (kobo) for a store scope: the store's own
+/// goal if set, else the business-wide goal (null store_id), else null (unset).
+int? resolveMonthlyBudgetKobo(
+  List<ExpenseBudgetData> budgets,
+  String? storeId,
+) {
+  if (storeId != null) {
+    for (final b in budgets) {
+      if (b.storeId == storeId) return b.amountKobo;
+    }
+  }
+  for (final b in budgets) {
+    if (b.storeId == null) return b.amountKobo;
+  }
+  return null;
+}
+
 // ── Products by store ───────────────────────────────────────────────────────
 final productsByStoreProvider =
     StreamProvider.family<List<ProductDataWithStock>, String>((ref, storeId) {
@@ -339,6 +382,30 @@ final currentUserMaxDiscountPercentProvider = Provider<int>((ref) {
   return int.tryParse(stored ?? '') ?? seedDefault();
 });
 
+// ── Expense approval limit (master plan §10.2 / §20.4) ───────────────────────
+
+/// `role_settings` key holding the max expense amount (kobo) a role may
+/// self-approve. Stored on each role row by CEO Settings; shared here so the
+/// Expenses flow reads the same key the settings screen writes.
+const kMaxExpenseApprovalKoboKey = 'max_expense_approval_kobo';
+
+/// The max expense amount (kobo) the current user may record without CEO
+/// approval (§20.4). `null` means unlimited (CEO). A Manager reads the stored
+/// limit — seed default 0, so until the CEO raises it every Manager expense
+/// escalates to Pending. Any other/unresolved role returns 0.
+final currentUserMaxExpenseApprovalKoboProvider = Provider<int?>((ref) {
+  final role = ref.watch(currentUserRoleProvider);
+  if (role == null) return 0;
+  if (role.slug == 'ceo') return null; // unlimited — CEO never escalates
+  final settings = ref.watch(roleSettingsProvider(role.id)).valueOrNull;
+  if (settings == null) return 0;
+  final stored = settings
+      .where((s) => s.settingKey == kMaxExpenseApprovalKoboKey)
+      .map((s) => s.settingValue)
+      .firstOrNull;
+  return int.tryParse(stored ?? '') ?? 0;
+});
+
 // ── Manager cross-store view toggle (master plan §11.2 / §10.2) ──────────────
 
 /// `role_settings` key for the CEO toggle that unlocks the Home store picker
@@ -448,4 +515,27 @@ final fundDayClosingsProvider = StreamProvider.family<List<FundDayClosingData>,
       .watch(databaseProvider)
       .fundDayClosingsDao
       .watchForDay(key.storeId, key.businessDate);
+});
+
+/// Every Close Day reconciliation snapshot in the business, newest day first —
+/// the Funds Register Report (§25.2) filters these to the selected period.
+final allFundDayClosingsProvider =
+    StreamProvider<List<FundDayClosingData>>((ref) {
+  return ref.watch(databaseProvider).fundDayClosingsDao.watchAllForBusiness();
+});
+
+/// Every funds account in the business (incl. soft-deleted), for resolving the
+/// account name on each Funds Register Report row.
+final allFundsAccountsProvider = StreamProvider<List<FundsAccountData>>((ref) {
+  return ref.watch(databaseProvider).fundsAccountsDao.watchAllForBusiness();
+});
+
+// ── Daily Stock Count (master plan §17) ──────────────────────────────────────
+
+/// Every saved Daily Stock Count session in the business, newest day first —
+/// drives the Stock Count History sheet and feeds the Daily Reconciliation
+/// Report (Ring 3, §25.9). Live so a count saved on another device appears
+/// without a manual refresh (§5).
+final allStockCountsProvider = StreamProvider<List<StockCountData>>((ref) {
+  return ref.watch(databaseProvider).stockCountsDao.watchAllForBusiness();
 });

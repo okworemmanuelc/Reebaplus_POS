@@ -2159,7 +2159,13 @@ class LastShipmentInfo {
 }
 
 @DriftAccessor(
-  tables: [Expenses, ExpenseCategories, ActivityLogs, PaymentTransactions],
+  tables: [
+    Expenses,
+    ExpenseCategories,
+    ActivityLogs,
+    PaymentTransactions,
+    FundTransactions,
+  ],
 )
 class ExpensesDao extends DatabaseAccessor<AppDatabase>
     with _$ExpensesDaoMixin, BusinessScopedDao<AppDatabase> {
@@ -2219,6 +2225,13 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
     return id;
   }
 
+  /// Records an expense (§20). [status] is computed by the caller from the
+  /// recorder's role + approval limit: 'approved' for a CEO or a Manager within
+  /// their limit; 'pending' for a Manager over limit. When the expense is
+  /// auto-approved AND pays from a tracked account (Cash / Bank / POS), the
+  /// Funds Register debit is posted immediately, dated to [businessDate] (the
+  /// open funds day, §20.5) — the caller must have confirmed the day is open. A
+  /// 'pending' expense moves no money until the CEO approves it (approveExpense).
   Future<void> addExpense({
     required String categoryName,
     required int amountKobo,
@@ -2227,6 +2240,11 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
     String? reference,
     String? storeId,
     required String recordedBy,
+    DateTime? expenseDate,
+    String? receiptPath,
+    String? fundsAccountId,
+    String status = 'approved',
+    String? businessDate,
   }) async {
     final flagValue = await db.systemConfigDao
         .get('feature.domain_rpcs_v2.record_expense');
@@ -2236,12 +2254,19 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
     // recorded (defaulting to 'other' when the caller didn't specify a
     // method). Keeps analytics/reporting parity across the flag flip.
     final effectivePaymentMethod = paymentMethod ?? 'other';
+    final pickedDate = expenseDate ?? DateTime.now();
+    // Only a tracked-account method moves money; 'other' never does (§20.5).
+    final tracked = effectivePaymentMethod != 'other' &&
+        fundsAccountId != null &&
+        storeId != null;
 
     await transaction(() async {
       final categoryId = await resolveCategoryId(categoryName);
       final expenseId = UuidV7.generate();
       final activityLogId = UuidV7.generate();
       final paymentId = UuidV7.generate();
+      final now = DateTime.now();
+      final approved = status == 'approved';
 
       // 1. Insert Expense locally (UI-immediate).
       final expComp = ExpensesCompanion.insert(
@@ -2254,7 +2279,13 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
         recordedBy: Value(recordedBy),
         reference: Value(reference),
         storeId: Value(storeId),
-        lastUpdatedAt: Value(DateTime.now()),
+        fundsAccountId: Value(fundsAccountId),
+        status: Value(status),
+        expenseDate: Value(pickedDate),
+        receiptPath: Value(receiptPath),
+        approvedBy: approved ? Value(recordedBy) : const Value.absent(),
+        approvedAt: approved ? Value(now) : const Value.absent(),
+        lastUpdatedAt: Value(now),
       );
       await into(expenses).insert(expComp);
 
@@ -2269,7 +2300,7 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
         entityType: const Value('expense'),
         entityId: Value(expenseId),
         storeId: Value(storeId),
-        lastUpdatedAt: Value(DateTime.now()),
+        lastUpdatedAt: Value(now),
       );
       await into(db.activityLogs).insert(activityComp);
 
@@ -2282,7 +2313,7 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
         type: 'expense',
         expenseId: Value(expenseId),
         performedBy: Value(recordedBy),
-        lastUpdatedAt: Value(DateTime.now()),
+        lastUpdatedAt: Value(now),
       );
       await into(db.paymentTransactions).insert(payComp);
 
@@ -2297,8 +2328,12 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
           'p_description': description,
           'p_category_id': categoryId,
           'p_payment_method': effectivePaymentMethod,
+          'p_status': status,
+          'p_expense_date': pickedDate.toIso8601String(),
           if (reference != null) 'p_reference': reference,
           if (storeId != null) 'p_store_id': storeId,
+          if (fundsAccountId != null) 'p_funds_account_id': fundsAccountId,
+          if (receiptPath != null) 'p_receipt_path': receiptPath,
         };
         await db.syncDao
             .enqueue('domain:pos_record_expense', jsonEncode(payload));
@@ -2307,7 +2342,365 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
         await db.syncDao.enqueueUpsert('activity_logs', activityComp);
         await db.syncDao.enqueueUpsert('payment_transactions', payComp);
       }
+
+      // 4. §20.5 — post the Funds Register debit only when the expense is
+      // already approved and pays from a tracked account. Pending expenses move
+      // no money until the CEO approves. Always via the table-upsert path (the
+      // fund_transactions ledger has no domain RPC of its own; refunds debit it
+      // the same way).
+      if (approved && tracked && businessDate != null) {
+        await _appendExpenseDebit(
+          fundsAccountId: fundsAccountId,
+          storeId: storeId,
+          amountKobo: amountKobo,
+          businessDate: businessDate,
+          paymentId: paymentId,
+          performedBy: recordedBy,
+        );
+      }
+
+      // 5. §20.4 / §26.4 — a Manager's over-limit expense lands Pending; alert
+      // the CEO(s) so the approval surfaces on their notification bell (the
+      // §20.1 "pending approval" badge). Fired inside the txn so it rolls back
+      // with the insert.
+      if (!approved) {
+        final ceoIds =
+            await db.userBusinessesDao.getUserIdsForRoleSlugs(['ceo']);
+        for (final uid in ceoIds) {
+          await db.notificationsDao.fireNotification(
+            type: 'expense.pending_approval',
+            message: 'Expense awaiting your approval: $description',
+            severity: 'warning',
+            linkedRecordId: expenseId,
+            recipientUserId: uid,
+          );
+        }
+      }
     });
+  }
+
+  /// Appends a Funds Register debit for an expense, dated to [businessDate]
+  /// (the open funds day). Linked to the expense via [paymentId] (its
+  /// payment_transactions row) so a later reversal can find it. §20.5 / §23.5.
+  Future<void> _appendExpenseDebit({
+    required String fundsAccountId,
+    required String storeId,
+    required int amountKobo,
+    required String businessDate,
+    required String paymentId,
+    required String performedBy,
+  }) async {
+    final comp = FundTransactionsCompanion.insert(
+      id: Value(UuidV7.generate()),
+      businessId: requireBusinessId(),
+      fundsAccountId: fundsAccountId,
+      storeId: storeId,
+      businessDate: businessDate,
+      type: 'debit',
+      amountKobo: amountKobo,
+      signedAmountKobo: -amountKobo,
+      referenceType: 'expense',
+      paymentId: Value(paymentId),
+      performedBy: Value(performedBy),
+      lastUpdatedAt: Value(DateTime.now()),
+    );
+    await into(fundTransactions).insert(comp);
+    await db.syncDao.enqueueUpsert('fund_transactions', comp);
+  }
+
+  /// The payment_transactions id created for [expenseId] at record time — the
+  /// link used to attach / find its Funds Register debit.
+  Future<String> _expensePaymentId(String expenseId) async {
+    final pay = await (select(paymentTransactions)
+          ..where(
+              (t) => t.expenseId.equals(expenseId) & t.type.equals('expense'))
+          ..limit(1))
+        .getSingleOrNull();
+    return pay?.id ?? UuidV7.generate();
+  }
+
+  /// Count of expenses awaiting CEO approval (§20.1 bell badge / pending
+  /// section). Business-scoped, non-deleted.
+  Stream<int> watchPendingCount() {
+    final query = selectOnly(expenses)
+      ..addColumns([expenses.id.count()])
+      ..where(whereBusiness(expenses) &
+          expenses.isDeleted.not() &
+          expenses.status.equals('pending'));
+    return query
+        .watchSingleOrNull()
+        .map((row) => row?.read(expenses.id.count()) ?? 0);
+  }
+
+  /// CEO approves a pending expense (§20.4). Sets status + approver, and — when
+  /// it pays from a tracked account — posts the Funds Register debit now, dated
+  /// to [businessDate] (today's open day, §20.5). The caller must have confirmed
+  /// the day is open. Notifies the recorder.
+  Future<void> approveExpense({
+    required String expenseId,
+    required String approverId,
+    required String businessDate,
+  }) async {
+    // The status read+guard MUST live inside the transaction. Drift serializes
+    // transactions on one connection, so a concurrent/double-tap approve sees
+    // the already-committed 'approved' status and no-ops — otherwise both would
+    // append a fund_transactions debit (double-debit). The conditional UPDATE
+    // (status == 'pending') + affected-row check is the belt-and-suspenders.
+    String? recordedBy;
+    String? description;
+    var didApprove = false;
+
+    await transaction(() async {
+      final exp = await (select(expenses)
+            ..where((t) => t.id.equals(expenseId) & whereBusiness(t)))
+          .getSingleOrNull();
+      if (exp == null || exp.status != 'pending') return;
+      final now = DateTime.now();
+      final affected = await (update(expenses)
+            ..where((t) =>
+                t.id.equals(expenseId) &
+                whereBusiness(t) &
+                t.status.equals('pending')))
+          .write(ExpensesCompanion(
+        status: const Value('approved'),
+        approvedBy: Value(approverId),
+        approvedAt: Value(now),
+        lastUpdatedAt: Value(now),
+      ));
+      if (affected == 0) return; // lost the race — already approved
+      didApprove = true;
+      recordedBy = exp.recordedBy;
+      description = exp.description;
+
+      final row = await (select(expenses)
+            ..where((t) => t.id.equals(expenseId) & whereBusiness(t)))
+          .getSingle();
+      await db.syncDao.enqueueUpsert('expenses', row.toCompanion(true));
+
+      final tracked = exp.paymentMethod != null &&
+          exp.paymentMethod != 'other' &&
+          exp.fundsAccountId != null &&
+          exp.storeId != null;
+      if (tracked) {
+        await _appendExpenseDebit(
+          fundsAccountId: exp.fundsAccountId!,
+          storeId: exp.storeId!,
+          amountKobo: exp.amountKobo,
+          businessDate: businessDate,
+          paymentId: await _expensePaymentId(expenseId),
+          performedBy: approverId,
+        );
+      }
+
+      await db.activityLogDao.log(
+        action: 'expense_approved',
+        description: 'Approved expense: ${exp.description}',
+        staffId: approverId,
+        storeId: exp.storeId,
+        expenseId: expenseId,
+      );
+    });
+
+    if (didApprove && recordedBy != null) {
+      await db.notificationsDao.fireNotification(
+        type: 'expense.approved',
+        message: 'Your expense "$description" was approved.',
+        severity: 'info',
+        linkedRecordId: expenseId,
+        recipientUserId: recordedBy,
+      );
+    }
+  }
+
+  /// CEO rejects a pending expense with a reason (§20.4). No funds movement.
+  /// Notifies the recorder.
+  Future<void> rejectExpense({
+    required String expenseId,
+    required String approverId,
+    required String reason,
+  }) async {
+    // In-transaction guard (same reasoning as approveExpense) so a double-tap
+    // reject doesn't re-fire / re-notify.
+    String? recordedBy;
+    String? description;
+    var didReject = false;
+
+    await transaction(() async {
+      final exp = await (select(expenses)
+            ..where((t) => t.id.equals(expenseId) & whereBusiness(t)))
+          .getSingleOrNull();
+      if (exp == null || exp.status != 'pending') return;
+      final now = DateTime.now();
+      final affected = await (update(expenses)
+            ..where((t) =>
+                t.id.equals(expenseId) &
+                whereBusiness(t) &
+                t.status.equals('pending')))
+          .write(ExpensesCompanion(
+        status: const Value('rejected'),
+        rejectionReason: Value(reason),
+        approvedBy: Value(approverId),
+        approvedAt: Value(now),
+        lastUpdatedAt: Value(now),
+      ));
+      if (affected == 0) return;
+      didReject = true;
+      recordedBy = exp.recordedBy;
+      description = exp.description;
+
+      final row = await (select(expenses)
+            ..where((t) => t.id.equals(expenseId) & whereBusiness(t)))
+          .getSingle();
+      await db.syncDao.enqueueUpsert('expenses', row.toCompanion(true));
+
+      await db.activityLogDao.log(
+        action: 'expense_rejected',
+        description: 'Rejected expense: ${exp.description} — $reason',
+        staffId: approverId,
+        storeId: exp.storeId,
+        expenseId: expenseId,
+      );
+    });
+
+    if (didReject && recordedBy != null) {
+      await db.notificationsDao.fireNotification(
+        type: 'expense.rejected',
+        message: 'Your expense "$description" was rejected: $reason',
+        severity: 'warning',
+        linkedRecordId: expenseId,
+        recipientUserId: recordedBy,
+      );
+    }
+  }
+
+  /// Edits the descriptive fields of an expense (§20.3 Edit). Amount, payment
+  /// method, and account are immutable after creation — the funds ledger is
+  /// append-only, so a wrong amount is corrected by soft-delete + re-create
+  /// (softDeleteExpense reverses any posted debit). The 24h / role gate is
+  /// enforced by the caller.
+  Future<void> updateExpense({
+    required String expenseId,
+    required String performedBy,
+    required String categoryName,
+    required String description,
+    String? reference,
+    DateTime? expenseDate,
+    String? receiptPath,
+  }) async {
+    final categoryId = await resolveCategoryId(categoryName);
+    final now = DateTime.now();
+    await (update(expenses)
+          ..where((t) => t.id.equals(expenseId) & whereBusiness(t)))
+        .write(ExpensesCompanion(
+      categoryId: Value(categoryId),
+      description: Value(description),
+      reference: Value(reference),
+      expenseDate: expenseDate != null ? Value(expenseDate) : const Value.absent(),
+      receiptPath: Value(receiptPath),
+      lastUpdatedAt: Value(now),
+    ));
+    final row = await (select(expenses)
+          ..where((t) => t.id.equals(expenseId) & whereBusiness(t)))
+        .getSingle();
+    await db.syncDao.enqueueUpsert('expenses', row.toCompanion(true));
+
+    await db.activityLogDao.log(
+      action: 'expense_updated',
+      description: 'Edited expense: ${row.description}',
+      staffId: performedBy,
+      storeId: row.storeId,
+      expenseId: expenseId,
+    );
+  }
+
+  /// Soft-deletes an expense (§20.3, CEO only, hard rule #9 — enqueueUpsert, not
+  /// delete). If it had posted a Funds Register debit (approved + tracked), a
+  /// compensating credit is appended on today's open day [businessDate] so the
+  /// cash returns to the till (refund-day rule, §19.7). The caller must confirm
+  /// the day is open when a reversal is due.
+  Future<void> softDeleteExpense({
+    required String expenseId,
+    required String performedBy,
+    String? businessDate,
+  }) async {
+    // Read + delete-guard live inside the transaction (Drift serializes txns),
+    // and the UPDATE is conditional on is_deleted = false, so a double-tap
+    // delete can't append the compensating 'void' credit twice (which would
+    // over-credit the till). Only the call that actually flips is_deleted
+    // reverses the funds debit.
+    String? description;
+    String? storeIdForLog;
+    var didDelete = false;
+
+    await transaction(() async {
+      final exp = await (select(expenses)
+            ..where((t) => t.id.equals(expenseId) & whereBusiness(t)))
+          .getSingleOrNull();
+      if (exp == null || exp.isDeleted) return;
+      final now = DateTime.now();
+      final affected = await (update(expenses)
+            ..where((t) =>
+                t.id.equals(expenseId) &
+                whereBusiness(t) &
+                t.isDeleted.equals(false)))
+          .write(ExpensesCompanion(
+        isDeleted: const Value(true),
+        lastUpdatedAt: Value(now),
+      ));
+      if (affected == 0) return; // lost the race — already deleted
+      didDelete = true;
+      description = exp.description;
+      storeIdForLog = exp.storeId;
+
+      final row = await (select(expenses)
+            ..where((t) => t.id.equals(expenseId) & whereBusiness(t)))
+          .getSingle();
+      await db.syncDao.enqueueUpsert('expenses', row.toCompanion(true));
+
+      final hadDebit = exp.status == 'approved' &&
+          exp.paymentMethod != null &&
+          exp.paymentMethod != 'other' &&
+          exp.fundsAccountId != null &&
+          exp.storeId != null;
+      if (hadDebit && businessDate != null) {
+        final payId = await _expensePaymentId(expenseId);
+        final debits = await (select(fundTransactions)
+              ..where((t) =>
+                  whereBusiness(t) &
+                  t.paymentId.equals(payId) &
+                  t.referenceType.equals('expense') &
+                  t.type.equals('debit')))
+            .get();
+        for (final d in debits) {
+          final credit = FundTransactionsCompanion.insert(
+            id: Value(UuidV7.generate()),
+            businessId: requireBusinessId(),
+            fundsAccountId: d.fundsAccountId,
+            storeId: d.storeId,
+            businessDate: businessDate,
+            type: 'credit',
+            amountKobo: d.amountKobo,
+            signedAmountKobo: d.amountKobo,
+            referenceType: 'void',
+            paymentId: Value(payId),
+            performedBy: Value(performedBy),
+            lastUpdatedAt: Value(now),
+          );
+          await into(fundTransactions).insert(credit);
+          await db.syncDao.enqueueUpsert('fund_transactions', credit);
+        }
+      }
+    });
+
+    if (didDelete) {
+      await db.activityLogDao.log(
+        action: 'expense_deleted',
+        description: 'Deleted expense: $description',
+        staffId: performedBy,
+        storeId: storeIdForLog,
+        expenseId: expenseId,
+      );
+    }
   }
 
   Stream<int> watchTotalThisMonth() {
@@ -2337,6 +2730,62 @@ class ExpenseWithCategory {
   final ExpenseData expense;
   final ExpenseCategoryData? category;
   ExpenseWithCategory({required this.expense, this.category});
+}
+
+/// §20.1/§20.3 monthly budget goal. One live row per (business, store-or-null):
+/// a null store_id row is the business-wide goal; a store_id row is that store's
+/// goal. Routed through enqueueUpsert per the §5 sync contract.
+@DriftAccessor(tables: [ExpenseBudgets])
+class ExpenseBudgetsDao extends DatabaseAccessor<AppDatabase>
+    with _$ExpenseBudgetsDaoMixin, BusinessScopedDao<AppDatabase> {
+  ExpenseBudgetsDao(super.db);
+
+  /// All live budgets for the business (the business-wide row has null
+  /// store_id). The provider layer resolves the goal for a given store scope.
+  Stream<List<ExpenseBudgetData>> watchAll() {
+    return (select(expenseBudgets)
+          ..where((t) => whereBusiness(t) & t.isDeleted.not()))
+        .watch();
+  }
+
+  /// Sets the monthly goal for (business, [storeId]-or-null). storeId null sets
+  /// the business-wide goal. Updates the existing live row for the scope, else
+  /// inserts a fresh one — one live row per scope (the partial unique indexes
+  /// guard against races). enqueueUpsert syncs it (§5).
+  Future<void> setBudget({String? storeId, required int amountKobo}) async {
+    final existing = await (select(expenseBudgets)
+          ..where((t) {
+            final base = whereBusiness(t) & t.isDeleted.not();
+            return storeId == null
+                ? base & t.storeId.isNull()
+                : base & t.storeId.equals(storeId);
+          })
+          ..limit(1))
+        .getSingleOrNull();
+    final now = DateTime.now();
+    if (existing != null) {
+      await (update(expenseBudgets)
+            ..where((t) => t.id.equals(existing.id) & whereBusiness(t)))
+          .write(ExpenseBudgetsCompanion(
+        amountKobo: Value(amountKobo),
+        lastUpdatedAt: Value(now),
+      ));
+      final row = await (select(expenseBudgets)
+            ..where((t) => t.id.equals(existing.id) & whereBusiness(t)))
+          .getSingle();
+      await db.syncDao.enqueueUpsert('expense_budgets', row.toCompanion(true));
+    } else {
+      final comp = ExpenseBudgetsCompanion.insert(
+        id: Value(UuidV7.generate()),
+        businessId: requireBusinessId(),
+        storeId: Value(storeId),
+        amountKobo: amountKobo,
+        lastUpdatedAt: Value(now),
+      );
+      await into(expenseBudgets).insert(comp);
+      await db.syncDao.enqueueUpsert('expense_budgets', comp);
+    }
+  }
 }
 
 @DriftAccessor(tables: [SyncQueue, SyncQueueOrphans])
@@ -4191,6 +4640,13 @@ class FundsAccountsDao extends DatabaseAccessor<AppDatabase>
         .get();
   }
 
+  /// Every account in the business (incl. soft-deleted), for name lookups in the
+  /// Funds Register Report (§25.2) — historical Close Day snapshots may point at
+  /// an account that was later removed, so the report still needs its name.
+  Stream<List<FundsAccountData>> watchAllForBusiness() {
+    return (select(fundsAccounts)..where((t) => whereBusiness(t))).watch();
+  }
+
   /// Idempotently ensures a Cash Till exists for [storeId] and returns it.
   Future<FundsAccountData> ensureCashTill(String storeId) async {
     final existing = await (select(fundsAccounts)
@@ -4592,6 +5048,98 @@ class FundDayClosingsDao extends DatabaseAccessor<AppDatabase>
               whereBusiness(t) &
               t.storeId.equals(storeId) &
               t.businessDate.equals(businessDate)))
+        .get();
+  }
+
+  /// Every Close Day reconciliation snapshot for the business, newest day first
+  /// — the rows the Funds Register Report (§25.2) renders across a period.
+  Stream<List<FundDayClosingData>> watchAllForBusiness() {
+    return (select(fundDayClosings)
+          ..where((t) => whereBusiness(t))
+          ..orderBy([
+            (t) => OrderingTerm.desc(t.businessDate),
+            (t) => OrderingTerm.desc(t.createdAt),
+          ]))
+        .watch();
+  }
+}
+
+@DriftAccessor(tables: [StockCounts])
+class StockCountsDao extends DatabaseAccessor<AppDatabase>
+    with _$StockCountsDaoMixin, BusinessScopedDao<AppDatabase> {
+  StockCountsDao(super.db);
+
+  /// Persists one saved Daily Stock Count session (§17.3) — the stock-audit
+  /// snapshot the Daily Reconciliation Report (Ring 3, §25.9) reads.
+  /// [changedLines] are the products whose actual ≠ system, each a map
+  /// {p,n,s,a,d} = product id / name / system / actual / diff (diff = actual −
+  /// system); matched lines are omitted but counted in [productsCounted]. The
+  /// shortage/surplus roll-up is derived here so the report (and the unit test)
+  /// can read it without re-parsing the JSON. Synced via enqueueUpsert (§5).
+  Future<String> recordCount({
+    required String? storeId,
+    required String businessDate,
+    required int productsCounted,
+    required List<Map<String, dynamic>> changedLines,
+    String? countedBy,
+  }) async {
+    var shortageCount = 0;
+    var surplusCount = 0;
+    var shortageUnits = 0;
+    var surplusUnits = 0;
+    for (final line in changedLines) {
+      final d = (line['d'] as num).toInt();
+      if (d < 0) {
+        shortageCount++;
+        shortageUnits += -d;
+      } else if (d > 0) {
+        surplusCount++;
+        surplusUnits += d;
+      }
+    }
+    final now = DateTime.now();
+    final row = StockCountsCompanion.insert(
+      id: Value(UuidV7.generate()),
+      businessId: requireBusinessId(),
+      storeId: Value(storeId),
+      businessDate: businessDate,
+      productsCounted: productsCounted,
+      shortageCount: shortageCount,
+      surplusCount: surplusCount,
+      shortageUnits: shortageUnits,
+      surplusUnits: surplusUnits,
+      linesJson: jsonEncode(changedLines),
+      countedBy: Value(countedBy),
+      createdAt: Value(now),
+      lastUpdatedAt: Value(now),
+    );
+    await into(stockCounts).insert(row);
+    await db.syncDao.enqueueUpsert('stock_counts', row);
+    return row.id.value;
+  }
+
+  /// Every saved count for the business, newest first — the rows the Daily
+  /// Reconciliation Report (§25.9) and the Stock Count History sheet render.
+  Stream<List<StockCountData>> watchAllForBusiness() {
+    return (select(stockCounts)
+          ..where((t) => whereBusiness(t))
+          ..orderBy([
+            (t) => OrderingTerm.desc(t.businessDate),
+            (t) => OrderingTerm.desc(t.createdAt),
+          ]))
+        .watch();
+  }
+
+  /// Saved counts for a given store + day (the report's per-day drill-down).
+  Future<List<StockCountData>> getForDay(
+    String? storeId,
+    String businessDate,
+  ) {
+    return (select(stockCounts)
+          ..where((t) {
+            final base = whereBusiness(t) & t.businessDate.equals(businessDate);
+            return storeId == null ? base : base & t.storeId.equals(storeId);
+          }))
         .get();
   }
 }
