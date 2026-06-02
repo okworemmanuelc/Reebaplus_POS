@@ -6,6 +6,7 @@ import 'package:reebaplus_pos/core/theme/colors.dart';
 
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/core/utils/date_period.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/menu_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
@@ -32,8 +33,8 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  String _selectedPeriod = 'Day';
-  final List<String> _periods = ['Day', 'Week', 'Month', 'Year', 'To Date'];
+  String _selectedPeriod = kDatePeriodLabels.first; // Last 24 hours (§30.6/§30.11)
+  final List<String> _periods = kDatePeriodLabels;
 
   // Store filter (null = All)
   String? _selectedStoreId;
@@ -162,24 +163,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     super.dispose();
   }
 
-  bool _isDateInPeriod(DateTime date, String period) {
-    final now = DateTime.now();
-    final diff = now.difference(date);
-    switch (period) {
-      case 'Day':
-        return diff.inDays == 0 && now.day == date.day;
-      case 'Week':
-        return diff.inDays <= 7;
-      case 'Month':
-        return diff.inDays <= 30;
-      case 'Year':
-        return diff.inDays <= 365;
-      case 'To Date':
-        return true;
-      default:
-        return true;
-    }
-  }
+  bool _isDateInPeriod(DateTime date, String period) =>
+      datePeriodFromLabel(period).includes(date);
 
   @override
   Widget build(BuildContext context) {
@@ -575,7 +560,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         items: _periods
             .map((p) => DropdownMenuItem(value: p, child: Text(p)))
             .toList(),
-        onChanged: (v) => setState(() => _selectedPeriod = v ?? 'Day'),
+        onChanged: (v) =>
+            setState(() => _selectedPeriod = v ?? kDatePeriodLabels.first),
       ),
     );
   }
@@ -677,27 +663,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         isPositive: false,
         inverted: true,
         onTap: () {
-          String initialPeriod = 'All Time';
-          switch (_selectedPeriod) {
-            case 'Day':
-              initialPeriod = 'Today';
-              break;
-            case 'Week':
-              initialPeriod = 'This Week';
-              break;
-            case 'Month':
-              initialPeriod = 'This Month';
-              break;
-            case 'Year':
-              initialPeriod = 'This Year';
-              break;
-            case 'To Date':
-              initialPeriod = 'All Time';
-              break;
-          }
+          // Home and Expenses share the canonical chip set (§30.11), so the
+          // selected period passes straight through.
           Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (_) => ExpensesScreen(initialPeriod: initialPeriod),
+              builder: (_) => ExpensesScreen(initialPeriod: _selectedPeriod),
             ),
           );
         },

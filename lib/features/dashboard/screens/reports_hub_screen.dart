@@ -4,6 +4,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/core/utils/date_period.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/approvals_screen.dart';
@@ -21,27 +22,11 @@ class ReportsHubScreen extends ConsumerStatefulWidget {
 }
 
 class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
-  String _selectedPeriod = 'Day';
-  final List<String> _periods = ['Day', 'Week', 'Month', 'Year', 'To Date'];
+  String _selectedPeriod = kDatePeriodLabels.first; // Last 24 hours (§30.11)
+  final List<String> _periods = kDatePeriodLabels;
 
-  bool _isDateInPeriod(DateTime date, String period) {
-    final now = DateTime.now();
-    final diff = now.difference(date);
-    switch (period) {
-      case 'Day':
-        return diff.inDays == 0 && now.day == date.day;
-      case 'Week':
-        return diff.inDays <= 7;
-      case 'Month':
-        return diff.inDays <= 30;
-      case 'Year':
-        return diff.inDays <= 365;
-      case 'To Date':
-        return true;
-      default:
-        return true;
-    }
-  }
+  bool _isDateInPeriod(DateTime date, String period) =>
+      datePeriodFromLabel(period).includes(date);
 
   @override
   Widget build(BuildContext context) {
@@ -177,7 +162,8 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
                 value: p,
                 child: Text(p, style: const TextStyle(fontSize: 12))))
             .toList(),
-        onChanged: (v) => setState(() => _selectedPeriod = v ?? 'Day'),
+        onChanged: (v) =>
+            setState(() => _selectedPeriod = v ?? kDatePeriodLabels.first),
       ),
     );
   }

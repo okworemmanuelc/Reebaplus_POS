@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:reebaplus_pos/core/utils/date_period.dart';
 import 'package:reebaplus_pos/features/expenses/data/models/expense.dart';
 import 'package:reebaplus_pos/shared/services/notification_service.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
@@ -13,20 +14,10 @@ class ExpenseService extends ValueNotifier<List<Expense>> {
   List<Expense> getAll() => List.unmodifiable(value);
 
   List<Expense> getByPeriod(String period) {
-    if (period == 'All Time') return getAll();
-
+    final window = datePeriodFromLabel(period);
+    if (window == DatePeriod.toDate) return getAll();
     final now = DateTime.now();
-    return value.where((e) {
-      final diff = now.difference(e.date);
-      if (period == 'Day' || period == 'Today') {
-        return diff.inDays == 0 && now.day == e.date.day;
-      }
-      if (period == 'Week' || period == 'This Week') return diff.inDays <= 7;
-      if (period == 'Month' || period == 'This Month') return diff.inDays <= 30;
-      if (period == 'Year' || period == 'This Year') return diff.inDays <= 365;
-      if (period == 'To Date') return true;
-      return true;
-    }).toList();
+    return value.where((e) => window.includes(e.date, now: now)).toList();
   }
 
   List<Expense> getByCategory(String category) {

@@ -8,7 +8,7 @@ import 'package:reebaplus_pos/core/database/daos.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
-import 'package:reebaplus_pos/core/utils/business_time.dart';
+import 'package:reebaplus_pos/core/utils/date_period.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
@@ -26,18 +26,11 @@ class _StockAuditScreenState extends ConsumerState<StockAuditScreen> {
   StreamSubscription? _sub;
   bool _loading = true;
 
-  String _selectedPeriod = 'This Month';
+  String _selectedPeriod = 'Last 30 days'; // §30.6/§30.11 default
   String? _selectedStoreId;
   String? _selectedMovementType;
-  String _businessTz = 'UTC';
 
-  static const _periods = [
-    'Today',
-    'This Week',
-    'This Month',
-    'This Quarter',
-    'All Time',
-  ];
+  static const _periods = kDatePeriodLabels;
 
   static const _movementTypes = <String, String?>{
     'All Types': null,
@@ -54,19 +47,7 @@ class _StockAuditScreenState extends ConsumerState<StockAuditScreen> {
   void initState() {
     super.initState();
     // CEO guard is checked in build; data loads regardless
-    _loadTimezone();
     _subscribe();
-  }
-
-  Future<void> _loadTimezone() async {
-    final db = ref.read(databaseProvider);
-    final businessId = db.currentBusinessId;
-    if (businessId == null) return;
-    final tz = await getBusinessTimezone(db, businessId);
-    if (mounted && tz != _businessTz) {
-      setState(() => _businessTz = tz);
-      _subscribe();
-    }
   }
 
   @override
@@ -109,23 +90,8 @@ class _StockAuditScreenState extends ConsumerState<StockAuditScreen> {
         });
   }
 
-  (DateTime?, DateTime?) _getDateRange(String period) {
-    final now = DateTime.now();
-    switch (period) {
-      case 'Today':
-        return (localDayStartUtc(now, _businessTz), null);
-      case 'This Week':
-        return (now.subtract(const Duration(days: 7)), null);
-      case 'This Month':
-        return (localDateUtc(now.year, now.month, 1, _businessTz), null);
-      case 'This Quarter':
-        final quarterMonth = ((now.month - 1) ~/ 3) * 3 + 1;
-        return (localDateUtc(now.year, quarterMonth, 1, _businessTz), null);
-      case 'All Time':
-      default:
-        return (null, null);
-    }
-  }
+  (DateTime?, DateTime?) _getDateRange(String period) =>
+      dateRangeForLabel(period);
 
   @override
   Widget build(BuildContext context) {
@@ -221,7 +187,7 @@ class _StockAuditScreenState extends ConsumerState<StockAuditScreen> {
                   )
                   .toList(),
               onChanged: (v) {
-                _selectedPeriod = v ?? 'This Month';
+                _selectedPeriod = v ?? 'Last 30 days';
                 _subscribe();
               },
             ),

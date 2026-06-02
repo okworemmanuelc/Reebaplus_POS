@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import 'package:reebaplus_pos/core/utils/date_period.dart';
 import 'package:reebaplus_pos/features/payments/data/models/payment.dart';
 
 class PaymentService extends ValueNotifier<List<Payment>> {
@@ -10,20 +11,10 @@ class PaymentService extends ValueNotifier<List<Payment>> {
   List<Payment> getAll() => List.unmodifiable(value);
 
   List<Payment> getByPeriod(String period) {
-    if (period == 'All Time') return getAll();
-
+    final window = datePeriodFromLabel(period);
+    if (window == DatePeriod.toDate) return getAll();
     final now = DateTime.now();
-    return value.where((p) {
-      final diff = now.difference(p.date);
-      if (period == 'Day' || period == 'Today') {
-        return diff.inDays == 0 && now.day == p.date.day;
-      }
-      if (period == 'Week' || period == 'This Week') return diff.inDays <= 7;
-      if (period == 'Month' || period == 'This Month') return diff.inDays <= 30;
-      if (period == 'Year' || period == 'This Year') return diff.inDays <= 365;
-      if (period == 'To Date') return true;
-      return true;
-    }).toList();
+    return value.where((p) => window.includes(p.date, now: now)).toList();
   }
 
   List<Payment> getBySupplier(String supplierName) {

@@ -8,6 +8,7 @@ import 'package:reebaplus_pos/core/theme/colors.dart';
 
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/core/utils/date_period.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/app_drawer.dart';
 import 'package:reebaplus_pos/features/payments/data/models/payment.dart';
@@ -32,7 +33,7 @@ class PaymentsScreen extends ConsumerStatefulWidget {
 class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  String _periodFilter = 'This Month';
+  String _periodFilter = 'Last 30 days'; // §30.6/§30.11 default
   String _supplierFilter = 'All';
   Color get _bg => Theme.of(context).scaffoldBackgroundColor;
   Color get _surface => Theme.of(context).colorScheme.surface;
@@ -224,13 +225,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
             AppDropdown<String>(
               value: _periodFilter,
               width: context.getRSize(130),
-              items: [
-                'Today',
-                'This Week',
-                'This Month',
-                'This Year',
-                'All Time',
-              ].map((String val) {
+              items: kDatePeriodLabels.map((String val) {
                 return DropdownMenuItem<String>(value: val, child: Text(val));
               }).toList(),
               onChanged: (val) {

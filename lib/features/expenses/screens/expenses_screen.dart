@@ -8,6 +8,7 @@ import 'package:reebaplus_pos/core/theme/colors.dart';
 
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/core/utils/date_period.dart';
 import 'package:reebaplus_pos/shared/widgets/app_drawer.dart';
 import 'package:reebaplus_pos/features/expenses/data/models/expense.dart';
 import 'package:reebaplus_pos/features/expenses/widgets/add_expense_sheet.dart';
@@ -29,7 +30,7 @@ class ExpensesScreen extends ConsumerStatefulWidget {
 class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  String _periodFilter = 'This Month';
+  String _periodFilter = 'Last 30 days'; // §20.1/§30.6 default
   Color get _bg => Theme.of(context).scaffoldBackgroundColor;
   Color get _surface => Theme.of(context).colorScheme.surface;
   Color get _text => Theme.of(context).colorScheme.onSurface;
@@ -51,22 +52,8 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     super.dispose();
   }
 
-  bool _isInPeriod(DateTime date, String period) {
-    final now = DateTime.now();
-    final diff = now.difference(date);
-    switch (period) {
-      case 'Today':
-        return diff.inDays == 0 && now.day == date.day;
-      case 'This Week':
-        return diff.inDays <= 7;
-      case 'This Month':
-        return diff.inDays <= 30;
-      case 'This Year':
-        return diff.inDays <= 365;
-      default:
-        return true;
-    }
-  }
+  bool _isInPeriod(DateTime date, String period) =>
+      datePeriodFromLabel(period).includes(date);
 
   Expense _toExpense(ExpenseData d, Map<String, String> categoryNames) =>
       Expense(
@@ -291,13 +278,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
                 AppDropdown<String>(
                   value: _periodFilter,
                   width: context.getRSize(130),
-                  items: [
-                    'Today',
-                    'This Week',
-                    'This Month',
-                    'This Year',
-                    'All Time',
-                  ].map((String val) {
+                  items: kDatePeriodLabels.map((String val) {
                     return DropdownMenuItem<String>(value: val, child: Text(val));
                   }).toList(),
                   onChanged: (val) {
@@ -604,21 +585,21 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
 
   Widget _buildBudgetTracker(double totalSpent) {
     double budget = 0;
-    switch (_periodFilter) {
-      case 'Today':
+    switch (datePeriodFromLabel(_periodFilter)) {
+      case DatePeriod.last24Hours:
         budget = budgetToday;
         break;
-      case 'This Week':
+      case DatePeriod.last7Days:
         budget = budgetWeek;
         break;
-      case 'This Month':
+      case DatePeriod.last30Days:
         budget = budgetMonth;
         break;
-      case 'This Year':
+      case DatePeriod.lastYear:
         budget = budgetYear;
         break;
-      default:
-        // No specific budget for "All Time", so we'll hide it or show a placeholder
+      case DatePeriod.toDate:
+        // No specific budget for "To date", so hide the tracker.
         return const SizedBox();
     }
 

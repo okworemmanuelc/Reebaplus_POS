@@ -5,6 +5,7 @@ import 'package:reebaplus_pos/core/theme/colors.dart';
 
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/core/utils/date_period.dart';
 import 'package:reebaplus_pos/core/utils/stock_calculator.dart';
 import 'package:reebaplus_pos/features/inventory/data/inventory_data.dart';
 import 'package:reebaplus_pos/features/inventory/data/models/supplier.dart';
@@ -24,7 +25,7 @@ class SupplierDetailScreen extends StatefulWidget {
 }
 
 class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
-  String _timeFilter = 'Month'; // Default filter
+  String _timeFilter = 'Last 30 days'; // §30.6/§30.11 default
   Color get _bg => Theme.of(context).scaffoldBackgroundColor;
   Color get _surface => Theme.of(context).colorScheme.surface;
   Color get _cardBg => Theme.of(context).cardColor;
@@ -248,7 +249,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
   }
 
   Widget _buildFilterTabs(BuildContext context) {
-    final filters = ['Day', 'Week', 'Month', 'Year', 'All Time'];
+    const filters = kDatePeriodLabels;
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
@@ -291,33 +292,12 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
     );
     final itemIds = itemsForSupplier.map((e) => e.id).toSet();
 
-    final now = DateTime.now();
-    DateTime start;
-
-    switch (_timeFilter) {
-      case 'Day':
-        start = DateTime(now.year, now.month, now.day);
-        break;
-      case 'Week':
-        start = now.subtract(Duration(days: now.weekday - 1));
-        start = DateTime(start.year, start.month, start.day);
-        break;
-      case 'Month':
-        start = DateTime(now.year, now.month, 1);
-        break;
-      case 'Year':
-        start = DateTime(now.year, 1, 1);
-        break;
-      case 'All Time':
-      default:
-        start = DateTime(2000);
-        break;
-    }
+    final window = datePeriodFromLabel(_timeFilter);
 
     return kInventoryLogs.where((log) {
       if (log.action != 'restock' && log.action != 'new_product') return false;
       if (!itemIds.contains(log.itemId)) return false;
-      if (log.timestamp.isBefore(start)) return false;
+      if (!window.includes(log.timestamp)) return false;
       return true;
     }).toList()..sort((a, b) => b.timestamp.compareTo(a.timestamp));
   }
