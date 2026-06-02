@@ -145,6 +145,89 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 
 ---
 
+## Session 63 — 2026-06-02 — Daily Reconciliation Report (§25.2 / §25.9, Ring 3)
+
+The last big §25 report. The Reports hub now has 6 cards.
+
+**Plan change (user) — §25.9 drill-down model:** §25.9 was written for Day / Week /
+Month / Year period cards, but §30.11 (same date) had already replaced those chips
+with rolling windows and made the daily reconciliation calendar-bound. **User chose:
+one card per calendar day within the selected rolling window** (no span aggregation).
+Updated §25.9 to match, with a dated note.
+
+**Built today:**
+- **Daily Reconciliation card** on the Reports hub (CEO + Manager, §25.3) → a
+  **day-card list** (`daily_reconciliation_list_screen.dart`). The rolling period
+  chip picks the span; the screen lists one card per **calendar day** in it that has
+  a Close Day and/or a saved stock count. Each card headlines items-sold + net cash
+  variance and flags a **Mismatch** when that day had a cash shortage or a stock
+  shortage. CSV export of the day summary. Tapping → that day's detail.
+- **Per-day detail** (`daily_reconciliation_detail_screen.dart`) — the full §25.2
+  roll-up for one business date: **sales summary** (items sold, SKUs, total sales,
+  best staff, top item), **Close Day cash audit** per account (expected / counted /
+  variance, shortage flagged), **stock audit** (products counted, short / surplus +
+  itemised shortages), **outstanding customer debt** and **approved expenses
+  recorded that day**, and **empty-crate holdings** (Bar / Beer Distributor only).
+  CSV export. Read-only.
+- **Two new providers** (`stream_providers.dart`): `businessTimezoneProvider` (to
+  bucket order / expense timestamps into the business calendar day) and
+  `emptyCratesByManufacturerProvider`. No new DAO methods — sales/expenses/debts are
+  summarised from existing providers (`allOrdersProvider`, `allExpensesProvider`
+  approved-only, `walletBalancesKoboProvider`), matching the spec's "summary, not a
+  duplicate".
+
+**Bug found & fixed during review (audit-accuracy).** A Save Count inserts a fresh
+session row, so re-counting a store the same day yields several rows for one
+(store, date). The first cut **summed** the stock figures across all sessions →
+double-counted products-counted / short / surplus and listed shortages twice. Fixed:
+both screens now collapse to the **latest session per store** (newest createdAt)
+before rolling up — genuinely distinct stores still aggregate, a re-save replaces
+rather than doubles. Re-verified PASS.
+
+**Files touched:**
+- lib/features/dashboard/screens/daily_reconciliation_list_screen.dart (new)
+- lib/features/dashboard/screens/daily_reconciliation_detail_screen.dart (new)
+- lib/features/dashboard/screens/reports_hub_screen.dart (Daily Reconciliation card)
+- lib/core/providers/stream_providers.dart (businessTimezone + emptyCrates providers)
+- reebaplus_master_plan.md (§25.9 rolling-window reconciliation)
+
+**Master plan sections covered:** §25.2 (Daily Reconciliation content), §25.9
+(per-day drill-down, reconciled to rolling windows), §25.6/§25.7 (period + CSV),
+§25.8 (empty state).
+
+**Tested:** `flutter analyze` clean on all touched files (project-wide only the
+pre-existing `avoid_print` infos remain). CSV tests pass. The feature was reviewed by
+an adversarial multi-agent pass (caught the double-count above) and re-verified after
+the fix. On-device pass pending.
+
+**Known issues / left open:**
+- Per-store report scoping / multi-store breakdown is **Phase 2** (master plan §2);
+  the detail aggregates a day across stores (correct for one-store Phase 1).
+- Empty crates + outstanding debt are **current** point-in-time figures (not
+  day-scoped) — they summarise the live subsystems per §25.2.
+- **Supplier Accounts Report** is the only §25.2 card still unbuilt — blocked on the
+  Ring 1 supplier subsystem (in-memory stub). **Expense Tracker** CSV still pending
+  (routes to the §20 feature screen).
+
+---
+
+## Session 62 — 2026-06-02 — Daily Stock Count: role-based store visibility (CEO all-stores filter) (§17)
+
+Follow-up to Session 58. The user asked for stock counts to stay **per store**, but with a CEO **"All stores" filter** while roles below CEO are confined to their **own assigned store**.
+
+**Built today (all in [stock_count_screen.dart](lib/features/inventory/screens/stock_count_screen.dart)):**
+- **Role-based store scope.** Reused the app's existing "view all stores" rule verbatim — `isCeo || (isManager && managerCanViewAllStoresProvider)` — so Stock Count doesn't invent a second, conflicting definition. CEO (and a Manager the CEO granted) may view every store; everyone else is scoped to their `user_stores` assignments (falling back to their primary `users.storeId`).
+- **"All stores" overview (read-only).** When an all-stores viewer opens unscoped, the Store picker gains an **All stores** option (the default) that lists every store's stock — product, store, quantity — with **no Actual input, no Save Count, no Record Damages**. Counting is per store, so the CEO picks a store from the picker to actually take a count. A small hint banner says so.
+- **Roles below CEO see only their store.** The picker shows only their assigned store(s) (no "All" option); a single assigned store means no picker at all. The Count **History** is now filtered to their store(s) too — a Stock keeper no longer sees other stores' counts.
+- **Scope resolves after the role does.** Moved `_init()` out of `initState` and behind a `build()` gate that only fires once the role provider is non-null, so a CEO is never briefly mis-scoped to "no store" on first open.
+- A non-all-stores viewer with a null scope (no assigned store) now loads **nothing** instead of every store's products (closes a would-be cross-store leak), and shows a "No store assigned to you" empty state.
+
+**Plan:** §17.1 updated with the role-based store-visibility rule (read-only All-stores overview; sub-CEO roles confined to their store for both counting and History).
+
+**Verify:** `flutter analyze` clean; full suite **315 passed**. Not yet walked on-device.
+
+---
+
 ## Session 61 — 2026-06-02 — Reports: CSV export on Sales/Funds + remove Stock Audit report (§25)
 
 Phase B finishing touches on the §25 Reports hub.
@@ -659,7 +742,42 @@ helper wired into each report detail.
 
 ---
 
-## Session 56 — 2026-06-02 — Fix: Close Day 42501 RLS + Funds Register Report + stock-count gate on Close Day
+## Session 56 — 2026-06-02 — Close Day: RLS fix + Funds Register Report + stock-count gate + same-day Reopen
+
+### Part D — Reopen Day (same day only) (§23.5/§23.6, plan change)
+
+**Plan updates made during session:**
+- §23.6 — added **Reopen Day**: a closed day can be reopened **while it is still
+  the same business day** (e.g. closed too early). Gated by `funds.close_day`.
+  Once the day rolls over it stays closed (the closed-day summary, hence the
+  button, only shows for today). §23.5 clarified: "never reopened" means never
+  *automatically* by a back-dated refund — the manual same-day reopen is a
+  separate explicit action. User decision 2026-06-02.
+
+**Built today:**
+- `FundDaysDao.reopenDay(store, date, performedBy)` — inside one transaction:
+  deletes that day's `fund_day_closings` snapshots (hard delete + enqueueDelete;
+  it's a normal synced table, and enqueueDelete also cancels any still-pending
+  close upsert — so the UNIQUE (fund_day_id, funds_account_id) constraint won't
+  block a later re-close), flips `fund_days` back to `open`, clears
+  closedBy/closedAt, logs `funds.reopen_day`. The ledger (`fund_transactions`) is
+  untouched, so the expected balance is preserved.
+- "Reopen Day" button (outline) on the closed-day summary with a confirm dialog;
+  only renders for today's closed day → inherently same-day.
+
+**Files touched:**
+- reebaplus_master_plan.md (§23.6 Reopen Day, §23.5 clarifier)
+- lib/core/database/daos.dart (FundDaysDao.reopenDay)
+- lib/features/funds/screens/funds_register_screen.dart (Reopen button + handler)
+
+**Tested:**
+- `flutter analyze` on touched files: no issues. On-device pass pending.
+
+**Notes:**
+- Reopen is gated on `funds.close_day` (no new permission key → no cloud
+  permissions-catalogue deploy needed). Reopen logs to Activity Logs but does NOT
+  fire a bell notification — can add a `funds_day_reopened` §26.4 notification as a
+  follow-up if the CEO should be alerted when a Manager reopens.
 
 ### Part C — Stock-count gate on Close Day (§23.6, plan change) + report empty-state fix
 

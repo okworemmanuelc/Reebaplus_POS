@@ -9,6 +9,7 @@ import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/sales_detail_screen.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/profit_report_screen.dart';
+import 'package:reebaplus_pos/features/dashboard/screens/daily_reconciliation_list_screen.dart';
 import 'package:reebaplus_pos/features/expenses/screens/expenses_screen.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/customer_ledger_screen.dart';
 import 'package:reebaplus_pos/features/funds/screens/funds_register_report_screen.dart';
@@ -95,6 +96,25 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
                       ),
                     );
                   });
+                },
+              ),
+            if (isMgrUp)
+              _buildReportCard(
+                context,
+                title: 'Daily Reconciliation',
+                subtitle: 'Day-by-Day Audit',
+                icon: FontAwesomeIcons.clipboardCheck,
+                color: Colors.indigo,
+                locked: false,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    slideDownRoute(
+                      DailyReconciliationListScreen(
+                        initialPeriod: _selectedPeriod,
+                      ),
+                    ),
+                  );
                 },
               ),
             if (isMgrUp && hasPermission(ref, 'reports.see_expenses'))

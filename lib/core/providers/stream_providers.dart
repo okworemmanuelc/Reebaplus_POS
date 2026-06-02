@@ -480,6 +480,23 @@ final todaysBusinessDateProvider = FutureProvider<String>((ref) async {
   return businessDateString(now, tz);
 });
 
+/// The business timezone name (e.g. `Africa/Lagos`), or `UTC` before a business
+/// is bound. Lets report screens bucket order / expense timestamps into the
+/// business calendar day via [businessDateString] without each re-resolving the
+/// timezone. Used by the Daily Reconciliation Report (§25.9).
+final businessTimezoneProvider = FutureProvider<String>((ref) async {
+  final db = ref.watch(databaseProvider);
+  final bizId = db.currentBusinessId;
+  return bizId == null ? 'UTC' : await getBusinessTimezone(db, bizId);
+});
+
+/// Current empty-crate holdings per manufacturer (`manufacturerId → count`).
+/// Crate businesses only (§13/§18.3); used by the Daily Reconciliation Report's
+/// empty-crates section. Point-in-time pool balance, not a day-scoped movement.
+final emptyCratesByManufacturerProvider = StreamProvider<Map<String, int>>((ref) {
+  return ref.watch(databaseProvider).inventoryDao.watchEmptyCratesByManufacturer();
+});
+
 /// Active funds accounts for a store (Cash Till first). Drives the Accounts
 /// list and the checkout receiving-account picker.
 final fundsAccountsForStoreProvider =
