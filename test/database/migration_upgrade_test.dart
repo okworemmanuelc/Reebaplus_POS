@@ -404,4 +404,142 @@ void main() {
       );
     });
   });
+
+  group('onUpgrade v27 → v28 (customers.wallet.totals.view permission)', () {
+    Future<bool> permissionExists(AppDatabase db, String key) async {
+      final rows = await db
+          .customSelect(
+            'SELECT 1 FROM permissions WHERE key = ?',
+            variables: [Variable<String>(key)],
+          )
+          .get();
+      return rows.isNotEmpty;
+    }
+
+    test('re-seeds the new permission key into the local catalog', () async {
+      // Build a fresh v28 DB, then revert the v28 delta: drop the new permission
+      // key (the catalog seed put it there at onCreate) and step user_version
+      // back. Every other table is untouched.
+      final db1 = await openAndInit();
+      expect(
+        await permissionExists(db1, 'customers.wallet.totals.view'),
+        isTrue,
+        reason: 'onCreate should seed the key',
+      );
+      await db1.customStatement(
+        "DELETE FROM permissions WHERE key = 'customers.wallet.totals.view'",
+      );
+      await db1.customStatement('PRAGMA user_version = 27');
+      await db1.close();
+
+      // Re-open → onUpgrade(27 → 28) re-inserts the key via INSERT OR IGNORE.
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+
+      expect(
+        await permissionExists(db2, 'customers.wallet.totals.view'),
+        isTrue,
+      );
+    });
+  });
+
+  group('onUpgrade v28 → v29 (crate tracking by manufacturer, §13.4)', () {
+    test('re-keys the crate balance/pending tables + relaxes the ledger CHECK',
+        () async {
+      // Build a fresh v29 DB, then revert the v29 delta on the two balance
+      // CACHES + pending_crate_returns to their old crate-size-group shape so
+      // the migration guards (hasCol crate_size_group_id) re-fire. The exact old
+      // constraints don't matter — the block DROPs + recreates these tables from
+      // the current schema — only that crate_size_group_id is present.
+      final db1 = await openAndInit();
+      await db1.customStatement('PRAGMA foreign_keys = OFF');
+      await db1.customStatement('DROP TABLE IF EXISTS customer_crate_balances');
+      await db1.customStatement(
+        'CREATE TABLE customer_crate_balances (id TEXT NOT NULL PRIMARY KEY, '
+        'business_id TEXT NOT NULL, customer_id TEXT NOT NULL, '
+        'crate_size_group_id TEXT NOT NULL, balance INTEGER NOT NULL DEFAULT 0, '
+        'created_at INTEGER NOT NULL DEFAULT 0, last_updated_at INTEGER NOT NULL DEFAULT 0)',
+      );
+      await db1.customStatement(
+          'DROP TABLE IF EXISTS manufacturer_crate_balances');
+      await db1.customStatement(
+        'CREATE TABLE manufacturer_crate_balances (id TEXT NOT NULL PRIMARY KEY, '
+        'business_id TEXT NOT NULL, manufacturer_id TEXT NOT NULL, '
+        'crate_size_group_id TEXT NOT NULL, balance INTEGER NOT NULL DEFAULT 0, '
+        'created_at INTEGER NOT NULL DEFAULT 0, last_updated_at INTEGER NOT NULL DEFAULT 0)',
+      );
+      await db1.customStatement('DROP TABLE IF EXISTS pending_crate_returns');
+      await db1.customStatement(
+        'CREATE TABLE pending_crate_returns (id TEXT NOT NULL PRIMARY KEY, '
+        'business_id TEXT NOT NULL, order_id TEXT, customer_id TEXT NOT NULL, '
+        'crate_size_group_id TEXT NOT NULL, quantity INTEGER NOT NULL, '
+        'submitted_by TEXT NOT NULL, submitted_at INTEGER NOT NULL DEFAULT 0, '
+        'approved_by TEXT, approved_at INTEGER, '
+        "status TEXT NOT NULL DEFAULT 'pending', rejection_reason TEXT, "
+        'created_at INTEGER NOT NULL DEFAULT 0, last_updated_at INTEGER NOT NULL DEFAULT 0)',
+      );
+      // Revert crate_ledger to its OLD shape (crate_size_group_id NOT NULL) so
+      // the rebuild branch (cgIsNotNull) actually runs — AND recreate its
+      // indexes, because drift's alterTable re-applies them, which is what made
+      // the first attempt crash on a duplicate idx_crate_ledger_business_lua.
+      await db1.customStatement('DROP TABLE IF EXISTS crate_ledger');
+      await db1.customStatement(
+        'CREATE TABLE crate_ledger (id TEXT NOT NULL PRIMARY KEY, '
+        'business_id TEXT NOT NULL, customer_id TEXT, manufacturer_id TEXT, '
+        'crate_size_group_id TEXT NOT NULL, quantity_delta INTEGER NOT NULL, '
+        'movement_type TEXT NOT NULL, reference_order_id TEXT, '
+        'reference_return_id TEXT, performed_by TEXT, voided_at INTEGER, '
+        'voided_by TEXT, void_reason TEXT, '
+        'created_at INTEGER NOT NULL DEFAULT 0, last_updated_at INTEGER NOT NULL DEFAULT 0)',
+      );
+      await db1.customStatement(
+        'CREATE INDEX idx_crate_ledger_business_lua '
+        'ON crate_ledger (business_id, last_updated_at)',
+      );
+      await db1.customStatement(
+        'CREATE INDEX idx_crate_ledger_owner_group '
+        'ON crate_ledger (business_id, customer_id, manufacturer_id, crate_size_group_id, created_at)',
+      );
+      await db1.customStatement('PRAGMA foreign_keys = ON');
+      await db1.customStatement('PRAGMA user_version = 28');
+      await db1.close();
+
+      // Re-open → onUpgrade(28 → 29). Must succeed and produce the new shape.
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+
+      final ccb = await columnsOf(db2, 'customer_crate_balances');
+      expect(ccb.contains('manufacturer_id'), isTrue);
+      expect(ccb.contains('crate_size_group_id'), isFalse);
+
+      final mcb = await columnsOf(db2, 'manufacturer_crate_balances');
+      expect(mcb.contains('crate_size_group_id'), isFalse);
+
+      final pcr = await columnsOf(db2, 'pending_crate_returns');
+      expect(pcr.contains('manufacturer_id'), isTrue);
+
+      // The relaxed owner CHECK lets a customer crate row also name a
+      // manufacturer (both set) — the core of the re-key.
+      final biz = UuidV7.generate();
+      final cust = UuidV7.generate();
+      final mfr = UuidV7.generate();
+      await db2.customStatement(
+          "INSERT INTO businesses (id, name) VALUES ('$biz', 'B')");
+      await db2.customStatement(
+          "INSERT INTO customers (id, business_id, name) VALUES ('$cust', '$biz', 'C')");
+      await db2.customStatement(
+          "INSERT INTO manufacturers (id, business_id, name) VALUES ('$mfr', '$biz', 'M')");
+      await db2.customStatement(
+        "INSERT INTO crate_ledger (id, business_id, customer_id, manufacturer_id, "
+        "quantity_delta, movement_type) "
+        "VALUES ('${UuidV7.generate()}', '$biz', '$cust', '$mfr', -2, 'returned')",
+      );
+      final rows = await db2.customSelect(
+        "SELECT customer_id, manufacturer_id FROM crate_ledger WHERE business_id = '$biz'",
+      ).get();
+      expect(rows, hasLength(1));
+      expect(rows.first.read<String?>('customer_id'), cust);
+      expect(rows.first.read<String?>('manufacturer_id'), mfr);
+    });
+  });
 }

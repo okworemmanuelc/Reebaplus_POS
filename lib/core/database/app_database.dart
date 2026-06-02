@@ -2795,6 +2795,11 @@ const List<List<String>> _defaultPermissionRows = [
   ['customers.delete', 'Soft-delete a customer', 'Customers'],
   ['customers.wallet.update', 'Add funds to customer wallets', 'Customers'],
   ['customers.set_debt_limit', 'Set a customer\'s debt limit', 'Customers'],
+  [
+    'customers.wallet.totals.view',
+    'View wallet Total In / Total Out on a customer',
+    'Customers',
+  ],
   // Suppliers / Shipments
   ['suppliers.manage', 'Manage suppliers and payments', 'Suppliers'],
   ['shipments.manage', 'Manage incoming shipments', 'Suppliers'],

@@ -284,6 +284,16 @@ bool hasPermission(WidgetRef ref, String key) {
   return ref.watch(currentUserPermissionsProvider).contains(key);
 }
 
+/// True if the current user is Manager or above (CEO or Manager), by [roleRank].
+/// Roles below Manager (Cashier, Stock keeper) don't see monetary values in
+/// Orders (§19.3) and have the wallet Total In/Out tiles hidden by default
+/// (§18.4). **Fails closed**: returns false while the role is still resolving
+/// locally, so money stays hidden rather than flashing into view for a low role.
+bool isManagerOrAbove(WidgetRef ref) {
+  final role = ref.watch(currentUserRoleProvider);
+  return role != null && roleRank(role.slug) <= 1;
+}
+
 /// True if the current user may open the Sync Issues troubleshooting screen.
 /// The CEO always can (implicit owner of this infra screen — they may not hold
 /// the `sync.view` grant itself); other roles only if the CEO has granted them

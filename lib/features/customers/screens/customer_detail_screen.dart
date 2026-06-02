@@ -14,7 +14,7 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
-import 'package:reebaplus_pos/core/utils/business_time.dart';
+import 'package:reebaplus_pos/core/utils/date_period.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
@@ -46,8 +46,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
   CustomerData? _customerData;
   int _walletBalance = 0;
   List<WalletTransactionData> _walletHistory = [];
-  String _selectedPeriod = 'All Time';
-  String _businessTz = 'UTC';
+  String _selectedPeriod = 'To date'; // §30.11 canonical chip set
   List<OrderData> _orders = [];
   List<CrateBalanceEntry> _crateBalances = [];
 
@@ -73,12 +72,6 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     }
 
     final db = ref.read(databaseProvider);
-    final businessId = db.currentBusinessId;
-    if (businessId != null) {
-      getBusinessTimezone(db, businessId).then((tz) {
-        if (mounted) setState(() => _businessTz = tz);
-      });
-    }
 
     _customerSub = db.customersDao.watchCustomerById(id).listen((data) {
       if (mounted) setState(() => _customerData = data);
@@ -132,33 +125,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
   String? get _customerId => widget.customer?.id;
 
   List<WalletTransactionData> get _filteredHistory {
-    if (_selectedPeriod == 'All Time') return _walletHistory;
-    final now = DateTime.now();
-    late final DateTime from;
-    switch (_selectedPeriod) {
-      case 'Today':
-        from = localDayStartUtc(now, _businessTz);
-        break;
-      case 'This Week':
-        final weekStart = now.subtract(Duration(days: now.weekday - 1));
-        from = localDateUtc(
-          weekStart.year,
-          weekStart.month,
-          weekStart.day,
-          _businessTz,
-        );
-        break;
-      case 'This Month':
-        from = localDateUtc(now.year, now.month, 1, _businessTz);
-        break;
-      case 'This Year':
-        from = localDateUtc(now.year, 1, 1, _businessTz);
-        break;
-      default:
-        return _walletHistory;
-    }
+    final window = datePeriodFromLabel(_selectedPeriod);
     return _walletHistory
-        .where((txn) => !txn.createdAt.toUtc().isBefore(from))
+        .where((txn) => window.includes(txn.createdAt))
         .toList();
   }
 
@@ -1132,20 +1101,13 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                       size: context.getRSize(11),
                       color: theme.colorScheme.onSurface.withAlpha(128),
                     ),
-                    items:
-                        [
-                              'Today',
-                              'This Week',
-                              'This Month',
-                              'This Year',
-                              'All Time',
-                            ]
-                            .map(
-                              (p) => DropdownMenuItem(value: p, child: Text(p)),
-                            )
-                            .toList(),
+                    items: kDatePeriodLabels
+                        .map(
+                          (p) => DropdownMenuItem(value: p, child: Text(p)),
+                        )
+                        .toList(),
                     onChanged: (v) =>
-                        setState(() => _selectedPeriod = v ?? 'All Time'),
+                        setState(() => _selectedPeriod = v ?? 'To date'),
                   ),
                 ),
               ],
@@ -1332,8 +1294,14 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
 
     return Column(
       children: [
-        _buildWalletSummaryRow(theme),
-        SizedBox(height: context.getRSize(4)),
+        // §18.4: Total In / Total Out are hidden for roles below Manager unless
+        // the CEO grants `customers.wallet.totals.view`. Manager + CEO always
+        // see them (isManagerOrAbove).
+        if (isManagerOrAbove(ref) ||
+            hasPermission(ref, 'customers.wallet.totals.view')) ...[
+          _buildWalletSummaryRow(theme),
+          SizedBox(height: context.getRSize(4)),
+        ],
         Expanded(
           child: filtered.isEmpty
               ? _EmptyState(
@@ -1574,7 +1542,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                 SizedBox(width: ctx.getRSize(12)),
                 Expanded(
                   child: Text(
-                    entry.groupName,
+                    entry.manufacturerName,
                     style: TextStyle(
                       fontSize: ctx.getRFontSize(14),
                       fontWeight: FontWeight.w600,

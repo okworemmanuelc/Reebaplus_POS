@@ -60,10 +60,10 @@ void main() {
       );
     });
 
-    test('permissions table seeded with 32 default rows on fresh install',
+    test('permissions table seeded with 33 default rows on fresh install',
         () async {
       final perms = await db.permissionsDao.getAll();
-      expect(perms.length, equals(32));
+      expect(perms.length, equals(33));
 
       // Spot-check a few keys + categories.
       final keys = perms.map((p) => p.key).toSet();

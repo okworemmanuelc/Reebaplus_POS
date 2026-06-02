@@ -14,6 +14,7 @@ import 'package:reebaplus_pos/core/theme/colors.dart';
 
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/core/utils/date_period.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -44,9 +45,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
   late TabController _tabController;
   final ScreenshotController _screenshotCtrl = ScreenshotController();
 
-  // Date filters
-  String _completedFilter = 'All Time';
-  String _cancelledFilter = 'All Time';
+  // Date filters (§19.1/§30.11: default Last 24 hours).
+  String _completedFilter = kDatePeriodLabels.first;
+  String _cancelledFilter = kDatePeriodLabels.first;
 
   // Search
   final TextEditingController _searchController = TextEditingController();
@@ -137,16 +138,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                   .toList();
               final completed = _applySearch(
                 separatedCompleted.where((o) {
-                  if (_completedFilter == 'All Time') return true;
                   final t = o.order.completedAt ?? o.order.createdAt;
-                  final diff = now.difference(t);
-                  if (_completedFilter == 'Day') {
-                    return diff.inDays == 0 && now.day == t.day;
-                  }
-                  if (_completedFilter == 'Week') return diff.inDays <= 7;
-                  if (_completedFilter == 'Month') return diff.inDays <= 30;
-                  if (_completedFilter == 'Year') return diff.inDays <= 365;
-                  return true;
+                  return datePeriodFromLabel(_completedFilter)
+                      .includes(t, now: now);
                 }).toList(),
               );
 
@@ -155,16 +149,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                   .toList();
               final cancelled = _applySearch(
                 separatedCancelled.where((o) {
-                  if (_cancelledFilter == 'All Time') return true;
                   final t = o.order.cancelledAt ?? o.order.createdAt;
-                  final diff = now.difference(t);
-                  if (_cancelledFilter == 'Day') {
-                    return diff.inDays == 0 && now.day == t.day;
-                  }
-                  if (_cancelledFilter == 'Week') return diff.inDays <= 7;
-                  if (_cancelledFilter == 'Month') return diff.inDays <= 30;
-                  if (_cancelledFilter == 'Year') return diff.inDays <= 365;
-                  return true;
+                  return datePeriodFromLabel(_cancelledFilter)
+                      .includes(t, now: now);
                 }).toList(),
               );
 
@@ -235,7 +222,19 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
 
   // ─────────────────────────── SEARCH BAR ─────────────────────────────────
 
-  Widget _buildSearchBar(BuildContext context) {
+  /// The search row. On the Completed / Cancelled tabs a period-filter
+  /// **dropdown** sits inline to the right of the search field (§19.1); pass
+  /// the filter args to show it. The Pending tab has no period filter, so it
+  /// calls this with no filter args and renders the search field alone.
+  Widget _buildSearchBar(
+    BuildContext context, {
+    String? selectedFilter,
+    ValueChanged<String>? onSelectFilter,
+    List<String>? filterOptions,
+  }) {
+    final showFilter = selectedFilter != null &&
+        onSelectFilter != null &&
+        filterOptions != null;
     return Container(
       color: surfaceCol,
       padding: EdgeInsets.fromLTRB(
@@ -244,7 +243,25 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
         context.getRSize(16),
         context.getRSize(10),
       ),
-      child: TextField(
+      child: Row(
+        children: [
+          Expanded(child: _buildSearchField(context)),
+          if (showFilter) ...[
+            SizedBox(width: context.getRSize(10)),
+            _buildFilterDropdown(
+              context,
+              selected: selectedFilter,
+              options: filterOptions,
+              onSelect: onSelectFilter,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchField(BuildContext context) {
+    return TextField(
         controller: _searchController,
         onChanged: _onSearchChanged,
         style: TextStyle(
@@ -297,43 +314,130 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
             ),
           ),
         ),
+      );
+  }
+
+  /// Period-filter dropdown that sits inline with the search bar (§19.1).
+  /// `options` is capped to Day/Week/Month for roles below Manager by the
+  /// caller. Styled as a bordered pill to match the search field.
+  Widget _buildFilterDropdown(
+    BuildContext context, {
+    required String selected,
+    required List<String> options,
+    required ValueChanged<String> onSelect,
+  }) {
+    return PopupMenuButton<String>(
+      onSelected: onSelect,
+      color: surfaceCol,
+      elevation: 3,
+      position: PopupMenuPosition.under,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: borderCol),
+      ),
+      itemBuilder: (ctx) => [
+        for (final o in options)
+          PopupMenuItem<String>(
+            value: o,
+            child: Row(
+              children: [
+                Icon(
+                  FontAwesomeIcons.check,
+                  size: context.getRSize(11),
+                  color: o == selected
+                      ? Theme.of(context).colorScheme.primary
+                      : Colors.transparent,
+                ),
+                SizedBox(width: context.getRSize(8)),
+                Text(
+                  o,
+                  style: TextStyle(
+                    color: textCol,
+                    fontSize: context.getRFontSize(13),
+                    fontWeight:
+                        o == selected ? FontWeight.w700 : FontWeight.normal,
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: context.getRSize(14),
+          vertical: context.getRSize(12),
+        ),
+        decoration: BoxDecoration(
+          color: _bg,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: borderCol),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              FontAwesomeIcons.calendarDay,
+              size: context.getRSize(13),
+              color: subtextCol,
+            ),
+            SizedBox(width: context.getRSize(8)),
+            Text(
+              selected,
+              style: TextStyle(
+                color: textCol,
+                fontSize: context.getRFontSize(13),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            SizedBox(width: context.getRSize(6)),
+            Icon(
+              FontAwesomeIcons.chevronDown,
+              size: context.getRSize(10),
+              color: subtextCol,
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  /// Period options. Roles below Manager are capped at a Month maximum (§19.1);
+  /// `managerUp` (Manager-or-above) is exactly that gate.
+  List<String> _periodOptions(bool managerUp) {
+    // §30.11 canonical chip set. Lower roles get the three shortest windows.
+    return managerUp ? kDatePeriodLabels : kDatePeriodLabels.sublist(0, 3);
   }
 
   // ─────────────────────────── TABS ───────────────────────────────────────
 
   Widget _buildPendingTab(BuildContext context, List<OrderWithItems> list) {
+    // §19.3: roles below Manager don't see monetary values in Orders.
+    final managerUp = isManagerOrAbove(ref);
+
     // Compute summary stats
     final totalValue = list.fold<int>(
       0,
       (sum, o) => sum + o.order.netAmountKobo,
     );
-    final totalOutstanding = list.fold<int>(
-      0,
-      (sum, o) =>
-          sum +
-          (o.order.netAmountKobo - o.order.amountPaidKobo).clamp(0, 999999999),
-    );
     final unassigned =
         list.where((o) => o.order.riderName == 'Pick-up Order').length;
 
+    // §19.2: no "Outstanding" card — a pending order is already settled at
+    // checkout (received or charged to the wallet, §14.3), so it never owes.
+    // Any debt lives on the customer's wallet (rule #4) and shows per card via
+    // the wallet-debt badge when the balance is below zero.
     final stats = [
       _StatItem(
         label: 'Pending',
         value: '${list.length}',
         color: Theme.of(context).colorScheme.primary,
       ),
-      _StatItem(
-        label: 'Total Value',
-        value: formatCurrency(totalValue / 100.0),
-        color: Theme.of(context).colorScheme.primary,
-      ),
-      _StatItem(
-        label: 'Outstanding',
-        value: formatCurrency(totalOutstanding / 100.0),
-        color: danger,
-      ),
+      if (managerUp)
+        _StatItem(
+          label: 'Total Value',
+          value: formatCurrency(totalValue / 100.0),
+          color: Theme.of(context).colorScheme.primary,
+        ),
       _StatItem(
         label: 'Pick-up',
         value: '$unassigned',
@@ -349,6 +453,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
           pinned: true,
           delegate: _PinnedHeaderDelegate(
             height: searchBarHeight,
+            // Pending has no period filter — search field only.
             child: _buildSearchBar(context),
           ),
         ),
@@ -358,6 +463,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
   }
 
   Widget _buildCompletedTab(BuildContext context, List<OrderWithItems> list) {
+    final managerUp = isManagerOrAbove(ref);
+
     final totalRevenue = list.fold<int>(
       0,
       (sum, o) => sum + o.order.netAmountKobo,
@@ -377,25 +484,26 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
         value: '${list.length}',
         color: success,
       ),
-      _StatItem(
-        label: 'Revenue',
-        value: formatCurrency(totalRevenue / 100.0),
-        color: Theme.of(context).colorScheme.primary,
-      ),
-      _StatItem(
-        label: 'Collected',
-        value: formatCurrency(totalCollected / 100.0),
-        color: success,
-      ),
-      _StatItem(
-        label: 'Crate Deposits',
-        value: formatCurrency(crateDeposits / 100.0),
-        color: subtextCol,
-      ),
+      if (managerUp) ...[
+        _StatItem(
+          label: 'Revenue',
+          value: formatCurrency(totalRevenue / 100.0),
+          color: Theme.of(context).colorScheme.primary,
+        ),
+        _StatItem(
+          label: 'Collected',
+          value: formatCurrency(totalCollected / 100.0),
+          color: success,
+        ),
+        _StatItem(
+          label: 'Crate Deposits',
+          value: formatCurrency(crateDeposits / 100.0),
+          color: subtextCol,
+        ),
+      ],
     ];
 
     final searchBarHeight = context.getRSize(64.0);
-    final filterChipHeight = context.getRSize(56.0);
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(child: _SummaryStrip(stats: stats)),
@@ -403,17 +511,11 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
           pinned: true,
           delegate: _PinnedHeaderDelegate(
             height: searchBarHeight,
-            child: _buildSearchBar(context),
-          ),
-        ),
-        SliverPersistentHeader(
-          pinned: true,
-          delegate: _PinnedHeaderDelegate(
-            height: filterChipHeight,
-            child: _buildFilterChips(
+            child: _buildSearchBar(
               context,
-              selected: _completedFilter,
-              onSelect: (f) => setState(() => _completedFilter = f),
+              selectedFilter: _completedFilter,
+              onSelectFilter: (f) => setState(() => _completedFilter = f),
+              filterOptions: _periodOptions(managerUp),
             ),
           ),
         ),
@@ -423,6 +525,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
   }
 
   Widget _buildCancelledTab(BuildContext context, List<OrderWithItems> list) {
+    final managerUp = isManagerOrAbove(ref);
+
     final valueForfeited = list.fold<int>(
       0,
       (sum, o) => sum + o.order.netAmountKobo,
@@ -436,11 +540,12 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
         value: '${list.length}',
         color: danger,
       ),
-      _StatItem(
-        label: 'Value Forfeited',
-        value: formatCurrency(valueForfeited / 100.0),
-        color: danger,
-      ),
+      if (managerUp)
+        _StatItem(
+          label: 'Value Forfeited',
+          value: formatCurrency(valueForfeited / 100.0),
+          color: danger,
+        ),
       _StatItem(
         label: 'Refunds Issued',
         value: '$refundsIssued',
@@ -449,7 +554,6 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     ];
 
     final searchBarHeight = context.getRSize(64.0);
-    final filterChipHeight = context.getRSize(56.0);
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(child: _SummaryStrip(stats: stats)),
@@ -457,69 +561,16 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
           pinned: true,
           delegate: _PinnedHeaderDelegate(
             height: searchBarHeight,
-            child: _buildSearchBar(context),
-          ),
-        ),
-        SliverPersistentHeader(
-          pinned: true,
-          delegate: _PinnedHeaderDelegate(
-            height: filterChipHeight,
-            child: _buildFilterChips(
+            child: _buildSearchBar(
               context,
-              selected: _cancelledFilter,
-              onSelect: (f) => setState(() => _cancelledFilter = f),
+              selectedFilter: _cancelledFilter,
+              onSelectFilter: (f) => setState(() => _cancelledFilter = f),
+              filterOptions: _periodOptions(managerUp),
             ),
           ),
         ),
         ..._buildOrderSlivers(context, list, status: 'cancelled'),
       ],
-    );
-  }
-
-  // ─────────────────────────── FILTER CHIPS ───────────────────────────────
-
-  Widget _buildFilterChips(
-    BuildContext context, {
-    required String selected,
-    required ValueChanged<String> onSelect,
-  }) {
-    final filters = ['Day', 'Week', 'Month', 'Year', 'To Date', 'All Time'];
-    return Container(
-      color: surfaceCol,
-      padding: EdgeInsets.symmetric(vertical: context.getRSize(8)),
-      height: context.getRSize(56),
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: EdgeInsets.symmetric(horizontal: context.getRSize(16)),
-        itemCount: filters.length,
-        separatorBuilder: (context, index) =>
-            SizedBox(width: context.getRSize(8)),
-        itemBuilder: (context, index) {
-          final f = filters[index];
-          final isSelected = f == selected;
-          return FilterChip(
-            label: Text(
-              f,
-              style: TextStyle(
-                fontSize: context.getRFontSize(12),
-                color: isSelected ? Colors.white : textCol,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-              ),
-            ),
-            selected: isSelected,
-            onSelected: (_) => onSelect(f),
-            selectedColor: Theme.of(context).colorScheme.primary,
-            backgroundColor: _bg,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-              side: BorderSide(
-                color: isSelected ? Colors.transparent : borderCol,
-              ),
-            ),
-            showCheckmark: false,
-          );
-        },
-      ),
     );
   }
 
@@ -575,6 +626,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       ];
     }
 
+    // §19.7: the Pending-tab Refund is gated to CEO + Manager (sales.cancel).
+    final canRefund = hasPermission(ref, 'sales.cancel');
+
     return [
       SliverPadding(
         padding: EdgeInsets.fromLTRB(
@@ -593,13 +647,16 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                 onMarkAsDelivered: status == 'pending'
                     ? () => _markAsDelivered(item)
                     : null,
-                onCancel:
-                    status == 'pending' ? () => _cancelOrder(item.order) : null,
+                // §19.7: Refund replaces the old Cancel button on the Pending
+                // tab and is hidden unless the user may cancel a sale. It
+                // reverses the sale (stock, payment, both wallet legs, Funds
+                // debit dated to today) and moves the order to Cancelled. The
+                // Completed and Cancelled tabs have no Refund button (§19.8).
+                onRefund: (status == 'pending' && canRefund)
+                    ? () => _refundPendingOrder(item.order)
+                    : null,
                 onAssignRider: status == 'pending'
                     ? (orderId) => _showRiderSelection(context, orderId)
-                    : null,
-                onRefund: status == 'cancelled'
-                    ? () => _showRefundChoice(context, item.order)
                     : null,
                 onViewReceipt: () => _viewReceipt(context, item),
               );
@@ -656,159 +713,123 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     }
   }
 
-  void _cancelOrder(OrderData order) {
+  /// §19.7: Refund a Pending order (Manager/CEO — gated at the call site via
+  /// sales.cancel). A refund moves cash out of the till, so it first requires
+  /// an **open funds day** for the order's store (§23.8) — gated here, before
+  /// the reason is asked, the same way the POS gate blocks sales. The reversal
+  /// runs in OrdersDao.markCancelled and is dated to **today** (the refund day,
+  /// §23.5): stock restored, payment voided, **both wallet legs reversed** (the
+  /// wallet returns to its pre-sale balance, §14.3), and the Funds account
+  /// debited today. The order moves to the Cancelled tab.
+  void _refundPendingOrder(OrderData order) async {
+    final today = await ref.read(todaysBusinessDateProvider.future);
+    final storeId = order.storeId;
+    final day = storeId == null
+        ? null
+        : await ref.read(databaseProvider).fundDaysDao.getDay(storeId, today);
+    if (!mounted) return;
+    if (day == null || day.status != 'open') {
+      AppNotification.showError(
+        context,
+        'Open the day before issuing a refund.',
+      );
+      return;
+    }
+
+    final reasonController = TextEditingController();
+    final refundLabel = formatCurrency(order.amountPaidKobo / 100.0);
+
     showDialog(
       context: context,
       builder: (ctx) {
-        return AlertDialog(
-          backgroundColor: surfaceCol,
-          title: Text(
-            'Cancel Order',
-            style: TextStyle(color: textCol, fontWeight: FontWeight.bold),
-          ),
-          content: Text(
-            'Are you sure you want to cancel order #${order.id}?',
-            style: TextStyle(color: subtextCol),
-          ),
-          actions: [
-            AppButton(
-              text: 'Back',
-              variant: AppButtonVariant.ghost,
-              size: AppButtonSize.small,
-              onPressed: () => Navigator.pop(ctx),
-            ),
-            AppButton(
-              text: 'Cancel Order',
-              variant: AppButtonVariant.danger,
-              size: AppButtonSize.small,
-              onPressed: () {
-                Navigator.pop(ctx);
-                ref
-                    .read(orderServiceProvider)
-                    .markAsCancelled(order.id, 'Cancelled by staff', '');
-              },
-            ),
-          ],
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            final reason = reasonController.text.trim();
+            return AlertDialog(
+              backgroundColor: surfaceCol,
+              title: Text(
+                'Refund ${order.orderNumber}',
+                style: TextStyle(color: textCol, fontWeight: FontWeight.bold),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'A full refund of $refundLabel goes back out and the stock '
+                    'is restored. The customer\'s wallet returns to its pre-sale '
+                    'balance, and the cash leaves today\'s till. The order then '
+                    'moves to Cancelled.',
+                    style: TextStyle(color: subtextCol, fontSize: 13),
+                  ),
+                  SizedBox(height: context.getRSize(16)),
+                  TextField(
+                    controller: reasonController,
+                    autofocus: true,
+                    minLines: 1,
+                    maxLines: 3,
+                    style: TextStyle(color: textCol),
+                    onChanged: (_) => setDialogState(() {}),
+                    decoration: InputDecoration(
+                      labelText: 'Reason (required)',
+                      labelStyle: TextStyle(color: subtextCol),
+                      enabledBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: borderCol),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderSide: BorderSide(
+                          color: Theme.of(ctx).colorScheme.primary,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                AppButton(
+                  text: 'Back',
+                  variant: AppButtonVariant.ghost,
+                  size: AppButtonSize.small,
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+                AppButton(
+                  text: 'Issue Refund',
+                  icon: FontAwesomeIcons.rotateLeft,
+                  variant: AppButtonVariant.danger,
+                  size: AppButtonSize.small,
+                  onPressed: reason.isEmpty
+                      ? null
+                      : () {
+                          Navigator.pop(ctx);
+                          _executeRefund(order, reason, today);
+                        },
+                ),
+              ],
+            );
+          },
         );
       },
     );
   }
 
-  void _showRefundChoice(BuildContext context, OrderData order) {
-    final isPartial = order.amountPaidKobo < order.netAmountKobo;
-
-    if (isPartial) {
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: surfaceCol,
-          title: Text(
-            'Refund Payment',
-            style: TextStyle(color: textCol, fontWeight: FontWeight.bold),
-          ),
-          content: Text(
-            'Partial payment was made (${formatCurrency(order.amountPaidKobo / 100.0)} of ${formatCurrency(order.netAmountKobo / 100.0)}). '
-            'The refund will be credited to ${order.orderNumber}\'s wallet.',
-            style: TextStyle(color: subtextCol),
-          ),
-          actions: [
-            AppButton(
-              text: 'Cancel',
-              variant: AppButtonVariant.ghost,
-              size: AppButtonSize.small,
-              onPressed: () => Navigator.pop(ctx),
-            ),
-            AppButton(
-              text: 'Confirm Refund',
-              size: AppButtonSize.small,
-              onPressed: () {
-                Navigator.pop(ctx);
-                _processRefund(order, toWallet: true);
-              },
-            ),
-          ],
-        ),
+  void _executeRefund(
+    OrderData order,
+    String reason,
+    String businessDate,
+  ) async {
+    final staffId = ref.read(authProvider).currentUser?.id ?? '';
+    await ref.read(orderServiceProvider).markAsCancelled(
+          order.id,
+          reason,
+          staffId,
+          businessDate: businessDate,
+        );
+    if (mounted) {
+      AppNotification.showSuccess(
+        context,
+        'Refund issued for ${order.orderNumber}.',
       );
-      return;
     }
-
-    showModalBottomSheet(
-      context: context,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => SafeArea(
-        child: Container(
-          decoration: BoxDecoration(
-            color: surfaceCol,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: EdgeInsets.all(context.getRSize(16)),
-                child: Text(
-                  'Refund Method',
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(18),
-                    fontWeight: FontWeight.bold,
-                    color: textCol,
-                  ),
-                ),
-              ),
-              Text(
-                'Select how you want to refund ${formatCurrency(order.amountPaidKobo / 100.0)}',
-                style: TextStyle(color: subtextCol, fontSize: 13),
-              ),
-              const SizedBox(height: 16),
-              ListTile(
-                leading: Icon(
-                  FontAwesomeIcons.wallet,
-                  color: success,
-                  size: context.getRSize(18),
-                ),
-                title: Text(
-                  'Refund to Wallet',
-                  style: TextStyle(color: textCol),
-                ),
-                subtitle: Text(
-                  'Add balance to customer\'s wallet',
-                  style: TextStyle(color: subtextCol, fontSize: 12),
-                ),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _processRefund(order, toWallet: true);
-                },
-              ),
-              ListTile(
-                leading: Icon(
-                  FontAwesomeIcons.moneyBillWave,
-                  color: Theme.of(context).colorScheme.primary,
-                  size: context.getRSize(18),
-                ),
-                title: Text('Refund to Cash', style: TextStyle(color: textCol)),
-                subtitle: Text(
-                  'Record as cash payout',
-                  style: TextStyle(color: subtextCol, fontSize: 12),
-                ),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _processRefund(order, toWallet: false);
-                },
-              ),
-              SizedBox(height: context.getRSize(20) + context.deviceBottomInset),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _processRefund(OrderData order, {required bool toWallet}) {
-    AppNotification.showSuccess(
-      context,
-      'Refund of ${formatCurrency(order.amountPaidKobo / 100.0)} processed to ${toWallet ? 'Wallet' : 'Cash'}.',
-    );
   }
 
   void _showRiderSelection(BuildContext context, String orderId) {
@@ -922,26 +943,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                           ),
                         ),
                         SizedBox(width: context.getRSize(12)),
-                        if (currentOrder.status == 'cancelled')
-                          Expanded(
-                            child: AppButton(
-                              text: 'Refund',
-                              icon: FontAwesomeIcons.rotateLeft,
-                              variant: AppButtonVariant.danger,
-                              onPressed:
-                                  (currentOrder.paymentType == 'Credit')
-                                  ? null
-                                  : () {
-                                      Navigator.pop(modalCtx);
-                                      _showRefundChoice(
-                                        context,
-                                        currentOrder,
-                                      );
-                                    },
-                            ),
-                          ),
-                        if (currentOrder.status == 'cancelled')
-                          SizedBox(width: context.getRSize(12)),
+                        // §19.8: the receipt modal is read-only. Refunds happen
+                        // only from the Pending tab (§19.7), before an order is
+                        // confirmed — there is no Refund button here.
                         Expanded(
                           child: AppButton(
                             text: 'Share',
@@ -1252,8 +1256,9 @@ class _OrderCard extends ConsumerWidget {
   final OrderWithItems orderWithItems;
   final String status;
   final VoidCallback? onMarkAsDelivered;
-  final VoidCallback? onCancel;
   final Function(String)? onAssignRider;
+  // §19.7: fires on the Pending tab only (Refund). Null hides the button —
+  // either the order isn't pending, or the user lacks sales.cancel.
   final VoidCallback? onRefund;
   final VoidCallback onViewReceipt;
 
@@ -1261,7 +1266,6 @@ class _OrderCard extends ConsumerWidget {
     required this.orderWithItems,
     required this.status,
     this.onMarkAsDelivered,
-    this.onCancel,
     this.onAssignRider,
     this.onRefund,
     required this.onViewReceipt,
@@ -1313,6 +1317,17 @@ class _OrderCard extends ConsumerWidget {
     final customer = orderWithItems.customer;
     final items = orderWithItems.items;
 
+    // §19.3: roles below Manager see items + quantities only — no monetary
+    // values (line prices, total, paid, discount, wallet-debt) anywhere on the
+    // card. The printed receipt (onViewReceipt) is unchanged.
+    final canSeeMoney = isManagerOrAbove(ref);
+    // The footer block (divider + money rows) is replaced by just the
+    // cancellation reason when money is hidden — so a low role still sees why a
+    // cancelled order was cancelled, with no money.
+    final showCancelReason = status == 'cancelled' &&
+        order.cancellationReason != null &&
+        order.cancellationReason!.isNotEmpty;
+
     // Accent color for the left border stripe
     final Color accentColor;
     if (status == 'pending') {
@@ -1323,10 +1338,10 @@ class _OrderCard extends ConsumerWidget {
       accentColor = danger;
     }
 
-    // Financial values
-    final outstanding = order.netAmountKobo - order.amountPaidKobo;
-    final isWalletPayment = order.paymentType == 'Wallet Payment';
-    final hasOutstanding = outstanding > 0 && !isWalletPayment;
+    // Financial values. No per-order "owes" figure (§19.2): the sale is settled
+    // at checkout — received, or charged through the wallet (§14.3) — so the
+    // order never carries a balance. Customer debt lives on the wallet (rule #4)
+    // and shows via the wallet-debt badge below, only when the balance is < 0.
     final hasDiscount = order.discountKobo > 0;
 
     // Wallet badge — only for named customers with a negative balance (debt).
@@ -1551,14 +1566,17 @@ class _OrderCard extends ConsumerWidget {
                                           ),
                                         ),
                                       ),
-                                      Text(
-                                        formatCurrency(item.totalKobo / 100.0),
-                                        style: TextStyle(
-                                          color: textCol,
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: context.getRFontSize(13),
+                                      if (canSeeMoney)
+                                        Text(
+                                          formatCurrency(
+                                            item.totalKobo / 100.0,
+                                          ),
+                                          style: TextStyle(
+                                            color: textCol,
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: context.getRFontSize(13),
+                                          ),
                                         ),
-                                      ),
                                     ],
                                   ),
                                 );
@@ -1595,61 +1613,64 @@ class _OrderCard extends ConsumerWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Divider(height: 1, color: borderCol),
-                              SizedBox(height: context.getRSize(10)),
+                              if (canSeeMoney || showCancelReason) ...[
+                                Divider(height: 1, color: borderCol),
+                                SizedBox(height: context.getRSize(10)),
+                              ],
 
-                              // ── Totals row ─────────────────────────────
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Text(
-                                            'Total  ',
-                                            style: TextStyle(
-                                              color: subtextCol,
-                                              fontSize:
-                                                  context.getRFontSize(12),
+                              // ── Totals row (money — hidden below Manager) ──
+                              if (canSeeMoney)
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Text(
+                                              'Total  ',
+                                              style: TextStyle(
+                                                color: subtextCol,
+                                                fontSize:
+                                                    context.getRFontSize(12),
+                                              ),
                                             ),
-                                          ),
-                                          Text(
-                                            formatCurrency(
-                                              order.netAmountKobo / 100.0,
+                                            Text(
+                                              formatCurrency(
+                                                order.netAmountKobo / 100.0,
+                                              ),
+                                              style: TextStyle(
+                                                color: primary,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize:
+                                                    context.getRFontSize(15),
+                                              ),
                                             ),
-                                            style: TextStyle(
-                                              color: primary,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize:
-                                                  context.getRFontSize(15),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      SizedBox(height: context.getRSize(2)),
-                                      Text(
-                                        'Paid: ${formatCurrency(order.amountPaidKobo / 100.0)}',
-                                        style: TextStyle(
-                                          color: subtextCol,
-                                          fontSize: context.getRFontSize(12),
+                                          ],
                                         ),
-                                      ),
-                                    ],
-                                  ),
-                                  // Debt badge (named customers, negative balance)
-                                  if (showWalletDebt)
-                                    _WalletDebtBadge(
-                                      balanceKobo: walletBalanceKobo,
+                                        SizedBox(height: context.getRSize(2)),
+                                        Text(
+                                          'Paid: ${formatCurrency(order.amountPaidKobo / 100.0)}',
+                                          style: TextStyle(
+                                            color: subtextCol,
+                                            fontSize: context.getRFontSize(12),
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                ],
-                              ),
+                                    // Debt badge (named customers, negative balance)
+                                    if (showWalletDebt)
+                                      _WalletDebtBadge(
+                                        balanceKobo: walletBalanceKobo,
+                                      ),
+                                  ],
+                                ),
 
-                              // ── Discount row ───────────────────────────
-                              if (hasDiscount) ...[
+                              // ── Discount row (money — hidden below Manager) ─
+                              if (canSeeMoney && hasDiscount) ...[
                                 SizedBox(height: context.getRSize(6)),
                                 Row(
                                   children: [
@@ -1671,48 +1692,14 @@ class _OrderCard extends ConsumerWidget {
                                 ),
                               ],
 
-                              // ── Outstanding badge ──────────────────────
-                              if (hasOutstanding) ...[
-                                SizedBox(height: context.getRSize(6)),
-                                Container(
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: context.getRSize(10),
-                                    vertical: context.getRSize(5),
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: danger.withValues(alpha: 0.08),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: danger.withValues(alpha: 0.2),
-                                    ),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        FontAwesomeIcons.clockRotateLeft,
-                                        size: context.getRSize(11),
-                                        color: danger,
-                                      ),
-                                      SizedBox(width: context.getRSize(6)),
-                                      Text(
-                                        'Owes: ${formatCurrency(outstanding / 100.0)}',
-                                        style: TextStyle(
-                                          color: danger,
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: context.getRFontSize(12),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
+                              // §19.2: no per-order "Owes" badge — settled at
+                              // checkout; customer debt shows via the wallet
+                              // badge above (rule #4), only when balance < 0.
 
                               // ── Cancellation reason ────────────────────
-                              if (status == 'cancelled' &&
-                                  order.cancellationReason != null &&
-                                  order.cancellationReason!.isNotEmpty) ...[
-                                SizedBox(height: context.getRSize(6)),
+                              if (showCancelReason) ...[
+                                if (canSeeMoney)
+                                  SizedBox(height: context.getRSize(6)),
                                 Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
@@ -1758,17 +1745,20 @@ class _OrderCard extends ConsumerWidget {
                             ),
                             child: Row(
                               children: [
-                                if (onCancel != null)
+                                // §19.7: Refund (CEO + Manager only — null hides
+                                // it). Replaces the former Cancel button.
+                                if (onRefund != null) ...[
                                   Expanded(
                                     child: AppButton(
-                                      text: 'Cancel',
-                                      icon: FontAwesomeIcons.ban,
-                                      variant: AppButtonVariant.ghost,
+                                      text: 'Refund',
+                                      icon: FontAwesomeIcons.rotateLeft,
+                                      variant: AppButtonVariant.danger,
                                       size: AppButtonSize.xsmall,
-                                      onPressed: onCancel,
+                                      onPressed: onRefund,
                                     ),
                                   ),
-                                SizedBox(width: context.getRSize(12)),
+                                  SizedBox(width: context.getRSize(12)),
+                                ],
                                 if (onMarkAsDelivered != null)
                                   Expanded(
                                     child: AppButton(
@@ -1779,30 +1769,6 @@ class _OrderCard extends ConsumerWidget {
                                     ),
                                   ),
                               ],
-                            ),
-                          ),
-
-                        // ── Refund button (cancelled) ──────────────────────
-                        if (status == 'cancelled' && onRefund != null)
-                          Container(
-                            padding: EdgeInsets.fromLTRB(
-                              context.getRSize(14),
-                              context.getRSize(12),
-                              context.getRSize(14),
-                              context.getRSize(14),
-                            ),
-                            decoration: BoxDecoration(
-                              color: surfaceCol,
-                              border: Border(
-                                top: BorderSide(color: borderCol),
-                              ),
-                            ),
-                            child: AppButton(
-                              text: 'Initiate Refund',
-                              icon: FontAwesomeIcons.rotateLeft,
-                              variant: AppButtonVariant.danger,
-                              size: AppButtonSize.xsmall,
-                              onPressed: onRefund,
                             ),
                           ),
                       ],
