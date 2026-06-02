@@ -7,7 +7,6 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/date_period.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
-import 'package:reebaplus_pos/features/dashboard/screens/stock_audit_screen.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/sales_detail_screen.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/profit_report_screen.dart';
 import 'package:reebaplus_pos/features/expenses/screens/expenses_screen.dart';
@@ -110,21 +109,6 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const ExpensesScreen()),
-                  );
-                },
-              ),
-            if (isMgrUp && hasPermission(ref, 'stock.view'))
-              _buildReportCard(
-                context,
-                title: 'Stock Audit',
-                subtitle: 'Inventory Health',
-                icon: FontAwesomeIcons.boxesStacked,
-                color: Colors.blueAccent,
-                locked: false,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    slideDownRoute(const StockAuditScreen()),
                   );
                 },
               ),

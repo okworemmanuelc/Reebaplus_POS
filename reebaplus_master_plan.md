@@ -835,6 +835,7 @@ Accessed from the Stock Take icon at the top of the Inventory screen.
 - Multiple counts per day allowed, each with timestamp.
 - Each saved count is recorded as a session (store, date, products counted, the per-product shortages/surpluses). The **Stock Count History** lists these per store, newest first — every saved count appears, including one with no changes.
 - Saving triggers the daily reconciliation report → goes to CEO and Manager in Reports tab.
+- A saved count for the store that day also **unlocks Close Day** for that store (§23.6 stock-count gate).
 - Reconciliation report includes: shortages/unaccounted items, items sold, best-selling item, best-performing staff, cash balance, empty crates balance (Bar/Beer Distributor only).
 
 ### 17.4 Access
@@ -1259,6 +1260,16 @@ reconciliation is ready (the funds-mismatch alert to the CEO still fires
 separately when any account is off). The full Daily Reconciliation Report screen
 (§25.9) remains its planned Ring 3 item.
 
+**Stock-count gate (2026-06-02, user).** Closing the **current** business day is
+blocked until a Daily Stock Count (§17) has been saved for that store that day —
+the day's reconciliation needs the stock audit alongside the cash audit. The
+Close Day button still shows; tapping it without a saved count opens a "Take
+stock first" prompt with a shortcut to the Stock Count screen, and does **not**
+close the day. **Exception:** closing a *stale previous* day (the §23.8
+unclosed-previous-day path) is exempt — that day can no longer be counted, and
+blocking it would deadlock the next day from ever opening. So the gate applies
+only when the day being closed is today; back-dated closes proceed unchanged.
+
 > Confirmed Phase 1 (2026-05-31, decision C1) — the earlier §3 build-order parenthetical that deferred this to Phase 2 is superseded; Funds History (§23.2) remains Phase 2.
 
 ### 23.7 Role access
@@ -1351,13 +1362,18 @@ CSV/PDF export with selectable time frame. Deferred to Phase 3.
 - Sales Report — revenue, volume, top items, top staff, by period and store.
 - Daily Reconciliation Report — auto-generated when the stock take is saved. The day's roll-up: total SKUs/items sold, the Close Day cash audit (expected vs actual per account, **fund shortages / misappropriations flagged**), empty crates details (Bar/Beer Distributor only), outstanding customer debts, and expenses recorded that day — plus the stock audit, sales summary, best staff, and top item. Opens via the period drill-down cards (§25.9). Draws its debt/expense figures from the existing Customer Ledger / Expense Tracker subsystems (a summary, not a duplicate). Depends on Close Day + Daily Stock Count, so it is built after both (Ring 3).
 - Expense Tracker — by category, trend, vs budget.
-- Stock Audit — stock levels, low stock, out of stock, stock value, movement summary.
 - Customer Ledger — wallet balances, top debtors, top credit balances.
 - Supplier Accounts Report — outstanding balances, total paid, total received per supplier.
 - Funds Register Report — daily open/close per account, mismatches flagged.
 - Profit Report — CEO only. Revenue, cost of goods, gross profit, margins.
 
 Note: there is no Pending Approvals card on Reports. Pending approvals live on the Expenses screen and notification bell.
+
+> Removed 2026-06-02 (user) — the standalone **Stock Audit report** (hub card +
+> screen) was dropped from Phase 1. Stock health stays visible in Inventory, and
+> the stock-reconciliation summary still appears inside the Daily Reconciliation
+> Report (§25.2 / §25.9). The §25.3 row and the §30.11 scope reference were removed
+> to match.
 
 ### 25.3 Role-based visibility
 
@@ -1366,7 +1382,6 @@ Note: there is no Pending Approvals card on Reports. Pending approvals live on t
 | Sales | All | Own store | Hidden | Hidden |
 | Daily Reconciliation | All | Own store | Hidden | Hidden |
 | Expense Tracker | All | Own store | Hidden | Hidden |
-| Stock Audit | All | Own store | Hidden | Hidden |
 | Customer Ledger | All | Own store | Hidden | Hidden |
 | Supplier Accounts | All | If toggled | Hidden | Hidden |
 | Funds Register | All | Own store | Hidden | Hidden |
@@ -1673,8 +1688,8 @@ Destructive or significant actions confirm before proceeding (suspend staff, cha
 > "This Week", "All Time", etc.) and a class of off-by-one / fragile date bugs.
 >
 > **Scope / exceptions:** This governs Home, Reports, Orders, Expenses, Supplier
-> Accounts (Payments + Supplier detail), the Customer wallet, and the Stock Audit
-> report. It does **not** change the calendar-day-bound machinery — Funds
+> Accounts (Payments + Supplier detail), and the Customer wallet. It does **not**
+> change the calendar-day-bound machinery — Funds
 > Register Open/Close Day and the daily reconciliation (§23) stay
 > per-calendar-day. **Inventory History (§16.8)** keeps its own labels
 > ("Today / 7 Days / 30 Days / All"). The Phase-3 Deliveries screen is untouched.

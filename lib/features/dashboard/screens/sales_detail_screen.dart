@@ -4,6 +4,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:reebaplus_pos/core/database/daos.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/core/utils/csv_export.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
@@ -36,14 +37,8 @@ class _SalesDetailScreenState extends ConsumerState<SalesDetailScreen> {
     _loading = false;
   }
 
-  @override
-  Widget build(BuildContext context) {
-    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final textTheme = theme.textTheme;
-
-    // Build flat list of rows — one row per item per order
+  // Flat list of rows — one row per item per order, newest first.
+  List<_SaleRow> _buildRows() {
     final rows = <_SaleRow>[];
     for (final o in widget.orders) {
       for (final i in o.items) {
@@ -63,9 +58,52 @@ class _SalesDetailScreenState extends ConsumerState<SalesDetailScreen> {
         );
       }
     }
-
-    // Sort newest first
     rows.sort((a, b) => b.date.compareTo(a.date));
+    return rows;
+  }
+
+  // CSV columns mirror the on-screen table: the Profit column only in profit mode.
+  Future<void> _exportCsv() async {
+    final isProfit = widget.mode == 'profit';
+    final csvRows = <List<String>>[
+      for (final r in _buildRows())
+        [
+          DateFormat('yyyy-MM-dd HH:mm').format(r.date),
+          r.productName,
+          '${r.qty}',
+          r.revenue.toStringAsFixed(2),
+          if (isProfit) (r.profit != null ? r.profit!.toStringAsFixed(2) : ''),
+        ],
+    ];
+    try {
+      await shareCsv(
+        csv: buildCsv(
+          isProfit
+              ? ['Date', 'Product', 'Qty', 'Revenue', 'Profit']
+              : ['Date', 'Product', 'Qty', 'Revenue'],
+          csvRows,
+        ),
+        fileName:
+            '${isProfit ? 'profit' : 'sales'}_report_${widget.period.replaceAll(' ', '_')}',
+        subject: '${isProfit ? 'Profit' : 'Sales'} — ${widget.period}',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not export: $e')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+
+    final rows = _buildRows();
 
     // Totals
     final totalRevenue = rows.fold<double>(0, (s, r) => s + r.revenue);
@@ -114,6 +152,14 @@ class _SalesDetailScreenState extends ConsumerState<SalesDetailScreen> {
             ),
           ],
         ),
+        actions: [
+          IconButton(
+            tooltip: 'Export CSV',
+            icon: Icon(FontAwesomeIcons.fileCsv,
+                size: 18, color: colorScheme.onSurface),
+            onPressed: rows.isEmpty ? null : _exportCsv,
+          ),
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
