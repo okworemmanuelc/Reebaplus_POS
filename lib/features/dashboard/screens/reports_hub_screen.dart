@@ -7,11 +7,12 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/date_period.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
-import 'package:reebaplus_pos/features/dashboard/screens/approvals_screen.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/stock_audit_screen.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/sales_detail_screen.dart';
+import 'package:reebaplus_pos/features/dashboard/screens/profit_report_screen.dart';
 import 'package:reebaplus_pos/features/expenses/screens/expenses_screen.dart';
 import 'package:reebaplus_pos/features/customers/screens/customers_screen.dart';
+import 'package:reebaplus_pos/features/funds/screens/funds_register_report_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 
 class ReportsHubScreen extends ConsumerStatefulWidget {
@@ -30,6 +31,10 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // §25.3 role gating — the Reports hub is CEO + Manager only (§11.3). Each
+    // card is additionally guarded so it is hidden (never greyed — rule #7) for
+    // any role lacking it. The CEO-only Profit card lands in the §25 Profit pass.
+    final isMgrUp = isManagerOrAbove(ref);
     return SharedScaffold(
       activeRoute: 'dashboard',
       appBar: AppBar(
@@ -64,87 +69,118 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
           mainAxisSpacing: context.spacingM,
           crossAxisSpacing: context.spacingM,
           children: [
-            _buildReportCard(
-              context,
-              title: 'Pending Approvals',
-              subtitle: 'Requests Waiting',
-              icon: FontAwesomeIcons.clockRotateLeft,
-              color: Colors.orange,
-              onTap: () => Navigator.push(
+            if (isMgrUp && hasPermission(ref, 'reports.see_sales'))
+              _buildReportCard(
                 context,
-                MaterialPageRoute(builder: (_) => const ApprovalsScreen()),
+                title: 'Sales Report',
+                subtitle: 'Revenue & Volume',
+                icon: FontAwesomeIcons.chartLine,
+                color: context.primaryColor,
+                locked: false,
+                onTap: () {
+                  final ordersAsync = ref.read(allOrdersProvider);
+                  ordersAsync.whenData((allOrders) {
+                    final filtered = allOrders
+                        .where((o) =>
+                            o.order.status == 'completed' &&
+                            _isDateInPeriod(o.order.createdAt, _selectedPeriod))
+                        .toList();
+                    Navigator.push(
+                      context,
+                      slideDownRoute(
+                        SalesDetailScreen(
+                          orders: filtered,
+                          mode: 'sales',
+                          period: _selectedPeriod,
+                        ),
+                      ),
+                    );
+                  });
+                },
               ),
-            ),
-            _buildReportCard(
-              context,
-              title: 'Sales Report',
-              subtitle: 'Revenue & Volume',
-              icon: FontAwesomeIcons.chartLine,
-              color: context.primaryColor,
-              locked: false,
-              onTap: () {
-                final ordersAsync = ref.read(allOrdersProvider);
-                ordersAsync.whenData((allOrders) {
-                  final filtered = allOrders
-                      .where((o) =>
-                          o.order.status == 'completed' &&
-                          _isDateInPeriod(o.order.createdAt, _selectedPeriod))
-                      .toList();
+            if (isMgrUp && hasPermission(ref, 'reports.see_expenses'))
+              _buildReportCard(
+                context,
+                title: 'Expense Tracker',
+                subtitle: 'Outflow Analysis',
+                icon: FontAwesomeIcons.fileInvoiceDollar,
+                color: Colors.redAccent,
+                locked: false,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const ExpensesScreen()),
+                  );
+                },
+              ),
+            if (isMgrUp && hasPermission(ref, 'stock.view'))
+              _buildReportCard(
+                context,
+                title: 'Stock Audit',
+                subtitle: 'Inventory Health',
+                icon: FontAwesomeIcons.boxesStacked,
+                color: Colors.blueAccent,
+                locked: false,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    slideDownRoute(const StockAuditScreen()),
+                  );
+                },
+              ),
+            // Customer Ledger has no dedicated permission key, so it gates on
+            // role alone — CEO + Manager only (§25.3).
+            if (isMgrUp)
+              _buildReportCard(
+                context,
+                title: 'Customer Ledger',
+                subtitle: 'Wallet & Credit',
+                icon: FontAwesomeIcons.wallet,
+                color: Colors.purpleAccent,
+                locked: false,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    slideLeftRoute(const CustomersScreen()),
+                  );
+                },
+              ),
+            if (isMgrUp && hasPermission(ref, 'funds.view'))
+              _buildReportCard(
+                context,
+                title: 'Funds Register Report',
+                subtitle: 'Daily Open & Close',
+                icon: FontAwesomeIcons.vault,
+                color: Colors.teal,
+                locked: false,
+                onTap: () {
                   Navigator.push(
                     context,
                     slideDownRoute(
-                      SalesDetailScreen(
-                        orders: filtered,
-                        mode: 'sales',
-                        period: _selectedPeriod,
-                      ),
+                      FundsRegisterReportScreen(initialPeriod: _selectedPeriod),
                     ),
                   );
-                });
-              },
-            ),
-            _buildReportCard(
-              context,
-              title: 'Expense Tracker',
-              subtitle: 'Outflow Analysis',
-              icon: FontAwesomeIcons.fileInvoiceDollar,
-              color: Colors.redAccent,
-              locked: false,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const ExpensesScreen()),
-                );
-              },
-            ),
-            _buildReportCard(
-              context,
-              title: 'Stock Audit',
-              subtitle: 'Inventory Health',
-              icon: FontAwesomeIcons.boxesStacked,
-              color: Colors.blueAccent,
-              locked: false,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  slideDownRoute(const StockAuditScreen()),
-                );
-              },
-            ),
-            _buildReportCard(
-              context,
-              title: 'Customer Ledger',
-              subtitle: 'Wallet & Credit',
-              icon: FontAwesomeIcons.wallet,
-              color: Colors.purpleAccent,
-              locked: false,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  slideLeftRoute(const CustomersScreen()),
-                );
-              },
-            ),
+                },
+              ),
+            // Profit Report — CEO only (§25.2/§25.3); reports.see_profit is
+            // granted to the CEO alone by default.
+            if (isMgrUp && hasPermission(ref, 'reports.see_profit'))
+              _buildReportCard(
+                context,
+                title: 'Profit Report',
+                subtitle: 'Margins & COGS',
+                icon: FontAwesomeIcons.chartPie,
+                color: Colors.green,
+                locked: false,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    slideDownRoute(
+                      ProfitReportScreen(initialPeriod: _selectedPeriod),
+                    ),
+                  );
+                },
+              ),
           ],
         ),
       ),

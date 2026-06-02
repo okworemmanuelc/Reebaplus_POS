@@ -17,7 +17,6 @@ import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/customers/data/services/customer_service.dart';
 import 'package:reebaplus_pos/features/deliveries/data/models/delivery_receipt.dart';
 import 'package:reebaplus_pos/features/deliveries/data/services/delivery_service.dart';
-import 'package:reebaplus_pos/features/expenses/data/services/expense_service.dart';
 import 'package:reebaplus_pos/features/inventory/data/services/supplier_service.dart';
 import 'package:reebaplus_pos/features/payments/data/services/payment_service.dart';
 import 'package:reebaplus_pos/shared/services/activity_log_service.dart';
@@ -144,11 +143,8 @@ final deliveryReceiptServiceProvider =
   return DeliveryReceiptService();
 });
 
-// ── Expense ─────────────────────────────────────────────────────────────────
-final expenseServiceProvider =
-    ChangeNotifierProvider<ExpenseService>((ref) {
-  return ExpenseService(ref.read(notificationProvider));
-});
+// Expenses are persisted/synced via ExpensesDao (§20); the old in-memory
+// ExpenseService stub was removed in Session 59.
 
 // ── Payment ─────────────────────────────────────────────────────────────────
 final paymentServiceProvider =

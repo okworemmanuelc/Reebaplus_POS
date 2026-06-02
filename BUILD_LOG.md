@@ -78,7 +78,7 @@ Keep this section updated at the top so it's easy to see what's done at a glance
 - [x] Checkout (section 14) *(two-step payment + receiving account done with Funds Register Session 26; "Add wallet info to receipt" checkbox added Session 30 — §14 now complete)*
 - [~] Receipt (section 15) *(QR code removed — §15.3 / hard rule #8 — and §15.1 wallet-info display wired in Session 30; full §15 pass (refund button, Completed-tab specifics) still pending)*
 - [ ] Inventory + Product Details (section 16)
-- [ ] Daily Stock Count (section 17)
+- [~] Daily Stock Count (section 17) *(Session 58: count persistence + shortages snapshot, Record Damages form, store-name header, CEO/Manager notifications, Cashier blocked. Open: the Ring 3 Daily Reconciliation Report that consumes this data; on-device pass)*
 - [~] Customers + Customer Profile (section 18) *(Session 31: soft-delete, Crates-tab gate, required phone, customers.set_debt_limit permission. Open: Edit flow, GPS capture, Add-Funds payment method)*
 - [ ] Orders (section 19)
 - [ ] Expenses + Pending Approval flow (section 20)
@@ -142,6 +142,557 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 - The cloud retains the orphaned 0076–0085 schema (supplier accounts, stores address columns, stock-transfer RPCs, renamed permission labels) now untracked-by-migrations after the repair-reverted reconciliation. Harmless to this app (it never references those tables), but a fresh `db reset`/rebuild won't reproduce them — re-baseline with `supabase db pull` if that matters. **Note 0077 added cloud `stores` address columns**; this app still writes the single fused `stores.location` — verify the cloud columns are nullable/defaulted so store upserts don't 23502 (not observed, but flagged).
 - Avatar colour does not propagate cross-device (existing per-device pull behaviour, unchanged).
 - After deploy, the stuck `businesses:upsert` flushes on its next retry (or tap **Retry now** in Sync Issues).
+
+---
+
+## Session 60 — 2026-06-02 — Reports hub: Phase A (cleanup + role-gating) + Profit Report (§25, Ring 3)
+
+Continues the §25 planning in **Session 57** (which fixed the §11.3-vs-§25.3
+plan conflict). This is the first implementation pass.
+
+**Built today:**
+- **Hub cleanup + role-gating (§25.2/§25.3).** Removed the **Pending Approvals**
+  card the plan forbids (§25.2) — it opened a dead placeholder screen
+  (`approvals_screen.dart`); real expense approvals live on the Expenses screen.
+  Each remaining card is now **hidden, never greyed** (rule #7) for any role
+  lacking it: Sales→`reports.see_sales`, Expense Tracker→`reports.see_expenses`,
+  Stock Audit→`stock.view`, Funds Register→`funds.view`, Customer Ledger→role
+  (no dedicated key), all under an `isManagerOrAbove` base so the hub stays
+  CEO+Manager only (§11.3).
+- **Profit Report (§25.2, CEO only) — new screen.** Revenue, cost of goods, gross
+  profit, margin over the selected period (§30.11 chips), with a per-product
+  breakdown sorted by profit and CSV export. Gated behind `reports.see_profit`
+  (CEO-only by default seed). Profit per line uses the buying price snapshotted
+  on the order line at sale time.
+- **Shared CSV export helper** (`lib/core/utils/csv_export.dart`, §25.7 "CSV from
+  day one") — RFC-4180 builder + share-sheet, reusing the existing
+  `share_plus`+`path_provider` (no new dependency). Unit-tested.
+
+**Bug found & fixed during review (money-math).** The first cut of the Profit
+Report booked order lines whose captured buying price was **0** as **zero cost =
+100% profit**, overstating gross profit/margin and diverging from the trusted
+Net-Profit (home_screen) and Sales-breakdown screens, which treat a 0 buying
+price as **unknown cost** and exclude it. A 0 cost is reachable in-spec (a product
+created by a role without `products.edit_buying_price` persists 0). Fixed:
+zero/negative-cost lines are excluded from the profit math everywhere (headline,
+per-product, CSV), their quantity surfaced as a transparency note ("Profit
+excludes N item(s) sold with no recorded buying price"); if every sold line is
+uncosted, only the note shows (no misleading ₦0 headline). Revenue − COGS now
+always equals Gross Profit.
+
+**Files touched:**
+- lib/features/dashboard/screens/reports_hub_screen.dart (remove forbidden card +
+  dead import, role-gate all cards, add Profit card)
+- lib/features/dashboard/screens/profit_report_screen.dart (new)
+- lib/core/utils/csv_export.dart (new)
+- test/utils/csv_export_test.dart (new — 6 tests)
+
+**Master plan sections covered:** §25.2 (Profit Report; Pending-Approvals removal),
+§25.3 (role gating), §25.6 (detail-screen shape), §25.7 (CSV), §25.8 (empty state).
+
+**Tested:** `flutter analyze` clean on all touched files (project-wide only the
+pre-existing `avoid_print` infos in test/database/roles_v13_report.dart remain).
+CSV helper unit tests pass (6/6). Profit math + gating reviewed by an adversarial
+multi-agent pass (the zero-cost bug above was caught there) and re-verified after
+the fix. On-device pass pending.
+
+**Process note (no data lost, but flagged):** while undoing an over-eager
+`dart format`, a `git checkout` discarded Session 56's **uncommitted** Funds
+Register card in `reports_hub_screen.dart`; it was rebuilt verbatim from the
+session-start read. The session-start git status is stale and the working tree
+carries large uncommitted work (Sessions 56–60, migrations 0071–0073) — **commit
+recommended.** See memory `feedback_never_git_checkout_uncommitted`.
+
+**Known issues / left open (Phase B/C):**
+- **Customer Ledger** card still routes to the customers LIST, not a §25.2
+  wallet-balances / top-debtors report — Phase B (next).
+- Wire CSV export into the other report detail screens (Sales/Stock Audit/Funds/
+  Expenses) — Phase B.
+- **Daily Reconciliation Report** (§25.9) is now **unblockable** — its dependency,
+  Daily Stock Count, landed in **Session 58** (§17). Re-scope in Phase C.
+- **Supplier Accounts Report** still blocked on the Ring 1 Supplier Accounts +
+  Track Shipments subsystem (payment_service.dart is still an in-memory stub).
+
+---
+
+## Session 60 — 2026-06-02 — Expenses fixes: budget-bar crash, always-on budget, Add Expense as a screen (§20)
+
+**Built today:**
+- **Fixed the Expense Tracker crash (§20.1).** Opening Expense Tracker from
+  Business Reports threw a layout error ("infinite width"). Cause: the **Set
+  budget** button used the shared button's default full-width mode while sitting
+  inline in a row, which has no width to fill. Told that one button to size to
+  its label. No other button was affected (the rest sit in full-width slots or
+  dialogs).
+- **Budget bar is now always visible (§20.1).** It used to appear **only** when
+  the period selector was on "Last 30 days". Since the budget is a **monthly**
+  goal, the bar now shows on **every** period. Its Spent/pending figures always
+  reflect the **last-30-days** window regardless of the selected period (which
+  still filters the list and the "Total Expenses" headline). No misleading
+  "2% of monthly budget" when you switch the list to "Today".
+- **Add Expense opens as a full screen (§20.2).** The Record/Edit Expense form
+  was a bottom-sheet modal; it's now a pushed **screen** with a normal app bar
+  and back button. Same fields, same rules — only the presentation changed.
+  Renamed `AddExpenseSheet` → `AddExpenseScreen` and moved it into `screens/`.
+  Set `resizeToAvoidBottomInset: false` on it so the keyboard inset isn't
+  double-counted (the footer already pads by `deviceBottomInset`, which includes
+  the keyboard) — without it, focusing a field threw the Save button up the page.
+- **Fixed "Set budget" not syncing to the cloud (§20.1, 42501).** Saving a
+  monthly budget showed an RLS rejection in Sync Issues (`expense_budgets:upsert`,
+  code 42501). Cause: migration 0073 created the `expense_budgets` cloud policy
+  with the old inline `user_businesses` membership subquery — the same broken
+  pattern 0071/0074 already had to rewrite (it returns empty when a user's
+  `auth_user_id` has drifted, so the push is silently forbidden while reads still
+  work). New migration **0075** redefines the policy to use the profiles-based
+  `public.current_user_business_ids()`, the canonical path every other tenant
+  table uses. Deployed. The stuck budget upsert flushes on Retry / next tick.
+
+**Files touched:**
+- lib/features/expenses/screens/expenses_screen.dart
+- lib/features/expenses/screens/add_expense_screen.dart (new — moved/renamed from widgets/add_expense_sheet.dart)
+- lib/features/expenses/widgets/add_expense_sheet.dart (deleted)
+- supabase/migrations/0075_expense_budgets_rls_via_profiles.sql (new)
+- reebaplus_master_plan.md (§20.1 always-visible note, §20.2 screen-presentation note)
+
+**Database changes:**
+- Cloud migration **0075** — redefines `expense_budgets_tenant_rw` RLS to use
+  `public.current_user_business_ids()` (fixes the 42501 push rejection). No
+  schema change. Deployed via `supabase db push`.
+
+**Master plan sections covered:**
+- §20.1 — budget bar always visible; §20.2 — Record Expense as a screen.
+
+**Plan updates made during session:**
+- §20.1: noted the monthly budget bar is shown on every period and reflects the
+  last-30-days window (user request, 2026-06-02).
+- §20.2: noted the form opens as a full screen, not a modal (user request).
+
+**Tested:**
+- `flutter analyze lib/features/expenses/` — no issues. On-device pass pending
+  (user to hot-reload and confirm the three changes).
+
+**Known issues / left open:**
+- None.
+
+**Next session should:**
+- Continue Ring-1/Ring-3 reporting work per the master plan.
+
+---
+
+## Session 59 — 2026-06-02 — Expenses: full implementation (approval flow + funds debit + budget) (§20, Ring 1)
+
+**Built today:**
+- The Expenses feature went from a fake in-memory stub to a real, persisted,
+  cloud-synced feature. (The screen already read the real database; the gaps
+  were the §20 behaviours below.)
+- **Approval flow (§20.4).** Every expense now has a status — Approved, Pending
+  CEO approval, or Rejected. A Manager recording an expense **over their
+  approval limit** lands as Pending; a CEO (or a Manager within limit) is
+  auto-approved. The Expenses screen shows a **Pending Approvals** section at
+  the top (only for whoever can approve), each with **Approve** / **Reject**
+  (reject asks for a reason). Cards carry a status badge; rejected cards show
+  the CEO's reason. Approving/rejecting notifies the staff who recorded it.
+- **Money actually moves now (§20.5).** Recording a Cash / Bank / POS expense
+  **reduces that Funds Register account**. The debit posts **when the expense is
+  approved** — immediately for an auto-approved one, or at CEO approval for a
+  Pending one; a Rejected one never moves money. Like a refund, it's dated to
+  **today's open funds day**, so recording/approving such an expense needs the
+  day to be open (blocked with a clear message otherwise). "Other"-method
+  expenses don't touch any account. Deleting an approved expense **gives the
+  money back** (a reversing entry on today's till).
+- **Record Expense form upgrades (§20.2):** category is now a **searchable field
+  that creates new categories on the fly**; the payment method maps to a real
+  account, with an **account picker** (which Cash Till / Bank / POS machine) for
+  tracked methods; the **date** and a **receipt photo (local file)** are now
+  saved; payment-method options fixed to Cash / Bank Transfer / POS card / Other.
+- **Edit / Delete (§20.3):** edit your own within 24h (CEO + Manager), edit any
+  (CEO), soft-delete (CEO only) — each gated and hidden when not allowed.
+  Editing changes descriptive fields only; amount/method are fixed after
+  creation (delete + re-record to change them), which keeps the money ledger
+  consistent.
+- **Monthly budget (§20.1/§20.3):** the budget bar now uses a **real, CEO-set
+  monthly goal** (replacing hardcoded numbers), countable **per business and per
+  store**. The bar counts **approved** spend only and shows "₦X pending
+  approval" underneath. CEO gets a **Set budget** action.
+- **Stats tab (§20.6):** category breakdown, this-month-vs-budget comparison,
+  and top staff by spend — all over approved expenses.
+- **Home Total Expenses** now counts approved expenses only.
+- Removed the dead in-memory `ExpenseService` / `Expense` model / provider.
+
+**Files touched:**
+- reebaplus_master_plan.md (§20.1/§20.5 amendments)
+- lib/core/database/app_database.dart (expenses columns, expense_budgets table,
+  fund_transactions reference_type CHECK widen, schema v31 + migration step,
+  synced/soft-delete lists, partial unique indexes)
+- lib/core/database/daos.dart (ExpensesDao: approval-aware addExpense + funds
+  debit, approveExpense / rejectExpense / updateExpense / softDeleteExpense,
+  watchPendingCount; new ExpenseBudgetsDao)
+- lib/core/database/daos.g.dart, app_database.g.dart (regenerated)
+- lib/core/providers/stream_providers.dart (pendingExpensesCountProvider,
+  expenseBudgetsProvider + resolveMonthlyBudgetKobo,
+  currentUserMaxExpenseApprovalKoboProvider)
+- lib/features/expenses/screens/expenses_screen.dart (full rewrite: badges,
+  pending section, approve/reject, budget bar + set-budget, edit/delete, stats)
+- lib/features/expenses/widgets/add_expense_sheet.dart (searchable category,
+  account picker, open-day gate, date/receipt persistence, status-from-limit)
+- lib/features/dashboard/screens/home_screen.dart (Total Expenses = approved only)
+- lib/core/providers/app_providers.dart (removed dead expenseServiceProvider)
+- supabase/migrations/0073_expenses_full.sql (new — NOT yet deployed)
+- test/expenses/expense_approval_funds_test.dart (new — 6 tests)
+- Deleted: lib/features/expenses/data/services/expense_service.dart,
+  lib/features/expenses/data/models/expense.dart
+
+**Database changes:**
+- Schema bumped to **v31**. `expenses` gains `funds_account_id`, `status`
+  (CHECK approved/pending/rejected, default approved), `rejection_reason`,
+  `approved_by`, `approved_at`, `expense_date`, `receipt_path`.
+- `fund_transactions.reference_type` CHECK widened to allow `'expense'` (the
+  expense debit / its reversal). Append-only ledger rebuild (same dance as the
+  v29 crate_ledger change).
+- New synced tenant table **`expense_budgets`** (`business_id`, nullable
+  `store_id`, `amount_kobo`) with two partial unique indexes (one live goal per
+  business / per store). Added to `_syncedTenantTables` + `_softDeletableTables`.
+- Cloud migration **0073** mirrors all of the above + adds `p_status` /
+  `p_funds_account_id` / `p_expense_date` / `p_receipt_path` to the
+  `pos_record_expense` RPC and `expense_budgets` to the snapshot pull.
+  **NOT yet pushed** — see Known issues (deploy ordering).
+
+**Plan updates made during session:**
+- §20.1 (Budget Activity bar): recorded that the monthly budget goal is set
+  **overall for the business and optionally per store**, stored in a new
+  `expense_budgets` table (`business_id`, nullable `store_id`, `amount_kobo`);
+  the bar resolves the goal by the viewer's store scope, falling back to the
+  business-wide goal. (User request, 2026-06-02 — §20 previously said only
+  "monthly budget".)
+- §20.5 (Cash and account rules): recorded that the Funds Register debit posts
+  **when the expense becomes approved** (auto-approved → immediately; Pending →
+  on CEO approval; Rejected → never), dated to the open funds day it posts on
+  (refund-day rule, §19.7), and that recording/approving a tracked-account
+  expense **requires an open funds day** (§23.8). Also: receipt photo is a
+  **local file path** in Phase 1 (cloud upload deferred). (User decisions,
+  2026-06-02.)
+
+**Post-build adversarial review + fixes (same session):**
+Ran a multi-agent bug review (7 finder dimensions × diverse-lens verifiers);
+15 candidate findings, 5 confirmed (4 distinct bugs). All fixed — Dart-only, no
+schema/migration/redeploy:
+- **(HIGH) Budgets never synced DOWN.** `expense_budgets` was in the push list
+  but missing from the inbound `_pullOrder` + `_restoreTableData` switch in
+  `supabase_sync_service.dart`, so a budget set on one device never reached
+  others (and a 2nd device setting the same scope would hit a cloud unique-index
+  23505). Added it to both. **The Session-58 `stock_counts` table had the
+  identical omission — fixed it too** (saved counts likewise weren't reaching
+  other devices). Regression test: `test/sync/expense_budgets_restore_test.dart`.
+- **(HIGH) Manager saw all stores' expenses.** The screen read the unscoped
+  `allExpensesProvider`; §20.3 says Manager = own store. Added
+  `viewerScopedExpensesProvider` (CEO → all; others → own store) so the list,
+  totals, stats, and budget spend are all store-scoped and match the goal scope.
+- **(MED) Double-tap approve could double-debit** (TOCTOU: status read outside
+  the txn). Moved the status guard inside the transaction with a conditional
+  `status='pending'` UPDATE + affected-row check in `approveExpense` /
+  `rejectExpense` / `softDeleteExpense` (the latter so a double delete can't
+  double-reverse). Regression tests added (double-approve → one debit; double-
+  delete → one reversal).
+- **(MED) No CEO alert on pending submit.** `addExpense` now fires an
+  `expense.pending_approval` notification to CEO users when a Manager's
+  over-limit expense escalates (§20.4/§26.4 bell badge).
+- Hardening (latent, from refuted-but-cheap findings): `_methodLabel` no longer
+  crashes on a legacy `'card'` method; the Add-Expense FAB is gated by
+  `expenses.create`.
+
+**Tested:**
+- `flutter analyze` clean (only pre-existing `avoid_print` infos in
+  test/database/roles_v13_report.dart).
+- Full suite after fixes: **309 passed, 58 skipped, 0 failures.**
+- Migration chain upgrades cleanly to **v31** (migration_upgrade_test covers
+  v17/v21/v24/v26/v27/v28 → v31).
+- `test/expenses/expense_approval_funds_test.dart` (8 tests) + new
+  `test/sync/expense_budgets_restore_test.dart` (2 tests).
+
+**Known issues / left open:**
+- **Cloud migration 0073 deployed** (2026-06-02, `supabase db push`) — remote is
+  in sync with the v31 build. The review fixes are Dart-only, so no further
+  cloud deploy is needed.
+- **Per-store budget setting is single-store in Phase 1.** The data model +
+  sync support per-store goals, but the CEO Set-Budget action always writes the
+  business-wide (null-store) goal because the UI shows one store (§2.2). A
+  store picker for budgets lands with the Phase-2 multi-store UI.
+- **Receipt photo is local-only** (Phase 1 decision): the file path syncs but
+  the image itself does not upload, so a receipt won't appear on other devices.
+  Cloud upload (Supabase Storage + compression) is deferred.
+- **Edit is descriptive-only**: amount / payment method / account are immutable
+  after creation (delete + re-record to change them). Deliberate, to keep the
+  append-only funds ledger consistent.
+- The `pos_record_expense` **domain-RPC path** is behind a feature flag (likely
+  off); the live path is the table-upsert path. Both were updated.
+- Not yet verified on-device (emulator) — pending a run.
+
+**Next session should:**
+- Deploy cloud 0073, then verify on the emulator: record (auto-approved + over-
+  limit Pending), approve/reject, the open-day gate, the funds debit/reversal in
+  Funds Register, and the per-store budget bar.
+
+---
+
+## Session 58 — 2026-06-02 — Daily Stock Count: persistence + Record Damages + notifications (§17, Ring 2)
+
+**Built today:**
+- Saving a stock count now **records the count** (not just the stock adjustment).
+  Each Save Count writes one session row holding how many products were counted,
+  the shortage/surplus totals, and the itemised list of products that didn't
+  match — the data the Daily Reconciliation Report (a later, Ring 3 feature)
+  will read. A count is recorded even when everything matched, so the history is
+  complete.
+- Added the **Record Damages** button (top of the Daily Stock Count screen). It
+  opens a small form — pick a product, type a quantity, choose a reason
+  (Broken / Expired / Spilled / Theft / Other) — and submitting reduces that
+  product's stock and logs it to history. It blocks if the quantity is more than
+  what's in stock.
+- The stock count and the damage each now **notify the CEO and Manager**
+  ("stock count saved — reconciliation report ready" / "damage recorded"), per
+  the master plan's notification list.
+- Saving now records **who** did the count/adjustment (it previously saved a
+  blank staff id).
+- **Fixed the header**: the subtitle showed a raw store id ("Store #" + a long
+  id) — it now shows the store **name** (or "All Stores"), with a store icon. The raw
+  id was also a hard-rule #4 violation (no UUIDs in user-facing text).
+- **Access control**: the Stock Take icon in the Inventory header is now hidden
+  for Cashiers (master plan §17.4: only Stock keeper, Manager, CEO). The screen
+  itself also refuses access if somehow reached by a Cashier.
+
+**Files touched:**
+- supabase/migrations/0072_stock_counts.sql (new — pushed to remote)
+- lib/core/database/app_database.dart (StockCounts table, schema v30, migration step, synced-tables list, index)
+- lib/core/database/daos.dart (StockCountsDao)
+- lib/core/database/daos.g.dart, app_database.g.dart (regenerated)
+- lib/core/providers/stream_providers.dart (allStockCountsProvider)
+- lib/features/inventory/screens/stock_count_screen.dart (Save Count persistence + notify, Record Damages form, store-name header, access guard)
+- lib/features/inventory/screens/inventory_screen.dart (hide Stock Take icon for Cashier)
+- test/inventory/stock_count_dao_test.dart (new)
+
+**Database changes:**
+- New synced table `stock_counts` — one row per saved count session: store, date,
+  who counted, products-counted, shortage/surplus roll-up, and a JSON list of the
+  changed products. Schema bumped to v30. Cloud migration 0072 (table + RLS +
+  realtime + snapshot pull) was pushed to remote **before** the v30 app — the
+  required deploy order.
+- Damages are NOT a new table — they reuse the existing stock-adjustment ledger
+  with a `damage:<reason>` note, so the cloud already syncs them.
+
+**Master plan sections covered:**
+- §17.1 (header — store name + store icon), §17.2 (Record Damages form), §17.3
+  (save records the count + shortages; fires the reconciliation-ready event),
+  §17.4 (access: Cashier blocked), §26.4 (stock-count-saved + damage-recorded
+  notifications).
+
+**Plan updates made during session:**
+- None. This implements the existing plan; no scope change.
+
+**Tested:**
+- `flutter analyze` — clean (only pre-existing `avoid_print` infos in an unrelated test).
+- New `test/inventory/stock_count_dao_test.dart` (5 tests) — a short count adjusts
+  inventory AND records the itemised shortages payload; a matched count still
+  records a zero-shortage session; mixed shortage/surplus roll-ups are correct;
+  the write enqueues for sync; a damage reduces stock via the `damage:<reason>`
+  ledger.
+- Full non-integration suite: **299 passed, 2 skipped, 0 failed** (migration +
+  sync tests unaffected by the schema bump).
+
+**Post-build review + fixes (same session):** ran an extensive multi-agent
+adversarial review of the above. It found **5 real bugs** (and correctly dismissed
+6 test-coverage nits). All five fixed:
+- **(critical) Cloud sync would silently fail.** The `stock_counts` RLS policy in
+  0072 copied the *old, broken* membership-subquery pattern from 0068 — the exact
+  thing migration 0071 had to fix for the funds table. Saved counts would have been
+  rejected by the cloud (error 42501) and stuck in the sync queue, while reads kept
+  working (so it would have looked fine until you checked another device). Fixed by
+  **new migration `0074_stock_counts_rls_via_profiles.sql`** (mirrors 0071, uses the
+  profiles-based `current_user_business_ids()` helper), pushed to remote.
+- **(high) Saving could freeze the screen.** If another till sold an item mid-count,
+  Save Count could throw partway and leave the Save button permanently stuck/hidden
+  with no message. Wrapped the save in error handling that shows a message, refreshes
+  the figures, and re-enables the button so the user can retry.
+- **(medium) A blank count box zeroed stock.** An empty "Actual" box was read as 0,
+  which would zero that product's stock and fire a false shortage alert. Now a blank
+  box means "not counted" and is skipped (a typed 0 is still a real count).
+- **(low) Access guard hardened** to fail closed while the role is still loading.
+- **(nit) Header label** no longer says "All Stores" for a single-store count whose
+  name hasn't synced yet (shows "This store").
+- Re-ran: `flutter analyze` clean; stock-count tests pass; full suite **305 passed,
+  2 skipped, 0 failed**.
+
+**Follow-up — per-store + history + confirm (same session, user request):**
+- **Counts are now per store.** A daily stock count is taken for one store at a
+  time; the combined all-stores view is gone. When opened with a store lock it's
+  fixed to that store; when opened unscoped a **Store picker** chooses which store
+  (hidden if the business has a single store). Switching stores reloads that
+  store's count. (Plan updated — §17.1.)
+- **Fixed: a saved count now shows in history.** The Stock Count History sheet was
+  reading the partial activity-log trail, which missed no-change counts. It now
+  reads the authoritative `stock_counts` table, so **every saved count appears**
+  (per store, newest first) with each session's store, time, products counted,
+  and the itemised shortages/surpluses.
+- **Confirm dialog on Save Count.** Tapping Save Count now shows a confirmation
+  summarising how many products will be adjusted (and any shortages) before it
+  commits — since saving changes live stock. (Plan updated — §17.2.)
+- Cleanup: removed the now-dead all-stores grouping (`_DisplayItem`,
+  `_buildStoreHeader`); the product list is a flat per-store table.
+- Re-ran: `flutter analyze` clean; full suite **315 passed, 2 skipped, 0 failed**.
+
+**Known issues / left open:**
+- Not yet verified on-device (emulator pass pending).
+- `ActivityLogDao.getStockCountLogs()` is now unused (the history switched to
+  `stock_counts`) — left in place, not deleted.
+- The **Daily Reconciliation Report** (§25.9) that consumes this data is still a
+  **Ring 3** item — not built here. This session only produces its stock-audit
+  half (the cash-audit half already exists from Close Day).
+
+**Next session should:**
+- Either continue Ring 2 (Customers Edit / GPS), or pick up the Ring 3 Daily
+  Reconciliation Report now that both halves (Close Day cash + stock count) of
+  its data exist.
+
+---
+
+## Session 57 — 2026-06-02 — Planning: full Business Reports hub (§25) + plan-conflict fix
+
+**Planning session — no feature code yet.** Mapped the §25 Reports hub against the
+current code and the data layer, and resolved a master-plan contradiction before
+building.
+
+**Plan conflict resolved (master plan edited):** §11.3 said the Reports hub is
+"CEO and Manager only," but the §25.3 visibility matrix and the §27.3 sidebar row
+gave Cashier an "Own sales" Sales report and Stock keeper a no-money Stock Audit.
+The three can't all stand. **User chose: keep CEO + Manager only.** Edited
+`reebaplus_master_plan.md` — §25.3 now reads "Hidden" for Cashier and Stock keeper
+on every report (including Stock Audit), the §27.3 Reports row is `Yes | Yes |
+Hidden | Hidden`, and a dated reconciliation note records the decision. A cashier's
+own-sales summary stays on Home / Orders; a stock keeper's stock view stays in
+Inventory.
+
+**State found (drift vs §25.2):**
+- `reports_hub_screen.dart` shows 6 cards with **no per-card role gating**.
+- A **"Pending Approvals" card** is present — **forbidden by §25.2** ("there is no
+  Pending Approvals card on Reports"). Must be removed.
+- **Customer Ledger** card routes to the Customers **list**, not a §25.6
+  wallet-balances / top-debtors report. **Expense Tracker** routes to the Expenses
+  feature screen. **Sales / Stock Audit / Funds Register** have real detail screens.
+- Missing cards: Daily Reconciliation, Supplier Accounts, Profit. No CSV export
+  (§25.7) on any report yet.
+
+**Buildability (verified against daos.dart / app_database.dart):**
+- Ready now: Sales, Expense Tracker, Stock Audit, Customer Ledger, Funds Register,
+  **Profit** (COGS available — `OrderItems.buyingPriceKobo` is stored per line).
+- **Blocked** (depend on earlier-Ring subsystems not yet built): **Supplier
+  Accounts** (Ring 1 Supplier Accounts + Track Shipments — `PaymentService` is still
+  an in-memory stub, no `supplier_payments` table); **Daily Reconciliation** (Ring 2
+  Daily Stock Count snapshot — only the Close-Day cash half exists).
+- CSV (§25.7) needs **no new dependency** — `share_plus` + `path_provider` already
+  in `pubspec.yaml`.
+
+**Agreed scope (user):** Hub + ready reports now; defer the two blocked cards until
+their subsystems land (rule #7 — absent, not greyed). Build plan: (A) remove the
+forbidden card + add §25.3 role-gating via `hasPermission` / role slug; (B) build
+Profit (CEO-only) + a real Customer Ledger report screen + a shared CSV-export
+helper wired into each report detail.
+
+**Next session should:** start Phase A (hub cleanup + role-gating), then Phase B.
+
+---
+
+## Session 56 — 2026-06-02 — Fix: Close Day 42501 RLS rejection + Funds Register Report card (§25.2)
+
+### Part B — Funds Register Report (§25.2)
+
+**Built today:**
+- Added the **Funds Register Report** card to the Business Reports hub
+  (§25.2). Opens a read-only detail screen showing, across the selected period,
+  each closed day's per-account reconciliation: account, Expected, Counted, and
+  Variance — with mismatches flagged (red, plus a per-day "Mismatch" badge).
+  Headline tiles up top: Days closed, Mismatches, Net variance. Period dropdown
+  overrides the hub's global filter (§25.5/§25.6). Empty state "No data for this
+  period." (§25.8). This is the close-day data surfacing the user asked for.
+
+**Files touched:**
+- lib/features/funds/screens/funds_register_report_screen.dart (new)
+- lib/features/dashboard/screens/reports_hub_screen.dart (new card + import)
+- lib/core/database/daos.dart (FundDayClosingsDao.watchAllForBusiness,
+  FundsAccountsDao.watchAllForBusiness — both business-scoped)
+- lib/core/providers/stream_providers.dart (allFundDayClosingsProvider,
+  allFundsAccountsProvider)
+
+**Master plan sections covered:**
+- §25.2 Funds Register Report, §25.5/§25.6 period filter, §25.8 empty state.
+
+**Plan updates made during session:**
+- None. Built exactly as §25.2 already specifies (a report card in the grid, not
+  a new "Audit" tab — user confirmed "build per plan").
+
+**Tested:**
+- `flutter analyze` on all four touched files: no issues. On-device pass pending.
+
+**Known issues / left open:**
+- CSV export (§25.7 "CSV from day one") not added — no sibling report screen has
+  it yet; deferred to the full §25 pass so all reports get it together.
+- Daily Reconciliation Report (§25.2/§25.9) still deferred — it's Ring 3 and needs
+  Daily Stock Count (§17), which isn't built.
+- Manager "own store" scoping (§25.3) not yet enforced on report detail screens —
+  matches the current behaviour of the other report cards; for the §25 pass.
+
+### Part A — Fix: Close Day 42501 RLS rejection on fund_day_closings
+
+**The bug:** Closing the day surfaced repeated "RLS rejection" errors on the Sync
+Issues screen — `fund_day_closings:upsert` failing with Postgres code 42501 ("new
+row violates row-level security policy"). One stuck row per account (Cash Till, POS
+machine, Bank). The per-account reconciliation snapshots never reached the cloud,
+so the day's reconciliation looked incomplete / "didn't close."
+
+**What actually happened:** The day *did* close. `closeDay()` does all its work in
+local SQLite (no row-level security there) and only enqueues the cloud pushes, so it
+never threw — "Day closed" was shown and the `fund_days` header flipped to closed and
+synced fine (it was NOT in the failure list). Only the `fund_day_closings` snapshots
+were stuck in the push queue.
+
+**Root cause:** When `fund_day_closings` was added (migration 0068), its RLS policy
+copied the *original* `fund_days` policy from 0057 — the pre-0051 pattern that
+resolves the caller's business through an inline `auth.uid() → users.auth_user_id →
+user_businesses` subquery. That subquery runs as the logged-in user (so it's itself
+filtered by row-level security) and comes back empty whenever a user's stored
+`auth_user_id` has drifted from their current login — which fails the check and
+returns 42501. The three sibling funds tables had already been fixed for exactly this
+in migration 0058 (they resolve the business via the profiles-based helper
+`current_user_business_ids()`), but `fund_day_closings` was created later and missed
+that fix.
+
+**The fix:** New migration `0071_fund_day_closings_rls_via_profiles.sql` — drops and
+recreates the `fund_day_closings_tenant_rw` policy to use
+`public.current_user_business_ids()`, identical to the 0058 funds policies. Pushed to
+the cloud (only pending migration; 0050–0070 already applied). No app/schema change —
+the local Drift table was already correct.
+
+**Files touched:**
+- supabase/migrations/0071_fund_day_closings_rls_via_profiles.sql (new)
+
+**Database changes:**
+- Cloud only: swapped the `fund_day_closings` RLS policy from the user_businesses
+  inline subquery to the profiles-based `current_user_business_ids()` helper.
+
+**Master plan sections covered:**
+- §23.6 — Close Day / per-account reconciliation snapshot (bug fix, no plan change).
+
+**Tested:**
+- `supabase db push` applied 0071; `supabase migration list` confirms 0071 is now on
+  remote. The already-queued `fund_day_closings` upserts will flush on Retry / next
+  backoff tick now that the policy passes.
+
+**Known issues / left open:**
+- The stuck queue items need a Retry (or the next auto-retry) to actually push — the
+  fix unblocks them but does not replay them itself.
+- Reports surfacing of close-day data (Funds Register Report / Daily Reconciliation
+  Report, §25.2) is still unbuilt — see note to user; §25 Reports is not started.
+
+**Next session should:**
+- Confirm on-device that the pending `fund_day_closings` items cleared after Retry.
 
 ---
 
