@@ -118,7 +118,8 @@ void main() {
         equals(-3000));
 
     // 2. Cancel order which triggers refund
-    await db.ordersDao.markCancelled(orderId, 'Customer changed mind', 'staff1');
+    await db.ordersDao.markCancelled(orderId, 'Customer changed mind', 'staff1',
+        businessDate: '2026-06-01');
 
     expect(await db.walletTransactionsDao.getBalanceKobo(customerId), equals(0));
 

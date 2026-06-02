@@ -1268,41 +1268,86 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         }
       }
 
-      if (walletDebitKobo > 0) {
-        if (customerId == null) {
-          throw ArgumentError(
-            'walletDebitKobo > 0 requires a non-null customerId',
-          );
-        }
+      // §14.3 full wallet ledger (rule #4): every registered sale runs through
+      // the wallet. Post TWO legs — a debit for the order total (goods leave)
+      // and a credit for the amount paid at checkout (money in) — so the net
+      // (paid − total) is the customer's position: 0 when fully paid, negative
+      // when they owe. This includes fully-paid cash sales (debit total +
+      // credit total, net 0), so the wallet history is complete. The Funds
+      // Register is a SEPARATE ledger: the cash/card/transfer still credited the
+      // chosen account above; this credit leg records the same money against the
+      // customer's wallet, not the business's account — so there is no
+      // double-count. The credit leg reuses the existing top-up reference types
+      // (by method, mirroring WalletService) so no CHECK widening is needed.
+      // Walk-ins (customerId == null) never touch the wallet (rule #14) — they
+      // pay in full straight to the account.
+      //
+      // v1 path. The v2 RPC (pos_record_sale_v2) still mints only the debit via
+      // p_wallet_amount_kobo — it MUST also mint this credit leg before
+      // record_sale v2 is enabled, or cloud wallets will miss payments (R2).
+      if (customerId != null) {
+        final cid = customerId;
         final wallet =
             await (select(customerWallets)
                   ..where(
                     (w) =>
                         whereBusiness(w) &
-                        w.customerId.equals(customerId) &
+                        w.customerId.equals(cid) &
                         w.isDeleted.not(),
                   )
                   ..limit(1))
                 .getSingleOrNull();
         if (wallet == null) {
-          throw StateError('Customer $customerId has no wallet — cannot debit');
+          throw StateError('Customer $cid has no wallet — cannot post sale');
         }
-        final walletTxId = UuidV7.generate();
-        final walletTxComp = WalletTransactionsCompanion.insert(
-          id: Value(walletTxId),
+
+        // §14.3 — both legs of the sale are one event, so stamp them with the
+        // SAME created_at. The wallet history is newest-first; on this tie the
+        // DISPLAY query (WalletTransactionsDao.watchHistory) puts the order
+        // DEBIT above the payment CREDIT via signed_amount_kobo ASC, so the
+        // order charge (the last step of the sale) sits at the top. Net
+        // (paid − total) is unchanged by the timestamp/ordering.
+        final legTime = DateTime.now();
+        //
+        // Leg 1 — debit the order total (the purchase leaves the wallet).
+        final debitComp = WalletTransactionsCompanion.insert(
+          id: Value(UuidV7.generate()),
           businessId: requireBusinessId(),
           walletId: wallet.id,
-          customerId: customerId,
+          customerId: cid,
           type: 'debit',
-          amountKobo: walletDebitKobo,
-          signedAmountKobo: -walletDebitKobo,
+          amountKobo: totalAmountKobo,
+          signedAmountKobo: -totalAmountKobo,
           referenceType: 'order_payment',
           orderId: Value(orderId),
           performedBy: Value(staffId),
-          lastUpdatedAt: Value(DateTime.now()),
+          createdAt: Value(legTime),
+          lastUpdatedAt: Value(legTime),
         );
-        await into(walletTransactions).insert(walletTxComp);
-        await db.syncDao.enqueueUpsert('wallet_transactions', walletTxComp);
+        await into(walletTransactions).insert(debitComp);
+        await db.syncDao.enqueueUpsert('wallet_transactions', debitComp);
+
+        // Leg 2 — credit the amount paid now (money into the wallet). Skipped
+        // when nothing is paid at checkout (pure credit / pay-from-wallet sale).
+        if (amountPaidKobo > 0) {
+          final creditComp = WalletTransactionsCompanion.insert(
+            id: Value(UuidV7.generate()),
+            businessId: requireBusinessId(),
+            walletId: wallet.id,
+            customerId: cid,
+            type: 'credit',
+            amountKobo: amountPaidKobo,
+            signedAmountKobo: amountPaidKobo,
+            referenceType:
+                paymentMethod == 'cash' ? 'topup_cash' : 'topup_transfer',
+            orderId: Value(orderId),
+            performedBy: Value(staffId),
+            createdAt: Value(legTime),
+            lastUpdatedAt: Value(legTime),
+          );
+          await into(walletTransactions).insert(creditComp);
+          await db.syncDao.enqueueUpsert('wallet_transactions', creditComp);
+        }
       }
 
       // v1 also enqueues the updated inventory cache so the cloud converges.
@@ -1341,7 +1386,18 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
   }
 
   /// Cancel an order: append compensating stock rows + void payments.
-  Future<void> markCancelled(String orderId, String reason, String staffId) async {
+  /// Refund/cancel an order. [businessDate] is the **refund day** (`YYYY-MM-DD`,
+  /// the caller's "today") — the Funds Register reversal is dated to it, not to
+  /// the original sale day, so the cash-out lands on the day it actually leaves
+  /// the till (§19.7 / §23.5). The caller (the Pending-tab Refund flow) resolves
+  /// today's business date and gates on an open day before calling, the same way
+  /// the POS gate works for sales.
+  Future<void> markCancelled(
+    String orderId,
+    String reason,
+    String staffId, {
+    required String businessDate,
+  }) async {
     final flagValue =
         await db.systemConfigDao.get('feature.domain_rpcs_v2.cancel_order');
     final useDomainRpc = flagValue == 'true' || flagValue == '"true"';
@@ -1375,6 +1431,11 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
           'p_actor_id': staffId,
           'p_order_id': orderId,
           'p_cancellation_reason': reason,
+          // Refund day — the server must date the Funds void-debit to this, not
+          // the original sale day (mirror of the v1 path below). R2: until
+          // pos_cancel_order honours this AND mints the wallet payment-leg
+          // reversal, don't enable feature.domain_rpcs_v2.cancel_order.
+          'p_business_date': businessDate,
         };
         await db.syncDao
             .enqueue('domain:pos_cancel_order', jsonEncode(payload));
@@ -1451,46 +1512,50 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         await db.syncDao.enqueueUpsert('payment_transactions', pay);
       }
 
-      // Wallet: Refund any debit associated with the order (ledger is append-only)
-      final originalDebit =
-          await (select(walletTransactions)
-                ..where(
-                  (t) =>
-                      whereBusiness(t) &
-                      t.orderId.equals(orderId) &
-                      t.type.equals('debit'),
-                )
-                ..limit(1))
-              .getSingleOrNull();
-
-      if (originalDebit != null) {
-        final refundId = UuidV7.generate();
-        final refundComp = WalletTransactionsCompanion.insert(
-          id: Value(refundId),
+      // Wallet: reverse BOTH legs the sale posted (§14.3) so the customer's
+      // wallet returns to its exact pre-sale balance. createOrder debited the
+      // order total (the purchase) and, when anything was paid now, credited the
+      // amount paid (the payment). We append the opposite of each leg (the
+      // ledger is append-only — never mutate): the debit becomes a 'refund'
+      // credit, the payment-credit becomes a 'void' debit. Net wallet effect =
+      // +total − paid, undoing the sale's −(total − paid). Walk-in orders have
+      // no wallet legs, so this is a no-op for them.
+      final saleWalletLegs =
+          await (select(walletTransactions)..where(
+                (t) =>
+                    whereBusiness(t) &
+                    t.orderId.equals(orderId) &
+                    t.referenceType.isNotIn(const ['refund', 'void']),
+              ))
+              .get();
+      for (final leg in saleWalletLegs) {
+        final toCredit = leg.type == 'debit';
+        final compReverse = WalletTransactionsCompanion.insert(
+          id: Value(UuidV7.generate()),
           businessId: requireBusinessId(),
-          walletId: originalDebit.walletId,
-          customerId: originalDebit.customerId,
-          type: 'credit',
-          amountKobo: originalDebit.amountKobo,
-          signedAmountKobo: originalDebit.amountKobo,
-          referenceType: 'refund',
+          walletId: leg.walletId,
+          customerId: leg.customerId,
+          type: toCredit ? 'credit' : 'debit',
+          amountKobo: leg.amountKobo,
+          signedAmountKobo: toCredit ? leg.amountKobo : -leg.amountKobo,
+          referenceType: toCredit ? 'refund' : 'void',
           orderId: Value(orderId),
           performedBy: Value(staffId),
-          lastUpdatedAt: Value(DateTime.now()),
+          lastUpdatedAt: Value(now),
         );
-        await into(walletTransactions).insert(refundComp);
-        await db.syncDao.enqueueUpsert('wallet_transactions', refundComp);
+        await into(walletTransactions).insert(compReverse);
+        await db.syncDao.enqueueUpsert('wallet_transactions', compReverse);
       }
 
-      // Funds Register reversal (§19.7 / hard rule #5): the sale credited the
-      // cash/card/transfer portion to a funds account (OrdersDao.createOrder →
-      // creditSale). Cancelling/refunding it must take that money back out, or
-      // the account's expected balance stays inflated and Close Day (§23.6)
-      // would report a phantom surplus. fund_transactions is append-only, so we
-      // append a compensating 'void' debit per original 'sale' credit (same
-      // account + business_date) rather than mutating the credit. (v1 path; if
-      // feature.domain_rpcs_v2.cancel_order is ever enabled, pos_cancel_order
-      // must mint this debit server-side instead — mirror of createOrder R2.)
+      // Funds Register reversal (§19.7 / §23.5 / hard rule #5): the sale
+      // credited the cash/card/transfer portion to a funds account (createOrder
+      // → creditSale). The refund takes that money back out — but it leaves
+      // TODAY's till, so the compensating 'void' debit is dated to [businessDate]
+      // (the refund day), NOT the original sale day. That keeps each day's Close
+      // Day matching the physical cash that moved that day, and never reopens a
+      // day that was already closed. fund_transactions is append-only, so we
+      // append the debit rather than mutate the credit. The original credit's
+      // account + amount are preserved; only the date moves to today.
       final saleCredits = await (select(fundTransactions)
             ..where((t) =>
                 whereBusiness(t) &
@@ -1503,7 +1568,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
           businessId: requireBusinessId(),
           fundsAccountId: credit.fundsAccountId,
           storeId: credit.storeId,
-          businessDate: credit.businessDate,
+          businessDate: businessDate,
           type: 'debit',
           amountKobo: credit.amountKobo,
           signedAmountKobo: -credit.amountKobo,

@@ -5,11 +5,14 @@
 // OrderService.addOrder is the production cart entry point and had ZERO test
 // coverage. These tests lock in:
 //   • _resolvePaymentType classification: cash / mixed / credit / wallet
-//   • _resolveWalletDebit residual: mixed → debit == total − paid
+//   • the full wallet ledger (§14.3, rule #4): every registered sale posts a
+//     debit for the order total + a credit for the amount paid, netting to
+//     paid − total (0 when fully paid, negative = the customer owes)
 //   • the Funds Register credit (hard rule #5): a paid sale credits the named
 //     account by the cash portion; wallet/credit sales credit nothing
-//   • the wallet-ledger writes (net-zero on a fully-paid registered cash sale)
 //   • getBalanceFor == SUM(signed_amount_kobo) after layering opening + sale
+//   • refund (markCancelled) reverses BOTH wallet legs and dates the Funds
+//     void-debit to the refund day, not the original sale day (§19.7/§23.5)
 //
 // Asserted through addOrder (not the private methods) so the real persisted
 // rows — orders.payment_type, payment_transactions, wallet_transactions,
@@ -154,8 +157,23 @@ void main() {
       final order = await onlyOrder();
       expect(order.paymentType, 'cash');
 
-      // Net-zero: a fully-paid sale touches the wallet not at all.
-      expect(await walletTxns(), isEmpty, reason: 'no debt put on account');
+      // §14.3 full ledger: a fully-paid sale runs through the wallet as two
+      // legs — debit the order total, credit the amount paid — netting to zero.
+      final wallet = await walletTxns();
+      expect(wallet, hasLength(2), reason: 'debit total + credit paid');
+      expect(
+        wallet.where((w) => w.type == 'debit').single.signedAmountKobo,
+        -200000,
+      );
+      expect(
+        wallet.where((w) => w.type == 'credit').single.signedAmountKobo,
+        200000,
+      );
+      expect(
+        wallet.fold<int>(0, (sum, w) => sum + w.signedAmountKobo),
+        0,
+        reason: 'fully paid → net-zero wallet effect',
+      );
 
       final pays = await payments();
       expect(pays, hasLength(1));
@@ -190,12 +208,23 @@ void main() {
       final order = await onlyOrder();
       expect(order.paymentType, 'mixed');
 
-      // The residual ₦800 is debited to the customer's wallet (put on account).
+      // §14.3 full ledger: debit the order total, credit the cash paid. The net
+      // is −(total − paid) = the residual the customer now owes on the wallet.
       final wallet = await walletTxns();
-      expect(wallet, hasLength(1));
-      expect(wallet.first.type, 'debit');
-      expect(wallet.first.signedAmountKobo, -80000,
-          reason: 'residual == total − paid == 200000 − 120000');
+      expect(wallet, hasLength(2));
+      expect(
+        wallet.where((w) => w.type == 'debit').single.signedAmountKobo,
+        -200000,
+      );
+      expect(
+        wallet.where((w) => w.type == 'credit').single.signedAmountKobo,
+        120000,
+      );
+      expect(
+        wallet.fold<int>(0, (sum, w) => sum + w.signedAmountKobo),
+        -80000,
+        reason: 'net wallet == −(total − paid) == −80000',
+      );
       expect(wallet.first.customerId, s.customerId);
 
       // Only the cash portion hits the Funds Register.
@@ -206,6 +235,39 @@ void main() {
         await db.fundTransactionsDao.getBalanceFor(s.tillId, date),
         120000,
       );
+    });
+
+    test(
+        '§14.3 ordering (bug #3): the payment credit shows BEFORE the order '
+        'debit in wallet history', () async {
+      await service.addOrder(
+        customerId: s.customerId,
+        cart: twoUnitCart(),
+        totalAmountKobo: 200000,
+        amountPaidKobo: 120000, // partial → both legs present
+        paymentType: 'cash',
+        paymentSubType: 'cash',
+        staffId: s.staffId,
+        storeId: s.storeId,
+        fundsAccountId: s.tillId,
+        businessDate: date,
+      );
+
+      // watchHistory drives the customer-wallet display order — newest activity
+      // first. The order charge (debit) is the last step of the sale, so it
+      // sits at the TOP, with the payment (credit) below it.
+      final hist =
+          await db.walletTransactionsDao.watchHistory(s.customerId).first;
+      expect(hist, hasLength(2));
+      expect(
+        hist.first.type,
+        'debit',
+        reason: 'the order charge (debit) is the most-recent activity and must '
+            'sit at the top of the newest-first wallet history — §14.3',
+      );
+      final debitIdx = hist.indexWhere((w) => w.type == 'debit');
+      final creditIdx = hist.indexWhere((w) => w.type == 'credit');
+      expect(debitIdx, lessThan(creditIdx));
     });
 
     test(
@@ -384,7 +446,8 @@ void main() {
       final order = await onlyOrder();
       expect(await db.fundTransactionsDao.getBalanceFor(s.tillId, date), 200000);
 
-      await service.markAsCancelled(order.id, 'customer refund', s.staffId);
+      await service.markAsCancelled(order.id, 'customer refund', s.staffId,
+          businessDate: date);
 
       // A compensating 'void' debit was appended (ledger is append-only) and
       // the account balance is back to pre-sale.
@@ -415,16 +478,30 @@ void main() {
       final order = await onlyOrder();
       expect(await db.fundTransactionsDao.getBalanceFor(s.tillId, date), 120000);
 
-      await service.markAsCancelled(order.id, 'refund', s.staffId);
+      await service.markAsCancelled(order.id, 'refund', s.staffId,
+          businessDate: date);
 
-      // Funds credit reversed to 0, and the wallet debit got a refund credit.
+      // Funds credit reversed to 0.
       expect(await db.fundTransactionsDao.getBalanceFor(s.tillId, date), 0);
-      final refunds = (await walletTxns())
-          .where((w) => w.referenceType == 'refund')
-          .toList();
-      expect(refunds, hasLength(1));
-      expect(refunds.first.signedAmountKobo, 80000,
-          reason: 'credit reversing the ₦800 wallet debit');
+
+      // Both wallet legs are reversed (§14.3): the order-total debit becomes a
+      // 'refund' credit (+200000); the payment credit becomes a 'void' debit
+      // (−120000). Net = +80000, undoing the sale's −80000 → wallet back to its
+      // pre-sale balance.
+      final wallet = await walletTxns();
+      expect(
+        wallet.where((w) => w.referenceType == 'refund').single.signedAmountKobo,
+        200000,
+      );
+      expect(
+        wallet.where((w) => w.referenceType == 'void').single.signedAmountKobo,
+        -120000,
+      );
+      expect(
+        wallet.fold<int>(0, (sum, w) => sum + w.signedAmountKobo),
+        0,
+        reason: 'customer wallet returns to its pre-sale balance',
+      );
     });
 
     test('credit/wallet sale (no funds credit): nothing to void', () async {
@@ -440,13 +517,111 @@ void main() {
       );
       final order = await onlyOrder();
 
-      await service.markAsCancelled(order.id, 'refund', s.staffId);
+      await service.markAsCancelled(order.id, 'refund', s.staffId,
+          businessDate: date);
 
       // No 'sale' funds credit existed, so no 'void' debit is appended.
       expect(
         (await fundTxns()).where((f) => f.referenceType == 'void'),
         isEmpty,
       );
+      // The wallet's order-total debit is reversed by a 'refund' credit, so the
+      // customer's wallet returns to its pre-sale balance.
+      final wallet = await walletTxns();
+      expect(
+        wallet.where((w) => w.referenceType == 'refund').single.signedAmountKobo,
+        200000,
+      );
+      expect(wallet.fold<int>(0, (sum, w) => sum + w.signedAmountKobo), 0);
+    });
+
+    test(
+        'the void debit is dated to the refund day, not the sale day '
+        '(§19.7 / §23.5)', () async {
+      await service.addOrder(
+        customerId: s.customerId,
+        cart: twoUnitCart(),
+        totalAmountKobo: 200000,
+        amountPaidKobo: 200000,
+        paymentType: 'cash',
+        paymentSubType: 'cash',
+        staffId: s.staffId,
+        storeId: s.storeId,
+        fundsAccountId: s.tillId,
+        businessDate: date, // sale day
+      );
+      final order = await onlyOrder();
+
+      const refundDay = '2026-06-02'; // a later day — the cash leaves "today"
+      await service.markAsCancelled(order.id, 'next-day refund', s.staffId,
+          businessDate: refundDay);
+
+      // The void lands on the refund day, carrying the −200000 cash-out there.
+      final voids =
+          (await fundTxns()).where((f) => f.referenceType == 'void').toList();
+      expect(voids, hasLength(1));
+      expect(voids.first.businessDate, refundDay);
+      expect(voids.first.signedAmountKobo, -200000);
+
+      // The sale day still shows the full credit (its close is never reopened);
+      // the refund day carries the cash-out.
+      expect(await db.fundTransactionsDao.getBalanceFor(s.tillId, date), 200000);
+      expect(
+        await db.fundTransactionsDao.getBalanceFor(s.tillId, refundDay),
+        -200000,
+      );
+    });
+  });
+
+  group('Lifecycle — checkout creates Pending; Confirm completes (§19.5)', () {
+    test(
+        'a completed checkout lands the order in Pending, completedAt null',
+        () async {
+      await service.addOrder(
+        customerId: s.customerId,
+        cart: twoUnitCart(),
+        totalAmountKobo: 200000,
+        amountPaidKobo: 200000,
+        paymentType: 'cash',
+        paymentSubType: 'cash',
+        staffId: s.staffId,
+        storeId: s.storeId,
+        fundsAccountId: s.tillId,
+        businessDate: date,
+      );
+
+      final order = await onlyOrder();
+      expect(order.status, 'pending',
+          reason: 'checkout creates a Pending order; Confirm completes it');
+      expect(order.completedAt, isNull,
+          reason: 'completedAt is stamped at Confirm, not checkout');
+
+      // Revenue/money is booked at checkout regardless of status.
+      expect(await db.fundTransactionsDao.getBalanceFor(s.tillId, date), 200000);
+    });
+
+    test(
+        'Confirm (markAsCompleted) flips Pending → Completed and stamps '
+        'completedAt', () async {
+      await service.addOrder(
+        customerId: s.customerId,
+        cart: twoUnitCart(),
+        totalAmountKobo: 200000,
+        amountPaidKobo: 200000,
+        paymentType: 'cash',
+        paymentSubType: 'cash',
+        staffId: s.staffId,
+        storeId: s.storeId,
+        fundsAccountId: s.tillId,
+        businessDate: date,
+      );
+
+      final pending = await onlyOrder();
+      await service.markAsCompleted(pending.id, s.staffId);
+
+      final completed = await onlyOrder();
+      expect(completed.status, 'completed');
+      expect(completed.completedAt, isNotNull);
     });
   });
 }

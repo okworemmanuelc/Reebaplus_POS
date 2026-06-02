@@ -104,11 +104,17 @@ class OrderService {
       netAmountKobo: totalAmountKobo,
       amountPaidKobo: Value(amountPaidKobo),
       paymentType: dbPaymentType,
-      status: 'completed',
+      // §19.5 lifecycle: a completed checkout lands the order in Pending
+      // (already settled — received, or charged through the wallet, §14.3).
+      // Confirm (OrdersDao.markCompleted) flips it to 'completed' and stamps
+      // completedAt — for crate businesses that's after the Empty-Crates modal.
+      // Revenue is recognized here at checkout, not at Confirm; the Funds credit
+      // and wallet legs are already booked regardless of status. The v2 RPC
+      // forwards this status via p_status, so both sync paths agree.
+      status: 'pending',
       staffId: Value(staffId),
       storeId: Value(storeId),
       crateDepositPaidKobo: Value(crateDepositPaidKobo),
-      completedAt: Value(DateTime.now().toUtc()),
     );
 
     await _ordersDao.createOrder(
@@ -325,8 +331,21 @@ class OrderService {
     return _ordersDao.markCompleted(orderId, staffId);
   }
 
-  Future<void> markAsCancelled(String orderId, String reason, String staffId) {
-    return _ordersDao.markCancelled(orderId, reason, staffId);
+  /// Refund/cancel an order. [businessDate] is the refund day (the caller's
+  /// "today", `YYYY-MM-DD`) — the Funds Register reversal is dated to it so the
+  /// cash-out lands on the day it leaves the till (§19.7 / §23.5).
+  Future<void> markAsCancelled(
+    String orderId,
+    String reason,
+    String staffId, {
+    required String businessDate,
+  }) {
+    return _ordersDao.markCancelled(
+      orderId,
+      reason,
+      staffId,
+      businessDate: businessDate,
+    );
   }
 
   Future<void> assignRider(String orderId, String riderName) {

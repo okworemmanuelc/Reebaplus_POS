@@ -217,7 +217,8 @@ void main() {
       expect(await db.select(db.paymentTransactions).get(), isEmpty);
     });
 
-    test('skips wallet write when walletDebitKobo == 0', () async {
+    test('posts both wallet legs for a fully-paid sale (§14.3 full ledger)',
+        () async {
       final s = await _seed(db);
       await db.ordersDao.createOrder(
         order: _orderCompanion(
@@ -233,7 +234,20 @@ void main() {
         staffId: s.staffId,
         storeId: s.storeId,
       );
-      expect(await db.select(db.walletTransactions).get(), isEmpty);
+      // Every registered sale runs through the wallet (rule #4): a debit for the
+      // order total and a credit for the amount paid, netting to zero when fully
+      // paid — so the wallet history is complete even for cash sales.
+      final wallet = await db.select(db.walletTransactions).get();
+      expect(wallet, hasLength(2));
+      expect(
+        wallet.where((w) => w.type == 'debit').single.signedAmountKobo,
+        -100000,
+      );
+      expect(
+        wallet.where((w) => w.type == 'credit').single.signedAmountKobo,
+        100000,
+      );
+      expect(wallet.fold<int>(0, (sum, w) => sum + w.signedAmountKobo), 0);
       expect(await db.select(db.paymentTransactions).get(), hasLength(1));
     });
   });
@@ -291,7 +305,8 @@ void main() {
       final orderId = (await db.select(db.orders).getSingle()).id;
       final originalSale = await db.select(db.stockTransactions).getSingle();
 
-      await db.ordersDao.markCancelled(orderId, 'changed mind', s.staffId);
+      await db.ordersDao.markCancelled(orderId, 'changed mind', s.staffId,
+          businessDate: '2026-05-01');
 
       final all = await db.select(db.stockTransactions).get();
       expect(
