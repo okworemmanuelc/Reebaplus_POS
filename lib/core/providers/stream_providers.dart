@@ -399,6 +399,28 @@ final isDayOpenProvider =
       .watchIsDayOpen(key.storeId, key.businessDate);
 });
 
+/// The day-header row for (store, businessDate) — null until opened. Lets the
+/// Funds Register pick its state (open form / balances+Close / closed summary).
+final fundDayProvider =
+    StreamProvider.family<FundDayData?, ({String storeId, String businessDate})>(
+        (ref, key) {
+  return ref
+      .watch(databaseProvider)
+      .fundDaysDao
+      .watchDay(key.storeId, key.businessDate);
+});
+
+/// The most recent still-open day for [storeId] strictly before businessDate,
+/// or null — drives the §23.8 unclosed-previous-day banner.
+final unclosedDayBeforeProvider =
+    StreamProvider.family<FundDayData?, ({String storeId, String businessDate})>(
+        (ref, key) {
+  return ref
+      .watch(databaseProvider)
+      .fundDaysDao
+      .watchUnclosedDayBefore(key.storeId, key.businessDate);
+});
+
 /// Live per-account expected balances (kobo) for (store, businessDate).
 final fundDayBalancesProvider = StreamProvider.family<Map<String, int>,
     ({String storeId, String businessDate})>((ref, key) {

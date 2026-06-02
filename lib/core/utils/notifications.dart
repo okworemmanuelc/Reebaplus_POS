@@ -58,7 +58,14 @@ class AppNotification {
       onAction: onAction,
     );
 
-    if (_overlayEntry == null) {
+    // Self-heal: the overlay entry is a static held across the app's lifetime,
+    // but the host Overlay is torn down whenever MainLayout's navigator key is
+    // regenerated (e.g. on an auth-state change). After that the old entry is
+    // detached (`mounted == false`) and setting `_state.value` paints nothing —
+    // every notification goes silent until a hot restart. Re-insert a fresh
+    // entry into the current Overlay whenever the previous one is gone. We don't
+    // remove() the stale entry: its Overlay was already disposed with it.
+    if (_overlayEntry == null || !_overlayEntry!.mounted) {
       _overlayEntry = OverlayEntry(
         builder: (context) => _NotificationOverlay(state: _state),
       );

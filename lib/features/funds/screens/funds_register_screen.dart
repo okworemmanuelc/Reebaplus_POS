@@ -172,11 +172,28 @@ class _FundsRegisterScreenState extends ConsumerState<FundsRegisterScreen> {
 
     final isCeo = ref.watch(currentUserRoleProvider)?.slug == 'ceo';
     final lockedStoreId = ref.read(navigationProvider).lockedStoreId.value;
-    final storeId = isCeo ? (_selectedStoreId ?? lockedStoreId) : lockedStoreId;
+    // Bug #1 (secondary): a lone-owner CEO has lockedStoreId == null, which left
+    // the screen permanently blank. Fall back to the first store the business
+    // owns. allStoresProvider is business-scoped, so it can never surface
+    // another business's store on a multi-business device.
+    final stores = ref.watch(allStoresProvider).valueOrNull;
+    final fallbackStoreId =
+        (stores != null && stores.isNotEmpty) ? stores.first.id : null;
+    final storeId = isCeo
+        ? (_selectedStoreId ?? lockedStoreId ?? fallbackStoreId)
+        : (lockedStoreId ?? fallbackStoreId);
 
-    final body = storeId == null
-        ? const SizedBox.shrink()
-        : _buildForStore(context, storeId, isCeo);
+    // Bug #1 (primary): show a fade-in placeholder while the store list / async
+    // providers resolve instead of a bare SizedBox.shrink() that flashes blank
+    // then pops in content (§30.7 — loading is a fade-in, not a blank/spinner).
+    final Widget body;
+    if (storeId == null) {
+      body = stores == null
+          ? _loadingState(context)
+          : _emptyState(context, "No store found for this business.");
+    } else {
+      body = _buildForStore(context, storeId, isCeo);
+    }
 
     return SharedScaffold(
       activeRoute: 'funds_register',
@@ -210,13 +227,19 @@ class _FundsRegisterScreenState extends ConsumerState<FundsRegisterScreen> {
     final today = todayAsync.valueOrNull;
     final accounts = accountsAsync.valueOrNull;
     if (today == null || accounts == null) {
-      return const SizedBox.shrink();
+      return _loadingState(context); // bug #1 — fade-in, not blank.
     }
 
-    final isOpen = ref
-            .watch(isDayOpenProvider((storeId: storeId, businessDate: today)))
-            .valueOrNull ??
-        false;
+    final day = ref
+        .watch(fundDayProvider((storeId: storeId, businessDate: today)))
+        .valueOrNull;
+    final status = day?.status; // null = not opened, 'open', 'closed'.
+    // §23.8 — a prior day for this store is still unclosed.
+    final unclosed = ref
+        .watch(
+          unclosedDayBeforeProvider((storeId: storeId, businessDate: today)),
+        )
+        .valueOrNull;
 
     return ListView(
       padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + context.deviceBottomInset),
@@ -225,12 +248,75 @@ class _FundsRegisterScreenState extends ConsumerState<FundsRegisterScreen> {
           _storeSelector(storeId),
           const SizedBox(height: 16),
         ],
-        isOpen
-            ? _openDayBalances(storeId, today, accounts)
-            : _openDayForm(storeId, today, accounts),
-        const SizedBox(height: 20),
+        if (unclosed != null) ...[
+          // §23.8 — must close the previous day before today can open. The
+          // banner's action closes that prior day; once closed it clears and
+          // today's open-day form appears.
+          _unclosedDayBanner(storeId, unclosed, accounts),
+          const SizedBox(height: 20),
+        ] else ...[
+          if (status == 'open')
+            _openDayBalances(storeId, today, accounts)
+          else if (status == 'closed')
+            _closedDaySummary(storeId, today, accounts)
+          else
+            _openDayForm(storeId, today, accounts),
+          const SizedBox(height: 20),
+        ],
         if (isCeo) _accountsSection(storeId, accounts),
       ],
+    );
+  }
+
+  /// Fade-in loading placeholder (§30.7 — no spinner) shown while the store
+  /// list / day / accounts providers resolve. Bug #1.
+  Widget _loadingState(BuildContext context) {
+    final theme = Theme.of(context);
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+      builder: (_, v, child) => Opacity(opacity: v, child: child),
+      child: ListView(
+        padding:
+            EdgeInsets.fromLTRB(20, 20, 20, 20 + context.deviceBottomInset),
+        children: [
+          _card(
+            title: 'Funds Register',
+            children: [
+              SizedBox(
+                height: 100,
+                child: Center(
+                  child: Text(
+                    'Loading…',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color:
+                          theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _emptyState(BuildContext context, String message) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Text(
+          message,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+          ),
+        ),
+      ),
     );
   }
 
@@ -369,6 +455,17 @@ class _FundsRegisterScreenState extends ConsumerState<FundsRegisterScreen> {
               ],
             ),
           ),
+        // §23.6 — Close Day. Hidden for roles without funds.close_day
+        // (hide-don't-block, hard rule #7).
+        if (hasPermission(ref, 'funds.close_day')) ...[
+          const SizedBox(height: 16),
+          AppButton(
+            text: 'Close Day',
+            variant: AppButtonVariant.primary,
+            icon: FontAwesomeIcons.lock,
+            onPressed: () => _showCloseDaySheet(storeId, today, accounts),
+          ),
+        ],
       ],
     );
   }
@@ -453,6 +550,360 @@ class _FundsRegisterScreenState extends ConsumerState<FundsRegisterScreen> {
           ],
         ),
       ],
+    );
+  }
+
+  /// §23.8 — a previous day is still open. Big banner with a Close action so the
+  /// user can close it (and unblock opening today).
+  Widget _unclosedDayBanner(
+    String storeId,
+    FundDayData unclosed,
+    List<FundsAccountData> accounts,
+  ) {
+    final theme = Theme.of(context);
+    final amber = Colors.amber.shade700;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: amber.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: amber.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(FontAwesomeIcons.triangleExclamation, size: 16, color: amber),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Previous day not closed',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'The day for ${unclosed.businessDate} is still open. Close it before '
+            'starting a new day.',
+            style: TextStyle(
+              fontSize: 13,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+            ),
+          ),
+          const SizedBox(height: 14),
+          if (hasPermission(ref, 'funds.close_day'))
+            AppButton(
+              text: 'Close ${unclosed.businessDate}',
+              variant: AppButtonVariant.primary,
+              icon: FontAwesomeIcons.lock,
+              onPressed: () =>
+                  _showCloseDaySheet(storeId, unclosed.businessDate, accounts),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// §23.6 — the day is closed; show the per-account reconciliation (expected vs
+  /// counted, variance flagged in red).
+  Widget _closedDaySummary(
+    String storeId,
+    String today,
+    List<FundsAccountData> accounts,
+  ) {
+    final theme = Theme.of(context);
+    final closings = ref
+            .watch(fundDayClosingsProvider(
+                (storeId: storeId, businessDate: today)))
+            .valueOrNull ??
+        const <FundDayClosingData>[];
+    final labelFor = {for (final a in accounts) a.id: _accountLabel(a)};
+    return _card(
+      title: "Day closed",
+      children: [
+        Row(
+          children: [
+            Icon(FontAwesomeIcons.lock, size: 14, color: theme.colorScheme.primary),
+            const SizedBox(width: 8),
+            Text(
+              'Reconciliation',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        for (final c in closings)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  labelFor[c.fundsAccountId] ?? c.accountType,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                _summaryLine('Expected', c.expectedKobo, theme),
+                _summaryLine('Counted', c.countedKobo, theme),
+                _summaryLine(
+                  'Variance',
+                  c.varianceKobo,
+                  theme,
+                  danger: c.varianceKobo != 0,
+                ),
+              ],
+            ),
+          ),
+        if (closings.isEmpty)
+          Text(
+            'No reconciliation recorded.',
+            style: TextStyle(
+              fontSize: 13,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _summaryLine(String label, int kobo, ThemeData theme,
+      {bool danger = false}) {
+    final color =
+        danger ? Colors.red.shade600 : theme.colorScheme.onSurface;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+            ),
+          ),
+          Text(
+            formatCurrency(kobo / 100.0),
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: danger ? FontWeight.w800 : FontWeight.w600,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showCloseDaySheet(
+    String storeId,
+    String businessDate,
+    List<FundsAccountData> accounts,
+  ) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _CloseDaySheet(
+        storeId: storeId,
+        businessDate: businessDate,
+        accounts: accounts,
+      ),
+    );
+  }
+}
+
+/// §23.6 Close Day flow — per account, show the expected (live) balance and
+/// collect the counted cash (till) / amount withdrawn (POS, bank), then close.
+class _CloseDaySheet extends ConsumerStatefulWidget {
+  final String storeId;
+  final String businessDate;
+  final List<FundsAccountData> accounts;
+
+  const _CloseDaySheet({
+    required this.storeId,
+    required this.businessDate,
+    required this.accounts,
+  });
+
+  @override
+  ConsumerState<_CloseDaySheet> createState() => _CloseDaySheetState();
+}
+
+class _CloseDaySheetState extends ConsumerState<_CloseDaySheet> {
+  final Map<String, TextEditingController> _counted = {};
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    for (final c in _counted.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  TextEditingController _ctrlFor(String id) =>
+      _counted.putIfAbsent(id, () => TextEditingController());
+
+  String _label(FundsAccountData a) =>
+      a.accountType == 'cash_till' ? 'Cash Till' : a.name;
+
+  Future<void> _close() async {
+    if (_saving) return;
+    final userId = ref.read(authProvider).currentUser?.id;
+    if (userId == null) return;
+    setState(() => _saving = true);
+    final perAccount = <String, int>{};
+    for (final a in widget.accounts) {
+      final naira = parseCurrency(_counted[a.id]?.text ?? '');
+      perAccount[a.id] = (naira * 100).round();
+    }
+    try {
+      await ref.read(databaseProvider).fundDaysDao.closeDay(
+            storeId: widget.storeId,
+            businessDate: widget.businessDate,
+            perAccountCountedKobo: perAccount,
+            performedBy: userId,
+          );
+      if (mounted) {
+        Navigator.pop(context);
+        AppNotification.showSuccess(context, 'Day closed');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        AppNotification.showError(
+          context,
+          e is StateError ? e.message : 'Could not close the day',
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final balances = ref
+            .watch(fundDayBalancesProvider((
+          storeId: widget.storeId,
+          businessDate: widget.businessDate,
+        )))
+            .valueOrNull ??
+        const <String, int>{};
+
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.scaffoldBackgroundColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: EdgeInsets.fromLTRB(
+        20,
+        16,
+        20,
+        20 + context.deviceBottomInset,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: theme.dividerColor,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Close the day',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: theme.colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Count the cash in the till and enter the amount withdrawn from each '
+            'POS / bank account. Differences are flagged for review.',
+            style: TextStyle(
+              fontSize: 13,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Flexible(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  for (final a in widget.accounts) ...[
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          _label(a),
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                        ),
+                        Text(
+                          'Expected ${formatCurrency((balances[a.id] ?? 0) / 100.0)}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: theme.colorScheme.onSurface
+                                .withValues(alpha: 0.6),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    AppInput(
+                      controller: _ctrlFor(a.id),
+                      labelText: a.accountType == 'cash_till'
+                          ? 'Cash counted (₦)'
+                          : 'Amount withdrawn (₦)',
+                      hintText: '0',
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [CurrencyInputFormatter()],
+                    ),
+                    const SizedBox(height: 14),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          AppButton(
+            text: _saving ? 'Closing…' : 'Confirm Close Day',
+            variant: AppButtonVariant.primary,
+            icon: FontAwesomeIcons.lock,
+            isLoading: _saving,
+            onPressed: _saving ? null : _close,
+          ),
+        ],
+      ),
     );
   }
 }

@@ -82,6 +82,17 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   double _amountPaid = 0;
   String _currentOrderId = '';
 
+  /// Customer's wallet balance (Naira) AFTER the sale's two legs, captured at
+  /// confirm time and shown on the receipt. Snapshotting avoids the pre-sale
+  /// projection double-counting the just-posted dual-leg rows (§14.3, bug #5/#6).
+  /// Null for walk-ins (no wallet).
+  double? _receiptWalletBalance;
+
+  /// §14.2 bug #4 — the cashier confirmed the outstanding cash (after the wallet
+  /// credit is applied) was collected. Required before the apply-credit flow can
+  /// confirm.
+  bool _outstandingPaidConfirmed = false;
+
   late final CartService _cart;
   bool get _isWalkIn => _initialCustomer == null || _initialCustomer.isWalkIn;
   Color get _bg => Theme.of(context).scaffoldBackgroundColor;
@@ -111,7 +122,12 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   }
 
   void _onCustomerChanged() {
-    if (mounted) setState(() => _isWalletPayment = false);
+    if (mounted) {
+      setState(() {
+        _isWalletPayment = false;
+        _outstandingPaidConfirmed = false;
+      });
+    }
   }
 
   Future<void> _loadManufacturers() async {
@@ -198,6 +214,42 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     return oldCustomerWallet - widget.total + effectiveCash;
   }
 
+  /// Live wallet balance (kobo) for the current customer (0 for walk-ins).
+  /// Used for the apply-credit math and the debt-limit check so they avoid a
+  /// fresh awaited DB read (which made the over-limit error fire too late, #7).
+  int get _currentCustomerWalletKobo {
+    final id = _initialCustomer?.id;
+    if (_isWalkIn || id == null) return 0;
+    final balances =
+        ref.watch(walletBalancesKoboProvider).valueOrNull ??
+        const <String, int>{};
+    return balances[id] ?? 0;
+  }
+
+  int get _totalKobo => (widget.total * 100).round();
+
+  /// Wallet credit (kobo) available to apply toward an order (0 if none / debt).
+  int get _walletCreditKobo {
+    final k = _currentCustomerWalletKobo;
+    return k > 0 ? k : 0;
+  }
+
+  /// Outstanding (kobo) after the wallet credit is applied to the order.
+  int get _outstandingAfterCreditKobo =>
+      (_totalKobo - _walletCreditKobo).clamp(0, _totalKobo);
+
+  /// §14.2 bug #4 — "Pay from Wallet" chosen but the credit only PARTIALLY
+  /// covers the order: apply the credit (wallet → ₦0) and collect the
+  /// outstanding into a Funds account. (When credit fully covers, it's the
+  /// plain pay-from-wallet path; when there's no credit, wallet payment is
+  /// blocked.)
+  bool get _isApplyCreditFlow =>
+      _paymentType == PaymentType.fullCash &&
+      _isWalletPayment &&
+      !_isWalkIn &&
+      _walletCreditKobo > 0 &&
+      _walletCreditKobo < _totalKobo;
+
   // ── build ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
@@ -240,7 +292,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         context.getRSize(20),
         context.getRSize(20),
         context.getRSize(20),
-        context.getRSize(40),
+        context.getRSize(40) + context.deviceBottomInset,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -465,7 +517,8 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           // §14.2 Step 2: pick the receiving account — only when cash / card /
           // transfer actually lands in an account (not a wallet or credit sale).
           if ((_paymentType == PaymentType.fullCash && !_isWalletPayment) ||
-              _paymentType == PaymentType.partialCash)
+              _paymentType == PaymentType.partialCash ||
+              _isApplyCreditFlow)
             _buildAccountPicker(),
 
           // §14.1 — "Add wallet info to receipt" (off by default). Only shown
@@ -589,13 +642,22 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       return;
     }
 
-    // Wallet payment validation
+    // Wallet payment validation (§14.2)
     if (_paymentType == PaymentType.fullCash && _isWalletPayment) {
-      final walletBalance = _currentCustomerWallet;
-      if (walletBalance < widget.total) {
+      if (_walletCreditKobo <= 0) {
         AppNotification.showError(
           context,
-          'Insufficient wallet balance. Use Partial Payment instead.',
+          'No wallet credit to pay from. Use Cash / Card or Partial Payment.',
+        );
+        return;
+      }
+      // Apply-credit flow (bug #4): the credit only partly covers the order, so
+      // the cashier must confirm the outstanding cash was actually collected.
+      if (_isApplyCreditFlow && !_outstandingPaidConfirmed) {
+        AppNotification.showError(
+          context,
+          'Confirm the outstanding '
+          '${formatCurrency(_outstandingAfterCreditKobo / 100.0)} was paid.',
         );
         return;
       }
@@ -623,28 +685,27 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         return;
       }
 
-      // Block if this purchase would push the customer over their debt limit
+      // Block if this purchase would push the customer over their debt limit.
+      // Read the balance synchronously from the live ledger (no awaited DB
+      // round-trip) so the over-limit error always flashes — previously the
+      // await let the message drop behind an `if (mounted)` guard and the sale
+      // just went silent (#7).
       final totalKobo = (widget.total * 100).round();
       final amountPaidKobo = _paymentType == PaymentType.partialCash
           ? (_cashReceivedValue * 100).round()
           : 0;
       final remainingKobo = totalKobo - amountPaidKobo;
-      final currentBalanceKobo = await ref
-          .read(databaseProvider)
-          .customersDao
-          .getWalletBalanceKobo(customer.id);
+      final currentBalanceKobo = _currentCustomerWalletKobo;
       final newBalanceKobo = currentBalanceKobo - remainingKobo;
 
       if (newBalanceKobo < -limitKobo) {
         final overByKobo = (-newBalanceKobo) - limitKobo;
-        if (mounted) {
-          AppNotification.showError(
-            context,
-            'This sale exceeds ${customer.name}\'s debt limit of '
-            '${formatCurrency(limitKobo / 100.0)}. '
-            'Over limit by ${formatCurrency(overByKobo / 100.0)}.',
-          );
-        }
+        AppNotification.showError(
+          context,
+          'This sale exceeds ${customer.name}\'s debt limit of '
+          '${formatCurrency(limitKobo / 100.0)}. '
+          'Over limit by ${formatCurrency(overByKobo / 100.0)}.',
+        );
         return;
       }
     }
@@ -658,9 +719,17 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
       switch (_paymentType) {
         case PaymentType.fullCash:
-          // Wallet payment: amountPaidKobo=0 so the full amount is debited
-          // from the customer wallet (same mechanism as credit sale)
-          amountPaidKobo = _isWalletPayment ? 0 : totalKobo;
+          if (_isWalletPayment) {
+            // Pay from wallet. Apply-credit (bug #4): the credit only partly
+            // covers, so collect the outstanding now (it flows through the
+            // wallet as a credit leg and credits the chosen Funds account).
+            // Otherwise the credit fully covers — nothing is paid now and the
+            // full total debits the wallet credit (same as a credit sale).
+            amountPaidKobo =
+                _isApplyCreditFlow ? _outstandingAfterCreditKobo : 0;
+          } else {
+            amountPaidKobo = totalKobo;
+          }
           break;
         case PaymentType.partialCash:
           amountPaidKobo = (_cashReceivedValue * 100).round();
@@ -669,6 +738,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           amountPaidKobo = 0;
           break;
       }
+
+      // Snapshot the wallet balance BEFORE the legs post so the receipt shows
+      // the true post-sale net (old + paid − total) instead of the pre-sale
+      // projection re-applied on top of the just-written rows (#5/#6).
+      final oldWalletKobo = _currentCustomerWalletKobo;
 
       // ── Call atomic transaction ──────────────────────────────────────
       final auth = ref.read(authProvider);
@@ -717,7 +791,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
               0,
               (s, i) => s + ((i['discountKobo'] as int?) ?? 0),
             ),
-            paymentSubType: _isWalletPayment ? 'wallet' : 'cash',
+            // Apply-credit (bug #4) collects cash for the outstanding, so it's
+            // a 'cash' sub-type that credits a Funds account; only a fully
+            // covered wallet payment is the 'wallet' sub-type.
+            paymentSubType:
+                (_isWalletPayment && !_isApplyCreditFlow) ? 'wallet' : 'cash',
             fundsAccountId: fundsAccountId,
             businessDate: businessDate,
           );
@@ -726,6 +804,10 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       if (mounted) {
         setState(() {
           _amountPaid = amountPaidKobo / 100.0;
+          // True post-sale wallet net = old + credit(paid) − debit(total).
+          // Walk-ins have no wallet (§14.3).
+          _receiptWalletBalance =
+              _isWalkIn ? null : (oldWalletKobo + amountPaidKobo - totalKobo) / 100.0;
           _paymentConfirmed = true;
           _currentOrderId = orderNo;
         });
@@ -770,7 +852,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                 customerAddress: _initialCustomer?.addressText ?? 'N/A',
                 customerPhone: _initialCustomer?.phone,
                 cashReceived: _amountPaid,
-                walletBalance: _isWalkIn ? null : _dynamicNewCustomerWallet,
+                walletBalance: _receiptWalletBalance,
                 showWalletInfo: !_isWalkIn && _addWalletInfoToReceipt,
                 riderName: 'Pick-up Order',
                 manufacturerNames: _manufacturerNames,
@@ -790,7 +872,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         context.getRSize(20),
         context.getRSize(16),
         context.getRSize(20),
-        context.getRSize(32),
+        context.getRSize(32) + context.deviceBottomInset,
       ),
       decoration: BoxDecoration(
         color: _surface,
@@ -1113,7 +1195,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
   Widget _buildWalletSubOptions() {
     final walletBalance = _walletBalanceFor(widget.customer?.id);
-    final sufficient = walletBalance >= widget.total;
+    final hasCredit = walletBalance > 0;
 
     return Padding(
       padding: EdgeInsets.only(
@@ -1129,13 +1211,19 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
               _walletChip(
                 'Cash / Transfer',
                 !_isWalletPayment,
-                () => setState(() => _isWalletPayment = false),
+                () => setState(() {
+                  _isWalletPayment = false;
+                  _outstandingPaidConfirmed = false;
+                }),
               ),
               SizedBox(width: context.getRSize(10)),
               _walletChip(
                 'Pay from Wallet',
                 _isWalletPayment,
-                () => setState(() => _isWalletPayment = true),
+                () => setState(() {
+                  _isWalletPayment = true;
+                  _outstandingPaidConfirmed = false;
+                }),
               ),
             ],
           ),
@@ -1147,12 +1235,12 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                 vertical: context.getRSize(12),
               ),
               decoration: BoxDecoration(
-                color: sufficient
+                color: hasCredit
                     ? success.withValues(alpha: 0.08)
                     : danger.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: sufficient
+                  color: hasCredit
                       ? success.withValues(alpha: 0.3)
                       : danger.withValues(alpha: 0.3),
                 ),
@@ -1173,19 +1261,37 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                     style: TextStyle(
                       fontSize: context.getRFontSize(15),
                       fontWeight: FontWeight.w800,
-                      color: sufficient ? success : danger,
+                      color: hasCredit ? success : danger,
                     ),
                   ),
                 ],
               ),
             ),
-            if (!sufficient) ...[
+            // §14.2 bug #4 — the credit only partially covers the order: apply
+            // it (wallet → ₦0) and collect the rest. Shows the breakdown + an
+            // "Outstanding paid" confirmation; the receiving account picker for
+            // that cash renders just below (it's gated on _isApplyCreditFlow).
+            if (_isApplyCreditFlow) ...[
+              SizedBox(height: context.getRSize(10)),
+              _applyCreditRow(
+                'Wallet credit applied',
+                '−${formatCurrency(_walletCreditKobo / 100.0)}',
+              ),
+              _applyCreditRow('Wallet after sale', formatCurrency(0)),
+              _applyCreditRow(
+                'Outstanding to collect',
+                formatCurrency(_outstandingAfterCreditKobo / 100.0),
+                emphasise: true,
+              ),
+              SizedBox(height: context.getRSize(10)),
+              _outstandingPaidCheckbox(),
+            ] else if (!hasCredit) ...[
               SizedBox(height: context.getRSize(6)),
               Padding(
                 padding: EdgeInsets.symmetric(horizontal: context.getRSize(4)),
                 child: Text(
-                  'Insufficient balance (${formatCurrency(walletBalance - widget.total)} short). '
-                  'Use Partial Payment instead.',
+                  'No wallet credit available. Use Cash / Card or Partial '
+                  'Payment instead.',
                   style: TextStyle(
                     fontSize: context.getRFontSize(12),
                     color: danger,
@@ -1196,6 +1302,76 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             ],
           ],
         ],
+      ),
+    );
+  }
+
+  /// A label/value line in the apply-credit breakdown (§14.2 bug #4).
+  Widget _applyCreditRow(String label, String value, {bool emphasise = false}) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: context.getRSize(3)),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: context.getRFontSize(13),
+              fontWeight: emphasise ? FontWeight.w800 : FontWeight.w600,
+              color: emphasise ? _text : _subtext,
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: context.getRFontSize(emphasise ? 15 : 13),
+              fontWeight: emphasise ? FontWeight.w800 : FontWeight.w700,
+              color: emphasise ? Theme.of(context).colorScheme.primary : _text,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// "Outstanding paid" confirmation for the apply-credit flow (§14.2 bug #4).
+  Widget _outstandingPaidCheckbox() {
+    final on = _outstandingPaidConfirmed;
+    return GestureDetector(
+      onTap: () => setState(
+        () => _outstandingPaidConfirmed = !_outstandingPaidConfirmed,
+      ),
+      child: Container(
+        padding: EdgeInsets.all(context.getRSize(12)),
+        decoration: BoxDecoration(
+          color: on ? success.withValues(alpha: 0.08) : _surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: on ? success : _border,
+            width: on ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              on ? Icons.check_box : Icons.check_box_outline_blank,
+              size: context.getRSize(20),
+              color: on ? success : _subtext,
+            ),
+            SizedBox(width: context.getRSize(10)),
+            Expanded(
+              child: Text(
+                'Outstanding ${formatCurrency(_outstandingAfterCreditKobo / 100.0)} '
+                'was paid',
+                style: TextStyle(
+                  fontSize: context.getRFontSize(13),
+                  fontWeight: FontWeight.w600,
+                  color: _text,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1397,6 +1573,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           : () => setState(() {
               _paymentType = type;
               if (type != PaymentType.fullCash) _isWalletPayment = false;
+              _outstandingPaidConfirmed = false;
             }),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),

@@ -4008,6 +4008,19 @@ class WalletTransactionsDao extends DatabaseAccessor<AppDatabase>
           ..orderBy([
             (t) =>
                 OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc),
+            // §14.3 (bug #3) — newest activity first. A sale's two legs share
+            // the same second (created_at is second-resolution + createOrder
+            // stamps both legs the same instant), so this tiebreak decides their
+            // order. signed_amount_kobo ASC puts the order DEBIT (negative,
+            // "money out" — the LAST step of the sale) ABOVE the payment CREDIT
+            // (positive, "money in"). A real numeric column → deterministic
+            // across SQLite backends, unlike a boolean-expr tiebreak (a no-op in
+            // ORDER BY → fell back to rowid order, which differed in-memory vs
+            // the on-device file DB) or the random-tailed UuidV7 id.
+            (t) => OrderingTerm(
+                  expression: t.signedAmountKobo,
+                  mode: OrderingMode.asc,
+                ),
           ]))
         .watch();
   }
@@ -4398,6 +4411,36 @@ class FundDaysDao extends DatabaseAccessor<AppDatabase>
         .getSingleOrNull();
   }
 
+  /// Reactive day-header row for (store, date) — null when the day hasn't been
+  /// opened. Lets the Funds Register screen pick the right state (open form /
+  /// balances+Close / closed summary) and react when Close Day flips the status.
+  Stream<FundDayData?> watchDay(String storeId, String businessDate) {
+    return (select(fundDays)
+          ..where((t) =>
+              whereBusiness(t) &
+              t.storeId.equals(storeId) &
+              t.businessDate.equals(businessDate))
+          ..limit(1))
+        .watchSingleOrNull();
+  }
+
+  /// Reactive twin of [getUnclosedDayBefore] — drives the §23.8 unclosed-day
+  /// banner so it clears the instant that prior day is closed.
+  Stream<FundDayData?> watchUnclosedDayBefore(
+    String storeId,
+    String businessDate,
+  ) {
+    return (select(fundDays)
+          ..where((t) =>
+              whereBusiness(t) &
+              t.storeId.equals(storeId) &
+              t.businessDate.isSmallerThanValue(businessDate) &
+              t.status.equals('open'))
+          ..orderBy([(t) => OrderingTerm.desc(t.businessDate)])
+          ..limit(1))
+        .watchSingleOrNull();
+  }
+
   /// Closes the day for [storeId] (§23.6). For each active account it records a
   /// reconciliation snapshot — `expected` = the account's running balance
   /// (SUM signed_amount_kobo) at close, `counted` = the actual the user entered
@@ -4495,6 +4538,26 @@ class FundDaysDao extends DatabaseAccessor<AppDatabase>
               'Funds Register mismatch flagged at close for $businessDate.',
           severity: 'alert',
           recipientUserId: ceoUserId ?? performedBy,
+        );
+      }
+
+      // §23.6 / §26.4 — notify CEO + Manager the day is closed and the
+      // reconciliation is ready. Funds is CEO/Manager-only, so target those
+      // roles rather than broadcasting to every member. The mismatch alert
+      // above still fires separately to the CEO on a variance. Falls back to
+      // the closer if no role resolves locally (offline), so the close is never
+      // silent.
+      final recipients =
+          await db.userBusinessesDao.getUserIdsForRoleSlugs(['ceo', 'manager']);
+      for (final uid in (recipients.isEmpty ? [performedBy] : recipients)) {
+        await db.notificationsDao.fireNotification(
+          type: 'funds_day_closed',
+          message: anyMismatch
+              ? 'Day $businessDate closed — reconciliation ready '
+                  '(funds mismatch flagged).'
+              : 'Day $businessDate closed — reconciliation ready.',
+          severity: anyMismatch ? 'warning' : 'info',
+          recipientUserId: uid,
         );
       }
     });
@@ -5274,6 +5337,22 @@ class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
           ..limit(1))
         .getSingleOrNull();
     return row?.userId;
+  }
+
+  /// Active user ids whose role slug is in [slugs] for the current business.
+  /// Routes §26.4 notifications to a role audience (e.g. Close Day's "day
+  /// closed" fires to CEO + Manager). Empty if none resolve locally.
+  Future<List<String>> getUserIdsForRoleSlugs(List<String> slugs) async {
+    if (slugs.isEmpty) return const [];
+    final query = select(userBusinesses).join([
+      innerJoin(roles, roles.id.equalsExp(userBusinesses.roleId)),
+    ])..where(
+        whereBusiness(userBusinesses) &
+            userBusinesses.status.equals('active') &
+            roles.slug.isIn(slugs),
+      );
+    final rows = await query.get();
+    return rows.map((r) => r.readTable(userBusinesses).userId).toList();
   }
 
   /// All active memberships for the current business. Drives the
