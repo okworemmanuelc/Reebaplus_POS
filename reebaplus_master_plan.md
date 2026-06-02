@@ -815,7 +815,8 @@ Accessed from the Stock Take icon at the top of the Inventory screen.
 - Back button, title "Daily Stock Count", subtitle = store name only (no warehouse ID).
 - Store icon replaces warehouse icon.
 - Stock Count History icon (top right).
-- **Per store (2026-06-02, user):** a count is taken for **one store at a time** — there is no combined all-stores count. When the screen is opened with a store lock it is fixed to that store; when opened unscoped (e.g. a CEO with no store lock) a **Store picker** chooses which store to count (hidden when the business has a single store).
+- **Per store (2026-06-02, user):** a count is always *taken* for **one store at a time** — there is no combined all-stores count. When the screen is opened with a store lock it is fixed to that store; when opened unscoped a **Store picker** chooses which store to count (hidden when there is only one store in scope).
+- **Role-based store visibility (2026-06-02, user):** who may see which store follows the app's standard "view all stores" rule (same as the Home filter): the **CEO** — and a **Manager** the CEO has granted all-stores — may view **every store**, including an **"All stores" overview** at the top of the picker. That overview is **read-only** (a stock snapshot across all stores; no Actual input, Save Count, or Record Damages — counting is per store, so they pick a store to take a count). **Roles below that (Stock keeper, and Manager without the grant) are confined to their own assigned store(s)** — both for taking a count and for the Stock Count History, which only shows their store(s).
 
 ### 17.2 Body
 
@@ -1230,7 +1231,8 @@ Every transaction moves the right account up or down:
 - Refunds: account down — **on the refund day** (the day the cash leaves), not
   the day the original sale was made (§19.7). Each day's Funds Register only
   ever reflects activity that happened on that day; a closed day is never
-  reopened by a later refund.
+  *automatically* reopened by a later refund. (An explicit, manual **Reopen
+  Day** — same day only — is a separate user action; see §23.6.)
 - Expenses: account down.
 - Supplier payments: account down.
 
@@ -1262,6 +1264,18 @@ close the day. **Exception:** closing a *stale previous* day (the §23.8
 unclosed-previous-day path) is exempt — that day can no longer be counted, and
 blocking it would deadlock the next day from ever opening. So the gate applies
 only when the day being closed is today; back-dated closes proceed unchanged.
+
+**Reopen Day — same day only (2026-06-02, user).** A closed day can be **reopened
+while it is still the same business day** — e.g. the day was closed too early and
+sales need to resume. A **Reopen Day** button appears on the closed-day summary
+(gated by `funds.close_day` — whoever may close may reopen). Reopening clears that
+day's Close Day reconciliation snapshots, flips the header back to open, and lets
+POS resume; the ledger (each day's transactions) is untouched, so the expected
+balance is preserved and a later re-close records a fresh reconciliation. **Once
+the business day has rolled over, the day can no longer be reopened** — past days
+stay closed (the closed-day summary, and thus the button, only ever shows for
+today). This is the only way a closed day reopens; it is never automatic (§23.5).
+Logged to Activity Logs as `funds.reopen_day`.
 
 > Confirmed Phase 1 (2026-05-31, decision C1) — the earlier §3 build-order parenthetical that deferred this to Phase 2 is superseded; Funds History (§23.2) remains Phase 2.
 
@@ -1415,14 +1429,16 @@ CSV from day one. PDF in Phase 3.
 
 ### 25.9 Daily Reconciliation drill-down (period cards)
 
-The Daily Reconciliation Report does not open straight to a single detail screen; it opens to a list of **tappable period cards**, driven by the global period filter (§25.5):
+The Daily Reconciliation Report does not open straight to a single detail screen; it opens to a list of **tappable day cards**, driven by the global rolling period filter (§25.5 / §30.11):
 
-- Period = **Day** → one card per calendar day. Tapping opens that day's reconciliation.
-- Period = **Week / Month / Year** → one card per week / month / year. Tapping opens the reconciliation aggregated over that span (sums SKUs/items sold, expenses, and debts; lists each day's Close Day cash audit and any shortage / misappropriation flags inside the span).
-- Each card shows a headline (e.g. items sold, net cash variance) and a **mismatch indicator** when any day in the span had a Close Day shortage or unaccounted funds.
+- The selected rolling window (Last 24 hours / 7 days / 30 days / year / to date) chooses the **span**; the report lists **one card per calendar day** inside that span that has a Close Day and/or a saved stock count. Tapping a card opens that day's full reconciliation.
+- Each day card shows a headline (items sold, net cash variance) and a **mismatch indicator** when that day had a Close Day shortage / unaccounted funds or a stock shortage.
+- Reconciliation is per **calendar day** (§30.11 keeps the daily reconciliation calendar-bound), so there is no week/month/year aggregation — the rolling window only widens or narrows how many day cards are listed.
 - Role visibility follows §25.3 (Cashier & Stock keeper never see this report). CSV export per §25.6 / §25.7.
 
-This per-period drill-down is specific to the Daily Reconciliation Report; the other reports keep the §25.6 single detail-screen + period-filter model.
+This per-day drill-down is specific to the Daily Reconciliation Report; the other reports keep the §25.6 single detail-screen + period-filter model.
+
+> Updated 2026-06-02 (user) — the original Day/Week/Month/Year period-card model predated the §30.11 rolling-window unification; reconciled to **one card per calendar day within the selected rolling window** (no span aggregation), matching §30.11's per-calendar-day rule.
 
 > Confirmed Phase 1 (2026-06-01) — the Daily Reconciliation Report's content roll-up (SKUs sold, closing-day cash audit, empty crates, debts, expenses, fund-shortage flags) and the period-card drill-down were added on user request. The Sales Report card is **kept** (a distinct report). Build order unchanged: this stays a Ring 3 item, after Close Day (Ring 0/1) and Daily Stock Count (Ring 2) produce its data.
 
