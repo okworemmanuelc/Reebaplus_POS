@@ -106,6 +106,464 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 
 ---
 
+## Session 55 — 2026-06-01 — Fix: "confirm empty crates" crash (FormatException) + empty-crate tab not updating
+
+**The bug:** Confirming a crate return threw `FormatException: Invalid radix-10
+number`. Root cause: this app stores every `last_updated_at` / `created_at` as an
+**integer** (Unix epoch seconds), but four raw-SQL writes in the crate flow set
+`last_updated_at = CURRENT_TIMESTAMP`. SQLite's `CURRENT_TIMESTAMP` is the *text*
+"2026-06-01 20:06:53", which lands in the integer column as text. The next time
+drift reads that row it runs `int.parse` on the text and blows up.
+
+Because `addEmptyCrates` always does that UPDATE then immediately re-reads the
+manufacturer row, every confirm crashed — and since the crash rolled the whole
+transaction back, the manufacturer's empty-crate count never went up. That's why
+the Empty Crates tab in Inventory never reflected the return. Fixing the crash
+fixes both symptoms at once (the tab reads the manufacturer's stock via a live
+stream, so it now updates the moment a return is confirmed).
+
+**The fix:** Replaced `CURRENT_TIMESTAMP` with the same integer expression the
+columns already use as their default — `CAST(strftime('%s', CURRENT_TIMESTAMP)
+AS INTEGER)` — in the four crate writes (manufacturer empty-crate counter, the
+customer-balance upsert, the manufacturer-balance upsert, and the approve flow).
+No schema change, no data repair needed: both connected devices were checked and
+held clean integer timestamps (the failed confirms had always rolled back).
+
+**Files touched:**
+- lib/core/database/daos.dart
+- lib/shared/services/crate_return_approval_service.dart
+- test/crates/crate_logic_test.dart
+
+**Database changes:**
+- None. (Behaviour-only fix to how existing columns are written.)
+
+**Master plan sections covered:**
+- §13.4 — crate tracking by manufacturer (no plan change).
+
+**Plan updates made during session:**
+- None.
+
+**Tested:**
+- Added three regression tests in test/crates/crate_logic_test.dart covering
+  `addEmptyCrates`, a second customer return (ON CONFLICT path), and a second
+  approve (ON CONFLICT path). Confirmed they fail against the old code with the
+  exact `int.parse` crash, and pass after the fix. Full crate suite green;
+  analyze clean on the touched files.
+
+**Known issues / left open:**
+- Note for future raw-SQL writes: never assign `CURRENT_TIMESTAMP` (or any text
+  datetime) to a drift datetime column — it's stored as integer epoch. Use
+  `CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)` or a bound `DateTime`.
+
+---
+
+## Session 54 — 2026-06-01 — Date-filter chips unified onto one rolling helper
+
+The user asked to review every filter chip so the date windows (24 hours, last
+7 days, last 30 days, last year, to date) calculate correctly, and confirmed my
+recommendation: standardise to **rolling windows** with those labels, across all
+Phase-1 screens.
+
+Builds on the concurrent Session 53 Orders work (which made the Orders period
+filter a dropdown, default Day, capped for lower roles). My change relabels that
+dropdown to the canonical rolling set and preserves the lower-role cap as the
+**three shortest windows** (Last 24 hours / Last 7 days / Last 30 days).
+
+**The problem found (a real mess, not just a tweak):** every period filter rolled
+its own date math, and the same chip meant different things on different screens.
+Two incompatible styles were live at once — rolling ("last N days") on Home /
+Reports / Orders / Expenses / Payments, but calendar boundaries ("since the 1st /
+since Monday") on the Customer wallet and Supplier detail. Stock Audit was even
+inconsistent with itself ("This Week" = last 7 days but "This Month" = since the
+1st). Plus an off-by-up-to-a-day bug (`diff.inDays <= 7` counts a record 7d23h
+old as "within 7 days"), a fragile `'Day'` check, and three vocabularies for the
+same idea (Day/Today, To Date/All Time/All).
+
+**Built today:**
+- **One shared helper, `lib/core/utils/date_period.dart`** — the single source of
+  truth. A `DatePeriod` enum (last 24 hours / 7 days / 30 days / year / to date),
+  the canonical chip labels, a tolerant label parser (still understands every old
+  label so nothing breaks), an `includes(date)` test, and a `(start, end)` range
+  for the screens that query the DB by date. UTC-normalised so local/UTC
+  timestamps compare cleanly.
+- **Routed all 8 Phase-1 filter screens + 2 services through it:** Home, Reports
+  Hub, Orders (completed + cancelled tabs), Expenses (list + budget tracker),
+  Supplier-Accounts Payments + Supplier detail, Customer wallet, Stock Audit, and
+  the payment/expense services. Every chip now reads the same canonical set, and
+  the date math is identical everywhere.
+- Removed the dead business-timezone plumbing the refactor orphaned (Customer
+  detail + Stock Audit): rolling windows are timezone-independent, so the
+  `_businessTz` fetch / `localDateUtc` calendar math went away.
+- **Left alone on purpose:** Inventory History (§16.8 keeps its own
+  Today/7 Days/30 Days/All labels) and the Phase-3 Deliveries screen — matches the
+  scope the user chose.
+
+**Files touched:**
+- lib/core/utils/date_period.dart (NEW)
+- lib/features/dashboard/screens/home_screen.dart, reports_hub_screen.dart, stock_audit_screen.dart
+- lib/features/orders/screens/orders_screen.dart
+- lib/features/expenses/screens/expenses_screen.dart + data/services/expense_service.dart
+- lib/features/payments/screens/payments_screen.dart + data/services/payment_service.dart
+- lib/features/customers/screens/customer_detail_screen.dart
+- lib/features/inventory/screens/supplier_detail_screen.dart
+- test/utils/date_period_test.dart (NEW — 18 tests)
+- reebaplus_master_plan.md (new §30.11 canonical chip spec; §30.6/§19.1/§20.1/§25.1/§11.2 defaults)
+
+**Database changes:** None.
+
+**Master plan sections covered:** §30.11 (new), §30.6, §11.2, §19.1, §20.1, §25.1.
+
+**Plan updates made during session:** Added §30.11 documenting the canonical
+rolling chip set + that Funds/Close Day stay calendar-day-bound and Inventory
+History keeps its own labels; updated the per-screen default-period mentions.
+Reviewed with the user (the user picked the rolling approach + all-Phase-1 scope)
+before coding.
+
+**Tested:** New `test/utils/date_period_test.dart` — **18/18 pass**, covering the
+boundary cases that were previously wrong (exactly-7-days inclusive, 7d+1s
+excluded, etc.) and UTC/local zone handling. `flutter analyze lib`: my 10 files
+are clean. A read-only adversarial review (one agent per changed file) returned
+**all 10 all-clear** — no leftover hand-rolled date math, no legacy-label
+comparisons, all dropdown defaults valid, no orphaned imports. No on-device pass
+yet.
+
+**Known issues / left open:**
+- **Pre-existing, NOT this work:** the working tree carries a half-finished
+  crate-by-manufacturer migration (Session 52's deferred Bug #2) —
+  `app_database.dart`/`.g.dart` dropped `crateSizeGroupId` but `daos.dart` and the
+  sync/crate services still reference it, so `flutter analyze` reports 19
+  `crateSizeGroupId` errors and the full `flutter test` suite can't compile. None
+  of those files were touched here. The date-filter helper was verified in
+  isolation because its test imports only `date_period.dart` (zero app deps).
+  Finishing that crate migration is the prerequisite for a clean full-suite run.
+
+**Next session should:** finish the deferred crate-by-manufacturer migration so
+the app compiles + the full test suite runs, then on-device check the filter
+chips on Home / Orders / Expenses / Customer wallet.
+
+---
+
+## Session 53 — 2026-06-01 — Orders money hidden below Manager + filter dropdown + wallet-totals permission
+
+Continues on `feat/orders-pending-refund`. The user asked that roles **below
+Manager** (Cashier, Stock keeper) stop seeing monetary values in Orders, that the
+period filter chips become a **dropdown** sitting inline with the search bar, that
+the dropdown be **capped at Month** for those roles, that it **default to Day**,
+and that the **Total In / Total Out** tiles on a customer's Wallet tab be hidden
+for those roles unless the CEO turns them on.
+
+**Built today:**
+- Orders screen: the per-tab money stat cards (Total Value / Revenue / Collected /
+  Crate Deposits / Value Forfeited), the per-line item prices, and each order
+  card's Total / Paid / discount / wallet-debt amounts are now **hidden for roles
+  below Manager**. The printed/shared receipt is unchanged (it's the customer's
+  document).
+- Orders screen: the old row of filter chips is replaced by a **dropdown** that
+  sits next to the search bar (Completed + Cancelled tabs). It **defaults to Day**.
+  Roles below Manager only get Day / Week / Month; Manager + CEO also get Year /
+  To Date / All Time.
+- Customer Wallet tab: the **Total In / Total Out** tiles are hidden for roles
+  below Manager unless the CEO grants the new `customers.wallet.totals.view`
+  permission (CEO Settings → Roles & Permissions → that role). Manager + CEO
+  always see them.
+- Added a shared `isManagerOrAbove(ref)` helper (fails closed while the role is
+  still loading) used by both screens.
+
+**Files touched:**
+- lib/features/orders/screens/orders_screen.dart
+- lib/features/customers/screens/customer_detail_screen.dart
+- lib/core/providers/stream_providers.dart
+- lib/core/database/app_database.dart
+- supabase/migrations/0069_customers_wallet_totals_view_permission.sql (new)
+- test/database/migration_upgrade_test.dart
+- reebaplus_master_plan.md, BUILD_LOG.md
+
+**Database changes:**
+- New permission key `customers.wallet.totals.view` ("Customers" category). Added
+  to the local catalogue + a new local schema bump (v27 → v28, `INSERT OR IGNORE`
+  in onUpgrade) and to the cloud catalogue via migration 0069, which also grants
+  it to CEO + Manager by default (new-business seed + backfill of existing
+  businesses). Cashier / Stock keeper are intentionally NOT granted it.
+
+**Master plan sections covered:**
+- §19.1 (filter dropdown + Month cap + Day default), §19.3 (Cashier money rule),
+  §27.3 (Orders → Cashier "Items only"), §2.5 (new permission key), §18.4 (wallet
+  totals gating).
+
+**Plan updates made during session:**
+- §19.3 conflicted with the request: it previously let the **Cashier** see their
+  own sales' money ("Own sales only") and restricted only the Stock keeper. The
+  user confirmed the new rule, so §19.3 / §27.3 were updated so **both** roles
+  below Manager are money-blind in Orders, §19.1 documents the dropdown/cap/default,
+  §2.5 lists the new permission, and §18.4 documents the wallet-totals gating.
+
+**Tested:**
+- `flutter analyze` — clean for all changed files (only pre-existing `avoid_print`
+  infos in the unrelated `roles_v13_report.dart`).
+- Added a v27 → v28 onUpgrade test (re-seeds the new key); it + the existing
+  migration tests pass.
+- Updated the catalogue-count assertions that the new key bumped 32 → 33
+  (`roles_v13_seed_test`, `role_permissions_detail_test`, `roles_permissions_screen_test`)
+  — these also confirm the new key auto-appears as a CEO Settings toggle.
+- Full suite green: **271 passed, 0 failed**.
+
+**Known issues / left open:**
+- Cloud migration 0069 must be `supabase db push`-ed for the new permission to be
+  grantable on real devices (FK on `role_permissions.permission_key`).
+- The customer detail **Orders tab** order cards still show totals to a Cashier
+  (out of scope per the user's answer — they scoped the customer screen to the
+  Total In/Out tiles only). Flag if that should also be hidden.
+
+**Next session should:**
+- Deploy 0069, verify on-device that a Cashier sees no money in Orders and no
+  Total In/Out, and that the CEO toggle re-enables the tiles.
+
+---
+
+## Session 52 — 2026-06-01 — Bug sweep (wallet/receipt/funds/notifications) + Close Day UI
+
+Continues on `feat/orders-pending-refund`. The user reported 7 bugs; a read-only
+multi-agent investigation (6 finders + an adversarial verifier per finding)
+root-caused each against the §14.3 dual-leg wallet model. The verifier caught
+real mistakes in three of the first-pass fixes (a non-monotonic-UUID tiebreaker,
+a wrong "settle old debt" reading of bug #4, and unsafe notification re-insert),
+which changed the final approach. Six bugs + a Close Day UI landed and were
+tested; the seventh (crate tracking) is a schema+cloud migration left as the
+focused next step.
+
+**Built today:**
+- **Bug #7 — silent notifications fixed app-wide.** `AppNotification` held its
+  top-overlay entry in a static that was orphaned when the navigator key
+  regenerates on an auth-state change, so every notification after that silently
+  painted nothing (the debt-limit block was one victim). It now self-heals —
+  re-inserts a fresh overlay entry when the old one is unmounted. Also made the
+  checkout debt-limit check read the wallet balance synchronously (from the live
+  provider, no awaited DB read) so the "exceeds debt limit" / "no limit set"
+  error always flashes instead of dropping behind an `if (mounted)` guard.
+- **Bug #3 — credit shows before debit in wallet history.** The display query
+  (`WalletTransactionsDao.watchHistory`) sorted only by `created_at DESC`; the
+  two sale legs share the same second, so the tie order was undefined (and wrong
+  on-device). Added a deterministic secondary sort — credit sorts above debit —
+  so the wallet reads "money in, then money out" (the order charge shows last).
+  No reliance on insertion order or the random-tailed UuidV7 id.
+- **Bug #5/#6 — receipt wallet balance.** The receipt was fed a PRE-sale
+  projection (`old − total + cash`) read AFTER the legs posted, so it
+  double-counted (partial and credit sales showed double the debt). It now shows
+  a snapshot of the true post-sale net (`old + paid − total`) captured at
+  confirm; correct for full / partial / credit / wallet / apply-credit.
+- **Bug #4 — apply wallet credit on a full payment (new flow, §14.2/§14.3).**
+  When a registered customer with wallet credit pays in full and the credit only
+  partly covers the order, "Pay from Wallet" now applies the credit (wallet → ₦0),
+  shows the outstanding, requires an "Outstanding paid" confirmation + receiving
+  account, and collects the rest. The cash flows through the wallet (credit leg)
+  and credits the chosen Funds account — implemented purely by passing
+  `amountPaid = outstanding` + a cash sub-type to the existing dual-leg
+  `createOrder` (no DAO change).
+- **Bug #1 — Funds Register blank on open.** The screen returned an empty widget
+  while its async providers loaded (blank then pop-in), and was permanently blank
+  for a lone-owner CEO (no store auto-selected). Now shows a fade-in loading
+  placeholder (§30.7) and falls back to the business's first store.
+- **Close Day UI (§23.6) — the data layer existed (Session 49); the UI did not.**
+  Added a **Close Day** button at the bottom of the Funds Register (gated by
+  `funds.close_day`), a Close Day sheet (per-account counted cash / withdrawn vs
+  the live expected balance), a "Day closed" reconciliation summary (expected /
+  counted / variance, variance flagged red), and the §23.8 unclosed-previous-day
+  banner with a Close action. On close it now fires a §26.4 notification to
+  **CEO + Manager** ("day closed — reconciliation ready"); the existing
+  funds-mismatch alert to the CEO still fires on a variance.
+
+**Files touched:**
+- reebaplus_master_plan.md (§14.2/§14.3 apply-credit + credit-before-debit; §13.4
+  crate-by-manufacturer note; §23.6 Close Day button + CEO/Manager notification)
+- lib/core/utils/notifications.dart (overlay self-heal)
+- lib/core/database/daos.dart (watchHistory deterministic sort; createOrder leg
+  comment; FundDaysDao.watchDay/watchUnclosedDayBefore; closeDay day-closed
+  notification; UserBusinessesDao.getUserIdsForRoleSlugs)
+- lib/core/providers/stream_providers.dart (fundDayProvider, unclosedDayBeforeProvider)
+- lib/features/pos/screens/checkout_page.dart (apply-credit flow, snapshot receipt
+  balance, synchronous debt-limit error)
+- lib/features/funds/screens/funds_register_screen.dart (loading + store fallback,
+  Close Day button/sheet/summary/banner)
+- test/orders/order_service_money_math_test.dart (+1: credit-before-debit ordering)
+
+**Database changes:** None this batch — no schema/migration. (The crate re-key,
+below, IS a schema change and was deferred.)
+
+**Master plan sections covered:** §14.2, §14.3, §13.4, §23.6, §26.4, §30.7.
+
+**Plan updates made during session:** §14.2 documents the apply-credit
+full-payment flow; §14.3 documents credit-before-debit ledger ordering; §13.4
+notes empty crates are tracked by manufacturer (not crate size group); §23.6
+adds the Close Day button + CEO/Manager close notification. All reviewed with the
+user (3-question decision) before coding.
+
+**Tested:** `flutter analyze lib` clean. `flutter test`: **270 passed, 58
+skipped, 0 failed** (+1 over the Session 51 baseline = the new ordering test). No
+on-device pass yet — recommend verifying: a partial/credit registered sale
+receipt + wallet ordering, the apply-credit full payment, a debt-limit-exceeding
+sale flashes the top error, the Funds Register opens without a blank flash, and a
+full Close Day (button → sheet → summary, + the CEO/Manager notification).
+
+**Bug #2 (crate confirmation modal empty) — DONE + DEPLOYED (schema v29 + cloud
+0070).** Re-keyed empty-crate CUSTOMER tracking from crate size group to
+MANUFACTURER (§13.4). Root cause: the customer/manufacturer crate ledger keyed by
+a "crate size group" (Big/Medium/Small) that products are never assigned, so the
+§19.5 modal skipped every line (`crate_return_modal.dart` `if (cgId.isEmpty)
+continue;`). What changed:
+- **Schema v29** (slotted at v29 because a concurrent feature took v28/cloud 0069):
+  `customer_crate_balances` → `manufacturer_id` + UNIQUE(business, customer,
+  manufacturer); `manufacturer_crate_balances` → drop the size dim, UNIQUE(business,
+  manufacturer); `pending_crate_returns` → `manufacturer_id`; `crate_ledger` →
+  `crate_size_group_id` nullable + the owner CHECK relaxed from customer⊕manufacturer
+  to "at least one set" so a customer crate row can ALSO name the manufacturer whose
+  crates it holds. The two balance CACHES are dropped+recreated (they rehydrate);
+  `crate_ledger` rebuilds preserving history (v25 ledger-trigger pattern). The
+  `crate_size_groups` TABLE stays — it still powers the Empty Crates inventory tab,
+  deliveries, and supplier crate-group mapping (products/suppliers keep a vestigial
+  nullable `crate_size_group_id`).
+- **DAOs/UI/sync:** `recordCrateReturnByCustomer/Manufacturer`, `createPendingReturn`,
+  `verifyCrateReconciliation`, the two balance-display joins, the crate-return modal
+  (now lists by manufacturer — the actual modal-empty fix), the approval service,
+  `pendingReturnsWithDetailsProvider`, the approval + customer-Crates screens, and
+  the `_applyDomainResponse` balance_row handler — all keyed by manufacturer.
+- **Cloud 0070** (deployed) mirrors the table re-key (additive: new cols nullable,
+  caches/pending cleared) and rewrites `pos_record_crate_return` (param
+  `p_crate_size_group_id` → `p_manufacturer_id`) + `pos_approve_crate_return`
+  (reads `manufacturer_id`). Rollback at `scripts/rollback/0070_rollback.sql`.
+- **Tests:** crate_logic + the two dispatch tests re-keyed; the two skipped
+  integration tests re-keyed to compile/run; a new v28→v29 onUpgrade test; the
+  fixture helpers re-keyed. `flutter analyze` clean; `flutter test`: **291 passed,
+  58 skipped, 0 failed**.
+
+**Deploy (user said "apply and deploy", 69 confirmed ready):** `supabase db push`
+applied the whole pending set in order — **0068** (fund_day_closings, Session 49),
+**0069** (customers.wallet.totals.view, a concurrent feature), **0070** (this crate
+re-key). All three now show Local|Remote in `supabase migration list`.
+
+**Concurrent-work note:** this branch had heavy parallel editing during the
+session — a `customers.wallet.totals.view` feature (v28 / cloud 0069, logged as
+Sessions 53–54) landed in the same files. The crate re-key was slotted at v29 /
+0070 to avoid the version/migration collision and left that feature untouched;
+the green full-suite run confirms the two bodies of work coexist.
+
+**On-device migration fix (same session):** the first device run of the v29
+upgrade crashed — `CREATE INDEX idx_crate_ledger_business_lua already exists` —
+because drift's `alterTable` re-applies the rebuilt table's existing indexes, so
+the block's bare `CREATE INDEX` was a duplicate. Fixed by `DROP INDEX/TRIGGER IF
+EXISTS` before each recreate in the crate_ledger rebuild (also swaps
+`idx_crate_ledger_owner_group` to its new no-`crate_size_group_id` shape). The
+v28→v29 test now recreates those indexes first so it actually exercises the
+rebuild branch (it had skipped it). No cloud change. No uninstall needed — the
+failed onUpgrade rolled back, so a re-run on the fixed build upgrades cleanly.
+
+**On-device wallet-ordering fix (bug #3, real root cause + final direction):**
+two parts. (1) Root cause of the flakiness: `created_at` is second-resolution
+(no `storeDateTimeAsText`), so a sale's two wallet legs TIE on `created_at`, and
+the original tiebreak `OrderingTerm(type.equals('credit'), desc)` is a no-op in
+`ORDER BY` → the tie fell back to SQLite rowid order, which differs in-memory
+(test) vs the on-device file DB — a false-passing test. Fixed by tie-breaking on
+a real numeric column (`signed_amount_kobo`), deterministic across backends, and
+by stamping BOTH legs the same `created_at` in `createOrder` so they always tie.
+(2) Final direction (user clarified): the wallet history is **newest-first**, and
+the order charge is the LAST step of a sale, so it belongs at the **TOP** with
+the payment below it → tiebreak is `signed_amount_kobo ASC` (negative DEBIT above
+positive CREDIT). §14.3 plan note updated to match. Pure Dart change
+(`watchHistory` + the leg timestamps) — no schema/migration/cloud; just
+hot-restart.
+
+**Known issues / left open:**
+- No on-device pass yet for either the 6-bug/Close-Day batch or the crate re-key.
+- The v2 crate RPC flag (`feature.domain_rpcs_v2.record_crate_return`) is OFF by
+  default; the re-keyed cloud RPCs are deployed and ready for when it's enabled.
+
+**Next session should:** on-device verify — a Bar/Beer order's crate-return modal
+now lists drinks by manufacturer and records the customer's per-manufacturer crate
+balance; plus the 6-bug/Close-Day batch checks noted above.
+
+---
+
+## Session 51 — 2026-06-01 — Orders re-plan: full wallet ledger + Pending-first lifecycle + refund-day-dated reversal
+
+New branch: **`feat/orders-pending-refund`** (off `main` @ 979a512). An earlier
+draft of the Orders UI work this session was discarded at the user's request
+(`git reset --hard`) and the whole thing re-planned from the four decisions
+below, then rebuilt.
+
+**The four decisions (user, 2026-06-01):**
+1. Checkout → **Pending**; **revenue is recognized at checkout**. Confirming →
+   Completed is operational only (refund-locked + picked-up/delivered + crates
+   received), never a financial event.
+2. **Refund**: Pending tab only, Manager/CEO only, order → Cancelled. The
+   reversal is dated to the **refund day** (the day the cash leaves the till),
+   **not** the original sale day.
+3. An order **can** owe — but only a credit sale the wallet can't cover. "Owes"
+   **equals the wallet balance** and shows **only when that balance is below
+   zero**, because **every** registered sale runs through the wallet (rule #4).
+4. Close Day is strictly day-bounded — each day reconciles only its own activity.
+
+**Built today:**
+- **Full wallet ledger (§14.3, rule #4).** `OrdersDao.createOrder` now posts
+  **two** wallet legs for every registered sale — a **debit of the order total**
+  and a **credit of the amount paid** (reusing `topup_cash`/`topup_transfer` by
+  method, so no CHECK-widening migration). Net = paid − total (0 when fully
+  paid, negative = owes). This closes the old gap where fully-paid cash sales
+  skipped the wallet entirely. Walk-ins still bypass the wallet (rule #14). The
+  Funds Register credit is unchanged and independent — separate ledgers, no
+  double-count.
+- **Pending-first lifecycle (§19.5).** `OrderService.addOrder` creates orders as
+  `'pending'` and no longer stamps `completedAt`; Confirm (`markCompleted`) owns
+  that. Money is booked at checkout regardless of status.
+- **Refund-day-dated reversal (§19.7 / §23.5).** `markCancelled` now takes a
+  `businessDate` (the refund day) and (a) **reverses both wallet legs** so the
+  customer's wallet returns to its pre-sale balance, and (b) dates the Funds
+  Register **void-debit to that refund day**, not the sale's original day — so a
+  closed day is never reopened and today's till matches the cash that left it.
+- **Orders UI.** Pending populates; a real **Refund** button (Manager/CEO via
+  `sales.cancel`) replaces the old Cancel — it **gates on an open funds day**
+  for the order's store (§23.8, same as the POS gate), requires a reason, uses
+  the `ORD-` number, and calls `markAsCancelled` with today's business date.
+  Removed the no-op refund stub, the receipt-modal refund, the Pending
+  **Outstanding** stat card, and the per-order net-paid **Owes** badge. Owing
+  now shows only via the live **wallet-debt badge** (balance < 0).
+
+**Files touched:**
+- reebaplus_master_plan.md (§14.3, §19.2, §19.5, §19.7, §23.5, §23.8)
+- lib/core/database/daos.dart (createOrder dual legs; markCancelled rework)
+- lib/shared/services/order_service.dart (addOrder pending; markAsCancelled businessDate)
+- lib/features/orders/screens/orders_screen.dart (Refund flow + gate; removals)
+- test/orders/order_service_money_math_test.dart (dual-leg + refund-day + lifecycle)
+- test/orders/pr_4c_test.dart, test/wallet/wallet_logic_test.dart,
+  test/sync/dispatch/orders_dao_cancel_dispatch_test.dart (businessDate arg; one
+  obsolete "skips wallet write" test updated to assert the two legs)
+
+**Database changes:** None — reused existing `topup_cash`/`topup_transfer` and
+`refund`/`void` wallet reference types; no schema or migration.
+
+**Master plan sections covered:** §14.3, §19.2, §19.5, §19.7, §23.5, §23.8.
+
+**Plan updates made during session:** §14.3 made the dual-leg rule explicit;
+§19.2 dropped "Outstanding"; §19.5 documented revenue-at-checkout + operational
+Completed; §19.7 added refund-day dating + open-day requirement; §23.5/§23.8
+matched the refund rules. (All reviewed by the user before coding.)
+
+**Tested:** analyze clean (only the 18 pre-existing `avoid_print` infos in a
+test helper). `flutter test`: **269 passed, 58 skipped, 0 failed** — incl. new
+tests for the four sale-type wallet legs, refund reversing both legs, the
+Funds void landing on the refund day (sale day untouched), and the lifecycle.
+
+**Known issues / left open:**
+- **v2 RPCs (flag OFF):** `pos_record_sale_v2` still mints only the wallet
+  debit, and `pos_cancel_order` doesn't yet honour `p_business_date` or reverse
+  the payment leg — documented inline as "don't enable until updated" (R2).
+- Cloud migration **0068** (`fund_day_closings`, Session 49) is still **unpushed**
+  — must precede the v27 app schema reaching any device.
+
+**Next session should:** on-device check of a registered-customer sale's wallet
+history (two legs), the Pending → Confirm flow, and a Manager/CEO refund (incl.
+the open-day block); then resume the Ring 0 backlog.
+
+---
+
 ## Session 50 — 2026-06-01 — Ring 0 #5: Orders refund — Funds Register reversal (data layer) + §19 plan change
 
 **Built today (data layer + plan; Orders UI is the next step):**

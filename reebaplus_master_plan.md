@@ -78,10 +78,10 @@ More keys can be added as features grow:
 - `stock.add`, `stock.view`, `stock.adjust`
 - `expenses.create`, `expenses.approve`
 - `reports.see_sales`, `reports.see_profit`, `reports.see_cost_prices`, `reports.see_expenses`
-- `customers.add`, `customers.update`, `customers.delete`, `customers.wallet.update`
+- `customers.add`, `customers.update`, `customers.delete`, `customers.wallet.update`, `customers.wallet.totals.view`
 - `suppliers.manage`, `shipments.manage`
 - `staff.invite`, `staff.suspend`, `staff.change_role`
-- `activity_logs.view`, `settings.manage`
+- `activity_logs.view`, `settings.manage`, `settings.delete_business` (CEO-only, locked ON; §10.3)
 - `funds.open_day`, `funds.close_day`, `funds.view`
 
 ### 2.6 Live sync across devices
@@ -115,6 +115,7 @@ Each step unlocks the next. Build in this order:
 - [~] Activity Logs.
 - [~] Reports.
 - [ ] Notifications.
+- [ ] **Delete Business & Account (CEO Danger Zone)** — the last Phase 1 item. CEO permanently deletes their account, their business, and every business-scoped row, via one atomic cloud RPC (deliberate hard-delete exception to hard rule #9). Two-gate confirmation (type business name + PIN), online-only, then full local wipe and logout. Full spec in §10.3. *(Build last — after Ring 3, once every feature it cascades over exists.)*
 
 > **Remaining work re-grouped 2026-05-31 into Rings 0-3 — see PIVOT_PLAN.md §8.0.** Ring order: Ring 0 (foundation invariants) — POS/Cart wholesaler-tier price fix, Activity Logs generic-schema migration + notifications.severity column + logActivity()/fireNotification() helpers, money-math consistency regression net. Ring 1 (close the money loop) — Funds Register Close Day + reconciliation (built first; the funds-debit primitive), Orders Cancel reversal, Orders Refund, Customers Add Funds via WalletService.topup, Expenses approval/stats/budget, Supplier Accounts + Track Shipments (shared payments+shipments model). Ring 2 (operational daily loop) — Customers Edit (real DAO write), Customers GPS capture, Daily Stock Count + Record Damages. Ring 3 (reporting & cross-cutting verification) — Funds History, Daily Reconciliation Report, Notifications verification pass, Activity Logs feature screen, Reports hub + missing reports, barcode scanner, Deliveries removal, loading-state fade-in sweep, sync regression test, end-to-end QA.
 
@@ -338,6 +339,7 @@ Where the CEO tunes everything about the business. Menu screen with tappable sec
 - Activity Logs access — toggle for which roles can view activity logs (CEO only by default).
 - Sync Issues access — toggle for which roles can open the Sync Issues troubleshooting screen (gated by the `sync.view` permission). The CEO always has access; other roles default off. (Sync Issues is an infra/troubleshooting screen, not otherwise in the role tables.)
 - Appearance — CEO picks the business colour (accent): Amber, Blue, Purple, or Green. Synced, so it applies to every device in the business. Light/dark/system mode is NOT here — that stays a per-device comfort choice, set from "Display" in the side menu. Default colour: amber.
+- Danger Zone — CEO-only, sits at the bottom, visually separated. Holds **Delete Business** (delete the account, the business, and everything attached to it). Full behaviour in §10.3.
 
 ### 10.2 Roles & Permissions sub-page (per role)
 
@@ -351,7 +353,18 @@ Where the CEO tunes everything about the business. Menu screen with tappable sec
     picker is unlocked (see §11.2) so they can view other stores and request restock. Stored per role
     in `role_settings` (key `manager_view_all_stores`).
 
-### 10.3 Phase 2 (deferred)
+### 10.3 Delete Business & Account (Danger Zone)
+
+The **last Phase 1 item to build** (see §3). A CEO can permanently delete their account, their business, and everything attached to the business. Irreversible. CEO-only — no other role ever sees this section. Gated by the `settings.delete_business` permission, which is locked ON for CEO and unavailable to all other roles.
+
+- **Where it lives:** a red "Danger Zone" section at the bottom of the CEO Settings menu (§10.1), visually separated from the normal sections. One action inside it: **Delete Business**.
+- **What "everything" means:** deleting the business removes every row owned by that `business_id` across all synced tenant tables — products and prices, stock, customers and wallets, suppliers, orders, payments, expenses, funds accounts and entries, crate ledgers, stores, roles, permissions grants, role settings, invite codes, staff memberships (`user_businesses` / `user_stores`), and activity logs. Nothing business-scoped survives.
+- **What happens to staff:** their membership in *this* business is removed. A staff member who belonged only to this business keeps their login account but now has no business — on their next sign-in they land on the Welcome screen and must create a business or join another by invite. (Their account itself is not deleted; only the CEO's own account is deleted, because that was the CEO's explicit request.)
+- **What happens to the CEO:** after the business is gone, the CEO's own user account (auth + local) is deleted, and the device is fully logged out back to the Welcome screen.
+- **Confirmation (irreversible-action ritual):** a two-gate confirmation, never a single tap. The CEO must (1) type the exact business name to confirm, and (2) re-enter their PIN. A plain-English warning lists what will be lost ("all sales, stock, customers, staff access, and money records for this business will be permanently deleted and cannot be recovered"). Only then is Delete enabled.
+- **How it syncs (deliberate exception to hard rule #9):** this is the one place a hard delete is correct — soft-delete would leave a tombstoned but recoverable business, which defeats the purpose. It runs as a single atomic domain RPC (e.g. `domain:delete_business`) that the cloud executes in one server-side transaction (cascade delete by `business_id`, plus the CEO's auth user), rather than per-row `enqueueDelete`. Only after the cloud confirms success does the device wipe the local rows for that business and log out. If the device is offline, the action is blocked with a clear message — account/business deletion must be confirmed by the server before anything local is destroyed, so it is never queued blindly. Add `delete_business` to the build's irreversible-action list when implemented.
+
+### 10.4 Phase 2 (deferred)
 
 - Create custom roles beyond the four defaults.
 - Custom permission groups.
@@ -379,7 +392,7 @@ Renamed from Dashboard to match the bottom nav. Role-aware screen showing busine
   - Cashier and Stock keeper: locked to own store (no toggle).
   - A locked user assigned to more than one store gets a dropdown limited to their assigned stores
     (no "All Stores" entry).
-- Day/period dropdown stays as is.
+- Period dropdown uses the canonical rolling chip set (§30.11), default Last 24 hours.
 
 ### 11.3 Reports button
 
@@ -509,6 +522,13 @@ Tap any cart item to open this modal. Contains:
 - Required Deposit is calculated from that crate value.
 - Deposit Paid = amount customer is paying upfront for the crates (editable).
 - Tracked in customer's wallet history and customer's crate balance in their profile.
+- Empty crates are tracked **by manufacturer**, not by crate size (2026-06-01,
+  user). A customer's (and a manufacturer's) crate balance is one figure **per
+  manufacturer** — e.g. "owes 3 NB crates" — derived from the bottle products of
+  that manufacturer on the order. The earlier Big/Medium/Small "crate size group"
+  dimension is removed from crate balances: products were never assigned one, so
+  the crate-return confirmation modal (§19.5) showed nothing. (Manufacturer is
+  the level where crate value already lives, per the bullets above.)
 - For walk-in customers: this section is hidden entirely. Walk-ins must return crates equal to receipt at the same time as the sale.
 - Walk-in customers who have already paid the full deposit for empty crates can purchase goods without taking crates home.
 - Inventory of empty crates is still adjusted automatically when the order is confirmed (for walk-ins too).
@@ -553,12 +573,52 @@ Step 2 — Pick the receiving account:
 
 Selected account is credited in the Funds Register.
 
+> Full payment — apply existing wallet credit (2026-06-01, user). When a
+> **registered customer with positive wallet credit** chooses **Full payment**
+> and that credit is **less than the order total**, checkout first **applies the
+> wallet credit toward the order** and shows what is left to settle: it displays
+> the **balance after the wallet is emptied** (the wallet drops to **₦0**) and
+> the **outstanding** amount (total − wallet credit). The cashier then ticks an
+> **"Outstanding paid"** checkbox and picks the **receiving account** (Cash Till
+> / POS / Bank) for that outstanding cash, then confirms. The cash collected
+> **flows through the wallet** (it posts as a wallet credit too, §14.3), so the
+> wallet ends at exactly **₦0**. Walk-ins are unaffected (no wallet). If the
+> customer's wallet credit already **covers** the total, this is the existing
+> "Pay from wallet" path; if the customer has **no** credit, Full payment is
+> unchanged (collect the total into the chosen account).
+
 ### 14.3 Wallet flow
 
 Wallet is the source of truth for registered customers' money movements.
 
 - Registered customers: every sale flows through the wallet. Customer's payment enters wallet, immediately leaves as payment for goods. Net wallet change = 0 if fully paid, negative if credit sale, positive if overpaid.
 - Walk-in customers: no wallet flow. Money goes directly to the chosen account. No wallet record.
+
+> Implementation note (2026-06-01, user — closes a code/plan gap): "every sale
+> flows through the wallet" means **every** registered sale posts **two** wallet
+> rows, regardless of payment method (cash, transfer, card, partial, credit):
+>
+> 1. a **debit** for the order **total** (goods leave), and
+> 2. a **credit** for the **amount paid** at checkout (money in),
+>
+> netting to `paid − total` (0 when fully paid; negative = the customer owes).
+> This includes **fully-paid cash sales** (debit total, credit total, net 0) —
+> previously the code skipped the wallet entirely when nothing was owed, which
+> broke the "wallet history is the source of truth" rule (#4). The **Funds
+> Register is a separate ledger**: the cash/card/transfer still credits the
+> chosen account (§14.2) for the till count — the wallet's payment-credit leg
+> records the same money against the *customer's* account, not the business's,
+> so there is no double-count. **"Owes" = the wallet balance, and is shown only
+> when that balance is below zero.** Walk-ins are unaffected (no wallet; straight
+> to the account; cannot owe).
+
+> Ledger ordering (2026-06-01, user). The customer's wallet history is
+> **newest-activity-first**. The order **charge (debit)** is the last step of a
+> sale (money leaves after the payment comes in), so it sits at the **top** of
+> the list, with the payment **credit** directly **below** it. Both legs are
+> stamped the same instant; the display query tie-breaks the charge above the
+> payment (`signed_amount_kobo` ascending). Display/ordering only — the net
+> (paid − total) is unchanged.
 
 ### 14.4 After Confirm Payment
 
@@ -811,6 +871,13 @@ Stock keeper, Manager, CEO. Cashier blocked.
 | Soft delete | Yes | Yes | No | — |
 | Set debt limit | Yes | Yes | No | — |
 | Add funds to wallet | Yes | Yes | Yes | — |
+| View wallet totals (Total In / Total Out) | Yes | Yes | Hidden by default¹ | — |
+
+> ¹ **Wallet totals (2026-06-01, user):** the **Total In / Total Out** tiles on
+> the customer's Wallet tab are **hidden by default for roles below Manager**.
+> The CEO can re-enable them per role via the `customers.wallet.totals.view`
+> permission in CEO Settings → Roles & Permissions. Manager and CEO always see
+> them.
 
 ### 18.5 Business rules
 
@@ -826,11 +893,20 @@ Stock keeper, Manager, CEO. Cashier blocked.
 ### 19.1 Tabs
 
 - Three tabs: Pending, Completed, Cancelled.
-- Default period filter: Day.
+- Default period filter: Last 24 hours (canonical chip set, §30.11).
+- The period filter is a **dropdown** that sits inline with the search bar (on the Completed and Cancelled tabs). It replaces the old row of filter chips.
+- **Roles below Manager (Cashier, Stock keeper) are capped to a Month maximum** on this filter — they get Day / Week / Month only. Manager and CEO also get Year / To Date / All Time.
 
 ### 19.2 Stat cards per tab
 
-- Pending: count, Total Value, Outstanding, Pick-up.
+> Decision (2026-06-01, user): "Outstanding" is removed from the Pending tab.
+> A debt is a **wallet** figure, not an order figure (§14.3, rule #4), and a
+> per-tab `net − paid` sum wouldn't match the wallet (it double-counts a
+> customer with several open orders and ignores prior wallet credit). Owing is
+> instead shown **per order card** via the live wallet-debt badge, and **only
+> when the customer's wallet balance is below zero**.
+
+- Pending: count, Total Value, Pick-up.
 - Completed: count, Revenue, Collected, Crate Deposits.
 - Cancelled: count, Value Forfeited, Refunds Issued.
 
@@ -840,8 +916,16 @@ Stock keeper, Manager, CEO. Cashier blocked.
 |------|---------------|
 | CEO | All stores, all data |
 | Manager | Own store only |
-| Cashier | Own sales only |
+| Cashier | Items + quantities only — **no monetary values** (prices, totals, paid amounts) |
 | Stock keeper | Own store, items + quantities only (no prices, totals, payment info) |
+
+> **Monetary visibility (2026-06-01, user):** roles **below Manager** (Cashier,
+> Stock keeper) do **not** see monetary values anywhere in the Orders list — the
+> per-tab stat cards (Total Value / Revenue / Collected / Crate Deposits / Value
+> Forfeited), the per-line item prices, and the order-card Total / Paid /
+> wallet-debt amounts are all hidden. Manager and CEO see all of it. (The
+> printed/shared **receipt** itself is unchanged — it is the customer's document
+> and still carries its total.)
 
 ### 19.4 Order card
 
@@ -849,11 +933,20 @@ Uses short Order ID (e.g., ORD-000001), not the long UUID. Shows customer name, 
 
 ### 19.5 Pending order flow
 
-- Sale completed at POS → order lands in Pending (already paid).
+> Decision (2026-06-01, user): **revenue is recognized at checkout**, not at
+> Confirm — the sale and its money (Funds credit + wallet legs, §14.3) are
+> already booked when the order is created. Moving a Pending order to Completed
+> is therefore a purely **operational** milestone, not a financial one. It
+> signals three things only: the order is now **closed to refund** (§19.7/§19.8),
+> it has been **picked up / delivered**, and its **empty crates have been
+> received**. (So "Completed" must not be treated anywhere as the point revenue
+> is earned.)
+
+- Sale completed at POS → order lands in Pending (already settled at checkout — received, or charged through the wallet, §14.3).
 - User opens pending order → picks Pick-up OR assigns a Rider (rider just shown on receipt for now; full logistics in Phase 3).
 - Taps Confirm.
 - Bar / Beer Distributor only: Empty Crates confirmation modal opens, pre-filled with expected crate count. User confirms actual received count. Shortfall is automatically added to customer's crate balance, shown in red.
-- Order moves to Completed.
+- Order moves to Completed (now closed to refund; picked up/delivered; crates received).
 
 ### 19.6 No editing of Pending orders
 
@@ -866,10 +959,17 @@ Wrong items → cancel and create a new order. When an order is in Pending, the 
 > separate Cancel. Refund on the Completed tab is removed (§19.8).
 
 - Reason required.
-- Inventory restored.
-- Full refund only — choice of wallet (auto) or cash (logged manually).
-- Reverses the sale's Funds Register credit: a compensating `fund_transactions`
-  'void' debit so the chosen account returns to its pre-sale balance.
+- Full refund only. It **reverses every leg the sale posted**: inventory
+  restored, payment voided, the **wallet legs reversed** (so the customer's
+  wallet returns to its pre-sale balance, §14.3), and the **Funds Register
+  account debited** for the cash that goes back out.
+- **Dating (2026-06-01, user):** the reversal is dated to the **refund day —
+  the day/till the cash actually leaves — not the original sale day.** So a
+  refund only ever affects *today's* Funds Register and *today's* Close Day; a
+  day that was already closed is never reopened (§23.5, §23.8).
+- **Requires an open funds day** (like a sale requires Opening Cash, §23.8):
+  cash can't leave the till before the day is opened. Blocked with a clear
+  message otherwise.
 - The order moves to the Cancelled tab (which tracks Refunds Issued, §19.2).
 - Logs the refund (before/after) and fires the §26.4 'sale cancelled/refunded'
   notification.
@@ -890,7 +990,7 @@ Wrong items → cancel and create a new order. When an order is in Pending, the 
 
 - Header: Expenses / Manage operating costs / notification bell (with pending approval count badge for CEO).
 - 2 tabs: Expenses, Stats.
-- Total Expenses card with period selector (default "This Month").
+- Total Expenses card with period selector (default "Last 30 days"; canonical chip set, §30.11).
 - Budget Activity bar (Spent vs Goal) — only counts approved expenses. Small text below shows "₦X pending approval" if any.
 - Pending Approvals section at top (CEO only, shows when there are pending items).
 - Expense list with status badges (Approved, Pending CEO approval, Rejected).
@@ -1105,7 +1205,10 @@ Until this is done, POS is blocked.
 Every transaction moves the right account up or down:
 
 - Sales: account up (based on payment method).
-- Refunds: account down.
+- Refunds: account down — **on the refund day** (the day the cash leaves), not
+  the day the original sale was made (§19.7). Each day's Funds Register only
+  ever reflects activity that happened on that day; a closed day is never
+  reopened by a later refund.
 - Expenses: account down.
 - Supplier payments: account down.
 
@@ -1121,6 +1224,13 @@ Manager/CEO enters per store:
 
 App calculates expected vs actual for each account. Mismatches go into the reconciliation report along with the stock reconciliation.
 
+A **Close Day** button sits at the bottom of the Funds Register screen (visible to
+CEO/Manager once the day is open, gated by `funds.close_day`). Closing fires a
+§26.4 notification to **CEO and Manager** that the day is closed and the
+reconciliation is ready (the funds-mismatch alert to the CEO still fires
+separately when any account is off). The full Daily Reconciliation Report screen
+(§25.9) remains its planned Ring 3 item.
+
 > Confirmed Phase 1 (2026-05-31, decision C1) — the earlier §3 build-order parenthetical that deferred this to Phase 2 is superseded; Funds History (§23.2) remains Phase 2.
 
 ### 23.7 Role access
@@ -1134,6 +1244,9 @@ App calculates expected vs actual for each account. Mismatches go into the recon
 - POS blocked until Open Day is done. Block message differs by role:
   - Cashier: "Opening cash not set. Wait for Manager or CEO."
   - Manager/CEO: "Opening cash not set. Tap to enter."
+- Refunds (§19.7) are blocked until Open Day is done too — a refund moves real
+  cash out of the till, so it needs an open day to land on (the void debit is
+  dated to today, §23.5).
 - New day blocked until previous day's Close Day is entered.
 - Notifications fire to CEO and Manager every morning the previous day remains unclosed.
 - Big banner shown when entering the screen if a previous day is unclosed.
@@ -1202,7 +1315,7 @@ CSV/PDF export with selectable time frame. Deferred to Phase 3.
 
 ### 25.1 Business Reports screen
 
-- Header: back, "Business Reports", global period filter (defaults to Day).
+- Header: back, "Business Reports", global period filter (defaults to Last 24 hours; canonical chip set, §30.11).
 - Grid of report cards (2-column).
 
 ### 25.2 Reports list
@@ -1395,7 +1508,7 @@ Hardcoded for now. Custom notification settings = Phase 2.
 |------|-----|---------|---------|--------------|
 | Home | Yes | Yes | Yes | Yes |
 | Point of Sale | Yes | Yes | Yes | Hidden |
-| Orders | Yes | Yes | Yes | Items only |
+| Orders | Yes | Yes | Items only | Items only |
 | Inventory | Yes | Yes | Yes (view only) | Yes |
 | Funds Register | Yes | Yes | Hidden | Hidden |
 | Expenses | Yes | Yes | Hidden | Hidden |
@@ -1477,7 +1590,7 @@ UI elements a user doesn't have permission to use should not appear at all. Don'
 
 ### 30.6 Smart defaults
 
-Currency auto-fills based on country (editable in Settings). Period filters default to Day on most screens, Month on Expenses Total. Country defaults to Nigeria.
+Currency auto-fills based on country (editable in Settings). Period filters default to **Last 24 hours** on most screens and **Last 30 days** on the Expenses / Supplier-Accounts totals (the canonical chip set is in §30.11). Country defaults to Nigeria.
 
 ### 30.7 Loading animations
 
@@ -1494,6 +1607,34 @@ Customers, suppliers, payments, expenses are all soft-deleted to preserve audit 
 ### 30.10 Confirmation prompts
 
 Destructive or significant actions confirm before proceeding (suspend staff, change role, revoke invite, delete supplier, etc.). Non-destructive removals (e.g., remove cart item) use undo snackbars for 5 seconds instead of upfront confirmation.
+
+### 30.11 Date-range filter chips (canonical)
+
+> Added 2026-06-01 (user). Every browse/report **period filter chip** uses one
+> shared, rolling set so the same chip means the same thing on every screen:
+>
+> - **Last 24 hours** — `now − 24h`
+> - **Last 7 days** — `now − 7 days`
+> - **Last 30 days** — `now − 30 days`
+> - **Last year** — `now − 365 days`
+> - **To date** — unbounded (everything up to now)
+>
+> These are **rolling** windows (a span measured back from now), not calendar
+> periods ("this week / this month"). One helper computes them
+> (`lib/core/utils/date_period.dart`); screens must not roll their own date math.
+> Default selection: **Last 24 hours** on most screens; **Last 30 days** on the
+> Expenses and Supplier-Accounts totals (§30.6).
+>
+> This replaced an earlier mix of per-screen, inconsistent implementations
+> (some rolling, some calendar-bound, with divergent labels — "Day", "Today",
+> "This Week", "All Time", etc.) and a class of off-by-one / fragile date bugs.
+>
+> **Scope / exceptions:** This governs Home, Reports, Orders, Expenses, Supplier
+> Accounts (Payments + Supplier detail), the Customer wallet, and the Stock Audit
+> report. It does **not** change the calendar-day-bound machinery — Funds
+> Register Open/Close Day and the daily reconciliation (§23) stay
+> per-calendar-day. **Inventory History (§16.8)** keeps its own labels
+> ("Today / 7 Days / 30 Days / All"). The Phase-3 Deliveries screen is untouched.
 
 ---
 
