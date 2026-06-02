@@ -164,6 +164,12 @@ plan conflict). This is the first implementation pass.
   breakdown sorted by profit and CSV export. Gated behind `reports.see_profit`
   (CEO-only by default seed). Profit per line uses the buying price snapshotted
   on the order line at sale time.
+- **Customer Ledger Report (§25.2) — new screen.** Replaces the card that routed to
+  the customers LIST. Live wallet balances across registered customers: headline
+  Owed-to-you / Customer-credit / Debtors-count tiles, a Top-debtors section and an
+  In-credit section, plus CSV export. Negative balance = owes, positive = credit;
+  walk-ins excluded (rule #14). No period filter — balances are point-in-time, so
+  the rolling §30.11 windows don't apply.
 - **Shared CSV export helper** (`lib/core/utils/csv_export.dart`, §25.7 "CSV from
   day one") — RFC-4180 builder + share-sheet, reusing the existing
   `share_plus`+`path_provider` (no new dependency). Unit-tested.
@@ -182,8 +188,10 @@ always equals Gross Profit.
 
 **Files touched:**
 - lib/features/dashboard/screens/reports_hub_screen.dart (remove forbidden card +
-  dead import, role-gate all cards, add Profit card)
+  dead import, role-gate all cards, add Profit card, route Customer Ledger to the
+  new report)
 - lib/features/dashboard/screens/profit_report_screen.dart (new)
+- lib/features/dashboard/screens/customer_ledger_screen.dart (new)
 - lib/core/utils/csv_export.dart (new)
 - test/utils/csv_export_test.dart (new — 6 tests)
 
@@ -204,8 +212,10 @@ carries large uncommitted work (Sessions 56–60, migrations 0071–0073) — **
 recommended.** See memory `feedback_never_git_checkout_uncommitted`.
 
 **Known issues / left open (Phase B/C):**
-- **Customer Ledger** card still routes to the customers LIST, not a §25.2
-  wallet-balances / top-debtors report — Phase B (next).
+- **Customer Ledger** report is now built. Per-store report scoping (§25.6 store
+  filter, §25.3 Manager "Own store") is **Phase 2** (master plan §2: per-store
+  reports ship in Phase 2) and absent from every report screen — a known deferral,
+  not a Phase-1 gap.
 - Wire CSV export into the other report detail screens (Sales/Stock Audit/Funds/
   Expenses) — Phase B.
 - **Daily Reconciliation Report** (§25.9) is now **unblockable** — its dependency,

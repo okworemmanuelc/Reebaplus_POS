@@ -11,7 +11,7 @@ import 'package:reebaplus_pos/features/dashboard/screens/stock_audit_screen.dart
 import 'package:reebaplus_pos/features/dashboard/screens/sales_detail_screen.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/profit_report_screen.dart';
 import 'package:reebaplus_pos/features/expenses/screens/expenses_screen.dart';
-import 'package:reebaplus_pos/features/customers/screens/customers_screen.dart';
+import 'package:reebaplus_pos/features/dashboard/screens/customer_ledger_screen.dart';
 import 'package:reebaplus_pos/features/funds/screens/funds_register_report_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 
@@ -141,7 +141,7 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
                 onTap: () {
                   Navigator.push(
                     context,
-                    slideLeftRoute(const CustomersScreen()),
+                    slideDownRoute(const CustomerLedgerScreen()),
                   );
                 },
               ),
