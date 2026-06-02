@@ -4,6 +4,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/utils/csv_export.dart';
 import 'package:reebaplus_pos/core/utils/date_period.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -52,6 +53,40 @@ class _FundsRegisterReportScreenState
     }
   }
 
+  Future<void> _exportCsv(
+    List<FundDayClosingData> filtered,
+    Map<String, FundsAccountData> accountById,
+    Map<String, String> storeNameById,
+  ) async {
+    final rows = <List<String>>[
+      for (final c in filtered)
+        [
+          c.businessDate,
+          storeNameById[c.storeId] ?? 'Store',
+          _accountLabel(accountById[c.fundsAccountId], c.accountType),
+          (c.expectedKobo / 100.0).toStringAsFixed(2),
+          (c.countedKobo / 100.0).toStringAsFixed(2),
+          (c.varianceKobo / 100.0).toStringAsFixed(2),
+        ],
+    ];
+    try {
+      await shareCsv(
+        csv: buildCsv(
+          ['Date', 'Store', 'Account', 'Expected', 'Counted', 'Variance'],
+          rows,
+        ),
+        fileName: 'funds_register_${_period.replaceAll(' ', '_')}',
+        subject: 'Funds Register — $_period',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not export: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -64,12 +99,17 @@ class _FundsRegisterReportScreenState
     final accountById = {for (final a in accounts) a.id: a};
     final storeNameById = {for (final s in stores) s.id: s.name};
 
-    // Filter to the selected period on the close's business date (§25.5).
-    final filtered = closings
-        .where((c) => datePeriodFromLabel(_period).includes(
-              DateTime.tryParse(c.businessDate) ?? DateTime(1970),
-            ))
-        .toList();
+    // Filter to the selected period (§25.5). A close is keyed on a business
+    // *date* (a whole calendar day), so a day overlaps the rolling window iff
+    // it ENDS at/after the window start — anchor on the day's end (next
+    // midnight). Anchoring on the start instead would clip a day closed for
+    // "yesterday" out of "Last 24 hours" even though it just ended.
+    final filtered = closings.where((c) {
+      final start = DateTime.tryParse(c.businessDate);
+      if (start == null) return false;
+      final dayEnd = start.add(const Duration(days: 1));
+      return datePeriodFromLabel(_period).includes(dayEnd);
+    }).toList();
 
     // Headline figures (§25.6).
     final dayKeys = <String>{
@@ -98,6 +138,14 @@ class _FundsRegisterReportScreenState
         backgroundColor: context.backgroundColor,
         leading: BackButton(color: context.primaryColor),
         actions: [
+          IconButton(
+            tooltip: 'Export CSV',
+            icon: Icon(FontAwesomeIcons.fileCsv,
+                size: 18, color: context.primaryColor),
+            onPressed: filtered.isEmpty
+                ? null
+                : () => _exportCsv(filtered, accountById, storeNameById),
+          ),
           SizedBox(
             width: 110,
             child: AppDropdown<String>(

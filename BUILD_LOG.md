@@ -106,6 +106,55 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 
 ---
 
+## Session 61 — 2026-06-02 — Reports: CSV export on Sales/Funds + remove Stock Audit report (§25)
+
+Phase B finishing touches on the §25 Reports hub.
+
+**Built today:**
+- **CSV export (§25.7) wired into the Sales Report and the Funds Register Report.**
+  Each report-detail screen now has an "Export CSV" button in its app bar
+  (disabled when there's no data) using the shared `csv_export.dart` helper. Sales
+  CSV columns mirror the on-screen table (Profit column only in profit mode). Funds
+  CSV is one row per closed day/account: Date, Store, Account, Expected, Counted,
+  Variance. With Profit and Customer Ledger (built earlier), all remaining report
+  detail screens now export CSV.
+
+**Plan change (user request) — Stock Audit report removed:**
+- The user asked to remove the **Stock Audit** report entirely. Deleted the hub
+  card and the whole `stock_audit_screen.dart`. Updated `reebaplus_master_plan.md`:
+  removed the §25.2 list item, the §25.3 matrix row, and the §30.11 scope mention,
+  with a dated removal note. Stock health stays visible in **Inventory**, and the
+  **stock-reconciliation summary** still lives inside the Daily Reconciliation
+  Report (§25.2/§25.9) — only the standalone report is gone. Verified nothing else
+  referenced `StockAuditScreen` before deleting.
+- The Reports hub is now 5 cards: Sales, Expense Tracker, Customer Ledger, Funds
+  Register, Profit (CEO-only).
+
+**Files touched:**
+- lib/features/dashboard/screens/sales_detail_screen.dart (CSV export)
+- lib/features/funds/screens/funds_register_report_screen.dart (CSV export)
+- lib/features/dashboard/screens/reports_hub_screen.dart (remove Stock Audit card +
+  import)
+- lib/features/dashboard/screens/stock_audit_screen.dart (DELETED)
+- reebaplus_master_plan.md (§25.2 / §25.3 / §30.11 Stock Audit removal + note)
+
+**Master plan sections covered:** §25.7 (CSV), §25.2/§25.3/§30.11 (Stock Audit
+removal).
+
+**Tested:** `flutter analyze` clean on all touched files (project-wide only the
+pre-existing `avoid_print` infos remain). No test referenced the deleted screen.
+On-device pass pending.
+
+**Known issues / left open:**
+- **Expense Tracker** card still routes to the §20 Expenses *feature* screen (owned
+  by Session 59), which has no CSV export yet — small follow-up there, not added to
+  avoid touching that feature mid-flight.
+- **Daily Reconciliation Report** (§25.9) is now buildable (Daily Stock Count
+  landed in Session 58) — next big §25 item. **Supplier Accounts Report** still
+  blocked on the Ring 1 supplier subsystem.
+
+---
+
 ## Session 60 — 2026-06-02 — Reports hub: Phase A (cleanup + role-gating) + Profit Report (§25, Ring 3)
 
 Continues the §25 planning in **Session 57** (which fixed the §11.3-vs-§25.3
@@ -571,7 +620,47 @@ helper wired into each report detail.
 
 ---
 
-## Session 56 — 2026-06-02 — Fix: Close Day 42501 RLS rejection + Funds Register Report card (§25.2)
+## Session 56 — 2026-06-02 — Fix: Close Day 42501 RLS + Funds Register Report + stock-count gate on Close Day
+
+### Part C — Stock-count gate on Close Day (§23.6, plan change) + report empty-state fix
+
+**Plan updates made during session:**
+- §23.6 — added the **stock-count gate**: closing the *current* business day is
+  blocked until a Daily Stock Count (§17) is saved for that store that day. The
+  reconciliation needs the stock audit. Back-dated closes (the §23.8 stale-prev-day
+  path) are **exempt** — that day can't be re-counted, and blocking it would
+  deadlock the next day from opening. User decision 2026-06-02 ("hard-block today,
+  allow back-dated"). Cross-ref line added to §17.3.
+
+**Built today:**
+- Close Day now checks `StockCountsDao.wasStockCounted(store, date)` before opening
+  the close sheet (only when the day being closed is today). No count → a "Take
+  stock first" dialog with a shortcut to the Stock Count screen; the day does not
+  close. Back-dated/previous-day closes skip the check.
+- **Bug fix:** the Funds Register Report was empty because its default "Last 24
+  hours" rolling window clipped out a day closed for *yesterday's* business date
+  (the common previous-day-close path). The period filter is now business-day
+  aware — a day counts as in-period if it *ended* within the window (anchored on
+  the day's end, not its midnight start).
+
+**Files touched:**
+- reebaplus_master_plan.md (§23.6 stock-count gate, §17.3 cross-ref)
+- lib/core/database/daos.dart (StockCountsDao.wasStockCounted)
+- lib/features/funds/screens/funds_register_screen.dart (gate + Take-stock prompt)
+- lib/features/funds/screens/funds_register_report_screen.dart (business-day filter)
+
+**Question answered for the user:**
+- "What happens when a day is closed before the day ends?" → Per §23.5 a closed
+  day is never reopened; closing removes the open-day gate so POS is blocked for
+  the rest of that day. No reopen feature in Phase 1. The stock-count gate now
+  reduces accidental premature closes.
+
+**Tested:**
+- `flutter analyze` on all touched Dart files: no issues. On-device pass pending.
+
+**Known issues / left open:**
+- No "reopen day" feature (by §23.5 design). If premature closes become a real
+  problem in use, revisit with the user — would be a separate plan change.
 
 ### Part B — Funds Register Report (§25.2)
 
