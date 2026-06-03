@@ -18,7 +18,6 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/shared/models/order.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
-import 'package:reebaplus_pos/shared/widgets/sync_banner.dart';
 import 'package:reebaplus_pos/shared/widgets/tab_navigator.dart';
 
 // The LazyIndexedStack has been replaced with the direct Offstage + Set approach
@@ -172,39 +171,27 @@ class _MainLayoutState extends ConsumerState<MainLayout>
 
           // Offstage keeps the widget alive and mounted for streams/scroll,
           // while `_initializedTabs` ensures exactly zero unused tabs are mounted initially.
-          //
-          // The Column overlay places SyncBanner above the tab Stack. The
-          // banner self-collapses to zero height when the pull state is idle
-          // (AnimatedSize), so the per-screen Scaffolds underneath still
-          // reach the status bar when nothing is syncing.
-          body: Column(
-            children: [
-              const SyncBanner(),
-              Expanded(
-                child: Stack(
-                  children: List.generate(12, (i) {
-                    if (!_initializedTabs.contains(i)) {
-                      // Not yet visited — render nothing
-                      return const SizedBox.shrink();
-                    }
-                    final tab = Offstage(
-                      offstage: i != currentIndex,
-                      // TickerMode guarantees animations on offstage tabs don't tick
-                      child: TickerMode(
-                        enabled: i == currentIndex,
-                        child: TabNavigator(
-                          navigatorKey: _navigatorKeys[i],
-                          rootScreen: _tabWidgets[i],
-                          observer: _observers[i],
-                        ),
-                      ),
-                    );
-                    if (i != currentIndex) return tab;
-                    return FadeTransition(opacity: _tabFadeAnimation, child: tab);
-                  }),
+          body: Stack(
+            children: List.generate(12, (i) {
+              if (!_initializedTabs.contains(i)) {
+                // Not yet visited — render nothing
+                return const SizedBox.shrink();
+              }
+              final tab = Offstage(
+                offstage: i != currentIndex,
+                // TickerMode guarantees animations on offstage tabs don't tick
+                child: TickerMode(
+                  enabled: i == currentIndex,
+                  child: TabNavigator(
+                    navigatorKey: _navigatorKeys[i],
+                    rootScreen: _tabWidgets[i],
+                    observer: _observers[i],
+                  ),
                 ),
-              ),
-            ],
+              );
+              if (i != currentIndex) return tab;
+              return FadeTransition(opacity: _tabFadeAnimation, child: tab);
+            }),
           ),
           bottomNavigationBar: Builder(
             builder: (context) {

@@ -57,9 +57,8 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen>
     // login, before later staff joined) catches up without a re-login.
     // Deferred to a post-frame callback: _pullStaffRoster → pullChanges writes
     // pullStatus.value synchronously, which is bridged into Riverpod via
-    // pullStatusProvider (watched by the always-mounted SyncBanner). Mutating a
-    // watched provider during the build phase is illegal, so wait until the
-    // first frame is committed.
+    // pullStatusProvider. Mutating a watched provider during the build phase is
+    // illegal, so wait until the first frame is committed.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) unawaited(_pullStaffRoster(ref));
     });
