@@ -25,7 +25,18 @@ class _PrinterPickerState extends ConsumerState<PrinterPicker> {
 
   Future<void> _loadDevices() async {
     setState(() => _isLoading = true);
-    final devices = await ref.read(printerServiceProvider).getPairedDevices();
+    final printer = ref.read(printerServiceProvider);
+    // Reading device names from the OS bonded list needs BLUETOOTH_CONNECT on
+    // Android 12+; without it the list comes back empty or unnamed. Ensure the
+    // permission before loading so the picker list is accurate.
+    List<BluetoothInfo> devices = [];
+    try {
+      await printer.requestPermissions();
+      devices = await printer.getPairedDevices();
+    } catch (_) {
+      // No Bluetooth adapter / read failed — fall through to the empty state
+      // rather than spinning forever.
+    }
     if (mounted) {
       setState(() {
         _devices = devices;

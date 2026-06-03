@@ -10,16 +10,30 @@ class PrinterService {
   PrinterService();
 
   Future<bool> requestPermissions() async {
-    if (Platform.isAndroid) {
+    if (!Platform.isAndroid) return true;
+    try {
+      // Printing to an already-paired thermal printer needs BLUETOOTH_CONNECT
+      // on Android 12+ (API 31+). BLUETOOTH_SCAN is only for discovering NEW
+      // devices, so it's requested but treated as best-effort. We deliberately
+      // do NOT request location: we never run a classic Bluetooth discovery (we
+      // read the OS bonded list and connect), and gating on location got denied
+      // on POS devices and silently blocked every print. On Android < 12 these
+      // map to install-time permissions and report granted automatically.
       final statuses = await [
-        Permission.bluetoothScan,
         Permission.bluetoothConnect,
-        Permission.location,
+        Permission.bluetoothScan,
       ].request();
 
-      return statuses.values.every((status) => status.isGranted);
+      final connectGranted =
+          statuses[Permission.bluetoothConnect]?.isGranted ?? false;
+      if (!connectGranted) {
+        AppLogger.error('BLUETOOTH_CONNECT not granted: $statuses');
+      }
+      return connectGranted;
+    } catch (e) {
+      AppLogger.error('Printer permission request failed: $e');
+      return false;
     }
-    return true;
   }
 
   Future<bool> get isConnected async {

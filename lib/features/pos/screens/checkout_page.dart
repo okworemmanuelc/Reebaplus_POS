@@ -226,6 +226,20 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     return balances[id] ?? 0;
   }
 
+  /// Live debt limit (kobo) for the current customer. Reads from the live
+  /// CustomerService list so a limit raised before/while this checkout was open
+  /// is honoured — the `_initialCustomer` snapshot captured at init (and the
+  /// Customer carried through the cart) can be stale. The wallet *balance* is
+  /// already read live, so reading the limit live too keeps the two sides of
+  /// the debt-limit check consistent. Falls back to the snapshot if the
+  /// customer isn't in the live list yet.
+  int get _currentCustomerWalletLimitKobo {
+    final id = _initialCustomer?.id;
+    if (id == null) return _initialCustomer?.walletLimitKobo ?? 0;
+    final live = ref.read(customerServiceProvider).getById(id);
+    return live?.walletLimitKobo ?? _initialCustomer?.walletLimitKobo ?? 0;
+  }
+
   int get _totalKobo => (widget.total * 100).round();
 
   /// Wallet credit (kobo) available to apply toward an order (0 if none / debt).
@@ -516,10 +530,12 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           ),
 
           // §14.2 Step 2: pick the receiving account — only when cash / card /
-          // transfer actually lands in an account (not a wallet or credit sale).
+          // transfer actually lands in an account (not a wallet or credit
+          // sale). Apply-credit only collects cash when "outstanding paid" is
+          // ticked; left unticked the shortfall becomes debt, so no account.
           if ((_paymentType == PaymentType.fullCash && !_isWalletPayment) ||
               _paymentType == PaymentType.partialCash ||
-              _isApplyCreditFlow)
+              (_isApplyCreditFlow && _outstandingPaidConfirmed))
             _buildAccountPicker(),
 
           // §14.1 — "Add wallet info to receipt" (off by default). Only shown
@@ -614,8 +630,18 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   // ── Confirm payment logic ──────────────────────────────────────────────────
   Future<void> _confirmPayment() async {
     // Pre-flight: detect price/version drift since items were added to cart.
-    // Cashier accepts new prices or cancels back to the cart.
-    final stale = await _detectCartStaleness();
+    // Cashier accepts new prices or cancels back to the cart. This runs before
+    // the main try below, so guard it on its own — a thrown DB error here must
+    // flash, not silently kill the checkout button.
+    final List<CartStaleItem> stale;
+    try {
+      stale = await _detectCartStaleness();
+    } catch (e) {
+      if (mounted) {
+        AppNotification.showError(context, 'Could not verify cart prices: $e');
+      }
+      return;
+    }
     if (!mounted) return;
     if (stale.isNotEmpty) {
       final accepted = await _showStalenessDialog(stale);
@@ -652,15 +678,39 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         );
         return;
       }
-      // Apply-credit flow (bug #4): the credit only partly covers the order, so
-      // the cashier must confirm the outstanding cash was actually collected.
+      // Apply-credit flow (bug #4): the credit only partly covers the order.
+      // Either the cashier ticks "outstanding paid" (the rest is collected as
+      // cash), or the box is left unticked and the outstanding is booked as
+      // debt on the customer's wallet — allowed only while it stays within
+      // their debt limit (same gate as a partial/credit sale).
       if (_isApplyCreditFlow && !_outstandingPaidConfirmed) {
-        AppNotification.showError(
-          context,
-          'Confirm the outstanding '
-          '${formatCurrency(_outstandingAfterCreditKobo / 100.0)} was paid.',
-        );
-        return;
+        final customer = _initialCustomer!;
+        final limitKobo = _currentCustomerWalletLimitKobo;
+
+        // No limit set → can't carry the debt; require the cash be collected.
+        if (limitKobo <= 0) {
+          AppNotification.showError(
+            context,
+            '${customer.name} has no debt limit set. Tick "outstanding paid" '
+            'to collect the cash, or set a debt limit in the customer profile.',
+          );
+          return;
+        }
+
+        // Wallet goes to (current credit − full total); the shortfall is the
+        // outstanding that becomes debt. Block if it breaches the limit.
+        final newBalanceKobo = _currentCustomerWalletKobo - _totalKobo;
+        if (newBalanceKobo < -limitKobo) {
+          final overByKobo = (-newBalanceKobo) - limitKobo;
+          AppNotification.showError(
+            context,
+            'The outstanding exceeds ${customer.name}\'s debt limit of '
+            '${formatCurrency(limitKobo / 100.0)}. '
+            'Over limit by ${formatCurrency(overByKobo / 100.0)}. '
+            'Tick "outstanding paid" to collect the cash instead.',
+          );
+          return;
+        }
       }
     }
 
@@ -674,7 +724,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     if (_paymentType == PaymentType.partialCash ||
         _paymentType == PaymentType.credit) {
       final customer = _initialCustomer!;
-      final limitKobo = customer.walletLimitKobo;
+      final limitKobo = _currentCustomerWalletLimitKobo;
 
       // Block if no debt limit has been set
       if (limitKobo <= 0) {
@@ -721,13 +771,16 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       switch (_paymentType) {
         case PaymentType.fullCash:
           if (_isWalletPayment) {
-            // Pay from wallet. Apply-credit (bug #4): the credit only partly
-            // covers, so collect the outstanding now (it flows through the
-            // wallet as a credit leg and credits the chosen Funds account).
-            // Otherwise the credit fully covers — nothing is paid now and the
-            // full total debits the wallet credit (same as a credit sale).
-            amountPaidKobo =
-                _isApplyCreditFlow ? _outstandingAfterCreditKobo : 0;
+            // Pay from wallet. Apply-credit (bug #4) with the box ticked: the
+            // credit only partly covers, so collect the outstanding now (it
+            // flows through the wallet as a credit leg and credits the chosen
+            // Funds account). Otherwise — credit fully covers, OR apply-credit
+            // with the box left unticked — nothing is paid now and the full
+            // total debits the wallet credit, taking it negative by the
+            // outstanding (the debt the customer now owes).
+            amountPaidKobo = (_isApplyCreditFlow && _outstandingPaidConfirmed)
+                ? _outstandingAfterCreditKobo
+                : 0;
           } else {
             amountPaidKobo = totalKobo;
           }
@@ -792,11 +845,15 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
               0,
               (s, i) => s + ((i['discountKobo'] as int?) ?? 0),
             ),
-            // Apply-credit (bug #4) collects cash for the outstanding, so it's
-            // a 'cash' sub-type that credits a Funds account; only a fully
-            // covered wallet payment is the 'wallet' sub-type.
-            paymentSubType:
-                (_isWalletPayment && !_isApplyCreditFlow) ? 'wallet' : 'cash',
+            // Apply-credit (bug #4) collects cash for the outstanding ONLY when
+            // the box was ticked → 'cash' sub-type that credits a Funds
+            // account. A fully covered wallet payment, or an apply-credit left
+            // as debt (box unticked), is the 'wallet' sub-type — no cash lands,
+            // the full total debits the wallet and the shortfall becomes debt.
+            paymentSubType: (_isWalletPayment &&
+                    !(_isApplyCreditFlow && _outstandingPaidConfirmed))
+                ? 'wallet'
+                : 'cash',
             fundsAccountId: fundsAccountId,
             businessDate: businessDate,
           );
@@ -819,6 +876,13 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         cart.setActiveCustomer(null);
 
         widget.onCheckoutSuccess?.call();
+
+        // Auto-print the receipt the moment the sale is confirmed. Fire-and-
+        // forget: _printReceipt() is self-contained (shows the blue "Printing
+        // receipt…" banner, auto-connects to the saved/paired printer, and
+        // falls back to the picker) and must not block the confirm handler.
+        // widget.cart is a snapshot, so it survives the cart.clear() above.
+        unawaited(_printReceipt());
       }
     } catch (e) {
       if (mounted) {
@@ -989,6 +1053,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   }
 
   Future<void> _printReceipt() async {
+    if (!mounted) return;
+    // Blue in-progress banner, shown immediately — both on auto-print right
+    // after Confirm Payment and on a manual reprint tap. No reprintDate is
+    // passed below, so this checkout receipt never carries a REPRINTED stamp.
+    AppNotification.showInfo(context, 'Printing receipt...');
     try {
       final printer = ref.read(printerServiceProvider);
 
@@ -999,8 +1068,6 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         AppNotification.showError(context, 'Bluetooth permissions denied');
         return;
       }
-
-      AppNotification.showInfo(context, 'Preparing receipt...');
 
       final List<int> receiptBytes = await ThermalReceiptService.buildReceipt(
         orderId: _currentOrderId,
@@ -1022,20 +1089,16 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
       if (!mounted) return;
 
-      // Proactively check connection before writing.
-      final connected = await printer.isConnected;
-      if (connected) {
-        // Already connected — try printing directly.
-        final success = await printer.printBytesDirectly(receiptBytes);
-        if (success) {
-          if (!mounted) return;
-          AppNotification.showSuccess(context, 'Print successful');
-          return;
-        }
+      // Auto-print: reuse the live connection, otherwise auto-connect to the
+      // last-used / paired printer — printBytes() handles both. Only when that
+      // fails do we pull up the picker so the user can choose the right one.
+      final printed = await printer.printBytes(receiptBytes);
+      if (!mounted) return;
+      if (printed) {
+        AppNotification.showSuccess(context, 'Print successful');
+        return;
       }
 
-      // Not connected (or direct print failed) — show picker immediately.
-      if (!mounted) return;
       _showPrinterPicker(printer, receiptBytes);
     } catch (e) {
       if (mounted) {
@@ -1066,23 +1129,34 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             'Connecting to ${device.name}...',
           );
 
-          final connected = await printer.connect(device.macAdress);
-          if (!mounted) return;
-
-          if (connected) {
-            await printer.saveLastConnectedMac(device.macAdress);
-            final success = await printer.printBytesDirectly(receiptBytes);
+          // Wrap the connect/print so a thrown exception flashes an error
+          // instead of dying silently.
+          try {
+            final connected = await printer.connect(device.macAdress);
             if (!mounted) return;
-            if (success) {
-              AppNotification.showSuccess(context, 'Print successful');
+
+            if (connected) {
+              await printer.saveLastConnectedMac(device.macAdress);
+              final success = await printer.printBytesDirectly(receiptBytes);
+              if (!mounted) return;
+              if (success) {
+                AppNotification.showSuccess(context, 'Print successful');
+              } else {
+                AppNotification.showError(
+                  context,
+                  'Print failed after connect',
+                );
+              }
             } else {
-              AppNotification.showError(context, 'Print failed after connect');
+              AppNotification.showError(
+                context,
+                'Failed to connect to ${device.name}',
+              );
             }
-          } else {
-            AppNotification.showError(
-              context,
-              'Failed to connect to ${device.name}',
-            );
+          } catch (e) {
+            if (mounted) {
+              AppNotification.showError(context, 'Print error: $e');
+            }
           }
         },
       ),
@@ -1271,23 +1345,50 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
               ),
             ),
             // §14.2 bug #4 — the credit only partially covers the order: apply
-            // it (wallet → ₦0) and collect the rest. Shows the breakdown + an
-            // "Outstanding paid" confirmation; the receiving account picker for
-            // that cash renders just below (it's gated on _isApplyCreditFlow).
+            // it and handle the rest. Ticking "outstanding paid" collects the
+            // shortfall as cash (wallet → ₦0); leaving it unticked books the
+            // shortfall as debt (wallet goes negative). The receiving account
+            // picker for the cash renders below (gated on _isApplyCreditFlow).
             if (_isApplyCreditFlow) ...[
               SizedBox(height: context.getRSize(10)),
               _applyCreditRow(
                 'Wallet credit applied',
                 '−${formatCurrency(_walletCreditKobo / 100.0)}',
               ),
-              _applyCreditRow('Wallet after sale', formatCurrency(0)),
               _applyCreditRow(
-                'Outstanding to collect',
+                'Wallet after sale',
+                formatCurrency(
+                  _outstandingPaidConfirmed
+                      ? 0
+                      : (_currentCustomerWalletKobo - _totalKobo) / 100.0,
+                ),
+              ),
+              _applyCreditRow(
+                _outstandingPaidConfirmed
+                    ? 'Outstanding to collect'
+                    : 'Outstanding (added as debt)',
                 formatCurrency(_outstandingAfterCreditKobo / 100.0),
                 emphasise: true,
               ),
               SizedBox(height: context.getRSize(10)),
               _outstandingPaidCheckbox(),
+              if (!_outstandingPaidConfirmed) ...[
+                SizedBox(height: context.getRSize(6)),
+                Padding(
+                  padding:
+                      EdgeInsets.symmetric(horizontal: context.getRSize(4)),
+                  child: Text(
+                    'Leave unticked to add the '
+                    '${formatCurrency(_outstandingAfterCreditKobo / 100.0)} '
+                    'outstanding to $_customerDisplayName\'s debt.',
+                    style: TextStyle(
+                      fontSize: context.getRFontSize(12),
+                      color: _subtext,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),
+              ],
             ] else if (!hasCredit) ...[
               SizedBox(height: context.getRSize(6)),
               Padding(

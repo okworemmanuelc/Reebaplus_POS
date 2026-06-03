@@ -593,6 +593,17 @@ Selected account is credited in the Funds Register.
 > customer's wallet credit already **covers** the total, this is the existing
 > "Pay from wallet" path; if the customer has **no** credit, Full payment is
 > unchanged (collect the total into the chosen account).
+>
+> Outstanding left unpaid → booked as debt (2026-06-03, user). The "Outstanding
+> paid" checkbox is **optional**. If the cashier **leaves it unticked**, the
+> outstanding is **not** collected as cash — instead it is **booked as debt on
+> the customer's wallet** (the wallet goes **negative** by the outstanding, i.e.
+> credit the customer now owes the business), and no receiving account is needed.
+> This is allowed **only while the resulting debt stays within the customer's
+> debt limit** (the same gate as a partial / credit sale) — if it would
+> breach the limit, or the customer has **no** debt limit set, checkout is
+> blocked and the cashier must tick the box and collect the cash. The debt syncs
+> live through the wallet like any credit sale.
 
 ### 14.3 Wallet flow
 

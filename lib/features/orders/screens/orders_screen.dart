@@ -1054,15 +1054,15 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
 
       if (!context.mounted) return;
 
-      final isConnected = await printer.isConnected;
-      if (isConnected) {
-        final success = await printer.printBytesDirectly(bytes);
-        if (success) {
-          if (!context.mounted) return;
-          AppNotification.showSuccess(context, 'Print successful');
-          _logReprint(order.id.toString());
-          return;
-        }
+      // Auto-print: reuse the live connection, otherwise auto-connect to the
+      // last-used / paired printer — printBytes() handles both. Only when that
+      // fails do we fall through to the picker below.
+      final printed = await printer.printBytes(bytes);
+      if (!context.mounted) return;
+      if (printed) {
+        AppNotification.showSuccess(context, 'Print successful');
+        _logReprint(order.id.toString());
+        return;
       }
 
       if (context.mounted) {

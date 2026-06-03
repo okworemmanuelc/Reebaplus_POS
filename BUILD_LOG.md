@@ -106,6 +106,100 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 
 ---
 
+## Session 70 — 2026-06-03 — Checkout: no more silent action failures
+
+**What the user asked for:**
+- When an action on the checkout page fails, flash the appropriate error message instead of doing nothing silently.
+
+**Built today:**
+- Wrapped the cart-staleness pre-flight in `_confirmPayment`: it runs before the main try block, so a thrown DB error there used to kill the Confirm button with no feedback. It now flashes "Could not verify cart prices: …" and aborts cleanly.
+- Wrapped the printer-picker's `onSelected` connect/print path (`_showPrinterPicker`): `connect()` / `printBytesDirectly()` throwing previously went unhandled and silent. It now flashes "Print error: …".
+- Verified the rest of the page already surfaces failures (the main checkout catch, Print, Share, and every validation `return` flash). The only untouched `catch` is the cosmetic item-colour parse fallback, which is intentional.
+
+**Files touched:**
+- `lib/features/pos/screens/checkout_page.dart`
+
+**Database changes:**
+- None.
+
+**Status:** `flutter analyze` clean on the file. On-device confirmation pending.
+
+---
+
+## Session 69 — 2026-06-03 — Apply-credit: leave the outstanding unticked → book it as debt
+
+**What the user asked for:**
+- In the apply-credit checkout flow (Pay from Wallet where the credit only partly covers the order), when the "Outstanding paid" box is left unticked, don't block — instead register the outstanding as debt on the customer's wallet (credit they owe the business), as long as it stays within their debt limit. It must sync live.
+
+**Built today:**
+- The "Outstanding paid" checkbox is now optional. Ticked → the shortfall is collected as cash into the chosen Funds account (unchanged). Unticked → the full total debits the wallet (sub-type 'wallet', nothing paid now), so the wallet goes negative by the outstanding — that's the new debt. It posts through the wallet ledger and syncs live like any credit/wallet sale.
+- Gated the debt path on the debt limit: if the resulting debt would breach the customer's limit (or they have no limit set), checkout is blocked with a message telling the cashier to tick the box and collect the cash instead. Reuses the live debt-limit value from Session 67.
+- UI: the apply-credit breakdown now reflects the unticked state — "Wallet after sale" shows the negative balance, the outstanding row reads "Outstanding (added as debt)", and a hint explains that leaving the box unticked adds the amount to the customer's debt. The receiving-account picker now only appears when the box is ticked (no cash is collected otherwise).
+
+**Files touched:**
+- `lib/features/pos/screens/checkout_page.dart`
+- `reebaplus_master_plan.md` (§14.2 — documented the "leave unticked → debt" option)
+
+**Database changes:**
+- None.
+
+**Plan updates made during session:**
+- §14.2 apply-credit note updated: the "Outstanding paid" checkbox is optional; unticked books the outstanding as wallet debt within the debt limit.
+
+**Status:** `flutter analyze` clean on the file; order money-math + checkout tests pass. On-device confirmation pending.
+
+---
+
+## Session 68 — 2026-06-03 — Fix: Print Receipt did nothing (silently blocked by a location-permission gate)
+
+**What the user reported:**
+- Tapping **Print Receipt** on any device, for any user, did nothing — no "Preparing receipt…" message and no printer-picker popup. Same on the checkout receipt screen and on reprint from the Orders screen and a customer's orders.
+
+**Root cause:**
+- All three print paths call `PrinterService.requestPermissions()` as the first gate. It required **bluetoothScan + bluetoothConnect + location** to *all* be granted (`.every(isGranted)`). A POS app asking for **location** is unusual, so staff routinely deny it — and location isn't needed at all, because we connect to *already-paired* printers (we read the OS bonded list, we never run a classic Bluetooth scan). The moment location was denied, the method returned `false` and the whole flow stopped before "Preparing receipt…" and before the picker.
+- Secondary gap vs. the intended behaviour: checkout and Orders only checked `isConnected` then `printBytesDirectly`. They never called `autoConnect()`, so a previously-paired printer was never reused unless it happened to still be live — it should auto-connect to the last-used printer first.
+
+**Built today:**
+- `requestPermissions()` now requests only `bluetoothConnect` + `bluetoothScan` (no location) and returns success based on `bluetoothConnect` (the one actually needed to connect/print on Android 12+). Wrapped in try/catch with logging so a failure surfaces instead of silently killing the flow.
+- Checkout and Orders now call `printBytes()` (reuse live connection → else auto-connect to the saved/last-used printer → print). Only when that fails do they pull up the picker — matching "auto-print to the paired printer, fall back to the picker."
+- `PrinterPicker` now ensures Bluetooth permission before reading the bonded list (so device names are accurate on Android 12+) and no longer spins forever if the adapter read throws (e.g. no Bluetooth hardware) — it falls through to the empty state.
+- `AndroidManifest.xml`: capped legacy `BLUETOOTH`/`BLUETOOTH_ADMIN` + location at `maxSdkVersion=30`, flagged `BLUETOOTH_SCAN` `neverForLocation`. Printing no longer depends on location at the manifest level either.
+
+**Files touched:**
+- `lib/shared/services/printer_service.dart`
+- `lib/features/pos/screens/checkout_page.dart` (print path only — the Session 67 debt-limit change is separate)
+- `lib/features/orders/screens/orders_screen.dart`
+- `lib/shared/widgets/printer_picker.dart`
+- `android/app/src/main/AndroidManifest.xml`
+
+**Database changes:**
+- None.
+
+**Status:** `flutter analyze` clean on all touched Dart files. On-device confirmation pending — needs a real device with a paired thermal printer (the emulator has no Bluetooth, so the picker will show "No paired printers found" there, which is expected).
+
+---
+
+## Session 67 — 2026-06-03 — Fix: checkout used a stale debt limit (couldn't complete a sale after raising the limit)
+
+**What the user reported:**
+- After increasing a customer's debt limit, checkout still failed for a customer whose debt was NOT above the new limit — when there was an outstanding amount left on the account (a partial / credit sale).
+
+**Root cause:**
+- In `checkout_page.dart`, the debt-limit check compared a **live** wallet balance against a **stale** debt limit. The balance came from the live ledger (`walletBalancesKoboProvider`), but the limit was read from `_initialCustomer.walletLimitKobo` — a snapshot of the Customer object captured when the page (and the cart's active customer) was set up. Raising the limit afterward updated the database but never that snapshot, so the check kept using the old, lower limit and wrongly blocked the sale with "exceeds debt limit".
+
+**Built today:**
+- Added a `_currentCustomerWalletLimitKobo` getter that reads the customer's current debt limit live from `customerServiceProvider` (kept in sync via `watchAllCustomers()`), falling back to the `_initialCustomer` snapshot if the customer isn't in the live list yet. The debt-limit validation now uses it, so the limit and the balance are both read live and stay consistent.
+
+**Files touched:**
+- `lib/features/pos/screens/checkout_page.dart`
+
+**Database changes:**
+- None.
+
+**Status:** `flutter analyze lib/features/pos/screens/checkout_page.dart` clean. On-device confirmation pending.
+
+---
+
 ## Session 66 — 2026-06-03 — Removed the top SyncBanner
 
 **What the user asked for:**
