@@ -106,6 +106,47 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 
 ---
 
+## Session 74 — 2026-06-04 — Permission scopes: Business → Store → User (Business real, Store/User placeholders) (§10.2.1)
+
+**What the user asked for:**
+- Permission settings shouldn't be managed only per role. They should layer by scope: per **business** first (default for all stores), then per **store** (default for all users in that store), then per **user** (overrides the rest). Since multi-store isn't fully built, add placeholders where the store/user layers will go. The user clarified the "user" layer means: the CEO opens an individual staff member's profile and changes that one person's permission access.
+
+**Plan-conflict flagged first (per CLAUDE.md):** the master plan had permissions as strictly role-based and business-wide — no per-store or per-user override anywhere, and multi-store UI is Phase 2 (§2.2). This was a new feature, so the master plan was updated before any code (user approved "Business real + placeholders").
+
+**Built today:**
+- **Master plan §10.2.1 (new):** documents the three permission scopes and the resolution order (most-specific wins: **User > Store > Business**). Business is the existing per-role behaviour; Store (on the role page) and User (on the staff profile) are visible Phase-1 placeholders, disabled and labelled "coming with multi-store." Added a forward-only schema note naming the future Phase-2 tables (`store_role_permissions`, `user_permission_overrides`) — not built.
+- **Role detail screen:** added a Business / Store scope selector (lightweight glass-pill segmented control) at the top. Business = the full toggle list exactly as before. Store = a centred "Per-store permissions — coming with multi-store" placeholder. A muted helper line explains the hierarchy and points to the staff profile for per-person overrides.
+- **Staff detail screen:** added a "Permission access" card (only for a `settings.manage` holder, never on the own/read-only card) showing the member uses their role's permissions, plus a disabled "Customize this staff's permissions — coming with multi-store" row.
+
+**Files touched:**
+- `reebaplus_master_plan.md`
+- `lib/core/settings/role_permissions_detail_screen.dart`
+- `lib/features/staff/screens/staff_detail_screen.dart`
+- `BUILD_LOG.md`
+
+**Database changes:**
+- None. No new tables, columns, migrations, DAOs, providers, or sync changes. The placeholders are pure UI and write nothing — effective permissions stay role-based business-wide, correct for Phase 1.
+
+**Master plan sections covered:**
+- §10.2.1 (new) — permission scopes Business → Store → User. References §2.2 (multi-store is Phase 2) and §20.6 (the business→store fallback pattern the future tables will follow).
+
+**Plan updates made during session:**
+- Added §10.2.1 as above. This is a deliberate plan extension, approved by the user, because the original plan had no per-store/per-user permission concept.
+
+**Status:** `flutter analyze` clean on both changed files. On-device confirmation pending.
+
+**Tested:**
+- `flutter analyze` on the two changed files — no issues.
+
+**Known issues / left open:**
+- Store and User scopes are placeholders only — no override storage or runtime resolver yet. The real Phase-2 work (the two new synced tables + a resolver merging User > Store > Business) is described in §10.2.1 but not started.
+- On-device pass still pending (scope selector switches cleanly; Store placeholder shows; Permission access card appears for CEO and is hidden on self / for non-managers; no rows hit the sync queue from opening these screens).
+
+**Next session should:**
+- Get an on-device confirmation of the two placeholders, then continue with whatever multi-store groundwork the user prioritises.
+
+---
+
 ## Session 73 — 2026-06-04 — Cart: "Select Customer" picker rebuilt as a smooth fixed-height sheet
 
 **What the user asked for:**

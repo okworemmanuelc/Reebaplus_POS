@@ -358,6 +358,18 @@ Where the CEO tunes everything about the business. Menu screen with tappable sec
 - Other role settings near the toggles:
   - Can change product prices (toggle). Default: Manager ON, others OFF.
 
+#### 10.2.1 Permission scopes (Business → Store → User) (2026-06-04, user)
+
+Permission settings are layered by scope, most-specific wins: **User > Store > Business**.
+
+- **Business (default).** For each role, the CEO sets its permission toggles on the Roles & Permissions sub-page (everything described above). These apply to **every store** in the business — they are the default.
+- **Store (default for users in that store).** A store can override a role's permissions just for that store; that becomes the default for every user working in that store. Reached from the role's page via a scope selector (Business / Store).
+- **User (override the rest).** The CEO opens an **individual staff member's profile** (Staff Management → tap a staff member → **Permission access**) and adjusts *that one person's* permission access. A user override wins over both the store and business defaults. This lives on the staff profile, **not** the per-role Roles & Permissions page (which is by role, not by person).
+
+**Phase 1 ships the Business scope fully** (it is the existing Roles & Permissions behaviour). The **Store** selector on the role page and the **Permission access** section on the staff profile are **visible placeholders in Phase 1, disabled and labelled "coming with multi-store"** — multi-store UI itself is Phase 2 (§2.2). They are surfaced now so the hierarchy is visible and the CEO knows where each scope will be set; no per-store or per-user override is stored or enforced yet, so effective permissions remain role-based business-wide.
+
+**Forward note (Phase 2 schema — do not build yet):** the Store and User layers will introduce two synced tenant tables following the same business→store fallback pattern already used by `expense_budgets` (§20.6): `store_role_permissions` (`business_id`, `store_id`, `role_id`, `permission_key`) and `user_permission_overrides` (`business_id`, `user_id`, `permission_key`, `is_granted`). When built, both follow the §5 sync contract (added to `_syncedTenantTables`, routed through a DAO that enqueues, stream provider added), and a runtime resolver merges the three layers in User > Store > Business order.
+
 ### 10.3 Delete Business & Account (Danger Zone)
 
 The **last Phase 1 item to build** (see §3). A CEO can permanently delete their account, their business, and everything attached to the business. Irreversible. CEO-only — no other role ever sees this section. Gated by the `settings.delete_business` permission, which is locked ON for CEO and unavailable to all other roles.

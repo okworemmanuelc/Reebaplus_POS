@@ -837,6 +837,20 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   }
 
   Widget _buildSupplierFilter(BuildContext context) {
+    // §16.7: roles below Manager (and a Manager without the all-stores grant)
+    // are confined to their assigned store(s). Mirrors the Home filter lock.
+    final lock = _storeLock();
+    if (lock.locked &&
+        lock.lockedStores.isNotEmpty &&
+        !lock.lockedStores.any((s) => s.id == _selectedStoreId)) {
+      // Pin a locked user's filter to an allowed store, re-subscribing once.
+      final id = lock.lockedStores.first.id;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _selectedStoreId == id) return;
+        setState(() => _selectedStoreId = id);
+        _subscribeToProducts();
+      });
+    }
     return Container(
       padding: EdgeInsets.fromLTRB(
         context.getRSize(16),
@@ -850,8 +864,37 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
           Expanded(
             child: _isFirstLoad
                 ? const SizedBox.shrink()
-                : (ref.read(navigationProvider).storeLocked.value
-                      ? _buildLockedStoreChip()
+                : (lock.locked
+                      // One assigned store → a locked chip; several → a dropdown
+                      // limited to those stores (no "All Stores").
+                      ? (lock.lockedStores.length > 1
+                            ? AppDropdown<String>(
+                                value: lock.lockedStores
+                                        .any((s) => s.id == _selectedStoreId)
+                                    ? _selectedStoreId
+                                    : lock.lockedStores.first.id,
+                                labelText: 'Store',
+                                items: lock.lockedStores
+                                    .map(
+                                      (w) => DropdownMenuItem(
+                                        value: w.id.toString(),
+                                        child: Text(
+                                          w.name,
+                                          style: TextStyle(color: _text),
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: (val) {
+                                  if (val != null) {
+                                    setState(() => _selectedStoreId = val);
+                                    _subscribeToProducts();
+                                  }
+                                },
+                              )
+                            : _buildLockedStoreChip(
+                                lock.lockedStores.firstOrNull,
+                              ))
                       : AppDropdown<String>(
                           value: _selectedStoreId,
                           labelText: 'Store',
@@ -940,9 +983,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     );
   }
 
-  Widget _buildLockedStoreChip() {
-    final lockedId = ref.read(navigationProvider).lockedStoreId.value;
-    final store = _stores.where((w) => w.id == lockedId).firstOrNull;
+  Widget _buildLockedStoreChip(StoreData? store) {
     final label = store?.name ?? 'My Store';
     return Container(
       padding: EdgeInsets.symmetric(

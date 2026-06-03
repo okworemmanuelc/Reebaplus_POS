@@ -6144,6 +6144,17 @@ class UserStoresDao extends DatabaseAccessor<AppDatabase>
     return (select(userStores)..where((t) => t.userId.equals(userId))).get();
   }
 
+  /// User ids assigned to [storeId] in the current business. Routes the §26.4
+  /// stock-keeper adjustment notification to the *affected store's* leadership
+  /// (intersected with the Manager audience by the caller). Business-scoped so
+  /// it never leaks across businesses held on the same device.
+  Future<List<String>> getUserIdsForStore(String storeId) async {
+    final rows = await (select(userStores)
+          ..where((t) => whereBusiness(t) & t.storeId.equals(storeId)))
+        .get();
+    return rows.map((r) => r.userId).toList();
+  }
+
   /// Assign a user to a store. UNIQUE (user_id, store_id) guards
   /// against duplicates.
   Future<void> assign(UserStoresCompanion row) async {

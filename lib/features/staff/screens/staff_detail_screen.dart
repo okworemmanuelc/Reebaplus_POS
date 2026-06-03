@@ -313,6 +313,15 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                       : DateFormat('MMM d, y • h:mm a')
                           .format(membership.lastLoginAt!),
                 ),
+                // Permission access (§10.2.1) — only a permissions manager sees
+                // it, and never on the own (read-only) card. User-scope
+                // overrides are a Phase-1 placeholder; this person currently
+                // uses their role's permissions.
+                if (!widget.readOnly &&
+                    hasPermission(ref, 'settings.manage')) ...[
+                  SizedBox(height: context.getRSize(4)),
+                  _PermissionAccessCard(roleName: role?.name ?? 'their'),
+                ],
                 // Manage actions — hidden in view-only (own card). Each action
                 // has its OWN permission (§9): Change role -> staff.change_role,
                 // Suspend/Reactivate -> staff.suspend (both CEO + Manager by
@@ -423,6 +432,96 @@ class _InfoRow extends StatelessWidget {
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Per-user permission scope (§10.2.1). This member uses their role's
+/// permissions today; a per-person override is a Phase-1 placeholder, disabled
+/// until multi-store ships. Nothing is stored or enforced here yet.
+class _PermissionAccessCard extends StatelessWidget {
+  final String roleName;
+  const _PermissionAccessCard({required this.roleName});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final text = t.colorScheme.onSurface;
+    final subtext = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
+    return Container(
+      margin: EdgeInsets.only(bottom: context.getRSize(10)),
+      padding: EdgeInsets.all(context.getRSize(14)),
+      decoration: BoxDecoration(
+        color: t.cardColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: t.dividerColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(FontAwesomeIcons.userShield,
+                  size: context.getRSize(15), color: subtext),
+              SizedBox(width: context.getRSize(12)),
+              Text(
+                'Permission access',
+                style: TextStyle(
+                  color: subtext,
+                  fontSize: context.getRFontSize(13),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: context.getRSize(10)),
+          Text(
+            'Uses the $roleName role’s permissions, set in Roles & Permissions.',
+            style: TextStyle(
+              color: text,
+              fontSize: context.getRFontSize(13),
+              height: 1.4,
+            ),
+          ),
+          SizedBox(height: context.getRSize(12)),
+          // Per-user override — disabled placeholder (§10.2.1).
+          Opacity(
+            opacity: 0.5,
+            child: Row(
+              children: [
+                Icon(FontAwesomeIcons.sliders,
+                    size: context.getRSize(14), color: subtext),
+                SizedBox(width: context.getRSize(10)),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Customize this staff’s permissions',
+                        style: TextStyle(
+                          color: text,
+                          fontSize: context.getRFontSize(13),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      SizedBox(height: context.getRSize(2)),
+                      Text(
+                        'Coming with multi-store',
+                        style: TextStyle(
+                          color: subtext,
+                          fontSize: context.getRFontSize(11),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.lock_outline,
+                    size: context.getRSize(15), color: subtext),
+              ],
             ),
           ),
         ],

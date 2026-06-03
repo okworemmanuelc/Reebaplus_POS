@@ -63,6 +63,10 @@ class _RolePermissionsDetailScreenState
   int? _lastSavedExpenseKobo;
   // Manager-only: CEO toggle that unlocks the Home store picker (§11.2).
   bool _viewAllStores = false;
+  // Permission scope (§10.2.1). Business is the real, default scope; Store is a
+  // Phase-1 placeholder ("coming with multi-store"). User-scope overrides live
+  // on the staff member's profile, not here.
+  bool _storeScope = false;
 
   RoleData get role => widget.role;
   bool get _isCeo => role.slug == 'ceo';
@@ -274,6 +278,25 @@ class _RolePermissionsDetailScreenState
         padding: EdgeInsets.fromLTRB(
             24, 24, 24, 24 + context.deviceBottomInset),
         children: [
+          // Permission scope selector (§10.2.1): Business (real, default) vs
+          // Store (Phase-1 placeholder). User-scope overrides live on the staff
+          // member's profile (Staff Management → staff → Permission access).
+          _scopeSelector(t),
+          const SizedBox(height: 10),
+          Text(
+            'Business applies to every store. Per-store overrides and a single '
+            'staff member\'s overrides come with multi-store — set a person\'s '
+            'overrides from their profile (Staff Management).',
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.4,
+              color: t.colorScheme.onSurface.withValues(alpha: 0.55),
+            ),
+          ),
+          const SizedBox(height: 20),
+          if (_storeScope)
+            _storeScopePlaceholder(t)
+          else ...[
           if (_isCeo)
             Padding(
               padding: const EdgeInsets.only(bottom: 20),
@@ -315,6 +338,95 @@ class _RolePermissionsDetailScreenState
             ],
             const SizedBox(height: 20),
           ],
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Permission scope selector (§10.2.1). Business is the real, default scope
+  /// (the toggles below apply to every store); Store is a Phase-1 placeholder.
+  Widget _scopeSelector(ThemeData t) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: AppDecorations.glassCard(context, radius: 14),
+      child: Row(
+        children: [
+          _scopeSegment(t, 'Business', !_storeScope,
+              () => setState(() => _storeScope = false)),
+          _scopeSegment(
+              t, 'Store', _storeScope, () => setState(() => _storeScope = true)),
+        ],
+      ),
+    );
+  }
+
+  Widget _scopeSegment(
+    ThemeData t,
+    String label,
+    bool selected,
+    VoidCallback onTap,
+  ) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected ? t.colorScheme.primary : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: selected
+                  ? t.colorScheme.onPrimary
+                  : t.colorScheme.onSurface.withValues(alpha: 0.7),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Store-scope body — a Phase-1 placeholder. Per-store permission overrides
+  /// arrive with multi-store (§10.2.1 / §2.2); nothing is stored or enforced.
+  Widget _storeScopePlaceholder(ThemeData t) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: AppDecorations.glassCard(context, radius: 16),
+      child: Column(
+        children: [
+          Icon(
+            Icons.storefront_outlined,
+            size: 36,
+            color: t.colorScheme.onSurface.withValues(alpha: 0.4),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Per-store permissions',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: t.colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Coming with multi-store. For now, every store uses the business '
+            'defaults set under the Business tab.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 13,
+              height: 1.4,
+              color: t.colorScheme.onSurface.withValues(alpha: 0.6),
+            ),
+          ),
         ],
       ),
     );
