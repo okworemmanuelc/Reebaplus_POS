@@ -106,6 +106,72 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 
 ---
 
+## Session 66 — 2026-06-03 — Removed the top SyncBanner
+
+**What the user asked for:**
+- Initially: when sync runs/finishes, the top banner ("Syncing your store…" / "Caught up.") should overlay the screen instead of pushing it down. Then: remove that top banner entirely — there's already a green sync banner at the bottom.
+
+**Built today:**
+- Deleted `lib/shared/widgets/sync_banner.dart` (the top `SyncBanner` widget) and removed it from `MainLayout`. `MainLayout`'s body is now just the tab `Stack` — no more `Column(SyncBanner, Expanded(...))`, so nothing shifts the screen for sync state. Dropped the now-unused `sync_banner.dart` import.
+- Generalized a stale comment in `staff_management_screen.dart` that named the "always-mounted SyncBanner" as the `pullStatusProvider` watcher; the post-frame deferral reasoning stays.
+- `pullStatusProvider` is left in place (unwatched now) — it's still written by `pullChanges`; not part of this change.
+
+**Status:** `flutter analyze` clean (remaining 18 issues are pre-existing `avoid_print` infos in `test/database/roles_v13_report.dart`). On-device confirmation pending.
+
+---
+
+## Session 65 — 2026-06-03 — Roles & Permissions: dependency gating (§10.2)
+
+**What the user asked for:**
+- Some permissions are gated by others. When a permission that relies on another is toggled on/off, the rest should respond — e.g. when "Make a sale" is off, "Give a discount" should be off; when Inventory (stock view) is off, adding/updating stock is off. Make this 100% accurate and properly gated.
+
+**How the dependency map was decided (not invented):**
+- Ran a read-only multi-agent workflow (one analyzer per permission category + an adversarial verifier) to derive dependencies from how each permission *actually* gates the app — a true dependency = the child screen/button is unreachable, or the action is meaningless, without the parent.
+- Confirmed each link against the seeded default roles so no default grant is a child without its parent. This caught a conflict: the user-picked `reports.see_cost_prices → reports.see_profit` clashes with the Manager default (Manager is granted cost-prices *without* profit by design), so that one link was dropped after checking with the user.
+- A notable finding: `sales.discount.give` is defined but never enforced anywhere — discounts are gated only by each role's `max_discount_percent` setting. By the user's call it's still included in the dependency map now; actually wiring the permission to gate the discount UI is a deferred follow-up (see Known issues).
+
+**Built today:**
+- New single-source-of-truth dependency map (child → parent) with transitive `descendantsOf` / `ancestorsOf` / `parentOf` helpers.
+- In the CEO's Roles & Permissions detail screen: revoking a parent now cascade-revokes every currently-granted dependent (each enqueues its own sync delete; one activity-log entry records the cascade). A dependent's toggle is disabled with a `Requires "<parent>"` hint while its parent is off, so it can't be granted alone. CEO stays locked all-on.
+
+**The 18 dependency links:**
+- `sales.make` ← `sales.discount.give`, `sales.cancel`
+- `stock.view` (the Inventory gate) ← `products.add`, `products.edit_price`, `products.edit_buying_price`, `products.delete`, `stock.add`, `stock.adjust`
+- `customers.add` (the Customers gate) ← `customers.update`, `customers.delete`, `customers.wallet.update`, `customers.set_debt_limit`, `customers.wallet.totals.view`
+- `staff.invite` ← `staff.suspend`, `staff.change_role`
+- `suppliers.manage` ← `shipments.manage`
+- `funds.view` ← `funds.open_day`, `funds.close_day`
+
+**Follow-up in same session:** the user asked that disabling `customers.add` disable every other customer permission. Added the 5 `customers.* → customers.add` links above (checked safe against the seeded defaults — Manager/Cashier/CEO all hold `customers.add` alongside their customer children). `customers.update` is, like `sales.discount.give`, a defined-but-unenforced permission — the config gating still works. +2 tests (customer cascade + customer lock); suite now 14.
+
+**Files touched:**
+- lib/core/permissions/permission_dependencies.dart (new)
+- lib/core/settings/role_permissions_detail_screen.dart
+- test/settings/role_permissions_detail_test.dart
+
+**Database changes:**
+- None. Pure Dart/UI; no schema, migration, or new package. Revokes use the existing `RolePermissionsDao.revoke` path, so the §5 sync contract is unchanged.
+
+**Master plan sections covered:**
+- §10.2 — Roles & Permissions sub-page (per-role permission toggles).
+
+**Plan updates made during session:**
+- None. The master plan doesn't specify a dependency map; this is config-screen gating layered on the existing toggles, no behavioural change to seeded roles.
+
+**Tested:**
+- `flutter analyze` clean on the three touched files.
+- 12 tests in role_permissions_detail_test (3 new): parent revoke cascades to granted dependents and enqueues their deletes; a child toggle is disabled with the "Requires" hint while its parent is off; the child is interactive once the parent is on. Full settings + role suites green (42 tests).
+
+**Known issues / left open:**
+- `sales.discount.give` is still unenforced at runtime (discounts gated only by `max_discount_percent`). The dependency is in the map but cascading it is cosmetic until the permission is wired into the discount UI — a deferred follow-up the user chose.
+- Runtime "effective permission" resolution (auto-dropping a child whose parent isn't held) was deliberately NOT added — it would silently break legitimately-seeded grants (e.g. Manager cost-prices). Gating stays at the config screen; structural deps make runtime resolution moot anyway.
+- On-device pass pending.
+
+**Next session should:**
+- Optionally wire `sales.discount.give` enforcement into the discount UI (alongside `max_discount_percent`), if the user wants that toggle to do something at runtime.
+
+---
+
 ## Session 64 — 2026-06-03 — Business details: name/currency propagation, sync RLS fix, editable setup info
 
 **What the user reported:**

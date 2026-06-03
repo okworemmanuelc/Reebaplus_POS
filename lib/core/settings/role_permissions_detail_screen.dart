@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/permissions/permission_dependencies.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
@@ -125,12 +126,31 @@ class _RolePermissionsDetailScreenState
     if (!_guard()) return;
     if (enable) {
       await _db.rolePermissionsDao.grant(role.id, key);
-    } else {
-      await _db.rolePermissionsDao.revoke(role.id, key);
+      await _db.activityLogDao.log(
+        action: 'settings.role_permission.toggle',
+        description: 'Granted "$key" for ${role.name}',
+        staffId: _db.currentUserId,
+      );
+      return;
     }
+    // Revoking a parent cascades to any granted permission that depends on it
+    // (§10.2 dependency gating) — a child can't stay on once its parent is off.
+    // revoke() is idempotent, but we intersect with the granted set so the
+    // activity log records only what actually changed.
+    final granted = (ref.read(rolePermissionsProvider(role.id)).valueOrNull ??
+            const <RolePermissionData>[])
+        .map((g) => g.permissionKey)
+        .toSet();
+    final cascaded = descendantsOf(key).where(granted.contains).toList()..sort();
+    await _db.rolePermissionsDao.revoke(role.id, key);
+    for (final dep in cascaded) {
+      await _db.rolePermissionsDao.revoke(role.id, dep);
+    }
+    final suffix =
+        cascaded.isEmpty ? '' : ' (also revoked: ${cascaded.join(', ')})';
     await _db.activityLogDao.log(
       action: 'settings.role_permission.toggle',
-      description: '${enable ? 'Granted' : 'Revoked'} "$key" for ${role.name}',
+      description: 'Revoked "$key" for ${role.name}$suffix',
       staffId: _db.currentUserId,
     );
   }
@@ -216,6 +236,8 @@ class _RolePermissionsDetailScreenState
             const <RolePermissionData>[])
         .map((g) => g.permissionKey)
         .toSet();
+    // For the "Requires …" hint on a gated child toggle (§10.2).
+    final byKey = {for (final p in perms) p.key: p};
 
     final settingsAsync = ref.watch(roleSettingsProvider(role.id));
     if (settingsAsync.hasValue && !_seeded) _seed(settingsAsync.value!);
@@ -257,22 +279,43 @@ class _RolePermissionsDetailScreenState
               child: Column(
                 children: [
                   for (final perm in entry.value)
-                    SwitchListTile(
-                      title: Text(
-                        perm.description,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: t.colorScheme.onSurface,
+                    () {
+                      // A child is locked off while its parent permission is
+                      // off — it can't be granted alone, and was cascade-revoked
+                      // when the parent went off (§10.2). CEO is always all-on.
+                      final parent = parentOf(perm.key);
+                      final parentOff = !_isCeo &&
+                          parent != null &&
+                          !granted.contains(parent);
+                      return SwitchListTile(
+                        title: Text(
+                          perm.description,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: t.colorScheme.onSurface,
+                          ),
                         ),
-                      ),
-                      value: _isCeo ? true : granted.contains(perm.key),
-                      onChanged: _isCeo
-                          ? null
-                          : (v) => _togglePermission(perm.key, v),
-                      activeThumbColor: t.colorScheme.primary,
-                      contentPadding:
-                          const EdgeInsets.symmetric(horizontal: 16),
-                    ),
+                        subtitle: parentOff
+                            ? Text(
+                                'Requires "${byKey[parent]?.description ?? parent}"',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: t.colorScheme.onSurface
+                                      .withValues(alpha: 0.5),
+                                ),
+                              )
+                            : null,
+                        value: _isCeo
+                            ? true
+                            : !parentOff && granted.contains(perm.key),
+                        onChanged: (_isCeo || parentOff)
+                            ? null
+                            : (v) => _togglePermission(perm.key, v),
+                        activeThumbColor: t.colorScheme.primary,
+                        contentPadding:
+                            const EdgeInsets.symmetric(horizontal: 16),
+                      );
+                    }(),
                 ],
               ),
             ),

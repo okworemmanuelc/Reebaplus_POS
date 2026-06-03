@@ -199,6 +199,106 @@ void main() {
     );
   });
 
+  testWidgets('revoking a parent cascades to its granted dependents (§10.2)',
+      (tester) async {
+    // Cashier already holds stock.view (the Inventory gate). Grant two of its
+    // dependents so the cascade has something to remove.
+    for (final key in ['stock.add', 'products.add']) {
+      await db.into(db.rolePermissions).insert(
+            RolePermissionsCompanion.insert(
+              id: Value(UuidV7.generate()),
+              businessId: businessId,
+              roleId: cashierRoleId,
+              permissionKey: key,
+            ),
+          );
+    }
+    await pumpDetail(tester, cashierRole);
+    expect(await grantCount(cashierRoleId, 'stock.add'), 1);
+
+    await tester.tap(find.widgetWithText(SwitchListTile, 'View stock levels'));
+    await tester.pumpAndSettle();
+
+    // The parent and both dependents are revoked.
+    expect(await grantCount(cashierRoleId, 'stock.view'), 0);
+    expect(await grantCount(cashierRoleId, 'stock.add'), 0);
+    expect(await grantCount(cashierRoleId, 'products.add'), 0);
+    final pending = await getPendingQueue(db);
+    expect(
+      pending
+          .where((r) => r.actionType == 'role_permissions:delete')
+          .length,
+      greaterThanOrEqualTo(3),
+      reason: 'parent + 2 dependents each enqueue a delete tombstone',
+    );
+  });
+
+  testWidgets('a child toggle is disabled while its parent is off (§10.2)',
+      (tester) async {
+    // Manager has no grants seeded → stock.view is off, so its dependents lock.
+    await pumpDetail(tester, managerRole);
+
+    final child =
+        find.widgetWithText(SwitchListTile, 'Add stock to existing products');
+    expect(tester.widget<SwitchListTile>(child).onChanged, isNull,
+        reason: 'stock.add is locked while stock.view is off');
+    expect(find.text('Requires "View stock levels"'), findsWidgets);
+
+    // The parent itself has no parent, so it stays interactive.
+    final parent = find.widgetWithText(SwitchListTile, 'View stock levels');
+    expect(tester.widget<SwitchListTile>(parent).onChanged, isNotNull);
+  });
+
+  testWidgets('a child toggle is enabled once its parent is on (§10.2)',
+      (tester) async {
+    // Cashier is seeded with stock.view, so its dependents are interactive.
+    await pumpDetail(tester, cashierRole);
+
+    final child =
+        find.widgetWithText(SwitchListTile, 'Add stock to existing products');
+    expect(tester.widget<SwitchListTile>(child).onChanged, isNotNull,
+        reason: 'stock.add is interactive because stock.view is on');
+    expect(tester.widget<SwitchListTile>(child).subtitle, isNull,
+        reason: 'no "requires" hint when the parent is on');
+  });
+
+  testWidgets('revoking customers.add cascades to all customer permissions',
+      (tester) async {
+    for (final key in [
+      'customers.add',
+      'customers.delete',
+      'customers.wallet.update',
+    ]) {
+      await db.into(db.rolePermissions).insert(
+            RolePermissionsCompanion.insert(
+              id: Value(UuidV7.generate()),
+              businessId: businessId,
+              roleId: cashierRoleId,
+              permissionKey: key,
+            ),
+          );
+    }
+    await pumpDetail(tester, cashierRole);
+    expect(await grantCount(cashierRoleId, 'customers.delete'), 1);
+
+    await tester.tap(find.widgetWithText(SwitchListTile, 'Add a new customer'));
+    await tester.pumpAndSettle();
+
+    expect(await grantCount(cashierRoleId, 'customers.add'), 0);
+    expect(await grantCount(cashierRoleId, 'customers.delete'), 0);
+    expect(await grantCount(cashierRoleId, 'customers.wallet.update'), 0);
+  });
+
+  testWidgets('customer permissions are locked while customers.add is off',
+      (tester) async {
+    // Manager has no grants seeded → customers.add is off.
+    await pumpDetail(tester, managerRole);
+
+    final del = find.widgetWithText(SwitchListTile, 'Soft-delete a customer');
+    expect(tester.widget<SwitchListTile>(del).onChanged, isNull);
+    expect(find.text('Requires "Add a new customer"'), findsWidgets);
+  });
+
   testWidgets('editing max expense approval stores kobo + enqueues',
       (tester) async {
     await pumpDetail(tester, cashierRole);
