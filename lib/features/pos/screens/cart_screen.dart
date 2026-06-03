@@ -309,34 +309,26 @@ class _CartScreenState extends ConsumerState<CartScreen>
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      // Fixed-height sheet (no DraggableScrollableSheet): the drag-resize was
+      // the source of the jank — scrolling had to hand off to "expand the
+      // sheet" before the list actually moved, and the 75%↔95% snap jumped.
+      // A fixed height means the list scrolls cleanly. enableDrag stays off so
+      // a downward scroll never doubles as drag-to-dismiss; close via the
+      // native barrier (tap-outside, smooth slide-down) or the X.
+      enableDrag: false,
+      backgroundColor: _surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
       builder: (modalCtx) {
         String searchQuery = '';
         String? pickerStoreId = defaultPickerStoreId;
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => Navigator.pop(modalCtx),
-          child: DraggableScrollableSheet(
-            initialChildSize: 0.5,
-            minChildSize: 0.5,
-            maxChildSize: 0.9,
-            snap: true,
-            snapSizes: const [0.5, 0.9],
-            builder: (context, scrollController) {
-              return StatefulBuilder(
-                builder: (dialogCtx, setDialogState) {
-                  return GestureDetector(
-                    onTap: () {}, // Prevent tap from reaching the barrier
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: _surface,
-                        borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(28),
-                        ),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
+        return StatefulBuilder(
+          builder: (dialogCtx, setDialogState) {
+            return SizedBox(
+              height: MediaQuery.of(modalCtx).size.height * 0.85,
+              child: Column(
+                children: [
                           Padding(
                             padding: EdgeInsets.fromLTRB(
                               modalCtx.getRSize(20),
@@ -512,7 +504,6 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                           false);
                                 }).toList();
                                 return ListView(
-                                  controller: scrollController,
                                   padding: EdgeInsets.fromLTRB(
                                     modalCtx.getRSize(20),
                                     0,
@@ -529,14 +520,10 @@ class _CartScreenState extends ConsumerState<CartScreen>
                               },
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              );
-            },
-          ),
+                ],
+              ),
+            );
+          },
         );
       },
     );

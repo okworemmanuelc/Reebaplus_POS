@@ -15,6 +15,12 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 const _kMaxDiscount = 'max_discount_percent';
 const _kMaxExpenseKobo = 'max_expense_approval_kobo';
 
+/// Permission keys present in the catalogue but hidden from the Roles &
+/// Permissions UI. `sales.discount.give` is governed entirely by the per-role
+/// discount slider (`max_discount_percent`), so its on/off toggle is redundant.
+/// The key stays in the catalogue (unenforced) — hiding is reversible.
+const kHiddenPermissionKeys = {'sales.discount.give'};
+
 /// Permission categories in master-plan order. `allPermissionsProvider` returns
 /// them alphabetically, so the order is imposed here. Unknown categories (none
 /// today) fall through to the end.
@@ -231,7 +237,12 @@ class _RolePermissionsDetailScreenState
     );
   }
 
-  Widget _buildBody(ThemeData t, List<PermissionData> perms) {
+  Widget _buildBody(ThemeData t, List<PermissionData> permsRaw) {
+    // Drop hidden keys (e.g. give-discount, governed by the slider) so they
+    // never render as toggles.
+    final perms = permsRaw
+        .where((p) => !kHiddenPermissionKeys.contains(p.key))
+        .toList();
     final granted = (ref.watch(rolePermissionsProvider(role.id)).valueOrNull ??
             const <RolePermissionData>[])
         .map((g) => g.permissionKey)
@@ -253,6 +264,10 @@ class _RolePermissionsDetailScreenState
         groups.putIfAbsent(p.category, () => []).add(p);
       }
     }
+    // The Stores section is rendered first, on its own (with the Manager-only
+    // "Allow viewing other stores" toggle), so pull its permission group out of
+    // the generic category loop. null when no Stores permission exists.
+    final storesPerms = groups.remove('Stores');
 
     return SettingsFadeIn(
       child: ListView(
@@ -271,65 +286,83 @@ class _RolePermissionsDetailScreenState
                 ),
               ),
             ),
+          // Stores section sits first: the Manager-only "Allow viewing other
+          // stores" toggle (§11.2) and, directly below it, the store
+          // permission toggle(s) — e.g. "Add, edit, and remove stores" (§10.1).
+          if (_isManager || storesPerms != null) ...[
+            const SettingsSectionTitle('Stores'),
+            const SizedBox(height: 8),
+            if (_isManager) _viewAllStoresCard(t),
+            if (_isManager && storesPerms != null) const SizedBox(height: 8),
+            if (storesPerms != null)
+              _permissionGroupCard(t, storesPerms, granted, byKey),
+            const SizedBox(height: 20),
+          ],
           for (final entry in groups.entries) ...[
             SettingsSectionTitle(entry.key),
             const SizedBox(height: 8),
-            Container(
-              decoration: AppDecorations.glassCard(context, radius: 16),
-              child: Column(
-                children: [
-                  for (final perm in entry.value)
-                    () {
-                      // A child is locked off while its parent permission is
-                      // off — it can't be granted alone, and was cascade-revoked
-                      // when the parent went off (§10.2). CEO is always all-on.
-                      final parent = parentOf(perm.key);
-                      final parentOff = !_isCeo &&
-                          parent != null &&
-                          !granted.contains(parent);
-                      return SwitchListTile(
-                        title: Text(
-                          perm.description,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: t.colorScheme.onSurface,
-                          ),
+            _permissionGroupCard(t, entry.value, granted, byKey),
+            // The per-role discount limit lives under Sales (§10.2) — it's the
+            // sole discount control now that the give-discount toggle is gone.
+            if (entry.key == 'Sales') ...[
+              const SizedBox(height: 8),
+              _discountCard(t),
+            ],
+            // The per-role expense-approval limit lives under Expenses (§10.2).
+            if (entry.key == 'Expenses') ...[
+              const SizedBox(height: 8),
+              _expenseCard(t),
+            ],
+            const SizedBox(height: 20),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// A glass card of permission toggles for one category (§10.2). A child is
+  /// locked off while its parent permission is off — it can't be granted alone,
+  /// and is cascade-revoked when the parent goes off. CEO is always all-on.
+  Widget _permissionGroupCard(
+    ThemeData t,
+    List<PermissionData> perms,
+    Set<String> granted,
+    Map<String, PermissionData> byKey,
+  ) {
+    return Container(
+      decoration: AppDecorations.glassCard(context, radius: 16),
+      child: Column(
+        children: [
+          for (final perm in perms)
+            () {
+              final parent = parentOf(perm.key);
+              final parentOff =
+                  !_isCeo && parent != null && !granted.contains(parent);
+              return SwitchListTile(
+                title: Text(
+                  perm.description,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: t.colorScheme.onSurface,
+                  ),
+                ),
+                subtitle: parentOff
+                    ? Text(
+                        'Requires "${byKey[parent]?.description ?? parent}"',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: t.colorScheme.onSurface.withValues(alpha: 0.5),
                         ),
-                        subtitle: parentOff
-                            ? Text(
-                                'Requires "${byKey[parent]?.description ?? parent}"',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: t.colorScheme.onSurface
-                                      .withValues(alpha: 0.5),
-                                ),
-                              )
-                            : null,
-                        value: _isCeo
-                            ? true
-                            : !parentOff && granted.contains(perm.key),
-                        onChanged: (_isCeo || parentOff)
-                            ? null
-                            : (v) => _togglePermission(perm.key, v),
-                        activeThumbColor: t.colorScheme.primary,
-                        contentPadding:
-                            const EdgeInsets.symmetric(horizontal: 16),
-                      );
-                    }(),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-          ],
-          const SettingsSectionTitle('Role limits'),
-          const SizedBox(height: 8),
-          _limitsCard(t),
-          if (_isManager) ...[
-            const SizedBox(height: 20),
-            const SettingsSectionTitle('Stores'),
-            const SizedBox(height: 8),
-            _viewAllStoresCard(t),
-          ],
+                      )
+                    : null,
+                value: _isCeo ? true : !parentOff && granted.contains(perm.key),
+                onChanged: (_isCeo || parentOff)
+                    ? null
+                    : (v) => _togglePermission(perm.key, v),
+                activeThumbColor: t.colorScheme.primary,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+              );
+            }(),
         ],
       ),
     );
@@ -365,7 +398,9 @@ class _RolePermissionsDetailScreenState
     );
   }
 
-  Widget _limitsCard(ThemeData t) {
+  /// Per-role discount limit (§10.2). Shown under the Sales section — it's the
+  /// sole discount control now that the give-discount toggle is removed.
+  Widget _discountCard(ThemeData t) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: AppDecorations.glassCard(context, radius: 16),
@@ -405,7 +440,19 @@ class _RolePermissionsDetailScreenState
               onChanged: (v) => setState(() => _discount = v.round()),
               onChangeEnd: (v) => _commitDiscount(v.round()),
             ),
-          const Divider(height: 24),
+        ],
+      ),
+    );
+  }
+
+  /// Per-role expense-approval limit (§10.2). Shown under the Expenses section.
+  Widget _expenseCard(ThemeData t) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: AppDecorations.glassCard(context, radius: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           // Max expense approval
           Text(
             'Max expense approval',

@@ -1488,7 +1488,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 31;
+  int get schemaVersion => 32;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -2854,6 +2854,26 @@ class AppDatabase extends _$AppDatabase {
           );
         }
       }
+      if (from < 32) {
+        // v32 (label-only renames). Mirrors
+        // supabase/migrations/0087_rename_permission_labels.sql. The
+        // `permissions` catalogue is seeded once and never re-synced from the
+        // cloud, so existing installs need these UPDATEs to show the new
+        // labels. Enforcement is unchanged — only the displayed text differs.
+        // Idempotent: re-running just re-sets the same descriptions.
+        await customStatement(
+          "UPDATE permissions SET description = 'Edit product' "
+          "WHERE key = 'products.edit_price'",
+        );
+        await customStatement(
+          "UPDATE permissions SET description = 'View buying price' "
+          "WHERE key = 'products.edit_buying_price'",
+        );
+        await customStatement(
+          "UPDATE permissions SET description = 'View Inventory' "
+          "WHERE key = 'stock.view'",
+        );
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -3036,12 +3056,12 @@ const List<List<String>> _defaultPermissionRows = [
   ['sales.discount.give', 'Give a discount on a sale', 'Sales'],
   // Products
   ['products.add', 'Add a new product', 'Products'],
-  ['products.edit_price', 'Edit product prices', 'Products'],
-  ['products.edit_buying_price', 'Edit product buying price', 'Products'],
+  ['products.edit_price', 'Edit product', 'Products'],
+  ['products.edit_buying_price', 'View buying price', 'Products'],
   ['products.delete', 'Delete a product', 'Products'],
   // Stock
   ['stock.add', 'Add stock to existing products', 'Stock'],
-  ['stock.view', 'View stock levels', 'Stock'],
+  ['stock.view', 'View Inventory', 'Stock'],
   ['stock.adjust', 'Adjust stock quantities (damages, theft, count)', 'Stock'],
   // Expenses
   ['expenses.create', 'Record a new expense', 'Expenses'],

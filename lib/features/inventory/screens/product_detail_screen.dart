@@ -114,6 +114,30 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   bool get _canSeeSuppliers =>
       ref.read(currentUserPermissionsProvider).contains('suppliers.manage');
 
+  /// §26.4: when a **stock keeper** adds or removes stock, notify every CEO +
+  /// Manager so they see the movement (and the reason, on a removal). No-op for
+  /// any other actor — a Manager/CEO adjusting their own stock shouldn't notify
+  /// themselves. Mirrors the CEO+Manager fan-out used by the stock-count screen.
+  Future<void> _notifyLeadershipOfStockAdjustment({
+    required String summary,
+    required bool isRemove,
+    required String productId,
+  }) async {
+    if (ref.read(currentUserRoleProvider)?.slug != 'stock_keeper') return;
+    final db = ref.read(databaseProvider);
+    final recipients =
+        await db.userBusinessesDao.getUserIdsForRoleSlugs(['ceo', 'manager']);
+    for (final uid in recipients) {
+      await db.notificationsDao.fireNotification(
+        type: 'stock_adjustment',
+        message: summary,
+        severity: isRemove ? 'warning' : 'info',
+        linkedRecordId: productId,
+        recipientUserId: uid,
+      );
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -1765,15 +1789,23 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                   note,
                   auth.currentUser?.id,
                 );
+                final summary =
+                    '$actorName ${isRemove ? 'removed' : 'added'} $qty '
+                    '${product.unit}(s) of ${product.name} '
+                    '(${selectedStore.name})'
+                    '${isRemove ? ' — ${reason!}' : ''}';
                 await ref.read(activityLogProvider).logAction(
                       'stock_adjustment',
-                      '$actorName ${isRemove ? 'removed' : 'added'} $qty '
-                          '${product.unit}(s) of ${product.name} '
-                          '(${selectedStore.name})'
-                          '${isRemove ? ' — ${reason!}' : ''}',
+                      summary,
                       productId: product.id,
                       storeId: selectedStore.id,
                     );
+                // §26.4: tell CEO + Managers when a stock keeper moves stock.
+                await _notifyLeadershipOfStockAdjustment(
+                  summary: summary,
+                  isRemove: isRemove,
+                  productId: product.id,
+                );
                 if (sheetCtx.mounted) Navigator.pop(sheetCtx);
                 widget.onUpdateStock();
                 // Reflect the change on this screen immediately (#1).

@@ -16,8 +16,8 @@
 
 /// Child permission key → the parent it depends on.
 const Map<String, String> kPermissionParent = {
-  // Sales — a discount or cancellation only happens within a sale.
-  'sales.discount.give': 'sales.make',
+  // Sales — a cancellation only happens within a sale. (Discounts are governed
+  // by the per-role discount slider, not a permission toggle.)
   'sales.cancel': 'sales.make',
   // Products & Stock mutations — all reached only through the Inventory
   // screen, which is gated by `stock.view`.

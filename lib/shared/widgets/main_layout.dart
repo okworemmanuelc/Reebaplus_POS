@@ -199,11 +199,20 @@ class _MainLayoutState extends ConsumerState<MainLayout>
                   t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
 
               // Nav tabs in bar order. Stock (Inventory, tab 2) is gated on
-              // stock.view (§16.7) — held by all roles by default. Driving the
-              // index math AND the items list from one list keeps a hidden tab
-              // from desyncing them. Home(0), Stock(2), POS(1), Orders(3), Cart(8).
+              // stock.view (§16.7); POS (tab 1) and Cart (tab 8) are gated on
+              // sales.make (hard rule #7 — hide what the role can't use, e.g.
+              // the stock keeper). Driving the index math AND the items list
+              // from one list keeps a hidden tab from desyncing them.
+              // Home(0), Stock(2), POS(1), Orders(3), Cart(8).
               final showStock = hasPermission(ref, 'stock.view');
-              final tabOrder = <int>[0, if (showStock) 2, 1, 3, 8];
+              final showPos = hasPermission(ref, 'sales.make');
+              final tabOrder = <int>[
+                0,
+                if (showStock) 2,
+                if (showPos) 1,
+                3,
+                if (showPos) 8,
+              ];
               final bool isNavTab = tabOrder.contains(currentIndex);
               final int navIndex =
                   isNavTab ? tabOrder.indexOf(currentIndex) : 0;
@@ -249,15 +258,16 @@ class _MainLayoutState extends ConsumerState<MainLayout>
                       ),
                       label: 'Stock',
                     ),
-                  BottomNavigationBarItem(
-                    icon: const Icon(Icons.point_of_sale_outlined),
-                    activeIcon: Icon(
-                      isNavTab
-                          ? Icons.point_of_sale
-                          : Icons.point_of_sale_outlined,
+                  if (showPos)
+                    BottomNavigationBarItem(
+                      icon: const Icon(Icons.point_of_sale_outlined),
+                      activeIcon: Icon(
+                        isNavTab
+                            ? Icons.point_of_sale
+                            : Icons.point_of_sale_outlined,
+                      ),
+                      label: 'POS',
                     ),
-                    label: 'POS',
-                  ),
                   BottomNavigationBarItem(
                     icon: Badge(
                       label: Text(_pendingOrderCount.toString()),
@@ -277,32 +287,33 @@ class _MainLayoutState extends ConsumerState<MainLayout>
                     ),
                     label: 'Orders',
                   ),
-                  BottomNavigationBarItem(
-                    icon: ValueListenableBuilder<List<Map<String, dynamic>>>(
-                      valueListenable: ref.read(cartProvider),
-                      builder: (_, cart, __) => Badge(
-                        label: Text(cart.length.toString()),
-                        isLabelVisible: cart.isNotEmpty,
-                        backgroundColor: t.colorScheme.error,
-                        child: const Icon(Icons.shopping_cart_outlined),
+                  if (showPos)
+                    BottomNavigationBarItem(
+                      icon: ValueListenableBuilder<List<Map<String, dynamic>>>(
+                        valueListenable: ref.read(cartProvider),
+                        builder: (_, cart, __) => Badge(
+                          label: Text(cart.length.toString()),
+                          isLabelVisible: cart.isNotEmpty,
+                          backgroundColor: t.colorScheme.error,
+                          child: const Icon(Icons.shopping_cart_outlined),
+                        ),
                       ),
-                    ),
-                    activeIcon:
-                        ValueListenableBuilder<List<Map<String, dynamic>>>(
-                          valueListenable: ref.read(cartProvider),
-                          builder: (_, cart, __) => Badge(
-                            label: Text(cart.length.toString()),
-                            isLabelVisible: cart.isNotEmpty,
-                            backgroundColor: t.colorScheme.error,
-                            child: Icon(
-                              isNavTab
-                                  ? Icons.shopping_cart
-                                  : Icons.shopping_cart_outlined,
+                      activeIcon:
+                          ValueListenableBuilder<List<Map<String, dynamic>>>(
+                            valueListenable: ref.read(cartProvider),
+                            builder: (_, cart, __) => Badge(
+                              label: Text(cart.length.toString()),
+                              isLabelVisible: cart.isNotEmpty,
+                              backgroundColor: t.colorScheme.error,
+                              child: Icon(
+                                isNavTab
+                                    ? Icons.shopping_cart
+                                    : Icons.shopping_cart_outlined,
+                              ),
                             ),
                           ),
-                        ),
-                    label: 'Cart',
-                  ),
+                      label: 'Cart',
+                    ),
                 ],
               );
                 },

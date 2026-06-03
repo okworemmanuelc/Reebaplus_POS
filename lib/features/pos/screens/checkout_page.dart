@@ -71,6 +71,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   final ScreenshotController _screenshotCtrl = ScreenshotController();
   bool _paymentConfirmed = false;
   bool _isProcessing = false;
+  // True while a receipt print is in flight — drives the persistent blue
+  // "Printing receipt…" banner on the receipt view (no toast, no spinner).
+  bool _isPrinting = false;
   Map<String, String> _manufacturerNames = {};
   String? _branchName;
   StreamSubscription<List<ManufacturerData>>? _manufacturersSub;
@@ -107,6 +110,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   void initState() {
     super.initState();
     _initialCustomer = widget.customer;
+    // §14.2 — default a registered customer to "Pay from Wallet". Walk-ins have
+    // no wallet (hard rule 14), so they stay on Cash / Card. When the customer
+    // has no wallet credit the existing sub-options surface the "no credit"
+    // hint and the cashier switches to Cash / Card.
+    _isWalletPayment = !_isWalkIn;
     AppLogger.info(
       'CheckoutPage: Initializing with ${widget.cart.length} items. Total: ${widget.total}',
     );
@@ -653,12 +661,18 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             version: s.currentVersion,
           ),
       });
-      // Cart values changed — let the user re-confirm against the new total.
+      // The cart provider now holds the new prices, but THIS page's totals were
+      // snapshotted at construction — `widget.cart` / `widget.total` are
+      // immutable and `acceptStaleness` rebuilt the cart with fresh map
+      // instances, so they never update here. Re-confirming on this page would
+      // re-flag the same lines forever. Return to the cart (its totals are
+      // live) so the cashier reviews the new prices and checks out again.
       if (mounted) {
-        AppNotification.showError(
+        AppNotification.showInfo(
           context,
-          'Prices updated. Review the cart and confirm again.',
+          'Prices updated. Review the cart and check out again.',
         );
+        Navigator.of(context).pop();
       }
       return;
     }
@@ -901,6 +915,16 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   Widget _buildReceiptView() {
     return Column(
       children: [
+        // Persistent blue print-progress banner. Fades in/out (house rule:
+        // fade transitions, no rotating spinners) and stays while _isPrinting.
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
+          transitionBuilder: (child, anim) =>
+              FadeTransition(opacity: anim, child: child),
+          child: _isPrinting
+              ? _buildPrintingBanner()
+              : const SizedBox.shrink(),
+        ),
         Expanded(
           child: SingleChildScrollView(
             padding: EdgeInsets.all(context.getRSize(20)),
@@ -929,6 +953,39 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         ),
         _buildReceiptActions(),
       ],
+    );
+  }
+
+  /// Blue in-progress banner pinned at the top of the receipt while a print is
+  /// running. A static print glyph (not a spinner) keeps to the house loading
+  /// convention; the AnimatedSwitcher in _buildReceiptView fades it in/out.
+  Widget _buildPrintingBanner() {
+    return Container(
+      width: double.infinity,
+      color: Colors.blue.shade600,
+      padding: EdgeInsets.symmetric(
+        horizontal: context.getRSize(20),
+        vertical: context.getRSize(12),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            FontAwesomeIcons.print,
+            size: context.getRSize(16),
+            color: Colors.white,
+          ),
+          SizedBox(width: context.getRSize(10)),
+          Text(
+            'Printing receipt…',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+              fontSize: context.getRFontSize(14),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1054,10 +1111,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
   Future<void> _printReceipt() async {
     if (!mounted) return;
-    // Blue in-progress banner, shown immediately — both on auto-print right
-    // after Confirm Payment and on a manual reprint tap. No reprintDate is
-    // passed below, so this checkout receipt never carries a REPRINTED stamp.
-    AppNotification.showInfo(context, 'Printing receipt...');
+    // Show the persistent blue "Printing receipt…" banner immediately — on
+    // auto-print right after Confirm Payment and on a manual reprint tap. It
+    // stays until this method's finally clears it. No reprintDate is passed
+    // below, so this checkout receipt never stamps REPRINTED.
+    setState(() => _isPrinting = true);
     try {
       final printer = ref.read(printerServiceProvider);
 
@@ -1104,6 +1162,8 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       if (mounted) {
         AppNotification.showError(context, 'Print error: $e');
       }
+    } finally {
+      if (mounted) setState(() => _isPrinting = false);
     }
   }
 
@@ -1124,6 +1184,8 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           Navigator.pop(context);
 
           if (!mounted) return;
+          // Re-arm the print-progress banner for the manual connect + print.
+          setState(() => _isPrinting = true);
           AppNotification.showSuccess(
             context,
             'Connecting to ${device.name}...',
@@ -1157,6 +1219,8 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             if (mounted) {
               AppNotification.showError(context, 'Print error: $e');
             }
+          } finally {
+            if (mounted) setState(() => _isPrinting = false);
           }
         },
       ),

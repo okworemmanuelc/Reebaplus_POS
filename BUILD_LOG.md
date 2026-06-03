@@ -106,6 +106,113 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 
 ---
 
+## Session 73 — 2026-06-04 — Cart: "Select Customer" picker rebuilt as a smooth fixed-height sheet
+
+**What the user asked for:**
+- In the cart, the pick-customer modal closed too easily when scrolling and opened too small; then, after a first pass, the scrolling / height-resize / disappearance still felt glitchy. Make it smooth.
+
+**Built today:**
+- Root cause of both the dismiss-on-scroll and the jank: the picker (`_showChangeCustomerModal`) stacked three drag mechanisms — `showModalBottomSheet`'s own drag-to-dismiss, an inner `DraggableScrollableSheet` (with 75%↔95% snap), and a tap-to-dismiss barrier. Scrolling had to hand off to "expand the sheet" before the list actually moved, and the snap jumped — that's the glitchy feel.
+- Fix: removed the `DraggableScrollableSheet` and the custom `GestureDetector` barrier entirely. The sheet is now a plain **fixed-height** `showModalBottomSheet` — `SizedBox(height: 85% of screen)` + a normal `Column` with the grip / header / store filter / search / `ListView`. Gave the sheet a real `backgroundColor` + rounded `shape` so its native open/close animation shows; kept `enableDrag: false` so a downward scroll never doubles as drag-to-dismiss. Closing is the native barrier (tap-outside → smooth slide-down) or the X. The list is a plain `ListView` (no shared scroll controller), so scrolling is clean.
+
+**Files touched:**
+- `lib/features/pos/screens/cart_screen.dart`
+
+**Database changes:**
+- None.
+
+**Status:** `flutter analyze` clean on the file. On-device confirmation pending (scroll should be smooth, no accidental dismiss, opens at ~85%, closes with a clean slide-down).
+
+**Known issues / left open:**
+- The two sibling sheets in the same file (`_viewSavedCarts`, `_showEditCrateDeposit`) still use the `DraggableScrollableSheet` + default-drag pattern and may feel the same way. Not touched this session — apply the same fixed-height treatment if they misbehave.
+
+---
+
+## Session 72 — 2026-06-03 — Permissions/nav cleanup + stock-adjustment notifications
+
+**What the user asked for:**
+- Remove the "Give a discount" toggle (the per-role discount slider already governs it).
+- Hide POS and Cart from the bottom nav for a stock keeper (any role without the sales permission).
+- Rename permission labels: "Edit product buying price" → "View buying price", "Edit product prices" → "Edit product", "View stock levels" → "View Inventory".
+- Notify the CEO and managers whenever a stock keeper adds or removes stock (with the reason on a removal).
+
+**Built today:**
+- The "Give a discount on a sale" toggle no longer shows in Roles & Permissions; the per-role Max discount % slider remains the single control (0% = no discount). The role-card "X of N permissions" count now ignores the hidden key. The underlying permission key stays in the catalogue, unenforced.
+- POS and Cart tabs now disappear from the bottom nav for any role lacking the "Make a sale" permission (the stock keeper by default), instead of showing but being blocked at the screen. CEO/Manager/Cashier are unchanged.
+- Three permission labels renamed (display text only — what each permission controls is unchanged).
+- When a stock keeper adds or removes stock from the Update Stock screen, the CEO and all managers now get an in-app notification (blue for an add, yellow for a removal, with the reason). A manager/CEO adjusting stock themselves does not trigger it.
+- Moved the Max discount % slider out of the bottom "Role limits" section up into the Sales section at the top of the role's settings (it's the sole discount control now). Max expense approval stays in Role limits.
+- Moved the Manager-only "Stores" settings section (Allow viewing other stores) to the very top of the role settings screen — it's now first on the list. Everything else keeps its order.
+- Pulled the `Stores`-category permission group ("Add, edit, and remove stores") out of the generic bottom-of-list rendering and into that same top Stores section, directly below the "Allow viewing other stores" toggle, so the two store settings sit together. Extracted a shared `_permissionGroupCard` helper to render category toggle cards in both the Stores section and the main loop (no behaviour change to the toggles themselves).
+- Moved the Max expense approval input out of the bottom "Role limits" section up into the Expenses section (parallels the discount-to-Sales move). The "Role limits" section is now empty and removed.
+
+**Files touched:**
+- lib/core/settings/role_permissions_detail_screen.dart
+- lib/core/settings/roles_permissions_screen.dart
+- lib/core/permissions/permission_dependencies.dart
+- lib/shared/widgets/main_layout.dart
+- lib/core/database/app_database.dart
+- lib/features/inventory/screens/product_detail_screen.dart
+- supabase/migrations/0087_rename_permission_labels.sql (new)
+- reebaplus_master_plan.md (§10.2, §12, §16.7, §26.4)
+
+**Database changes:**
+- Local schema bumped to v32: a migration updates the three permission labels in the local `permissions` catalogue (existing devices get the new labels; the catalogue is seeded once and not re-synced).
+- Cloud migration 0087 updates the same three labels in the cloud `permissions` catalogue. Pushed to remote.
+
+**Master plan sections covered:**
+- §10.2 — Roles & Permissions (give-discount toggle now hidden, governed by the slider).
+- §12 — POS/Cart gated on the sales permission, hidden in nav when absent.
+- §16.7 — permission label wording (View Inventory / Edit product / View buying price).
+- §26.4 — new "stock keeper added/removed stock" notification to CEO + Manager.
+
+**Plan updates made during session:**
+- §10.2: noted the give-discount toggle is hidden (the Max discount % limit governs discounts).
+- §12: noted POS + Cart are hidden in the bottom nav for any role without the sales permission.
+- §16.7: "See buying price" reworded to "View buying price" to match the new label.
+- §26.4: added the stock-keeper add/remove notification (info for add, warning for removal, with reason; fires to CEO + Manager).
+
+**Tested:**
+- `flutter analyze` on all six touched Dart files — no issues.
+- Cloud migration 0087 applied successfully via `supabase db push`.
+- On-device emulator verification of the four behaviours still to be run by the user (no APK build per workflow).
+
+**Known issues / left open:**
+- None.
+
+**Next session should:**
+- On the emulator, confirm: no give-discount toggle (slider still works); stock keeper has no POS/Cart tabs; the three renamed labels show on an upgraded install; a stock-keeper add/remove notifies a CEO/manager account.
+
+---
+
+## Session 71 — 2026-06-03 — Checkout: price-change guard fix + Pay-from-Wallet default
+
+**What the user asked for:**
+- Review the price-change guard for when goods prices change mid-sale (and other events not accounted for during checkout).
+- Make the checkout payment default to "Pay from Wallet".
+
+**Built today:**
+- Price-change guard fix. The guard (`_detectCartStaleness` → "Prices changed" dialog) correctly catches a product whose price/version changed since it was added to the cart. But on "Accept new prices" it updated the cart provider and then told the cashier to "confirm again" while staying on the checkout page — and that page's totals are an immutable snapshot taken when it opened (`widget.cart` / `widget.total`). `acceptStaleness` rebuilds the cart with fresh map instances, so this page never saw the new prices and re-confirming would re-flag the same lines forever (stuck loop). Now, after accepting, it flashes "Prices updated. Review the cart and check out again." and pops back to the cart, whose totals are live — the cashier reviews the new prices and checks out again cleanly.
+- Pay-from-Wallet default. On opening Checkout, a registered customer now defaults to the "Pay from Wallet" sub-option (set in `initState` via `_isWalletPayment = !_isWalkIn`). Walk-ins stay on Cash / Card (no wallet, hard rule 14). If the customer has no wallet credit, the existing "no credit available" hint still shows and the cashier switches to Cash / Card — the default is just the starting selection.
+
+**Audit notes (events checked, no change needed):**
+- Stock running out mid-sale: handled server-side. When online, `flushSale` surfaces `insufficient_stock` from the cloud RPC, `_compensateRejectedSale` reverses the local writes, and the checkout catch flashes "Checkout failed: …". Offline, the sale posts optimistically and reconciles on the next push (offline-first by design).
+- Product deleted mid-sale: `checkCartStaleness` skips a soft-deleted/missing product (the row still resolves for the FK), so the sale completes against the cart snapshot. Left as-is — selling the last of a just-discontinued line is acceptable under the offline model; not in scope to change.
+
+**Files touched:**
+- `lib/features/pos/screens/checkout_page.dart`
+- `reebaplus_master_plan.md` (§14.2 — Pay-from-Wallet default note)
+
+**Database changes:**
+- None.
+
+**Plan updates made during session:**
+- §14.2 — added the "Default selection (2026-06-03, user)" note: registered customers default to Pay from Wallet, walk-ins to Cash / Card.
+
+**Status:** `flutter analyze` clean on the file. On-device confirmation pending.
+
+---
+
 ## Session 70 — 2026-06-03 — Checkout: no more silent action failures
 
 **What the user asked for:**

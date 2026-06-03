@@ -350,15 +350,13 @@ Where the CEO tunes everything about the business. Menu screen with tappable sec
 
 ### 10.2 Roles & Permissions sub-page (per role)
 
-- All permissions shown as toggles, grouped by category (Sales, Products, Stock, Reports, Customers, etc.).
+- All permissions shown as toggles, grouped by category (Sales, Products, Stock, Reports, Customers, etc.). Exception: `sales.discount.give` has no toggle — whether a role can discount is governed entirely by the **Max discount %** limit shown under the Sales section (0% = no discount), so a separate on/off toggle would be redundant. The key remains in the catalogue, unenforced.
+- **Stores** section sits first, at the very top. It groups the Manager-only **Allow viewing other stores** toggle (Default OFF; when ON, the Manager's Home store picker is unlocked — see §11.2 — so they can view other stores and request restock; stored per role in `role_settings` key `manager_view_all_stores`) together with the **Add, edit, and remove stores** permission toggle directly below it. The `Stores`-category permission group always renders here at the top, never at the bottom of the list.
+- The **Max discount %** limit (per role) sits directly under the Sales section near the top (Default: Manager 10%, Cashier 0%) — it is the discount control.
+- The **Max expense approval** amount (per role) sits directly under the Expenses section (Default: Manager amount set by CEO).
 - CEO role: all toggles locked ON (greyed out) so CEO's access can never be accidentally removed.
-- Role limits below the toggles:
-  - Max discount % (per role). Default: Manager 10%, Cashier 0%.
-  - Max expense approval amount (per role). Default: Manager amount set by CEO.
+- Other role settings near the toggles:
   - Can change product prices (toggle). Default: Manager ON, others OFF.
-  - Allow viewing other stores (Manager role only). Default OFF. When ON, the Manager's Home store
-    picker is unlocked (see §11.2) so they can view other stores and request restock. Stored per role
-    in `role_settings` (key `manager_view_all_stores`).
 
 ### 10.3 Delete Business & Account (Danger Zone)
 
@@ -432,7 +430,7 @@ Expandable card. Closed shows total SKUs. Expanded shows the full list grouped b
 
 ## 12. Point of Sale
 
-The screen where sales actually happen. Stock keeper does not see this screen at all.
+The screen where sales actually happen. POS and Cart are gated on `sales.make`: any role without it (the stock keeper by default) has both tabs hidden from the bottom nav entirely (hard rule #7), with the POS screen guard as defense-in-depth.
 
 ### 12.1 Header
 
@@ -604,6 +602,13 @@ Selected account is credited in the Funds Register.
 > breach the limit, or the customer has **no** debt limit set, checkout is
 > blocked and the cashier must tick the box and collect the cash. The debt syncs
 > live through the wallet like any credit sale.
+>
+> Default selection (2026-06-03, user). On opening Checkout, a **registered
+> customer** defaults to **"Pay from Wallet"** (Full payment → wallet sub-option
+> pre-selected). **Walk-ins** stay on **Cash / Card** (no wallet, hard rule 14).
+> If the customer has **no wallet credit**, the existing "no credit available"
+> hint shows and the cashier switches to Cash / Card — the default is just the
+> starting selection, not a constraint.
 
 ### 14.3 Wallet flow
 
@@ -794,7 +799,7 @@ Permissions (defaults shown above):
   **Delete product** = `products.delete` (its own permission, not edit).
 - **Add stock** = `stock.add` and **Remove / adjust stock** = `stock.adjust` —
   the two modes of the Update-Stock modal, gated independently.
-- **See buying price** = `products.edit_buying_price`;
+- **View buying price** = `products.edit_buying_price`;
   **See Suppliers** = `suppliers.manage`.
 
 ### 16.8 History tab
@@ -1496,6 +1501,7 @@ Opens the relevant screen (Inventory for low stock, Expense for pending approval
 - Out of stock (fires to Stock keeper, Manager, CEO).
 - Stock count saved → daily reconciliation report ready (fires to Manager, CEO).
 - Damage recorded (fires to Manager, CEO).
+- Stock keeper added or removed stock (fires to CEO, Manager — info for an add, warning for a removal, with the reason). Only fires when the actor is a stock keeper.
 
 **Staff**
 

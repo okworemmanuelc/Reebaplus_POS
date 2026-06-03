@@ -78,13 +78,19 @@ class _RoleCard extends ConsumerWidget {
     final t = Theme.of(context);
     final color = roleTagColor(role.slug);
     final isCeo = role.slug == 'ceo';
-    final count =
-        ref.watch(rolePermissionsProvider(role.id)).valueOrNull?.length ?? 0;
+    // Exclude hidden keys (e.g. give-discount) from both tallies so the count
+    // matches the toggles actually shown on the detail screen.
+    final count = (ref.watch(rolePermissionsProvider(role.id)).valueOrNull ??
+            const <RolePermissionData>[])
+        .where((g) => !kHiddenPermissionKeys.contains(g.permissionKey))
+        .length;
     // Derive the denominator from the global catalogue so it never goes stale
-    // if permission keys are added. Falls back to 30 (the current seed count)
-    // until the catalogue resolves locally.
-    final total =
-        ref.watch(allPermissionsProvider).valueOrNull?.length ?? 30;
+    // if permission keys are added. Falls back to the seed count (30 minus the
+    // hidden keys) until the catalogue resolves locally.
+    final allPerms = ref.watch(allPermissionsProvider).valueOrNull;
+    final total = allPerms == null
+        ? 30 - kHiddenPermissionKeys.length
+        : allPerms.where((p) => !kHiddenPermissionKeys.contains(p.key)).length;
     // CEO is locked all-on; show the full count regardless of sync state.
     final subtitle =
         isCeo ? 'All $total permissions' : '$count of $total permissions';
