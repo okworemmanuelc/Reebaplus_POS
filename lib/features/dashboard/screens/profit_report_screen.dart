@@ -130,6 +130,7 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
     final theme = Theme.of(context);
     final orders = ref.watch(allOrdersProvider).valueOrNull ?? const [];
     final data = _compute(orders, _period);

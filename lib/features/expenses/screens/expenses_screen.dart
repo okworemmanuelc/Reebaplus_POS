@@ -576,7 +576,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
                 keyboardType: TextInputType.number,
                 style: TextStyle(color: _text),
                 decoration: InputDecoration(
-                  prefixText: '₦ ',
+                  prefixText: '$activeCurrencySymbol ',
                   prefixStyle: TextStyle(color: _text),
                   labelText: 'Amount (naira)',
                   labelStyle: TextStyle(color: _subtext),

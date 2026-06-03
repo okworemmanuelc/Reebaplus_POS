@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/utils/csv_export.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
@@ -79,6 +80,7 @@ class _CustomerLedgerScreenState extends ConsumerState<CustomerLedgerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
     final theme = Theme.of(context);
     final customers = ref.watch(customerServiceProvider).value;
     final balances =

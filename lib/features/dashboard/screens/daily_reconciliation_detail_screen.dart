@@ -76,6 +76,7 @@ class _DailyReconciliationDetailScreenState
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
     final theme = Theme.of(context);
     final tz = ref.watch(businessTimezoneProvider).valueOrNull;
     final data = _compute(tz);
