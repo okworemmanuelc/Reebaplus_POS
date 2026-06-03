@@ -253,6 +253,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   // ── build ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
+    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
     return Scaffold(
       backgroundColor: _bg,
       appBar: AppBar(
@@ -857,6 +858,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                 riderName: 'Pick-up Order',
                 manufacturerNames: _manufacturerNames,
                 branchName: _branchName,
+                businessName: ref.watch(currentBusinessNameProvider),
               ),
             ),
           ),
@@ -1015,6 +1017,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         showWalletInfo: !_isWalkIn && _addWalletInfoToReceipt,
         riderName: 'Pick-up Order',
         branchName: _branchName,
+        businessName: ref.read(currentBusinessNameProvider),
       );
 
       if (!mounted) return;

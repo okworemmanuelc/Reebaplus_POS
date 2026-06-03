@@ -238,6 +238,27 @@ final localBusinessesProvider = StreamProvider.autoDispose<List<BusinessData>>((
   return db.select(db.businesses).watch();
 });
 
+/// The active business row, live. Resolves [localBusinessesProvider] against
+/// the bound `currentBusinessId` (a device can hold more than one business's
+/// data). Used wherever the business name must reflect a Business Info rename
+/// (§10.1) immediately — receipts (§15.1), onboarding welcome, etc.
+final currentBusinessProvider = Provider.autoDispose<BusinessData?>((ref) {
+  final id = ref.watch(databaseProvider).currentBusinessId;
+  final list = ref.watch(localBusinessesProvider).valueOrNull ?? const [];
+  if (list.isEmpty) return null;
+  if (id == null) return list.first;
+  for (final b in list) {
+    if (b.id == id) return b;
+  }
+  return list.first;
+});
+
+/// The active business name, live (see [currentBusinessProvider]). Empty when
+/// no business is bound yet.
+final currentBusinessNameProvider = Provider.autoDispose<String>((ref) {
+  return ref.watch(currentBusinessProvider)?.name ?? '';
+});
+
 /// Lifts the `SupabaseSyncService.pullStatus` ValueNotifier into Riverpod
 /// so the MainLayout catch-up banner (and SyncIssues) can `ref.watch` it.
 /// Mirrors the pattern used for the `isOnline` ValueNotifier (read directly

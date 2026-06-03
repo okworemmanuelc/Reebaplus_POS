@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
+import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 
@@ -539,7 +540,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     if (canEditBuying && buyingPrice > retailPrice) {
       AppNotification.showError(
         context,
-        'Buying price (₦$buyingPrice) cannot be higher than retailer price (₦$retailPrice).',
+        'Buying price (${formatCurrency(buyingPrice)}) cannot be higher than retailer price (${formatCurrency(retailPrice)}).',
       );
       return;
     }
@@ -852,7 +853,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                     Expanded(
                       child: AppInput(
                         controller: _retailPriceCtrl,
-                        labelText: 'Retailer Price (₦) *',
+                        labelText: 'Retailer Price ($activeCurrencySymbol) *',
                         hintText: '0.00',
                         keyboardType: const TextInputType.numberWithOptions(
                           decimal: true,
@@ -864,7 +865,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                     Expanded(
                       child: AppInput(
                         controller: _wholesalePriceCtrl,
-                        labelText: 'Wholesaler Price (₦) *',
+                        labelText: 'Wholesaler Price ($activeCurrencySymbol) *',
                         hintText: '0.00',
                         keyboardType: const TextInputType.numberWithOptions(
                           decimal: true,
@@ -878,7 +879,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                   const SizedBox(height: 14),
                   AppInput(
                     controller: _buyingPriceCtrl,
-                    labelText: 'Buying Price (₦) *',
+                    labelText: 'Buying Price ($activeCurrencySymbol) *',
                     hintText: '0.00',
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
@@ -1033,7 +1034,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                     const SizedBox(height: 6),
                     AppInput(
                       controller: _emptyCrateValueCtrl,
-                      labelText: 'Empty Crate Value (₦)',
+                      labelText: 'Empty Crate Value ($activeCurrencySymbol)',
                       hintText: '0.00',
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,

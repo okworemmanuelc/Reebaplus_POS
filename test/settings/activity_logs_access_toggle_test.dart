@@ -145,6 +145,10 @@ void main() {
       isTrue,
       reason: 'grant enqueues an upsert',
     );
+
+    // Drain the success-toast auto-dismiss timer so it isn't pending at teardown.
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
   });
 
   testWidgets('toggling a pre-existing grant off revokes it', (tester) async {
@@ -174,5 +178,9 @@ void main() {
       isTrue,
       reason: 'revoke enqueues a delete tombstone',
     );
+
+    // Drain the success-toast auto-dismiss timer so it isn't pending at teardown.
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
   });
 }

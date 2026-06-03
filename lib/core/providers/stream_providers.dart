@@ -8,6 +8,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/core/data/currencies.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/theme/theme_notifier.dart';
@@ -177,6 +178,29 @@ final businessDesignSystemProvider = StreamProvider<DesignSystem?>((ref) {
   final db = ref.watch(databaseProvider);
   if (db.currentBusinessId == null) return Stream.value(null);
   return db.settingsDao.watch(kBusinessDesignSystemKey).map(_parseDesignSystem);
+});
+
+/// The business-wide currency code (ISO-4217, e.g. 'NGN', 'USD'), streamed
+/// from the synced `default_currency` setting (Business Info, §10.1). Falls
+/// back to [kDefaultCurrency] pre-login (no bound business) or when unset.
+/// The app-root bridge (main.dart) feeds this into [setActiveCurrencyCode] so
+/// every money display follows the CEO-chosen currency live, including across
+/// devices. Mirrors [businessDesignSystemProvider]'s null-session guard.
+final currencyCodeProvider = StreamProvider<String>((ref) {
+  ref.watch(authProvider); // re-subscribe when the session binds / unbinds
+  final db = ref.watch(databaseProvider);
+  if (db.currentBusinessId == null) return Stream.value(kDefaultCurrency);
+  return db.settingsDao
+      .watch('default_currency')
+      .map((code) => code ?? kDefaultCurrency);
+});
+
+/// The active currency display symbol (e.g. '₦', r'$', 'GH₵'), derived from
+/// [currencyCodeProvider]. For widgets that render a symbol directly (input
+/// field prefixes, labels) and want to rebuild when the currency changes.
+final currencySymbolProvider = Provider<String>((ref) {
+  final code = ref.watch(currencyCodeProvider).valueOrNull ?? kDefaultCurrency;
+  return currencySymbolForCode(code);
 });
 
 /// Global permissions catalog. Identical on every device and every

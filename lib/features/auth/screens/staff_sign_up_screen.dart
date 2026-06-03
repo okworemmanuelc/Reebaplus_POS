@@ -1029,7 +1029,11 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
   }
 
   Widget _buildSuccessStep() {
-    final business = _draft.businessName;
+    // Prefer the live business name (the local row pulled right after invite
+    // redemption) so a CEO rename after the invite was generated reflects here;
+    // fall back to the name the invite carried.
+    final live = ref.watch(currentBusinessNameProvider);
+    final business = live.isNotEmpty ? live : _draft.businessName;
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 40),

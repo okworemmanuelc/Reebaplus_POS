@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
@@ -71,7 +72,7 @@ class _QuickSaleModalState extends ConsumerState<QuickSaleModal> {
           SizedBox(height: context.getRSize(12)),
           AppInput(
             controller: _priceCtrl,
-            labelText: 'Price Per Unit (₦)',
+            labelText: 'Price Per Unit ($activeCurrencySymbol)',
             hintText: 'e.g. 500',
             prefixIcon: Icon(
               FontAwesomeIcons.nairaSign,

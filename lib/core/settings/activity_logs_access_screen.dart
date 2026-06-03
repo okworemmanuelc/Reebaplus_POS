@@ -103,16 +103,25 @@ class _RoleToggle extends ConsumerWidget {
       return;
     }
     final db = ref.read(databaseProvider);
-    if (enable) {
-      await db.rolePermissionsDao.grant(role.id, _kActivityLogsView);
-    } else {
-      await db.rolePermissionsDao.revoke(role.id, _kActivityLogsView);
+    try {
+      if (enable) {
+        await db.rolePermissionsDao.grant(role.id, _kActivityLogsView);
+      } else {
+        await db.rolePermissionsDao.revoke(role.id, _kActivityLogsView);
+      }
+      await db.activityLogDao.log(
+        action: 'settings.activity_logs_access.toggle',
+        description:
+            '${enable ? 'Granted' : 'Revoked'} activity log access for ${role.name}',
+        staffId: db.currentUserId,
+      );
+      if (context.mounted) {
+        AppNotification.showSuccess(context, 'Access updated.');
+      }
+    } catch (_) {
+      if (context.mounted) {
+        AppNotification.showError(context, 'Couldn\'t update access.');
+      }
     }
-    await db.activityLogDao.log(
-      action: 'settings.activity_logs_access.toggle',
-      description:
-          '${enable ? 'Granted' : 'Revoked'} activity log access for ${role.name}',
-      staffId: db.currentUserId,
-    );
   }
 }

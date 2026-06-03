@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
 
 import 'package:reebaplus_pos/core/utils/number_format.dart';
@@ -15,16 +17,17 @@ import 'package:reebaplus_pos/features/inventory/data/models/crate_stock.dart';
 import 'package:reebaplus_pos/features/inventory/data/models/inventory_log.dart';
 import 'package:reebaplus_pos/features/pos/data/products_data.dart';
 
-class SupplierDetailScreen extends StatefulWidget {
+class SupplierDetailScreen extends ConsumerStatefulWidget {
   final Supplier supplier;
 
   const SupplierDetailScreen({super.key, required this.supplier});
 
   @override
-  State<SupplierDetailScreen> createState() => _SupplierDetailScreenState();
+  ConsumerState<SupplierDetailScreen> createState() =>
+      _SupplierDetailScreenState();
 }
 
-class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
+class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
   String _timeFilter = 'Last 30 days'; // §30.6/§30.11 default
   Color get _bg => Theme.of(context).scaffoldBackgroundColor;
   Color get _surface => Theme.of(context).colorScheme.surface;
@@ -37,6 +40,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
     return Scaffold(
         backgroundColor: _bg,
         appBar: AppBar(

@@ -87,6 +87,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
     return Scaffold(
       backgroundColor: _bg,
       drawer: const AppDrawer(activeRoute: 'expenses'),
@@ -575,7 +576,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
                 keyboardType: TextInputType.number,
                 style: TextStyle(color: _text),
                 decoration: InputDecoration(
-                  prefixText: '₦ ',
+                  prefixText: '$activeCurrencySymbol ',
                   prefixStyle: TextStyle(color: _text),
                   labelText: 'Amount (naira)',
                   labelStyle: TextStyle(color: _subtext),

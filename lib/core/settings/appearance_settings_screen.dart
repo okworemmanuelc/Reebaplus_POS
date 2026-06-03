@@ -119,12 +119,21 @@ class AppearanceSettingsScreen extends ConsumerWidget {
     }
     themeController.setDesignSystem(ds); // immediate, this device
     final db = ref.read(databaseProvider);
-    await db.settingsDao.set(kBusinessDesignSystemKey, ds.name); // synced
-    await db.activityLogDao.log(
-      action: 'settings.appearance.accent',
-      description: 'Set business colour to ${ds.name}',
-      staffId: db.currentUserId,
-    );
+    try {
+      await db.settingsDao.set(kBusinessDesignSystemKey, ds.name); // synced
+      await db.activityLogDao.log(
+        action: 'settings.appearance.accent',
+        description: 'Set business colour to ${ds.name}',
+        staffId: db.currentUserId,
+      );
+      if (context.mounted) {
+        AppNotification.showSuccess(context, 'Appearance updated.');
+      }
+    } catch (_) {
+      if (context.mounted) {
+        AppNotification.showError(context, 'Couldn\'t update appearance.');
+      }
+    }
   }
 }
 

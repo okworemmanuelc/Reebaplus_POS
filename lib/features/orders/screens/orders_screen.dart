@@ -112,6 +112,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
     return SharedScaffold(
       activeRoute: 'orders',
       backgroundColor: _bg,
@@ -915,6 +916,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                           orderStatus: currentOrder.status,
                           refundAmount: currentOrder.amountPaidKobo / 100.0,
                           branchName: branchName,
+                          businessName: ref.read(currentBusinessNameProvider),
                         ),
                       ),
                     ),
@@ -1047,6 +1049,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
         orderStatus: order.status,
         refundAmount: order.amountPaidKobo / 100.0,
         branchName: finalBranchName,
+        businessName: ref.read(currentBusinessNameProvider),
       );
 
       if (!context.mounted) return;

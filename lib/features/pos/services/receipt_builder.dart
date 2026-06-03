@@ -26,6 +26,7 @@ class ThermalReceiptService {
     String? orderStatus,
     double? refundAmount,
     String? branchName,
+    String? businessName,
   }) async {
     // Generate profile for 58mm printer
     final profile = await CapabilityProfile.load();
@@ -75,19 +76,17 @@ class ThermalReceiptService {
       );
       bytes += generator.hr();
     }
-    bytes += generator.text(
-      'Coldcrate Ltd',
-      styles: const PosStyles(
-        align: PosAlign.center,
-        height: PosTextSize.size2,
-        width: PosTextSize.size2,
-        bold: true,
-      ),
-    );
-    bytes += generator.text(
-      'Wholesale Drinks & POS',
-      styles: const PosStyles(align: PosAlign.center),
-    );
+    if (businessName != null && businessName.trim().isNotEmpty) {
+      bytes += generator.text(
+        businessName.trim(),
+        styles: const PosStyles(
+          align: PosAlign.center,
+          height: PosTextSize.size2,
+          width: PosTextSize.size2,
+          bold: true,
+        ),
+      );
+    }
     if (branchName != null && branchName.isNotEmpty) {
       bytes += generator.text(
         'Branch: $branchName',

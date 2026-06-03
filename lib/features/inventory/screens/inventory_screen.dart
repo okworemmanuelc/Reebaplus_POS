@@ -11,6 +11,7 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
 
 import 'package:reebaplus_pos/core/utils/responsive.dart'; // RESPONSIVE: utility imported
+import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/features/inventory/data/models/crate_group.dart';
 import 'package:reebaplus_pos/features/inventory/data/models/supplier.dart';
 import 'package:reebaplus_pos/features/inventory/data/models/inventory_item.dart';
@@ -312,6 +313,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
     // Defense-in-depth (hard rules #6/#7): Inventory is gated on stock.view
     // (§16.7). The drawer item and bottom-nav Stock tab already hide without it;
     // this guards a deep-link / programmatic switch to the tab. SharedScaffold
@@ -1498,7 +1500,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                       ),
                       if (depositNaira > 0)
                         Text(
-                          'Deposit: ₦${depositNaira.toStringAsFixed(0)}',
+                          'Deposit: ${formatCurrency(depositNaira)}',
                           style: TextStyle(
                             color: _subtext,
                             fontSize: context.getRFontSize(11),
@@ -1689,7 +1691,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                   Expanded(
                     child: _styledDialogField(
                       depositCtrl,
-                      'Deposit (₦)',
+                      'Deposit ($activeCurrencySymbol)',
                       '0',
                       isNumber: true,
                       isCurrency: true,
@@ -1810,7 +1812,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'Deposit Amount (₦)',
+                          'Deposit Amount ($activeCurrencySymbol)',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
@@ -1912,7 +1914,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                         const SizedBox(height: 12),
                         _styledDialogField(
                           crateValueCtrl,
-                          'Bulk Update Price (₦)',
+                          'Bulk Update Price ($activeCurrencySymbol)',
                           priceMode == 'add'
                               ? '+ /- amount'
                               : 'New price for all items',

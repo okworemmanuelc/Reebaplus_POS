@@ -89,6 +89,7 @@ class _FundsRegisterReportScreenState
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
     final theme = Theme.of(context);
     final closings =
         ref.watch(allFundDayClosingsProvider).valueOrNull ?? const [];

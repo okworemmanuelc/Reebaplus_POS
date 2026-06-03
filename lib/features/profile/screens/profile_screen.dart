@@ -9,7 +9,8 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/shared/utils/role_display.dart';
-import 'package:reebaplus_pos/core/settings/settings_screen.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/shared/utils/avatar_helpers.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
@@ -71,6 +72,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
     final user = ref.watch(authProvider).currentUser;
     if (user == null) {
       return const SharedScaffold(
@@ -415,13 +417,209 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             variant: AppButtonVariant.outline,
             icon: FontAwesomeIcons.penToSquare,
             onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const SettingsScreen()),
-              );
+              final user = ref.read(authProvider).currentUser;
+              if (user == null) return;
+              _openEditProfileSheet(user);
             },
           ),
         ),
       ],
+    );
+  }
+
+  /// Self-service edit of the logged-in user's own name + avatar colour.
+  /// No role gate — a user can always edit their own profile.
+  void _openEditProfileSheet(UserData user) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _EditProfileSheet(user: user, parentRef: ref),
+    );
+  }
+}
+
+/// Bottom-sheet body for editing the current user's name + avatar colour.
+/// Local state (name field + swatch selection) lives here so taps update
+/// live without rebuilding the whole profile screen.
+class _EditProfileSheet extends StatefulWidget {
+  final UserData user;
+  final WidgetRef parentRef;
+  const _EditProfileSheet({required this.user, required this.parentRef});
+
+  @override
+  State<_EditProfileSheet> createState() => _EditProfileSheetState();
+}
+
+class _EditProfileSheetState extends State<_EditProfileSheet> {
+  static const _swatches = [
+    '#3B82F6',
+    '#22C55E',
+    '#F59E0B',
+    '#EF4444',
+    '#A855F7',
+    '#EC4899',
+    '#14B8A6',
+    '#6B7280',
+  ];
+
+  late final TextEditingController _nameController;
+  late String _selectedHex;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.user.name);
+    _selectedHex = _swatches.contains(widget.user.avatarColor)
+        ? widget.user.avatarColor
+        : _swatches.first;
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final name = _nameController.text.trim();
+    if (name.length < 2) {
+      AppNotification.showError(context, 'Enter at least 2 characters.');
+      return;
+    }
+
+    setState(() => _saving = true);
+    final db = widget.parentRef.read(databaseProvider);
+    try {
+      await db.storesDao.updateUserProfile(
+        id: widget.user.id,
+        name: name,
+        avatarColor: _selectedHex,
+      );
+      await widget.parentRef.read(authProvider).refreshCurrentUser();
+      await db.activityLogDao.log(
+        action: 'settings.profile.update',
+        description: 'Updated profile (name, avatar)',
+        staffId: db.currentUserId,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      AppNotification.showSuccess(context, 'Profile updated.');
+    } catch (_) {
+      if (!mounted) return;
+      AppNotification.showError(context, 'Couldn\'t update profile.');
+      setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: t.colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: EdgeInsets.fromLTRB(
+        24,
+        16,
+        24,
+        24 + context.deviceBottomInset,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: t.colorScheme.onSurface.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'Edit Profile',
+            style: TextStyle(
+              fontSize: context.getRFontSize(18),
+              fontWeight: FontWeight.bold,
+              color: t.colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 20),
+          TextField(
+            controller: _nameController,
+            textCapitalization: TextCapitalization.words,
+            decoration: AppDecorations.authInputDecoration(
+              context,
+              label: 'Name',
+              prefixIcon: Icons.person_rounded,
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'Avatar colour',
+            style: TextStyle(
+              fontSize: context.getRFontSize(13),
+              fontWeight: FontWeight.w600,
+              color: t.colorScheme.onSurface.withValues(alpha: 0.7),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              for (final hex in _swatches)
+                GestureDetector(
+                  onTap: () => setState(() => _selectedHex = hex),
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: parseHexColor(hex),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: _selectedHex == hex
+                            ? t.colorScheme.onSurface
+                            : Colors.transparent,
+                        width: 3,
+                      ),
+                    ),
+                    child: _selectedHex == hex
+                        ? const Icon(Icons.check_rounded,
+                            color: Colors.white, size: 20)
+                        : null,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          GestureDetector(
+            onTap: _saving ? null : _save,
+            child: Opacity(
+              opacity: _saving ? 0.6 : 1,
+              child: Container(
+                height: 54,
+                alignment: Alignment.center,
+                decoration: AppDecorations.primaryGradient(context, radius: 14),
+                child: const Text(
+                  'Save changes',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

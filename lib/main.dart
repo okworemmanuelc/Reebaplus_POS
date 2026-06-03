@@ -6,8 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:reebaplus_pos/core/data/currencies.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/theme_notifier.dart';
+import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/db_wipe.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -214,6 +216,15 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
       final ds = next.valueOrNull;
       if (ds != null) themeController.setDesignSystem(ds);
     });
+
+    // Keep the app-wide money formatter in sync with the CEO-chosen currency
+    // (synced `default_currency`, §10.1). Watching here rebuilds MaterialApp
+    // on change so every formatCurrency() re-renders with the new symbol;
+    // setting the global synchronously means descendants in this same frame
+    // already read the updated symbol (receipts, money labels).
+    final currencyCode =
+        ref.watch(currencyCodeProvider).valueOrNull ?? kDefaultCurrency;
+    setActiveCurrencyCode(currencyCode);
 
     return ForceUpdateWrapper(
       child: AutoLockWrapper(

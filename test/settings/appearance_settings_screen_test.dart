@@ -123,6 +123,10 @@ void main() {
     final pending = await getPendingQueue(db);
     expect(pending.any((r) => r.actionType == 'settings:upsert'), isTrue);
     expect(themeController.designSystem, DesignSystem.green);
+
+    // Drain the success-toast auto-dismiss timer so it isn't pending at teardown.
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
   });
 
   testWidgets('non-CEO is blocked (no accent cards)', (tester) async {
