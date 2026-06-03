@@ -10,6 +10,7 @@ import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/date_period.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/app_drawer.dart';
 import 'package:reebaplus_pos/features/payments/data/models/payment.dart';
 import 'package:reebaplus_pos/features/payments/widgets/add_payment_sheet.dart';
@@ -56,6 +57,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
     return Scaffold(
           backgroundColor: _bg,
           drawer: const AppDrawer(activeRoute: 'supplier_accounts'),

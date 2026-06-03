@@ -14,6 +14,7 @@ import 'package:reebaplus_pos/core/utils/stock_calculator.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/menu_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
@@ -751,7 +752,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                         keyboardType: TextInputType.number,
                         inputFormatters: [CurrencyInputFormatter()],
                         autofocus: true,
-                        prefixText: '₦ ',
+                        prefixText: '$activeCurrencySymbol ',
                         hintText: '0',
                         fillColor: Theme.of(context).cardColor,
                         border: OutlineInputBorder(
@@ -801,7 +802,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
     final valueText = value == value.toInt()
         ? value.toInt().toString()
         : value.toStringAsFixed(1);
-    final label = kind == 'naira' ? '−₦$valueText' : '−$valueText%';
+    final label = kind == 'naira' ? '−$activeCurrencySymbol$valueText' : '−$valueText%';
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: context.getRSize(8),
@@ -853,6 +854,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
     final cartItems = List<Map<String, dynamic>>.from(
       ref.read(cartProvider).value,
     );
@@ -1101,7 +1103,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                               ),
                               Flexible(
                                 child: Text(
-                                  ' Bal: ₦${customerWallet.abs().toStringAsFixed(0)} ${customerWallet == 0 ? "clear" : (isOwe ? "overdue" : "credit")}',
+                                  ' Bal: $activeCurrencySymbol${customerWallet.abs().toStringAsFixed(0)} ${customerWallet == 0 ? "clear" : (isOwe ? "overdue" : "credit")}',
                                   style: TextStyle(
                                     fontSize: context.getRFontSize(12),
                                     color: customerWallet == 0

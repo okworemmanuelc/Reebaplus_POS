@@ -150,6 +150,7 @@ class _FundsRegisterScreenState extends ConsumerState<FundsRegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
     final theme = Theme.of(context);
     // Role guard (hard rule #6): Funds Register is Manager/CEO only.
     if (!hasPermission(ref, 'funds.view') &&
@@ -381,8 +382,8 @@ class _FundsRegisterScreenState extends ConsumerState<FundsRegisterScreen> {
           AppInput(
             controller: _ctrlFor(a.id),
             labelText: a.accountType == 'cash_till'
-                ? '${_accountLabel(a)} — opening cash (₦)'
-                : '${a.name} — opening balance (₦)',
+                ? '${_accountLabel(a)} — opening cash ($activeCurrencySymbol)'
+                : '${a.name} — opening balance ($activeCurrencySymbol)',
             hintText: '0',
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             inputFormatters: [CurrencyInputFormatter()],
@@ -881,8 +882,8 @@ class _CloseDaySheetState extends ConsumerState<_CloseDaySheet> {
                     AppInput(
                       controller: _ctrlFor(a.id),
                       labelText: a.accountType == 'cash_till'
-                          ? 'Cash counted (₦)'
-                          : 'Amount withdrawn (₦)',
+                          ? 'Cash counted ($activeCurrencySymbol)'
+                          : 'Amount withdrawn ($activeCurrencySymbol)',
                       hintText: '0',
                       keyboardType:
                           const TextInputType.numberWithOptions(decimal: true),

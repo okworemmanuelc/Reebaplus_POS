@@ -193,6 +193,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
     final t = Theme.of(context);
     final text = t.colorScheme.onSurface;
     final subtext = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;

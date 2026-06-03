@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:reebaplus_pos/core/database/daos.dart';
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
@@ -9,7 +11,7 @@ import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 /// Shows when the user taps "Total Sales" or "Net Profit" on the dashboard.
 /// [mode] = 'sales' → revenue-focused columns.
 /// [mode] = 'profit' → adds a Profit/Loss column per item.
-class SalesDetailScreen extends StatefulWidget {
+class SalesDetailScreen extends ConsumerStatefulWidget {
   final List<OrderWithItems> orders;
   final String mode; // 'sales' | 'profit'
   final String period;
@@ -22,10 +24,10 @@ class SalesDetailScreen extends StatefulWidget {
   });
 
   @override
-  State<SalesDetailScreen> createState() => _SalesDetailScreenState();
+  ConsumerState<SalesDetailScreen> createState() => _SalesDetailScreenState();
 }
 
-class _SalesDetailScreenState extends State<SalesDetailScreen> {
+class _SalesDetailScreenState extends ConsumerState<SalesDetailScreen> {
   bool _loading = true;
 
   @override
@@ -36,6 +38,7 @@ class _SalesDetailScreenState extends State<SalesDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;

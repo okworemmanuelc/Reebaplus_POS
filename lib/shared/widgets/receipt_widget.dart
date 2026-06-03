@@ -33,6 +33,10 @@ class ReceiptWidget extends StatelessWidget {
   /// Name of the store / branch that processed this sale.
   final String? branchName;
 
+  /// The business name (§15.1) — shown as the receipt header. Read live from
+  /// the `businesses` row so a rename in Business Info (§10.1) reflects here.
+  final String? businessName;
+
   const ReceiptWidget({
     super.key,
     required this.orderId,
@@ -55,6 +59,7 @@ class ReceiptWidget extends StatelessWidget {
     this.refundAmount,
     this.manufacturerNames,
     this.branchName,
+    this.businessName,
   });
 
   @override
@@ -153,14 +158,16 @@ class ReceiptWidget extends StatelessWidget {
             ),
             SizedBox(height: context.getRSize(12)),
           ],
-          Text(
-            'Coldcrate Ltd',
-            style: TextStyle(
-              fontSize: context.getRFontSize(20),
-              fontWeight: FontWeight.w800,
-              color: textCol,
+          if (businessName != null && businessName!.trim().isNotEmpty)
+            Text(
+              businessName!.trim(),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: context.getRFontSize(20),
+                fontWeight: FontWeight.w800,
+                color: textCol,
+              ),
             ),
-          ),
           if (branchName != null && branchName!.isNotEmpty) ...[
             Text(
               'Branch: $branchName',

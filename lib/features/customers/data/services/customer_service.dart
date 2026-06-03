@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:drift/drift.dart';
+import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/shared/services/activity_log_service.dart';
 import 'package:reebaplus_pos/shared/services/wallet_service.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -93,7 +94,7 @@ class CustomerService extends ValueNotifier<List<Customer>> {
 
     await _log.logAction(
       'Payment Added',
-      'Added payment of ₦${payment.amount.round()} for ${customer.name}',
+      'Added payment of ${formatCurrency(payment.amount)} for ${customer.name}',
       customerId: customer.id,
     );
   }
@@ -152,7 +153,7 @@ class CustomerService extends ValueNotifier<List<Customer>> {
     final naira = (amountKobo / 100).round();
     await _log.logAction(
       'Payment Added',
-      'Topped up ₦$naira to ${customer?.name ?? customerId}\'s wallet'
+      'Topped up ${formatCurrency(naira)} to ${customer?.name ?? customerId}\'s wallet'
           '${note != null && note.isNotEmpty ? '. Note: $note' : ''}',
       customerId: customerId,
     );
@@ -167,7 +168,7 @@ class CustomerService extends ValueNotifier<List<Customer>> {
 
     await _log.logAction(
       'Limit Updated',
-      'Updated wallet limit to ₦${newLimit.abs().toStringAsFixed(0)} for ${customer.name}',
+      'Updated wallet limit to ${formatCurrency(newLimit.abs())} for ${customer.name}',
       customerId: customer.id,
     );
   }
@@ -192,7 +193,7 @@ class CustomerService extends ValueNotifier<List<Customer>> {
 
     await _log.logAction(
       'Wallet Refunded',
-      'Refunded ₦${amount.round()} to ${customer.name}. Note: $note',
+      'Refunded ${formatCurrency(amount)} to ${customer.name}. Note: $note',
       customerId: customer.id,
     );
   }
@@ -217,7 +218,7 @@ class CustomerService extends ValueNotifier<List<Customer>> {
 
     await _log.logAction(
       'Wallet Updated',
-      'Added ₦${amount.round()} to ${customer.name}\'s wallet. Note: $note',
+      'Added ${formatCurrency(amount)} to ${customer.name}\'s wallet. Note: $note',
       customerId: customer.id,
     );
   }

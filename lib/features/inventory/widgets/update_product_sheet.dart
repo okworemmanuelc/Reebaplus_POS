@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
+import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 
@@ -697,7 +698,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                         Expanded(
                           child: AppInput(
                             controller: _retailPriceCtrl,
-                            labelText: 'Retailer Price (₦) *',
+                            labelText: 'Retailer Price ($activeCurrencySymbol) *',
                             hintText: 'e.g. 500',
                             keyboardType: const TextInputType.numberWithOptions(
                               decimal: true,
@@ -709,7 +710,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                         Expanded(
                           child: AppInput(
                             controller: _wholesalePriceCtrl,
-                            labelText: 'Wholesaler Price (₦) *',
+                            labelText: 'Wholesaler Price ($activeCurrencySymbol) *',
                             hintText: '0.00',
                             keyboardType: const TextInputType.numberWithOptions(
                               decimal: true,
@@ -723,7 +724,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                       const SizedBox(height: 14),
                       AppInput(
                         controller: _buyingPriceCtrl,
-                        labelText: 'Buying Price (₦) *',
+                        labelText: 'Buying Price ($activeCurrencySymbol) *',
                         hintText: '0.00',
                         keyboardType: const TextInputType.numberWithOptions(
                           decimal: true,
@@ -899,7 +900,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                         const SizedBox(height: 6),
                         AppInput(
                           controller: _emptyCrateValueCtrl,
-                          labelText: 'Empty Crate Value (₦)',
+                          labelText: 'Empty Crate Value ($activeCurrencySymbol)',
                           hintText: '0.00',
                           keyboardType: const TextInputType.numberWithOptions(
                             decimal: true,

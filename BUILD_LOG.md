@@ -106,6 +106,45 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 
 ---
 
+## Session 64 — 2026-06-03 — Business details: name/currency propagation, sync RLS fix, editable setup info
+
+**What the user reported:**
+1. Changing the business name in Settings doesn't show on receipts (and "verify currency too") — and should reflect on the onboarding welcome screen and everywhere the name appears.
+2. The CEO should be able to edit all the setup/onboarding info (store address, phone) and their own CEO details.
+3. A Sync Issues screenshot: `businesses:upsert` rejected with `42501` (RLS), 24 attempts — the rename never reaches the cloud.
+
+**Root causes found:**
+- **Sync (the real blocker).** Business edits push as a PostgREST `.upsert()` = `INSERT ... ON CONFLICT DO UPDATE`. Postgres checks the **INSERT** policy's `WITH CHECK` on the candidate row even when the row already exists. The cloud `businesses_insert` policy (0004) requires `onboarding_complete = false` AND `owner_id = auth.uid()` — but an established business pushes `onboarding_complete = true`, and the local `businesses` table has no `owner_id` column so it's never pushed (candidate is NULL). Either way → 42501, retried forever. Migration 0062 (Session 32) only widened the UPDATE branch; its header wrongly assumed the INSERT branch is never evaluated for an edit.
+- **Receipts hardcoded the name.** Both the on-screen receipt and the thermal builder printed `'Coldcrate Ltd'` / `'Wholesale Drinks & POS'`, ignoring the real business.
+- **Currency was hardcoded to ₦** everywhere — `formatCurrency()` ignored the saved `default_currency`; the Business Info dropdown wrote the setting but nothing read it.
+- **Stores + CEO profile were read-only.** No edit path existed; the POS header even showed the app name instead of the business name (§12.1).
+
+**Built today:**
+- **Cloud migration 0086** (`0086_businesses_insert_edit_upsert_fix.sql`) — relaxes `businesses_insert` to `WITH CHECK (owner_id = auth.uid() OR id = public.business_id())`, mirroring the 0062 UPDATE policy, so an owner editing their active business passes. **Deployed 2026-06-03.** The push was first blocked because the remote had 0076–0085 applied (parallel work the user deployed then lost in a `git reset --hard`; files unrecoverable — 0076–0080 partially survive in dangling commit `cd1ec9d` with a duplicate-0080, 0081–0085 gone). Reconciled with `supabase migration repair --status reverted 0076..0085` (untracks them on remote — does NOT drop their schema; the supplier-accounts / stores-address / stock-transfer tables stay live but untracked-by-migrations), then `supabase db push` applied 0086. Confirmed `0086 | 0086 | 0086` in `migration list`.
+- **App-wide currency.** New `kCurrencySymbols` map + `currencySymbolForCode()` (currencies.dart); a global `activeCurrencySymbol` + currency-aware `formatCurrency()` (number_format.dart); `currencyCodeProvider` / `currencySymbolProvider` (stream_providers.dart); the app root (`main.dart`) watches the synced currency and updates the global, so every money display (29 `formatCurrency` call sites + both receipts) follows the CEO-chosen currency live. Hardcoded `₦` labels/prefixes/strings across 12 files swapped to the dynamic symbol.
+  - **Follow-up (symbol-only):** the user reported Home cards showed `"NGN (₦)197,640"`. Cause: older onboarding stored `default_currency` as the **label** `"NGN (₦)"` (not the ISO code `"NGN"`); the old hardcoded formatter ignored the setting, so it surfaced only once `formatCurrency` started reading it. Fix: `currencySymbolForCode` now returns **only the glyph**, tolerant of label-style values via a new `normalizeCurrencyCode()` (extracts the embedded ISO code → `"NGN (₦)"` → `"NGN"` → `₦`). Business Info `_load` normalises too, so the picker shows a clean code and saving repairs the stored value. `test/currency_format_test.dart` (8 tests) guards it.
+  - **Follow-up (live reactivity):** the user reported a currency change didn't update other users live. Root cause was NOT sync (the `settings` row pushes — it carries `business_id` so RLS passes — is in the realtime publication, and the restore fires the local watch) but **reactivity**: each tab lives behind its own nested `TabNavigator` (MainLayout), so a preserved route never re-ran `formatCurrency` when the global symbol changed. Fix: every money-displaying SCREEN (21 of them) now `ref.watch(currencySymbolProvider)` at the top of `build`, so they rebuild the instant currency changes — same-device and cross-device. Two non-Consumer detail screens (supplier_detail, sales_detail) were converted to `ConsumerStatefulWidget`.
+- **Settings-save flashes (user request).** Added success/error toasts to the CEO Settings sub-pages that saved silently: Appearance ("Appearance updated."), Security auto-lock ("Auto-lock updated."), Activity-Logs-access + Sync-Issues-access toggles ("Access updated."). Business Info and Stores already flashed. Drained the new toast's auto-dismiss timer in the 3 affected widget tests (appearance + activity-logs toggle) — full suite back to green (323 pass).
+- **Business name on receipts + POS header.** `ReceiptWidget` and `ThermalReceiptService.buildReceipt` gained a `businessName` param; the 3 call sites (checkout, customer-detail, orders) pass it from a new live `currentBusinessProvider` / `currentBusinessNameProvider`. POS header (§12.1) and the staff onboarding "Welcome to {business}" now read the live name too.
+- **Editable setup info.** Business Info gains a **Phone** field (`BusinessesDao.updateInfo` + cloud). New enqueuing DAO writes `StoresDao.updateStore` (name/address) and `StoresDao.updateUserProfile` (name/avatar), plus `AuthService.refreshCurrentUser()`. Stores settings + the profile screen made editable (CEO/own-profile). Email editing deliberately deferred (login identity → needs OTP).
+
+**Database changes:**
+- One new cloud migration (0086) — RLS only, no schema change. Pending deploy (see above). No local Drift schema/version bump (used existing columns: `businesses.phone`, `stores.location`, `users.name`/`avatarColor`).
+
+**Master plan updates:**
+- §10.1 — Business Info gains phone; currency made real + receipt/header name noted. Stores: editing the existing store's name/address is Phase 1.
+- §27.1 — profile edit (own name + avatar) note added; email edit out of scope.
+
+**Tested:**
+- `flutter analyze lib` → clean (whole tree). Full suite `flutter test` → **315 passing**. Receipt widget tests still green (wallet-info gate + QR-removal). Editable Stores/Profile screens reviewed against the diff (permission-gated, enqueue via the new DAOs, `deviceBottomInset` correct). Emulator walk-through to confirm the queued rename flushes is the one manual step left.
+
+**Known issues / left open:**
+- The cloud retains the orphaned 0076–0085 schema (supplier accounts, stores address columns, stock-transfer RPCs, renamed permission labels) now untracked-by-migrations after the repair-reverted reconciliation. Harmless to this app (it never references those tables), but a fresh `db reset`/rebuild won't reproduce them — re-baseline with `supabase db pull` if that matters. **Note 0077 added cloud `stores` address columns**; this app still writes the single fused `stores.location` — verify the cloud columns are nullable/defaulted so store upserts don't 23502 (not observed, but flagged).
+- Avatar colour does not propagate cross-device (existing per-device pull behaviour, unchanged).
+- After deploy, the stuck `businesses:upsert` flushes on its next retry (or tap **Retry now** in Sync Issues).
+
+---
+
 ## Session 55 — 2026-06-01 — Fix: "confirm empty crates" crash (FormatException) + empty-crate tab not updating
 
 **The bug:** Confirming a crate return threw `FormatException: Invalid radix-10

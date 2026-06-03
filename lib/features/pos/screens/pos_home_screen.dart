@@ -79,6 +79,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
     // §12 / hard rule #6: POS is gated to roles that hold `sales.make` (CEO,
     // Manager, Cashier). Stock keeper is already hidden in the sidebar; this is
     // defense-in-depth against deep-links / bottom-nav.
@@ -240,13 +241,16 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
   ) {
     // §12.1: the store selector is CEO-only (CEO can switch selling store).
     final isCeo = ref.watch(currentUserRoleProvider)?.slug == 'ceo';
+    // §12.1: POS header shows the business name (live, so a Business Info
+    // rename reflects here) with the current store as the subtitle.
+    final bizName = ref.watch(currentBusinessNameProvider);
     return AppBar(
       backgroundColor: surfaceCol,
       elevation: 0,
       leading: const MenuButton(),
       title: AppBarHeader(
         icon: FontAwesomeIcons.beerMugEmpty,
-        title: 'Reebaplus POS',
+        title: bizName.isNotEmpty ? bizName : 'Reebaplus POS',
         subtitle: _controller!.currentStoreName ?? 'Point of Sale',
       ),
       actions: [

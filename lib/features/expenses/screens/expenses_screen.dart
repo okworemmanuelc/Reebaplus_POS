@@ -72,6 +72,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
     return Scaffold(
           backgroundColor: _bg,
           drawer: const AppDrawer(activeRoute: 'expenses'),

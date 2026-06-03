@@ -168,6 +168,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
     // ── Role resolution & §11.4 card visibility ─────────────────────────────
     final role = ref.watch(currentUserRoleProvider);
     final slug = role?.slug;

@@ -332,8 +332,15 @@ Where the CEO tunes everything about the business. Menu screen with tappable sec
 
 ### 10.1 Sections from day one
 
-- Business Info — business name, type, currency (editable).
-- Stores — shows Store 1 (name, address, state, country). Phase 2 adds ability to add more stores.
+- Business Info — business name, **phone**, type, currency (all editable). The
+  chosen currency now actually drives money formatting app-wide (receipts and
+  every money surface), and the business name shows on receipts (§15.1) and the
+  POS header (§12.1); both reflect a rename live. (Phone editable + currency made
+  real + receipt/header business name fixed 2026-06-03, user.)
+- Stores — shows Store 1 (name, address). **The CEO can edit the existing
+  store's name and address** (Phase 1, 2026-06-03, user) — the local store keeps
+  a single fused `address` field (street/state/country were merged at
+  onboarding). Phase 2 still adds the ability to add *more* stores.
 - Security — auto-lock timer with preset chips: 1, 3, 5, 10, 15, 30 minutes (default 5).
 - Roles & Permissions — four role cards (CEO, Manager, Cashier, Stock keeper). Tap to open.
 - Activity Logs access — toggle for which roles can view activity logs (CEO only by default).
@@ -1472,6 +1479,13 @@ Hardcoded for now. Custom notification settings = Phase 2.
 - Lock icon (existing).
 - "Switch User" labelled button (new).
 - Background color matches role tag (CEO yellow, Manager blue, Cashier green, Stock keeper grey).
+
+> Profile edit (2026-06-03, user). Tapping the avatar opens the profile screen,
+> where the logged-in user can **edit their own name and avatar colour** (self-
+> service, any role). The name change syncs to the cloud (it appears in Staff
+> Management, the Who's-Working picker, and on receipts as the seller); avatar
+> colour follows the existing per-device avatar behaviour. Editing the email
+> (login identity) stays out of scope for now — it needs OTP re-verification.
 
 ### 27.2 Sidebar items (visually grouped, no text headings)
 

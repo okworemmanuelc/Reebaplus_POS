@@ -75,6 +75,16 @@ class AuthService extends ValueNotifier<UserData?> {
   /// The currently logged-in user, or null if nobody is logged in.
   UserData? get currentUser => value;
 
+  /// Re-reads the current user's `users` row from the local DB and republishes
+  /// it so the UI reflects an in-place profile edit (name / avatar). No-op if
+  /// no user is bound. Used by the profile-edit flow after [StoresDao.updateUserProfile].
+  Future<void> refreshCurrentUser() async {
+    final id = value?.id;
+    if (id == null) return;
+    final fresh = await _db.storesDao.getUserById(id);
+    if (fresh != null) value = fresh;
+  }
+
   /// Whether Supabase currently has an active auth session. Reading this is
   /// cheap and does not force a network refresh — supabase-flutter refreshes
   /// the JWT lazily on the next cloud call. A `false` result means there is

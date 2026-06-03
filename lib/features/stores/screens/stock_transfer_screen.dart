@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/features/inventory/data/inventory_data.dart';
 import 'package:reebaplus_pos/features/inventory/data/models/inventory_item.dart';
@@ -404,7 +405,7 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     AppInput(
-                      labelText: 'Unit Price ₦',
+                      labelText: 'Unit Price $activeCurrencySymbol',
                       controller: _priceCtrl,
                       keyboardType: TextInputType.number,
                       inputFormatters: [CurrencyInputFormatter()],

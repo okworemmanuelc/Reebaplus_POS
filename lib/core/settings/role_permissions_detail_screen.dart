@@ -392,7 +392,7 @@ class _RolePermissionsDetailScreenState
                 if (_guard()) _commitExpense();
               },
               decoration: InputDecoration(
-                prefixText: '₦ ',
+                prefixText: '$activeCurrencySymbol ',
                 hintText: '0',
                 isDense: true,
                 border: OutlineInputBorder(

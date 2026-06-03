@@ -63,12 +63,21 @@ class _SecuritySettingsScreenState
     }
     setState(() => _autoLockSeconds = seconds);
     final db = ref.read(databaseProvider);
-    await db.settingsDao.set('auto_lock_interval_seconds', seconds.toString());
-    await db.activityLogDao.log(
-      action: 'settings.security.auto_lock',
-      description: 'Set auto-lock to ${seconds ~/ 60} min',
-      staffId: db.currentUserId,
-    );
+    try {
+      await db.settingsDao.set('auto_lock_interval_seconds', seconds.toString());
+      await db.activityLogDao.log(
+        action: 'settings.security.auto_lock',
+        description: 'Set auto-lock to ${seconds ~/ 60} min',
+        staffId: db.currentUserId,
+      );
+      if (mounted) {
+        AppNotification.showSuccess(context, 'Auto-lock updated.');
+      }
+    } catch (_) {
+      if (mounted) {
+        AppNotification.showError(context, 'Couldn\'t update auto-lock.');
+      }
+    }
   }
 
   /// Biometric enablement is device-local: it persists to the same

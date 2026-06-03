@@ -603,6 +603,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                           reprintDate: reprintDate,
                           reshareDate: reshareDate,
                           branchName: branchName,
+                          businessName: ref.read(currentBusinessNameProvider),
                         ),
                       ),
                     ),
@@ -703,6 +704,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
         orderStatus: order.status,
         refundAmount: order.amountPaidKobo / 100.0,
         branchName: branchName,
+        businessName: ref.read(currentBusinessNameProvider),
       );
 
       if (!ctx.mounted) return;
@@ -802,6 +804,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
     final theme = Theme.of(context);
     final showCrates = _showCratesTab();
 

@@ -451,6 +451,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
     // Subscribe to permission changes so the role-gated UI (buying row,
     // action button) rebuilds when the role + its grants resolve locally.
     // The `_canEdit` family of getters read the same provider.
@@ -1026,7 +1027,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                   _emptyCrateValueController,
                   width: 90,
                   keyboardType: TextInputType.number,
-                  prefix: '₦',
+                  prefix: activeCurrencySymbol,
                 ),
               ),
               _divider(context),
@@ -2061,7 +2062,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         onChanged: (v) => setState(() {}),
         border: InputBorder.none,
         contentPadding: EdgeInsets.zero,
-        prefixText: '₦',
+        prefixText: activeCurrencySymbol,
         fillColor: Colors.transparent,
       ),
     );

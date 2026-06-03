@@ -107,16 +107,25 @@ class _RoleToggle extends ConsumerWidget {
       return;
     }
     final db = ref.read(databaseProvider);
-    if (enable) {
-      await db.rolePermissionsDao.grant(role.id, _kSyncView);
-    } else {
-      await db.rolePermissionsDao.revoke(role.id, _kSyncView);
+    try {
+      if (enable) {
+        await db.rolePermissionsDao.grant(role.id, _kSyncView);
+      } else {
+        await db.rolePermissionsDao.revoke(role.id, _kSyncView);
+      }
+      await db.activityLogDao.log(
+        action: 'settings.sync_issues_access.toggle',
+        description:
+            '${enable ? 'Granted' : 'Revoked'} Sync Issues access for ${role.name}',
+        staffId: db.currentUserId,
+      );
+      if (context.mounted) {
+        AppNotification.showSuccess(context, 'Access updated.');
+      }
+    } catch (_) {
+      if (context.mounted) {
+        AppNotification.showError(context, 'Couldn\'t update access.');
+      }
     }
-    await db.activityLogDao.log(
-      action: 'settings.sync_issues_access.toggle',
-      description:
-          '${enable ? 'Granted' : 'Revoked'} Sync Issues access for ${role.name}',
-      staffId: db.currentUserId,
-    );
   }
 }

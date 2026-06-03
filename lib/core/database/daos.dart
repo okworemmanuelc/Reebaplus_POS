@@ -3154,6 +3154,53 @@ class StoresDao extends DatabaseAccessor<AppDatabase>
     )..where((t) => t.id.equals(id) & whereBusiness(t))).getSingleOrNull();
   }
 
+  /// Edit an existing store's name / address (§10.1 Stores). Business-scoped
+  /// (a device can hold more than one business's stores) and routed through
+  /// the sync queue so the change reaches the cloud + other devices. `stores`
+  /// is a synced tenant table, so this is the only correct write path.
+  /// An empty [location] clears the stored address (nullable column).
+  Future<void> updateStore({
+    required String id,
+    String? name,
+    String? location,
+  }) async {
+    await (update(stores)..where((t) => t.id.equals(id) & whereBusiness(t)))
+        .write(
+      StoresCompanion(
+        name: name == null ? const Value.absent() : Value(name),
+        location: location == null
+            ? const Value.absent()
+            : Value(location.isEmpty ? null : location),
+        lastUpdatedAt: Value(DateTime.now()),
+      ),
+    );
+    final row =
+        await (select(stores)..where((t) => t.id.equals(id))).getSingle();
+    await db.syncDao.enqueueUpsert('stores', row);
+  }
+
+  /// Edit a user's own display name / avatar colour (profile, §10.1-adjacent).
+  /// Routed through the sync queue so the change reaches the cloud + other
+  /// devices (name is in the `users` push whitelist). Not business-scoped —
+  /// the caller passes their own user id.
+  Future<void> updateUserProfile({
+    required String id,
+    String? name,
+    String? avatarColor,
+  }) async {
+    await (update(users)..where((t) => t.id.equals(id))).write(
+      UsersCompanion(
+        name: name == null ? const Value.absent() : Value(name),
+        avatarColor:
+            avatarColor == null ? const Value.absent() : Value(avatarColor),
+        lastUpdatedAt: Value(DateTime.now()),
+      ),
+    );
+    final row =
+        await (select(users)..where((t) => t.id.equals(id))).getSingle();
+    await db.syncDao.enqueueUpsert('users', row);
+  }
+
   Future<UserData?> getUserById(String id) {
     // deliberately not businessId-scoped
     return (select(users)..where((t) => t.id.equals(id))).getSingleOrNull();
@@ -5036,12 +5083,16 @@ class BusinessesDao extends DatabaseAccessor<AppDatabase>
   /// still routes through `enqueueUpsert`. Because that absence also means
   /// no `bump_businesses_last_updated_at` trigger exists, `lastUpdatedAt`
   /// is stamped explicitly here (same as onboarding's local mirror).
-  Future<void> updateInfo({String? name, String? type}) async {
+  Future<void> updateInfo({String? name, String? type, String? phone}) async {
     final id = requireBusinessId();
     await (update(businesses)..where((t) => t.id.equals(id))).write(
       BusinessesCompanion(
         name: name == null ? const Value.absent() : Value(name),
         type: type == null ? const Value.absent() : Value(type),
+        // Empty string clears the stored phone (nullable column).
+        phone: phone == null
+            ? const Value.absent()
+            : Value(phone.isEmpty ? null : phone),
         lastUpdatedAt: Value(DateTime.now()),
       ),
     );

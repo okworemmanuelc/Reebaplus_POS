@@ -592,7 +592,7 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
           children: [
             _kindChip('%', 'percent'),
             SizedBox(width: context.getRSize(8)),
-            _kindChip('₦', 'naira'),
+            _kindChip(activeCurrencySymbol, 'naira'),
             SizedBox(width: context.getRSize(12)),
             Expanded(
               child: AppInput(
@@ -600,7 +600,7 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
                 ),
-                hintText: _discountKind == 'percent' ? '0%' : '₦0',
+                hintText: _discountKind == 'percent' ? '0%' : '${activeCurrencySymbol}0',
               ),
             ),
           ],

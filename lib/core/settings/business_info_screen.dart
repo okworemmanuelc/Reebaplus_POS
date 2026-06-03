@@ -22,6 +22,7 @@ class BusinessInfoScreen extends ConsumerStatefulWidget {
 
 class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
   final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
   String? _type;
   String _currency = kDefaultCurrency;
   bool _loading = true;
@@ -40,6 +41,7 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
   @override
   void dispose() {
     _nameController.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
 
@@ -55,8 +57,11 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
     if (!mounted) return;
     setState(() {
       _nameController.text = biz?.name ?? '';
+      _phoneController.text = biz?.phone ?? '';
       _type = kBusinessTypes.contains(biz?.type) ? biz?.type : null;
-      _currency = currency ?? kDefaultCurrency;
+      // Normalise legacy label-style values (e.g. "NGN (₦)") to a clean ISO
+      // code so the picker shows "NGN" and saving repairs the stored value.
+      _currency = normalizeCurrencyCode(currency);
       _currencyCodes = {kDefaultCurrency, ...kCountryCurrency.values, _currency}
           .toList()
         ..sort();
@@ -81,7 +86,11 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
     setState(() => _saving = true);
     final db = ref.read(databaseProvider);
     try {
-      await db.businessesDao.updateInfo(name: name, type: _type);
+      await db.businessesDao.updateInfo(
+        name: name,
+        type: _type,
+        phone: _phoneController.text.trim(),
+      );
       await db.settingsDao.set('default_currency', _currency);
       await db.activityLogDao.log(
         action: 'settings.business_info.update',
@@ -138,6 +147,16 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
                             context,
                             label: 'Business name',
                             prefixIcon: Icons.business_rounded,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _phoneController,
+                          keyboardType: TextInputType.phone,
+                          decoration: AppDecorations.authInputDecoration(
+                            context,
+                            label: 'Phone number',
+                            prefixIcon: Icons.phone_rounded,
                           ),
                         ),
                         const SizedBox(height: 16),
