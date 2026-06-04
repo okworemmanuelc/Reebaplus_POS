@@ -10,6 +10,7 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/profile/widgets/profile_ui.dart';
 import 'package:reebaplus_pos/features/staff/screens/staff_permissions_screen.dart';
 import 'package:reebaplus_pos/shared/utils/role_display.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
@@ -19,7 +20,8 @@ import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 /// (Reactivate) actions, each gated behind a confirm dialog. Reached from a
 /// manageable card in Staff Management, or — with [readOnly] true — from the
 /// viewer's own card, which opens view-only (no Change role / Suspend, since
-/// you still can't manage yourself).
+/// you still can't manage yourself). Shares the modern profile card set
+/// (profile_ui.dart) with the Profile screen.
 class StaffDetailScreen extends ConsumerStatefulWidget {
   final String membershipId;
   final bool readOnly;
@@ -35,6 +37,7 @@ class StaffDetailScreen extends ConsumerStatefulWidget {
 
 class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
   int? _totalSalesKobo;
+  int _ordersCount = 0;
 
   @override
   void initState() {
@@ -43,8 +46,8 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
   }
 
   Future<void> _loadSales() async {
-    // Total sales made (§9.5) — cheap aggregate over completed orders the
-    // member rang up (orders.staff_id). A one-shot read, not a synced write.
+    // Total sales made + count (§9.5) — cheap aggregate over completed orders
+    // the member rang up (orders.staff_id). A one-shot read, not a synced write.
     final db = ref.read(databaseProvider);
     final memberships = await db.userBusinessesDao.watchForCurrentBusiness().first;
     final m =
@@ -52,13 +55,16 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
     if (m == null) return;
     final result = await db
         .customSelect(
-          "SELECT COALESCE(SUM(net_amount_kobo), 0) AS total "
+          "SELECT COALESCE(SUM(net_amount_kobo), 0) AS total, COUNT(*) AS cnt "
           "FROM orders WHERE staff_id = ?1 AND status = 'completed'",
           variables: [Variable<String>(m.userId)],
         )
         .getSingleOrNull();
     if (!mounted) return;
-    setState(() => _totalSalesKobo = result?.read<int>('total') ?? 0);
+    setState(() {
+      _totalSalesKobo = result?.read<int>('total') ?? 0;
+      _ordersCount = result?.read<int>('cnt') ?? 0;
+    });
   }
 
   List<RoleData> _invitableRoles(List<RoleData> all, String? mySlug) {
@@ -239,12 +245,6 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
         context, suspending ? 'Staff suspended.' : 'Staff reactivated.');
   }
 
-  Color _avatarColor(UserData user) {
-    final hex = user.avatarColor.replaceFirst('#', '');
-    final value = int.tryParse('FF$hex', radix: 16);
-    return value != null ? Color(value) : const Color(0xFF3B82F6);
-  }
-
   @override
   Widget build(BuildContext context) {
     ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
@@ -292,91 +292,55 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
       body: user == null
           ? const Center(child: Text('Loading…'))
           : ListView(
-              padding: EdgeInsets.all(context.getRSize(16)).copyWith(
-                bottom: context.getRSize(16) + context.deviceBottomInset,
+              padding: EdgeInsets.all(context.getRSize(20)).copyWith(
+                bottom: context.getRSize(20) + context.deviceBottomInset,
               ),
               children: [
-                Center(
-                  child: Column(
-                    children: [
-                      CircleAvatar(
-                        radius: context.getRSize(40),
-                        backgroundColor: _avatarColor(user),
-                        child: Text(
-                          user.name.isNotEmpty
-                              ? user.name[0].toUpperCase()
-                              : '?',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: context.getRFontSize(28),
-                          ),
-                        ),
-                      ),
-                      SizedBox(height: context.getRSize(12)),
-                      Text(
-                        user.name,
-                        style: TextStyle(
-                          color: text,
-                          fontSize: context.getRFontSize(20),
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      SizedBox(height: context.getRSize(8)),
-                      Wrap(
-                        spacing: 8,
-                        children: [
-                          _Tag(
-                            label: role?.name ?? 'Unknown',
-                            color: roleTagColor(role?.slug),
-                          ),
-                          _Tag(
-                            label: suspended ? 'Suspended' : 'Active',
-                            color: suspended
-                                ? subtext
-                                : t.colorScheme.primary,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+                ProfileHeaderCard(
+                  name: user.name,
+                  avatarColorHex: user.avatarColor,
+                  roleLabel: role?.name ?? 'Unknown',
+                  roleColor: roleTagColor(role?.slug),
+                  pills: [
+                    ProfilePill(
+                      icon: suspended
+                          ? FontAwesomeIcons.userSlash
+                          : FontAwesomeIcons.circleCheck,
+                      label: suspended ? 'Suspended' : 'Active',
+                      color: suspended ? subtext : t.colorScheme.primary,
+                    ),
+                    ProfilePill(
+                      icon: FontAwesomeIcons.store,
+                      label: store?.name ?? 'Unassigned',
+                    ),
+                  ],
                 ),
                 SizedBox(height: context.getRSize(24)),
-                _InfoRow(
-                  icon: FontAwesomeIcons.store,
-                  label: 'Assigned store',
-                  value: store?.name ?? '—',
+                ProfileStatGrid(
+                  stats: [
+                    ProfileStat(
+                      label: 'Orders',
+                      value: _totalSalesKobo == null
+                          ? '…'
+                          : _ordersCount.toString(),
+                      icon: FontAwesomeIcons.receipt,
+                      color: t.colorScheme.primary,
+                    ),
+                    ProfileStat(
+                      label: 'Total sales',
+                      value: _totalSalesKobo == null
+                          ? '…'
+                          : formatCurrency(_totalSalesKobo! / 100.0),
+                      icon: FontAwesomeIcons.sackDollar,
+                      color: const Color(0xFFA855F7),
+                    ),
+                  ],
                 ),
-                _InfoRow(
-                  icon: FontAwesomeIcons.envelope,
-                  label: 'Email',
-                  value: user.email ?? '—',
+                SizedBox(height: context.getRSize(24)),
+                ProfileInfoCard(
+                  title: 'Account Details',
+                  rows: _infoRows(membership, user, role, store, subtext),
                 ),
-                _InfoRow(
-                  icon: FontAwesomeIcons.sackDollar,
-                  label: 'Total sales made',
-                  value: _totalSalesKobo == null
-                      ? '…'
-                      : formatCurrency(_totalSalesKobo! / 100.0),
-                ),
-                _InfoRow(
-                  icon: FontAwesomeIcons.clock,
-                  label: 'Last login',
-                  value: membership.lastLoginAt == null
-                      ? 'Never logged in'
-                      : DateFormat('MMM d, y • h:mm a')
-                          .format(membership.lastLoginAt!),
-                ),
-                // Permission access (§10.2.1) — only a permissions manager sees
-                // it, and never on the own (read-only) card. Opens the per-user
-                // override editor; this person inherits their role's
-                // permissions until the CEO overrides specific ones.
-                if (!widget.readOnly &&
-                    role != null &&
-                    hasPermission(ref, 'settings.manage')) ...[
-                  SizedBox(height: context.getRSize(4)),
-                  _PermissionAccessCard(user: user, role: role),
-                ],
                 // Manage actions — hidden in view-only (own card). Each action
                 // has its OWN permission (§9): Change role -> staff.change_role,
                 // Suspend/Reactivate -> staff.suspend (both CEO + Manager by
@@ -386,7 +350,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                 if (!widget.readOnly &&
                     (hasPermission(ref, 'staff.change_role') ||
                         hasPermission(ref, 'staff.suspend'))) ...[
-                  SizedBox(height: context.getRSize(28)),
+                  SizedBox(height: context.getRSize(24)),
                   if (hasPermission(ref, 'staff.change_role')) ...[
                     AppButton(
                       text: 'Change role',
@@ -413,181 +377,75 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
             ),
     );
   }
-}
 
-class _Tag extends StatelessWidget {
-  final String label;
-  final Color color;
-  const _Tag({required this.label, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(10),
+  /// Account-detail rows for the info card. The last row is the per-user
+  /// Permission access (§10.2.1) — shown only to a permissions manager, never on
+  /// the own (read-only) card, and not for the CEO target (always full access).
+  List<ProfileInfoRow> _infoRows(
+    UserBusinessData membership,
+    UserData user,
+    RoleData? role,
+    StoreData? store,
+    Color subtext,
+  ) {
+    final rows = <ProfileInfoRow>[
+      ProfileInfoRow(
+        icon: FontAwesomeIcons.store,
+        label: 'Assigned store',
+        value: store?.name ?? '—',
       ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.bold,
-          fontSize: 12,
+      ProfileInfoRow(
+        icon: FontAwesomeIcons.envelope,
+        label: 'Email',
+        value: user.email ?? '—',
+      ),
+      ProfileInfoRow(
+        icon: FontAwesomeIcons.clock,
+        label: 'Last login',
+        value: membership.lastLoginAt == null
+            ? 'Never logged in'
+            : DateFormat('MMM d, y • h:mm a').format(membership.lastLoginAt!),
+      ),
+    ];
+
+    if (!widget.readOnly &&
+        role != null &&
+        hasPermission(ref, 'settings.manage')) {
+      final isCeo = role.slug == 'ceo';
+      final overrideCount = isCeo
+          ? 0
+          : (ref.watch(userPermissionOverridesProvider(user.id)).valueOrNull ??
+                  const [])
+              .length;
+      final String state;
+      final Color? stateColor;
+      if (isCeo) {
+        state = 'Full access';
+        stateColor = subtext;
+      } else if (overrideCount == 0) {
+        state = 'Role default';
+        stateColor = subtext;
+      } else {
+        state = '$overrideCount override${overrideCount == 1 ? '' : 's'}';
+        stateColor = Theme.of(context).colorScheme.primary;
+      }
+      rows.add(
+        ProfileInfoRow(
+          icon: FontAwesomeIcons.userShield,
+          label: 'Permission access',
+          value: state,
+          valueColor: stateColor,
+          onTap: isCeo
+              ? null
+              : () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          StaffPermissionsScreen(user: user, role: role),
+                    ),
+                  ),
         ),
-      ),
-    );
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-  const _InfoRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    final text = t.colorScheme.onSurface;
-    final subtext = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
-    return Container(
-      margin: EdgeInsets.only(bottom: context.getRSize(10)),
-      padding: EdgeInsets.all(context.getRSize(14)),
-      decoration: BoxDecoration(
-        color: t.cardColor,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: t.dividerColor),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: context.getRSize(15), color: subtext),
-          SizedBox(width: context.getRSize(12)),
-          Text(
-            label,
-            style: TextStyle(
-              color: subtext,
-              fontSize: context.getRFontSize(13),
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const Spacer(),
-          Flexible(
-            child: Text(
-              value,
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                color: text,
-                fontSize: context.getRFontSize(14),
-                fontWeight: FontWeight.bold,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Per-user permission scope (§10.2.1). This member inherits their role's
-/// permissions; the CEO can override specific ones from here. The CEO target
-/// is never overridable (full access), so it shows a static note instead of an
-/// editor entry.
-class _PermissionAccessCard extends ConsumerWidget {
-  final UserData user;
-  final RoleData role;
-  const _PermissionAccessCard({required this.user, required this.role});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final t = Theme.of(context);
-    final subtext = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
-    final isCeo = role.slug == 'ceo';
-    final overrideCount = isCeo
-        ? 0
-        : (ref.watch(userPermissionOverridesProvider(user.id)).valueOrNull ??
-                const [])
-            .length;
-
-    // One clean line, matching the info rows above (icon · label · state ·
-    // chevron). CEO is full-access and not tappable; everyone else shows
-    // whether they inherit the role or carry overrides, and taps through to the
-    // per-user editor (§10.2.1).
-    final String state;
-    final Color stateColor;
-    if (isCeo) {
-      state = 'Full access';
-      stateColor = subtext;
-    } else if (overrideCount == 0) {
-      state = 'Role default';
-      stateColor = subtext;
-    } else {
-      state = '$overrideCount override${overrideCount == 1 ? '' : 's'}';
-      stateColor = t.colorScheme.primary;
+      );
     }
-
-    final row = Container(
-      margin: EdgeInsets.only(bottom: context.getRSize(10)),
-      padding: EdgeInsets.all(context.getRSize(14)),
-      decoration: BoxDecoration(
-        color: t.cardColor,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: t.dividerColor),
-      ),
-      child: Row(
-        children: [
-          Icon(FontAwesomeIcons.userShield,
-              size: context.getRSize(15), color: subtext),
-          SizedBox(width: context.getRSize(12)),
-          Text(
-            'Permission access',
-            style: TextStyle(
-              color: subtext,
-              fontSize: context.getRFontSize(13),
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const Spacer(),
-          Flexible(
-            child: Text(
-              state,
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                color: stateColor,
-                fontSize: context.getRFontSize(14),
-                fontWeight: FontWeight.bold,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          if (!isCeo) ...[
-            SizedBox(width: context.getRSize(6)),
-            Icon(Icons.chevron_right,
-                size: context.getRSize(18), color: subtext),
-          ],
-        ],
-      ),
-    );
-
-    if (isCeo) return row;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => StaffPermissionsScreen(user: user, role: role),
-          ),
-        ),
-        child: row,
-      ),
-    );
+    return rows;
   }
 }

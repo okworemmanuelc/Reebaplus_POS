@@ -10,6 +10,7 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/features/profile/screens/profile_screen.dart';
+import 'package:reebaplus_pos/features/settings/screens/staff_settings_screen.dart';
 import 'package:reebaplus_pos/features/staff/screens/staff_management_screen.dart';
 import 'package:reebaplus_pos/features/sync/screens/sync_issues_screen.dart';
 import 'package:reebaplus_pos/shared/utils/role_display.dart';
@@ -282,6 +283,10 @@ class AppDrawer extends ConsumerWidget {
 
   Widget _buildNavList(BuildContext context, WidgetRef ref) {
     final t = Theme.of(context);
+    // Role slug drives the two staff-vs-CEO splits below: the self-service
+    // "Settings" item (roles below CEO) and where the "Display" tile lives.
+    final slug = ref.watch(currentUserRoleProvider)?.slug;
+    final isBelowCeo = slug != null && slug != 'ceo';
 
     return ListView(
       padding: EdgeInsets.symmetric(
@@ -425,6 +430,23 @@ class AppDrawer extends ConsumerWidget {
               ).push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
             },
           ),
+        // Staff Settings (§10.5) — self-service settings home for roles BELOW
+        // CEO (profile edit, change PIN, Display mode). Mutually exclusive with
+        // CEO Settings above: the CEO uses that, never this. Hidden entirely for
+        // the CEO (hard rule #7).
+        if (isBelowCeo)
+          _navItem(
+            context,
+            FontAwesomeIcons.gear,
+            'Settings',
+            active: false,
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const StaffSettingsScreen()),
+              );
+            },
+          ),
         // Sync Issues — troubleshooting screen gated on sync.view (CEO always +
         // whoever the CEO granted it via Sync Issues access). Hidden entirely
         // for other roles (hard rule #7).
@@ -464,7 +486,10 @@ class AppDrawer extends ConsumerWidget {
         SizedBox(height: context.getRSize(12)),
         Divider(color: t.dividerColor),
         SizedBox(height: context.getRSize(12)),
-        _buildAppearanceTile(context),
+        // "Display" (light/dark mode) — stays in the side menu for the CEO (and
+        // while the role is still resolving, so it's never unreachable). For
+        // roles below CEO it now lives inside Staff Settings (§10.5).
+        if (!isBelowCeo) _buildAppearanceTile(context),
         // Extra space for system navigation bar
         SizedBox(
           height: context.deviceBottomInset + context.getRSize(20),

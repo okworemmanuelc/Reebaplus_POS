@@ -417,6 +417,8 @@ class _NotificationCard extends ConsumerWidget {
         return FontAwesomeIcons.userCheck;
       case 'staff.role_changed':
         return FontAwesomeIcons.userGear;
+      case 'staff.profile_updated':
+        return FontAwesomeIcons.userPen;
       default:
         return FontAwesomeIcons.bell;
     }
@@ -455,6 +457,8 @@ class _NotificationCard extends ConsumerWidget {
       case 'staff.reactivated':
         return success;
       case 'staff.role_changed':
+        return blueMain;
+      case 'staff.profile_updated':
         return blueMain;
       default:
         return blueMain;
