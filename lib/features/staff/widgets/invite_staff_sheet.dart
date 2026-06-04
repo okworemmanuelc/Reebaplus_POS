@@ -182,15 +182,15 @@ class _InviteStaffSheetState extends ConsumerState<InviteStaffSheet> {
     final surface = t.colorScheme.surface;
     final text = t.colorScheme.onSurface;
 
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
+    // deviceBottomInset already includes the keyboard inset (and works under
+    // MainLayout, unlike MediaQuery.viewInsets.bottom which reads 0 here), so a
+    // single SingleChildScrollView handles both keyboard avoidance and overflow.
+    return Container(
+      decoration: BoxDecoration(
+        color: surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      child: Container(
-        decoration: BoxDecoration(
-          color: surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        ),
+      child: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(
           context.getRSize(20),
           context.getRSize(16),

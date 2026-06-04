@@ -113,4 +113,17 @@ extension ResponsiveHelper on BuildContext {
     final raw = MediaQueryData.fromView(view);
     return raw.padding.bottom + raw.viewInsets.bottom;
   }
+
+  /// The system-navigation inset ONLY (no keyboard), read from the raw OS view
+  /// so an ancestor Scaffold can't zero it out. Same source as
+  /// [deviceBottomInset] but EXCLUDES the keyboard — use it for bottom-anchored
+  /// chrome that the Scaffold already lifts above the keyboard but NOT above the
+  /// system nav bar on edge-to-edge (a floating action button is the case this
+  /// exists for). Using [deviceBottomInset] there would double-count the
+  /// keyboard and jump the button too high when typing.
+  double get deviceBottomPadding {
+    final view = View.maybeOf(this);
+    if (view == null) return MediaQuery.maybeOf(this)?.padding.bottom ?? 0;
+    return MediaQueryData.fromView(view).padding.bottom;
+  }
 }

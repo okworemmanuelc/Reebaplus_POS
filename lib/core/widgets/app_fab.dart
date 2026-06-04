@@ -11,6 +11,12 @@ class AppFAB extends StatelessWidget {
   final double? width;
   final Widget? trailing;
 
+  /// Lift the FAB above the system navigation bar on edge-to-edge devices
+  /// (3-button nav / gesture pill). Default true. Set false ONLY on bottom-nav
+  /// tab roots (POS, Stock) whose visible bottom bar already lifts the FAB clear
+  /// of the system nav — adding the inset there would leave a gap above the bar.
+  final bool reserveBottomInset;
+
   const AppFAB({
     super.key,
     required this.label,
@@ -19,6 +25,7 @@ class AppFAB extends StatelessWidget {
     this.heroTag,
     this.width,
     this.trailing,
+    this.reserveBottomInset = true,
   });
 
   @override
@@ -88,12 +95,20 @@ class AppFAB extends StatelessWidget {
       ),
     );
 
+    Widget result = fab;
     if (heroTag != null) {
-      return Hero(
-        tag: heroTag!,
-        child: fab,
+      result = Hero(tag: heroTag!, child: fab);
+    }
+    // Edge-to-edge: the Scaffold FAB slot places the button ~16px above the
+    // content bottom, which on a 3-button system nav lands UNDER that nav bar.
+    // Lift it by the real system-nav inset (keyboard excluded — the Scaffold
+    // already handles the keyboard). Skipped on visible-bottom-bar tab roots.
+    if (reserveBottomInset) {
+      result = Padding(
+        padding: EdgeInsets.only(bottom: context.deviceBottomPadding),
+        child: result,
       );
     }
-    return fab;
+    return result;
   }
 }

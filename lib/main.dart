@@ -232,10 +232,20 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
           title: 'Reebaplus POS',
           debugShowCheckedModeBanner: false,
           builder: (context, child) {
-            return GestureDetector(
-              onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
-              behavior: HitTestBehavior.opaque,
-              child: child,
+            // Cap OS font-scaling so large system-text settings can't overflow
+            // the dense POS layouts. responsive.dart already scales type by
+            // screen width; this bounds the per-device accessibility multiplier
+            // on top of that. Raise the cap if larger text is needed.
+            final mq = MediaQuery.of(context);
+            return MediaQuery(
+              data: mq.copyWith(
+                textScaler: mq.textScaler.clamp(maxScaleFactor: 1.3),
+              ),
+              child: GestureDetector(
+                onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+                behavior: HitTestBehavior.opaque,
+                child: child,
+              ),
             );
           },
           themeMode: theme.themeMode,
