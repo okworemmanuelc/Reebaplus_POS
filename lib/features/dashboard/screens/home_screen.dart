@@ -33,8 +33,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  String _selectedPeriod = kDatePeriodLabels.first; // Last 24 hours (§30.6/§30.11)
-  final List<String> _periods = kDatePeriodLabels;
+  String _selectedPeriod = kDatePeriodLabels.first; // Today (§30.6/§30.11)
 
   // Store filter (null = All)
   String? _selectedStoreId;
@@ -179,13 +178,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final isCashier = slug == 'cashier';
     final isStockKeeper = slug == 'stock_keeper';
 
-    final showTotalSales = isCeo || isManager || isCashier;
-    final showNetProfit = isCeo;
+    // §11.4 card visibility also respects the report permissions (hard rule
+    // #6): these cards open the full Sales / Expenses breakdowns, so a
+    // Manager/Cashier whose report key is revoked must not see the card. CEO is
+    // always-on.
+    final showTotalSales = isCeo ||
+        ((isManager || isCashier) && hasPermission(ref, 'reports.see_sales'));
+    final showNetProfit = isCeo || hasPermission(ref, 'reports.see_profit');
     final showPending = slug != null; // all four roles
-    final showExpenses = isCeo || isManager;
-    final showStockValue = isCeo || isManager;
+    final showExpenses =
+        isCeo || (isManager && hasPermission(ref, 'reports.see_expenses'));
+    final showStockValue =
+        isCeo || (isManager && hasPermission(ref, 'stock.view'));
     final showTotalSkus = isCashier || isStockKeeper;
-    final showWallet = isCeo || isManager || isCashier;
+    final showWallet = isCeo ||
+        ((isManager || isCashier) && hasPermission(ref, 'customers.add'));
     final showStaffSales = isCeo || isManager;
 
     final subtitle = isCashier
@@ -557,11 +564,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildPeriodDropdown() {
+    // §30.11 / §19.2: roles below Manager are capped to Today/This Week/This Month.
+    final options = datePeriodLabelsForRole(managerUp: isManagerOrAbove(ref));
+    final selected =
+        options.contains(_selectedPeriod) ? _selectedPeriod : options.last;
     return SizedBox(
       width: context.getRSize(140),
       child: AppDropdown<String>(
-        value: _selectedPeriod,
-        items: _periods
+        value: selected,
+        items: options
             .map((p) => DropdownMenuItem(value: p, child: Text(p)))
             .toList(),
         onChanged: (v) =>

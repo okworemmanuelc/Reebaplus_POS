@@ -63,6 +63,7 @@ The agent should design these tables (names are illustrative — match your exis
 - `permissions` — id, key, description, category
 - `role_permissions` — role_id, permission_id
 - `role_settings` — role_id, setting_key, setting_value
+- `user_permission_overrides` — id, business_id, user_id, permission_key, is_granted (per-staff override of the role default; §10.2.1)
 - `user_businesses` — user_id, business_id, role_id, status, last_login_at
 - `invite_codes` — id, business_id, role_id, code, generated_by_user_id, expires_at, used_by_user_id, revoked_at, email, store_id
 - `stores` — id, business_id, name, address, state, country
@@ -364,11 +365,11 @@ Permission settings are layered by scope, most-specific wins: **User > Store > B
 
 - **Business (default).** For each role, the CEO sets its permission toggles on the Roles & Permissions sub-page (everything described above). These apply to **every store** in the business — they are the default.
 - **Store (default for users in that store).** A store can override a role's permissions just for that store; that becomes the default for every user working in that store. Reached from the role's page via a scope selector (Business / Store).
-- **User (override the rest).** The CEO opens an **individual staff member's profile** (Staff Management → tap a staff member → **Permission access**) and adjusts *that one person's* permission access. A user override wins over both the store and business defaults. This lives on the staff profile, **not** the per-role Roles & Permissions page (which is by role, not by person).
+- **User (override the rest) — BUILT (Phase 1).** The CEO opens an **individual staff member's profile** (Staff Management → tap a staff member → **Permission access → Customize**) and adjusts *that one person's* permission access. Each permission toggle shows the **effective** value (the role default, unless overridden); flipping it away from the role default stores an override, flipping it back to the role default clears the override (inherit). A user override wins over both the store and business defaults. This lives on the staff profile, **not** the per-role Roles & Permissions page (which is by role, not by person). The CEO is never overridable (always all-on). Per-user overrides do **not** depend on multi-store, so they ship in Phase 1; they cover the boolean permission toggles only (the per-role limits — discount %, expense approval — stay role-level). A **Restore defaults** button at the bottom of this screen clears *all* of the staff member's overrides at once and returns them to the role defaults; it asks for confirmation first (so a stray tap can't wipe them) and is disabled when the person has no overrides. (Not shown for the CEO, who has none.)
 
-**Phase 1 ships the Business scope fully** (it is the existing Roles & Permissions behaviour). The **Store** selector on the role page and the **Permission access** section on the staff profile are **visible placeholders in Phase 1, disabled and labelled "coming with multi-store"** — multi-store UI itself is Phase 2 (§2.2). They are surfaced now so the hierarchy is visible and the CEO knows where each scope will be set; no per-store or per-user override is stored or enforced yet, so effective permissions remain role-based business-wide.
+**Phase 1 ships Business and User scopes fully.** The **Store** selector on the role page is a **visible placeholder, disabled and labelled "coming with multi-store"** — per-store overrides need the multi-store UI, which is Phase 2 (§2.2). Until then, effective permissions = the role default ± the staff member's own overrides.
 
-**Forward note (Phase 2 schema — do not build yet):** the Store and User layers will introduce two synced tenant tables following the same business→store fallback pattern already used by `expense_budgets` (§20.6): `store_role_permissions` (`business_id`, `store_id`, `role_id`, `permission_key`) and `user_permission_overrides` (`business_id`, `user_id`, `permission_key`, `is_granted`). When built, both follow the §5 sync contract (added to `_syncedTenantTables`, routed through a DAO that enqueues, stream provider added), and a runtime resolver merges the three layers in User > Store > Business order.
+**Storage & resolution.** Per-user overrides live in the synced tenant table `user_permission_overrides` (`business_id`, `user_id`, `permission_key`, `is_granted`); presence of a row = an override, `is_granted` true/false = force-grant/force-revoke, absence = inherit the role default. It follows the §5 sync contract (in `_syncedTenantTables`, written through a DAO that enqueues, stream provider added). The runtime resolver (`currentUserPermissionsProvider`) merges role grants ± the user's overrides (CEO skips overrides). The future **Store** layer will add `store_role_permissions` (`business_id`, `store_id`, `role_id`, `permission_key`) following the same business→store fallback pattern as `expense_budgets` (§20.6), extending the resolver to the full **User > Store > Business** order.
 
 ### 10.3 Delete Business & Account (Danger Zone)
 
@@ -409,7 +410,7 @@ Renamed from Dashboard to match the bottom nav. Role-aware screen showing busine
   - Cashier and Stock keeper: locked to own store (no toggle).
   - A locked user assigned to more than one store gets a dropdown limited to their assigned stores
     (no "All Stores" entry).
-- Period dropdown uses the canonical rolling chip set (§30.11), default Last 24 hours.
+- Period dropdown uses the canonical calendar chip set (§30.11), default Today.
 
 ### 11.3 Reports button
 
@@ -784,8 +785,32 @@ Action buttons by role:
   - Quantity.
   - Reason (required if Remove): Damage / Theft / Expired / Other.
   - Notes (optional).
-  - Save → updates quantity + logs to History.
+  - Save → **submits the change for approval** (§16.6.1); inventory is not
+    touched until a Manager/CEO approves.
 - Cashier: no edit buttons. View-only. Buying price hidden.
+
+### 16.6.1 Stock-keeper adjustment approval (added 2026-06-04, user)
+
+A stock keeper's Add/Remove does **not** change inventory directly. Saving the
+Update Stock modal records a **pending request** and notifies the **CEO and the
+Manager(s) of the affected store** (if no Manager is tied to that store, only the
+CEO). The stock keeper sees a "Sent for approval" confirmation; the stored
+quantity is unchanged until a decision is made.
+
+- The approver opens the **Stock Approvals** card on the Reports hub (§25.2) —
+  CEO sees every store's requests, a Manager only their assigned store(s). Each
+  request is a **tappable card that expands** to the full detail (who, store,
+  reason, when) with **Approve / Reject** actions.
+- **Approve** runs the real adjustment (the same atomic inventory + ledger path a
+  Manager/CEO uses), so the stock number changes only now. If the store no longer
+  has enough stock for a Remove, approval fails and the request stays pending.
+- **Reject** discards the request — no inventory change. The approver may add an
+  **optional reason**; it is shown to the stock keeper in the rejection
+  notification and recorded in the activity log. (Added 2026-06-04, user.)
+- Either decision notifies the stock keeper who submitted (approved / rejected) and
+  is written to the activity log.
+- **Manager/CEO** adjustments are applied **directly** and never enter this queue —
+  approval gates stock-keeper actions only.
 
 ### 16.7 Role access
 
@@ -932,9 +957,9 @@ Stock keeper, Manager, CEO. Cashier blocked.
 ### 19.1 Tabs
 
 - Three tabs: Pending, Completed, Cancelled.
-- Default period filter: Last 24 hours (canonical chip set, §30.11).
+- Default period filter: Today (canonical chip set, §30.11).
 - The period filter is a **dropdown** that sits inline with the search bar (on the Completed and Cancelled tabs). It replaces the old row of filter chips.
-- **Roles below Manager (Cashier, Stock keeper) are capped to a Month maximum** on this filter — they get Day / Week / Month only. Manager and CEO also get Year / To Date / All Time.
+- **Roles below Manager (Cashier, Stock keeper) are capped to a Month maximum** on this filter — they get Today / This Week / This Month only. Manager and CEO also get This Year / To Date.
 
 ### 19.2 Stat cards per tab
 
@@ -1029,9 +1054,9 @@ Wrong items → cancel and create a new order. When an order is in Pending, the 
 
 - Header: Expenses / Manage operating costs / notification bell (with pending approval count badge for CEO).
 - 2 tabs: Expenses, Stats.
-- Total Expenses card with period selector (default "Last 30 days"; canonical chip set, §30.11).
+- Total Expenses card with period selector (default "This Month"; canonical chip set, §30.11).
 - Budget Activity bar (Spent vs Goal) — only counts approved expenses. Small text below shows "₦X pending approval" if any.
-  - **Always visible (2026-06-02, user):** the budget is a **monthly** goal, so the bar is shown on **every** period selection (not gated to the "Last 30 days" view). Its Spent/pending figures always reflect the **last-30-days window**, independent of the period selector above the list (which only filters the expense list and the "Total Expenses" headline).
+  - **Always visible (2026-06-02, user):** the budget is a **monthly** goal, so the bar is shown on **every** period selection (not gated to the "This Month" view). Its Spent/pending figures always reflect the **current calendar month**, independent of the period selector above the list (which only filters the expense list and the "Total Expenses" headline).
   - **Budget scope (2026-06-02, user):** the monthly budget goal is set **overall for the business and, optionally, per store** within the business. A store with no goal of its own falls back to the business-wide goal. The bar resolves the goal by the viewer's scope — CEO viewing all stores sees the business-wide goal; a store-scoped view (Manager, or a CEO filtered to one store) sees that store's goal. Stored in an `expense_budgets` table (`business_id`, nullable `store_id`, `amount_kobo`); set via the CEO-only "Set monthly budget" action (§20.3).
 - Pending Approvals section at top (CEO only, shows when there are pending items).
 - Expense list with status badges (Approved, Pending CEO approval, Rejected).
@@ -1396,7 +1421,7 @@ CSV/PDF export with selectable time frame. Deferred to Phase 3.
 
 ### 25.1 Business Reports screen
 
-- Header: back, "Business Reports", global period filter (defaults to Last 24 hours; canonical chip set, §30.11).
+- Header: back, "Business Reports", global period filter (defaults to Today; canonical chip set, §30.11).
 - Grid of report cards (2-column).
 
 ### 25.2 Reports list
@@ -1409,7 +1434,9 @@ CSV/PDF export with selectable time frame. Deferred to Phase 3.
 - Funds Register Report — daily open/close per account, mismatches flagged.
 - Profit Report — CEO only. Revenue, cost of goods, gross profit, margins.
 
-Note: there is no Pending Approvals card on Reports. Pending approvals live on the Expenses screen and notification bell.
+- Stock Approvals — CEO + Manager. Stock-keeper Add/Remove requests awaiting approval (§16.6.1). A tappable card per request expands to the detail with Approve / Reject; a count badge shows what's outstanding. (Added 2026-06-04, user.)
+
+Note: **expense** pending approvals are not on Reports — they live on the Expenses screen and notification bell (§20.4). The Stock Approvals card above is the one exception, added 2026-06-04 on user request to surface stock-keeper adjustment approvals (§16.6.1) in the Reports tab.
 
 > Removed 2026-06-02 (user) — the standalone **Stock Audit report** (hub card +
 > screen) was dropped from Phase 1. Stock health stays visible in Inventory, and
@@ -1464,16 +1491,16 @@ CSV from day one. PDF in Phase 3.
 
 ### 25.9 Daily Reconciliation drill-down (period cards)
 
-The Daily Reconciliation Report does not open straight to a single detail screen; it opens to a list of **tappable day cards**, driven by the global rolling period filter (§25.5 / §30.11):
+The Daily Reconciliation Report does not open straight to a single detail screen; it opens to a list of **tappable day cards**, driven by the global period filter (§25.5 / §30.11):
 
-- The selected rolling window (Last 24 hours / 7 days / 30 days / year / to date) chooses the **span**; the report lists **one card per calendar day** inside that span that has a Close Day and/or a saved stock count. Tapping a card opens that day's full reconciliation.
+- The selected period (Today / This Week / This Month / This Year / To Date) chooses the **span**; the report lists **one card per calendar day** inside that span that has a Close Day and/or a saved stock count. Tapping a card opens that day's full reconciliation.
 - Each day card shows a headline (items sold, net cash variance) and a **mismatch indicator** when that day had a Close Day shortage / unaccounted funds or a stock shortage.
-- Reconciliation is per **calendar day** (§30.11 keeps the daily reconciliation calendar-bound), so there is no week/month/year aggregation — the rolling window only widens or narrows how many day cards are listed.
+- Reconciliation is per **calendar day** (§30.11 keeps the daily reconciliation calendar-bound), so there is no week/month/year aggregation — the selected period only widens or narrows how many day cards are listed.
 - Role visibility follows §25.3 (Cashier & Stock keeper never see this report). CSV export per §25.6 / §25.7.
 
 This per-day drill-down is specific to the Daily Reconciliation Report; the other reports keep the §25.6 single detail-screen + period-filter model.
 
-> Updated 2026-06-02 (user) — the original Day/Week/Month/Year period-card model predated the §30.11 rolling-window unification; reconciled to **one card per calendar day within the selected rolling window** (no span aggregation), matching §30.11's per-calendar-day rule.
+> Updated 2026-06-02 (user) — the original Day/Week/Month/Year period-card model predated the §30.11 unification; reconciled to **one card per calendar day within the selected period** (no span aggregation), matching §30.11's per-calendar-day rule. (§30.11 was reversed back to calendar periods on 2026-06-04 — the per-calendar-day rule here is unchanged.)
 
 > Confirmed Phase 1 (2026-06-01) — the Daily Reconciliation Report's content roll-up (SKUs sold, closing-day cash audit, empty crates, debts, expenses, fund-shortage flags) and the period-card drill-down were added on user request. The Sales Report card is **kept** (a distinct report). Build order unchanged: this stays a Ring 3 item, after Close Day (Ring 0/1) and Daily Stock Count (Ring 2) produce its data.
 
@@ -1513,7 +1540,8 @@ Opens the relevant screen (Inventory for low stock, Expense for pending approval
 - Out of stock (fires to Stock keeper, Manager, CEO).
 - Stock count saved → daily reconciliation report ready (fires to Manager, CEO).
 - Damage recorded (fires to Manager, CEO).
-- Stock keeper added or removed stock (fires to CEO, Manager — info for an add, warning for a removal, with the reason). Only fires when the actor is a stock keeper.
+- Stock keeper requested a stock change → **approval needed** (fires to the CEO and the Manager(s) of the **affected store** — info for an add, warning for a removal, with the reason). Only fires when the actor is a stock keeper. CEOs always receive it (they aren't store-assigned); Managers are narrowed to those assigned to the store where the stock moved. If no Manager is tied to that store, only the CEO is notified. The approver acts on it via the Stock Approvals card (§16.6.1 / §25.2). (Amended 2026-06-04, user: stock-keeper changes are now approval-gated — the old post-hoc "added/removed stock" notice became this approval request. The audience rule is unchanged; no all-Managers fallback.)
+- Stock change approved / rejected (fires to the stock keeper who submitted; §16.6.1).
 
 **Staff**
 
@@ -1693,7 +1721,7 @@ UI elements a user doesn't have permission to use should not appear at all. Don'
 
 ### 30.6 Smart defaults
 
-Currency auto-fills based on country (editable in Settings). Period filters default to **Last 24 hours** on most screens and **Last 30 days** on the Expenses / Supplier-Accounts totals (the canonical chip set is in §30.11). Country defaults to Nigeria.
+Currency auto-fills based on country (editable in Settings). Period filters default to **Today** on most screens and **This Month** on the Expenses / Supplier-Accounts totals (the canonical chip set is in §30.11). Country defaults to Nigeria.
 
 ### 30.7 Loading animations
 
@@ -1713,24 +1741,33 @@ Destructive or significant actions confirm before proceeding (suspend staff, cha
 
 ### 30.11 Date-range filter chips (canonical)
 
-> Added 2026-06-01 (user). Every browse/report **period filter chip** uses one
-> shared, rolling set so the same chip means the same thing on every screen:
+> Added 2026-06-01 (user). Reversed to calendar periods 2026-06-04 (user).
+> Every browse/report **period filter chip** uses one shared set so the same
+> chip means the same thing on every screen:
 >
-> - **Last 24 hours** — `now − 24h`
-> - **Last 7 days** — `now − 7 days`
-> - **Last 30 days** — `now − 30 days`
-> - **Last year** — `now − 365 days`
-> - **To date** — unbounded (everything up to now)
+> - **Today** — since local midnight today
+> - **This Week** — since local midnight of the most recent **Sunday**
+> - **This Month** — since the 1st of the current month
+> - **This Year** — since Jan 1 of the current year
+> - **To Date** — unbounded (everything up to now)
 >
-> These are **rolling** windows (a span measured back from now), not calendar
-> periods ("this week / this month"). One helper computes them
+> These are **calendar** periods anchored to the start of the current day /
+> week / month / year (not rolling spans measured back from now). Because they
+> are calendar-anchored they are computed from the **local** date parts of now
+> (local-zone dependent). One helper computes them
 > (`lib/core/utils/date_period.dart`); screens must not roll their own date math.
-> Default selection: **Last 24 hours** on most screens; **Last 30 days** on the
-> Expenses and Supplier-Accounts totals (§30.6).
+> Default selection: **Today** on most screens; **This Month** on the Expenses
+> and Supplier-Accounts totals (§30.6).
 >
-> This replaced an earlier mix of per-screen, inconsistent implementations
-> (some rolling, some calendar-bound, with divergent labels — "Day", "Today",
-> "This Week", "All Time", etc.) and a class of off-by-one / fragile date bugs.
+> **Role cap:** roles **below Manager** (Cashier, Stock keeper) may only choose
+> **Today / This Week / This Month** — This Year / To Date are hidden for them.
+> Manager and CEO get all five. Enforced via `datePeriodLabelsForRole(...)` on
+> every selector a non-Manager can reach (Home, Orders, Customer wallet, and
+> the Expenses / Supplier-Accounts totals); the Reports hub and its sub-screens
+> are already CEO/Manager-only (§11.3) so they keep the full set.
+>
+> The label parser still understands every legacy/rolling label ("Day", "Last
+> 24 hours", "30 Days", "All Time", etc.) so any in-flight value resolves.
 >
 > **Scope / exceptions:** This governs Home, Reports, Orders, Expenses, Supplier
 > Accounts (Payments + Supplier detail), and the Customer wallet. It does **not**

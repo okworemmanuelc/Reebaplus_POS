@@ -28,7 +28,18 @@ class SupplierDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
-  String _timeFilter = 'Last 30 days'; // §30.6/§30.11 default
+  String _timeFilter = 'This Month'; // §30.6/§30.11 default
+
+  /// Period labels this viewer may choose (§19.2/§30.11 — roles below Manager
+  /// are capped to Today/This Week/This Month).
+  List<String> get _periodOptions =>
+      datePeriodLabelsForRole(managerUp: isManagerOrAbove(ref));
+
+  /// [_timeFilter] clamped into [_periodOptions], so the active chip and the
+  /// log filter agree for capped viewers.
+  String get _effectivePeriod => _periodOptions.contains(_timeFilter)
+      ? _timeFilter
+      : _periodOptions.last;
   Color get _bg => Theme.of(context).scaffoldBackgroundColor;
   Color get _surface => Theme.of(context).colorScheme.surface;
   Color get _cardBg => Theme.of(context).cardColor;
@@ -253,12 +264,12 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
   }
 
   Widget _buildFilterTabs(BuildContext context) {
-    const filters = kDatePeriodLabels;
+    final filters = _periodOptions;
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
         children: filters.map((f) {
-          final active = _timeFilter == f;
+          final active = _effectivePeriod == f;
           return Padding(
             padding: EdgeInsets.only(right: context.getRSize(8)),
             child: GestureDetector(
@@ -296,7 +307,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
     );
     final itemIds = itemsForSupplier.map((e) => e.id).toSet();
 
-    final window = datePeriodFromLabel(_timeFilter);
+    final window = datePeriodFromLabel(_effectivePeriod);
 
     return kInventoryLogs.where((log) {
       if (log.action != 'restock' && log.action != 'new_product') return false;
@@ -339,12 +350,15 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              'Goods Received',
-              style: TextStyle(
-                fontSize: context.getRFontSize(16),
-                fontWeight: FontWeight.w800,
-                color: _text,
+            Flexible(
+              child: Text(
+                'Goods Received',
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: context.getRFontSize(16),
+                  fontWeight: FontWeight.w800,
+                  color: _text,
+                ),
               ),
             ),
             Text(

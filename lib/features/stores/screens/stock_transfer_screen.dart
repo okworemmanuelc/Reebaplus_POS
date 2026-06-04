@@ -5,6 +5,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/features/inventory/data/inventory_data.dart';
 import 'package:reebaplus_pos/features/inventory/data/models/inventory_item.dart';
 import 'package:reebaplus_pos/features/inventory/data/models/inventory_log.dart';
@@ -58,6 +59,11 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
   }
 
   Future<void> _submit() async {
+    // Re-check at the write boundary (hard rule #6): stock transfer is reached
+    // from the CEO-only Stores tab, so it needs `settings.manage`.
+    if (!ref.read(currentUserPermissionsProvider).contains('settings.manage')) {
+      return;
+    }
     final qty = double.tryParse(_qtyCtrl.text) ?? 0;
 
     if (_sourceStore == null || _destinationStore == null) {

@@ -3190,6 +3190,16 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
   }
 
   Future<void> enqueueUpsert(String tableName, Insertable row) async {
+    // Sync safeguard (CLAUDE.md §5): fail fast on an unknown/typo'd table.
+    // The pusher dispatches `<table>:upsert` to `_supabase.from(table)` with
+    // no whitelist, so a bad name would silently stick as a failed queue row.
+    if (!kEnqueueableTables.contains(tableName)) {
+      throw StateError(
+        'enqueueUpsert("$tableName"): not a registered synced/cache/businesses '
+        'table. Add it to _syncedTenantTables (or kSyncCacheTables) or fix the '
+        'table name — CLAUDE.md §5.',
+      );
+    }
     final payloadMap = serializeInsertable(row);
     // Resolve the queue row's businessId. Prefer the payload's value — it
     // covers the bootstrap case where the very first business/user is being
@@ -3274,6 +3284,15 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
         'enqueueDelete is forbidden for append-only ledger table '
         '"$tableName". Append a compensating/void row through the '
         'corresponding DAO instead (e.g. WalletTransactionsDao.voidTransaction).',
+      );
+    }
+    // Sync safeguard (CLAUDE.md §5): delete targets are always synced tables
+    // (never caches, which the cloud rebuilds from domain responses). Reject
+    // an unknown/typo'd name before it sticks as a failed queue row.
+    if (!kSyncedTenantTables.contains(tableName)) {
+      throw StateError(
+        'enqueueDelete("$tableName"): not a registered synced table — '
+        'fix the table name or add it to _syncedTenantTables (CLAUDE.md §5).',
       );
     }
     final payloadMap = {
@@ -4250,6 +4269,212 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
   // Transfer flows have no UI callers today; methods will land alongside the
   // transfer screens. Keeping the shell preserves the AppDatabase accessor
   // registration so adding methods later doesn't require schema regen.
+}
+
+@DriftAccessor(tables: [StockAdjustmentRequests])
+class StockAdjustmentRequestsDao extends DatabaseAccessor<AppDatabase>
+    with _$StockAdjustmentRequestsDaoMixin, BusinessScopedDao<AppDatabase> {
+  StockAdjustmentRequestsDao(super.db);
+
+  /// All still-pending requests for the business, newest first. Approver-side
+  /// store scoping (a Manager only sees their store's requests) is applied in
+  /// the UI, mirroring the home/inventory store-lock pattern.
+  Stream<List<StockAdjustmentRequestData>> watchPending() {
+    return (select(stockAdjustmentRequests)
+          ..where((t) => whereBusiness(t) & t.status.equals('pending'))
+          ..orderBy([
+            (t) =>
+                OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc),
+          ]))
+        .watch();
+  }
+
+  /// §16.6.1 — a stock keeper submits an Add/Remove for approval. Writes a
+  /// `pending` row only (inventory is untouched until approval) and fires an
+  /// approval-request notification to the CEO and the Manager(s) of the
+  /// affected store. If no Manager is tied to that store, only the CEO is
+  /// notified (same audience rule as the old §26.4 post-hoc notice).
+  Future<void> requestStockAdjustment({
+    required String productId,
+    required String storeId,
+    required int quantityDiff,
+    required String reason,
+    required String summary,
+    required String? requestedBy,
+  }) async {
+    final row = StockAdjustmentRequestsCompanion.insert(
+      id: Value(UuidV7.generate()),
+      businessId: requireBusinessId(),
+      productId: productId,
+      storeId: storeId,
+      quantityDiff: quantityDiff,
+      reason: reason,
+      summary: summary,
+      requestedBy: Value(requestedBy),
+      lastUpdatedAt: Value(DateTime.now()),
+    );
+    await into(stockAdjustmentRequests).insert(row);
+    await db.syncDao.enqueueUpsert('stock_adjustment_requests', row);
+
+    await db.activityLogDao.log(
+      action: 'stock_adjustment_requested',
+      description: 'Requested approval: $summary',
+      staffId: requestedBy,
+      storeId: storeId,
+      productId: productId,
+    );
+
+    // Approval audience: CEO (never store-assigned) + Manager(s) of this store.
+    final ceoIds = await db.userBusinessesDao.getUserIdsForRoleSlugs(['ceo']);
+    final managerIds =
+        await db.userBusinessesDao.getUserIdsForRoleSlugs(['manager']);
+    final storeUserIds =
+        (await db.userStoresDao.getUserIdsForStore(storeId)).toSet();
+    final storeManagerIds = managerIds.where(storeUserIds.contains);
+    final isRemove = quantityDiff < 0;
+    for (final uid in <String>{...ceoIds, ...storeManagerIds}) {
+      await db.notificationsDao.fireNotification(
+        type: 'stock_approval.requested',
+        message: 'Approval needed: $summary',
+        severity: isRemove ? 'warning' : 'info',
+        linkedRecordId: row.id.value,
+        recipientUserId: uid,
+      );
+    }
+  }
+
+  /// Approve a pending request: apply the real inventory change via
+  /// `adjustStock` (keeping the atomic delta envelope), flip the row to
+  /// `approved`, and notify the requester. Throws (rolling back the whole
+  /// transaction) if the adjustment can't be applied — e.g. a Remove that would
+  /// take stock negative — leaving the request `pending` for a retry.
+  Future<void> approveRequest({
+    required String requestId,
+    required String approverId,
+  }) async {
+    String? requestedBy;
+    String? summary;
+    var didApprove = false;
+
+    await transaction(() async {
+      final req = await (select(stockAdjustmentRequests)
+            ..where((t) => t.id.equals(requestId) & whereBusiness(t)))
+          .getSingleOrNull();
+      if (req == null || req.status != 'pending') return;
+
+      // Apply the actual stock movement (atomic via pos_inventory_delta_v2).
+      await db.inventoryDao.adjustStock(
+        req.productId,
+        req.storeId,
+        req.quantityDiff,
+        req.reason,
+        req.requestedBy,
+      );
+
+      final now = DateTime.now();
+      final affected = await (update(stockAdjustmentRequests)
+            ..where((t) =>
+                t.id.equals(requestId) &
+                whereBusiness(t) &
+                t.status.equals('pending')))
+          .write(StockAdjustmentRequestsCompanion(
+        status: const Value('approved'),
+        approvedBy: Value(approverId),
+        approvedAt: Value(now),
+        lastUpdatedAt: Value(now),
+      ));
+      if (affected == 0) return; // lost the race
+      didApprove = true;
+      requestedBy = req.requestedBy;
+      summary = req.summary;
+
+      final updated = await (select(stockAdjustmentRequests)
+            ..where((t) => t.id.equals(requestId) & whereBusiness(t)))
+          .getSingle();
+      await db.syncDao
+          .enqueueUpsert('stock_adjustment_requests', updated.toCompanion(true));
+
+      await db.activityLogDao.log(
+        action: 'stock_adjustment_approved',
+        description: 'Approved stock change: ${req.summary}',
+        staffId: approverId,
+        storeId: req.storeId,
+        productId: req.productId,
+      );
+    });
+
+    if (didApprove && requestedBy != null) {
+      await db.notificationsDao.fireNotification(
+        type: 'stock_approval.approved',
+        message: 'Your stock request was approved & applied — $summary',
+        severity: 'info',
+        linkedRecordId: requestId,
+        recipientUserId: requestedBy,
+      );
+    }
+  }
+
+  /// Reject a pending request — no inventory movement. The optional [reason]
+  /// (why it was rejected) is shown to the requester in the rejection
+  /// notification and recorded in the activity log. Notifies the requester.
+  Future<void> rejectRequest({
+    required String requestId,
+    required String approverId,
+    String? reason,
+  }) async {
+    final trimmedReason = reason?.trim();
+    final hasReason = trimmedReason != null && trimmedReason.isNotEmpty;
+    String? requestedBy;
+    var didReject = false;
+
+    await transaction(() async {
+      final req = await (select(stockAdjustmentRequests)
+            ..where((t) => t.id.equals(requestId) & whereBusiness(t)))
+          .getSingleOrNull();
+      if (req == null || req.status != 'pending') return;
+      final now = DateTime.now();
+      final affected = await (update(stockAdjustmentRequests)
+            ..where((t) =>
+                t.id.equals(requestId) &
+                whereBusiness(t) &
+                t.status.equals('pending')))
+          .write(StockAdjustmentRequestsCompanion(
+        status: const Value('rejected'),
+        approvedBy: Value(approverId),
+        approvedAt: Value(now),
+        lastUpdatedAt: Value(now),
+      ));
+      if (affected == 0) return;
+      didReject = true;
+      requestedBy = req.requestedBy;
+
+      final updated = await (select(stockAdjustmentRequests)
+            ..where((t) => t.id.equals(requestId) & whereBusiness(t)))
+          .getSingle();
+      await db.syncDao
+          .enqueueUpsert('stock_adjustment_requests', updated.toCompanion(true));
+
+      await db.activityLogDao.log(
+        action: 'stock_adjustment_rejected',
+        description: 'Rejected stock change: ${req.summary}'
+            '${hasReason ? ' — Reason: $trimmedReason' : ''}',
+        staffId: approverId,
+        storeId: req.storeId,
+        productId: req.productId,
+      );
+    });
+
+    if (didReject && requestedBy != null) {
+      await db.notificationsDao.fireNotification(
+        type: 'stock_approval.rejected',
+        message: 'Your stock request was rejected'
+            '${hasReason ? ' — $trimmedReason' : '.'}',
+        severity: 'warning',
+        linkedRecordId: requestId,
+        recipientUserId: requestedBy,
+      );
+    }
+  }
 }
 
 @DriftAccessor(tables: [PendingCrateReturns])
@@ -5838,6 +6063,100 @@ class RolePermissionsDao extends DatabaseAccessor<AppDatabase>
     await (delete(rolePermissions)..where((t) => t.id.equals(existing.id)))
         .go();
     await db.syncDao.enqueueDelete('role_permissions', existing.id);
+  }
+}
+
+@DriftAccessor(tables: [UserPermissionOverrides])
+class UserPermissionOverridesDao extends DatabaseAccessor<AppDatabase>
+    with _$UserPermissionOverridesDaoMixin, BusinessScopedDao<AppDatabase> {
+  UserPermissionOverridesDao(super.db);
+
+  Stream<List<UserPermissionOverrideData>> watchForUser(String userId) {
+    return (select(userPermissionOverrides)
+          ..where((t) => whereBusiness(t) & t.userId.equals(userId))
+          ..orderBy([(t) => OrderingTerm.asc(t.permissionKey)]))
+        .watch();
+  }
+
+  Future<List<UserPermissionOverrideData>> getForUser(String userId) {
+    return (select(userPermissionOverrides)
+          ..where((t) => whereBusiness(t) & t.userId.equals(userId))
+          ..orderBy([(t) => OrderingTerm.asc(t.permissionKey)]))
+        .get();
+  }
+
+  /// Set or clear a staff member's override for [permissionKey] (§10.2.1).
+  /// [value] true = force-grant, false = force-revoke, null = clear the
+  /// override (inherit the role default). Idempotent on the logical identity
+  /// (business_id, user_id, permission_key): a value that already matches is a
+  /// no-op, so we never trip UNIQUE on a stale toggle or a row that arrived
+  /// from the cloud since the UI last built.
+  Future<void> setOverride(
+    String userId,
+    String permissionKey,
+    bool? value,
+  ) async {
+    final existing = await (select(userPermissionOverrides)
+          ..where((t) =>
+              whereBusiness(t) &
+              t.userId.equals(userId) &
+              t.permissionKey.equals(permissionKey))
+          ..limit(1))
+        .getSingleOrNull();
+
+    if (value == null) {
+      // Inherit — remove the override row and tombstone it cloud-side.
+      // `user_permission_overrides` is not an append-only ledger, so
+      // hard-delete via `enqueueDelete` is the right path here.
+      if (existing == null) return;
+      await (delete(userPermissionOverrides)
+            ..where((t) => t.id.equals(existing.id)))
+          .go();
+      await db.syncDao.enqueueDelete('user_permission_overrides', existing.id);
+      return;
+    }
+
+    if (existing != null) {
+      if (existing.isGranted == value) return; // already at this value
+      final row = UserPermissionOverridesCompanion(
+        id: Value(existing.id),
+        businessId: Value(existing.businessId),
+        userId: Value(existing.userId),
+        permissionKey: Value(existing.permissionKey),
+        isGranted: Value(value),
+        lastUpdatedAt: Value(DateTime.now()),
+      );
+      await (update(userPermissionOverrides)
+            ..where((t) => t.id.equals(existing.id)))
+          .write(row);
+      await db.syncDao.enqueueUpsert('user_permission_overrides', row);
+      return;
+    }
+
+    final row = UserPermissionOverridesCompanion.insert(
+      id: Value(UuidV7.generate()),
+      businessId: requireBusinessId(),
+      userId: userId,
+      permissionKey: permissionKey,
+      isGranted: value,
+      lastUpdatedAt: Value(DateTime.now()),
+    );
+    await into(userPermissionOverrides).insert(row);
+    await db.syncDao.enqueueUpsert('user_permission_overrides', row);
+  }
+
+  /// Restore defaults — clear EVERY override for [userId] so all permissions
+  /// revert to the role default. Each row is hard-deleted and tombstoned
+  /// (`enqueueDelete`) so other devices drop it too (same path as a single
+  /// inherit/clear in [setOverride]). Returns the number of overrides cleared.
+  Future<int> clearAllForUser(String userId) async {
+    final rows = await getForUser(userId);
+    for (final r in rows) {
+      await (delete(userPermissionOverrides)..where((t) => t.id.equals(r.id)))
+          .go();
+      await db.syncDao.enqueueDelete('user_permission_overrides', r.id);
+    }
+    return rows.length;
   }
 }
 

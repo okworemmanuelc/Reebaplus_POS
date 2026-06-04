@@ -15936,6 +15936,793 @@ class StockTransactionsCompanion extends UpdateCompanion<StockTransactionData> {
   }
 }
 
+class $StockAdjustmentRequestsTable extends StockAdjustmentRequests
+    with TableInfo<$StockAdjustmentRequestsTable, StockAdjustmentRequestData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $StockAdjustmentRequestsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: () => UuidV7.generate(),
+  );
+  static const VerificationMeta _businessIdMeta = const VerificationMeta(
+    'businessId',
+  );
+  @override
+  late final GeneratedColumn<String> businessId = GeneratedColumn<String>(
+    'business_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES businesses (id)',
+    ),
+  );
+  static const VerificationMeta _productIdMeta = const VerificationMeta(
+    'productId',
+  );
+  @override
+  late final GeneratedColumn<String> productId = GeneratedColumn<String>(
+    'product_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES products (id)',
+    ),
+  );
+  static const VerificationMeta _storeIdMeta = const VerificationMeta(
+    'storeId',
+  );
+  @override
+  late final GeneratedColumn<String> storeId = GeneratedColumn<String>(
+    'store_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES stores (id)',
+    ),
+  );
+  static const VerificationMeta _quantityDiffMeta = const VerificationMeta(
+    'quantityDiff',
+  );
+  @override
+  late final GeneratedColumn<int> quantityDiff = GeneratedColumn<int>(
+    'quantity_diff',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _reasonMeta = const VerificationMeta('reason');
+  @override
+  late final GeneratedColumn<String> reason = GeneratedColumn<String>(
+    'reason',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _summaryMeta = const VerificationMeta(
+    'summary',
+  );
+  @override
+  late final GeneratedColumn<String> summary = GeneratedColumn<String>(
+    'summary',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _requestedByMeta = const VerificationMeta(
+    'requestedBy',
+  );
+  @override
+  late final GeneratedColumn<String> requestedBy = GeneratedColumn<String>(
+    'requested_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('pending'),
+  );
+  static const VerificationMeta _approvedByMeta = const VerificationMeta(
+    'approvedBy',
+  );
+  @override
+  late final GeneratedColumn<String> approvedBy = GeneratedColumn<String>(
+    'approved_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
+  );
+  static const VerificationMeta _approvedAtMeta = const VerificationMeta(
+    'approvedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> approvedAt = GeneratedColumn<DateTime>(
+    'approved_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _lastUpdatedAtMeta = const VerificationMeta(
+    'lastUpdatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastUpdatedAt =
+      GeneratedColumn<DateTime>(
+        'last_updated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+        defaultValue: currentDateAndTime,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    businessId,
+    productId,
+    storeId,
+    quantityDiff,
+    reason,
+    summary,
+    requestedBy,
+    status,
+    approvedBy,
+    approvedAt,
+    createdAt,
+    lastUpdatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'stock_adjustment_requests';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<StockAdjustmentRequestData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('business_id')) {
+      context.handle(
+        _businessIdMeta,
+        businessId.isAcceptableOrUnknown(data['business_id']!, _businessIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_businessIdMeta);
+    }
+    if (data.containsKey('product_id')) {
+      context.handle(
+        _productIdMeta,
+        productId.isAcceptableOrUnknown(data['product_id']!, _productIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_productIdMeta);
+    }
+    if (data.containsKey('store_id')) {
+      context.handle(
+        _storeIdMeta,
+        storeId.isAcceptableOrUnknown(data['store_id']!, _storeIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_storeIdMeta);
+    }
+    if (data.containsKey('quantity_diff')) {
+      context.handle(
+        _quantityDiffMeta,
+        quantityDiff.isAcceptableOrUnknown(
+          data['quantity_diff']!,
+          _quantityDiffMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_quantityDiffMeta);
+    }
+    if (data.containsKey('reason')) {
+      context.handle(
+        _reasonMeta,
+        reason.isAcceptableOrUnknown(data['reason']!, _reasonMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_reasonMeta);
+    }
+    if (data.containsKey('summary')) {
+      context.handle(
+        _summaryMeta,
+        summary.isAcceptableOrUnknown(data['summary']!, _summaryMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_summaryMeta);
+    }
+    if (data.containsKey('requested_by')) {
+      context.handle(
+        _requestedByMeta,
+        requestedBy.isAcceptableOrUnknown(
+          data['requested_by']!,
+          _requestedByMeta,
+        ),
+      );
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('approved_by')) {
+      context.handle(
+        _approvedByMeta,
+        approvedBy.isAcceptableOrUnknown(data['approved_by']!, _approvedByMeta),
+      );
+    }
+    if (data.containsKey('approved_at')) {
+      context.handle(
+        _approvedAtMeta,
+        approvedAt.isAcceptableOrUnknown(data['approved_at']!, _approvedAtMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('last_updated_at')) {
+      context.handle(
+        _lastUpdatedAtMeta,
+        lastUpdatedAt.isAcceptableOrUnknown(
+          data['last_updated_at']!,
+          _lastUpdatedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  StockAdjustmentRequestData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return StockAdjustmentRequestData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      businessId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}business_id'],
+      )!,
+      productId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}product_id'],
+      )!,
+      storeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}store_id'],
+      )!,
+      quantityDiff: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}quantity_diff'],
+      )!,
+      reason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reason'],
+      )!,
+      summary: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}summary'],
+      )!,
+      requestedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}requested_by'],
+      ),
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      approvedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}approved_by'],
+      ),
+      approvedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}approved_at'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      lastUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $StockAdjustmentRequestsTable createAlias(String alias) {
+    return $StockAdjustmentRequestsTable(attachedDatabase, alias);
+  }
+}
+
+class StockAdjustmentRequestData extends DataClass
+    implements Insertable<StockAdjustmentRequestData> {
+  final String id;
+  final String businessId;
+  final String productId;
+  final String storeId;
+  final int quantityDiff;
+  final String reason;
+  final String summary;
+  final String? requestedBy;
+  final String status;
+  final String? approvedBy;
+  final DateTime? approvedAt;
+  final DateTime createdAt;
+  final DateTime lastUpdatedAt;
+  const StockAdjustmentRequestData({
+    required this.id,
+    required this.businessId,
+    required this.productId,
+    required this.storeId,
+    required this.quantityDiff,
+    required this.reason,
+    required this.summary,
+    this.requestedBy,
+    required this.status,
+    this.approvedBy,
+    this.approvedAt,
+    required this.createdAt,
+    required this.lastUpdatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['business_id'] = Variable<String>(businessId);
+    map['product_id'] = Variable<String>(productId);
+    map['store_id'] = Variable<String>(storeId);
+    map['quantity_diff'] = Variable<int>(quantityDiff);
+    map['reason'] = Variable<String>(reason);
+    map['summary'] = Variable<String>(summary);
+    if (!nullToAbsent || requestedBy != null) {
+      map['requested_by'] = Variable<String>(requestedBy);
+    }
+    map['status'] = Variable<String>(status);
+    if (!nullToAbsent || approvedBy != null) {
+      map['approved_by'] = Variable<String>(approvedBy);
+    }
+    if (!nullToAbsent || approvedAt != null) {
+      map['approved_at'] = Variable<DateTime>(approvedAt);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
+    return map;
+  }
+
+  StockAdjustmentRequestsCompanion toCompanion(bool nullToAbsent) {
+    return StockAdjustmentRequestsCompanion(
+      id: Value(id),
+      businessId: Value(businessId),
+      productId: Value(productId),
+      storeId: Value(storeId),
+      quantityDiff: Value(quantityDiff),
+      reason: Value(reason),
+      summary: Value(summary),
+      requestedBy: requestedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(requestedBy),
+      status: Value(status),
+      approvedBy: approvedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(approvedBy),
+      approvedAt: approvedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(approvedAt),
+      createdAt: Value(createdAt),
+      lastUpdatedAt: Value(lastUpdatedAt),
+    );
+  }
+
+  factory StockAdjustmentRequestData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return StockAdjustmentRequestData(
+      id: serializer.fromJson<String>(json['id']),
+      businessId: serializer.fromJson<String>(json['businessId']),
+      productId: serializer.fromJson<String>(json['productId']),
+      storeId: serializer.fromJson<String>(json['storeId']),
+      quantityDiff: serializer.fromJson<int>(json['quantityDiff']),
+      reason: serializer.fromJson<String>(json['reason']),
+      summary: serializer.fromJson<String>(json['summary']),
+      requestedBy: serializer.fromJson<String?>(json['requestedBy']),
+      status: serializer.fromJson<String>(json['status']),
+      approvedBy: serializer.fromJson<String?>(json['approvedBy']),
+      approvedAt: serializer.fromJson<DateTime?>(json['approvedAt']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'businessId': serializer.toJson<String>(businessId),
+      'productId': serializer.toJson<String>(productId),
+      'storeId': serializer.toJson<String>(storeId),
+      'quantityDiff': serializer.toJson<int>(quantityDiff),
+      'reason': serializer.toJson<String>(reason),
+      'summary': serializer.toJson<String>(summary),
+      'requestedBy': serializer.toJson<String?>(requestedBy),
+      'status': serializer.toJson<String>(status),
+      'approvedBy': serializer.toJson<String?>(approvedBy),
+      'approvedAt': serializer.toJson<DateTime?>(approvedAt),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
+    };
+  }
+
+  StockAdjustmentRequestData copyWith({
+    String? id,
+    String? businessId,
+    String? productId,
+    String? storeId,
+    int? quantityDiff,
+    String? reason,
+    String? summary,
+    Value<String?> requestedBy = const Value.absent(),
+    String? status,
+    Value<String?> approvedBy = const Value.absent(),
+    Value<DateTime?> approvedAt = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? lastUpdatedAt,
+  }) => StockAdjustmentRequestData(
+    id: id ?? this.id,
+    businessId: businessId ?? this.businessId,
+    productId: productId ?? this.productId,
+    storeId: storeId ?? this.storeId,
+    quantityDiff: quantityDiff ?? this.quantityDiff,
+    reason: reason ?? this.reason,
+    summary: summary ?? this.summary,
+    requestedBy: requestedBy.present ? requestedBy.value : this.requestedBy,
+    status: status ?? this.status,
+    approvedBy: approvedBy.present ? approvedBy.value : this.approvedBy,
+    approvedAt: approvedAt.present ? approvedAt.value : this.approvedAt,
+    createdAt: createdAt ?? this.createdAt,
+    lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+  );
+  StockAdjustmentRequestData copyWithCompanion(
+    StockAdjustmentRequestsCompanion data,
+  ) {
+    return StockAdjustmentRequestData(
+      id: data.id.present ? data.id.value : this.id,
+      businessId: data.businessId.present
+          ? data.businessId.value
+          : this.businessId,
+      productId: data.productId.present ? data.productId.value : this.productId,
+      storeId: data.storeId.present ? data.storeId.value : this.storeId,
+      quantityDiff: data.quantityDiff.present
+          ? data.quantityDiff.value
+          : this.quantityDiff,
+      reason: data.reason.present ? data.reason.value : this.reason,
+      summary: data.summary.present ? data.summary.value : this.summary,
+      requestedBy: data.requestedBy.present
+          ? data.requestedBy.value
+          : this.requestedBy,
+      status: data.status.present ? data.status.value : this.status,
+      approvedBy: data.approvedBy.present
+          ? data.approvedBy.value
+          : this.approvedBy,
+      approvedAt: data.approvedAt.present
+          ? data.approvedAt.value
+          : this.approvedAt,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      lastUpdatedAt: data.lastUpdatedAt.present
+          ? data.lastUpdatedAt.value
+          : this.lastUpdatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StockAdjustmentRequestData(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('productId: $productId, ')
+          ..write('storeId: $storeId, ')
+          ..write('quantityDiff: $quantityDiff, ')
+          ..write('reason: $reason, ')
+          ..write('summary: $summary, ')
+          ..write('requestedBy: $requestedBy, ')
+          ..write('status: $status, ')
+          ..write('approvedBy: $approvedBy, ')
+          ..write('approvedAt: $approvedAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    businessId,
+    productId,
+    storeId,
+    quantityDiff,
+    reason,
+    summary,
+    requestedBy,
+    status,
+    approvedBy,
+    approvedAt,
+    createdAt,
+    lastUpdatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is StockAdjustmentRequestData &&
+          other.id == this.id &&
+          other.businessId == this.businessId &&
+          other.productId == this.productId &&
+          other.storeId == this.storeId &&
+          other.quantityDiff == this.quantityDiff &&
+          other.reason == this.reason &&
+          other.summary == this.summary &&
+          other.requestedBy == this.requestedBy &&
+          other.status == this.status &&
+          other.approvedBy == this.approvedBy &&
+          other.approvedAt == this.approvedAt &&
+          other.createdAt == this.createdAt &&
+          other.lastUpdatedAt == this.lastUpdatedAt);
+}
+
+class StockAdjustmentRequestsCompanion
+    extends UpdateCompanion<StockAdjustmentRequestData> {
+  final Value<String> id;
+  final Value<String> businessId;
+  final Value<String> productId;
+  final Value<String> storeId;
+  final Value<int> quantityDiff;
+  final Value<String> reason;
+  final Value<String> summary;
+  final Value<String?> requestedBy;
+  final Value<String> status;
+  final Value<String?> approvedBy;
+  final Value<DateTime?> approvedAt;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> lastUpdatedAt;
+  final Value<int> rowid;
+  const StockAdjustmentRequestsCompanion({
+    this.id = const Value.absent(),
+    this.businessId = const Value.absent(),
+    this.productId = const Value.absent(),
+    this.storeId = const Value.absent(),
+    this.quantityDiff = const Value.absent(),
+    this.reason = const Value.absent(),
+    this.summary = const Value.absent(),
+    this.requestedBy = const Value.absent(),
+    this.status = const Value.absent(),
+    this.approvedBy = const Value.absent(),
+    this.approvedAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  StockAdjustmentRequestsCompanion.insert({
+    this.id = const Value.absent(),
+    required String businessId,
+    required String productId,
+    required String storeId,
+    required int quantityDiff,
+    required String reason,
+    required String summary,
+    this.requestedBy = const Value.absent(),
+    this.status = const Value.absent(),
+    this.approvedBy = const Value.absent(),
+    this.approvedAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : businessId = Value(businessId),
+       productId = Value(productId),
+       storeId = Value(storeId),
+       quantityDiff = Value(quantityDiff),
+       reason = Value(reason),
+       summary = Value(summary);
+  static Insertable<StockAdjustmentRequestData> custom({
+    Expression<String>? id,
+    Expression<String>? businessId,
+    Expression<String>? productId,
+    Expression<String>? storeId,
+    Expression<int>? quantityDiff,
+    Expression<String>? reason,
+    Expression<String>? summary,
+    Expression<String>? requestedBy,
+    Expression<String>? status,
+    Expression<String>? approvedBy,
+    Expression<DateTime>? approvedAt,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? lastUpdatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (businessId != null) 'business_id': businessId,
+      if (productId != null) 'product_id': productId,
+      if (storeId != null) 'store_id': storeId,
+      if (quantityDiff != null) 'quantity_diff': quantityDiff,
+      if (reason != null) 'reason': reason,
+      if (summary != null) 'summary': summary,
+      if (requestedBy != null) 'requested_by': requestedBy,
+      if (status != null) 'status': status,
+      if (approvedBy != null) 'approved_by': approvedBy,
+      if (approvedAt != null) 'approved_at': approvedAt,
+      if (createdAt != null) 'created_at': createdAt,
+      if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  StockAdjustmentRequestsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? businessId,
+    Value<String>? productId,
+    Value<String>? storeId,
+    Value<int>? quantityDiff,
+    Value<String>? reason,
+    Value<String>? summary,
+    Value<String?>? requestedBy,
+    Value<String>? status,
+    Value<String?>? approvedBy,
+    Value<DateTime?>? approvedAt,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? lastUpdatedAt,
+    Value<int>? rowid,
+  }) {
+    return StockAdjustmentRequestsCompanion(
+      id: id ?? this.id,
+      businessId: businessId ?? this.businessId,
+      productId: productId ?? this.productId,
+      storeId: storeId ?? this.storeId,
+      quantityDiff: quantityDiff ?? this.quantityDiff,
+      reason: reason ?? this.reason,
+      summary: summary ?? this.summary,
+      requestedBy: requestedBy ?? this.requestedBy,
+      status: status ?? this.status,
+      approvedBy: approvedBy ?? this.approvedBy,
+      approvedAt: approvedAt ?? this.approvedAt,
+      createdAt: createdAt ?? this.createdAt,
+      lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (businessId.present) {
+      map['business_id'] = Variable<String>(businessId.value);
+    }
+    if (productId.present) {
+      map['product_id'] = Variable<String>(productId.value);
+    }
+    if (storeId.present) {
+      map['store_id'] = Variable<String>(storeId.value);
+    }
+    if (quantityDiff.present) {
+      map['quantity_diff'] = Variable<int>(quantityDiff.value);
+    }
+    if (reason.present) {
+      map['reason'] = Variable<String>(reason.value);
+    }
+    if (summary.present) {
+      map['summary'] = Variable<String>(summary.value);
+    }
+    if (requestedBy.present) {
+      map['requested_by'] = Variable<String>(requestedBy.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (approvedBy.present) {
+      map['approved_by'] = Variable<String>(approvedBy.value);
+    }
+    if (approvedAt.present) {
+      map['approved_at'] = Variable<DateTime>(approvedAt.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (lastUpdatedAt.present) {
+      map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StockAdjustmentRequestsCompanion(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('productId: $productId, ')
+          ..write('storeId: $storeId, ')
+          ..write('quantityDiff: $quantityDiff, ')
+          ..write('reason: $reason, ')
+          ..write('summary: $summary, ')
+          ..write('requestedBy: $requestedBy, ')
+          ..write('status: $status, ')
+          ..write('approvedBy: $approvedBy, ')
+          ..write('approvedAt: $approvedAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $OrderItemsTable extends OrderItems
     with TableInfo<$OrderItemsTable, OrderItemData> {
   @override
@@ -29630,6 +30417,491 @@ class RolePermissionsCompanion extends UpdateCompanion<RolePermissionData> {
   }
 }
 
+class $UserPermissionOverridesTable extends UserPermissionOverrides
+    with TableInfo<$UserPermissionOverridesTable, UserPermissionOverrideData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $UserPermissionOverridesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: () => UuidV7.generate(),
+  );
+  static const VerificationMeta _businessIdMeta = const VerificationMeta(
+    'businessId',
+  );
+  @override
+  late final GeneratedColumn<String> businessId = GeneratedColumn<String>(
+    'business_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES businesses (id)',
+    ),
+  );
+  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
+  @override
+  late final GeneratedColumn<String> userId = GeneratedColumn<String>(
+    'user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
+  );
+  static const VerificationMeta _permissionKeyMeta = const VerificationMeta(
+    'permissionKey',
+  );
+  @override
+  late final GeneratedColumn<String> permissionKey = GeneratedColumn<String>(
+    'permission_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _isGrantedMeta = const VerificationMeta(
+    'isGranted',
+  );
+  @override
+  late final GeneratedColumn<bool> isGranted = GeneratedColumn<bool>(
+    'is_granted',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_granted" IN (0, 1))',
+    ),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _lastUpdatedAtMeta = const VerificationMeta(
+    'lastUpdatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastUpdatedAt =
+      GeneratedColumn<DateTime>(
+        'last_updated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+        defaultValue: currentDateAndTime,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    businessId,
+    userId,
+    permissionKey,
+    isGranted,
+    createdAt,
+    lastUpdatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'user_permission_overrides';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<UserPermissionOverrideData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('business_id')) {
+      context.handle(
+        _businessIdMeta,
+        businessId.isAcceptableOrUnknown(data['business_id']!, _businessIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_businessIdMeta);
+    }
+    if (data.containsKey('user_id')) {
+      context.handle(
+        _userIdMeta,
+        userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_userIdMeta);
+    }
+    if (data.containsKey('permission_key')) {
+      context.handle(
+        _permissionKeyMeta,
+        permissionKey.isAcceptableOrUnknown(
+          data['permission_key']!,
+          _permissionKeyMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_permissionKeyMeta);
+    }
+    if (data.containsKey('is_granted')) {
+      context.handle(
+        _isGrantedMeta,
+        isGranted.isAcceptableOrUnknown(data['is_granted']!, _isGrantedMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_isGrantedMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('last_updated_at')) {
+      context.handle(
+        _lastUpdatedAtMeta,
+        lastUpdatedAt.isAcceptableOrUnknown(
+          data['last_updated_at']!,
+          _lastUpdatedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  UserPermissionOverrideData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return UserPermissionOverrideData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      businessId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}business_id'],
+      )!,
+      userId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}user_id'],
+      )!,
+      permissionKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}permission_key'],
+      )!,
+      isGranted: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_granted'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      lastUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $UserPermissionOverridesTable createAlias(String alias) {
+    return $UserPermissionOverridesTable(attachedDatabase, alias);
+  }
+}
+
+class UserPermissionOverrideData extends DataClass
+    implements Insertable<UserPermissionOverrideData> {
+  final String id;
+  final String businessId;
+  final String userId;
+  final String permissionKey;
+  final bool isGranted;
+  final DateTime createdAt;
+  final DateTime lastUpdatedAt;
+  const UserPermissionOverrideData({
+    required this.id,
+    required this.businessId,
+    required this.userId,
+    required this.permissionKey,
+    required this.isGranted,
+    required this.createdAt,
+    required this.lastUpdatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['business_id'] = Variable<String>(businessId);
+    map['user_id'] = Variable<String>(userId);
+    map['permission_key'] = Variable<String>(permissionKey);
+    map['is_granted'] = Variable<bool>(isGranted);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
+    return map;
+  }
+
+  UserPermissionOverridesCompanion toCompanion(bool nullToAbsent) {
+    return UserPermissionOverridesCompanion(
+      id: Value(id),
+      businessId: Value(businessId),
+      userId: Value(userId),
+      permissionKey: Value(permissionKey),
+      isGranted: Value(isGranted),
+      createdAt: Value(createdAt),
+      lastUpdatedAt: Value(lastUpdatedAt),
+    );
+  }
+
+  factory UserPermissionOverrideData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return UserPermissionOverrideData(
+      id: serializer.fromJson<String>(json['id']),
+      businessId: serializer.fromJson<String>(json['businessId']),
+      userId: serializer.fromJson<String>(json['userId']),
+      permissionKey: serializer.fromJson<String>(json['permissionKey']),
+      isGranted: serializer.fromJson<bool>(json['isGranted']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'businessId': serializer.toJson<String>(businessId),
+      'userId': serializer.toJson<String>(userId),
+      'permissionKey': serializer.toJson<String>(permissionKey),
+      'isGranted': serializer.toJson<bool>(isGranted),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
+    };
+  }
+
+  UserPermissionOverrideData copyWith({
+    String? id,
+    String? businessId,
+    String? userId,
+    String? permissionKey,
+    bool? isGranted,
+    DateTime? createdAt,
+    DateTime? lastUpdatedAt,
+  }) => UserPermissionOverrideData(
+    id: id ?? this.id,
+    businessId: businessId ?? this.businessId,
+    userId: userId ?? this.userId,
+    permissionKey: permissionKey ?? this.permissionKey,
+    isGranted: isGranted ?? this.isGranted,
+    createdAt: createdAt ?? this.createdAt,
+    lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+  );
+  UserPermissionOverrideData copyWithCompanion(
+    UserPermissionOverridesCompanion data,
+  ) {
+    return UserPermissionOverrideData(
+      id: data.id.present ? data.id.value : this.id,
+      businessId: data.businessId.present
+          ? data.businessId.value
+          : this.businessId,
+      userId: data.userId.present ? data.userId.value : this.userId,
+      permissionKey: data.permissionKey.present
+          ? data.permissionKey.value
+          : this.permissionKey,
+      isGranted: data.isGranted.present ? data.isGranted.value : this.isGranted,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      lastUpdatedAt: data.lastUpdatedAt.present
+          ? data.lastUpdatedAt.value
+          : this.lastUpdatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('UserPermissionOverrideData(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('userId: $userId, ')
+          ..write('permissionKey: $permissionKey, ')
+          ..write('isGranted: $isGranted, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    businessId,
+    userId,
+    permissionKey,
+    isGranted,
+    createdAt,
+    lastUpdatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is UserPermissionOverrideData &&
+          other.id == this.id &&
+          other.businessId == this.businessId &&
+          other.userId == this.userId &&
+          other.permissionKey == this.permissionKey &&
+          other.isGranted == this.isGranted &&
+          other.createdAt == this.createdAt &&
+          other.lastUpdatedAt == this.lastUpdatedAt);
+}
+
+class UserPermissionOverridesCompanion
+    extends UpdateCompanion<UserPermissionOverrideData> {
+  final Value<String> id;
+  final Value<String> businessId;
+  final Value<String> userId;
+  final Value<String> permissionKey;
+  final Value<bool> isGranted;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> lastUpdatedAt;
+  final Value<int> rowid;
+  const UserPermissionOverridesCompanion({
+    this.id = const Value.absent(),
+    this.businessId = const Value.absent(),
+    this.userId = const Value.absent(),
+    this.permissionKey = const Value.absent(),
+    this.isGranted = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  UserPermissionOverridesCompanion.insert({
+    this.id = const Value.absent(),
+    required String businessId,
+    required String userId,
+    required String permissionKey,
+    required bool isGranted,
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : businessId = Value(businessId),
+       userId = Value(userId),
+       permissionKey = Value(permissionKey),
+       isGranted = Value(isGranted);
+  static Insertable<UserPermissionOverrideData> custom({
+    Expression<String>? id,
+    Expression<String>? businessId,
+    Expression<String>? userId,
+    Expression<String>? permissionKey,
+    Expression<bool>? isGranted,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? lastUpdatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (businessId != null) 'business_id': businessId,
+      if (userId != null) 'user_id': userId,
+      if (permissionKey != null) 'permission_key': permissionKey,
+      if (isGranted != null) 'is_granted': isGranted,
+      if (createdAt != null) 'created_at': createdAt,
+      if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  UserPermissionOverridesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? businessId,
+    Value<String>? userId,
+    Value<String>? permissionKey,
+    Value<bool>? isGranted,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? lastUpdatedAt,
+    Value<int>? rowid,
+  }) {
+    return UserPermissionOverridesCompanion(
+      id: id ?? this.id,
+      businessId: businessId ?? this.businessId,
+      userId: userId ?? this.userId,
+      permissionKey: permissionKey ?? this.permissionKey,
+      isGranted: isGranted ?? this.isGranted,
+      createdAt: createdAt ?? this.createdAt,
+      lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (businessId.present) {
+      map['business_id'] = Variable<String>(businessId.value);
+    }
+    if (userId.present) {
+      map['user_id'] = Variable<String>(userId.value);
+    }
+    if (permissionKey.present) {
+      map['permission_key'] = Variable<String>(permissionKey.value);
+    }
+    if (isGranted.present) {
+      map['is_granted'] = Variable<bool>(isGranted.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (lastUpdatedAt.present) {
+      map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('UserPermissionOverridesCompanion(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('userId: $userId, ')
+          ..write('permissionKey: $permissionKey, ')
+          ..write('isGranted: $isGranted, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $RoleSettingsTable extends RoleSettings
     with TableInfo<$RoleSettingsTable, RoleSettingData> {
   @override
@@ -33779,6 +35051,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $ShipmentsTable shipments = $ShipmentsTable(this);
   late final $StockTransactionsTable stockTransactions =
       $StockTransactionsTable(this);
+  late final $StockAdjustmentRequestsTable stockAdjustmentRequests =
+      $StockAdjustmentRequestsTable(this);
   late final $OrderItemsTable orderItems = $OrderItemsTable(this);
   late final $PurchaseItemsTable purchaseItems = $PurchaseItemsTable(this);
   late final $ExpenseCategoriesTable expenseCategories =
@@ -33810,6 +35084,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $RolePermissionsTable rolePermissions = $RolePermissionsTable(
     this,
   );
+  late final $UserPermissionOverridesTable userPermissionOverrides =
+      $UserPermissionOverridesTable(this);
   late final $RoleSettingsTable roleSettings = $RoleSettingsTable(this);
   late final $UserBusinessesTable userBusinesses = $UserBusinessesTable(this);
   late final $InviteCodesTable inviteCodes = $InviteCodesTable(this);
@@ -33845,6 +35121,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final StockTransferDao stockTransferDao = StockTransferDao(
     this as AppDatabase,
   );
+  late final StockAdjustmentRequestsDao stockAdjustmentRequestsDao =
+      StockAdjustmentRequestsDao(this as AppDatabase);
   late final PendingCrateReturnsDao pendingCrateReturnsDao =
       PendingCrateReturnsDao(this as AppDatabase);
   late final SessionsDao sessionsDao = SessionsDao(this as AppDatabase);
@@ -33888,6 +35166,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final RolePermissionsDao rolePermissionsDao = RolePermissionsDao(
     this as AppDatabase,
   );
+  late final UserPermissionOverridesDao userPermissionOverridesDao =
+      UserPermissionOverridesDao(this as AppDatabase);
   late final RoleSettingsDao roleSettingsDao = RoleSettingsDao(
     this as AppDatabase,
   );
@@ -33925,6 +35205,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     stockAdjustments,
     shipments,
     stockTransactions,
+    stockAdjustmentRequests,
     orderItems,
     purchaseItems,
     expenseCategories,
@@ -33946,6 +35227,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     permissions,
     roles,
     rolePermissions,
+    userPermissionOverrides,
     roleSettings,
     userBusinesses,
     inviteCodes,
@@ -34442,6 +35724,34 @@ final class $$BusinessesTableReferences
     );
   }
 
+  static MultiTypedResultKey<
+    $StockAdjustmentRequestsTable,
+    List<StockAdjustmentRequestData>
+  >
+  _stockAdjustmentRequestsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.stockAdjustmentRequests,
+        aliasName: $_aliasNameGenerator(
+          db.businesses.id,
+          db.stockAdjustmentRequests.businessId,
+        ),
+      );
+
+  $$StockAdjustmentRequestsTableProcessedTableManager
+  get stockAdjustmentRequestsRefs {
+    final manager = $$StockAdjustmentRequestsTableTableManager(
+      $_db,
+      $_db.stockAdjustmentRequests,
+    ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _stockAdjustmentRequestsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
   static MultiTypedResultKey<$OrderItemsTable, List<OrderItemData>>
   _orderItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.orderItems,
@@ -34851,6 +36161,34 @@ final class $$BusinessesTableReferences
 
     final cache = $_typedResult.readTableOrNull(
       _rolePermissionsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $UserPermissionOverridesTable,
+    List<UserPermissionOverrideData>
+  >
+  _userPermissionOverridesRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.userPermissionOverrides,
+        aliasName: $_aliasNameGenerator(
+          db.businesses.id,
+          db.userPermissionOverrides.businessId,
+        ),
+      );
+
+  $$UserPermissionOverridesTableProcessedTableManager
+  get userPermissionOverridesRefs {
+    final manager = $$UserPermissionOverridesTableTableManager(
+      $_db,
+      $_db.userPermissionOverrides,
+    ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _userPermissionOverridesRefsTable($_db),
     );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
@@ -35544,6 +36882,32 @@ class $$BusinessesTableFilterComposer
     return f(composer);
   }
 
+  Expression<bool> stockAdjustmentRequestsRefs(
+    Expression<bool> Function($$StockAdjustmentRequestsTableFilterComposer f) f,
+  ) {
+    final $$StockAdjustmentRequestsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.stockAdjustmentRequests,
+          getReferencedColumn: (t) => t.businessId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$StockAdjustmentRequestsTableFilterComposer(
+                $db: $db,
+                $table: $db.stockAdjustmentRequests,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
   Expression<bool> orderItemsRefs(
     Expression<bool> Function($$OrderItemsTableFilterComposer f) f,
   ) {
@@ -36041,6 +37405,32 @@ class $$BusinessesTableFilterComposer
                 $removeJoinBuilderFromRootComposer,
           ),
     );
+    return f(composer);
+  }
+
+  Expression<bool> userPermissionOverridesRefs(
+    Expression<bool> Function($$UserPermissionOverridesTableFilterComposer f) f,
+  ) {
+    final $$UserPermissionOverridesTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.userPermissionOverrides,
+          getReferencedColumn: (t) => t.businessId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$UserPermissionOverridesTableFilterComposer(
+                $db: $db,
+                $table: $db.userPermissionOverrides,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
     return f(composer);
   }
 
@@ -36804,6 +38194,33 @@ class $$BusinessesTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> stockAdjustmentRequestsRefs<T extends Object>(
+    Expression<T> Function($$StockAdjustmentRequestsTableAnnotationComposer a)
+    f,
+  ) {
+    final $$StockAdjustmentRequestsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.stockAdjustmentRequests,
+          getReferencedColumn: (t) => t.businessId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$StockAdjustmentRequestsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.stockAdjustmentRequests,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
   Expression<T> orderItemsRefs<T extends Object>(
     Expression<T> Function($$OrderItemsTableAnnotationComposer a) f,
   ) {
@@ -37306,6 +38723,33 @@ class $$BusinessesTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> userPermissionOverridesRefs<T extends Object>(
+    Expression<T> Function($$UserPermissionOverridesTableAnnotationComposer a)
+    f,
+  ) {
+    final $$UserPermissionOverridesTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.userPermissionOverrides,
+          getReferencedColumn: (t) => t.businessId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$UserPermissionOverridesTableAnnotationComposer(
+                $db: $db,
+                $table: $db.userPermissionOverrides,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
   Expression<T> roleSettingsRefs<T extends Object>(
     Expression<T> Function($$RoleSettingsTableAnnotationComposer a) f,
   ) {
@@ -37467,6 +38911,7 @@ class $$BusinessesTableTableManager
             bool stockAdjustmentsRefs,
             bool shipmentsRefs,
             bool stockTransactionsRefs,
+            bool stockAdjustmentRequestsRefs,
             bool orderItemsRefs,
             bool purchaseItemsRefs,
             bool expenseCategoriesRefs,
@@ -37487,6 +38932,7 @@ class $$BusinessesTableTableManager
             bool sessionsRefs,
             bool rolesRefs,
             bool rolePermissionsRefs,
+            bool userPermissionOverridesRefs,
             bool roleSettingsRefs,
             bool userBusinessesRefs,
             bool inviteCodesRefs,
@@ -37588,6 +39034,7 @@ class $$BusinessesTableTableManager
                 stockAdjustmentsRefs = false,
                 shipmentsRefs = false,
                 stockTransactionsRefs = false,
+                stockAdjustmentRequestsRefs = false,
                 orderItemsRefs = false,
                 purchaseItemsRefs = false,
                 expenseCategoriesRefs = false,
@@ -37608,6 +39055,7 @@ class $$BusinessesTableTableManager
                 sessionsRefs = false,
                 rolesRefs = false,
                 rolePermissionsRefs = false,
+                userPermissionOverridesRefs = false,
                 roleSettingsRefs = false,
                 userBusinessesRefs = false,
                 inviteCodesRefs = false,
@@ -37639,6 +39087,7 @@ class $$BusinessesTableTableManager
                     if (stockAdjustmentsRefs) db.stockAdjustments,
                     if (shipmentsRefs) db.shipments,
                     if (stockTransactionsRefs) db.stockTransactions,
+                    if (stockAdjustmentRequestsRefs) db.stockAdjustmentRequests,
                     if (orderItemsRefs) db.orderItems,
                     if (purchaseItemsRefs) db.purchaseItems,
                     if (expenseCategoriesRefs) db.expenseCategories,
@@ -37659,6 +39108,7 @@ class $$BusinessesTableTableManager
                     if (sessionsRefs) db.sessions,
                     if (rolesRefs) db.roles,
                     if (rolePermissionsRefs) db.rolePermissions,
+                    if (userPermissionOverridesRefs) db.userPermissionOverrides,
                     if (roleSettingsRefs) db.roleSettings,
                     if (userBusinessesRefs) db.userBusinesses,
                     if (inviteCodesRefs) db.inviteCodes,
@@ -38109,6 +39559,27 @@ class $$BusinessesTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (stockAdjustmentRequestsRefs)
+                        await $_getPrefetchedData<
+                          BusinessData,
+                          $BusinessesTable,
+                          StockAdjustmentRequestData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$BusinessesTableReferences
+                              ._stockAdjustmentRequestsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$BusinessesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).stockAdjustmentRequestsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.businessId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (orderItemsRefs)
                         await $_getPrefetchedData<
                           BusinessData,
@@ -38529,6 +40000,27 @@ class $$BusinessesTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (userPermissionOverridesRefs)
+                        await $_getPrefetchedData<
+                          BusinessData,
+                          $BusinessesTable,
+                          UserPermissionOverrideData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$BusinessesTableReferences
+                              ._userPermissionOverridesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$BusinessesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).userPermissionOverridesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.businessId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (roleSettingsRefs)
                         await $_getPrefetchedData<
                           BusinessData,
@@ -38676,6 +40168,7 @@ typedef $$BusinessesTableProcessedTableManager =
         bool stockAdjustmentsRefs,
         bool shipmentsRefs,
         bool stockTransactionsRefs,
+        bool stockAdjustmentRequestsRefs,
         bool orderItemsRefs,
         bool purchaseItemsRefs,
         bool expenseCategoriesRefs,
@@ -38696,6 +40189,7 @@ typedef $$BusinessesTableProcessedTableManager =
         bool sessionsRefs,
         bool rolesRefs,
         bool rolePermissionsRefs,
+        bool userPermissionOverridesRefs,
         bool roleSettingsRefs,
         bool userBusinessesRefs,
         bool inviteCodesRefs,
@@ -40487,6 +41981,34 @@ final class $$StoresTableReferences
     );
   }
 
+  static MultiTypedResultKey<
+    $StockAdjustmentRequestsTable,
+    List<StockAdjustmentRequestData>
+  >
+  _stockAdjustmentRequestsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.stockAdjustmentRequests,
+        aliasName: $_aliasNameGenerator(
+          db.stores.id,
+          db.stockAdjustmentRequests.storeId,
+        ),
+      );
+
+  $$StockAdjustmentRequestsTableProcessedTableManager
+  get stockAdjustmentRequestsRefs {
+    final manager = $$StockAdjustmentRequestsTableTableManager(
+      $_db,
+      $_db.stockAdjustmentRequests,
+    ).filter((f) => f.storeId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _stockAdjustmentRequestsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
   static MultiTypedResultKey<$OrderItemsTable, List<OrderItemData>>
   _orderItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.orderItems,
@@ -40899,6 +42421,32 @@ class $$StoresTableFilterComposer
                 $removeJoinBuilderFromRootComposer,
           ),
     );
+    return f(composer);
+  }
+
+  Expression<bool> stockAdjustmentRequestsRefs(
+    Expression<bool> Function($$StockAdjustmentRequestsTableFilterComposer f) f,
+  ) {
+    final $$StockAdjustmentRequestsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.stockAdjustmentRequests,
+          getReferencedColumn: (t) => t.storeId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$StockAdjustmentRequestsTableFilterComposer(
+                $db: $db,
+                $table: $db.stockAdjustmentRequests,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
     return f(composer);
   }
 
@@ -41444,6 +42992,33 @@ class $$StoresTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> stockAdjustmentRequestsRefs<T extends Object>(
+    Expression<T> Function($$StockAdjustmentRequestsTableAnnotationComposer a)
+    f,
+  ) {
+    final $$StockAdjustmentRequestsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.stockAdjustmentRequests,
+          getReferencedColumn: (t) => t.storeId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$StockAdjustmentRequestsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.stockAdjustmentRequests,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
   Expression<T> orderItemsRefs<T extends Object>(
     Expression<T> Function($$OrderItemsTableAnnotationComposer a) f,
   ) {
@@ -41741,6 +43316,7 @@ class $$StoresTableTableManager
             bool inventoryRefs,
             bool stockAdjustmentsRefs,
             bool stockTransactionsRefs,
+            bool stockAdjustmentRequestsRefs,
             bool orderItemsRefs,
             bool fundsAccountsRefs,
             bool expensesRefs,
@@ -41820,6 +43396,7 @@ class $$StoresTableTableManager
                 inventoryRefs = false,
                 stockAdjustmentsRefs = false,
                 stockTransactionsRefs = false,
+                stockAdjustmentRequestsRefs = false,
                 orderItemsRefs = false,
                 fundsAccountsRefs = false,
                 expensesRefs = false,
@@ -41841,6 +43418,7 @@ class $$StoresTableTableManager
                     if (inventoryRefs) db.inventory,
                     if (stockAdjustmentsRefs) db.stockAdjustments,
                     if (stockTransactionsRefs) db.stockTransactions,
+                    if (stockAdjustmentRequestsRefs) db.stockAdjustmentRequests,
                     if (orderItemsRefs) db.orderItems,
                     if (fundsAccountsRefs) db.fundsAccounts,
                     if (expensesRefs) db.expenses,
@@ -42002,6 +43580,27 @@ class $$StoresTableTableManager
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.locationId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (stockAdjustmentRequestsRefs)
+                        await $_getPrefetchedData<
+                          StoreData,
+                          $StoresTable,
+                          StockAdjustmentRequestData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$StoresTableReferences
+                              ._stockAdjustmentRequestsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$StoresTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).stockAdjustmentRequestsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.storeId == item.id,
                               ),
                           typedResults: items,
                         ),
@@ -42264,6 +43863,7 @@ typedef $$StoresTableProcessedTableManager =
         bool inventoryRefs,
         bool stockAdjustmentsRefs,
         bool stockTransactionsRefs,
+        bool stockAdjustmentRequestsRefs,
         bool orderItemsRefs,
         bool fundsAccountsRefs,
         bool expensesRefs,
@@ -42474,6 +44074,34 @@ final class $$UsersTableReferences
     ).filter((f) => f.userId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_sessionsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $UserPermissionOverridesTable,
+    List<UserPermissionOverrideData>
+  >
+  _userPermissionOverridesRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.userPermissionOverrides,
+        aliasName: $_aliasNameGenerator(
+          db.users.id,
+          db.userPermissionOverrides.userId,
+        ),
+      );
+
+  $$UserPermissionOverridesTableProcessedTableManager
+  get userPermissionOverridesRefs {
+    final manager = $$UserPermissionOverridesTableTableManager(
+      $_db,
+      $_db.userPermissionOverrides,
+    ).filter((f) => f.userId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _userPermissionOverridesRefsTable($_db),
+    );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -42787,6 +44415,32 @@ class $$UsersTableFilterComposer extends Composer<_$AppDatabase, $UsersTable> {
                 $removeJoinBuilderFromRootComposer,
           ),
     );
+    return f(composer);
+  }
+
+  Expression<bool> userPermissionOverridesRefs(
+    Expression<bool> Function($$UserPermissionOverridesTableFilterComposer f) f,
+  ) {
+    final $$UserPermissionOverridesTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.userPermissionOverrides,
+          getReferencedColumn: (t) => t.userId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$UserPermissionOverridesTableFilterComposer(
+                $db: $db,
+                $table: $db.userPermissionOverrides,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
     return f(composer);
   }
 
@@ -43228,6 +44882,33 @@ class $$UsersTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> userPermissionOverridesRefs<T extends Object>(
+    Expression<T> Function($$UserPermissionOverridesTableAnnotationComposer a)
+    f,
+  ) {
+    final $$UserPermissionOverridesTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.userPermissionOverrides,
+          getReferencedColumn: (t) => t.userId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$UserPermissionOverridesTableAnnotationComposer(
+                $db: $db,
+                $table: $db.userPermissionOverrides,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
   Expression<T> userBusinessesRefs<T extends Object>(
     Expression<T> Function($$UserBusinessesTableAnnotationComposer a) f,
   ) {
@@ -43301,6 +44982,7 @@ class $$UsersTableTableManager
             bool stockCountsRefs,
             bool notificationsRefs,
             bool sessionsRefs,
+            bool userPermissionOverridesRefs,
             bool userBusinessesRefs,
             bool userStoresRefs,
           })
@@ -43408,6 +45090,7 @@ class $$UsersTableTableManager
                 stockCountsRefs = false,
                 notificationsRefs = false,
                 sessionsRefs = false,
+                userPermissionOverridesRefs = false,
                 userBusinessesRefs = false,
                 userStoresRefs = false,
               }) {
@@ -43420,6 +45103,7 @@ class $$UsersTableTableManager
                     if (stockCountsRefs) db.stockCounts,
                     if (notificationsRefs) db.notifications,
                     if (sessionsRefs) db.sessions,
+                    if (userPermissionOverridesRefs) db.userPermissionOverrides,
                     if (userBusinessesRefs) db.userBusinesses,
                     if (userStoresRefs) db.userStores,
                   ],
@@ -43592,6 +45276,27 @@ class $$UsersTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (userPermissionOverridesRefs)
+                        await $_getPrefetchedData<
+                          UserData,
+                          $UsersTable,
+                          UserPermissionOverrideData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$UsersTableReferences
+                              ._userPermissionOverridesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$UsersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).userPermissionOverridesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.userId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (userBusinessesRefs)
                         await $_getPrefetchedData<
                           UserData,
@@ -43663,6 +45368,7 @@ typedef $$UsersTableProcessedTableManager =
         bool stockCountsRefs,
         bool notificationsRefs,
         bool sessionsRefs,
+        bool userPermissionOverridesRefs,
         bool userBusinessesRefs,
         bool userStoresRefs,
       })
@@ -45103,6 +46809,34 @@ final class $$ProductsTableReferences
     );
   }
 
+  static MultiTypedResultKey<
+    $StockAdjustmentRequestsTable,
+    List<StockAdjustmentRequestData>
+  >
+  _stockAdjustmentRequestsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.stockAdjustmentRequests,
+        aliasName: $_aliasNameGenerator(
+          db.products.id,
+          db.stockAdjustmentRequests.productId,
+        ),
+      );
+
+  $$StockAdjustmentRequestsTableProcessedTableManager
+  get stockAdjustmentRequestsRefs {
+    final manager = $$StockAdjustmentRequestsTableTableManager(
+      $_db,
+      $_db.stockAdjustmentRequests,
+    ).filter((f) => f.productId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _stockAdjustmentRequestsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
   static MultiTypedResultKey<$OrderItemsTable, List<OrderItemData>>
   _orderItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.orderItems,
@@ -45521,6 +47255,32 @@ class $$ProductsTableFilterComposer
                 $removeJoinBuilderFromRootComposer,
           ),
     );
+    return f(composer);
+  }
+
+  Expression<bool> stockAdjustmentRequestsRefs(
+    Expression<bool> Function($$StockAdjustmentRequestsTableFilterComposer f) f,
+  ) {
+    final $$StockAdjustmentRequestsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.stockAdjustmentRequests,
+          getReferencedColumn: (t) => t.productId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$StockAdjustmentRequestsTableFilterComposer(
+                $db: $db,
+                $table: $db.stockAdjustmentRequests,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
     return f(composer);
   }
 
@@ -46196,6 +47956,33 @@ class $$ProductsTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> stockAdjustmentRequestsRefs<T extends Object>(
+    Expression<T> Function($$StockAdjustmentRequestsTableAnnotationComposer a)
+    f,
+  ) {
+    final $$StockAdjustmentRequestsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.stockAdjustmentRequests,
+          getReferencedColumn: (t) => t.productId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$StockAdjustmentRequestsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.stockAdjustmentRequests,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
   Expression<T> orderItemsRefs<T extends Object>(
     Expression<T> Function($$OrderItemsTableAnnotationComposer a) f,
   ) {
@@ -46271,6 +48058,7 @@ class $$ProductsTableTableManager
             bool stockTransfersRefs,
             bool stockAdjustmentsRefs,
             bool stockTransactionsRefs,
+            bool stockAdjustmentRequestsRefs,
             bool orderItemsRefs,
             bool purchaseItemsRefs,
           })
@@ -46446,6 +48234,7 @@ class $$ProductsTableTableManager
                 stockTransfersRefs = false,
                 stockAdjustmentsRefs = false,
                 stockTransactionsRefs = false,
+                stockAdjustmentRequestsRefs = false,
                 orderItemsRefs = false,
                 purchaseItemsRefs = false,
               }) {
@@ -46457,6 +48246,7 @@ class $$ProductsTableTableManager
                     if (stockTransfersRefs) db.stockTransfers,
                     if (stockAdjustmentsRefs) db.stockAdjustments,
                     if (stockTransactionsRefs) db.stockTransactions,
+                    if (stockAdjustmentRequestsRefs) db.stockAdjustmentRequests,
                     if (orderItemsRefs) db.orderItems,
                     if (purchaseItemsRefs) db.purchaseItems,
                   ],
@@ -46651,6 +48441,27 @@ class $$ProductsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (stockAdjustmentRequestsRefs)
+                        await $_getPrefetchedData<
+                          ProductData,
+                          $ProductsTable,
+                          StockAdjustmentRequestData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ProductsTableReferences
+                              ._stockAdjustmentRequestsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ProductsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).stockAdjustmentRequestsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.productId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (orderItemsRefs)
                         await $_getPrefetchedData<
                           ProductData,
@@ -46724,6 +48535,7 @@ typedef $$ProductsTableProcessedTableManager =
         bool stockTransfersRefs,
         bool stockAdjustmentsRefs,
         bool stockTransactionsRefs,
+        bool stockAdjustmentRequestsRefs,
         bool orderItemsRefs,
         bool purchaseItemsRefs,
       })
@@ -59702,6 +61514,894 @@ typedef $$StockTransactionsTableProcessedTableManager =
         bool shipmentId,
         bool performedBy,
         bool voidedBy,
+      })
+    >;
+typedef $$StockAdjustmentRequestsTableCreateCompanionBuilder =
+    StockAdjustmentRequestsCompanion Function({
+      Value<String> id,
+      required String businessId,
+      required String productId,
+      required String storeId,
+      required int quantityDiff,
+      required String reason,
+      required String summary,
+      Value<String?> requestedBy,
+      Value<String> status,
+      Value<String?> approvedBy,
+      Value<DateTime?> approvedAt,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+typedef $$StockAdjustmentRequestsTableUpdateCompanionBuilder =
+    StockAdjustmentRequestsCompanion Function({
+      Value<String> id,
+      Value<String> businessId,
+      Value<String> productId,
+      Value<String> storeId,
+      Value<int> quantityDiff,
+      Value<String> reason,
+      Value<String> summary,
+      Value<String?> requestedBy,
+      Value<String> status,
+      Value<String?> approvedBy,
+      Value<DateTime?> approvedAt,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+
+final class $$StockAdjustmentRequestsTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $StockAdjustmentRequestsTable,
+          StockAdjustmentRequestData
+        > {
+  $$StockAdjustmentRequestsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $BusinessesTable _businessIdTable(_$AppDatabase db) =>
+      db.businesses.createAlias(
+        $_aliasNameGenerator(
+          db.stockAdjustmentRequests.businessId,
+          db.businesses.id,
+        ),
+      );
+
+  $$BusinessesTableProcessedTableManager get businessId {
+    final $_column = $_itemColumn<String>('business_id')!;
+
+    final manager = $$BusinessesTableTableManager(
+      $_db,
+      $_db.businesses,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_businessIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $ProductsTable _productIdTable(_$AppDatabase db) =>
+      db.products.createAlias(
+        $_aliasNameGenerator(
+          db.stockAdjustmentRequests.productId,
+          db.products.id,
+        ),
+      );
+
+  $$ProductsTableProcessedTableManager get productId {
+    final $_column = $_itemColumn<String>('product_id')!;
+
+    final manager = $$ProductsTableTableManager(
+      $_db,
+      $_db.products,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_productIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $StoresTable _storeIdTable(_$AppDatabase db) => db.stores.createAlias(
+    $_aliasNameGenerator(db.stockAdjustmentRequests.storeId, db.stores.id),
+  );
+
+  $$StoresTableProcessedTableManager get storeId {
+    final $_column = $_itemColumn<String>('store_id')!;
+
+    final manager = $$StoresTableTableManager(
+      $_db,
+      $_db.stores,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_storeIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UsersTable _requestedByTable(_$AppDatabase db) =>
+      db.users.createAlias(
+        $_aliasNameGenerator(
+          db.stockAdjustmentRequests.requestedBy,
+          db.users.id,
+        ),
+      );
+
+  $$UsersTableProcessedTableManager? get requestedBy {
+    final $_column = $_itemColumn<String>('requested_by');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_requestedByTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UsersTable _approvedByTable(_$AppDatabase db) => db.users.createAlias(
+    $_aliasNameGenerator(db.stockAdjustmentRequests.approvedBy, db.users.id),
+  );
+
+  $$UsersTableProcessedTableManager? get approvedBy {
+    final $_column = $_itemColumn<String>('approved_by');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_approvedByTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$StockAdjustmentRequestsTableFilterComposer
+    extends Composer<_$AppDatabase, $StockAdjustmentRequestsTable> {
+  $$StockAdjustmentRequestsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get quantityDiff => $composableBuilder(
+    column: $table.quantityDiff,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get reason => $composableBuilder(
+    column: $table.reason,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get summary => $composableBuilder(
+    column: $table.summary,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get approvedAt => $composableBuilder(
+    column: $table.approvedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$BusinessesTableFilterComposer get businessId {
+    final $$BusinessesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableFilterComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductsTableFilterComposer get productId {
+    final $$ProductsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableFilterComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableFilterComposer get storeId {
+    final $$StoresTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableFilterComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableFilterComposer get requestedBy {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.requestedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableFilterComposer get approvedBy {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.approvedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$StockAdjustmentRequestsTableOrderingComposer
+    extends Composer<_$AppDatabase, $StockAdjustmentRequestsTable> {
+  $$StockAdjustmentRequestsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get quantityDiff => $composableBuilder(
+    column: $table.quantityDiff,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get reason => $composableBuilder(
+    column: $table.reason,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get summary => $composableBuilder(
+    column: $table.summary,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get approvedAt => $composableBuilder(
+    column: $table.approvedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$BusinessesTableOrderingComposer get businessId {
+    final $$BusinessesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableOrderingComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductsTableOrderingComposer get productId {
+    final $$ProductsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableOrderingComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableOrderingComposer get storeId {
+    final $$StoresTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableOrderingComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableOrderingComposer get requestedBy {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.requestedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableOrderingComposer get approvedBy {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.approvedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$StockAdjustmentRequestsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $StockAdjustmentRequestsTable> {
+  $$StockAdjustmentRequestsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get quantityDiff => $composableBuilder(
+    column: $table.quantityDiff,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get reason =>
+      $composableBuilder(column: $table.reason, builder: (column) => column);
+
+  GeneratedColumn<String> get summary =>
+      $composableBuilder(column: $table.summary, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get approvedAt => $composableBuilder(
+    column: $table.approvedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => column,
+  );
+
+  $$BusinessesTableAnnotationComposer get businessId {
+    final $$BusinessesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductsTableAnnotationComposer get productId {
+    final $$ProductsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableAnnotationComposer get storeId {
+    final $$StoresTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableAnnotationComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableAnnotationComposer get requestedBy {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.requestedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableAnnotationComposer get approvedBy {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.approvedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$StockAdjustmentRequestsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $StockAdjustmentRequestsTable,
+          StockAdjustmentRequestData,
+          $$StockAdjustmentRequestsTableFilterComposer,
+          $$StockAdjustmentRequestsTableOrderingComposer,
+          $$StockAdjustmentRequestsTableAnnotationComposer,
+          $$StockAdjustmentRequestsTableCreateCompanionBuilder,
+          $$StockAdjustmentRequestsTableUpdateCompanionBuilder,
+          (
+            StockAdjustmentRequestData,
+            $$StockAdjustmentRequestsTableReferences,
+          ),
+          StockAdjustmentRequestData,
+          PrefetchHooks Function({
+            bool businessId,
+            bool productId,
+            bool storeId,
+            bool requestedBy,
+            bool approvedBy,
+          })
+        > {
+  $$StockAdjustmentRequestsTableTableManager(
+    _$AppDatabase db,
+    $StockAdjustmentRequestsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$StockAdjustmentRequestsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$StockAdjustmentRequestsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$StockAdjustmentRequestsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> businessId = const Value.absent(),
+                Value<String> productId = const Value.absent(),
+                Value<String> storeId = const Value.absent(),
+                Value<int> quantityDiff = const Value.absent(),
+                Value<String> reason = const Value.absent(),
+                Value<String> summary = const Value.absent(),
+                Value<String?> requestedBy = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<String?> approvedBy = const Value.absent(),
+                Value<DateTime?> approvedAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => StockAdjustmentRequestsCompanion(
+                id: id,
+                businessId: businessId,
+                productId: productId,
+                storeId: storeId,
+                quantityDiff: quantityDiff,
+                reason: reason,
+                summary: summary,
+                requestedBy: requestedBy,
+                status: status,
+                approvedBy: approvedBy,
+                approvedAt: approvedAt,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                required String businessId,
+                required String productId,
+                required String storeId,
+                required int quantityDiff,
+                required String reason,
+                required String summary,
+                Value<String?> requestedBy = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<String?> approvedBy = const Value.absent(),
+                Value<DateTime?> approvedAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => StockAdjustmentRequestsCompanion.insert(
+                id: id,
+                businessId: businessId,
+                productId: productId,
+                storeId: storeId,
+                quantityDiff: quantityDiff,
+                reason: reason,
+                summary: summary,
+                requestedBy: requestedBy,
+                status: status,
+                approvedBy: approvedBy,
+                approvedAt: approvedAt,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$StockAdjustmentRequestsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                businessId = false,
+                productId = false,
+                storeId = false,
+                requestedBy = false,
+                approvedBy = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (businessId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.businessId,
+                                    referencedTable:
+                                        $$StockAdjustmentRequestsTableReferences
+                                            ._businessIdTable(db),
+                                    referencedColumn:
+                                        $$StockAdjustmentRequestsTableReferences
+                                            ._businessIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (productId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.productId,
+                                    referencedTable:
+                                        $$StockAdjustmentRequestsTableReferences
+                                            ._productIdTable(db),
+                                    referencedColumn:
+                                        $$StockAdjustmentRequestsTableReferences
+                                            ._productIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (storeId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.storeId,
+                                    referencedTable:
+                                        $$StockAdjustmentRequestsTableReferences
+                                            ._storeIdTable(db),
+                                    referencedColumn:
+                                        $$StockAdjustmentRequestsTableReferences
+                                            ._storeIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (requestedBy) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.requestedBy,
+                                    referencedTable:
+                                        $$StockAdjustmentRequestsTableReferences
+                                            ._requestedByTable(db),
+                                    referencedColumn:
+                                        $$StockAdjustmentRequestsTableReferences
+                                            ._requestedByTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (approvedBy) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.approvedBy,
+                                    referencedTable:
+                                        $$StockAdjustmentRequestsTableReferences
+                                            ._approvedByTable(db),
+                                    referencedColumn:
+                                        $$StockAdjustmentRequestsTableReferences
+                                            ._approvedByTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$StockAdjustmentRequestsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $StockAdjustmentRequestsTable,
+      StockAdjustmentRequestData,
+      $$StockAdjustmentRequestsTableFilterComposer,
+      $$StockAdjustmentRequestsTableOrderingComposer,
+      $$StockAdjustmentRequestsTableAnnotationComposer,
+      $$StockAdjustmentRequestsTableCreateCompanionBuilder,
+      $$StockAdjustmentRequestsTableUpdateCompanionBuilder,
+      (StockAdjustmentRequestData, $$StockAdjustmentRequestsTableReferences),
+      StockAdjustmentRequestData,
+      PrefetchHooks Function({
+        bool businessId,
+        bool productId,
+        bool storeId,
+        bool requestedBy,
+        bool approvedBy,
       })
     >;
 typedef $$OrderItemsTableCreateCompanionBuilder =
@@ -73993,6 +76693,484 @@ typedef $$RolePermissionsTableProcessedTableManager =
       RolePermissionData,
       PrefetchHooks Function({bool businessId, bool roleId})
     >;
+typedef $$UserPermissionOverridesTableCreateCompanionBuilder =
+    UserPermissionOverridesCompanion Function({
+      Value<String> id,
+      required String businessId,
+      required String userId,
+      required String permissionKey,
+      required bool isGranted,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+typedef $$UserPermissionOverridesTableUpdateCompanionBuilder =
+    UserPermissionOverridesCompanion Function({
+      Value<String> id,
+      Value<String> businessId,
+      Value<String> userId,
+      Value<String> permissionKey,
+      Value<bool> isGranted,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+
+final class $$UserPermissionOverridesTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $UserPermissionOverridesTable,
+          UserPermissionOverrideData
+        > {
+  $$UserPermissionOverridesTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $BusinessesTable _businessIdTable(_$AppDatabase db) =>
+      db.businesses.createAlias(
+        $_aliasNameGenerator(
+          db.userPermissionOverrides.businessId,
+          db.businesses.id,
+        ),
+      );
+
+  $$BusinessesTableProcessedTableManager get businessId {
+    final $_column = $_itemColumn<String>('business_id')!;
+
+    final manager = $$BusinessesTableTableManager(
+      $_db,
+      $_db.businesses,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_businessIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UsersTable _userIdTable(_$AppDatabase db) => db.users.createAlias(
+    $_aliasNameGenerator(db.userPermissionOverrides.userId, db.users.id),
+  );
+
+  $$UsersTableProcessedTableManager get userId {
+    final $_column = $_itemColumn<String>('user_id')!;
+
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_userIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$UserPermissionOverridesTableFilterComposer
+    extends Composer<_$AppDatabase, $UserPermissionOverridesTable> {
+  $$UserPermissionOverridesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get permissionKey => $composableBuilder(
+    column: $table.permissionKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isGranted => $composableBuilder(
+    column: $table.isGranted,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$BusinessesTableFilterComposer get businessId {
+    final $$BusinessesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableFilterComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableFilterComposer get userId {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.userId,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$UserPermissionOverridesTableOrderingComposer
+    extends Composer<_$AppDatabase, $UserPermissionOverridesTable> {
+  $$UserPermissionOverridesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get permissionKey => $composableBuilder(
+    column: $table.permissionKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isGranted => $composableBuilder(
+    column: $table.isGranted,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$BusinessesTableOrderingComposer get businessId {
+    final $$BusinessesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableOrderingComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableOrderingComposer get userId {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.userId,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$UserPermissionOverridesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $UserPermissionOverridesTable> {
+  $$UserPermissionOverridesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get permissionKey => $composableBuilder(
+    column: $table.permissionKey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get isGranted =>
+      $composableBuilder(column: $table.isGranted, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => column,
+  );
+
+  $$BusinessesTableAnnotationComposer get businessId {
+    final $$BusinessesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableAnnotationComposer get userId {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.userId,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$UserPermissionOverridesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $UserPermissionOverridesTable,
+          UserPermissionOverrideData,
+          $$UserPermissionOverridesTableFilterComposer,
+          $$UserPermissionOverridesTableOrderingComposer,
+          $$UserPermissionOverridesTableAnnotationComposer,
+          $$UserPermissionOverridesTableCreateCompanionBuilder,
+          $$UserPermissionOverridesTableUpdateCompanionBuilder,
+          (
+            UserPermissionOverrideData,
+            $$UserPermissionOverridesTableReferences,
+          ),
+          UserPermissionOverrideData,
+          PrefetchHooks Function({bool businessId, bool userId})
+        > {
+  $$UserPermissionOverridesTableTableManager(
+    _$AppDatabase db,
+    $UserPermissionOverridesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$UserPermissionOverridesTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$UserPermissionOverridesTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$UserPermissionOverridesTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> businessId = const Value.absent(),
+                Value<String> userId = const Value.absent(),
+                Value<String> permissionKey = const Value.absent(),
+                Value<bool> isGranted = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => UserPermissionOverridesCompanion(
+                id: id,
+                businessId: businessId,
+                userId: userId,
+                permissionKey: permissionKey,
+                isGranted: isGranted,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                required String businessId,
+                required String userId,
+                required String permissionKey,
+                required bool isGranted,
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => UserPermissionOverridesCompanion.insert(
+                id: id,
+                businessId: businessId,
+                userId: userId,
+                permissionKey: permissionKey,
+                isGranted: isGranted,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$UserPermissionOverridesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({businessId = false, userId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (businessId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.businessId,
+                                referencedTable:
+                                    $$UserPermissionOverridesTableReferences
+                                        ._businessIdTable(db),
+                                referencedColumn:
+                                    $$UserPermissionOverridesTableReferences
+                                        ._businessIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+                    if (userId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.userId,
+                                referencedTable:
+                                    $$UserPermissionOverridesTableReferences
+                                        ._userIdTable(db),
+                                referencedColumn:
+                                    $$UserPermissionOverridesTableReferences
+                                        ._userIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$UserPermissionOverridesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $UserPermissionOverridesTable,
+      UserPermissionOverrideData,
+      $$UserPermissionOverridesTableFilterComposer,
+      $$UserPermissionOverridesTableOrderingComposer,
+      $$UserPermissionOverridesTableAnnotationComposer,
+      $$UserPermissionOverridesTableCreateCompanionBuilder,
+      $$UserPermissionOverridesTableUpdateCompanionBuilder,
+      (UserPermissionOverrideData, $$UserPermissionOverridesTableReferences),
+      UserPermissionOverrideData,
+      PrefetchHooks Function({bool businessId, bool userId})
+    >;
 typedef $$RoleSettingsTableCreateCompanionBuilder =
     RoleSettingsCompanion Function({
       Value<String> id,
@@ -77560,6 +80738,11 @@ class $AppDatabaseManager {
       $$ShipmentsTableTableManager(_db, _db.shipments);
   $$StockTransactionsTableTableManager get stockTransactions =>
       $$StockTransactionsTableTableManager(_db, _db.stockTransactions);
+  $$StockAdjustmentRequestsTableTableManager get stockAdjustmentRequests =>
+      $$StockAdjustmentRequestsTableTableManager(
+        _db,
+        _db.stockAdjustmentRequests,
+      );
   $$OrderItemsTableTableManager get orderItems =>
       $$OrderItemsTableTableManager(_db, _db.orderItems);
   $$PurchaseItemsTableTableManager get purchaseItems =>
@@ -77602,6 +80785,11 @@ class $AppDatabaseManager {
       $$RolesTableTableManager(_db, _db.roles);
   $$RolePermissionsTableTableManager get rolePermissions =>
       $$RolePermissionsTableTableManager(_db, _db.rolePermissions);
+  $$UserPermissionOverridesTableTableManager get userPermissionOverrides =>
+      $$UserPermissionOverridesTableTableManager(
+        _db,
+        _db.userPermissionOverrides,
+      );
   $$RoleSettingsTableTableManager get roleSettings =>
       $$RoleSettingsTableTableManager(_db, _db.roleSettings);
   $$UserBusinessesTableTableManager get userBusinesses =>

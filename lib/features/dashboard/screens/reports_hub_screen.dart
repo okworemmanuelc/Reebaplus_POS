@@ -10,6 +10,7 @@ import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/sales_detail_screen.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/profit_report_screen.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/daily_reconciliation_list_screen.dart';
+import 'package:reebaplus_pos/features/dashboard/screens/stock_approvals_screen.dart';
 import 'package:reebaplus_pos/features/expenses/screens/expenses_screen.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/customer_ledger_screen.dart';
 import 'package:reebaplus_pos/features/funds/screens/funds_register_report_screen.dart';
@@ -35,6 +36,10 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
     // card is additionally guarded so it is hidden (never greyed — rule #7) for
     // any role lacking it. The CEO-only Profit card lands in the §25 Profit pass.
     final isMgrUp = isManagerOrAbove(ref);
+    // §16.6.1 — count of stock-keeper adjustments awaiting this viewer's
+    // approval (a CEO sees all stores; a Manager only their assigned store(s)).
+    final pendingApprovals =
+        ref.watch(viewerScopedPendingStockRequestsProvider).length;
     return SharedScaffold(
       activeRoute: 'dashboard',
       appBar: AppBar(
@@ -69,6 +74,25 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
           mainAxisSpacing: context.spacingM,
           crossAxisSpacing: context.spacingM,
           children: [
+            // Pending Stock Approvals (§16.6.1) — stock-keeper Add/Remove
+            // requests await the affected store's Manager / the CEO here. Shown
+            // first as an action item; the badge counts what's outstanding.
+            if (isMgrUp)
+              _buildReportCard(
+                context,
+                title: 'Stock Approvals',
+                subtitle: 'Approve Stock Changes',
+                icon: FontAwesomeIcons.clipboardList,
+                color: Colors.orange,
+                locked: false,
+                badgeCount: pendingApprovals,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    slideDownRoute(const StockApprovalsScreen()),
+                  );
+                },
+              ),
             if (isMgrUp && hasPermission(ref, 'reports.see_sales'))
               _buildReportCard(
                 context,
@@ -216,6 +240,7 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
     required Color color,
     required VoidCallback onTap,
     bool locked = false,
+    int badgeCount = 0,
   }) {
     return Material(
       color: Colors.transparent,
@@ -287,6 +312,27 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
                           .colorScheme
                           .onSurface
                           .withValues(alpha: 0.3),
+                    ),
+                  ),
+                ),
+              if (badgeCount > 0)
+                Positioned(
+                  top: 0,
+                  right: 0,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: color,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '$badgeCount',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ),
                 ),

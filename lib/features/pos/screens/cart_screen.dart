@@ -366,32 +366,39 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                 Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    AppButton(
-                                      text: 'New',
-                                      variant: AppButtonVariant.secondary,
-                                      isFullWidth: false,
-                                      height: modalCtx.getRSize(36),
-                                      icon: FontAwesomeIcons.userPlus,
-                                      onPressed: () {
-                                        Navigator.pop(modalCtx);
-                                        AddCustomerSheet.show(
-                                          context,
-                                          onCustomerAdded: (newCustomer) {
-                                            setState(
-                                              () =>
-                                                  _activeCustomer = newCustomer,
-                                            );
-                                            widget.onCustomerChanged(
-                                              newCustomer,
-                                            );
-                                            ref
-                                                .read(cartProvider)
-                                                .setActiveCustomer(newCustomer);
-                                          },
-                                        );
-                                      },
-                                    ),
-                                    SizedBox(width: modalCtx.getRSize(8)),
+                                    // Creating a customer needs `customers.add`
+                                    // (hard rule #6/#7) — hide "New" otherwise.
+                                    // The AddCustomerSheet save handler re-checks
+                                    // the same key at the write boundary.
+                                    if (hasPermission(ref, 'customers.add')) ...[
+                                      AppButton(
+                                        text: 'New',
+                                        variant: AppButtonVariant.secondary,
+                                        isFullWidth: false,
+                                        height: modalCtx.getRSize(36),
+                                        icon: FontAwesomeIcons.userPlus,
+                                        onPressed: () {
+                                          Navigator.pop(modalCtx);
+                                          AddCustomerSheet.show(
+                                            context,
+                                            onCustomerAdded: (newCustomer) {
+                                              setState(
+                                                () => _activeCustomer =
+                                                    newCustomer,
+                                              );
+                                              widget.onCustomerChanged(
+                                                newCustomer,
+                                              );
+                                              ref
+                                                  .read(cartProvider)
+                                                  .setActiveCustomer(
+                                                      newCustomer);
+                                            },
+                                          );
+                                        },
+                                      ),
+                                      SizedBox(width: modalCtx.getRSize(8)),
+                                    ],
                                     IconButton(
                                       onPressed: () => Navigator.pop(modalCtx),
                                       icon: Icon(Icons.close, color: _subtext),
@@ -1488,7 +1495,8 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                                       MainAxisAlignment
                                                           .spaceBetween,
                                                   children: [
-                                                    Row(
+                                                    Expanded(
+                                                      child: Row(
                                                       children: [
                                                         Container(
                                                           width: context
@@ -1507,8 +1515,10 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                                           width: context
                                                               .getRSize(8),
                                                         ),
-                                                        Text(
+                                                        Flexible(
+                                                          child: Text(
                                                           '${line.label}  ×${line.qty.toStringAsFixed(1)}',
+                                                          overflow: TextOverflow.ellipsis,
                                                           style: TextStyle(
                                                             fontSize: context
                                                                 .getRFontSize(
@@ -1519,7 +1529,9 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                                             color: _subtext,
                                                           ),
                                                         ),
+                                                        ),
                                                       ],
+                                                    ),
                                                     ),
                                                     Text(
                                                       formatCurrency(

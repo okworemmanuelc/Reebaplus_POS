@@ -403,6 +403,12 @@ class _NotificationCard extends ConsumerWidget {
         return FontAwesomeIcons.circleCheck;
       case 'crate_return_rejected':
         return FontAwesomeIcons.circleXmark;
+      case 'stock_approval.requested':
+        return FontAwesomeIcons.clipboardList;
+      case 'stock_approval.approved':
+        return FontAwesomeIcons.circleCheck;
+      case 'stock_approval.rejected':
+        return FontAwesomeIcons.circleXmark;
       default:
         return FontAwesomeIcons.bell;
     }
@@ -427,6 +433,12 @@ class _NotificationCard extends ConsumerWidget {
       case 'crate_return_approved':
         return success;
       case 'crate_return_rejected':
+        return danger;
+      case 'stock_approval.requested':
+        return const Color(0xFFF5A623);
+      case 'stock_approval.approved':
+        return success;
+      case 'stock_approval.rejected':
         return danger;
       default:
         return blueMain;

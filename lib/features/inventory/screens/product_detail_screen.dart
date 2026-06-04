@@ -114,43 +114,6 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   bool get _canSeeSuppliers =>
       ref.read(currentUserPermissionsProvider).contains('suppliers.manage');
 
-  /// §26.4: when a **stock keeper** adds or removes stock, notify the CEO and
-  /// the Manager(s) of the **affected store** so they see the movement (and the
-  /// reason, on a removal). No-op for any other actor — a Manager/CEO adjusting
-  /// their own stock shouldn't notify themselves.
-  ///
-  /// CEOs are always included (they aren't store-assigned). Managers are
-  /// narrowed to those assigned to [storeId]; if none resolve (e.g. a Manager
-  /// invited without a store), we fall back to all Managers so the leadership
-  /// audience is never silently dropped.
-  Future<void> _notifyLeadershipOfStockAdjustment({
-    required String summary,
-    required bool isRemove,
-    required String productId,
-    required String storeId,
-  }) async {
-    if (ref.read(currentUserRoleProvider)?.slug != 'stock_keeper') return;
-    final db = ref.read(databaseProvider);
-    final ceoIds = await db.userBusinessesDao.getUserIdsForRoleSlugs(['ceo']);
-    final managerIds =
-        await db.userBusinessesDao.getUserIdsForRoleSlugs(['manager']);
-    final storeUserIds =
-        (await db.userStoresDao.getUserIdsForStore(storeId)).toSet();
-    final storeManagerIds = managerIds.where(storeUserIds.contains).toList();
-    final effectiveManagers =
-        storeManagerIds.isEmpty ? managerIds : storeManagerIds;
-    final recipients = <String>{...ceoIds, ...effectiveManagers};
-    for (final uid in recipients) {
-      await db.notificationsDao.fireNotification(
-        type: 'stock_adjustment',
-        message: summary,
-        severity: isRemove ? 'warning' : 'info',
-        linkedRecordId: productId,
-        recipientUserId: uid,
-      );
-    }
-  }
-
   @override
   void initState() {
     super.initState();
@@ -1189,34 +1152,21 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: _border),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.lock_outline,
-                        size: context.getRSize(14),
-                        color: _subtext,
-                      ),
-                      SizedBox(width: context.getRSize(6)),
-                      Text(
-                        'VIEW ONLY',
-                        style: TextStyle(
-                          fontSize: context.getRFontSize(11),
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.8,
-                          color: _subtext,
-                        ),
-                      ),
-                    ],
+                  Icon(
+                    Icons.lock_outline,
+                    size: context.getRSize(14),
+                    color: _subtext,
                   ),
-                  SizedBox(height: context.getRSize(6)),
+                  SizedBox(width: context.getRSize(6)),
                   Text(
-                    "Your role can view this product but can't edit it or "
-                    'adjust its stock.',
+                    'VIEW ONLY',
                     style: TextStyle(
-                      fontSize: context.getRFontSize(13),
+                      fontSize: context.getRFontSize(12),
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.8,
                       color: _subtext,
                     ),
                   ),
@@ -1732,10 +1682,12 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     );
   }
 
-  /// Stock keeper "Update Stock" modal (master plan §16.6): add / remove a
-  /// quantity against a store, with a required reason on removal, optional
-  /// notes. Writes through `adjustStock` (so the cloud delta envelope is
-  /// enqueued) and logs to History.
+  /// "Update Stock" modal (master plan §16.6): add / remove a quantity against
+  /// a store, with a required reason on removal, optional notes. A **stock
+  /// keeper**'s change is queued for Manager/CEO approval (§16.6.1) via
+  /// `requestStockAdjustment` — inventory is untouched until approved. A
+  /// Manager/CEO applies it directly through `adjustStock` (cloud delta
+  /// envelope enqueued) and logs to History.
   Future<void> _showUpdateStockModal() async {
     final product = _productData;
     if (product == null) return;
@@ -1751,6 +1703,9 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     // State.dispose() (matches every other sheet in the app). Disposing them
     // here, after `await showModalBottomSheet`, raced the closing animation and
     // threw "TextEditingController used after being disposed".
+    // Flipped by onSave when a stock keeper's change is queued for approval
+    // (§16.6.1) rather than applied directly — drives the confirmation toast.
+    var sentForApproval = false;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -1779,7 +1734,30 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
           final note = isRemove
               ? '${reason!}${notes.isEmpty ? '' : ': $notes'}'
               : (notes.isEmpty ? 'Stock added by $actorName' : notes);
+          final summary = '$actorName ${isRemove ? 'removed' : 'added'} $qty '
+              '${product.unit}(s) of ${product.name} '
+              '(${store.name})'
+              '${isRemove ? ' — ${reason!}' : ''}';
+          final isStockKeeper =
+              ref.read(currentUserRoleProvider)?.slug == 'stock_keeper';
           try {
+            if (isStockKeeper) {
+              // §16.6.1 — a stock keeper's change needs Manager/CEO approval.
+              // Record a pending request; inventory stays untouched until it is
+              // approved in the Reports hub. The DAO fires the approval-request
+              // notification to the CEO + the affected store's Manager(s).
+              await db.stockAdjustmentRequestsDao.requestStockAdjustment(
+                productId: product.id,
+                storeId: store.id,
+                quantityDiff: delta,
+                reason: note,
+                summary: summary,
+                requestedBy: auth.currentUser?.id,
+              );
+              sentForApproval = true;
+              return null;
+            }
+            // Manager / CEO adjust directly — no approval needed.
             await db.inventoryDao.adjustStock(
               product.id,
               store.id,
@@ -1787,35 +1765,33 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
               note,
               auth.currentUser?.id,
             );
-            final summary = '$actorName ${isRemove ? 'removed' : 'added'} $qty '
-                '${product.unit}(s) of ${product.name} '
-                '(${store.name})'
-                '${isRemove ? ' — ${reason!}' : ''}';
             await ref.read(activityLogProvider).logAction(
                   'stock_adjustment',
                   summary,
                   productId: product.id,
                   storeId: store.id,
                 );
-            // §26.4: tell the CEO + the affected store's Managers when a stock
-            // keeper moves stock.
-            await _notifyLeadershipOfStockAdjustment(
-              summary: summary,
-              isRemove: isRemove,
-              productId: product.id,
-              storeId: store.id,
-            );
             widget.onUpdateStock();
             // Reflect the change on this screen immediately (#1).
             await _refreshLiveStock();
             return null;
           } catch (e) {
             debugPrint('UpdateStock modal save error: $e');
-            return 'Could not update stock: $e';
+            return isStockKeeper
+                ? 'Could not send for approval: $e'
+                : 'Could not update stock: $e';
           }
         },
       ),
     );
+    if (!mounted) return;
+    if (sentForApproval) {
+      AppNotification.showSuccess(
+        context,
+        'Sent for approval. A manager or the CEO must approve before the '
+        'stock changes.',
+      );
+    }
   }
 
   /// Bordered inline text/number field used as an `_infoRow` trailing. Editable
@@ -2006,9 +1982,10 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
 // framework tears the fields down before the controllers go away. The previous
 // inline version created the controllers in the caller and disposed them right
 // after `await showModalBottomSheet`, which raced the closing animation and
-// threw "TextEditingController used after being disposed". The DB write,
-// activity log, leadership notification and screen refresh stay on the screen
-// (private members) and run via [onSave].
+// threw "TextEditingController used after being disposed". The save side
+// effects — a stock keeper's approval request, or a Manager/CEO's direct
+// adjustment + activity log + screen refresh — stay on the screen (private
+// members) and run via [onSave].
 // ─────────────────────────────────────────────────────────────────────────────
 class _UpdateStockSheet extends ConsumerStatefulWidget {
   const _UpdateStockSheet({
@@ -2168,13 +2145,14 @@ class _UpdateStockSheetState extends ConsumerState<_UpdateStockSheet> {
           color: _bg,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
         ),
-        padding: EdgeInsets.fromLTRB(
-          20,
-          16,
-          20,
-          20 + context.deviceBottomInset,
-        ),
-        child: Column(
+        child: SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            16,
+            20,
+            20 + context.deviceBottomInset,
+          ),
+          child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -2283,6 +2261,7 @@ class _UpdateStockSheetState extends ConsumerState<_UpdateStockSheet> {
               onPressed: _doSave,
             ),
           ],
+        ),
         ),
       ),
     );

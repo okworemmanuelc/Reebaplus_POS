@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
@@ -250,6 +251,16 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
                         text: 'Save Customer',
                         variant: AppButtonVariant.primary,
                         onPressed: () async {
+                          // Defense-in-depth (hard rule #6): this is the single
+                          // chokepoint for creating a customer — the Cart "New"
+                          // button and the Customers screen both route here — so
+                          // re-check `customers.add` at the write boundary.
+                          if (!ref
+                              .read(currentUserPermissionsProvider)
+                              .contains('customers.add')) {
+                            Navigator.pop(context);
+                            return;
+                          }
                           if (_formKey.currentState!.validate()) {
                             // Refuse the save if we don't yet know which business this row
                             // belongs to — a NULL business_id will fail the cloud RLS check

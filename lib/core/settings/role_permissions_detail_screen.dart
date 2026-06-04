@@ -16,10 +16,20 @@ const _kMaxDiscount = 'max_discount_percent';
 const _kMaxExpenseKobo = 'max_expense_approval_kobo';
 
 /// Permission keys present in the catalogue but hidden from the Roles &
-/// Permissions UI. `sales.discount.give` is governed entirely by the per-role
-/// discount slider (`max_discount_percent`), so its on/off toggle is redundant.
-/// The key stays in the catalogue (unenforced) — hiding is reversible.
-const kHiddenPermissionKeys = {'sales.discount.give'};
+/// Permissions UI (and, via the same set, the per-staff override editor).
+/// The keys stay in the catalogue — hiding is reversible; re-show one the
+/// moment its feature ships.
+/// - `sales.discount.give` is governed entirely by the per-role discount slider
+///   (`max_discount_percent`), so its on/off toggle is redundant.
+/// - `customers.update` ("Update customer details") has no edit-customer UI yet
+///   (§18) — the toggle would be inert; un-hide when the edit flow ships.
+/// - `shipments.manage` ("Manage incoming shipments") has no Track-Shipments
+///   screen yet (§22) — un-hide when that screen ships.
+const kHiddenPermissionKeys = {
+  'sales.discount.give',
+  'customers.update',
+  'shipments.manage',
+};
 
 /// Permission categories in master-plan order. `allPermissionsProvider` returns
 /// them alphabetically, so the order is imposed here. Unknown categories (none

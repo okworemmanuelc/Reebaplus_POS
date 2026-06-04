@@ -48,11 +48,15 @@ class _DailyReconciliationDetailScreenState
       ['Sales — total value', (d.salesKobo / 100.0).toStringAsFixed(2)],
       ['Sales — best staff', d.bestStaff ?? ''],
       ['Sales — top item', d.topItem ?? ''],
-      for (final c in d.cash)
-        ['Cash: ${c.account}', 'expected ${(c.expectedKobo / 100.0).toStringAsFixed(2)}; '
-            'counted ${(c.countedKobo / 100.0).toStringAsFixed(2)}; '
-            'variance ${(c.varianceKobo / 100.0).toStringAsFixed(2)}'],
-      ['Cash — net variance', (d.netVarianceKobo / 100.0).toStringAsFixed(2)],
+      // Cash/funds rows only for `funds.view` holders (hard rule #6) — mirrors
+      // the gated cash card so the CSV can't leak balances the screen hides.
+      if (hasPermission(ref, 'funds.view')) ...[
+        for (final c in d.cash)
+          ['Cash: ${c.account}', 'expected ${(c.expectedKobo / 100.0).toStringAsFixed(2)}; '
+              'counted ${(c.countedKobo / 100.0).toStringAsFixed(2)}; '
+              'variance ${(c.varianceKobo / 100.0).toStringAsFixed(2)}'],
+        ['Cash — net variance', (d.netVarianceKobo / 100.0).toStringAsFixed(2)],
+      ],
       ['Stock — products counted', '${d.productsCounted}'],
       ['Stock — short (products/units)', '${d.shortageCount} / ${d.shortageUnits}'],
       ['Stock — surplus (products/units)', '${d.surplusCount} / ${d.surplusUnits}'],
@@ -112,8 +116,13 @@ class _DailyReconciliationDetailScreenState
         ),
         children: [
           _salesCard(theme, data),
-          SizedBox(height: context.spacingM),
-          _cashCard(theme, data),
+          // The cash/funds section exposes per-account balances — the data
+          // `funds.view` protects (hard rule #6). §25.3 keeps the rest of the
+          // reconciliation report Manager-accessible; only this block is gated.
+          if (hasPermission(ref, 'funds.view')) ...[
+            SizedBox(height: context.spacingM),
+            _cashCard(theme, data),
+          ],
           SizedBox(height: context.spacingM),
           _stockCard(theme, data),
           SizedBox(height: context.spacingM),

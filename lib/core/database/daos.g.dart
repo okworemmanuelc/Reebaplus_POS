@@ -636,6 +636,50 @@ class StockTransferDaoManager {
       );
 }
 
+mixin _$StockAdjustmentRequestsDaoMixin on DatabaseAccessor<AppDatabase> {
+  $BusinessesTable get businesses => attachedDatabase.businesses;
+  $CategoriesTable get categories => attachedDatabase.categories;
+  $CrateSizeGroupsTable get crateSizeGroups => attachedDatabase.crateSizeGroups;
+  $SuppliersTable get suppliers => attachedDatabase.suppliers;
+  $ManufacturersTable get manufacturers => attachedDatabase.manufacturers;
+  $ProductsTable get products => attachedDatabase.products;
+  $StoresTable get stores => attachedDatabase.stores;
+  $UsersTable get users => attachedDatabase.users;
+  $StockAdjustmentRequestsTable get stockAdjustmentRequests =>
+      attachedDatabase.stockAdjustmentRequests;
+  StockAdjustmentRequestsDaoManager get managers =>
+      StockAdjustmentRequestsDaoManager(this);
+}
+
+class StockAdjustmentRequestsDaoManager {
+  final _$StockAdjustmentRequestsDaoMixin _db;
+  StockAdjustmentRequestsDaoManager(this._db);
+  $$BusinessesTableTableManager get businesses =>
+      $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$CategoriesTableTableManager get categories =>
+      $$CategoriesTableTableManager(_db.attachedDatabase, _db.categories);
+  $$CrateSizeGroupsTableTableManager get crateSizeGroups =>
+      $$CrateSizeGroupsTableTableManager(
+        _db.attachedDatabase,
+        _db.crateSizeGroups,
+      );
+  $$SuppliersTableTableManager get suppliers =>
+      $$SuppliersTableTableManager(_db.attachedDatabase, _db.suppliers);
+  $$ManufacturersTableTableManager get manufacturers =>
+      $$ManufacturersTableTableManager(_db.attachedDatabase, _db.manufacturers);
+  $$ProductsTableTableManager get products =>
+      $$ProductsTableTableManager(_db.attachedDatabase, _db.products);
+  $$StoresTableTableManager get stores =>
+      $$StoresTableTableManager(_db.attachedDatabase, _db.stores);
+  $$UsersTableTableManager get users =>
+      $$UsersTableTableManager(_db.attachedDatabase, _db.users);
+  $$StockAdjustmentRequestsTableTableManager get stockAdjustmentRequests =>
+      $$StockAdjustmentRequestsTableTableManager(
+        _db.attachedDatabase,
+        _db.stockAdjustmentRequests,
+      );
+}
+
 mixin _$PendingCrateReturnsDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
   $StoresTable get stores => attachedDatabase.stores;
@@ -1257,6 +1301,32 @@ class RolePermissionsDaoManager {
       $$RolePermissionsTableTableManager(
         _db.attachedDatabase,
         _db.rolePermissions,
+      );
+}
+
+mixin _$UserPermissionOverridesDaoMixin on DatabaseAccessor<AppDatabase> {
+  $BusinessesTable get businesses => attachedDatabase.businesses;
+  $StoresTable get stores => attachedDatabase.stores;
+  $UsersTable get users => attachedDatabase.users;
+  $UserPermissionOverridesTable get userPermissionOverrides =>
+      attachedDatabase.userPermissionOverrides;
+  UserPermissionOverridesDaoManager get managers =>
+      UserPermissionOverridesDaoManager(this);
+}
+
+class UserPermissionOverridesDaoManager {
+  final _$UserPermissionOverridesDaoMixin _db;
+  UserPermissionOverridesDaoManager(this._db);
+  $$BusinessesTableTableManager get businesses =>
+      $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$StoresTableTableManager get stores =>
+      $$StoresTableTableManager(_db.attachedDatabase, _db.stores);
+  $$UsersTableTableManager get users =>
+      $$UsersTableTableManager(_db.attachedDatabase, _db.users);
+  $$UserPermissionOverridesTableTableManager get userPermissionOverrides =>
+      $$UserPermissionOverridesTableTableManager(
+        _db.attachedDatabase,
+        _db.userPermissionOverrides,
       );
 }
 

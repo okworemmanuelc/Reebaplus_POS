@@ -405,8 +405,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
   /// Period options. Roles below Manager are capped at a Month maximum (§19.1);
   /// `managerUp` (Manager-or-above) is exactly that gate.
   List<String> _periodOptions(bool managerUp) {
-    // §30.11 canonical chip set. Lower roles get the three shortest windows.
-    return managerUp ? kDatePeriodLabels : kDatePeriodLabels.sublist(0, 3);
+    // §30.11 canonical chip set. Lower roles get Today/This Week/This Month only.
+    return datePeriodLabelsForRole(managerUp: managerUp);
   }
 
   // ─────────────────────────── TABS ───────────────────────────────────────

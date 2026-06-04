@@ -102,6 +102,21 @@ If you find a raw write outside the six exceptions above, it is a sync leak — 
 
 **As we build new tables for the Reebaplus master plan** (roles, permissions, stores, invite_codes, activity_logs, funds_accounts, shipments, etc.), every new synced table follows the same contract. Add it to `_syncedTenantTables`, route writes through a DAO that calls `enqueueUpsert` / `enqueueDelete`, and add a stream provider in `stream_providers.dart`.
 
+### Automated sync safeguard (don't rely on review alone)
+
+The contract above is enforced by three automated layers so a write can't *silently* fail to sync. They all read one co-located source of truth in [app_database.dart](lib/core/database/app_database.dart) — `kSyncedTenantTables` (public alias of `_syncedTenantTables`), `kSyncCacheTables` (the 3 Phase D caches), `kEnqueueableTables` (the union a DAO may enqueue: synced ∪ caches ∪ `businesses`) — so they cannot drift apart. Run them with `flutter test test/sync/`.
+
+- **Layer A — runtime enqueue guard** (`SyncDao.enqueueUpsert` / `enqueueDelete` in [daos.dart](lib/core/database/daos.dart)). Throws `StateError` on a table name outside the legitimate set, so a typo/unregistered target fails fast at the write boundary instead of sticking forever as a `failed` queue row. Mirrors the existing `_ledgerTables` guard. Test: `test/sync/sync_dao_enqueue_guard_test.dart`.
+- **Layer B — registration completeness** (`test/sync/sync_table_registration_test.dart`). Reflects over the live schema; any table carrying the sync fingerprint (**both** a `business_id` and a `last_updated_at` column) must be in `kSyncedTenantTables` or `kSyncCacheTables`. Adding a new tenant table and forgetting to register it turns this red. This is the keystone: it makes the most common omission impossible to merge.
+- **Layer C — raw-write leak scanner** (`test/sync/sync_raw_write_leak_test.dart`). Source-scans `daos.dart` + `lib/shared` + `lib/features` + `lib/core/services` for a raw Drift write to a synced table whose **enclosing method** contains no enqueue (any `enqueue…(` call, incl. helpers and `domain:` envelopes). Catches the truly silent case — a new screen/service that writes the DB without enqueuing.
+
+**`sync-exempt` marker convention** (the reusable contract for the legitimate §5 exceptions):
+
+- `// sync-exempt: <reason>` inside a method exempts that method from Layer C. The 7 §5 exceptions carry it.
+- `// sync-exempt-file: <reason>` at the top of a file exempts the whole file. Only the sync engine ([supabase_sync_service.dart](lib/core/services/supabase_sync_service.dart)) has it — it restores cloud-authoritative state.
+
+When you add a new synced table: add it to `_syncedTenantTables`, route writes through a DAO that enqueues, add the stream provider — then `flutter test test/sync/` is green. If a write is a genuinely new §5 exception, add a `// sync-exempt:` marker **and** propose adding it to the §5 exception list before merging.
+
 ## 6. Cautious with Dependencies
 
 Adding a package has a cost beyond installing it: bundle size, security surface, maintenance burden, licensing risk.
@@ -174,6 +189,7 @@ This convention does not change. New screens, modals, and bottom sheets must fol
 
 - **YES → use `context.deviceBottomInset`.** Covers: anything inside `showModalBottomSheet` / `showDialog` / `DraggableScrollableSheet` (modals always hide the bar); pushed detail screens (footers, scrollable bottoms); and drawer-accessed tab roots where the bottom nav bar is hidden — Customers, Payments, Expenses, Stores, Deliveries, Activity Log, Funds Register.
 - **NO → leave it (0 is correct).** This is **only** the body of the five bottom-nav tab roots rendered above the visible bar — **Home, POS, Inventory, Orders (list), Cart**. The bar already insets them; adding `deviceBottomInset` makes a **gap above the bar**. Their existing `context.bottomInset` reads 0 there, which is correct — do **not** convert it. (But modals opened *from* these files still use `deviceBottomInset`.)
+- **Floating action buttons (`AppFAB`):** same YES/NO split — but the Scaffold's `floatingActionButton` slot does **not** add the system-nav inset on edge-to-edge (only a ~16px margin), so on a **3-button nav** the bar paints over the FAB (the gap is ~invisible on gesture nav, which is why this was missed at first). `AppFAB` lifts itself via `reserveBottomInset` (default **true**, using nav-only `context.deviceBottomPadding` so the keyboard isn't double-counted when a form FAB shows with the keyboard up). Set `reserveBottomInset: false` only on the visible-bar tab roots (POS, Stock), exactly like the NO rule above. Never wrap an `AppFAB` in your own bottom inset.
 - **Auth / onboarding screens** (`lib/features/auth/**`) run **before** `MainLayout`, so their `padding.bottom` / `context.bottomInset` already works — leave them.
 
 **`showModalBottomSheet` — the `useSafeArea` trap (also a real bug):** `useSafeArea: true` wraps the sheet in `SafeArea(bottom: false)` — it protects top/left/right only and **does NOT inset the bottom**. Combined with the trap above (even a nested `SafeArea(bottom)` reads 0 under `MainLayout`), the bottom is **always** your job — put `context.deviceBottomInset` on the footer padding.
@@ -183,7 +199,7 @@ This convention does not change. New screens, modals, and bottom sheets must fol
 - Use `MediaQuery.padding.bottom`, `context.bottomInset`, or a bottom `SafeArea` for bottom-anchored content under `MainLayout` — they read **0**. Use `context.deviceBottomInset`.
 - Add `deviceBottomInset` to the **body** of one of the five bottom-nav tab roots (Home / POS / Inventory / Orders / Cart) — it creates a gap above the bar. (Their modals are fine.)
 - Assume `showModalBottomSheet(useSafeArea: true)` insets the bottom — it doesn't (`SafeArea(bottom: false)`).
-- Double-pad: don't add an inset to content already in a Scaffold's `bottomNavigationBar` / `persistentFooterButtons` / `floatingActionButton` / `bottomSheet` slot, and don't stack `deviceBottomInset` with a separate `viewInsets.bottom` on the same edge (`deviceBottomInset` already includes the keyboard).
+- Double-pad: don't add an inset to content already in a Scaffold's `bottomNavigationBar` / `persistentFooterButtons` / `bottomSheet` slot, and don't stack `deviceBottomInset` with a separate `viewInsets.bottom` on the same edge (`deviceBottomInset` already includes the keyboard). (`floatingActionButton` is deliberately NOT in this list — the Scaffold does not inset it for the system nav on edge-to-edge; `AppFAB` owns that inset itself via `reserveBottomInset`, see the decision rule above.)
 - Run the raw inset through the size scaler (`getRSize(deviceBottomInset + …)`). Apply the raw inset and scale only the fixed gap: `context.deviceBottomInset + context.getRSize(16)`.
 
 ---

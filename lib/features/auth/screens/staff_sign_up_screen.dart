@@ -559,6 +559,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
       // canonical cloud state — pushing it back is a no-op round trip.
       // insertOnConflictUpdate keeps this idempotent over whatever the pull
       // already restored.
+      // sync-exempt: §5 #7 — staff-sign-up local mirror after the redeem RPC.
       final now = DateTime.now();
       await db.transaction(() async {
         await db.into(db.users).insertOnConflictUpdate(
