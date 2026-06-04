@@ -217,6 +217,19 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
       if (ds != null) themeController.setDesignSystem(ds);
     });
 
+    // Live suspend → sign-out (master plan §9.5 / §8.3). When the signed-in
+    // user is suspended on another device, the `user_businesses` realtime
+    // update flips the local membership status; drop them to the Who's Working
+    // picker immediately. The picker hides suspended staff (§8.3), so they
+    // can't re-select themselves. lockApp() (UI-only, keeps the Supabase
+    // session) once `value` is null re-emissions are ignored — the guard below
+    // makes this fire exactly once per active session.
+    ref.listen(currentUserMembershipStatusProvider, (_, next) {
+      if (next == 'suspended' && _auth.value != null) {
+        _auth.lockApp();
+      }
+    });
+
     // Keep the app-wide money formatter in sync with the CEO-chosen currency
     // (synced `default_currency`, §10.1). Watching here rebuilds MaterialApp
     // on change so every formatCurrency() re-renders with the new symbol;

@@ -106,7 +106,86 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 
 ---
 
-## Session 86 — 2026-06-04 — Optional reason when rejecting a stock approval (§16.6.1)
+## Session 88 — 2026-06-04 — Live suspend sign-out (§9.5/§8.3) + CEO staff-action notifications (§26.4)
+
+**What the user asked for (one message, three tasks):**
+- When a staff is suspended, they should be signed out immediately, in real time.
+- Always show who created an order on the Pending / Completed / Cancelled order cards. *(This one was built in Session 87 below — see "already there".)*
+- Notify the CEO whenever a Manager invites a new staff, suspends/reactivates one, or changes a staff role.
+
+**Built today:**
+- **Live suspend → sign-out (§9.5 / §8.3).** Realtime for `user_businesses` was already delivering suspension changes to the staff's device — nothing reacted to them. Added a small provider (`currentUserMembershipStatusProvider`) exposing the signed-in user's own membership status, and a root `ref.listen` in `main.dart` that, when that status flips to `suspended` for an active session, immediately drops the device to the Who's Working picker via the existing `lockApp()`. The picker hides suspended staff (§8.3), so they can't re-select themselves. A `_auth.value != null` guard makes it fire exactly once. Cold-start suspension is unchanged (login/picker already block it); this covers purely the live case.
+- **CEO notifications for staff actions (§26.4 Staff).** Wired the existing `fireNotification` helper into the three staff actions, which previously only wrote + logged + showed a snackbar:
+  - Suspend / Reactivate → notifies the CEO ("X suspended/reactivated Y").
+  - Change role → notifies the CEO **and** the affected staff member ("Your role was changed from … to … by X").
+  - Invite generated → notifies the CEO ("X invited [email] as [role]").
+  - The **actor is never self-notified** — the CEO-facing notices fire only when a non-CEO (a Manager) performed the action; the affected-staff role-change notice always fires (they can't change their own role). CEO recipient resolved via the existing `getUserIdsForRoleSlugs(['ceo'])`.
+- Added `staff.invited` / `staff.suspended` / `staff.reactivated` / `staff.role_changed` icon + colour cases to the notifications panel so they render with sensible icons instead of the default bell.
+
+**What was already there (not rebuilt):**
+- **Created-by on orders (§19.4)** was implemented in Session 87 (below). Verified, left as-is.
+
+**Files touched:**
+- reebaplus_master_plan.md (§26.4 new "invite generated → CEO" event + "actor never self-notified" note; §19.4 already amended in Session 87)
+- lib/core/providers/stream_providers.dart (new `currentUserMembershipStatusProvider`)
+- lib/main.dart (root `ref.listen` for live suspend → `lockApp()`)
+- lib/features/staff/screens/staff_detail_screen.dart (`_changeRole`, `_toggleSuspend` fire §26.4 notifications)
+- lib/features/staff/widgets/invite_staff_sheet.dart (`_generate` fires the invite-generated CEO notification)
+- lib/shared/widgets/notifications_modal.dart (`staff.*` icon + colour cases)
+
+**Database changes:**
+- None. No schema bump, no migration. Notifications go through the existing `notifications` table + `fireNotification` (already synced).
+
+**Master plan sections covered:**
+- §9.5 / §8.3 (live suspend sign-out), §26.4 Staff (notifications).
+
+**Plan updates made during session:**
+- §26.4 — added "New staff invite generated (fires to CEO)" as a distinct event from "invite accepted", plus a note that the actor is never self-notified. (§19.4 created-by note was added in Session 87.)
+
+**Tested:**
+- `flutter analyze` on all five touched lib files — no issues.
+- `flutter test test/sync/` — 99/99 pass (no sync leak introduced; all notification writes route through the enqueuing `NotificationsDao`).
+
+**Known issues / left open:**
+- Live suspend relies on the realtime `user_businesses` channel reaching the device; if realtime is down (DNS/VPN, see the Sync-Issues note), the sign-out lands on the next pull instead of instantly. Acceptable degradation.
+- Not yet verified on a two-device emulator run (suspend on device A → device B drops to picker). Worth an on-device pass.
+
+**Next session should:**
+- On-device two-device check of the live suspend sign-out and the CEO notifications.
+
+---
+
+## Session 87 — 2026-06-04 — Order cards show who created the order (§19.4) + fix raw-UUID on card
+
+**What the user asked for:**
+- "Always indicate who created a particular order in the pending order, completed or cancelled orders screen."
+- (Same message, separate task — still open) "How are quick sales recorded? Plus they should also be mentioned in reports."
+
+**Built today:**
+- Every order card (Pending / Completed / Cancelled tabs) now shows a "By [staff name]" line under the order number + timestamp. The creator comes from the existing `orders.staffId` column resolved through `usersByBusinessProvider`; falls back to "Unknown" if the staff row can't be resolved. It is not a money value, so it shows for every role (the §19.3 money-hiding rule does not hide it).
+- Fixed a hard-rule #4 violation found in the same widget: the order card header was printing the raw order UUID (`Order #${order.id}`) instead of the short code. Changed to `order.orderNumber` (e.g. ORD-000001), matching §19.4 / §30.8. The refund dialog in the same file already used `orderNumber` correctly.
+
+**Files touched:**
+- lib/features/orders/screens/orders_screen.dart
+- reebaplus_master_plan.md (§19.4)
+
+**Database changes:**
+- None. `orders.staffId` already exists and is already set at checkout.
+
+**Master plan sections covered:**
+- §19.4 — order card now lists the creator; dated note added.
+
+**Plan updates made during session:**
+- §19.4 amended to state the order creator is shown on every tab, for every role (not a monetary value). Dated 2026-06-04.
+
+**Tested:**
+- `flutter analyze lib/features/orders/screens/orders_screen.dart` — no issues. On-device pass still pending.
+
+**Known issues / left open:**
+- **Quick sales (open).** Investigated this session: quick sales are currently NOT recorded at all — `OrderService._buildOrderItems` throws an `ArgumentError` at checkout because quick-sale cart items carry no product id, and `order_items.productId` is a non-null FK to products. The §12.3 "tracked in Activity Logs" and §26.4 "Quick Sale used" notification are also unimplemented. So they cannot appear in reports because they never become orders. Making them recordable + visible in reports needs design decisions (product-less order line storage incl. cloud RPC, inventory-bypass per §26.4, and how the Profit Report treats a line with no buying price). Presented to the user for direction; not built yet.
+
+**Next session should:**
+- Resolve the quick-sale recording approach with the user, then implement recording + activity log + notification + report inclusion.
 
 **What the user asked for:**
 - "When approval rejected, log it and notify the user that created that adjustment that their request was approved or rejected."

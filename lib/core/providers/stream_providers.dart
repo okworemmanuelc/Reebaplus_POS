@@ -372,6 +372,27 @@ final currentUserRoleProvider = Provider<RoleData?>((ref) {
   return ref.watch(userRoleProvider(userId));
 });
 
+/// The current user's membership status ('active' | 'suspended') for the bound
+/// business, or null when logged out / not yet resolved locally. Reactive: a
+/// suspension performed on another device arrives via the `user_businesses`
+/// realtime channel, flips the local row, and re-emits here. Drives the live
+/// suspend → sign-out guard in main.dart (master plan §9.5 / §8.3): when this
+/// turns 'suspended' for an active session, the device drops to the Who's
+/// Working picker (which hides suspended staff, so they can't re-select
+/// themselves).
+final currentUserMembershipStatusProvider = Provider<String?>((ref) {
+  final user = ref.watch(authProvider).currentUser;
+  if (user == null) return null;
+  final memberships = ref.watch(_userMembershipsProvider(user.id)).valueOrNull;
+  if (memberships == null || memberships.isEmpty) return null;
+  // Resolve the membership for the bound business (a multi-business email can
+  // hold >1 membership locally); fall back to the first before bind.
+  for (final m in memberships) {
+    if (m.businessId == user.businessId) return m.status;
+  }
+  return memberships.first.status;
+});
+
 /// The set of permission keys granted to the current user's role (e.g.
 /// `staff.invite`, `sales.make`). Empty until the role + its grants are
 /// resolved locally. Use [hasPermission] for a single-key check.

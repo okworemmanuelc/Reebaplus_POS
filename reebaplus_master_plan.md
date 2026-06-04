@@ -993,7 +993,20 @@ Stock keeper, Manager, CEO. Cashier blocked.
 
 ### 19.4 Order card
 
-Uses short Order ID (e.g., ORD-000001), not the long UUID. Shows customer name, address, status badge, payment method, timestamp, line items, total, paid amount.
+Uses short Order ID (e.g., ORD-000001), not the long UUID. Shows customer name, address, status badge, payment method, timestamp, **who created the order**, line items, total, paid amount.
+
+> Created by (2026-06-04, user). "Who created the order" is the staff member who
+> rang up the sale (`orders.staff_id`). Shown on **every** tab (Pending /
+> Completed / Cancelled) and to **every** role — it is not a monetary value, so
+> it is not hidden from Cashier / Stock keeper (§19.3). Falls back to "—" for any
+> legacy order with no recorded seller.
+
+> Order creator shown (2026-06-04, user). Every order card shows the name of the
+> staff member who created it (`orders.staffId` → user name), on **all three
+> tabs** — Pending, Completed, Cancelled. The creator's name is **not** a monetary
+> value, so unlike the §19.3 money-hiding rule it is visible to **every** role.
+> Falls back to "Unknown" when the staff row can't be resolved (e.g. a member
+> removed from the business). Resolved via `usersByBusinessProvider`.
 
 ### 19.5 Pending order flow
 
@@ -1545,10 +1558,19 @@ Opens the relevant screen (Inventory for low stock, Expense for pending approval
 
 **Staff**
 
+- New staff invite generated (fires to CEO). Added 2026-06-04 (user) — distinct
+  from "invite accepted" below: the CEO is alerted when a **Manager** creates an
+  invite code, not only when it is later redeemed.
 - New staff invite accepted (fires to inviter + CEO).
 - Staff suspended/reactivated (fires to CEO).
 - Role changed (fires to CEO + affected staff).
 - Staff hit 5 wrong PIN attempts → forced Forgot PIN (fires to CEO).
+
+> Actor is never self-notified (2026-06-04, user). The CEO-facing staff events
+> above fire only when **someone other than the CEO** performed the action (i.e.
+> a Manager) — the CEO is not notified of their own invite/suspend/role-change.
+> The "affected staff" recipient on a role change is always notified (they can't
+> change their own role, so they're never the actor).
 
 **Sales / Orders**
 

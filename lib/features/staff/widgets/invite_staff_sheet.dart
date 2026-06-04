@@ -118,6 +118,17 @@ class _InviteStaffSheetState extends ConsumerState<InviteStaffSheet> {
 
     setState(() => _generating = true);
     try {
+      // Resolved before any await so a mid-write dispose can't invalidate the
+      // ref reads. Drives the §26.4 invite-generated notification below.
+      final actorIsCeo = ref.read(currentUserRoleProvider)?.slug == 'ceo';
+      final roles = ref.read(allRolesProvider).valueOrNull ?? const <RoleData>[];
+      var invitedRoleName = 'staff';
+      for (final r in roles) {
+        if (r.id == _roleId) {
+          invitedRoleName = r.name;
+          break;
+        }
+      }
       final code = _randomCode();
       final companion = InviteCodesCompanion.insert(
         id: Value(UuidV7.generate()),
@@ -137,6 +148,20 @@ class _InviteStaffSheetState extends ConsumerState<InviteStaffSheet> {
         staffId: currentUser.id,
         storeId: _storeId,
       );
+      // §26.4 Staff — "New staff invite generated (fires to CEO)". Fires only
+      // when a non-CEO (a Manager) generated it; the CEO is never self-notified.
+      if (!actorIsCeo) {
+        final ceoIds = await db.userBusinessesDao.getUserIdsForRoleSlugs(['ceo']);
+        for (final ceoId in ceoIds) {
+          if (ceoId == currentUser.id) continue;
+          await db.notificationsDao.fireNotification(
+            type: 'staff.invited',
+            message: '${currentUser.name} invited $email as $invitedRoleName',
+            linkedRecordId: companion.id.value,
+            recipientUserId: ceoId,
+          );
+        }
+      }
       if (!mounted) return;
       setState(() {
         _generatedCode = code;

@@ -409,6 +409,14 @@ class _NotificationCard extends ConsumerWidget {
         return FontAwesomeIcons.circleCheck;
       case 'stock_approval.rejected':
         return FontAwesomeIcons.circleXmark;
+      case 'staff.invited':
+        return FontAwesomeIcons.userPlus;
+      case 'staff.suspended':
+        return FontAwesomeIcons.userSlash;
+      case 'staff.reactivated':
+        return FontAwesomeIcons.userCheck;
+      case 'staff.role_changed':
+        return FontAwesomeIcons.userGear;
       default:
         return FontAwesomeIcons.bell;
     }
@@ -440,6 +448,14 @@ class _NotificationCard extends ConsumerWidget {
         return success;
       case 'stock_approval.rejected':
         return danger;
+      case 'staff.invited':
+        return blueMain;
+      case 'staff.suspended':
+        return danger;
+      case 'staff.reactivated':
+        return success;
+      case 'staff.role_changed':
+        return blueMain;
       default:
         return blueMain;
     }

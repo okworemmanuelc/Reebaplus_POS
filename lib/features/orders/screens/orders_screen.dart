@@ -1354,6 +1354,14 @@ class _OrderCard extends ConsumerWidget {
     final walletBalanceKobo = customer == null ? 0 : (balances[customer.id] ?? 0);
     final showWalletDebt = customer != null && walletBalanceKobo < 0;
 
+    // §19.4: who created the order (staffId → user name). Not a monetary value,
+    // so it shows for every role (the §19.3 money-hiding rule does not apply).
+    final users =
+        ref.watch(usersByBusinessProvider).valueOrNull ?? const <String, UserData>{};
+    final creatorName = order.staffId == null
+        ? 'Unknown'
+        : (users[order.staffId!]?.name ?? 'Unknown');
+
     // Timestamp
     final time = status == 'pending'
         ? order.createdAt
@@ -1501,7 +1509,7 @@ class _OrderCard extends ConsumerWidget {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'Order #${order.id}',
+                                      'Order #${order.orderNumber}',
                                       style: TextStyle(
                                         color: subtextCol,
                                         fontWeight: FontWeight.w600,
@@ -1514,6 +1522,29 @@ class _OrderCard extends ConsumerWidget {
                                         color: subtextCol,
                                         fontSize: context.getRFontSize(11),
                                       ),
+                                    ),
+                                    // §19.4: who created the order — shown on
+                                    // every tab, for every role.
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          FontAwesomeIcons.user,
+                                          size: context.getRSize(9),
+                                          color: subtextCol,
+                                        ),
+                                        SizedBox(width: context.getRSize(4)),
+                                        Flexible(
+                                          child: Text(
+                                            'By $creatorName',
+                                            style: TextStyle(
+                                              color: subtextCol,
+                                              fontSize: context.getRFontSize(11),
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),
