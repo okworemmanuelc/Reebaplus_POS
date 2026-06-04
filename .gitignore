@@ -53,6 +53,16 @@ app.*.map.json
 .env.production
 .env.test
 .envrc
+# Keys / signing / service accounts (belt-and-suspenders; hooks also enforce these)
+*.jks
+*.keystore
+*.pem
+*.p12
+*.p8
+*.pfx
+google-services.json
+GoogleService-Info.plist
+service-account*.json
 Thumbs.db
 
 # Local properties (machine-specific)

@@ -384,8 +384,10 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
   /// The POS Opening-Cash block (§23.4 / hard rule #10). Manager/CEO can tap
   /// through to the Funds Register Open Day; Cashier is told to wait.
   Widget _buildDayNotOpenBlock(BuildContext context) {
-    final slug = ref.watch(currentUserRoleProvider)?.slug;
-    final canOpen = slug == 'ceo' || slug == 'manager';
+    // Tap-through to Open Day is gated on the `funds.open_day` permission (hard
+    // rule #6), not the role slug — so a CEO-revoked Manager is told to wait,
+    // consistent with the Funds Register form.
+    final canOpen = hasPermission(ref, 'funds.open_day');
     final theme = Theme.of(context);
     final onSurface = theme.colorScheme.onSurface;
 
@@ -455,6 +457,9 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
             : totalQty.toStringAsFixed(1);
 
         return AppFAB(
+          // POS is a bottom-nav tab root — the visible bottom bar already lifts
+          // the FAB above the system nav; don't add the inset.
+          reserveBottomInset: false,
           onPressed: () {
             ref.read(navigationProvider).setIndex(8); // 8 = CartScreen (9 is Deliveries)
           },
@@ -658,7 +663,9 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
               Flexible(
                 child: GridView.builder(
                   shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
+                  // Scrolls within the sheet when there are more stores than
+                  // fit — otherwise the fixed grid overflows the bottom.
+                  physics: const ClampingScrollPhysics(),
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 2,
                     crossAxisSpacing: 16,

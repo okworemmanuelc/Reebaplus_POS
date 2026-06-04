@@ -34,7 +34,18 @@ class PaymentsScreen extends ConsumerStatefulWidget {
 class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  String _periodFilter = 'Last 30 days'; // §30.6/§30.11 default
+  String _periodFilter = 'This Month'; // §30.6/§30.11 default
+
+  /// Period labels this viewer may choose (§19.2/§30.11 — roles below Manager
+  /// are capped to Today/This Week/This Month).
+  List<String> get _periodOptions =>
+      datePeriodLabelsForRole(managerUp: isManagerOrAbove(ref));
+
+  /// [_periodFilter] clamped into [_periodOptions], so the dropdown value and
+  /// the list filter agree for capped viewers.
+  String get _effectivePeriod => _periodOptions.contains(_periodFilter)
+      ? _periodFilter
+      : _periodOptions.last;
   String _supplierFilter = 'All';
   Color get _bg => Theme.of(context).scaffoldBackgroundColor;
   Color get _surface => Theme.of(context).colorScheme.surface;
@@ -58,6 +69,31 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
   @override
   Widget build(BuildContext context) {
     ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
+    // §22 access: Supplier Accounts is gated by `suppliers.manage` (CEO + Manager
+    // by default; independently revocable per staff via override). The drawer
+    // entry is already gated, but guard the screen too (CLAUDE.md coding rule #1)
+    // so a programmatic tab switch can't bypass it — and so a per-user override
+    // takes effect. Fail CLOSED: `perms` is empty while grants load → show a
+    // spinner rather than flashing no-access for a legitimate user.
+    final perms = ref.watch(currentUserPermissionsProvider);
+    if (!perms.contains('suppliers.manage')) {
+      return Scaffold(
+        backgroundColor: _bg,
+        drawer: const AppDrawer(activeRoute: 'supplier_accounts'),
+        appBar: _buildAppBar(context),
+        body: Center(
+          child: perms.isEmpty
+              ? const CircularProgressIndicator()
+              : Text(
+                  'You don’t have access to Supplier Accounts.',
+                  style: TextStyle(
+                    color: _subtext,
+                    fontSize: context.getRFontSize(14),
+                  ),
+                ),
+        ),
+      );
+    }
     return Scaffold(
           backgroundColor: _bg,
           drawer: const AppDrawer(activeRoute: 'supplier_accounts'),
@@ -225,9 +261,9 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
             ],
           ),
             AppDropdown<String>(
-              value: _periodFilter,
+              value: _effectivePeriod,
               width: context.getRSize(130),
-              items: kDatePeriodLabels.map((String val) {
+              items: _periodOptions.map((String val) {
                 return DropdownMenuItem<String>(value: val, child: Text(val));
               }).toList(),
               onChanged: (val) {
@@ -313,7 +349,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
     return Builder(
       builder: (context) {
         final paymentSvc = ref.watch(paymentServiceProvider);
-        final periodPayments = paymentSvc.getByPeriod(_periodFilter);
+        final periodPayments = paymentSvc.getByPeriod(_effectivePeriod);
 
         // Compute unique suppliers for chips
         final Set<String> supplierNames = {};

@@ -7,6 +7,12 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+// sync-exempt-file: this is the sync engine — `_restoreTableData`,
+// `_applyDomainResponse`, `_deleteLocalRowById`, and the backfill path write
+// cloud-authoritative state back into the local mirror (CLAUDE.md §5 #1/#2).
+// Enqueuing here would push the cloud's own data back to it. The sync-write
+// leak scanner (test/sync/sync_raw_write_leak_test.dart) skips this file.
+
 /// Thrown by [SupabaseSyncService.flushSale] when a `domain:pos_record_sale`
 /// envelope fails permanently at the server (insufficient_stock, FK / unique
 /// violation, tenant mismatch). The local optimistic sale has already
@@ -457,6 +463,11 @@ class SupabaseSyncService {
     switch (table) {
       case 'role_permissions':
         await (_db.delete(_db.rolePermissions)..where((t) => t.id.equals(id)))
+            .go();
+        break;
+      case 'user_permission_overrides':
+        await (_db.delete(_db.userPermissionOverrides)
+              ..where((t) => t.id.equals(id)))
             .go();
         break;
       case 'saved_carts':
@@ -1427,6 +1438,11 @@ class SupabaseSyncService {
     'roles',
     'role_settings',
     'role_permissions',
+    // v33 (§10.2.1) — per-staff permission overrides. References businesses +
+    // users (pulled above) and the global permissions catalogue, so FK-safe
+    // here. Without this entry the pull/restore/realtime loops never ingest it
+    // and an override set on one device never reaches the others.
+    'user_permission_overrides',
     'user_businesses',
     'user_stores',
     // invite_codes references business/role/store/generated-by-user — all
@@ -1456,6 +1472,8 @@ class SupabaseSyncService {
     'drivers',
     'stock_transfers',
     'stock_adjustments',
+    // v34 (§16.6.1) — references products/stores/users, all pulled above.
+    'stock_adjustment_requests',
     'activity_logs',
     'notifications',
     'stock_transactions',
@@ -1701,6 +1719,7 @@ class SupabaseSyncService {
   /// carry `is_deleted` and must NEVER be hard-removed by a reconcile.
   static const _hardDeleteReconcileTables = {
     'role_permissions',
+    'user_permission_overrides',
     'saved_carts',
     'notifications',
   };
@@ -1759,6 +1778,11 @@ class SupabaseSyncService {
     switch (table) {
       case 'role_permissions':
         return (_db.delete(_db.rolePermissions)
+              ..where((t) =>
+                  t.businessId.equals(businessId) & t.id.isIn(ids).not()))
+            .go();
+      case 'user_permission_overrides':
+        return (_db.delete(_db.userPermissionOverrides)
               ..where((t) =>
                   t.businessId.equals(businessId) & t.id.isIn(ids).not()))
             .go();
@@ -2834,6 +2858,29 @@ class SupabaseSyncService {
             await _db.into(_db.rolePermissions).insertOnConflictUpdate(row);
           }
           break;
+        case 'user_permission_overrides':
+          for (var r in rows) {
+            final row = UserPermissionOverrideData.fromJson(r);
+            // Same shape as role_permissions: random `id`, logical identity
+            // (business_id, user_id, permission_key) enforced by UNIQUE. Two
+            // devices overriding the same (user, permission) mint different ids
+            // for the same triple, so upserting on `id` alone trips the unique
+            // constraint (2067). Drop any local row with the same logical key
+            // but a different id first, so the incoming cloud row applies
+            // cleanly and the device converges on the cloud's id. Restore path
+            // — local only, never enqueue (§5 exception #1; re-pushing loops).
+            await (_db.delete(_db.userPermissionOverrides)
+                  ..where((t) =>
+                      t.businessId.equals(row.businessId) &
+                      t.userId.equals(row.userId) &
+                      t.permissionKey.equals(row.permissionKey) &
+                      t.id.equals(row.id).not()))
+                .go();
+            await _db
+                .into(_db.userPermissionOverrides)
+                .insertOnConflictUpdate(row);
+          }
+          break;
         case 'role_settings':
           for (var r in rows) {
             await _db
@@ -3137,6 +3184,21 @@ class SupabaseSyncService {
               () => _db
                   .into(_db.stockAdjustments)
                   .insertOnConflictUpdate(StockAdjustmentData.fromJson(r)),
+            );
+          }
+          break;
+        case 'stock_adjustment_requests':
+          // §16.6.1 approval queue. FK-resilient: references products / stores /
+          // users. Plain id-keyed upsert (the client-minted id is preserved
+          // cloud-side), so an approve/reject status flip from one device
+          // overwrites the pending row on the others.
+          for (var r in rows) {
+            await _insertResilient(
+              'stock_adjustment_requests',
+              r,
+              fkSkipped,
+              () => _db.into(_db.stockAdjustmentRequests).insertOnConflictUpdate(
+                  StockAdjustmentRequestData.fromJson(r)),
             );
           }
           break;

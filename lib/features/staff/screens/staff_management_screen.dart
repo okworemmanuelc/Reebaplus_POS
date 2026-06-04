@@ -72,6 +72,45 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen>
 
   @override
   Widget build(BuildContext context) {
+    // §9 access: Staff Management is gated by `staff.invite` (CEO + Manager by
+    // default; revocable per staff via override). The drawer entry is already
+    // permission-gated (hard rule #7), but guard the screen too (coding rule #1)
+    // so an alternate/stale entry can't bypass it and a per-user override takes
+    // effect. The FAB below builds only past this gate. Fail CLOSED: `perms` is
+    // empty while grants load → spinner, not a flash of no-access.
+    final perms = ref.watch(currentUserPermissionsProvider);
+    if (!perms.contains('staff.invite')) {
+      return Scaffold(
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        appBar: AppBar(
+          backgroundColor: _surface,
+          elevation: 0,
+          leading: IconButton(
+            icon: Icon(Icons.arrow_back_ios_new, color: _text, size: 20),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: Text(
+            'Staff',
+            style: TextStyle(
+              color: _text,
+              fontSize: context.getRFontSize(16),
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        body: Center(
+          child: perms.isEmpty
+              ? const CircularProgressIndicator()
+              : Text(
+                  'You don’t have access to Staff Management.',
+                  style: TextStyle(
+                    color: _subtext,
+                    fontSize: context.getRFontSize(14),
+                  ),
+                ),
+        ),
+      );
+    }
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: _buildAppBar(context),

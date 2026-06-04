@@ -46,7 +46,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
   CustomerData? _customerData;
   int _walletBalance = 0;
   List<WalletTransactionData> _walletHistory = [];
-  String _selectedPeriod = 'To date'; // §30.11 canonical chip set
+  String _selectedPeriod = 'To Date'; // §30.11 canonical chip set
   List<OrderData> _orders = [];
   List<CrateBalanceEntry> _crateBalances = [];
 
@@ -124,8 +124,19 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
       _customerData?.walletLimitKobo ?? widget.customer?.walletLimitKobo ?? 0;
   String? get _customerId => widget.customer?.id;
 
+  /// Period labels this viewer may choose (§19.2/§30.11 — roles below Manager
+  /// are capped to Today/This Week/This Month).
+  List<String> get _periodOptions =>
+      datePeriodLabelsForRole(managerUp: isManagerOrAbove(ref));
+
+  /// [_selectedPeriod] clamped into [_periodOptions], so the dropdown value and
+  /// the filter agree for capped viewers (default is "To Date", out of their set).
+  String get _effectivePeriod => _periodOptions.contains(_selectedPeriod)
+      ? _selectedPeriod
+      : _periodOptions.last;
+
   List<WalletTransactionData> get _filteredHistory {
-    final window = datePeriodFromLabel(_selectedPeriod);
+    final window = datePeriodFromLabel(_effectivePeriod);
     return _walletHistory
         .where((txn) => window.includes(txn.createdAt))
         .toList();
@@ -347,6 +358,23 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                                   ? 'cash'
                                   : 'transfer';
                               final messenger = ScaffoldMessenger.of(context);
+                              // Defense-in-depth write-boundary re-check (§10.2.1):
+                              // the Add Funds button is already render-gated on
+                              // `customers.wallet.update`, but re-check the
+                              // effective permission before moving money so a
+                              // revoked override is honored at the action too.
+                              if (!ref
+                                  .read(currentUserPermissionsProvider)
+                                  .contains('customers.wallet.update')) {
+                                Navigator.pop(ctx);
+                                messenger.showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                        'You don\'t have permission to do that.'),
+                                  ),
+                                );
+                                return;
+                              }
                               Navigator.pop(ctx);
                               try {
                                 await ref
@@ -1089,7 +1117,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                 SizedBox(width: context.getRSize(8)),
                 Expanded(
                   child: DropdownButton<String>(
-                    value: _selectedPeriod,
+                    value: _effectivePeriod,
                     isExpanded: true,
                     underline: const SizedBox.shrink(),
                     isDense: true,
@@ -1104,13 +1132,13 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                       size: context.getRSize(11),
                       color: theme.colorScheme.onSurface.withAlpha(128),
                     ),
-                    items: kDatePeriodLabels
+                    items: _periodOptions
                         .map(
                           (p) => DropdownMenuItem(value: p, child: Text(p)),
                         )
                         .toList(),
                     onChanged: (v) =>
-                        setState(() => _selectedPeriod = v ?? 'To date'),
+                        setState(() => _selectedPeriod = v ?? 'To Date'),
                   ),
                 ),
               ],
@@ -1297,11 +1325,11 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
 
     return Column(
       children: [
-        // §18.4: Total In / Total Out are hidden for roles below Manager unless
-        // the CEO grants `customers.wallet.totals.view`. Manager + CEO always
-        // see them (isManagerOrAbove).
-        if (isManagerOrAbove(ref) ||
-            hasPermission(ref, 'customers.wallet.totals.view')) ...[
+        // §18.4: Total In / Total Out are gated by `customers.wallet.totals.view`
+        // (granted to Manager + CEO by default; the CEO can revoke it per staff
+        // member). Read the effective permission — no role-tier bypass — so a
+        // per-user override actually takes effect.
+        if (hasPermission(ref, 'customers.wallet.totals.view')) ...[
           _buildWalletSummaryRow(theme),
           SizedBox(height: context.getRSize(4)),
         ],

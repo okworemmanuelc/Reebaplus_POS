@@ -51,7 +51,10 @@ class _QuickSaleModalState extends ConsumerState<QuickSaleModal> {
         'Quick Sale ⚡',
         style: TextStyle(color: widget.textCol, fontWeight: FontWeight.bold),
       ),
-      content: Column(
+      // Scrolls so the three fields + actions never overflow the dialog when
+      // the keyboard shrinks the available height on small screens.
+      content: SingleChildScrollView(
+        child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           AppInput(
@@ -82,6 +85,7 @@ class _QuickSaleModalState extends ConsumerState<QuickSaleModal> {
             inputFormatters: [CurrencyInputFormatter()],
           ),
         ],
+      ),
       ),
       actions: [
         AppButton(

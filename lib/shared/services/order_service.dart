@@ -167,6 +167,8 @@ class OrderService {
     String orderId,
     List<OrderItemsCompanion> items,
   ) async {
+    // sync-exempt: §5 #3 — local-only reversal of writes the cloud's RPC
+    // already rolled back (insufficient_stock etc.); nothing to push.
     await _db.transaction(() async {
       // 1. Mark order cancelled.
       await (_db.update(_db.orders)

@@ -114,30 +114,6 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   bool get _canSeeSuppliers =>
       ref.read(currentUserPermissionsProvider).contains('suppliers.manage');
 
-  /// §26.4: when a **stock keeper** adds or removes stock, notify every CEO +
-  /// Manager so they see the movement (and the reason, on a removal). No-op for
-  /// any other actor — a Manager/CEO adjusting their own stock shouldn't notify
-  /// themselves. Mirrors the CEO+Manager fan-out used by the stock-count screen.
-  Future<void> _notifyLeadershipOfStockAdjustment({
-    required String summary,
-    required bool isRemove,
-    required String productId,
-  }) async {
-    if (ref.read(currentUserRoleProvider)?.slug != 'stock_keeper') return;
-    final db = ref.read(databaseProvider);
-    final recipients =
-        await db.userBusinessesDao.getUserIdsForRoleSlugs(['ceo', 'manager']);
-    for (final uid in recipients) {
-      await db.notificationsDao.fireNotification(
-        type: 'stock_adjustment',
-        message: summary,
-        severity: isRemove ? 'warning' : 'info',
-        linkedRecordId: productId,
-        recipientUserId: uid,
-      );
-    }
-  }
-
   @override
   void initState() {
     super.initState();
@@ -1181,18 +1157,17 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                 children: [
                   Icon(
                     Icons.lock_outline,
-                    size: context.getRSize(16),
+                    size: context.getRSize(14),
                     color: _subtext,
                   ),
-                  SizedBox(width: context.getRSize(8)),
-                  Flexible(
-                    child: Text(
-                      'View only — this product is not in your store',
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: context.getRFontSize(13),
-                        color: _subtext,
-                      ),
+                  SizedBox(width: context.getRSize(6)),
+                  Text(
+                    'VIEW ONLY',
+                    style: TextStyle(
+                      fontSize: context.getRFontSize(12),
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.8,
+                      color: _subtext,
                     ),
                   ),
                 ],
@@ -1707,10 +1682,12 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     );
   }
 
-  /// Stock keeper "Update Stock" modal (master plan §16.6): add / remove a
-  /// quantity against a store, with a required reason on removal, optional
-  /// notes. Writes through `adjustStock` (so the cloud delta envelope is
-  /// enqueued) and logs to History.
+  /// "Update Stock" modal (master plan §16.6): add / remove a quantity against
+  /// a store, with a required reason on removal, optional notes. A **stock
+  /// keeper**'s change is queued for Manager/CEO approval (§16.6.1) via
+  /// `requestStockAdjustment` — inventory is untouched until approved. A
+  /// Manager/CEO applies it directly through `adjustStock` (cloud delta
+  /// envelope enqueued) and logs to History.
   Future<void> _showUpdateStockModal() async {
     final product = _productData;
     if (product == null) return;
@@ -1722,276 +1699,99 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       return;
     }
 
-    final qtyCtrl = TextEditingController();
-    final notesCtrl = TextEditingController();
-    // Add and Remove are gated separately (stock.add vs stock.adjust). The modal
-    // only opened because the viewer holds at least one; start in whichever mode
-    // is allowed (Add by default).
-    final canAdd = _canAddStock;
-    final canRemove = _canAdjustStock;
-    var isRemove = !canAdd && canRemove;
-    const reasons = ['Damage', 'Theft', 'Expired', 'Other'];
-    String? reason;
-    StoreData selectedStore = stores.cast<StoreData?>().firstWhere(
-          (s) => s?.id == widget.selectedStoreId,
-          orElse: () => stores.first,
-        )!;
-    var saving = false;
-
+    // The sheet owns its own text controllers and disposes them in its
+    // State.dispose() (matches every other sheet in the app). Disposing them
+    // here, after `await showModalBottomSheet`, raced the closing animation and
+    // threw "TextEditingController used after being disposed".
+    // Flipped by onSave when a stock keeper's change is queued for approval
+    // (§16.6.1) rather than applied directly — drives the confirmation toast.
+    var sentForApproval = false;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (sheetCtx) {
-        return StatefulBuilder(
-          builder: (sheetCtx, setSheet) {
-            Future<void> doSave() async {
-              final qty = int.tryParse(qtyCtrl.text.trim()) ?? 0;
-              if (qty <= 0) {
-                AppNotification.showError(
-                  sheetCtx,
-                  'Quantity must be greater than 0.',
-                );
-                return;
-              }
-              if (isRemove && reason == null) {
-                AppNotification.showError(
-                  sheetCtx,
-                  'A reason is required when removing stock.',
-                );
-                return;
-              }
-              // Defense-in-depth (hard rule #6): re-check the mode's permission
-              // live, in case it was revoked while the sheet was open.
-              if (isRemove && !_canAdjustStock) {
-                AppNotification.showError(
-                    sheetCtx, 'You don\'t have permission to remove stock.');
-                return;
-              }
-              if (!isRemove && !_canAddStock) {
-                AppNotification.showError(
-                    sheetCtx, 'You don\'t have permission to add stock.');
-                return;
-              }
-              setSheet(() => saving = true);
-              final auth = ref.read(authProvider);
-              final actorName = auth.currentUser?.name ?? 'Unknown';
-              final notes = notesCtrl.text.trim();
-              final delta = isRemove ? -qty : qty;
-              final note = isRemove
-                  ? '${reason!}${notes.isEmpty ? '' : ': $notes'}'
-                  : (notes.isEmpty ? 'Stock added by $actorName' : notes);
-              try {
-                await db.inventoryDao.adjustStock(
-                  product.id,
-                  selectedStore.id,
-                  delta,
-                  note,
-                  auth.currentUser?.id,
-                );
-                final summary =
-                    '$actorName ${isRemove ? 'removed' : 'added'} $qty '
-                    '${product.unit}(s) of ${product.name} '
-                    '(${selectedStore.name})'
-                    '${isRemove ? ' — ${reason!}' : ''}';
-                await ref.read(activityLogProvider).logAction(
-                      'stock_adjustment',
-                      summary,
-                      productId: product.id,
-                      storeId: selectedStore.id,
-                    );
-                // §26.4: tell CEO + Managers when a stock keeper moves stock.
-                await _notifyLeadershipOfStockAdjustment(
-                  summary: summary,
-                  isRemove: isRemove,
-                  productId: product.id,
-                );
-                if (sheetCtx.mounted) Navigator.pop(sheetCtx);
-                widget.onUpdateStock();
-                // Reflect the change on this screen immediately (#1).
-                await _refreshLiveStock();
-              } catch (e) {
-                debugPrint('UpdateStock modal save error: $e');
-                if (sheetCtx.mounted) {
-                  AppNotification.showError(
-                    sheetCtx,
-                    'Could not update stock: $e',
-                  );
-                }
-                setSheet(() => saving = false);
-              }
-            }
-
-            Widget modeChip(String label, bool removeMode) {
-              final selected = isRemove == removeMode;
-              final color = removeMode ? danger : success;
-              return Expanded(
-                child: GestureDetector(
-                  onTap: () => setSheet(() {
-                    isRemove = removeMode;
-                    if (!removeMode) reason = null;
-                  }),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    decoration: BoxDecoration(
-                      color: selected
-                          ? color.withValues(alpha: 0.15)
-                          : _surface,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: selected ? color : _border,
-                        width: selected ? 1.5 : 1,
-                      ),
-                    ),
-                    child: Center(
-                      child: Text(
-                        label,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: selected ? color : _subtext,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
+      builder: (_) => _UpdateStockSheet(
+        product: product,
+        stores: stores,
+        initialStoreId: widget.selectedStoreId,
+        // Add and Remove are gated separately (stock.add vs stock.adjust).
+        canAdd: _canAddStock,
+        canRemove: _canAdjustStock,
+        // Re-checked live at save time (hard rule #6) in case a permission is
+        // revoked while the sheet is open — these getters read live perms.
+        canAddNow: () => _canAddStock,
+        canRemoveNow: () => _canAdjustStock,
+        onSave: ({
+          required bool isRemove,
+          required int qty,
+          required StoreData store,
+          String? reason,
+          required String notes,
+        }) async {
+          final auth = ref.read(authProvider);
+          final actorName = auth.currentUser?.name ?? 'Unknown';
+          final delta = isRemove ? -qty : qty;
+          final note = isRemove
+              ? '${reason!}${notes.isEmpty ? '' : ': $notes'}'
+              : (notes.isEmpty ? 'Stock added by $actorName' : notes);
+          final summary = '$actorName ${isRemove ? 'removed' : 'added'} $qty '
+              '${product.unit}(s) of ${product.name} '
+              '(${store.name})'
+              '${isRemove ? ' — ${reason!}' : ''}';
+          final isStockKeeper =
+              ref.read(currentUserRoleProvider)?.slug == 'stock_keeper';
+          try {
+            if (isStockKeeper) {
+              // §16.6.1 — a stock keeper's change needs Manager/CEO approval.
+              // Record a pending request; inventory stays untouched until it is
+              // approved in the Reports hub. The DAO fires the approval-request
+              // notification to the CEO + the affected store's Manager(s).
+              await db.stockAdjustmentRequestsDao.requestStockAdjustment(
+                productId: product.id,
+                storeId: store.id,
+                quantityDiff: delta,
+                reason: note,
+                summary: summary,
+                requestedBy: auth.currentUser?.id,
               );
+              sentForApproval = true;
+              return null;
             }
-
-            return Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(sheetCtx).viewInsets.bottom,
-              ),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: _bg,
-                  borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(28)),
-                ),
-                padding: EdgeInsets.fromLTRB(
-                  20,
-                  16,
-                  20,
-                  20 + sheetCtx.deviceBottomInset,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 40,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: _border,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Update Stock',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        color: _text,
-                      ),
-                    ),
-                    Text(
-                      product.name,
-                      style: TextStyle(fontSize: 13, color: _subtext),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        if (canAdd) modeChip('Add stock', false),
-                        if (canAdd && canRemove) const SizedBox(width: 10),
-                        if (canRemove) modeChip('Remove stock', true),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-                    if (stores.length > 1) ...[
-                      Text(
-                        'STORE',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: _subtext,
-                          letterSpacing: 0.8,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      AppDropdown<StoreData>(
-                        value: selectedStore,
-                        items: stores
-                            .map(
-                              (s) => DropdownMenuItem(
-                                value: s,
-                                child: Text(
-                                  s.name,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (v) =>
-                            setSheet(() => selectedStore = v ?? selectedStore),
-                      ),
-                      const SizedBox(height: 14),
-                    ],
-                    AppInput(
-                      controller: qtyCtrl,
-                      labelText: 'Quantity *',
-                      hintText: '0',
-                      keyboardType: TextInputType.number,
-                    ),
-                    if (isRemove) ...[
-                      const SizedBox(height: 14),
-                      Text(
-                        'REASON *',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: _subtext,
-                          letterSpacing: 0.8,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      AppDropdown<String?>(
-                        value: reason,
-                        hintText: 'Select a reason',
-                        items: reasons
-                            .map(
-                              (r) =>
-                                  DropdownMenuItem(value: r, child: Text(r)),
-                            )
-                            .toList(),
-                        onChanged: (v) => setSheet(() => reason = v),
-                      ),
-                    ],
-                    const SizedBox(height: 14),
-                    AppInput(
-                      controller: notesCtrl,
-                      labelText: 'Notes (optional)',
-                      hintText: 'Any extra detail…',
-                    ),
-                    const SizedBox(height: 20),
-                    AppButton(
-                      text: isRemove ? 'Remove Stock' : 'Add Stock',
-                      variant: AppButtonVariant.primary,
-                      isLoading: saving,
-                      onPressed: doSave,
-                    ),
-                  ],
-                ),
-              ),
+            // Manager / CEO adjust directly — no approval needed.
+            await db.inventoryDao.adjustStock(
+              product.id,
+              store.id,
+              delta,
+              note,
+              auth.currentUser?.id,
             );
-          },
-        );
-      },
+            await ref.read(activityLogProvider).logAction(
+                  'stock_adjustment',
+                  summary,
+                  productId: product.id,
+                  storeId: store.id,
+                );
+            widget.onUpdateStock();
+            // Reflect the change on this screen immediately (#1).
+            await _refreshLiveStock();
+            return null;
+          } catch (e) {
+            debugPrint('UpdateStock modal save error: $e');
+            return isStockKeeper
+                ? 'Could not send for approval: $e'
+                : 'Could not update stock: $e';
+          }
+        },
+      ),
     );
-    qtyCtrl.dispose();
-    notesCtrl.dispose();
+    if (!mounted) return;
+    if (sentForApproval) {
+      AppNotification.showSuccess(
+        context,
+        'Sent for approval. A manager or the CEO must approve before the '
+        'stock changes.',
+      );
+    }
   }
 
   /// Bordered inline text/number field used as an `_infoRow` trailing. Editable
@@ -2170,6 +1970,299 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             },
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _UpdateStockSheet — the Stock keeper's "Update Stock" bottom sheet (§16.6).
+//
+// Owns its own text controllers and disposes them in State.dispose(), so the
+// framework tears the fields down before the controllers go away. The previous
+// inline version created the controllers in the caller and disposed them right
+// after `await showModalBottomSheet`, which raced the closing animation and
+// threw "TextEditingController used after being disposed". The save side
+// effects — a stock keeper's approval request, or a Manager/CEO's direct
+// adjustment + activity log + screen refresh — stay on the screen (private
+// members) and run via [onSave].
+// ─────────────────────────────────────────────────────────────────────────────
+class _UpdateStockSheet extends ConsumerStatefulWidget {
+  const _UpdateStockSheet({
+    required this.product,
+    required this.stores,
+    required this.initialStoreId,
+    required this.canAdd,
+    required this.canRemove,
+    required this.canAddNow,
+    required this.canRemoveNow,
+    required this.onSave,
+  });
+
+  final ProductData product;
+  final List<StoreData> stores;
+  final String? initialStoreId;
+  final bool canAdd;
+  final bool canRemove;
+  // Live permission re-checks evaluated at save time (hard rule #6).
+  final bool Function() canAddNow;
+  final bool Function() canRemoveNow;
+  // Performs the movement on the screen. Returns null on success, or an error
+  // message to surface in the sheet (the sheet stays open on error).
+  final Future<String?> Function({
+    required bool isRemove,
+    required int qty,
+    required StoreData store,
+    String? reason,
+    required String notes,
+  }) onSave;
+
+  @override
+  ConsumerState<_UpdateStockSheet> createState() => _UpdateStockSheetState();
+}
+
+class _UpdateStockSheetState extends ConsumerState<_UpdateStockSheet> {
+  final _qtyCtrl = TextEditingController();
+  final _notesCtrl = TextEditingController();
+  static const _reasons = ['Damage', 'Theft', 'Expired', 'Other'];
+
+  late bool _isRemove;
+  String? _reason;
+  late StoreData _selectedStore;
+  bool _saving = false;
+
+  Color get _bg => Theme.of(context).scaffoldBackgroundColor;
+  Color get _surface => Theme.of(context).colorScheme.surface;
+  Color get _text => Theme.of(context).colorScheme.onSurface;
+  Color get _subtext =>
+      Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6);
+  Color get _border => Theme.of(context).dividerColor;
+
+  @override
+  void initState() {
+    super.initState();
+    // Start in whichever mode is allowed (Add by default).
+    _isRemove = !widget.canAdd && widget.canRemove;
+    _selectedStore = widget.stores.cast<StoreData?>().firstWhere(
+          (s) => s?.id == widget.initialStoreId,
+          orElse: () => widget.stores.first,
+        )!;
+  }
+
+  @override
+  void dispose() {
+    _qtyCtrl.dispose();
+    _notesCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _doSave() async {
+    final qty = int.tryParse(_qtyCtrl.text.trim()) ?? 0;
+    if (qty <= 0) {
+      AppNotification.showError(context, 'Quantity must be greater than 0.');
+      return;
+    }
+    if (_isRemove && _reason == null) {
+      AppNotification.showError(
+        context,
+        'A reason is required when removing stock.',
+      );
+      return;
+    }
+    // Defense-in-depth (hard rule #6): re-check the mode's permission live, in
+    // case it was revoked while the sheet was open.
+    if (_isRemove && !widget.canRemoveNow()) {
+      AppNotification.showError(
+          context, 'You don\'t have permission to remove stock.');
+      return;
+    }
+    if (!_isRemove && !widget.canAddNow()) {
+      AppNotification.showError(
+          context, 'You don\'t have permission to add stock.');
+      return;
+    }
+    setState(() => _saving = true);
+    final error = await widget.onSave(
+      isRemove: _isRemove,
+      qty: qty,
+      store: _selectedStore,
+      reason: _reason,
+      notes: _notesCtrl.text.trim(),
+    );
+    if (!mounted) return;
+    if (error == null) {
+      Navigator.pop(context);
+    } else {
+      AppNotification.showError(context, error);
+      setState(() => _saving = false);
+    }
+  }
+
+  Widget _modeChip(String label, bool removeMode) {
+    final selected = _isRemove == removeMode;
+    final color = removeMode ? danger : success;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() {
+          _isRemove = removeMode;
+          if (!removeMode) _reason = null;
+        }),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: selected ? color.withValues(alpha: 0.15) : _surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: selected ? color : _border,
+              width: selected ? 1.5 : 1,
+            ),
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: selected ? color : _subtext,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final product = widget.product;
+    final stores = widget.stores;
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          color: _bg,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            16,
+            20,
+            20 + context.deviceBottomInset,
+          ),
+          child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: _border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Update Stock',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: _text,
+              ),
+            ),
+            Text(
+              product.name,
+              style: TextStyle(fontSize: 13, color: _subtext),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                if (widget.canAdd) _modeChip('Add stock', false),
+                if (widget.canAdd && widget.canRemove)
+                  const SizedBox(width: 10),
+                if (widget.canRemove) _modeChip('Remove stock', true),
+              ],
+            ),
+            const SizedBox(height: 14),
+            if (stores.length > 1) ...[
+              Text(
+                'STORE',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: _subtext,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const SizedBox(height: 8),
+              AppDropdown<StoreData>(
+                value: _selectedStore,
+                items: stores
+                    .map(
+                      (s) => DropdownMenuItem(
+                        value: s,
+                        child: Text(
+                          s.name,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) =>
+                    setState(() => _selectedStore = v ?? _selectedStore),
+              ),
+              const SizedBox(height: 14),
+            ],
+            AppInput(
+              controller: _qtyCtrl,
+              labelText: 'Quantity *',
+              hintText: '0',
+              keyboardType: TextInputType.number,
+            ),
+            if (_isRemove) ...[
+              const SizedBox(height: 14),
+              Text(
+                'REASON *',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: _subtext,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const SizedBox(height: 8),
+              AppDropdown<String?>(
+                value: _reason,
+                hintText: 'Select a reason',
+                items: _reasons
+                    .map(
+                      (r) => DropdownMenuItem(value: r, child: Text(r)),
+                    )
+                    .toList(),
+                onChanged: (v) => setState(() => _reason = v),
+              ),
+            ],
+            const SizedBox(height: 14),
+            AppInput(
+              controller: _notesCtrl,
+              labelText: 'Notes (optional)',
+              hintText: 'Any extra detail…',
+            ),
+            const SizedBox(height: 20),
+            AppButton(
+              text: _isRemove ? 'Remove Stock' : 'Add Stock',
+              variant: AppButtonVariant.primary,
+              isLoading: _saving,
+              onPressed: _doSave,
+            ),
+          ],
+        ),
+        ),
       ),
     );
   }

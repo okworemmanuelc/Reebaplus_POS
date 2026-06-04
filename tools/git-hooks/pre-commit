@@ -1,0 +1,20 @@
+#!/bin/sh
+# Block secrets / sensitive files from being committed.
+# Active via:  git config core.hooksPath tools/git-hooks   (see README.md)
+# Override (only when you are SURE it's a false positive):  git commit --no-verify
+
+set -u
+DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+. "$DIR/_scan.sh"
+
+files=$(git diff --cached --name-only --diff-filter=ACM)
+diff=$(git diff --cached --diff-filter=ACM)
+
+if secret_scan "$files" "$diff"; then
+  exit 0
+fi
+
+printf '\n[BLOCKED] commit stopped: possible secret / sensitive file (see above).\n'
+printf '  - Remove it from the staging area, e.g.  git restore --staged <file>\n'
+printf '  - If it is genuinely safe, override with:  git commit --no-verify\n\n'
+exit 1

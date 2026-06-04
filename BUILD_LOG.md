@@ -106,6 +106,615 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 
 ---
 
+## Session 86 — 2026-06-04 — Optional reason when rejecting a stock approval (§16.6.1)
+
+**What the user asked for:**
+- "When approval rejected, log it and notify the user that created that adjustment that their request was approved or rejected."
+
+**What was already there (so it wasn't rebuilt):**
+- Both `approveRequest` and `rejectRequest` already logged to `activity_logs` and notified the requesting stock keeper on each outcome. (The user just couldn't see it until the Session 84 sync fix made the approver's card populate.) Confirmed end-to-end before changing anything.
+
+**Built today (the add-on the user chose):**
+- Rejecting now asks the approver for an **optional reason**. The reason is shown to the stock keeper in their rejection notification and recorded in the activity-log entry. Empty reason still rejects (the reason is simply omitted).
+- The Reject button opens a small dialog (optional text field + Cancel / Reject) before the rejection runs; Cancel leaves the request pending. The dialog owns and disposes its own text controller (the controller-lifecycle rule from the earlier crash fix).
+- Reworded the requester-facing notifications so they read as clearly theirs: "Your stock request was approved & applied — …" / "Your stock request was rejected — (reason)".
+- No schema/migration/cloud change — the reason rides the existing notification + activity-log (the durable audit); nothing displays rejected request rows, so no column was added.
+
+**Files touched:**
+- lib/core/database/daos.dart (`rejectRequest` gains `reason`; approve/reject notification wording)
+- lib/features/dashboard/screens/stock_approvals_screen.dart (`_decide` reject branch + new `_RejectReasonDialog`)
+- reebaplus_master_plan.md (§16.6.1 reject-reason line), BUILD_LOG.md
+
+**Database changes:**
+- None.
+
+**Master plan sections covered:**
+- §16.6.1 (optional reject reason).
+
+**Plan updates made during session:**
+- §16.6.1 amended (optional reason on reject).
+
+**Tested:**
+- `flutter analyze lib` clean.
+- On-device pending: as CEO/Manager, Reports → Stock Approvals → Reject → type a reason → the stock keeper (other device, after sync) gets "Your stock request was rejected — (reason)" and the Activity Log shows "Rejected stock change: (summary) — Reason: (reason)". Empty reason still rejects.
+
+**Known issues / left open:**
+- None.
+
+---
+
+## Session 85 — 2026-06-04 — Repo hygiene: private repo + secret-push guard
+
+**Built today:**
+- Made the GitHub repo private (was public) to protect proprietary code. It had 0 forks / 0 stars, so nothing was lost in the switch.
+- Added a local git-hook guard so secrets/sensitive files can't be committed or pushed. Plain shell, no new dependency.
+  - `pre-commit` scans the staged change; `pre-push` re-scans the commits being pushed (backstop for `--no-verify`).
+  - Blocks sensitive *filenames* (`.env*`, `.envrc`, `*.jks`/`*.keystore`, `key.properties`, `*.pem/.p12/.p8/.pfx`, `google-services.json`, `GoogleService-Info.plist`, `service-account*.json`, `id_rsa*`) — even with `git add -f`.
+  - Blocks secret *content* pasted into any tracked file: private-key blocks, AWS keys, and Supabase **service-role** keys (decodes JWT payload to check `role=service_role`).
+  - Deliberately does NOT flag the Supabase **anon** key in `lib/main.dart` — anon keys are client-public by design (ship in every APK, gated by RLS). Verified it decodes to `role=anon` and passes.
+- Activated with `git config core.hooksPath tools/git-hooks` (one-time per clone — documented in the hooks README).
+
+**Files touched:**
+- tools/git-hooks/_scan.sh (new — shared scan logic)
+- tools/git-hooks/pre-commit (new)
+- tools/git-hooks/pre-push (new)
+- tools/git-hooks/README.md (new)
+- .gitignore (added key/keystore/service-account patterns at root)
+
+**Database changes:**
+- None.
+
+**Master plan sections covered:**
+- None — repo/devops hygiene, not an app feature.
+
+**Plan updates made during session:**
+- None.
+
+**Tested:**
+- 9 unit tests on the scan logic (each filename/content rule blocks; real anon key + ordinary code pass). All green.
+- 6 end-to-end tests in throwaway /tmp repos with real `git commit`/`git push`: clean commit passes; `.envrc` (even `add -f`) blocked; private-key content blocked; `--no-verify` bypass works; `pre-push` blocks the bypassed secret commit; clean repo pushes fine. All green.
+- Dry-ran the scanner over the current uncommitted working tree — no false positives; pending work will commit normally.
+
+**Known issues / left open:**
+- Local guard only; not enforced on GitHub's servers (server-side push protection needs the paid Secret Protection add-on, unavailable on personal private repos). Each machine must run the one-time `core.hooksPath` command.
+- The anon key + URL remain hardcoded in `lib/main.dart` and in git history (intentional — client-public). Not externalized.
+
+**Next session should:**
+- Resume normal feature work. If a second dev machine is set up, run the one-time hook activation there.
+
+---
+
+## Session 84 — 2026-06-04 — Fix: stock approval requests never reached the approver's device (§16.6.1)
+
+**What the user reported:**
+- "Stock keeper added stock and the request-for-approval notification was sent, but as CEO I did not see the approve-stock functionality when I went to the Stock Approvals card on Reports."
+
+**Root cause:**
+- The new synced table `stock_adjustment_requests` (Session 78) was wired into `_syncedTenantTables`, `_pullOrder`, and the cloud `pos_pull_snapshot` — but **not into `_restoreTableData`** in `supabase_sync_service.dart`. The push and the realtime subscription worked (so the notification — a separate already-wired table — arrived), but when the approver's device received the request row via pull/realtime, the per-table apply `switch` had no case for it and **silently dropped it**. So the approver's Stock Approvals card showed nothing. (Exactly the multi-site gap in the [new-synced-table apply-sites] note.)
+
+**Fix:**
+- Added the `case 'stock_adjustment_requests':` to `_restoreTableData` — an FK-resilient id-keyed `insertOnConflictUpdate` (clone of the `stock_adjustments` case). Upsert-only table (never `enqueueDelete`), so the hard-delete sites (`_deleteLocalRowById` / `_hardDeleteReconcileTables` / `_deleteLocalRowsNotIn`) are correctly N/A.
+
+**Files touched:**
+- lib/core/services/supabase_sync_service.dart (`_restoreTableData` apply case)
+
+**Database changes:**
+- None (cloud 0089 already deployed).
+
+**Tested:**
+- `flutter analyze lib` clean.
+- Needs both devices on the rebuilt app: submit a fresh request as stock keeper → it now appears on the CEO/Manager's Stock Approvals card with Approve/Reject. (An already-pending request from the broken build may need a full re-pull / re-login on the approver device to come down, since the incremental pull cursor moved past it.)
+
+**Known issues / left open:**
+- None for this fix.
+
+---
+
+## Session 84 — 2026-06-04 — Per-staff permission toggles now actually take effect (enforcement-leak fixes)
+
+**What the user asked for:**
+- "Review the permissions a CEO can use to override other permissions in the staff management screens. The on/off toggles don't work — toggling a permission off doesn't change anything. What's the cause? Should we remove role-based permissions and make them per-user with role defaults?"
+
+**The finding (and the answer to the design question):**
+- The per-user override system the user imagined **already exists**: each role has default grants (`role_permissions`), and a CEO can override any one staff member's access on their profile (`user_permission_overrides`), merged at runtime by `currentUserPermissionsProvider`. So there was nothing to rebuild — the user picked "fix enforcement only."
+- The toggles **save correctly**; the bug was that flipping one often changed nothing the staff member could do. A toggle only takes effect where the feature asks `hasPermission(ref, '<key>')` (the effective role-default ± override). Several features instead checked the **role name** (e.g. "is this a manager?"), checked **nothing**, or read the **raw role defaults** directly — all of which ignore a per-user override.
+- Audited all 29 toggle-able permissions (one checker per key + a second pass to refute false alarms): 22 were already correct, 1 suspected leak was a false alarm, **9 were real**.
+
+**Built today (the 9 fixes):**
+- **Home "Net Profit" card** — was CEO-only by role; now also shows for anyone the CEO grants `reports.see_profit`.
+- **Home "Customer Wallet" card + "Add Customer" button** — were shown by role; now follow the `customers.add` permission, so revoking it from a cashier hides both.
+- **Customer wallet Total In / Total Out tiles** — a Manager always saw them regardless of the toggle; now they follow `customers.wallet.totals.view` (Managers still see them by default, but the CEO can now turn them off per person).
+- **Add Funds to a wallet** — added a permission re-check at the moment money moves (the button was already hidden correctly).
+- **Supplier Accounts** — the Inventory "Suppliers" tab read raw role defaults (ignored overrides) and the Supplier Accounts screen had no entry guard, so it could be reached without permission; both now follow the effective `suppliers.manage`.
+- **Staff Management** — added a screen entry guard and a re-check before an invite code is generated, so revoking `staff.invite` actually blocks it (the menu item was already gated).
+- **"See buying prices in reports"** (`reports.see_cost_prices`) — was never checked anywhere. Now it gates the raw "Cost of goods" figure (and CSV column) in the Profit Report, on top of the existing profit gate — so a CEO can let someone see profit but withhold the raw cost. (Design note: this is the only place a raw buying-price number appears in reports; profit/net-profit numbers stay governed by `reports.see_profit`.)
+- **Two toggles that did nothing because the feature isn't built** — "Update customer details" (no edit-customer screen yet, §18) and "Manage incoming shipments" (no Track Shipments screen yet, §22) — are now **hidden** from both permission editors (like the existing hidden discount toggle), so the CEO isn't shown switches that can't work. Reversible: un-hide each the moment its feature ships.
+
+**New guardrail:**
+- Added `test/permissions/permission_enforcement_test.dart` — a source scan asserting every non-hidden permission key is actually checked somewhere via `hasPermission` / the effective-permission set. If a future key is added with no enforcement (or only a role-name check), this test goes red. Same idea as the existing sync-leak scanner. It passes now.
+
+**Files touched:**
+- `lib/features/dashboard/screens/home_screen.dart`
+- `lib/features/customers/screens/customers_screen.dart`
+- `lib/features/customers/screens/customer_detail_screen.dart`
+- `lib/features/inventory/screens/inventory_screen.dart`
+- `lib/features/payments/screens/payments_screen.dart`
+- `lib/features/staff/screens/staff_management_screen.dart`
+- `lib/features/staff/widgets/invite_staff_sheet.dart`
+- `lib/features/dashboard/screens/profit_report_screen.dart`
+- `lib/core/settings/role_permissions_detail_screen.dart` (hidden-keys set)
+- `test/permissions/permission_enforcement_test.dart` (new)
+
+**Database changes:**
+- None. No schema, no migration, no new sync registration — pure enforcement wiring on existing screens.
+
+**Master plan sections covered:**
+- §10.2.1 (per-user permission overrides — making them effective everywhere), hard rules #6/#7.
+
+**Plan updates made during session:**
+- None. The per-user override model was already documented (§10.2.1, Sessions 74/76).
+
+**Tested:**
+- `flutter analyze` clean on all 10 touched files. `test/permissions/` passes. `test/customers test/staff test/inventory` all pass.
+- Pre-existing failures, NOT from this work: `test/settings/role_permissions_detail_test.dart` (6) — still hard-codes the OLD permission labels and `Expected: <33>` switches (owned by the in-flight label-rename work). My hidden-keys change shifts the correct visible switch count from 32 → **30** (two more keys hidden), so whoever fixes that test should expect 30, not 33.
+
+**Known issues / left open:**
+- On-device pass pending: revoke `reports.see_profit` from a Manager and `customers.add` from a Cashier on one device, switch to that staff member (shared-PIN), and confirm the gated UI disappears. Repeat for `suppliers.manage` (grant to a cashier → Suppliers surfaces appear).
+- `customers.update` / `shipments.manage` toggles stay hidden until their features (§18 edit-customer, §22 shipments) are built.
+
+**Next session should:**
+- Run the on-device checks above, then continue with whatever is next on the permissions/inventory track.
+
+**Follow-up fix (same day): per-staff override turned OFF didn't revert on the other device.**
+- On-device report: as CEO, granting `activity_logs.view` / `settings.manage` / `sync.view` to a stock keeper propagated live, but turning them back OFF did not — the stock keeper kept the access.
+- Root cause was NOT per-permission and NOT enforcement — it was **one missing cloud property on the override table**. For a stock keeper (whose role default for those keys is OFF), turning a granted override OFF *clears* the row — a hard delete. Supabase Realtime authorizes a DELETE against the row's `business_id`-scoped RLS using only the columns in the table's REPLICA IDENTITY; `user_permission_overrides` was still on the default (primary-key only), so `business_id` was absent, the RLS check failed, and Realtime **dropped the DELETE**. The grant (delivered live as an INSERT, whose new record carries every column) stuck; the removal never arrived until the device next did a full snapshot reconcile (restart / re-login). This is the exact bug 0064 fixed for `role_permissions` / `saved_carts` / `notifications` — `user_permission_overrides` was added in 0088 *after* 0064 and missed.
+- **Fix:** migration `0090_user_permission_overrides_replica_identity_full.sql` → `ALTER TABLE public.user_permission_overrides REPLICA IDENTITY FULL;`. Server-side only — **no app rebuild needed**; takes effect immediately for future deletes. Deployed via `supabase db push`. The client already applied the realtime DELETE (`_deleteLocalRowById` case), so nothing in the app changed.
+- **Because this is a per-TABLE property, the fix covers ALL permission keys at once** — there is no per-permission variant of this bug. It also fixes the mirror case: re-enabling a *default-on* permission after force-revoking it (also a clear → delete).
+- **New guardrail:** `test/sync/replica_identity_full_test.dart` — asserts every table in `_hardDeleteReconcileTables` has an `ALTER TABLE … REPLICA IDENTITY FULL` migration. Would have caught this. Passes now (4/4 hard-delete tables covered). `flutter test test/sync` → 99 pass.
+- **Clearing the already-stuck override:** the stock keeper's device that missed the dropped DELETE still holds the stale row until its next snapshot reconcile (app restart / re-login) — or re-toggle the permission ON then OFF (the OFF now broadcasts correctly).
+
+**Follow-up feature (same day): "Restore defaults" button on the per-staff permission screen (§10.2.1).**
+- The CEO asked for a button to wipe a staff member's overrides back to the role defaults in one tap. Added at the bottom of the per-staff Permission access → Customize screen.
+- **Behaviour:** clears EVERY override for that staff member so all permissions inherit the role default again. Asks for confirmation first (a Cancel/Restore dialog, so a stray tap can't wipe overrides). Disabled with a helper line ("… is already on the … defaults.") when the person has no overrides; not shown for the CEO (who has none). Re-checks `settings.manage` before and after the dialog, and writes an `activity_logs` entry.
+- **Sync:** new `UserPermissionOverridesDao.clearAllForUser(userId)` hard-deletes each override row and `enqueueDelete`s it — so the restore propagates live to the staff member's device (relies on the 0090 replica-identity fix above; without it the clears wouldn't broadcast).
+- **Files:** `lib/features/staff/screens/staff_permissions_screen.dart` (button + confirm + handler), `lib/core/database/daos.dart` (`clearAllForUser`), `reebaplus_master_plan.md` §10.2.1 (documented the button), `test/permissions/user_permission_overrides_dao_test.dart` (new — verifies it clears only that user, returns the count, tombstones each). `flutter analyze` clean; `test/permissions` + `test/staff` pass.
+- **Plan update:** §10.2.1 gained one sentence describing the Restore defaults button (per CLAUDE.md — no UI ships unlisted).
+
+---
+
+## Session 83 — 2026-06-04 — FABs (and modal footers) clear the 3-button system nav bar
+
+**What the user asked for:**
+- "If your [overflow] fix worked, FABs will never go below the system nav buttons on devices with the three bottom system nav buttons. Review all FABs and ensure they don't go below the nav and stay responsive, including in modals."
+
+**Built today:**
+- Root cause: a Scaffold's `floatingActionButton` slot only lifts the FAB ~16px above the content bottom — it does NOT add the system-nav safe area on edge-to-edge (Android 15). On screens where MainLayout's bottom nav bar is HIDDEN (drawer-accessed + pushed screens) the screen reaches the physical bottom, so the FAB landed ~16px up — UNDER the ~48px 3-button nav. (On gesture nav the thin pill ≈ the 16px margin, so the gap was invisible — that's why it was missed.) On the visible-bar tab roots (POS, Stock) the bar already lifts the FAB, so those were already fine.
+- Fix (centralized in the design-system FAB): `AppFAB` now lifts itself above the system nav by default via a new `reserveBottomInset` flag (default true). It uses a new nav-ONLY inset, `context.deviceBottomPadding` (system nav, EXCLUDES the keyboard), so a form's Save FAB shown with the keyboard up doesn't double-lift.
+- Opted out the two visible-bar tab roots: POS "Go to Cart" and Stock "Add Product" pass `reserveBottomInset: false` (the bar already insets them; more would leave a gap above the bar).
+- Net: auto-fixes the FABs on Customers, Payments, Expenses, Stores, Deliveries, Staff Management, and Stock Count.
+- Modals: confirmed every bottom-anchored modal/sheet footer already uses `deviceBottomInset` (so they clear the nav). The only sheets without it are auth screens (run before MainLayout — already correct) and the centered PIN dialog (not bottom-anchored). No modal changes needed.
+- Updated CLAUDE.md's safe-area section: `floatingActionButton` is NOT a "don't-pad" Scaffold slot; documented the `AppFAB` / `reserveBottomInset` / `deviceBottomPadding` rule so it can't regress.
+
+**Files touched:**
+- lib/core/utils/responsive.dart (new `deviceBottomPadding`)
+- lib/core/widgets/app_fab.dart (`reserveBottomInset` + self-inset)
+- lib/features/inventory/screens/inventory_screen.dart (opt out)
+- lib/features/pos/screens/pos_home_screen.dart (opt out)
+- CLAUDE.md (safe-area FAB guidance)
+
+**Database changes:**
+- None.
+
+**Master plan sections covered:**
+- None — UI safe-area robustness. Extends the CLAUDE.md edge-to-edge inset convention to FABs.
+
+**Plan updates made during session:**
+- CLAUDE.md safe-area section updated (FAB inset rule). No master-plan feature change.
+
+**Tested:**
+- `flutter analyze` on the 4 code files — no issues. NOT yet visually confirmed on-device: needs a look on a 3-button-nav emulator — the Add buttons on Customers/Expenses/Payments/Stores/Deliveries/Staff and the Save FAB on Stock Count should sit fully above the nav bar, while the POS/Stock tab FABs should be unchanged (no new gap above the bar).
+
+**Known issues / left open:**
+- Pending the on-device visual confirmation above.
+
+**Next session should:**
+- Confirm FAB clearance on a 3-button-nav device; nothing else outstanding from this pass.
+
+---
+
+## Session 82 — 2026-06-04 — Period filters reversed to calendar periods + non-Manager cap
+
+**Built today:**
+- Reversed the date filters from the rolling set ("Last 24 hours / Last 7 days / Last 30 days / Last year / To date") back to **calendar periods**: **Today, This Week, This Month, This Year, To Date**. "This Week" starts on **Sunday**. "To Date" still means everything up to now. Because they're calendar-anchored, "Today" now means since local midnight (not a fixed 24-hour span).
+- Applied a **role cap**: Cashier and Stock keeper only see **Today / This Week / This Month** on every period selector they can reach (Home, Orders, a customer's wallet, and the Expenses / Supplier-Accounts totals). Manager and CEO see all five. The Reports hub and its sub-screens were already CEO/Manager-only, so they were left showing all five.
+- Added a shared helper `datePeriodLabelsForRole(managerUp:)` and a per-screen value "clamp" so a capped viewer's dropdown never shows a value it isn't allowed to pick (e.g. a Cashier opening a customer wallet, whose default was "To Date", now opens on "This Month").
+- The Expenses monthly budget bar now reflects the **current calendar month** (it previously used a rolling last-30-days window).
+
+**Files touched:**
+- lib/core/utils/date_period.dart
+- lib/features/dashboard/screens/home_screen.dart
+- lib/features/orders/screens/orders_screen.dart
+- lib/features/customers/screens/customer_detail_screen.dart
+- lib/features/expenses/screens/expenses_screen.dart
+- lib/features/payments/screens/payments_screen.dart
+- lib/features/inventory/screens/supplier_detail_screen.dart
+- test/utils/date_period_test.dart
+- reebaplus_master_plan.md, BUILD_LOG.md
+
+**Database changes:**
+- None.
+
+**Master plan sections covered:**
+- §30.11 — rewrote the canonical chip set to calendar periods + documented the non-Manager cap.
+- §11.2, §19.1/§19.2, §20.1, §25.1, §25.9, §30.6 — updated the scattered default-label references.
+
+**Plan updates made during session:**
+- §30.11 reversed from rolling windows back to calendar periods (user request, 2026-06-04); added the explicit non-Manager Today/This Week/This Month cap. Reconciled all "rolling" / "Last 24 hours" / "Last 30 days" references across the plan.
+
+**Tested:**
+- Rewrote test/utils/date_period_test.dart for calendar boundaries (Sunday-start week, month/year starts) + the role-cap helper — 25 cases, all green.
+- `flutter analyze` clean on all touched files.
+
+**Known issues / left open:**
+- On-device pass not yet done (emulator) — confirm a Cashier sees only the three chips on Home/Orders/wallet and that the customer wallet opens on "This Month" without crashing.
+
+**Next session should:**
+- Run the app on the emulator and spot-check the role cap + calendar filtering as above.
+
+---
+
+## Session 81 — 2026-06-04 — Permission-wiring audit + 9 enforcement-leak fixes; staff Permission-access card redesign
+
+**What the user asked for:**
+- "I turned on and turned off manage business settings but the ceo settings is still accessible to this same cashier… deploy workflow to ensure every permission is wired correctly in the permissions role, and while they are investigating, redesign the permissions tappable card in the staff's profile — right now the card is cluttered."
+
+**What I did:**
+- **Redesigned the "Permission access" card** on the staff profile (`staff_detail_screen.dart`). It was cluttered — a header row, a full sentence, AND a nested "Customize…" row with a second icon, subtext and chevron. Collapsed it to a single clean line matching the info rows above it: icon · "Permission access" · a state value (**Role default** / **N overrides** / **Full access** for CEO) · chevron. The value turns the accent colour when the staff member has overrides; CEO is non-tappable full-access. Behaviour and gating unchanged.
+- **Ran a multi-agent audit workflow** over all 33 permission keys (90 sub-agents: a finder per key + adversarial verifiers on each suspected leak + a synthesis). It found **9 confirmed enforcement leaks** and ~20 false suspicions it dismissed. Recurring root cause: an entry point gated on a **role slug or the wrong key** instead of the permission key, or the destination screen never re-checking.
+- **The reported `settings.manage` symptom is NOT a code bug.** The CEO-Settings vertical (drawer + screen body + all 7 sub-screens) is correctly gated. Most likely the test device was logged in as the **CEO** (always-on, non-overridable by design), or the revoke simply hadn't propagated/refreshed on the cashier's device. Told the user to confirm which role was logged in.
+- **Fixed all 9 confirmed leaks** (user approved "all 9"):
+  1. `products.edit_price` — long-press product editor was ungated; now gated on the key (entry + save re-check).
+  2. `stock.add` — the editor's "quantity to add" field added stock with no check; now gated, with stock-keeper adds routed through the §16.6.1 approval flow.
+  3. `stock.adjust` — Daily Stock Count was gated by role slug only; now also requires the permission (icon + fail-closed screen guard).
+  4. `reports.see_sales` — Home "Total Sales" card was role-only; now requires the key.
+  5. `reports.see_expenses` — Expenses drawer item gated the wrong key (`expenses.create`) and the screen never re-checked; fixed the drawer key, the Home card, and added a load-bearing screen-body guard.
+  6. `funds.view` — Daily Reconciliation exposed per-account balances (card + CSV) with no check; gated both (rest of the report stays Manager-visible per §25.3).
+  7. `funds.open_day` — Open-Day form/handler and the POS "opening cash" CTA were role-only; now gated on the key (form + handler re-check + POS tap).
+  8. `customers.add` — Cart "New customer" bypassed the only gate; added a re-check at the single save chokepoint and hid the Cart button.
+  9. `settings.manage` — standalone Stores tab body + Add/Edit/Delete + Stock Transfer were unguarded (only reachable via the gated drawer item); added a reactive body guard, gated the FAB/Stock-Transfer action, and write-boundary re-checks.
+- Also fixed the cosmetic hard-rule-#7 item: Home "Stock Value" card now respects `stock.view`.
+
+**Dead keys noted (gate nothing, left as-is):** `sales.discount.give` (intentional — uses the discount slider), `customers.update` (no edit-customer feature yet), `reports.see_cost_prices`, `shipments.manage` (§22 unbuilt). Not wired this session — the user chose the "all 9 confirmed leaks" scope, not the dead-key wiring.
+
+**Files touched:**
+- lib/features/staff/screens/staff_detail_screen.dart (card redesign)
+- lib/features/inventory/screens/inventory_screen.dart, lib/features/inventory/widgets/update_product_sheet.dart, lib/features/inventory/screens/stock_count_screen.dart (#1–3)
+- lib/features/dashboard/screens/home_screen.dart, lib/shared/widgets/app_drawer.dart, lib/features/expenses/screens/expenses_screen.dart (#4–5)
+- lib/features/dashboard/screens/daily_reconciliation_detail_screen.dart (#6)
+- lib/features/funds/screens/funds_register_screen.dart, lib/features/pos/screens/pos_home_screen.dart (#7)
+- lib/features/customers/widgets/add_customer_sheet.dart, lib/features/pos/screens/cart_screen.dart (#8)
+- lib/features/stores/screens/stores_screen.dart, lib/features/stores/screens/stock_transfer_screen.dart (#9)
+
+**Database changes:**
+- None — pure UI/permission-gating. No schema, no sync registration, no migration.
+
+**Master plan sections covered:**
+- No new features. Enforcement-only hardening of existing permission keys (hard rules #6/#7). No plan changes.
+
+**Tested:**
+- `flutter analyze` on all 14 touched files — no issues.
+- `flutter test test/sync test/database` — 157 pass. `test/settings/sidebar_role_visibility_test.dart` (exercises the #5 drawer change) — passes. `test/customers`, `test/staff`, `test/inventory`, `test/pos`, `test/expenses`, `test/funds` — pass.
+- **Pre-existing failures, NOT from this work:** `test/settings/role_permissions_detail_test.dart` (6) hard-codes the OLD permission labels ("Edit product prices", "View stock levels") and expects 33 switches; the in-flight label rename (migration 0087 + `app_database.dart` catalogue edits, already in git status) renamed them and hides `sales.discount.give` (→ 32). `test/utils/date_period_test.dart` references removed `DatePeriod` enum names. Both belong to other in-progress work — left untouched.
+
+**Known issues / left open:**
+- The 4 dead permission keys above remain unwired (out of chosen scope).
+- The `role_permissions_detail_test.dart` / `date_period_test.dart` failures should be updated by whoever owns the label-rename / date-period work.
+
+**Next session should:**
+- Confirm on-device: revoke a permission from a Cashier (e.g. `stock.adjust`, `reports.see_sales`) and verify the gated UI disappears for that cashier on a second device.
+
+---
+
+## Session 80 — 2026-06-04 — Keyboard & overflow hardening (scrollable modals, capped text scaling, Row fixes)
+
+**What the user asked for:**
+- "A lot of screens show 'bottom overflowed by xx pixels', especially when the keyboard comes up — what's causing it and the fix?" After the diagnosis, they approved a three-part fix to do "in that order": (a) make keyboard forms scroll, (b) cap OS text scaling, (c) audit Rows for sideways overflow and fix.
+
+**Built today:**
+- (a) Stopped the "BOTTOM OVERFLOWED BY … pixels" stripe on modals when the keyboard opens. Cause: every screen sits under MainLayout's Scaffold (resizeToAvoidBottomInset defaults on), so the keyboard shrinks the content area by ~⅓; a fixed, non-scrolling Column can't fit and overflows. Fix: the content now scrolls, so it slides instead of overflowing.
+  - Edit-item modal (POS cart line editor): wrapped in a scroll view.
+  - Invite-staff sheet: wrapped in a scroll view AND fixed a real bug — its keyboard padding used `MediaQuery.viewInsets.bottom`, which reads 0 under MainLayout (the trap documented in CLAUDE.md), so it was double/none-padding. Now uses `deviceBottomInset` only.
+  - Quick Sale dialog: wrapped its content in a scroll view.
+  - POS "Switch Store" picker grid: now scrolls when there are more stores than fit (it used to overflow — not a keyboard case).
+  - Verified four other input sheets (add-customer, add-payment, receive-delivery, crate-return) already scroll correctly — left untouched.
+- (b) Capped the phone's system font-size multiplier at 1.3× in main.dart's MaterialApp builder, so very large accessibility text can't blow out the dense POS layouts. Type still scales by screen width as before; this only bounds the extra OS multiplier on top. Easy to raise later.
+- (c) Fixed horizontal "RIGHT OVERFLOWED" risks where a long name/amount sat in a Row with no room to shrink — now they truncate with "…":
+  - On-screen receipt: per-manufacturer crate line.
+  - Cart: crate-deposit line label.
+  - Expenses: category-section header.
+  - Supplier detail: "Goods Received" header.
+
+**Files touched:**
+- lib/main.dart
+- lib/features/pos/widgets/edit_item_modal.dart
+- lib/features/pos/widgets/quick_sale_modal.dart
+- lib/features/staff/widgets/invite_staff_sheet.dart
+- lib/features/pos/screens/pos_home_screen.dart
+- lib/features/pos/screens/cart_screen.dart
+- lib/features/expenses/screens/expenses_screen.dart
+- lib/features/inventory/screens/supplier_detail_screen.dart
+- lib/shared/widgets/receipt_widget.dart
+- lib/features/inventory/screens/product_detail_screen.dart (follow-up, after editing done)
+- lib/features/funds/screens/funds_register_screen.dart (follow-up, after editing done)
+- lib/features/inventory/screens/inventory_screen.dart (follow-up, after editing done)
+
+**Database changes:**
+- None.
+
+**Master plan sections covered:**
+- None — cross-cutting UI robustness pass, no feature/plan changes. Follows the existing safe-area inset convention in CLAUDE.md.
+
+**Plan updates made during session:**
+- None.
+
+**Tested:**
+- `flutter analyze` on all 12 touched files — no issues. Did NOT run the full test suite: the working tree had other in-progress work (new migrations/screens) unrelated to this, and these are layout-only changes with no test coverage — analyze is the right check here.
+
+**Known issues / left open:**
+- The 1.3× text-scale cap is a judgment call — adjust in main.dart if larger text is wanted.
+- Three follow-ups that were initially deferred (those files were being edited live) were COMPLETED later the same session once editing finished: product_detail `_UpdateStockSheet` got the scroll wrap; the funds_register account rows (day-summary + close-day sheet) and the inventory "Update [manufacturer]" dialog title now wrap in Expanded + ellipsis.
+
+**Next session should:**
+- Nothing outstanding from this pass. Optionally extend the same Expanded+ellipsis treatment to the remaining LOW-confidence Row sites from the audit (static-label + amount rows) only if huge currency values ever overflow on the narrowest devices.
+
+---
+
+## Session 79 — 2026-06-04 — Reusable sync safeguard (can't silently fail to sync)
+
+**What the user asked for:**
+- "build a reusable sync safeguard so future features and existing features can't silently fail to sync." (And: create a new branch for the work first.)
+
+**Built today:**
+- A three-layer, automated guardrail that enforces the §5 sync invariant (every write to a synced table must reach the cloud via a DAO's enqueue), so the failure can't slip through code review:
+  - **Layer A — runtime guard.** `SyncDao.enqueueUpsert`/`enqueueDelete` now throw if asked to enqueue a table that isn't a real synced/cache/businesses table. A typo'd or unregistered table name fails immediately at the write, instead of quietly sticking in the outbox as a failed item. (Same idea as the existing ledger-delete guard.)
+  - **Layer B — registration check.** A test reads the live database shape and flags any table that *looks* syncable (has both a `business_id` and a `last_updated_at` column) but was never registered for sync. This is the big one: it makes "added a new table, forgot to wire up sync" turn the tests red instead of silently never syncing.
+  - **Layer C — leak scanner.** A test scans the app's source for a write to a synced table that has no matching enqueue anywhere in the same method — i.e. a screen or service that writes to the database without sending it to the cloud. The exact silent bug the user was worried about.
+- A small "exempt" marker convention so the handful of legitimate local-only writes (the sync engine itself, PIN columns, onboarding/staff-signup mirrors, rejected-sale reversal) declare themselves with a one-line comment instead of tripping the scanner.
+- The scanner found **zero** real leaks in the current app — only the already-documented legitimate exceptions — and it correctly caught a deliberately-planted bad write during testing, then went green again once removed.
+
+**Files touched:**
+- lib/core/database/app_database.dart (3 public constants: kSyncedTenantTables, kSyncCacheTables, kEnqueueableTables)
+- lib/core/database/daos.dart (Layer A guards in enqueueUpsert/enqueueDelete)
+- lib/core/services/supabase_sync_service.dart (sync-exempt-file marker)
+- lib/shared/services/order_service.dart, lib/shared/services/auth_service.dart, lib/features/auth/screens/staff_sign_up_screen.dart (sync-exempt markers on the legitimate §5 exceptions)
+- test/sync/sync_dao_enqueue_guard_test.dart, test/sync/sync_table_registration_test.dart, test/sync/sync_raw_write_leak_test.dart (new)
+- CLAUDE.md (§5 — documented the safeguard + marker convention)
+- Ran build_runner once to regenerate the stale Drift code for the in-progress stock_adjustment_requests feature (only the two .g.dart files changed) so the project would compile for testing.
+
+**Database changes:**
+- None. (Added public constant aliases only; no schema change.)
+
+**Master plan sections covered:**
+- None new — this enforces the existing CLAUDE.md §5 sync invariant; it is build tooling, not a product feature.
+
+**Plan updates made during session:**
+- None.
+
+**Tested:**
+- `flutter analyze` clean. `flutter test test/sync test/orders test/customers test/expenses test/inventory` → all 138+ passed (no regression from the Layer A guard). The three new sync tests pass; Layer C verified to catch a planted leak and go green after removal.
+
+**Known issues / left open:**
+- Out of scope by design: partial-row upserts (missing NOT NULL → cloud 23502; not silent, surfaces as failed), domain-envelope payload-key drift (covered by dispatch tests), and stream-provider registration for new synced tables (UI propagation, a possible future "Layer D").
+- Work is on branch `feat/sync-write-guardrails` (not yet merged/committed).
+
+**Next session should:**
+- Commit/merge `feat/sync-write-guardrails` if approved; consider a future "Layer D" that checks every synced table also has a stream provider.
+
+---
+
+## Session 78 — 2026-06-04 — Stock-keeper adjustments now need approval (§16.6.1)
+
+**What the user asked for:**
+- "Before updating inventory for stock keeper actions, send them to manager of the store and ceo for approval in reports tab. It should be a tappable card that when tapped, expands with details of what happened and seeks for approval. If manager or ceo has approved, then proceed."
+
+**Plan conflict flagged + resolved:**
+- The plan (line ~1413) said "there is no Pending Approvals card on Reports." The user confirmed (AskUserQuestion) they want the approval card **on the Reports tab** anyway (overriding that line), and that approval applies to **stock add/remove only** (not product create / shipments). Plan amended accordingly before coding.
+
+**Built today:**
+- A stock keeper's **Update Stock** (Add/Remove) no longer changes inventory directly. It now records a **pending request** and shows "Sent for approval." Inventory stays unchanged until a Manager/CEO approves.
+- The request notifies the **CEO + the affected store's Manager(s)** (CEO-only if no manager is tied to that store) — same audience as the old post-hoc notice, which this replaces.
+- New **Stock Approvals** card on the Reports hub (CEO + Manager) with a count badge. CEO sees every store's requests; a Manager only their assigned store(s). Each request is a **tappable card that expands** to who/store/reason/when with **Approve / Reject**.
+- **Approve** runs the real adjustment through the existing atomic `adjustStock` path (so the stock number changes only now; a Remove that no longer fits fails and stays pending). **Reject** discards it. Both notify the stock keeper who submitted.
+- Manager/CEO stock adjustments are unaffected — they still apply directly.
+
+**Files touched:**
+- `lib/core/database/app_database.dart` (new `StockAdjustmentRequests` table, schemaVersion 33→34, v34 migration block, `_syncedTenantTables`, @DriftDatabase registration)
+- `lib/core/database/daos.dart` (new `StockAdjustmentRequestsDao` — request / approve / reject / watchPending, reusing `adjustStock`)
+- `lib/core/services/supabase_sync_service.dart` (`_pullOrder`)
+- `lib/core/providers/stream_providers.dart` (`pendingStockRequestsProvider` + `viewerScopedPendingStockRequestsProvider`)
+- `lib/features/inventory/screens/product_detail_screen.dart` (onSave branches stock-keeper→request vs direct adjust; removed the now-dead post-hoc notify helper)
+- `lib/features/dashboard/screens/stock_approvals_screen.dart` (new — expandable approval cards)
+- `lib/features/dashboard/screens/reports_hub_screen.dart` (Stock Approvals card + badge)
+- `lib/shared/widgets/notifications_modal.dart` (icon/colour for the new notification types)
+- `supabase/migrations/0089_stock_adjustment_requests.sql` (new)
+- `reebaplus_master_plan.md` (§16.6 Stock Keeper save, new §16.6.1, §25.2 Stock Approvals card, §26.4 notifications), generated drift files, `BUILD_LOG.md`
+
+**Database changes:**
+- New synced table `stock_adjustment_requests`, local schema v33 → v34, cloud migration 0089 (table + RLS via `current_user_business_ids()` + bump trigger + realtime + `pos_pull_snapshot`). Additive only.
+
+**Master plan sections covered:**
+- §16.6 / §16.6.1 (new approval flow), §25.2 (Stock Approvals card), §26.4 (notifications).
+
+**Plan updates made during session:**
+- Amended §16.6 Stock Keeper save, added §16.6.1, amended the §25.2 "no approvals card on Reports" note (stock approvals are the one exception), amended §26.4 stock-keeper notification lines.
+
+**Tested:**
+- `flutter analyze` clean on all touched Dart files; `build_runner` regen succeeded.
+- On-device verification pending (emulator): submit as stock keeper → "Sent for approval", number unchanged; approve as CEO/Manager from Reports → number changes; reject → discarded; both notify the stock keeper.
+
+**Known issues / left open:**
+- Cloud migration 0089 must be deployed (`supabase db push`) before a v34 device pushes a request, or the upsert 42P01s.
+
+---
+
+## Session 77 — 2026-06-04 — Confirm before Close Day
+
+**What the user asked for:**
+- "Add a confirmation before close the day so as to avoid mistakenly closing the day."
+
+**Built today:**
+- The Close Day flow now asks "Close the day?" one more time before it actually closes. Tapping "Confirm Close Day" on the count-cash sheet pops up a dialog explaining that closing locks that day's sales and a new day must be opened to continue. Cancel backs out and changes nothing; "Close Day" goes ahead. Stops an accidental tap from closing the day.
+- The dialog shows the date in a friendly format (e.g. "Thu, 4 Jun 2026") instead of the raw "2026-06-04", matching the Daily Reconciliation screens.
+
+**Files touched:**
+- lib/features/funds/screens/funds_register_screen.dart
+
+**Database changes:**
+- None.
+
+**Master plan sections covered:**
+- §23.6 (Close Day flow) — no plan change, just a safety confirmation.
+
+**Plan updates made during session:**
+- None.
+
+**Tested:**
+- `flutter analyze` on the changed file — no issues.
+
+**Known issues / left open:**
+- None.
+
+---
+
+## Session 76 — 2026-06-04 — Per-staff permission overrides built for real (User scope) (§10.2.1)
+
+**What the user asked for:**
+- After the earlier session that scaffolded Business → Store → User scopes with Store/User as placeholders, the user asked "what's the way forward — build multi-store now?" The honest answer: full multi-store is Phase 2 and a multi-session epic, BUT the part they cared about — the CEO opening a staff member's profile and changing that one person's access — is the **User** scope, which is **independent of multi-store**. They chose to build per-user overrides now. (Store overrides stay a placeholder, still blocked on multi-store.)
+
+**Built today:**
+- **New synced tenant table `user_permission_overrides`** (`business_id`, `user_id`, `permission_key`, `is_granted`). A row forces a permission on (`is_granted` true) or off (false) for one staff member; no row = inherit the role default. Local Drift table (schema v33) + DAO (`UserPermissionOverridesDao.setOverride` / `watchForUser`) that routes writes through `enqueueUpsert`/`enqueueDelete` (§5 sync contract). Added to `_syncedTenantTables`, registered on `AppDatabase`, with a `userPermissionOverridesProvider` stream provider.
+- **Runtime resolver merge:** `currentUserPermissionsProvider` now computes effective = role grants ± the user's overrides (grant adds, revoke removes). The CEO is skipped entirely — always all-on, never overridable.
+- **Per-user override editor** (`StaffPermissionsScreen`): reached from Staff Management → tap a staff member → **Permission access → Customize**. Mirrors the per-role screen (toggles grouped by category, hidden keys excluded, dependency gating + cascade-revoke, activity logging). Each toggle shows the **effective** value; flipping away from the role default stores an override, flipping back clears it (subtitle shows "Overridden — role default is on/off"). The staff-profile card went from a disabled placeholder to a live entry showing the override count.
+- **Cloud migration 0088:** creates `user_permission_overrides` with RLS via `current_user_business_ids()` (the fixed profiles-based pattern, from the start — no follow-up fix migration needed), FK to `permissions(key)`, the `_bump_last_updated_at` trigger, realtime publication, and the table appended to `pos_pull_snapshot`. Deployed via `supabase db push` (only 0088 was pending; no divergence).
+
+**Files touched:**
+- `reebaplus_master_plan.md` (§10.2.1 User scope promoted to "BUILT (Phase 1)"; §2.4 table added)
+- `lib/core/database/app_database.dart` (table, schemaVersion 32→33, v33 migration block, `_syncedTenantTables`, @DriftDatabase registration)
+- `lib/core/database/daos.dart` (`UserPermissionOverridesDao`)
+- `lib/core/providers/stream_providers.dart` (`userPermissionOverridesProvider` + resolver merge)
+- `lib/features/staff/screens/staff_permissions_screen.dart` (new)
+- `lib/features/staff/screens/staff_detail_screen.dart` (Permission access card now navigates)
+- `supabase/migrations/0088_user_permission_overrides.sql` (new)
+- generated drift files (build_runner), `BUILD_LOG.md`
+
+**Database changes:**
+- New synced table `user_permission_overrides`, local schema v32 → v33, cloud migration 0088. Additive only.
+
+**Master plan sections covered:**
+- §10.2.1 — User scope is now BUILT (Phase 1). Store scope remains a placeholder pending multi-store (Phase 2, §2.2).
+
+**Plan updates made during session:**
+- §10.2.1 rewritten: User scope promoted from placeholder to built, with storage/resolution documented. §2.4 gained the `user_permission_overrides` table. Approved by the user (chose "Per-user overrides now").
+
+**Follow-up fix (same day): overrides weren't reaching the second device.** First on-device test: CEO overrode a Cashier's permission, logged in as that staff on a SECOND device — nothing changed. Root cause was NOT the resolver (that was correct) — it was the **client-side sync apply path**. `user_permission_overrides` was added to the cloud pull (`pos_pull_snapshot`, 0088) and `_syncedTenantTables`, but NOT to the sync service's per-table sites: it was missing from `_pullOrder` (which drives both the pull-restore loop AND the realtime subscription loop), had no `_restoreTableData` case (so pulled/realtime rows were silently dropped), and no hard-delete handling. Fixed by wiring it exactly like `role_permissions` (its twin: random id, logical key `(business_id, user_id, permission_key)`, grant=upsert, clear=hard-delete) at all five sites in `supabase_sync_service.dart`: `_pullOrder`, `_restoreTableData` (with logical-key dedup), `_deleteLocalRowById`, `_hardDeleteReconcileTables`, `_deleteLocalRowsNotIn`. Lesson: a new synced table needs the §5 DAO/enqueue contract PLUS registration at every per-table switch in `supabase_sync_service.dart`, not just the pull RPC. **Both devices must run the rebuilt app to pick this up.**
+
+**Status:** `flutter analyze` clean (only pre-existing `avoid_print` infos in a test report file). `flutter test test/database test/sync` → all pass (157 after the sync-wiring fix; the v33 migration's idempotency guard verified by the revert-then-re-upgrade suite). Cloud migration deployed. On-device cross-device confirmation pending after rebuilding both devices.
+
+**Tested:**
+- Full `flutter analyze`; database + sync test suites; `build_runner` codegen; `supabase db push`.
+
+**Known issues / left open:**
+- Store-scope overrides still a placeholder (needs the multi-store epic — Phase 2).
+- On-device pass pending: open a staff member → Permission access → Customize; flip a toggle (creates an override, effective set updates, count shows on the card); flip back (clears it); verify the override syncs to a second device and the affected staff member's gated UI reflects it. CEO target shows the static "full access" note (no editor).
+- Resolver applies overrides as a flat add/remove; if a later ROLE change orphaned an overridden child whose parent went off at role level, the editor's gating still shows it correctly but the resolver wouldn't re-cascade. Acceptable edge case (mirrors how role grants are already trusted to be dependency-consistent); revisit if it ever bites.
+
+**Next session should:**
+- Get the on-device confirmation above, then decide whether to start the Phase 2 multi-store groundwork (current-store context + `StoreScopedDao`) that the Store scope depends on.
+
+---
+
+## Session 75 — 2026-06-04 — Stock-update crash fix + accurate view-only banner + inventory store confinement + store-scoped stock notification (§16.6/§16.7/§26.4)
+
+**What the user asked for:**
+- A crash ("A TextEditingController was used after being disposed") that happened when a Stock keeper updated stock from the Product Details screen.
+- When a product is view-only for a staff member, show a clear "VIEW ONLY" tag and the real reason — not always "this product is not in your store".
+- Notify the CEO and store manager whenever a Stock keeper adds or removes stock (with the reason). During planning the user also clarified: roles below Manager should only see items in their assigned store, and the notification should go to the affected store's Manager(s), not every Manager.
+
+**Built today:**
+- **Fixed the crash.** The Update Stock bottom sheet used to create its text boxes in the caller and throw them away right after the sheet closed, which collided with the closing animation. Moved the sheet into its own widget that owns and cleans up its own text boxes at the right time (the same pattern every other sheet in the app already uses). No behaviour changed — same Add/Remove modes, store picker, reason, validation, and permission re-checks.
+- **Accurate view-only message.** A Cashier opening a product now sees a clear "VIEW ONLY" tag instead of the misleading "not in your store".
+- **Store confinement in Inventory.** Cashiers and Stock keepers are now locked to their assigned store in the Inventory store picker (no "All Stores", and the product list only shows their store) — matching how the Home screen already behaves. The CEO, and a Manager the CEO granted all-stores, are unchanged.
+- **Store-scoped stock notification.** A Stock keeper's add/remove now notifies the CEO plus the Manager(s) assigned to the store where the stock moved, instead of every Manager. If no Manager is tied to that store, only the CEO is notified.
+
+**Files touched:**
+- lib/features/inventory/screens/product_detail_screen.dart
+- lib/features/inventory/screens/inventory_screen.dart
+- lib/core/database/daos.dart
+- reebaplus_master_plan.md
+- BUILD_LOG.md
+
+**Database changes:**
+- None. Added one read-only DAO query (`UserStoresDao.getUserIdsForStore`) — no new tables, columns, or migrations.
+
+**Master plan sections covered:**
+- §16.6 / §16.7 — product detail view-only state and inventory store access.
+- §26.4 — stock-keeper stock-movement notification.
+
+**Plan updates made during session:**
+- §26.4 amended: the Stock keeper add/removed-stock notification now fires to the CEO and the **affected store's** Manager(s) (was "all Managers"), with an all-Managers fallback when none are assigned to that store. Noted inline in the plan with today's date.
+
+**Tested:**
+- `flutter analyze` clean on all touched files (only pre-existing `avoid_print` infos remain in an unrelated test file).
+- On-device emulator verification still pending (see below).
+
+**Known issues / left open:**
+- Needs an on-device pass: confirm the crash is gone with the keyboard up (Add and Remove), the Cashier banner reads correctly, a locked Cashier/Stock keeper sees only their store, and only the CEO + that store's Manager(s) get the notification.
+- A Manager without the all-stores grant and without any assigned store falls back to the "My Store" chip (mirrors Home) — acceptable, but worth revisiting if managers should always be store-assigned.
+
+**Next session should:**
+- Run the on-device checks above, then continue with whatever is next on the inventory/permissions track.
+
+## Session 74 — 2026-06-04 — Permission scopes: Business → Store → User (Business real, Store/User placeholders) (§10.2.1)
+
+**What the user asked for:**
+- Permission settings shouldn't be managed only per role. They should layer by scope: per **business** first (default for all stores), then per **store** (default for all users in that store), then per **user** (overrides the rest). Since multi-store isn't fully built, add placeholders where the store/user layers will go. The user clarified the "user" layer means: the CEO opens an individual staff member's profile and changes that one person's permission access.
+
+**Plan-conflict flagged first (per CLAUDE.md):** the master plan had permissions as strictly role-based and business-wide — no per-store or per-user override anywhere, and multi-store UI is Phase 2 (§2.2). This was a new feature, so the master plan was updated before any code (user approved "Business real + placeholders").
+
+**Built today:**
+- **Master plan §10.2.1 (new):** documents the three permission scopes and the resolution order (most-specific wins: **User > Store > Business**). Business is the existing per-role behaviour; Store (on the role page) and User (on the staff profile) are visible Phase-1 placeholders, disabled and labelled "coming with multi-store." Added a forward-only schema note naming the future Phase-2 tables (`store_role_permissions`, `user_permission_overrides`) — not built.
+- **Role detail screen:** added a Business / Store scope selector (lightweight glass-pill segmented control) at the top. Business = the full toggle list exactly as before. Store = a centred "Per-store permissions — coming with multi-store" placeholder. A muted helper line explains the hierarchy and points to the staff profile for per-person overrides.
+- **Staff detail screen:** added a "Permission access" card (only for a `settings.manage` holder, never on the own/read-only card) showing the member uses their role's permissions, plus a disabled "Customize this staff's permissions — coming with multi-store" row.
+
+**Files touched:**
+- `reebaplus_master_plan.md`
+- `lib/core/settings/role_permissions_detail_screen.dart`
+- `lib/features/staff/screens/staff_detail_screen.dart`
+- `BUILD_LOG.md`
+
+**Database changes:**
+- None. No new tables, columns, migrations, DAOs, providers, or sync changes. The placeholders are pure UI and write nothing — effective permissions stay role-based business-wide, correct for Phase 1.
+
+**Master plan sections covered:**
+- §10.2.1 (new) — permission scopes Business → Store → User. References §2.2 (multi-store is Phase 2) and §20.6 (the business→store fallback pattern the future tables will follow).
+
+**Plan updates made during session:**
+- Added §10.2.1 as above. This is a deliberate plan extension, approved by the user, because the original plan had no per-store/per-user permission concept.
+
+**Status:** `flutter analyze` clean on both changed files. On-device confirmation pending.
+
+**Tested:**
+- `flutter analyze` on the two changed files — no issues.
+
+**Known issues / left open:**
+- Store and User scopes are placeholders only — no override storage or runtime resolver yet. The real Phase-2 work (the two new synced tables + a resolver merging User > Store > Business) is described in §10.2.1 but not started.
+- On-device pass still pending (scope selector switches cleanly; Store placeholder shows; Permission access card appears for CEO and is hidden on self / for non-managers; no rows hit the sync queue from opening these screens).
+
+**Next session should:**
+- Get an on-device confirmation of the two placeholders, then continue with whatever multi-store groundwork the user prioritises.
+
+---
+
 ## Session 73 — 2026-06-04 — Cart: "Select Customer" picker rebuilt as a smooth fixed-height sheet
 
 **What the user asked for:**

@@ -1,0 +1,40 @@
+#!/bin/sh
+# Backstop: re-scan the commits about to be pushed, in case a secret slipped in
+# via `git commit --no-verify` or before the hook existed.
+# Override (NOT recommended):  git push --no-verify
+
+set -u
+DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+. "$DIR/_scan.sh"
+
+bad=0
+
+# git feeds one line per ref on stdin: <local_ref> <local_sha> <remote_ref> <remote_sha>
+while read -r local_ref local_sha remote_ref remote_sha; do
+  # branch deletion (local sha all zeros) -> nothing to scan
+  if printf '%s' "$local_sha" | grep -Eq '^0+$'; then
+    continue
+  fi
+  if printf '%s' "$remote_sha" | grep -Eq '^0+$'; then
+    # new branch on the remote: scan commits not already on any remote
+    commits=$(git rev-list "$local_sha" --not --remotes)
+  else
+    commits=$(git rev-list "$remote_sha".."$local_sha")
+  fi
+  for c in $commits; do
+    files=$(git show --name-only --diff-filter=ACM --format= "$c")
+    cdiff=$(git show --diff-filter=ACM --format= "$c")
+    if ! secret_scan "$files" "$cdiff"; then
+      printf '   ^ in commit %s\n' "$(git show -s --format='%h %s' "$c")"
+      bad=1
+    fi
+  done
+done
+
+if [ "$bad" -ne 0 ]; then
+  printf '\n[BLOCKED] push stopped: possible secret in the commits above.\n'
+  printf '  - Remove the secret and rewrite history (e.g. git rebase / amend), then re-push.\n'
+  printf '  - To override (NOT recommended):  git push --no-verify\n\n'
+  exit 1
+fi
+exit 0

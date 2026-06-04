@@ -155,12 +155,14 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
               ),
             ],
           ),
-          floatingActionButton: AppFAB(
-            heroTag: 'customers_fab',
-            onPressed: () => AddCustomerSheet.show(context),
-            icon: FontAwesomeIcons.userPlus,
-            label: 'Add Customer',
-          ),
+          floatingActionButton: hasPermission(ref, 'customers.add')
+              ? AppFAB(
+                  heroTag: 'customers_fab',
+                  onPressed: () => AddCustomerSheet.show(context),
+                  icon: FontAwesomeIcons.userPlus,
+                  label: 'Add Customer',
+                )
+              : null,
         );
   }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:intl/intl.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -64,6 +65,11 @@ class _FundsRegisterScreenState extends ConsumerState<FundsRegisterScreen> {
   ) async {
     final userId = ref.read(authProvider).currentUser?.id;
     if (userId == null) return;
+    // Defense-in-depth (hard rule #6): re-check at the write boundary in case
+    // `funds.open_day` was revoked while the form was open.
+    if (!ref.read(currentUserPermissionsProvider).contains('funds.open_day')) {
+      return;
+    }
     final perAccount = <String, int>{};
     for (final a in accounts) {
       final naira = parseCurrency(_opening[a.id]?.text ?? '');
@@ -260,8 +266,13 @@ class _FundsRegisterScreenState extends ConsumerState<FundsRegisterScreen> {
             _openDayBalances(storeId, today, accounts)
           else if (status == 'closed')
             _closedDaySummary(storeId, today, accounts)
+          // Opening the day is gated on `funds.open_day` (hard rule #6). A
+          // `funds.view`-only viewer reaches this screen (OR-clause guard) but
+          // must not see the open-day form — show a wait note instead.
+          else if (hasPermission(ref, 'funds.open_day'))
+            _openDayForm(storeId, today, accounts)
           else
-            _openDayForm(storeId, today, accounts),
+            _openDayLockedNote(),
           const SizedBox(height: 20),
         ],
         if (isCeo) _accountsSection(storeId, accounts),
@@ -401,6 +412,26 @@ class _FundsRegisterScreenState extends ConsumerState<FundsRegisterScreen> {
     );
   }
 
+  /// Shown to a `funds.view`-only viewer (no `funds.open_day`) when today's day
+  /// isn't open yet — they may watch balances but not open the day (hard rule
+  /// #6/#7: no open-day form, no Open Day button).
+  Widget _openDayLockedNote() {
+    return _card(
+      title: 'Day not opened',
+      children: [
+        Text(
+          'The day hasn’t been opened yet. A Manager or CEO needs to open it '
+          'before sales can start.',
+          style: TextStyle(
+            fontSize: 13,
+            color:
+                Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _openDayBalances(
     String storeId,
     String today,
@@ -437,14 +468,18 @@ class _FundsRegisterScreenState extends ConsumerState<FundsRegisterScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  _accountLabel(a),
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: theme.colorScheme.onSurface,
+                Expanded(
+                  child: Text(
+                    _accountLabel(a),
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurface,
+                    ),
                   ),
                 ),
+                const SizedBox(width: 8),
                 Text(
                   formatCurrency((balances[a.id] ?? 0) / 100.0),
                   style: TextStyle(
@@ -765,8 +800,41 @@ class _CloseDaySheetState extends ConsumerState<_CloseDaySheet> {
   String _label(FundsAccountData a) =>
       a.accountType == 'cash_till' ? 'Cash Till' : a.name;
 
+  String _prettyDate(String date) {
+    final d = DateTime.tryParse(date);
+    return d == null ? date : DateFormat('EEE, d MMM yyyy').format(d);
+  }
+
   Future<void> _close() async {
     if (_saving) return;
+    final theme = Theme.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: theme.colorScheme.surface,
+        title: const Text('Close the day?'),
+        content: Text(
+          'This closes ${_prettyDate(widget.businessDate)} for this store. '
+          'You won\'t be able to record more sales for this day, and a new day '
+          'must be opened to continue. Make sure the counts above are correct.',
+        ),
+        actions: [
+          AppButton(
+            text: 'Cancel',
+            variant: AppButtonVariant.ghost,
+            isFullWidth: false,
+            onPressed: () => Navigator.pop(ctx, false),
+          ),
+          AppButton(
+            text: 'Close Day',
+            variant: AppButtonVariant.primary,
+            isFullWidth: false,
+            onPressed: () => Navigator.pop(ctx, true),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
     final userId = ref.read(authProvider).currentUser?.id;
     if (userId == null) return;
     setState(() => _saving = true);
@@ -860,14 +928,18 @@ class _CloseDaySheetState extends ConsumerState<_CloseDaySheet> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          _label(a),
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: theme.colorScheme.onSurface,
+                        Expanded(
+                          child: Text(
+                            _label(a),
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: theme.colorScheme.onSurface,
+                            ),
                           ),
                         ),
+                        const SizedBox(width: 8),
                         Text(
                           'Expected ${formatCurrency((balances[a.id] ?? 0) / 100.0)}',
                           style: TextStyle(

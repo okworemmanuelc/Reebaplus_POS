@@ -85,6 +85,34 @@ int? resolveMonthlyBudgetKobo(
   return null;
 }
 
+// ── Stock adjustment approvals (§16.6.1) ─────────────────────────────────────
+/// All still-pending stock-adjustment requests for the business, newest first.
+/// Approver-side store scoping is applied by
+/// [viewerScopedPendingStockRequestsProvider].
+final pendingStockRequestsProvider =
+    StreamProvider<List<StockAdjustmentRequestData>>((ref) {
+  return ref.watch(databaseProvider).stockAdjustmentRequestsDao.watchPending();
+});
+
+/// Pending stock requests the current viewer may approve (§16.6.1): a CEO sees
+/// every store; a Manager sees only requests for the store(s) they're assigned
+/// to (mirrors the Home/Inventory store lock — confinement is computed locally,
+/// never via the dead nav-service flags).
+final viewerScopedPendingStockRequestsProvider =
+    Provider<List<StockAdjustmentRequestData>>((ref) {
+  final all = ref.watch(pendingStockRequestsProvider).valueOrNull ?? const [];
+  final role = ref.watch(currentUserRoleProvider);
+  if (role?.slug == 'ceo') return all;
+  final userId = ref.watch(authProvider).currentUser?.id;
+  if (userId == null) return const [];
+  final assignedStoreIds =
+      (ref.watch(myUserStoresProvider(userId)).valueOrNull ??
+              const <UserStoreData>[])
+          .map((s) => s.storeId)
+          .toSet();
+  return all.where((r) => assignedStoreIds.contains(r.storeId)).toList();
+});
+
 // ── Products by store ───────────────────────────────────────────────────────
 final productsByStoreProvider =
     StreamProvider.family<List<ProductDataWithStock>, String>((ref, storeId) {
@@ -215,6 +243,18 @@ final rolePermissionsProvider =
   return ref.watch(databaseProvider).rolePermissionsDao.watchForRole(roleId);
 });
 
+/// Per-staff permission overrides for a specific user (§10.2.1). A row forces
+/// `permissionKey` on (`isGranted` true) or off (false) for that user,
+/// overriding their role default; no row = inherit.
+final userPermissionOverridesProvider =
+    StreamProvider.family<List<UserPermissionOverrideData>, String>(
+        (ref, userId) {
+  return ref
+      .watch(databaseProvider)
+      .userPermissionOverridesDao
+      .watchForUser(userId);
+});
+
 /// Per-role tunable settings (max discount %, max expense approval kobo).
 final roleSettingsProvider =
     StreamProvider.family<List<RoleSettingData>, String>((ref, roleId) {
@@ -340,7 +380,27 @@ final currentUserPermissionsProvider = Provider<Set<String>>((ref) {
   if (role == null) return const <String>{};
   final grants = ref.watch(rolePermissionsProvider(role.id)).valueOrNull;
   if (grants == null) return const <String>{};
-  return grants.map((g) => g.permissionKey).toSet();
+  final effective = grants.map((g) => g.permissionKey).toSet();
+  // The CEO is always all-on and is never overridable (§10.2.1) — skip overrides.
+  if (role.slug == 'ceo') return effective;
+  // Apply this staff member's per-user overrides on top of the role default:
+  // isGranted true = force-grant, false = force-revoke (§10.2.1). Absence of a
+  // row = inherit, so only the explicit overrides touch the set.
+  final userId = ref.watch(authProvider).currentUser?.id;
+  if (userId != null) {
+    final overrides =
+        ref.watch(userPermissionOverridesProvider(userId)).valueOrNull;
+    if (overrides != null) {
+      for (final o in overrides) {
+        if (o.isGranted) {
+          effective.add(o.permissionKey);
+        } else {
+          effective.remove(o.permissionKey);
+        }
+      }
+    }
+  }
+  return effective;
 });
 
 /// True if the current user's role grants [key]. Thin reader over

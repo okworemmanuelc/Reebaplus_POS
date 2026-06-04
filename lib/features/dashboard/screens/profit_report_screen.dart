@@ -90,13 +90,18 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
   }
 
   Future<void> _exportCsv(_ProfitData data) async {
+    // Mirror the on-screen gate: omit the raw Cost-of-goods column unless the
+    // viewer holds `reports.see_cost_prices`.
+    final canSeeCost = ref
+        .read(currentUserPermissionsProvider)
+        .contains('reports.see_cost_prices');
     final rows = <List<String>>[
       for (final p in data.products)
         [
           p.name,
           '${p.qty}',
           (p.revenueKobo / 100.0).toStringAsFixed(2),
-          (p.cogsKobo / 100.0).toStringAsFixed(2),
+          if (canSeeCost) (p.cogsKobo / 100.0).toStringAsFixed(2),
           (p.profitKobo / 100.0).toStringAsFixed(2),
           p.marginPct.toStringAsFixed(1),
         ],
@@ -105,15 +110,18 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
       'TOTAL',
       '',
       (data.revenueKobo / 100.0).toStringAsFixed(2),
-      (data.cogsKobo / 100.0).toStringAsFixed(2),
+      if (canSeeCost) (data.cogsKobo / 100.0).toStringAsFixed(2),
       (data.profitKobo / 100.0).toStringAsFixed(2),
       data.marginPct.toStringAsFixed(1),
     ]);
     try {
       await shareCsv(
         csv: buildCsv(
-          ['Product', 'Qty sold', 'Revenue', 'Cost of goods', 'Gross profit',
-            'Margin %'],
+          [
+            'Product', 'Qty sold', 'Revenue',
+            if (canSeeCost) 'Cost of goods',
+            'Gross profit', 'Margin %',
+          ],
           rows,
         ),
         fileName: 'profit_report_${_period.replaceAll(' ', '_')}',
@@ -132,6 +140,11 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
   Widget build(BuildContext context) {
     ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
     final theme = Theme.of(context);
+    // `reports.see_cost_prices` ("See buying prices in reports") gates the raw
+    // Cost-of-goods figure on top of the screen's upstream `reports.see_profit`
+    // gate — so a CEO can grant someone the Profit Report yet withhold the raw
+    // cost. Revenue / Gross Profit / Margin stay (they're `reports.see_profit`).
+    final canSeeCost = hasPermission(ref, 'reports.see_cost_prices');
     final orders = ref.watch(allOrdersProvider).valueOrNull ?? const [];
     final data = _compute(orders, _period);
     final hasCostedData = data.products.isNotEmpty;
@@ -177,7 +190,7 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
                 bottom: context.spacingM + context.deviceBottomInset,
               ),
               children: [
-                if (hasCostedData) _headline(theme, data),
+                if (hasCostedData) _headline(theme, data, canSeeCost),
                 if (data.uncostedItems > 0) ...[
                   if (hasCostedData) SizedBox(height: context.spacingM),
                   _uncostedNote(theme, data.uncostedItems,
@@ -236,7 +249,7 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
     );
   }
 
-  Widget _headline(ThemeData theme, _ProfitData data) {
+  Widget _headline(ThemeData theme, _ProfitData data, bool canSeeCost) {
     final profit = data.profitKobo;
     final color = profit >= 0 ? const Color(0xFF22C55E) : theme.colorScheme.error;
     return Container(
@@ -272,8 +285,9 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
             runSpacing: context.spacingS,
             children: [
               _chip(theme, 'Revenue', formatCurrency(data.revenueKobo / 100.0)),
-              _chip(theme, 'Cost of goods',
-                  formatCurrency(data.cogsKobo / 100.0)),
+              if (canSeeCost)
+                _chip(theme, 'Cost of goods',
+                    formatCurrency(data.cogsKobo / 100.0)),
               _chip(theme, 'Margin', '${data.marginPct.toStringAsFixed(1)}%'),
             ],
           ),

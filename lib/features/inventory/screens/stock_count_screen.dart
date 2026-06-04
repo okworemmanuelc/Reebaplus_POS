@@ -962,9 +962,19 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
     // mutating UI (Save / Record Damages / table) until an allowed role is
     // confirmed — show a spinner while the role is still resolving (null), and
     // the no-access state once it resolves to a disallowed role.
+    // §17.4 access is by role, but the count/damage actions decrement stock, so
+    // gate on the `stock.adjust` permission too (hard rule #6) — it is
+    // independently revocable from a Manager/Stock keeper. `perms` is empty
+    // while the role's grants are still loading; treat that as "resolving" so we
+    // show a spinner rather than flashing the no-access state for a legit role.
     final role = ref.watch(currentUserRoleProvider);
+    final perms = ref.watch(currentUserPermissionsProvider);
     const allowed = {'ceo', 'manager', 'stock_keeper'};
-    if (role == null || !allowed.contains(role.slug)) {
+    final blocked = role == null ||
+        perms.isEmpty ||
+        !allowed.contains(role.slug) ||
+        !perms.contains('stock.adjust');
+    if (blocked) {
       return Scaffold(
         backgroundColor: _bg,
         appBar: AppBar(
@@ -984,7 +994,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
           ),
         ),
         body: Center(
-          child: role == null
+          child: (role == null || perms.isEmpty)
               ? const CircularProgressIndicator()
               : Text(
                   'You don’t have access to stock counts.',

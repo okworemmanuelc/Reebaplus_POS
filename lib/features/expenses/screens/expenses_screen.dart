@@ -50,7 +50,7 @@ class ExpensesScreen extends ConsumerStatefulWidget {
 class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  String _periodFilter = 'Last 30 days'; // §20.1/§30.6 default
+  String _periodFilter = 'This Month'; // §20.1/§30.6 default
   Color get _bg => Theme.of(context).scaffoldBackgroundColor;
   Color get _surface => Theme.of(context).colorScheme.surface;
   Color get _text => Theme.of(context).colorScheme.onSurface;
@@ -77,6 +77,17 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
   bool _isInPeriod(DateTime date, String period) =>
       datePeriodFromLabel(period).includes(date);
 
+  /// Period labels this viewer may choose (§19.2/§30.11 — roles below Manager
+  /// are capped to Today/This Week/This Month).
+  List<String> get _periodOptions =>
+      datePeriodLabelsForRole(managerUp: isManagerOrAbove(ref));
+
+  /// [_periodFilter] clamped into [_periodOptions], so the dropdown value and
+  /// the list filter agree for capped viewers.
+  String get _effectivePeriod => _periodOptions.contains(_periodFilter)
+      ? _periodFilter
+      : _periodOptions.last;
+
   /// Resolves a recordedBy user id to a name; never shows a raw UUID (rule #4).
   String _recordedByName(String? userId, Map<String, UserData> users) {
     if (userId == null) return '—';
@@ -88,6 +99,31 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
   @override
   Widget build(BuildContext context) {
     ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
+    // Hard rule #6 (load-bearing): the Expenses screen IS the expense
+    // report/list, so it requires `reports.see_expenses`. The drawer item and
+    // the Home "Total Expenses" card are gated on the same key, but guard the
+    // screen body too so no alternate route exposes the report. The Add-Expense
+    // FAB additionally checks `expenses.create`.
+    if (!hasPermission(ref, 'reports.see_expenses')) {
+      return Scaffold(
+        backgroundColor: _bg,
+        drawer: const AppDrawer(activeRoute: 'expenses'),
+        appBar: _buildAppBar(context),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Text(
+              'You don’t have access to expense reports.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: _subtext,
+                fontSize: context.getRFontSize(14),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     return Scaffold(
       backgroundColor: _bg,
       drawer: const AppDrawer(activeRoute: 'expenses'),
@@ -106,7 +142,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
           final periodApproved = allExpenses
               .where((e) =>
                   e.expense.status == 'approved' &&
-                  _isInPeriod(e.expense.expenseDate, _periodFilter))
+                  _isInPeriod(e.expense.expenseDate, _effectivePeriod))
               .toList();
           final approvedTotal = periodApproved.fold<int>(
             0,
@@ -117,7 +153,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
           // reflects the last-30-days window, independent of the period
           // selector above the list.
           final monthly = allExpenses
-              .where((e) => _isInPeriod(e.expense.expenseDate, 'Last 30 days'))
+              .where((e) => _isInPeriod(e.expense.expenseDate, 'This Month'))
               .toList();
           final budgetSpentKobo = monthly
               .where((e) => e.expense.status == 'approved')
@@ -336,9 +372,9 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
                   ],
                 ),
                 AppDropdown<String>(
-                  value: _periodFilter,
+                  value: _effectivePeriod,
                   width: context.getRSize(130),
-                  items: kDatePeriodLabels.map((String val) {
+                  items: _periodOptions.map((String val) {
                     return DropdownMenuItem<String>(
                         value: val, child: Text(val));
                   }).toList(),
@@ -350,7 +386,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
             ),
           ),
           // §20.1/§20.3: monthly budget bar — always visible; reflects the
-          // last-30-days window regardless of the selected period.
+          // current calendar month regardless of the selected period.
           _buildBudgetBar(
             context,
             spentKobo: budgetSpentKobo,
@@ -643,7 +679,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
 
     // Period-filtered list (all statuses) for the main grouped section.
     final periodList = allExpenses
-        .where((e) => _isInPeriod(e.expense.expenseDate, _periodFilter))
+        .where((e) => _isInPeriod(e.expense.expenseDate, _effectivePeriod))
         .toList();
 
     if (pending.isEmpty && periodList.isEmpty) {
@@ -683,13 +719,16 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      cat.toUpperCase(),
-                      style: TextStyle(
-                        color: _subtext,
-                        fontSize: context.getRFontSize(12),
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.2,
+                    Expanded(
+                      child: Text(
+                        cat.toUpperCase(),
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: _subtext,
+                          fontSize: context.getRFontSize(12),
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.2,
+                        ),
                       ),
                     ),
                     Text(

@@ -706,6 +706,43 @@ class StockTransactions extends Table {
   ];
 }
 
+// Approval queue for stock-keeper stock adjustments (master plan §16.6.1).
+// A stock keeper's Add/Remove does NOT touch inventory directly — it lands here
+// as a `pending` request. The affected store's Manager(s) and the CEO approve in
+// the Reports hub; on approval the real adjustment runs via `adjustStock` (so
+// the atomic pos_inventory_delta_v2 envelope still applies the inventory +
+// ledger). `reason` is the note carried into the eventual adjustment; `summary`
+// is a denormalised human headline (like notifications.message) so the approval
+// card renders without cross-table joins. Direct Manager/CEO adjustments never
+// pass through here.
+@DataClassName('StockAdjustmentRequestData')
+class StockAdjustmentRequests extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get productId => text().references(Products, #id)();
+  TextColumn get storeId => text().references(Stores, #id)();
+  // Signed: positive = add, negative = remove.
+  IntColumn get quantityDiff => integer()();
+  TextColumn get reason => text()();
+  // Denormalised headline ("Akin added 5 bottle(s) of Star (Main Store)").
+  TextColumn get summary => text()();
+  TextColumn get requestedBy => text().nullable().references(Users, #id)();
+  TextColumn get status => text().withDefault(const Constant('pending'))();
+  TextColumn get approvedBy => text().nullable().references(Users, #id)();
+  DateTimeColumn get approvedAt => dateTime().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => [
+    "CHECK (status IN ('pending','approved','rejected'))",
+  ];
+}
+
 @DataClassName('OrderData')
 class Orders extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
@@ -1195,6 +1232,32 @@ class RolePermissions extends Table {
   ];
 }
 
+/// Per-staff permission override (master plan §10.2.1). A row means this user's
+/// effective permission for `permissionKey` is forced: `isGranted` true =
+/// force-grant, false = force-revoke. No row = inherit the role default. The
+/// runtime resolver applies these on top of the role's grants (CEO is skipped —
+/// always all-on). Scoped per business so a multi-business user's overrides
+/// don't leak across businesses.
+@DataClassName('UserPermissionOverrideData')
+class UserPermissionOverrides extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get userId => text().references(Users, #id)();
+  TextColumn get permissionKey => text()();
+  BoolColumn get isGranted => boolean()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => [
+    'UNIQUE (business_id, user_id, permission_key)',
+  ];
+}
+
 @DataClassName('RoleSettingData')
 class RoleSettings extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
@@ -1384,6 +1447,7 @@ class MigrationEvents extends Table {
     StockTransfers,
     StockAdjustments,
     StockTransactions,
+    StockAdjustmentRequests,
     Orders,
     OrderItems,
     Shipments,
@@ -1408,6 +1472,7 @@ class MigrationEvents extends Table {
     Permissions,
     Roles,
     RolePermissions,
+    UserPermissionOverrides,
     RoleSettings,
     UserBusinesses,
     InviteCodes,
@@ -1431,6 +1496,7 @@ class MigrationEvents extends Table {
     StoresDao,
     StockLedgerDao,
     StockTransferDao,
+    StockAdjustmentRequestsDao,
     PendingCrateReturnsDao,
     SessionsDao,
     WalletTransactionsDao,
@@ -1450,6 +1516,7 @@ class MigrationEvents extends Table {
     PermissionsDao,
     RolesDao,
     RolePermissionsDao,
+    UserPermissionOverridesDao,
     RoleSettingsDao,
     UserBusinessesDao,
     InviteCodesDao,
@@ -1488,7 +1555,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 32;
+  int get schemaVersion => 34;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -2874,6 +2941,67 @@ class AppDatabase extends _$AppDatabase {
           "WHERE key = 'stock.view'",
         );
       }
+      if (from < 33) {
+        // v33 (master plan §10.2.1): per-staff permission overrides. One new
+        // synced tenant table. Mirrors
+        // supabase/migrations/0088_user_permission_overrides.sql. The
+        // (business_id, last_updated_at) sync index and the bump trigger match
+        // the generic `_postCreateStatements` loops so a fresh install
+        // (onCreate) and an upgrade end up identical.
+        //
+        // Idempotency guard (like the v27/v30 blocks): a DB stepped back to
+        // < 33 by the revert-then-re-upgrade tests may still carry the table;
+        // a blind createTable would throw "table already exists".
+        final exists = await customSelect(
+          "SELECT 1 FROM sqlite_master WHERE type='table' "
+          "AND name='user_permission_overrides'",
+        ).get();
+        if (exists.isEmpty) {
+          await m.createTable(userPermissionOverrides);
+          await customStatement(
+            'CREATE INDEX idx_user_permission_overrides_business_lua '
+            'ON user_permission_overrides (business_id, last_updated_at)',
+          );
+          await customStatement(
+            'CREATE TRIGGER bump_user_permission_overrides_last_updated_at '
+            'AFTER UPDATE ON user_permission_overrides '
+            'FOR EACH ROW '
+            'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+            'BEGIN '
+            "UPDATE user_permission_overrides SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+            'END',
+          );
+        }
+      }
+      if (from < 34) {
+        // v34 (master plan §16.6.1): stock-keeper adjustment approval queue.
+        // One new synced tenant table. Mirrors
+        // supabase/migrations/0089_stock_adjustment_requests.sql. The
+        // (business_id, last_updated_at) sync index and the bump trigger match
+        // the generic `_postCreateStatements` loops so a fresh install
+        // (onCreate) and an upgrade end up identical. Idempotency guard (like
+        // v33) for a DB stepped back to < 34 by the revert-then-re-upgrade tests.
+        final exists = await customSelect(
+          "SELECT 1 FROM sqlite_master WHERE type='table' "
+          "AND name='stock_adjustment_requests'",
+        ).get();
+        if (exists.isEmpty) {
+          await m.createTable(stockAdjustmentRequests);
+          await customStatement(
+            'CREATE INDEX idx_stock_adjustment_requests_business_lua '
+            'ON stock_adjustment_requests (business_id, last_updated_at)',
+          );
+          await customStatement(
+            'CREATE TRIGGER bump_stock_adjustment_requests_last_updated_at '
+            'AFTER UPDATE ON stock_adjustment_requests '
+            'FOR EACH ROW '
+            'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+            'BEGIN '
+            "UPDATE stock_adjustment_requests SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+            'END',
+          );
+        }
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -2981,6 +3109,8 @@ const List<String> _syncedTenantTables = [
   'stock_transfers',
   'stock_adjustments',
   'stock_transactions',
+  // v34 (master plan §16.6.1) — stock-keeper adjustment approval queue.
+  'stock_adjustment_requests',
   'orders',
   'order_items',
   'shipments',
@@ -3010,10 +3140,41 @@ const List<String> _syncedTenantTables = [
   // by migration on both client and cloud.
   'roles',
   'role_permissions',
+  // v33 (master plan §10.2.1) — per-staff permission overrides.
+  'user_permission_overrides',
   'role_settings',
   'user_businesses',
   'invite_codes',
   'user_stores',
+];
+
+// ---------------------------------------------------------------------------
+// Sync safeguard constants (CLAUDE.md §5). Public, derived from the single
+// source of truth above so the three guardrail layers — the SyncDao enqueue
+// guard, the registration-completeness test, and the raw-write leak scanner —
+// cannot drift apart.
+// ---------------------------------------------------------------------------
+
+/// Public, read-only view of the synced-tenant-table set, for the sync
+/// guardrails (SyncDao enqueue guard + the registration/leak tests).
+const List<String> kSyncedTenantTables = _syncedTenantTables;
+
+/// Phase D §6.3 caches: enqueued + pushed, but deliberately NOT in
+/// `_syncedTenantTables` (no cursor index / bump trigger). They carry the
+/// sync fingerprint (`business_id` + `last_updated_at`), so the registration
+/// test exempts them explicitly.
+const List<String> kSyncCacheTables = [
+  'inventory',
+  'customer_crate_balances',
+  'manufacturer_crate_balances',
+];
+
+/// Every table name a DAO may legitimately enqueue. `businesses` syncs via
+/// its own realtime channel and has no `business_id`, so it is listed by name.
+const List<String> kEnqueueableTables = [
+  ..._syncedTenantTables,
+  ...kSyncCacheTables,
+  'businesses',
 ];
 
 // Subset of `_syncedTenantTables` introduced in schema v13. Used by

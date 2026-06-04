@@ -222,12 +222,6 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
     }
 
     return Container(
-      padding: EdgeInsets.fromLTRB(
-        context.getRSize(24),
-        context.getRSize(16),
-        context.getRSize(24),
-        context.deviceBottomInset + context.getRSize(24),
-      ),
       decoration: BoxDecoration(
         color: t.colorScheme.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
@@ -239,7 +233,17 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
           ),
         ],
       ),
-      child: Column(
+      // Scrolls so the fixed-height content never overflows when the keyboard
+      // shrinks the sheet. Bottom padding (incl. keyboard via deviceBottomInset)
+      // lives on the scroll view so the last field can clear the keyboard.
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          context.getRSize(24),
+          context.getRSize(16),
+          context.getRSize(24),
+          context.deviceBottomInset + context.getRSize(24),
+        ),
+        child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           // Drag Handle
@@ -525,6 +529,7 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
               ],
             ),
         ],
+      ),
       ),
     );
   }

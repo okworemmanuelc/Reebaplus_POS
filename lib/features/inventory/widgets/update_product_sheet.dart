@@ -79,6 +79,16 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
       .read(currentUserPermissionsProvider)
       .contains('products.edit_buying_price');
 
+  /// Whether the current role may edit product details/prices (§16.7). This
+  /// editor's primary purpose; re-checked at save time (hard rule #6).
+  bool get _canEditPrice =>
+      ref.read(currentUserPermissionsProvider).contains('products.edit_price');
+
+  /// Whether the current role may add stock to an existing product (§16.7).
+  /// Gates the in-sheet "quantity to add" field and its save branch.
+  bool get _canAddStock =>
+      ref.read(currentUserPermissionsProvider).contains('stock.add');
+
   /// Empty-crate value in kobo, or null when not tracking empties / left blank.
   int? get _emptyCrateValueKobo {
     if (!(_trackEmpties && _unit.toLowerCase() == 'bottle')) return null;
@@ -335,6 +345,14 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
     final auth = ref.read(authProvider);
     setState(() => _errorMessage = null);
 
+    // Defense-in-depth (hard rule #6): this editor mutates product details, so
+    // bail if `products.edit_price` was revoked while the sheet was open.
+    if (!_canEditPrice) {
+      setState(() =>
+          _errorMessage = 'You no longer have permission to edit products.');
+      return;
+    }
+
     final canEditBuying = _canEditBuying;
     final name = _nameCtrl.text.trim();
     String? missingField;
@@ -429,15 +447,35 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
         );
       }
 
-      // 3. Add stock if quantity entered
-      if (qtyToAdd > 0) {
-        await db.inventoryDao.adjustStock(
-          widget.product.id,
-          _selectedStore!.id,
-          qtyToAdd,
-          'Restock by ${auth.currentUser?.name ?? 'Unknown'}',
-          auth.currentUser?.id,
-        );
+      // 3. Add stock if a quantity was entered — gated on `stock.add` (hard
+      //    rule #6). A stock keeper's add needs Manager/CEO approval (§16.6.1),
+      //    so route it to a pending request rather than touching inventory.
+      var stockRequested = false;
+      final adding = qtyToAdd > 0 && _canAddStock;
+      if (adding) {
+        final actorName = auth.currentUser?.name ?? 'Unknown';
+        final isStockKeeper =
+            ref.read(currentUserRoleProvider)?.slug == 'stock_keeper';
+        if (isStockKeeper) {
+          await db.stockAdjustmentRequestsDao.requestStockAdjustment(
+            productId: widget.product.id,
+            storeId: _selectedStore!.id,
+            quantityDiff: qtyToAdd,
+            reason: 'Restock by $actorName',
+            summary: '$actorName requested +$qtyToAdd ${widget.product.unit}(s) '
+                'of $name (${_selectedStore!.name})',
+            requestedBy: auth.currentUser?.id,
+          );
+          stockRequested = true;
+        } else {
+          await db.inventoryDao.adjustStock(
+            widget.product.id,
+            _selectedStore!.id,
+            qtyToAdd,
+            'Restock by $actorName',
+            auth.currentUser?.id,
+          );
+        }
       }
 
       // 4. Log the update
@@ -446,7 +484,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
           .logAction(
             'update_product',
             '${auth.currentUser?.name ?? 'Unknown'} updated product: $name'
-                '${qtyToAdd > 0 ? ', added $qtyToAdd units' : ''}',
+                '${adding ? (stockRequested ? ', requested +$qtyToAdd units' : ', added $qtyToAdd units') : ''}',
             productId: widget.product.id,
           );
 
@@ -972,31 +1010,36 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                     const SizedBox(height: 16),
 
                     // ── STOCK SECTION ────────────────────────────────────────
-                    Text(
-                      'Stock Management',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: textColor,
-                        fontSize: 15,
+                    // Add-stock is gated on `stock.add` (hard rule #6/#7). The
+                    // entry already requires `products.edit_price`, so this
+                    // hides the field when add-stock specifically is revoked.
+                    if (_canAddStock) ...[
+                      Text(
+                        'Stock Management',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: textColor,
+                          fontSize: 15,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Current total stock: ${widget.totalStock}',
-                      style: TextStyle(fontSize: 13, color: subtext),
-                    ),
-                    const SizedBox(height: 14),
-                    AppInput(
-                      controller: _qtyToAddCtrl,
-                      labelText: 'QUANTITY TO ADD',
-                      hintText: '0',
-                      keyboardType: TextInputType.number,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'This amount will be added to the existing stock',
-                      style: TextStyle(fontSize: 11, color: subtext),
-                    ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Current total stock: ${widget.totalStock}',
+                        style: TextStyle(fontSize: 13, color: subtext),
+                      ),
+                      const SizedBox(height: 14),
+                      AppInput(
+                        controller: _qtyToAddCtrl,
+                        labelText: 'QUANTITY TO ADD',
+                        hintText: '0',
+                        keyboardType: TextInputType.number,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'This amount will be added to the existing stock',
+                        style: TextStyle(fontSize: 11, color: subtext),
+                      ),
+                    ],
                     const SizedBox(height: 14),
 
                     // ── STORE ────────────────────────────────────────────

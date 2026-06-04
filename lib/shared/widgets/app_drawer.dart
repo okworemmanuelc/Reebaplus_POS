@@ -356,9 +356,10 @@ class AppDrawer extends ConsumerWidget {
                 activeRoute == 'supplier_accounts' || activeRoute == 'payments',
             onTap: () => _navigateTo(context, ref, 'supplier_accounts'),
           ),
-        // Expenses — CEO/Manager only (§27.3). expenses.create not held by
-        // Cashier or Stock keeper.
-        if (hasPermission(ref, 'expenses.create'))
+        // Expenses — opens the expense report/list, so gate on the viewing key
+        // `reports.see_expenses` (hard rule #6), not `expenses.create` (that's
+        // only the Add-Expense action). Neither is held by Cashier/Stock keeper.
+        if (hasPermission(ref, 'reports.see_expenses'))
           _navItem(
             context,
             FontAwesomeIcons.fileInvoiceDollar,

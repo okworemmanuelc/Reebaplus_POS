@@ -10,6 +10,7 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/staff/screens/staff_permissions_screen.dart';
 import 'package:reebaplus_pos/shared/utils/role_display.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 
@@ -313,6 +314,16 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                       : DateFormat('MMM d, y • h:mm a')
                           .format(membership.lastLoginAt!),
                 ),
+                // Permission access (§10.2.1) — only a permissions manager sees
+                // it, and never on the own (read-only) card. Opens the per-user
+                // override editor; this person inherits their role's
+                // permissions until the CEO overrides specific ones.
+                if (!widget.readOnly &&
+                    role != null &&
+                    hasPermission(ref, 'settings.manage')) ...[
+                  SizedBox(height: context.getRSize(4)),
+                  _PermissionAccessCard(user: user, role: role),
+                ],
                 // Manage actions — hidden in view-only (own card). Each action
                 // has its OWN permission (§9): Change role -> staff.change_role,
                 // Suspend/Reactivate -> staff.suspend (both CEO + Manager by
@@ -426,6 +437,103 @@ class _InfoRow extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Per-user permission scope (§10.2.1). This member inherits their role's
+/// permissions; the CEO can override specific ones from here. The CEO target
+/// is never overridable (full access), so it shows a static note instead of an
+/// editor entry.
+class _PermissionAccessCard extends ConsumerWidget {
+  final UserData user;
+  final RoleData role;
+  const _PermissionAccessCard({required this.user, required this.role});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = Theme.of(context);
+    final subtext = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
+    final isCeo = role.slug == 'ceo';
+    final overrideCount = isCeo
+        ? 0
+        : (ref.watch(userPermissionOverridesProvider(user.id)).valueOrNull ??
+                const [])
+            .length;
+
+    // One clean line, matching the info rows above (icon · label · state ·
+    // chevron). CEO is full-access and not tappable; everyone else shows
+    // whether they inherit the role or carry overrides, and taps through to the
+    // per-user editor (§10.2.1).
+    final String state;
+    final Color stateColor;
+    if (isCeo) {
+      state = 'Full access';
+      stateColor = subtext;
+    } else if (overrideCount == 0) {
+      state = 'Role default';
+      stateColor = subtext;
+    } else {
+      state = '$overrideCount override${overrideCount == 1 ? '' : 's'}';
+      stateColor = t.colorScheme.primary;
+    }
+
+    final row = Container(
+      margin: EdgeInsets.only(bottom: context.getRSize(10)),
+      padding: EdgeInsets.all(context.getRSize(14)),
+      decoration: BoxDecoration(
+        color: t.cardColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: t.dividerColor),
+      ),
+      child: Row(
+        children: [
+          Icon(FontAwesomeIcons.userShield,
+              size: context.getRSize(15), color: subtext),
+          SizedBox(width: context.getRSize(12)),
+          Text(
+            'Permission access',
+            style: TextStyle(
+              color: subtext,
+              fontSize: context.getRFontSize(13),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const Spacer(),
+          Flexible(
+            child: Text(
+              state,
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                color: stateColor,
+                fontSize: context.getRFontSize(14),
+                fontWeight: FontWeight.bold,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (!isCeo) ...[
+            SizedBox(width: context.getRSize(6)),
+            Icon(Icons.chevron_right,
+                size: context.getRSize(18), color: subtext),
+          ],
+        ],
+      ),
+    );
+
+    if (isCeo) return row;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => StaffPermissionsScreen(user: user, role: role),
+          ),
+        ),
+        child: row,
       ),
     );
   }

@@ -76,6 +76,14 @@ class _InviteStaffSheetState extends ConsumerState<InviteStaffSheet> {
 
   Future<void> _generate() async {
     if (!_formKey.currentState!.validate()) return;
+    // Write-boundary re-check (§10.2.1): the screen + drawer entry are gated on
+    // `staff.invite`, but re-check the effective permission before writing the
+    // invite so a revoked per-user override is honored at the action too.
+    if (!ref.read(currentUserPermissionsProvider).contains('staff.invite')) {
+      AppNotification.showError(
+          context, 'You don\'t have permission to do that.');
+      return;
+    }
     if (_roleId == null || _storeId == null) {
       AppNotification.showError(context, 'Pick a role and a store.');
       return;
@@ -182,15 +190,15 @@ class _InviteStaffSheetState extends ConsumerState<InviteStaffSheet> {
     final surface = t.colorScheme.surface;
     final text = t.colorScheme.onSurface;
 
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
+    // deviceBottomInset already includes the keyboard inset (and works under
+    // MainLayout, unlike MediaQuery.viewInsets.bottom which reads 0 here), so a
+    // single SingleChildScrollView handles both keyboard avoidance and overflow.
+    return Container(
+      decoration: BoxDecoration(
+        color: surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      child: Container(
-        decoration: BoxDecoration(
-          color: surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        ),
+      child: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(
           context.getRSize(20),
           context.getRSize(16),

@@ -115,7 +115,11 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     final businessesAsync = ref.watch(localBusinessesProvider);
     if (!grantsAsync.hasValue || !businessesAsync.hasValue) return null;
 
-    final perms = grantsAsync.value!.map((g) => g.permissionKey).toSet();
+    // Use the EFFECTIVE permission set (role grants ± this user's overrides), not
+    // the raw role grants — otherwise a CEO's per-staff override of
+    // `suppliers.manage` wouldn't change the visible tabs. The grants watch above
+    // stays only as the load-gate so the tab bar still reveals in one shot.
+    final perms = ref.watch(currentUserPermissionsProvider);
     final businessId = ref.read(authProvider).currentUser?.businessId;
     final businessType = businessesAsync.value!
         .where((b) => b.id == businessId)
@@ -362,6 +366,9 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       appBar: _buildAppBar(context),
       floatingActionButton: (onProductsTab && canAddProduct)
           ? AppFAB(
+              // Stock is a bottom-nav tab root — the visible bottom bar already
+              // lifts the FAB above the system nav; don't add the inset.
+              reserveBottomInset: false,
               onPressed: _showAddProductSheet,
               icon: FontAwesomeIcons.plus,
               label: 'Add Product',
@@ -420,10 +427,12 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
             }),
           ),
         // Stock Take icon (§16.1) → Daily Stock Count. §17.4 access: Stock
-        // keeper, Manager, CEO. Cashier blocked — hide the icon entirely (hard
-        // rule #7: hide, don't disable).
+        // keeper, Manager, CEO — AND the `stock.adjust` permission, since the
+        // count/damage actions decrement stock and the key is independently
+        // revocable. Otherwise hide the icon entirely (hard rule #7).
         if (const {'ceo', 'manager', 'stock_keeper'}
-            .contains(ref.watch(currentUserRoleProvider)?.slug))
+                .contains(ref.watch(currentUserRoleProvider)?.slug) &&
+            hasPermission(ref, 'stock.adjust'))
           IconButton(
             tooltip: 'Daily Stock Count',
             icon: const Icon(Icons.fact_check_outlined),
@@ -836,7 +845,43 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     }).toList()..sort((a, b) => a.manufacturer.compareTo(b.manufacturer));
   }
 
+  /// §16.7 store confinement for the Inventory filter. The CEO — and a Manager
+  /// the CEO has granted all-stores — may view every store; Cashier and Stock
+  /// keeper (and a Manager without the grant) are locked to their assigned
+  /// store(s). Mirrors the Home filter rule. `lockedStores` is empty while the
+  /// assignments are still resolving.
+  ({bool locked, List<StoreData> lockedStores}) _storeLock() {
+    final slug = ref.watch(currentUserRoleProvider)?.slug;
+    final canViewAllStores = slug == 'ceo' ||
+        (slug == 'manager' && ref.watch(managerCanViewAllStoresProvider));
+    final locked = slug != null && !canViewAllStores;
+    final userId = ref.read(authProvider).currentUser?.id;
+    final assignedStoreIds = (userId == null
+            ? const <UserStoreData>[]
+            : (ref.watch(myUserStoresProvider(userId)).valueOrNull ??
+                const <UserStoreData>[]))
+        .map((s) => s.storeId)
+        .toSet();
+    final lockedStores =
+        _stores.where((s) => assignedStoreIds.contains(s.id)).toList();
+    return (locked: locked, lockedStores: lockedStores);
+  }
+
   Widget _buildSupplierFilter(BuildContext context) {
+    // §16.7: roles below Manager (and a Manager without the all-stores grant)
+    // are confined to their assigned store(s). Mirrors the Home filter lock.
+    final lock = _storeLock();
+    if (lock.locked &&
+        lock.lockedStores.isNotEmpty &&
+        !lock.lockedStores.any((s) => s.id == _selectedStoreId)) {
+      // Pin a locked user's filter to an allowed store, re-subscribing once.
+      final id = lock.lockedStores.first.id;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _selectedStoreId == id) return;
+        setState(() => _selectedStoreId = id);
+        _subscribeToProducts();
+      });
+    }
     return Container(
       padding: EdgeInsets.fromLTRB(
         context.getRSize(16),
@@ -850,8 +895,37 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
           Expanded(
             child: _isFirstLoad
                 ? const SizedBox.shrink()
-                : (ref.read(navigationProvider).storeLocked.value
-                      ? _buildLockedStoreChip()
+                : (lock.locked
+                      // One assigned store → a locked chip; several → a dropdown
+                      // limited to those stores (no "All Stores").
+                      ? (lock.lockedStores.length > 1
+                            ? AppDropdown<String>(
+                                value: lock.lockedStores
+                                        .any((s) => s.id == _selectedStoreId)
+                                    ? _selectedStoreId
+                                    : lock.lockedStores.first.id,
+                                labelText: 'Store',
+                                items: lock.lockedStores
+                                    .map(
+                                      (w) => DropdownMenuItem(
+                                        value: w.id.toString(),
+                                        child: Text(
+                                          w.name,
+                                          style: TextStyle(color: _text),
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: (val) {
+                                  if (val != null) {
+                                    setState(() => _selectedStoreId = val);
+                                    _subscribeToProducts();
+                                  }
+                                },
+                              )
+                            : _buildLockedStoreChip(
+                                lock.lockedStores.firstOrNull,
+                              ))
                       : AppDropdown<String>(
                           value: _selectedStoreId,
                           labelText: 'Store',
@@ -940,9 +1014,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     );
   }
 
-  Widget _buildLockedStoreChip() {
-    final lockedId = ref.read(navigationProvider).lockedStoreId.value;
-    final store = _stores.where((w) => w.id == lockedId).firstOrNull;
+  Widget _buildLockedStoreChip(StoreData? store) {
     final label = store?.name ?? 'My Store';
     return Container(
       padding: EdgeInsets.symmetric(
@@ -1117,18 +1189,24 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         : Theme.of(context).colorScheme.primary;
 
     return GestureDetector(
-      onLongPress: () {
-        showModalBottomSheet(
-          context: context,
-          isScrollControlled: true,
-          backgroundColor: Colors.transparent,
-          builder: (ctx) => UpdateProductSheet(
-            product: product,
-            totalStock: currentStock,
-            onProductUpdated: () => setState(() {}),
-          ),
-        );
-      },
+      // Long-press opens the full product editor (name/prices/details), so it
+      // is gated on `products.edit_price` (hard rule #6/#7 — hide, don't
+      // disable). Stock-only roles add stock via the product-detail Update
+      // Stock sheet instead, never this editor.
+      onLongPress: hasPermission(ref, 'products.edit_price')
+          ? () {
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (ctx) => UpdateProductSheet(
+                  product: product,
+                  totalStock: currentStock,
+                  onProductUpdated: () => setState(() {}),
+                ),
+              );
+            }
+          : null,
       onTap: () {
         final inventoryItem = InventoryItem(
           id: product.id.toString(),
@@ -1781,12 +1859,15 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      'Update ${mfr.name}',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
-                        color: _text,
+                    Expanded(
+                      child: Text(
+                        'Update ${mfr.name}',
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                          color: _text,
+                        ),
                       ),
                     ),
                     IconButton(

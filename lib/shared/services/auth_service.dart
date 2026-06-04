@@ -120,6 +120,8 @@ class AuthService extends ValueNotifier<UserData?> {
   /// the users table. PIN unlock is device-local; the hashed PIN columns
   /// (pin_hash / pin_salt / pin_iterations) live on the users row.
   Future<void> setUserPin(String userId, String plaintext) async {
+    // sync-exempt: §5 #4 — pin/pinHash/pinSalt/pinIterations are local-only
+    // columns by schema design; they do not exist in Supabase.
     debugPrint('[AuthService] setUserPin: userId=$userId');
     final salt = PinHasher.generateSaltBase64();
     final hash = PinHasher.hashBase64(
@@ -312,6 +314,8 @@ class AuthService extends ValueNotifier<UserData?> {
   /// add yet another. We now query cloud `public.users` for the
   /// canonical id and reuse it locally.
   Future<UserData?> upsertLocalUserFromProfile() async {
+    // sync-exempt: §5 #5 — mirrors a users row just read FROM the cloud;
+    // pushing it back is a no-op round trip.
     final authUser = _supabase.auth.currentUser;
     if (authUser == null || authUser.email == null) return null;
 
@@ -1003,6 +1007,8 @@ class AuthService extends ValueNotifier<UserData?> {
     //    requireBusinessId() would throw. Payloads carry businessId
     //    explicitly so cross-tenant safety is enforced by the values, not
     //    by the resolver.
+    // sync-exempt: §5 #6 — onboarding mirror; the cloud RPC above already
+    // wrote canonical state, and AuthService isn't bound yet (resolver null).
     try {
       await _db.transaction(() async {
         await (_db.delete(_db.users)

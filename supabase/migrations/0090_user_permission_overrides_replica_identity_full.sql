@@ -1,0 +1,41 @@
+-- 0090_user_permission_overrides_replica_identity_full.sql
+--
+-- Live realtime DELETE propagation for `user_permission_overrides` — the fourth
+-- hard-delete table, added in 0088 AFTER 0064 and missed by it.
+--
+-- Problem (identical to 0064)
+-- ---------------------------
+-- Supabase Realtime authorizes every change against the row's RLS SELECT policy
+-- before broadcasting it. For a DELETE, the only columns available in the old
+-- record are those in the table's REPLICA IDENTITY. `user_permission_overrides`
+-- carries a business-scoped RLS policy:
+--
+--   user_permission_overrides -> user_permission_overrides_tenant_rw
+--                                (USING business_id IN (current_user_business_ids()))
+--
+-- but its replica identity is the Postgres DEFAULT = primary key (`id`) only.
+-- So `business_id` is absent from a delete's old record, the RLS check runs
+-- against a NULL business_id, fails, and Realtime DROPS the DELETE event before
+-- it reaches subscribed clients.
+--
+-- Net effect on a multi-device business: when a CEO turns a per-staff override
+-- OFF, that *clears* the override row (hard delete via `enqueueDelete`, since a
+-- stock keeper's role default for the key is already off). The grant that the
+-- INSERT/UPSERT delivered live never disappears on the staff member's other
+-- device — it only clears on the next full snapshot reconcile (app restart /
+-- re-login). The user-visible bug: toggling a permission ON propagates, but
+-- toggling it OFF does not revert.
+--
+-- This is the only hard-delete table (the `enqueueDelete` call sites +
+-- `_hardDeleteReconcileTables`) still on the default replica identity; the other
+-- three (role_permissions, saved_carts, notifications) were fixed in 0064.
+--
+-- Fix
+-- ---
+-- REPLICA IDENTITY FULL makes the old record carry every column, so Realtime can
+-- authorize the DELETE against the real `business_id` and deliver it live. Cost
+-- is a little extra WAL volume on UPDATE/DELETE — negligible for this small,
+-- low-write table. Idempotent: re-running is a no-op. The client already applies
+-- the realtime DELETE (`_deleteLocalRowById` case 'user_permission_overrides').
+
+ALTER TABLE public.user_permission_overrides REPLICA IDENTITY FULL;

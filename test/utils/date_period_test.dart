@@ -2,17 +2,20 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:reebaplus_pos/core/utils/date_period.dart';
 
 void main() {
-  // Fixed reference instant so the rolling windows are deterministic.
-  final now = DateTime.utc(2026, 6, 1, 12, 0, 0);
+  // Fixed reference instant so the calendar boundaries are deterministic.
+  // 2026-06-03 is a Wednesday; its Sunday-start week begins 2026-05-31.
+  // Built as a LOCAL DateTime so it matches how `startFrom` constructs
+  // boundaries (local date parts), independent of the runner's timezone.
+  final now = DateTime(2026, 6, 3, 12, 0, 0);
 
   group('canonical labels', () {
     test('kDatePeriodLabels is the agreed set, in order', () {
       expect(kDatePeriodLabels, [
-        'Last 24 hours',
-        'Last 7 days',
-        'Last 30 days',
-        'Last year',
-        'To date',
+        'Today',
+        'This Week',
+        'This Month',
+        'This Year',
+        'To Date',
       ]);
     });
 
@@ -23,25 +26,30 @@ void main() {
     });
   });
 
-  group('datePeriodFromLabel tolerates legacy labels', () {
-    test('Day / Today -> last24Hours', () {
-      expect(datePeriodFromLabel('Day'), DatePeriod.last24Hours);
-      expect(datePeriodFromLabel('Today'), DatePeriod.last24Hours);
+  group('datePeriodFromLabel tolerates legacy / rolling labels', () {
+    test('Today / Day / Last 24 hours -> today', () {
+      expect(datePeriodFromLabel('Today'), DatePeriod.today);
+      expect(datePeriodFromLabel('Day'), DatePeriod.today);
+      expect(datePeriodFromLabel('Last 24 hours'), DatePeriod.today);
     });
-    test('Week / This Week / 7 Days -> last7Days', () {
-      expect(datePeriodFromLabel('Week'), DatePeriod.last7Days);
-      expect(datePeriodFromLabel('This Week'), DatePeriod.last7Days);
-      expect(datePeriodFromLabel('7 Days'), DatePeriod.last7Days);
+    test('This Week / Week / 7 Days / Last 7 days -> thisWeek', () {
+      expect(datePeriodFromLabel('This Week'), DatePeriod.thisWeek);
+      expect(datePeriodFromLabel('Week'), DatePeriod.thisWeek);
+      expect(datePeriodFromLabel('7 Days'), DatePeriod.thisWeek);
+      expect(datePeriodFromLabel('Last 7 days'), DatePeriod.thisWeek);
     });
-    test('Month / This Month / 30 Days / This Quarter -> last30Days', () {
-      expect(datePeriodFromLabel('Month'), DatePeriod.last30Days);
-      expect(datePeriodFromLabel('This Month'), DatePeriod.last30Days);
-      expect(datePeriodFromLabel('30 Days'), DatePeriod.last30Days);
-      expect(datePeriodFromLabel('This Quarter'), DatePeriod.last30Days);
+    test('This Month / Month / 30 Days / This Quarter / Last 30 days -> thisMonth',
+        () {
+      expect(datePeriodFromLabel('This Month'), DatePeriod.thisMonth);
+      expect(datePeriodFromLabel('Month'), DatePeriod.thisMonth);
+      expect(datePeriodFromLabel('30 Days'), DatePeriod.thisMonth);
+      expect(datePeriodFromLabel('This Quarter'), DatePeriod.thisMonth);
+      expect(datePeriodFromLabel('Last 30 days'), DatePeriod.thisMonth);
     });
-    test('Year / This Year -> lastYear', () {
-      expect(datePeriodFromLabel('Year'), DatePeriod.lastYear);
-      expect(datePeriodFromLabel('This Year'), DatePeriod.lastYear);
+    test('This Year / Year / Last year -> thisYear', () {
+      expect(datePeriodFromLabel('This Year'), DatePeriod.thisYear);
+      expect(datePeriodFromLabel('Year'), DatePeriod.thisYear);
+      expect(datePeriodFromLabel('Last year'), DatePeriod.thisYear);
     });
     test('To Date / All / All Time / unknown -> toDate', () {
       expect(datePeriodFromLabel('To Date'), DatePeriod.toDate);
@@ -50,79 +58,77 @@ void main() {
       expect(datePeriodFromLabel('something weird'), DatePeriod.toDate);
     });
     test('is case- and whitespace-insensitive', () {
-      expect(datePeriodFromLabel('  last 7 DAYS '), DatePeriod.last7Days);
+      expect(datePeriodFromLabel('  THIS week '), DatePeriod.thisWeek);
     });
   });
 
-  group('startFrom', () {
+  group('startFrom — calendar boundaries (anchored to now)', () {
     test('toDate is unbounded (null)', () {
       expect(DatePeriod.toDate.startFrom(now), isNull);
     });
-    test('windows subtract the right span', () {
-      expect(DatePeriod.last24Hours.startFrom(now),
-          now.subtract(const Duration(hours: 24)));
-      expect(DatePeriod.last7Days.startFrom(now),
-          now.subtract(const Duration(days: 7)));
-      expect(DatePeriod.last30Days.startFrom(now),
-          now.subtract(const Duration(days: 30)));
-      expect(DatePeriod.lastYear.startFrom(now),
-          now.subtract(const Duration(days: 365)));
+    test('today starts at local midnight today', () {
+      expect(DatePeriod.today.startFrom(now), DateTime(2026, 6, 3));
+    });
+    test('thisWeek starts at the most recent Sunday (Sunday-start week)', () {
+      // Wednesday 2026-06-03 -> Sunday 2026-05-31.
+      expect(DatePeriod.thisWeek.startFrom(now), DateTime(2026, 5, 31));
+      expect(DatePeriod.thisWeek.startFrom(now)!.weekday, DateTime.sunday);
+    });
+    test('thisWeek on a Sunday starts that same Sunday', () {
+      final sunday = DateTime(2026, 5, 31, 9, 0); // a Sunday
+      expect(DatePeriod.thisWeek.startFrom(sunday), DateTime(2026, 5, 31));
+    });
+    test('thisWeek on a Saturday starts the previous Sunday', () {
+      final saturday = DateTime(2026, 6, 6, 9, 0); // a Saturday
+      expect(DatePeriod.thisWeek.startFrom(saturday), DateTime(2026, 5, 31));
+    });
+    test('thisMonth starts at the first of the month', () {
+      expect(DatePeriod.thisMonth.startFrom(now), DateTime(2026, 6, 1));
+    });
+    test('thisYear starts at Jan 1', () {
+      expect(DatePeriod.thisYear.startFrom(now), DateTime(2026, 1, 1));
     });
   });
 
-  group('includes — boundaries (the bug we are fixing)', () {
-    test('last 24 hours: 23h ago in, 25h ago out', () {
+  group('includes — calendar boundaries', () {
+    test('today: midnight today in, one second before out, later today in', () {
+      expect(DatePeriod.today.includes(DateTime(2026, 6, 3), now: now), isTrue);
       expect(
-          DatePeriod.last24Hours
-              .includes(now.subtract(const Duration(hours: 23)), now: now),
-          isTrue);
-      expect(
-          DatePeriod.last24Hours
-              .includes(now.subtract(const Duration(hours: 25)), now: now),
-          isFalse);
-    });
-
-    test('last 7 days: 6d ago in, exactly 7d in, 7d+1s out', () {
-      expect(
-          DatePeriod.last7Days
-              .includes(now.subtract(const Duration(days: 6)), now: now),
-          isTrue);
-      // boundary is inclusive at exactly the start
-      expect(
-          DatePeriod.last7Days
-              .includes(now.subtract(const Duration(days: 7)), now: now),
-          isTrue);
-      expect(
-          DatePeriod.last7Days.includes(
-              now.subtract(const Duration(days: 7, seconds: 1)),
+          DatePeriod.today.includes(
+              DateTime(2026, 6, 2, 23, 59, 59),
               now: now),
           isFalse);
+      expect(DatePeriod.today.includes(DateTime(2026, 6, 3, 11), now: now),
+          isTrue);
     });
 
-    test('last 30 days: 29d in, 31d out', () {
-      expect(
-          DatePeriod.last30Days
-              .includes(now.subtract(const Duration(days: 29)), now: now),
+    test('thisWeek: Sunday start in, the moment before out', () {
+      expect(DatePeriod.thisWeek.includes(DateTime(2026, 5, 31), now: now),
           isTrue);
       expect(
-          DatePeriod.last30Days
-              .includes(now.subtract(const Duration(days: 31)), now: now),
+          DatePeriod.thisWeek
+              .includes(DateTime(2026, 5, 30, 23, 59, 59), now: now),
           isFalse);
     });
 
-    test('last year: 364d in, 366d out', () {
-      expect(
-          DatePeriod.lastYear
-              .includes(now.subtract(const Duration(days: 364)), now: now),
+    test('thisMonth: 1st in, last day of prior month out', () {
+      expect(DatePeriod.thisMonth.includes(DateTime(2026, 6, 1), now: now),
           isTrue);
       expect(
-          DatePeriod.lastYear
-              .includes(now.subtract(const Duration(days: 366)), now: now),
+          DatePeriod.thisMonth.includes(DateTime(2026, 5, 31, 23), now: now),
           isFalse);
     });
 
-    test('to date includes everything, however old, and the future', () {
-      expect(DatePeriod.toDate.includes(DateTime.utc(1990), now: now), isTrue);
+    test('thisYear: Jan 1 in, Dec 31 of prior year out', () {
+      expect(DatePeriod.thisYear.includes(DateTime(2026, 1, 1), now: now),
+          isTrue);
+      expect(
+          DatePeriod.thisYear.includes(DateTime(2025, 12, 31, 23), now: now),
+          isFalse);
+    });
+
+    test('toDate includes everything, however old, and the future', () {
+      expect(DatePeriod.toDate.includes(DateTime(1990), now: now), isTrue);
       expect(
           DatePeriod.toDate
               .includes(now.add(const Duration(days: 10)), now: now),
@@ -131,24 +137,32 @@ void main() {
   });
 
   group('includes — zone handling', () {
-    test('a local-zoned timestamp compares as the same instant as UTC now', () {
-      // 1 hour ago expressed in local time must be "in" the 24h window even
-      // though `now` is UTC — the helper normalises both to UTC.
-      final localOneHourAgo =
-          now.toLocal().subtract(const Duration(hours: 1));
-      expect(DatePeriod.last24Hours.includes(localOneHourAgo, now: now),
-          isTrue);
+    test('a UTC-zoned timestamp compares as the same instant', () {
+      // 11:00 today expressed in UTC is still "in" today's window when `now`
+      // is 12:00 — the helper normalises both to UTC before comparing.
+      final utcEarlierToday = DateTime(2026, 6, 3, 11).toUtc();
+      expect(DatePeriod.today.includes(utcEarlierToday, now: now), isTrue);
+    });
+  });
+
+  group('datePeriodLabelsForRole', () {
+    test('Manager-or-above gets the full five', () {
+      expect(datePeriodLabelsForRole(managerUp: true), kDatePeriodLabels);
+    });
+    test('below Manager is capped to Today / This Week / This Month', () {
+      expect(datePeriodLabelsForRole(managerUp: false),
+          ['Today', 'This Week', 'This Month']);
     });
   });
 
   group('dateRangeForLabel', () {
-    test('returns (start, null) for a bounded window', () {
-      final (start, end) = dateRangeForLabel('Last 7 days', now: now);
-      expect(start, now.subtract(const Duration(days: 7)));
+    test('returns (start, null) for a bounded period', () {
+      final (start, end) = dateRangeForLabel('This Month', now: now);
+      expect(start, DateTime(2026, 6, 1));
       expect(end, isNull);
     });
     test('returns (null, null) for to date', () {
-      final (start, end) = dateRangeForLabel('To date', now: now);
+      final (start, end) = dateRangeForLabel('To Date', now: now);
       expect(start, isNull);
       expect(end, isNull);
     });

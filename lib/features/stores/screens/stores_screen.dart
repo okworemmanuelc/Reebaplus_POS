@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/widgets/app_fab.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/menu_button.dart';
@@ -189,6 +190,14 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                           ? null
                           : () async {
                               if (!formKey.currentState!.validate()) return;
+                              // Re-check at the write boundary (hard rule #6) in
+                              // case `settings.manage` was revoked while the
+                              // sheet was open.
+                              if (!ref
+                                  .read(currentUserPermissionsProvider)
+                                  .contains('settings.manage')) {
+                                return;
+                              }
                               setSheet(() => saving = true);
                               try {
                                 final db = ref.read(databaseProvider);
@@ -364,6 +373,12 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                           ? null
                           : () async {
                               if (!formKey.currentState!.validate()) return;
+                              // Re-check at the write boundary (hard rule #6).
+                              if (!ref
+                                  .read(currentUserPermissionsProvider)
+                                  .contains('settings.manage')) {
+                                return;
+                              }
                               setSheet(() => saving = true);
                               final db = ref.read(databaseProvider);
                               final combinedLocation =
@@ -478,6 +493,13 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
             size: AppButtonSize.small,
             onPressed: () async {
               Navigator.pop(ctx);
+              // Re-check at the write boundary (hard rule #6) — deleting a
+              // store needs `settings.manage`.
+              if (!ref
+                  .read(currentUserPermissionsProvider)
+                  .contains('settings.manage')) {
+                return;
+              }
               // Soft-delete the store: hard-delete would orphan
               // inventory and ledger FKs. The cloud-side cascade in 0001
               // is ON DELETE CASCADE for inventory, but realtime DELETE
@@ -510,6 +532,12 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
   // ── Build ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
+    // Stores management is CEO-only — `settings.manage` (hard rule #6/#7). The
+    // drawer entry is gated, but this tab is persistently mounted, so guard the
+    // screen reactively too: if the grant is revoked live, the Add / Stock
+    // Transfer entry points, the store cards' Edit/Delete, and the list all
+    // disappear at once.
+    final canManage = hasPermission(ref, 'settings.manage');
     return SharedScaffold(
       activeRoute: 'store',
       backgroundColor: _bg,
@@ -523,46 +551,63 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
           subtitle: 'Manage Storage Locations',
         ),
         actions: [
-          IconButton(
-            tooltip: 'Stock Transfer',
-            icon: const Icon(Icons.swap_horiz_rounded),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const StockTransferScreen(),
+          if (canManage)
+            IconButton(
+              tooltip: 'Stock Transfer',
+              icon: const Icon(Icons.swap_horiz_rounded),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const StockTransferScreen(),
+                ),
               ),
             ),
-          ),
           const NotificationBell(),
           SizedBox(width: rSize(context, 8)),
         ],
       ),
-      floatingActionButton: AppFAB(
-        onPressed: () => _showAddSheet(context),
-        icon: Icons.add_rounded,
-        label: 'Add Store',
-      ),
-      body: Builder(
-        builder: (context) {
-          final stores = _stores;
+      floatingActionButton: canManage
+          ? AppFAB(
+              onPressed: () => _showAddSheet(context),
+              icon: Icons.add_rounded,
+              label: 'Add Store',
+            )
+          : null,
+      body: !canManage
+          ? Center(
+              child: Padding(
+                padding: EdgeInsets.all(rSize(context, 32)),
+                child: Text(
+                  'You don’t have access to Stores.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: _subtext,
+                    fontSize: rFontSize(context, 14),
+                  ),
+                ),
+              ),
+            )
+          : Builder(
+              builder: (context) {
+                final stores = _stores;
 
-          if (stores.isEmpty) {
-            return _buildEmptyState(context);
-          }
+                if (stores.isEmpty) {
+                  return _buildEmptyState(context);
+                }
 
-          return ListView.builder(
-            padding: EdgeInsets.fromLTRB(
-              rSize(context, 16),
-              rSize(context, 16),
-              rSize(context, 16),
-              rSize(context, 100) + context.deviceBottomInset,
+                return ListView.builder(
+                  padding: EdgeInsets.fromLTRB(
+                    rSize(context, 16),
+                    rSize(context, 16),
+                    rSize(context, 16),
+                    rSize(context, 100) + context.deviceBottomInset,
+                  ),
+                  itemCount: stores.length,
+                  itemBuilder: (context, index) =>
+                      _buildStoreCard(context, stores[index]),
+                );
+              },
             ),
-            itemCount: stores.length,
-            itemBuilder: (context, index) =>
-                _buildStoreCard(context, stores[index]),
-          );
-        },
-      ),
     );
   }
 

@@ -329,11 +329,14 @@ class ReceiptWidget extends StatelessWidget {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(
-                                '$mfrName (${e.value.toStringAsFixed(0)} crates)',
-                                style: TextStyle(
-                                  fontSize: context.getRFontSize(12),
-                                  color: sub,
+                              Expanded(
+                                child: Text(
+                                  '$mfrName (${e.value.toStringAsFixed(0)} crates)',
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: context.getRFontSize(12),
+                                    color: sub,
+                                  ),
                                 ),
                               ),
                             ],
