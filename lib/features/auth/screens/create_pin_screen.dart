@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
-import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/auth/onboarding/onboarding_draft.dart';
 import 'package:reebaplus_pos/features/auth/screens/biometric_setup_screen.dart';
@@ -221,7 +221,7 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: adBg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: BrandedAuthBackground(
         child: SafeArea(
           child: Center(
@@ -230,8 +230,8 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 500),
                 child: _saving
-                    ? _buildSavingState(amberPrimary)
-                    : _buildInputState(amberPrimary),
+                    ? _buildSavingState(Theme.of(context).colorScheme.primary)
+                    : _buildInputState(Theme.of(context).colorScheme.primary),
               ),
             ),
           ),
@@ -241,7 +241,7 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
   }
 
   Widget _buildSavingState(Color primary) {
-    const textColor = adTextPrimary;
+    final textColor = authTextPrimary(context);
 
     return Column(
       key: const ValueKey('saving'),
@@ -280,7 +280,7 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
   bool get _isOnboarding => widget.isNewBusinessSetup;
 
   Widget _buildInputState(Color primary) {
-    const textColor = adTextPrimary;
+    final textColor = authTextPrimary(context);
 
     return Column(
       key: const ValueKey('input'),
@@ -307,7 +307,7 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
 
         Text(
           _confirming ? 'Confirm your PIN' : 'Create a PIN',
-          style: authTitleStyle,
+          style: authTitleStyle(context),
         ),
         SizedBox(height: context.getRSize(6)),
         Text(

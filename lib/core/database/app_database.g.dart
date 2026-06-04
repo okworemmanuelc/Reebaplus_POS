@@ -16774,9 +16774,9 @@ class $OrderItemsTable extends OrderItems
   late final GeneratedColumn<String> productId = GeneratedColumn<String>(
     'product_id',
     aliasedName,
-    false,
+    true,
     type: DriftSqlType.string,
-    requiredDuringInsert: true,
+    requiredDuringInsert: false,
     defaultConstraints: GeneratedColumn.constraintIsAlways(
       'REFERENCES products (id)',
     ),
@@ -16927,8 +16927,6 @@ class $OrderItemsTable extends OrderItems
         _productIdMeta,
         productId.isAcceptableOrUnknown(data['product_id']!, _productIdMeta),
       );
-    } else if (isInserting) {
-      context.missing(_productIdMeta);
     }
     if (data.containsKey('store_id')) {
       context.handle(
@@ -17022,7 +17020,7 @@ class $OrderItemsTable extends OrderItems
       productId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}product_id'],
-      )!,
+      ),
       storeId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}store_id'],
@@ -17068,7 +17066,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
   final String id;
   final String businessId;
   final String orderId;
-  final String productId;
+  final String? productId;
   final String storeId;
   final int quantity;
   final int unitPriceKobo;
@@ -17081,7 +17079,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
     required this.id,
     required this.businessId,
     required this.orderId,
-    required this.productId,
+    this.productId,
     required this.storeId,
     required this.quantity,
     required this.unitPriceKobo,
@@ -17097,7 +17095,9 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
     map['id'] = Variable<String>(id);
     map['business_id'] = Variable<String>(businessId);
     map['order_id'] = Variable<String>(orderId);
-    map['product_id'] = Variable<String>(productId);
+    if (!nullToAbsent || productId != null) {
+      map['product_id'] = Variable<String>(productId);
+    }
     map['store_id'] = Variable<String>(storeId);
     map['quantity'] = Variable<int>(quantity);
     map['unit_price_kobo'] = Variable<int>(unitPriceKobo);
@@ -17116,7 +17116,9 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
       id: Value(id),
       businessId: Value(businessId),
       orderId: Value(orderId),
-      productId: Value(productId),
+      productId: productId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(productId),
       storeId: Value(storeId),
       quantity: Value(quantity),
       unitPriceKobo: Value(unitPriceKobo),
@@ -17139,7 +17141,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
       id: serializer.fromJson<String>(json['id']),
       businessId: serializer.fromJson<String>(json['businessId']),
       orderId: serializer.fromJson<String>(json['orderId']),
-      productId: serializer.fromJson<String>(json['productId']),
+      productId: serializer.fromJson<String?>(json['productId']),
       storeId: serializer.fromJson<String>(json['storeId']),
       quantity: serializer.fromJson<int>(json['quantity']),
       unitPriceKobo: serializer.fromJson<int>(json['unitPriceKobo']),
@@ -17157,7 +17159,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
       'id': serializer.toJson<String>(id),
       'businessId': serializer.toJson<String>(businessId),
       'orderId': serializer.toJson<String>(orderId),
-      'productId': serializer.toJson<String>(productId),
+      'productId': serializer.toJson<String?>(productId),
       'storeId': serializer.toJson<String>(storeId),
       'quantity': serializer.toJson<int>(quantity),
       'unitPriceKobo': serializer.toJson<int>(unitPriceKobo),
@@ -17173,7 +17175,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
     String? id,
     String? businessId,
     String? orderId,
-    String? productId,
+    Value<String?> productId = const Value.absent(),
     String? storeId,
     int? quantity,
     int? unitPriceKobo,
@@ -17186,7 +17188,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
     id: id ?? this.id,
     businessId: businessId ?? this.businessId,
     orderId: orderId ?? this.orderId,
-    productId: productId ?? this.productId,
+    productId: productId.present ? productId.value : this.productId,
     storeId: storeId ?? this.storeId,
     quantity: quantity ?? this.quantity,
     unitPriceKobo: unitPriceKobo ?? this.unitPriceKobo,
@@ -17281,7 +17283,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
   final Value<String> id;
   final Value<String> businessId;
   final Value<String> orderId;
-  final Value<String> productId;
+  final Value<String?> productId;
   final Value<String> storeId;
   final Value<int> quantity;
   final Value<int> unitPriceKobo;
@@ -17310,7 +17312,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
     this.id = const Value.absent(),
     required String businessId,
     required String orderId,
-    required String productId,
+    this.productId = const Value.absent(),
     required String storeId,
     required int quantity,
     required int unitPriceKobo,
@@ -17322,7 +17324,6 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
     this.rowid = const Value.absent(),
   }) : businessId = Value(businessId),
        orderId = Value(orderId),
-       productId = Value(productId),
        storeId = Value(storeId),
        quantity = Value(quantity),
        unitPriceKobo = Value(unitPriceKobo),
@@ -17363,7 +17364,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
     Value<String>? id,
     Value<String>? businessId,
     Value<String>? orderId,
-    Value<String>? productId,
+    Value<String?>? productId,
     Value<String>? storeId,
     Value<int>? quantity,
     Value<int>? unitPriceKobo,
@@ -62409,7 +62410,7 @@ typedef $$OrderItemsTableCreateCompanionBuilder =
       Value<String> id,
       required String businessId,
       required String orderId,
-      required String productId,
+      Value<String?> productId,
       required String storeId,
       required int quantity,
       required int unitPriceKobo,
@@ -62425,7 +62426,7 @@ typedef $$OrderItemsTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> businessId,
       Value<String> orderId,
-      Value<String> productId,
+      Value<String?> productId,
       Value<String> storeId,
       Value<int> quantity,
       Value<int> unitPriceKobo,
@@ -62483,9 +62484,9 @@ final class $$OrderItemsTableReferences
         $_aliasNameGenerator(db.orderItems.productId, db.products.id),
       );
 
-  $$ProductsTableProcessedTableManager get productId {
-    final $_column = $_itemColumn<String>('product_id')!;
-
+  $$ProductsTableProcessedTableManager? get productId {
+    final $_column = $_itemColumn<String>('product_id');
+    if ($_column == null) return null;
     final manager = $$ProductsTableTableManager(
       $_db,
       $_db.products,
@@ -62970,7 +62971,7 @@ class $$OrderItemsTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> businessId = const Value.absent(),
                 Value<String> orderId = const Value.absent(),
-                Value<String> productId = const Value.absent(),
+                Value<String?> productId = const Value.absent(),
                 Value<String> storeId = const Value.absent(),
                 Value<int> quantity = const Value.absent(),
                 Value<int> unitPriceKobo = const Value.absent(),
@@ -63000,7 +63001,7 @@ class $$OrderItemsTableTableManager
                 Value<String> id = const Value.absent(),
                 required String businessId,
                 required String orderId,
-                required String productId,
+                Value<String?> productId = const Value.absent(),
                 required String storeId,
                 required int quantity,
                 required int unitPriceKobo,

@@ -1044,7 +1044,10 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
 
         result.putIfAbsent(order.id, () => OrderWithItems(order, [], customer));
 
-        if (item != null && product != null) {
+        // Keep the line even when product is null — a Quick Sale (§12.3) has no
+        // product; its name comes from the order item's price snapshot via
+        // OrderItemDataWithProductData.displayName.
+        if (item != null) {
           result[order.id]!.items.add(
             OrderItemDataWithProductData(item, product),
           );
@@ -1122,6 +1125,9 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       for (final item in items) {
         final qty = item.quantity.value;
         final productId = item.productId.value;
+        // Quick-sale line (§26.4): no product → bypass inventory entirely
+        // (no deduction, no insufficient-stock check).
+        if (productId == null) continue;
         final whId = item.storeId.value;
 
         final rowsAffected = await customUpdate(
@@ -1216,11 +1222,14 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       }
 
       for (final item in items) {
+        final productId = item.productId.value;
+        // Quick-sale line (§26.4): no product → no stock_transactions row.
+        if (productId == null) continue;
         final txId = UuidV7.generate();
         final txComp = StockTransactionsCompanion.insert(
           id: Value(txId),
           businessId: requireBusinessId(),
-          productId: item.productId.value,
+          productId: productId,
           locationId: storeId ?? item.storeId.value,
           quantityDelta: -item.quantity.value,
           movementType: 'sale',
@@ -1353,6 +1362,8 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       // v1 also enqueues the updated inventory cache so the cloud converges.
       for (final item in items) {
         final productId = item.productId.value;
+        // Quick-sale line (§26.4): no product → no inventory row to converge.
+        if (productId == null) continue;
         final whId = item.storeId.value;
         final invRow =
             await (select(inventory)..where(
@@ -1820,8 +1831,29 @@ class OrderWithItems {
 
 class OrderItemDataWithProductData {
   final OrderItemData item;
-  final ProductData product;
+
+  /// Null for a Quick Sale line (§12.3) — an item not in inventory has no
+  /// product. Use [displayName] for a label that works in both cases.
+  final ProductData? product;
   OrderItemDataWithProductData(this.item, this.product);
+
+  /// The line's display name: the product name when present, otherwise the
+  /// name captured in the order item's price snapshot (Quick Sale), otherwise
+  /// a generic "Quick Sale" label.
+  String get displayName {
+    final p = product;
+    if (p != null) return p.name;
+    final snap = item.priceSnapshot;
+    if (snap != null) {
+      try {
+        final decoded = jsonDecode(snap);
+        if (decoded is Map && decoded['name'] is String) {
+          return decoded['name'] as String;
+        }
+      } catch (_) {}
+    }
+    return 'Quick Sale';
+  }
 }
 
 class InsufficientStockException implements Exception {
@@ -3692,6 +3724,14 @@ class StoresDao extends DatabaseAccessor<AppDatabase>
     }
     rows.sort((a, b) => b.lastUpdatedAt.compareTo(a.lastUpdatedAt));
     return rows.first;
+  }
+
+  /// Users belonging to the CURRENT business — business-scoped read for the
+  /// Home staff-sales name lookup. The device can hold more than one business's
+  /// users, so this must never be a bare `select(users)` (business-scoping
+  /// invariant — CLAUDE.md). Runs post-login, so the session resolver is bound.
+  Future<List<UserData>> getUsersForCurrentBusiness() {
+    return (select(users)..where((t) => whereBusiness(t))).get();
   }
 }
 
@@ -6309,6 +6349,20 @@ class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
                   ))
               .toList(),
         );
+  }
+
+  /// One-shot count of active staff for [businessId]. Drives cold-start
+  /// routing (master plan §7.2): >1 → Who Is Working picker so the signer is
+  /// chosen explicitly; ≤1 → that user's personalized PIN screen. Not
+  /// session-scoped (runs before sign-in), same as [watchActiveStaffForBusiness].
+  Future<int> countActiveStaffForBusiness(String businessId) async {
+    final countExp = userBusinesses.id.count();
+    final row = await (selectOnly(userBusinesses)
+          ..addColumns([countExp])
+          ..where(userBusinesses.businessId.equals(businessId) &
+              userBusinesses.status.equals('active')))
+        .getSingle();
+    return row.read(countExp) ?? 0;
   }
 
   /// All memberships for a specific user — Phase 1 always returns

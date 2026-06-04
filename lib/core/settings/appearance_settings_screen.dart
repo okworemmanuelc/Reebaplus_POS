@@ -36,7 +36,12 @@ class AppearanceSettingsScreen extends ConsumerWidget {
     (
       label: 'Green',
       ds: DesignSystem.green,
-      swatch: [greenPrimary, greenDark, Color(0xFF6EE7B7)],
+      swatch: [greenContrast, greenDark, Color(0xFF4ADE80)],
+    ),
+    (
+      label: 'Black & White',
+      ds: DesignSystem.bw,
+      swatch: [Color(0xFF111111), Color(0xFF757575), Color(0xFFE0E0E0)],
     ),
   ];
 

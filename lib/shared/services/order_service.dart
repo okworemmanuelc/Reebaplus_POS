@@ -153,7 +153,66 @@ class OrderService {
       }
     }
 
+    // §12.3 / §26.4: a Quick Sale is an off-inventory line. Once the sale is
+    // accepted (a server-rejected sale rethrows above and never reaches here),
+    // record it in the activity log and alert CEO + Manager for audit.
+    final quickLines = cart.where((c) {
+      final id = c['id'] as String?;
+      return id == null || id.isEmpty;
+    }).toList(growable: false);
+    if (quickLines.isNotEmpty) {
+      await _auditQuickSale(
+        orderId: orderId,
+        orderNumber: orderNumber,
+        staffId: staffId,
+        storeId: storeId,
+        quickLines: quickLines,
+      );
+    }
+
     return orderNumber;
+  }
+
+  /// §12.3 / §26.4: audit a Quick Sale — write an activity-log entry and fire a
+  /// CEO + Manager notification (Quick Sales bypass inventory, so they are
+  /// tracked for oversight). Best-effort: a failure here must not fail the sale,
+  /// which is already recorded.
+  Future<void> _auditQuickSale({
+    required String orderId,
+    required String orderNumber,
+    required String staffId,
+    required String storeId,
+    required List<Map<String, dynamic>> quickLines,
+  }) async {
+    try {
+      final summary = quickLines.map((c) {
+        final name = (c['name'] as String?)?.trim();
+        final qty = (c['qty'] as num?)?.toString() ?? '1';
+        return '$qty× ${name == null || name.isEmpty ? 'Quick Sale' : name}';
+      }).join(', ');
+
+      await _db.activityLogDao.log(
+        action: 'quick_sale',
+        description: 'Quick Sale on $orderNumber: $summary',
+        staffId: staffId,
+        storeId: storeId,
+        orderId: orderId,
+      );
+
+      final recipients = await _db.userBusinessesDao
+          .getUserIdsForRoleSlugs(['ceo', 'manager']);
+      for (final uid in (recipients.isEmpty ? [staffId] : recipients)) {
+        await _db.notificationsDao.fireNotification(
+          type: 'quick_sale_used',
+          message: 'Quick Sale on $orderNumber: $summary',
+          severity: 'warning',
+          linkedRecordId: orderId,
+          recipientUserId: uid,
+        );
+      }
+    } catch (e) {
+      debugPrint('[OrderService] quick-sale audit failed (non-fatal): $e');
+    }
   }
 
   /// Reverses the local writes performed by `OrdersDao.createOrder` when
@@ -188,6 +247,8 @@ class OrderService {
       for (final item in items) {
         final qty = item.quantity.value;
         final productId = item.productId.value;
+        // Quick-sale line (§26.4): never deducted inventory → nothing to refund.
+        if (productId == null) continue;
         final whId = item.storeId.value;
         await _db.customUpdate(
           'UPDATE inventory SET quantity = quantity + ?, last_updated_at = ? '
@@ -249,13 +310,12 @@ class OrderService {
     final businessId = _ordersDao.requireBusinessId();
     return cart
         .map((item) {
-          final productId = item['id'] as String?;
-          if (productId == null || productId.isEmpty) {
-            throw ArgumentError(
-              'Cart contains an item without a product id (Quick Sale '
-              'items cannot be saved as orders).',
-            );
-          }
+          // §12.3 Quick Sale: an item not in inventory has no product id. It is
+          // recorded as a real order line with productId == null; its name is
+          // carried in the priceSnapshot below. Quick-sale lines bypass
+          // inventory (§26.4) — OrdersDao.createOrder skips the stock writes.
+          final rawId = item['id'] as String?;
+          final productId = (rawId == null || rawId.isEmpty) ? null : rawId;
 
           final qty = (item['qty'] as num).toInt();
           // Prefer the integer kobo snapshot; fall back to the legacy double
@@ -276,7 +336,7 @@ class OrderService {
           return OrderItemsCompanion.insert(
             businessId: businessId,
             orderId: orderId,
-            productId: productId,
+            productId: Value(productId),
             storeId: storeId,
             quantity: qty,
             unitPriceKobo: unitPriceKobo,

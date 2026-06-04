@@ -133,7 +133,7 @@ OrderItemsCompanion _itemCompanion(
   return OrderItemsCompanion.insert(
     businessId: s.businessId,
     orderId: 'placeholder', // overwritten by createOrder
-    productId: s.productId,
+    productId: Value(s.productId),
     storeId: s.storeId,
     quantity: qty,
     unitPriceKobo: unitPriceKobo,

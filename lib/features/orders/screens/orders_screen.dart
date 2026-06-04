@@ -891,8 +891,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                           cart: richOrder.items
                               .map(
                                 (ri) => {
-                                  'name': ri.product.name,
-                                  'size': ri.product.size,
+                                  'name': ri.displayName,
+                                  'size': ri.product?.size,
                                   'qty': ri.item.quantity,
                                   'price': ri.item.unitPriceKobo / 100.0,
                                 },
@@ -996,8 +996,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     final receiptMapping = richOrder.items
         .map(
           (ri) => {
-            'name': ri.product.name,
-            'size': ri.product.size,
+            'name': ri.displayName,
+            'size': ri.product?.size,
             'qty': ri.item.quantity,
             'price': ri.item.unitPriceKobo / 100.0,
           },
@@ -1570,7 +1570,6 @@ class _OrderCard extends ConsumerWidget {
                             children: [
                               ...displayItems.map((richItem) {
                                 final item = richItem.item;
-                                final product = richItem.product;
                                 return Padding(
                                   padding: EdgeInsets.only(
                                     bottom: context.getRSize(4),
@@ -1593,7 +1592,7 @@ class _OrderCard extends ConsumerWidget {
                                       ),
                                       Expanded(
                                         child: Text(
-                                          '${item.quantity}× ${product.name}',
+                                          '${item.quantity}× ${richItem.displayName}',
                                           style: TextStyle(
                                             color: textCol,
                                             fontSize: context.getRFontSize(13),

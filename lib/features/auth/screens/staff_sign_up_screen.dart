@@ -10,7 +10,6 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
-import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_form_kit.dart';
 import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
@@ -689,7 +688,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: adBg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: BrandedAuthBackground(
         child: SafeArea(
           child: Column(
@@ -724,8 +723,8 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
                 Opacity(
                   opacity: showBack ? 1 : 0,
                   child: IconButton(
-                    icon: const Icon(Icons.arrow_back_ios,
-                        color: adTextPrimary, size: 20),
+                    icon: Icon(Icons.arrow_back_ios,
+                        color: authTextPrimary(context), size: 20),
                     onPressed: showBack ? _back : null,
                   ),
                 ),
@@ -774,8 +773,8 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
             autofocus: true,
             maxLength: 8,
             onSubmitted: (_) => _lookingUp ? null : _submitCode(),
-            style: const TextStyle(
-              color: adTextPrimary,
+            style: TextStyle(
+              color: authTextPrimary(context),
               letterSpacing: 4,
               fontWeight: FontWeight.w700,
             ),
@@ -812,7 +811,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
             controller: _emailDisplayCtrl,
             readOnly: true,
             enabled: false,
-            style: const TextStyle(color: adTextPrimary),
+            style: TextStyle(color: authTextPrimary(context)),
             decoration: AppDecorations.authInputDecoration(
               context,
               label: 'Email address',
@@ -825,7 +824,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
           "We'll send a code to ${_draft.email}",
           style: TextStyle(
             fontSize: 13,
-            color: adTextPrimary.withValues(alpha: 0.6),
+            color: authTextPrimary(context).withValues(alpha: 0.6),
           ),
         ),
         const SizedBox(height: 16),
@@ -839,22 +838,14 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
   }
 
   Widget _buildOtpStep() {
-    return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(
-        28,
-        12,
-        28,
-        MediaQuery.of(context).viewInsets.bottom + 24,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Text(
+    return AuthCenteredScroll(
+      children: [
+          Text(
             'Check your email',
             style: TextStyle(
               fontSize: 26,
               fontWeight: FontWeight.w800,
-              color: adTextPrimary,
+              color: authTextPrimary(context),
             ),
           ),
           const SizedBox(height: 8),
@@ -863,7 +854,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
             style: TextStyle(
               fontSize: 15,
               height: 1.4,
-              color: adTextPrimary.withValues(alpha: 0.65),
+              color: authTextPrimary(context).withValues(alpha: 0.65),
             ),
           ),
           const SizedBox(height: 28),
@@ -874,7 +865,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
               hasError: _otpError != null,
               ignorePointers: _otpLockedOut,
               readOnly: _otpVerifying,
-              textColor: adTextPrimary,
+              textColor: authTextPrimary(context),
               onSubmit: () {
                 if (_otpCtrl.text.trim().length == 6) _verifyOtp();
               },
@@ -885,7 +876,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
             child: Text(
               'Code expires in 5 minutes',
               style: TextStyle(
-                color: adTextPrimary.withValues(alpha: 0.5),
+                color: authTextPrimary(context).withValues(alpha: 0.5),
                 fontSize: 13,
               ),
             ),
@@ -913,7 +904,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
                 ? Text(
                     'Resend code in 0:${_resendCountdown.toString().padLeft(2, '0')}',
                     style: TextStyle(
-                      color: adTextPrimary.withValues(alpha: 0.5),
+                      color: authTextPrimary(context).withValues(alpha: 0.5),
                       fontSize: 13,
                     ),
                   )
@@ -923,8 +914,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
                     child: const Text('Resend code'),
                   ),
           ),
-        ],
-      ),
+      ],
     );
   }
 
@@ -943,7 +933,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
               if (_nameError != null) setState(() => _nameError = null);
             },
             onSubmitted: (_) => _submitName(),
-            style: const TextStyle(color: adTextPrimary),
+            style: TextStyle(color: authTextPrimary(context)),
             decoration: AppDecorations.authInputDecoration(
               context,
               label: 'Full name',
@@ -973,10 +963,10 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
           else ...[
             Text(
               confirming ? 'Confirm your PIN' : 'Create a PIN',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 26,
                 fontWeight: FontWeight.w800,
-                color: adTextPrimary,
+                color: authTextPrimary(context),
               ),
             ),
             const SizedBox(height: 8),
@@ -987,7 +977,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 15,
-                color: adTextPrimary.withValues(alpha: 0.65),
+                color: authTextPrimary(context).withValues(alpha: 0.65),
               ),
             ),
             const SizedBox(height: 28),
@@ -1012,16 +1002,16 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
         children: [
           CircleAvatar(
             radius: 44,
-            backgroundColor: amberPrimary.withValues(alpha: 0.12),
-            child: const Icon(Icons.check_rounded, size: 48, color: amberPrimary),
+            backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+            child: Icon(Icons.check_rounded, size: 48, color: Theme.of(context).colorScheme.primary),
           ),
           const SizedBox(height: 24),
-          const Text(
+          Text(
             'Joining your team…',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w700,
-              color: adTextPrimary,
+              color: authTextPrimary(context),
             ),
           ),
         ],
@@ -1056,10 +1046,10 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
                   ? 'Welcome to $business!'
                   : 'Welcome to the team!',
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.w800,
-                color: adTextPrimary,
+                color: authTextPrimary(context),
               ),
             ),
             const SizedBox(height: 12),
@@ -1068,7 +1058,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 15,
-                color: adTextPrimary.withValues(alpha: 0.65),
+                color: authTextPrimary(context).withValues(alpha: 0.65),
               ),
             ),
           ],
@@ -1101,8 +1091,8 @@ class _StepDots extends StatelessWidget {
           height: 8,
           decoration: BoxDecoration(
             color: active
-                ? amberPrimary
-                : adTextPrimary.withValues(alpha: 0.18),
+                ? Theme.of(context).colorScheme.primary
+                : authTextPrimary(context).withValues(alpha: 0.18),
             borderRadius: BorderRadius.circular(4),
           ),
         );

@@ -1,5 +1,16 @@
 import 'package:flutter/material.dart';
 
+/// Theme-aware primary text colour for auth / onboarding screens. Adapts to
+/// light/dark mode and to the active accent via [ColorScheme.onSurface], so
+/// content (titles, labels, typed input text) is always legible on the
+/// theme-aware auth backdrop. Use this instead of a hardcoded palette colour.
+Color authTextPrimary(BuildContext context) =>
+    Theme.of(context).colorScheme.onSurface;
+
+/// Theme-aware muted/secondary text colour for auth / onboarding screens.
+Color authTextMuted(BuildContext context, [double alpha = 0.65]) =>
+    Theme.of(context).colorScheme.onSurface.withValues(alpha: alpha);
+
 /// Reusable decorations for the Ribaplus design system.
 class AppDecorations {
   AppDecorations._();

@@ -53,7 +53,10 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
       if (o.order.status != 'completed') continue;
       if (!window.includes(o.order.createdAt)) continue;
       for (final i in o.items) {
-        if (i.item.buyingPriceKobo <= 0) {
+        final product = i.product;
+        // Quick-sale lines (§12.3) have no product and no captured cost — like
+        // any uncosted line, they are excluded from the profit math.
+        if (product == null || i.item.buyingPriceKobo <= 0) {
           uncostedItems += i.item.quantity;
           continue;
         }
@@ -62,8 +65,8 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
         revenueKobo += lineRevenue;
         cogsKobo += lineCogs;
         final acc = byProduct.putIfAbsent(
-          i.product.id,
-          () => _ProductAccum(i.product.name),
+          product.id,
+          () => _ProductAccum(product.name),
         );
         acc.qty += i.item.quantity;
         acc.revenueKobo += lineRevenue;

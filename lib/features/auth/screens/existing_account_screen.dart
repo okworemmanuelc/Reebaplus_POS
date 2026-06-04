@@ -4,9 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
-import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/features/auth/screens/create_pin_screen.dart';
+import 'package:reebaplus_pos/features/auth/widgets/auth_form_kit.dart';
 import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/shared/utils/role_display.dart';
@@ -120,66 +120,65 @@ class _ExistingAccountScreenState extends ConsumerState<ExistingAccountScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const textColor = adTextPrimary;
+    final textColor = authTextPrimary(context);
 
     return Scaffold(
-      backgroundColor: adBg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: BrandedAuthBackground(
         child: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: IconButton(
-                    icon: const Icon(Icons.arrow_back_ios,
-                        color: textColor, size: 20),
-                    onPressed: _loading
-                        ? null
-                        : () => Navigator.of(context).pop(),
-                  ),
+          child: Stack(
+            children: [
+              Align(
+                alignment: Alignment.topLeft,
+                child: IconButton(
+                  icon: Icon(Icons.arrow_back_ios,
+                      color: textColor, size: 20),
+                  onPressed: _loading
+                      ? null
+                      : () => Navigator.of(context).pop(),
                 ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Welcome back',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w800,
-                    color: textColor,
+              ),
+              AuthCenteredScroll(
+                children: [
+                  Text(
+                    'Welcome back',
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
+                      color: textColor,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'We found an existing account for ${_maskEmail(widget.email)}.\nSelect a business to continue.',
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: textColor.withValues(alpha: 0.65),
-                    height: 1.4,
+                  const SizedBox(height: 8),
+                  Text(
+                    'We found an existing account for ${_maskEmail(widget.email)}.\nSelect a business to continue.',
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: textColor.withValues(alpha: 0.65),
+                      height: 1.4,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 36),
+                  const SizedBox(height: 36),
 
-                _buildBusinessCard(context, account: widget.account),
+                  _buildBusinessCard(context, account: widget.account),
 
-                const SizedBox(height: 28),
+                  const SizedBox(height: 28),
 
-                Center(
-                  child: TextButton(
-                    onPressed: _loading ? null : _onCreateNew,
-                    child: Text(
-                      'Create a new business instead',
-                      style: TextStyle(
-                        color: textColor.withValues(alpha: 0.75),
-                        fontSize: 14,
-                        decoration: TextDecoration.underline,
+                  Center(
+                    child: TextButton(
+                      onPressed: _loading ? null : _onCreateNew,
+                      child: Text(
+                        'Create a new business instead',
+                        style: TextStyle(
+                          color: textColor.withValues(alpha: 0.75),
+                          fontSize: 14,
+                          decoration: TextDecoration.underline,
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
@@ -190,8 +189,8 @@ class _ExistingAccountScreenState extends ConsumerState<ExistingAccountScreen> {
     BuildContext context, {
     required SupabaseAccountInfo account,
   }) {
-    const textColor = adTextPrimary;
-    const primary = amberPrimary;
+    final textColor = authTextPrimary(context);
+    final primary = Theme.of(context).colorScheme.primary;
 
     return Container(
       decoration: AppDecorations.glassCard(context, radius: 20),
@@ -212,7 +211,7 @@ class _ExistingAccountScreenState extends ConsumerState<ExistingAccountScreen> {
                     color: primary.withValues(alpha: 0.15),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.business_rounded,
+                  child: Icon(Icons.business_rounded,
                       color: primary, size: 26),
                 ),
                 const SizedBox(width: 16),
@@ -222,7 +221,7 @@ class _ExistingAccountScreenState extends ConsumerState<ExistingAccountScreen> {
                     children: [
                       Text(
                         account.businessName,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.w600,
                           color: textColor,

@@ -50,7 +50,8 @@ class _SalesDetailScreenState extends ConsumerState<SalesDetailScreen> {
         rows.add(
           _SaleRow(
             date: o.order.createdAt,
-            productName: i.product.name,
+            // §12.3 Quick Sale: no product → name from the price snapshot.
+            productName: i.displayName,
             qty: i.item.quantity,
             revenue: revenue,
             profit: profit,

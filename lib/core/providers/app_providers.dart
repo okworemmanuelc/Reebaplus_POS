@@ -246,11 +246,15 @@ final currentBusinessProvider = Provider.autoDispose<BusinessData?>((ref) {
   final id = ref.watch(databaseProvider).currentBusinessId;
   final list = ref.watch(localBusinessesProvider).valueOrNull ?? const [];
   if (list.isEmpty) return null;
-  if (id == null) return list.first;
-  for (final b in list) {
-    if (b.id == id) return b;
+  if (id != null) {
+    for (final b in list) {
+      if (b.id == id) return b;
+    }
   }
-  return list.first;
+  // No bound id, or it didn't match a local row: only guess when there's
+  // exactly ONE business (unambiguous). With more than one business on the
+  // device, returning null avoids surfacing the WRONG business's name (§7.2a).
+  return list.length == 1 ? list.first : null;
 });
 
 /// The active business name, live (see [currentBusinessProvider]). Empty when

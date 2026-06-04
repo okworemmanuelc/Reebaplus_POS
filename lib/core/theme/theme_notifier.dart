@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// The two selectable design systems.
-enum DesignSystem { blue, amber, purple, green }
+/// The selectable design systems. Persisted by `.index` (SharedPreferences) and
+/// synced by `.name` — append new values at the end to keep indices stable.
+enum DesignSystem { blue, amber, purple, green, bw }
 
 /// Manages theme mode (light / dark / system) and design system (blue / amber).
 /// Persists both to SharedPreferences.

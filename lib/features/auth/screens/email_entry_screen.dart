@@ -6,7 +6,6 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
-import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/features/auth/screens/login_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/otp_verification_screen.dart';
@@ -315,10 +314,10 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const textColor = adTextPrimary;
+    final textColor = authTextPrimary(context);
 
     return Scaffold(
-      backgroundColor: adBg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: BrandedAuthBackground(
         child: SafeArea(
           child: AuthFormShell(
@@ -334,7 +333,7 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
                   readOnly: widget.lockedEmail,
                   textInputAction: TextInputAction.done,
                   onSubmitted: (_) => _loading ? null : _submit(),
-                  style: const TextStyle(color: textColor),
+                  style: TextStyle(color: textColor),
                   decoration: AppDecorations.authInputDecoration(
                     context,
                     label: widget.lockedEmail

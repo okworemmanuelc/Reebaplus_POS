@@ -59,50 +59,75 @@ const Color alTextSecondary = Color(0xFF4B5563); // Darkened for better contrast
 // PURPLE VIOLET PALETTE (new)
 // ═══════════════════════════════════════════════════════════════════════════
 
-// Brand Colors
-const Color purplePrimary = Color(0xFF8B5CF6);
-const Color purplePrimaryDark = Color(0xFF7C3AED);
-const Color purpleDark = Color(0xFF6D28D9);
+// Brand Colors (refined violet; light uses the deeper 7C3AED for contrast)
+const Color purplePrimary = Color(0xFF8B5CF6); // dark-theme primary
+const Color purplePrimaryDark = Color(0xFF7C3AED); // light-theme primary
+const Color purpleDark = Color(0xFF6D28D9); // secondary / gradient end
 const Color purpleGlow = Color(0x598B5CF6);
 
-// Purple Dark Theme (Softer purple-neutral)
-const Color pdBg = Color(0xFF0F111A); // Less purple (was 0F0817)
-const Color pdSurface = Color(0xFF170E20);
-const Color pdSurface2 = Color(0xFF1F1428);
-const Color pdBorder = Color(0x0FFFFFFF);
-const Color pdTextPrimary = Color(0xFFF3E8F6);
-const Color pdTextSecondary = Color(0xFF906B8B);
+// Purple Dark Theme — NEUTRAL surfaces (no purple tint)
+const Color pdBg = Color(0xFF0B0D10);
+const Color pdSurface = Color(0xFF15171B);
+const Color pdSurface2 = Color(0xFF1E2127);
+const Color pdBorder = Color(0x14FFFFFF);
+const Color pdTextPrimary = Color(0xFFF3F4F6);
+const Color pdTextSecondary = Color(0xFF9CA3AF);
 
-// Purple Light Theme (More neutral)
-const Color plBg = Color(0xFFF9FAFB); // Neutral background (was FAF4FB)
+// Purple Light Theme — NEUTRAL surfaces (no purple tint)
+const Color plBg = Color(0xFFF7F8FA);
 const Color plSurface = Color(0xFFFFFFFF);
-const Color plSurface2 = Color(0xFFF3F4F6); // Neutral gray-blue (was F5EDF5)
+const Color plSurface2 = Color(0xFFEDF0F4);
 const Color plBorder = Color(0x12000000);
-const Color plTextPrimary = Color(0xFF111827); // Neutral (was 200E1D)
-const Color plTextSecondary = Color(0xFF4B5563); // Standard gray (was 6B7280)
+const Color plTextPrimary = Color(0xFF111827);
+const Color plTextSecondary = Color(0xFF6B7280);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // GREEN FOREST PALETTE (new)
 // ═══════════════════════════════════════════════════════════════════════════
 
-// Brand Colors
-const Color greenPrimary = Color(0xFF10B981);
-const Color greenPrimaryDark = Color(0xFF059669);
-const Color greenDark = Color(0xFF047857);
-const Color greenGlow = Color(0x5910B981);
+// Brand Colors (darker, less neon than the old emerald)
+const Color greenPrimary = Color(0xFF22C55E); // dark-theme primary
+const Color greenContrast = Color(0xFF15803D); // light-theme primary (deep forest)
+const Color greenPrimaryDark = Color(0xFF15803D); // light selectedItem / chip-selected
+const Color greenDark = Color(0xFF166534); // secondary / gradient end
+const Color greenGlow = Color(0x5922C55E);
 
-// Green Dark Theme
-const Color gdBg = Color(0xFF061A14);
-const Color gdSurface = Color(0xFF0E201C);
-const Color gdSurface2 = Color(0xFF142823);
-const Color gdBorder = Color(0x0FFFFFFF);
-const Color gdTextPrimary = Color(0xFFE8F6F1);
-const Color gdTextSecondary = Color(0xFF6B9085);
+// Green Dark Theme — NEUTRAL surfaces (no green tint)
+const Color gdBg = Color(0xFF0B0D10);
+const Color gdSurface = Color(0xFF15171B);
+const Color gdSurface2 = Color(0xFF1E2127);
+const Color gdBorder = Color(0x14FFFFFF);
+const Color gdTextPrimary = Color(0xFFF3F4F6);
+const Color gdTextSecondary = Color(0xFF9CA3AF);
 
-// Green Light Theme
-const Color glBg = Color(0xFFF0FDF4);
+// Green Light Theme — NEUTRAL surfaces (no green tint)
+const Color glBg = Color(0xFFF7F8FA);
 const Color glSurface = Color(0xFFFFFFFF);
-const Color glSurface2 = Color(0xFFDCFCE7);
+const Color glSurface2 = Color(0xFFEDF0F4);
 const Color glBorder = Color(0x12000000);
-const Color glTextPrimary = Color(0xFF061A14);
-const Color glTextSecondary = Color(0xFF4B7166);
+const Color glTextPrimary = Color(0xFF111827);
+const Color glTextSecondary = Color(0xFF6B7280);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BLACK & WHITE PALETTE (monochrome chrome; status colours stay coloured)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// B&W Light Theme
+const Color bwlBg = Color(0xFFF4F4F5);
+const Color bwlSurface = Color(0xFFFFFFFF);
+const Color bwlSurface2 = Color(0xFFE7E7E9);
+const Color bwlBorder = Color(0x14000000);
+const Color bwlTextPrimary = Color(0xFF09090B);
+const Color bwlTextSecondary = Color(0xFF52525B);
+const Color bwPrimaryLight = Color(0xFF111111); // near-black primary
+const Color bwSecondaryLight = Color(0xFF3F3F46); // gradient end (black→gray)
+
+// B&W Dark Theme
+const Color bwdBg = Color(0xFF000000);
+const Color bwdSurface = Color(0xFF121212);
+const Color bwdSurface2 = Color(0xFF1E1E1E);
+const Color bwdBorder = Color(0x1FFFFFFF);
+const Color bwdTextPrimary = Color(0xFFFAFAFA);
+const Color bwdTextSecondary = Color(0xFFA1A1AA);
+const Color bwPrimaryDark = Color(0xFFFAFAFA); // near-white primary
+const Color bwSecondaryDark = Color(0xFFBDBDBD); // gradient end (white→gray)

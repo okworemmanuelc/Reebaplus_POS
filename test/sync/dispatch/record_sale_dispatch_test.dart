@@ -90,7 +90,7 @@ OrderItemsCompanion _itemCompanion(_SaleSeed s, String businessId) =>
     OrderItemsCompanion.insert(
       businessId: businessId,
       orderId: 'placeholder', // overwritten by createOrder
-      productId: s.productId,
+      productId: Value(s.productId),
       storeId: s.storeId,
       quantity: 2,
       unitPriceKobo: 100000,
@@ -221,7 +221,7 @@ void main() {
             OrderItemsCompanion.insert(
               businessId: businessId,
               orderId: 'placeholder',
-              productId: s.productId,
+              productId: Value(s.productId),
               storeId: s.storeId,
               quantity: 50,
               unitPriceKobo: 100000,

@@ -109,8 +109,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     _subscribeInventory(_selectedStoreId);
 
-    // Load staff list once (for staff sales breakdown)
-    final staff = await db.select(db.users).get();
+    // Load staff list once (for staff sales breakdown). Business-scoped — the
+    // device can hold more than one business's users, so a bare select(users)
+    // would leak other businesses' staff (business-scoping invariant).
+    final staff = await db.storesDao.getUsersForCurrentBusiness();
     if (mounted) setState(() => _staffList = staff);
   }
 

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:reebaplus_pos/core/theme/colors.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 
 /// Minimal dark-themed placeholder for routes not yet built (master plan §4
 /// uses placeholder routes for Terms/Privacy; the real invite-code entry is
@@ -17,15 +17,15 @@ class ComingSoonScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: adBg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        iconTheme: const IconThemeData(color: adTextPrimary),
+        iconTheme: IconThemeData(color: authTextPrimary(context)),
         title: Text(
           title,
-          style: const TextStyle(
-            color: adTextPrimary,
+          style: TextStyle(
+            color: authTextPrimary(context),
             fontWeight: FontWeight.w700,
             fontSize: 18,
           ),
@@ -40,7 +40,7 @@ class ComingSoonScreen extends StatelessWidget {
               Icon(
                 Icons.hourglass_empty_rounded,
                 size: 56,
-                color: amberPrimary.withValues(alpha: 0.8),
+                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.8),
               ),
               const SizedBox(height: 20),
               Text(
@@ -49,7 +49,7 @@ class ComingSoonScreen extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 15,
                   height: 1.5,
-                  color: adTextPrimary.withValues(alpha: 0.7),
+                  color: authTextPrimary(context).withValues(alpha: 0.7),
                 ),
               ),
             ],

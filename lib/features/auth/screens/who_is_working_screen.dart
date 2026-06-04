@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
-import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/utils/role_display.dart';
 import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
 import 'package:reebaplus_pos/features/auth/screens/login_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/otp_verification_screen.dart';
+import 'package:reebaplus_pos/features/auth/screens/welcome_screen.dart';
 
 /// The shared-till "Who's working?" picker (master plan §8). Shown all day
 /// when staff switch shifts or return after auto-lock — distinct from Login,
@@ -135,7 +136,7 @@ class _WhoIsWorkingScreenState extends ConsumerState<WhoIsWorkingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: adBg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: BrandedAuthBackground(
         child: SafeArea(
           child: AnimatedSwitcher(
@@ -242,7 +243,7 @@ class _PickerList extends ConsumerWidget {
                 Text(
                   businessName,
                   style: TextStyle(
-                    color: adTextPrimary.withValues(alpha: 0.7),
+                    color: authTextPrimary(context).withValues(alpha: 0.7),
                     fontSize: context.getRFontSize(14),
                     fontWeight: FontWeight.w600,
                   ),
@@ -251,7 +252,7 @@ class _PickerList extends ConsumerWidget {
               Text(
                 dateStr,
                 style: TextStyle(
-                  color: adTextPrimary.withValues(alpha: 0.5),
+                  color: authTextPrimary(context).withValues(alpha: 0.5),
                   fontSize: context.getRFontSize(12),
                 ),
               ),
@@ -259,7 +260,7 @@ class _PickerList extends ConsumerWidget {
               Text(
                 "Who's working?",
                 style: TextStyle(
-                  color: adTextPrimary,
+                  color: authTextPrimary(context),
                   fontSize: context.getRFontSize(26),
                   fontWeight: FontWeight.w700,
                 ),
@@ -269,11 +270,40 @@ class _PickerList extends ConsumerWidget {
         ),
         Expanded(
           child: ListView.builder(
-            padding: EdgeInsets.only(bottom: context.getRSize(24)),
+            padding: EdgeInsets.only(bottom: context.getRSize(12)),
             itemCount: staff.length,
             itemBuilder: (context, i) => _StaffPickerCard(
               entry: staff[i],
               onTap: () => onTap(staff[i]),
+            ),
+          ),
+        ),
+        // ── Escape hatch: account not in the list → back to Welcome (§4) so a
+        // new staff member can sign in or join with an invite code. ──────────
+        Padding(
+          padding: EdgeInsets.only(
+            left: context.getRSize(16),
+            right: context.getRSize(16),
+            bottom: context.getRSize(12),
+          ),
+          child: Center(
+            child: TextButton.icon(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const WelcomeScreen()),
+              ),
+              icon: Icon(
+                Icons.person_add_alt_1_outlined,
+                size: context.getRFontSize(18),
+                color: authTextPrimary(context).withValues(alpha: 0.7),
+              ),
+              label: Text(
+                "My account isn't here",
+                style: TextStyle(
+                  color: authTextPrimary(context).withValues(alpha: 0.7),
+                  fontSize: context.getRFontSize(14),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
           ),
         ),
@@ -308,10 +338,10 @@ class _StaffPickerCard extends StatelessWidget {
         vertical: context.getRSize(6),
       ),
       child: Material(
-        color: adSurface,
+        color: Theme.of(context).colorScheme.surface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: adBorder),
+          side: BorderSide(color: Theme.of(context).dividerColor),
         ),
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
@@ -340,7 +370,7 @@ class _StaffPickerCard extends StatelessWidget {
                       Text(
                         name,
                         style: TextStyle(
-                          color: adTextPrimary,
+                          color: authTextPrimary(context),
                           fontWeight: FontWeight.bold,
                           fontSize: context.getRFontSize(16),
                         ),
@@ -371,7 +401,7 @@ class _StaffPickerCard extends StatelessWidget {
                 ),
                 Icon(
                   Icons.chevron_right,
-                  color: adTextPrimary.withValues(alpha: 0.4),
+                  color: authTextPrimary(context).withValues(alpha: 0.4),
                   size: context.getRSize(20),
                 ),
               ],

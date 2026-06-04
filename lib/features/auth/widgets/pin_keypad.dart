@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
-import 'package:reebaplus_pos/core/theme/colors.dart';
 
 /// Six amber PIN dots. [filled] is how many are entered (0–6).
 ///
@@ -27,11 +26,11 @@ class PinDots extends StatelessWidget {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color:
-                isFilled ? amberPrimary : adTextPrimary.withValues(alpha: 0.05),
+                isFilled ? Theme.of(context).colorScheme.primary : authTextPrimary(context).withValues(alpha: 0.05),
             border: Border.all(
               color: isFilled
-                  ? amberPrimary
-                  : adTextPrimary.withValues(alpha: 0.2),
+                  ? Theme.of(context).colorScheme.primary
+                  : authTextPrimary(context).withValues(alpha: 0.2),
               width: 2,
             ),
           ),
@@ -69,13 +68,13 @@ class PinKey extends StatelessWidget {
             height: 64,
             child: Center(
               child: icon != null
-                  ? Icon(icon, color: adTextPrimary, size: 22)
+                  ? Icon(icon, color: authTextPrimary(context), size: 22)
                   : Text(
                       label!,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.w600,
-                        color: adTextPrimary,
+                        color: authTextPrimary(context),
                       ),
                     ),
             ),

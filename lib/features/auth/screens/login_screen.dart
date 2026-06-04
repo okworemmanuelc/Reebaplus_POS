@@ -10,6 +10,7 @@ import 'package:reebaplus_pos/shared/utils/role_display.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/features/auth/screens/email_entry_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/otp_verification_screen.dart';
+import 'package:reebaplus_pos/features/auth/screens/who_is_working_screen.dart';
 import 'dart:async';
 import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -18,7 +19,6 @@ import 'package:reebaplus_pos/features/auth/widgets/pin_keypad.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
-import 'package:reebaplus_pos/core/theme/colors.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   /// When set (e.g. routed from the Who Is Working picker, master plan §8.4),
@@ -113,14 +113,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       }
     }
 
-    // Try prefilling email if _identifiedUser is null
-    if (_emailController.text.isEmpty) {
-      final lastEmail = await auth.getLastLoggedInEmail();
-      if (mounted && lastEmail != null) {
-        setState(() => _emailController.text = lastEmail);
-      }
-    }
-
+    // Deliberately NOT prefilling from getLastLoggedInEmail() here: on a shared
+    // till the last user's email must not seed another signer's PIN screen
+    // (master plan §7.2a). The email is shown only when an identity is actually
+    // resolved (presetUser or device user, above). If neither resolved, the
+    // field stays empty and _submit refuses an unscoped PIN match.
     _checkBiometricAvailability();
   }
 
@@ -158,8 +155,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         // it's unsafe for a picker-selected (preset) user on a shared till — it
         // would resolve the last device user, not the chosen staff member.
         // Disable it whenever a preset user is in play; that person uses a PIN.
-        setState(() => _biometricsAvailable =
-            available && isEnabled && widget.presetUser == null);
+        // Also require a resolved device-user identity (_identifiedUser != null):
+        // _triggerBiometrics enters as getDeviceUserId(), so offering it with no
+        // resolved identity would silently unlock the last device user (§7.2a).
+        setState(() => _biometricsAvailable = available &&
+            isEnabled &&
+            widget.presetUser == null &&
+            _identifiedUser != null);
       }
     } catch (_) {}
   }
@@ -273,10 +275,28 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
     if (!mounted) return;
 
-    // Scope the PIN check to the identified user's email when known, so two
-    // staff who happen to share a PIN don't collide on the same device.
-    final scopeEmail =
-        _identifiedUser?.email ?? _emailController.text.trim();
+    // Scope the PIN check to the identified user as tightly as possible. When
+    // the signer was already identified (picker card or post-OTP preset), pin
+    // to their exact user id so no other local row — even one sharing this
+    // email or PIN on a different business — can match. Fall back to the typed
+    // email only when no identity is known. Master plan §7.2a.
+    final identified = _identifiedUser;
+    final scopeEmail = identified?.email ?? _emailController.text.trim();
+
+    // Never run an unscoped PIN match: with no resolved identity AND no typed
+    // email, getUsersByPin would match ANY local user's PIN — a cross-user
+    // leak on a shared till. Make them identify by email first (§7.2a).
+    if (identified == null && scopeEmail.isEmpty) {
+      setState(() => _checking = false);
+      _pinNotifier.value = '';
+      if (mounted) {
+        AppNotification.showError(
+          context,
+          'Enter your email above to continue.',
+        );
+      }
+      return;
+    }
 
     List<UserData> matches;
     try {
@@ -284,6 +304,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           .read(authProvider)
           .getUsersByPin(
             _pinNotifier.value,
+            userId: identified?.id,
             email: scopeEmail,
           );
     } catch (e) {
@@ -451,6 +472,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     );
   }
 
+  /// Returns to the "Who's working?" picker (master plan §8) so a different
+  /// staff member of the same business can sign in. Only offered when another
+  /// active staff member exists (see [build]). When the picker is still on the
+  /// stack below (multi-staff entry pushed this screen), pop back to that live
+  /// instance; otherwise — picker-replaced shortcut or cold-start root login —
+  /// replace this screen with a fresh picker.
+  void _switchAccount() {
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop();
+    } else {
+      navigator.pushReplacement(
+        MaterialPageRoute(builder: (_) => const WhoIsWorkingScreen()),
+      );
+    }
+  }
+
   Future<void> _forgotPin() async {
     final email = _emailController.text.trim();
     if (email.isEmpty) {
@@ -501,8 +539,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Offer "Switch account" (→ Who's working) only when the same business has
+    // another active staff member to switch to — otherwise there's no one to
+    // pick (master plan §8).
+    final identified = _identifiedUser;
+    bool showSwitch = false;
+    if (!_loginSuccess && identified != null) {
+      final staff =
+          ref.watch(activeStaffProvider(identified.businessId)).valueOrNull;
+      showSwitch =
+          staff != null && staff.any((e) => e.user.id != identified.id);
+    }
+
     return Scaffold(
-      backgroundColor: adBg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       resizeToAvoidBottomInset: false,
       body: BrandedAuthBackground(
         child: SafeArea(
@@ -525,6 +575,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     onBackspace: _onBackspace,
                     onSwitchToEmail: _switchToEmail,
                     onForgotPin: _forgotPin,
+                    showSwitchAccount: showSwitch,
+                    onSwitchAccount: _switchAccount,
                     biometricsAvailable: _biometricsAvailable,
                     onBiometrics: _biometricsAvailable
                         ? _triggerBiometrics
@@ -555,14 +607,14 @@ class _SuccessOverlay extends StatelessWidget {
     try {
       return Color(int.parse(hex.replaceFirst('#', '0xFF')));
     } catch (_) {
-      return amberPrimary;
+      return Theme.of(context).colorScheme.primary;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    const textColor = adTextPrimary;
-    final subtextColor = adTextPrimary.withValues(alpha: 0.65);
+    final textColor = authTextPrimary(context);
+    final subtextColor = authTextPrimary(context).withValues(alpha: 0.65);
     final avatarColor = _hexColor(context, user.avatarColor);
 
     return Center(
@@ -590,7 +642,7 @@ class _SuccessOverlay extends StatelessWidget {
             // ── Welcome text ─────────────────────────────────────────────
             Text(
               'Welcome, ${user.name}',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
                 color: textColor,
@@ -690,6 +742,8 @@ class _PinPad extends StatelessWidget {
   final VoidCallback onBackspace;
   final VoidCallback? onSwitchToEmail;
   final VoidCallback? onForgotPin;
+  final bool showSwitchAccount;
+  final VoidCallback? onSwitchAccount;
   final bool biometricsAvailable;
   final VoidCallback? onBiometrics;
 
@@ -703,6 +757,8 @@ class _PinPad extends StatelessWidget {
     required this.onBackspace,
     this.onSwitchToEmail,
     this.onForgotPin,
+    this.showSwitchAccount = false,
+    this.onSwitchAccount,
     this.biometricsAvailable = false,
     this.onBiometrics,
   });
@@ -711,15 +767,44 @@ class _PinPad extends StatelessWidget {
     try {
       return Color(int.parse(hex.replaceFirst('#', '0xFF')));
     } catch (_) {
-      return amberPrimary;
+      return Theme.of(context).colorScheme.primary;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    const textColor = adTextPrimary;
-    final subtextColor = adTextPrimary.withValues(alpha: 0.65);
-    return Center(
+    final textColor = authTextPrimary(context);
+    final subtextColor = authTextPrimary(context).withValues(alpha: 0.65);
+    return Stack(
+      children: [
+        // ── Back to "Who's working?" picker (only when another staff exists) ─
+        if (showSwitchAccount && onSwitchAccount != null)
+          Align(
+            alignment: Alignment.topLeft,
+            child: TextButton.icon(
+              onPressed: onSwitchAccount,
+              icon: Icon(
+                Icons.arrow_back_rounded,
+                size: context.getRFontSize(18),
+                color: textColor.withValues(alpha: 0.75),
+              ),
+              label: Text(
+                'Switch account',
+                style: TextStyle(
+                  color: textColor.withValues(alpha: 0.75),
+                  fontSize: context.getRFontSize(14),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              style: TextButton.styleFrom(
+                padding: context.rPaddingSymmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+              ),
+            ),
+          ),
+        Center(
       child: SingleChildScrollView(
         padding: context.rPaddingSymmetric(horizontal: 32, vertical: 16),
         child: Column(
@@ -772,7 +857,7 @@ class _PinPad extends StatelessWidget {
                 // scopes the PIN check, so editing it would let it drift away
                 // from the identified user. Switch accounts via the link below.
                 readOnly: identifiedUser != null,
-                style: const TextStyle(color: textColor),
+                style: TextStyle(color: textColor),
                 decoration: AppDecorations.authInputDecoration(
                   context,
                   label: 'Email Address',
@@ -863,6 +948,8 @@ class _PinPad extends StatelessWidget {
           ],
         ),
       ),
+        ),
+      ],
     );
   }
 

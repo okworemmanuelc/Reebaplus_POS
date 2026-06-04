@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:reebaplus_pos/core/theme/colors.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/features/auth/screens/ceo_sign_up_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/coming_soon_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/email_entry_screen.dart';
@@ -47,7 +47,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: adBg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: BrandedAuthBackground(
         child: SafeArea(
           child: FadeTransition(
@@ -66,13 +66,13 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                     children: [
                       const _WelcomeLogo(),
                       const SizedBox(height: 20),
-                      const Text(
+                      Text(
                         'Reebaplus',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 30,
                           fontWeight: FontWeight.w800,
-                          color: adTextPrimary,
+                          color: authTextPrimary(context),
                           letterSpacing: 0.5,
                         ),
                       ),
@@ -83,7 +83,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                         style: TextStyle(
                           fontSize: 15,
                           height: 1.4,
-                          color: adTextPrimary.withValues(alpha: 0.65),
+                          color: authTextPrimary(context).withValues(alpha: 0.65),
                         ),
                       ),
                       const SizedBox(height: 44),
@@ -127,13 +127,13 @@ class _SignInLink extends StatelessWidget {
           text: 'Already have an account? ',
           style: TextStyle(
             fontSize: 14,
-            color: adTextPrimary.withValues(alpha: 0.65),
+            color: authTextPrimary(context).withValues(alpha: 0.65),
           ),
-          children: const [
+          children: [
             TextSpan(
               text: 'Sign in',
               style: TextStyle(
-                color: amberPrimary,
+                color: Theme.of(context).colorScheme.primary,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -164,10 +164,10 @@ class _SmallPrint extends StatelessWidget {
     final baseStyle = TextStyle(
       fontSize: 12,
       height: 1.5,
-      color: adTextPrimary.withValues(alpha: 0.45),
+      color: authTextPrimary(context).withValues(alpha: 0.45),
     );
     final linkStyle = baseStyle.copyWith(
-      color: adTextPrimary.withValues(alpha: 0.7),
+      color: authTextPrimary(context).withValues(alpha: 0.7),
       decoration: TextDecoration.underline,
     );
 
@@ -210,17 +210,17 @@ class _WelcomeLogo extends StatelessWidget {
           width: 104,
           height: 104,
           decoration: BoxDecoration(
-            color: amberPrimary.withValues(alpha: 0.15),
+            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: amberPrimary, width: 2),
+            border: Border.all(color: Theme.of(context).colorScheme.primary, width: 2),
           ),
           alignment: Alignment.center,
-          child: const Text(
+          child: Text(
             'RP',
             style: TextStyle(
               fontSize: 40,
               fontWeight: FontWeight.w800,
-              color: amberPrimary,
+              color: Theme.of(context).colorScheme.primary,
             ),
           ),
         ),

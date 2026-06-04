@@ -27,10 +27,10 @@ class CrateReturnModal extends ConsumerStatefulWidget {
     required WidgetRef ref,
   }) async {
     // Guard 1: skip if no bottle items with trackEmpties enabled
-    final hasBottles = orderWithItems.items.any(
-      (i) =>
-          i.product.unit.toLowerCase() == 'bottle' && i.product.trackEmpties,
-    );
+    final hasBottles = orderWithItems.items.any((i) {
+      final p = i.product; // null for a Quick Sale line — never a crate product
+      return p != null && p.unit.toLowerCase() == 'bottle' && p.trackEmpties;
+    });
     if (!hasBottles) return true; // no crates to track — proceed
 
     // Guard 2: skip if full deposit was already paid.
@@ -42,9 +42,11 @@ class CrateReturnModal extends ConsumerStatefulWidget {
     };
     int expectedDepositKobo = 0;
     for (final ri in orderWithItems.items) {
-      if (ri.product.unit.toLowerCase() != 'bottle') continue;
-      if (!ri.product.trackEmpties) continue;
-      final mfrId = ri.product.manufacturerId;
+      final p = ri.product;
+      if (p == null) continue; // Quick Sale line — never a crate product.
+      if (p.unit.toLowerCase() != 'bottle') continue;
+      if (!p.trackEmpties) continue;
+      final mfrId = p.manufacturerId;
       if (mfrId == null) continue;
       expectedDepositKobo += (mfrDeposit[mfrId] ?? 0) * ri.item.quantity;
     }
@@ -99,6 +101,7 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
 
     for (final ri in widget.orderWithItems.items) {
       final product = ri.product;
+      if (product == null) continue; // Quick Sale line — never a crate product.
       if (product.unit.toLowerCase() != 'bottle') continue;
       if (!product.trackEmpties) continue;
 

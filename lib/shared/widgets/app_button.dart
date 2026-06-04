@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 
 enum AppButtonVariant { primary, secondary, outline, danger, ghost, success }
@@ -76,7 +75,9 @@ class AppButton extends StatelessWidget {
         textColor = t.textTheme.bodyMedium?.color ?? t.colorScheme.onSurface;
         break;
       case AppButtonVariant.success:
-        final successColor = t.extension<AppSemanticColors>()?.success ?? const Color(0xFF30D158);
+        // Match the success banner green (AppNotification) so a "success"
+        // button reads as the same green everywhere, on every theme.
+        final successColor = Colors.green.shade600;
         gradient = [
           Color.lerp(successColor, Colors.white, 0.1)!,
           successColor,
@@ -164,7 +165,7 @@ class AppButton extends StatelessWidget {
               ? [
                   BoxShadow(
                     color: (variant == AppButtonVariant.success
-                        ? (t.extension<AppSemanticColors>()?.success ?? const Color(0xFF30D158))
+                        ? Colors.green.shade600
                         : t.colorScheme.primary).withValues(alpha: 0.3),
                     blurRadius: 12,
                     offset: const Offset(0, 4),

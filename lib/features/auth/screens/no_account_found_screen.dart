@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 
-import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/features/auth/screens/ceo_sign_up_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/staff_sign_up_screen.dart';
+import 'package:reebaplus_pos/features/auth/widgets/auth_form_kit.dart';
 import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/smooth_route.dart';
@@ -23,42 +24,40 @@ class NoAccountFoundScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: adBg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: BrandedAuthBackground(
         child: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(28, 24, 28, 28),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: IconButton(
-                    icon: const Icon(Icons.arrow_back_ios,
-                        color: adTextPrimary, size: 20),
-                    onPressed: () => Navigator.of(context).maybePop(),
-                  ),
+          child: Stack(
+            children: [
+              Align(
+                alignment: Alignment.topLeft,
+                child: IconButton(
+                  icon: Icon(Icons.arrow_back_ios,
+                      color: authTextPrimary(context), size: 20),
+                  onPressed: () => Navigator.of(context).maybePop(),
                 ),
-                const SizedBox(height: 24),
+              ),
+              AuthCenteredScroll(
+                children: [
                 Center(
                   child: Container(
                     padding: const EdgeInsets.all(22),
                     decoration: BoxDecoration(
-                      color: amberPrimary.withValues(alpha: 0.12),
+                      color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.person_search_outlined,
-                        color: amberPrimary, size: 56),
+                    child: Icon(Icons.person_search_outlined,
+                        color: Theme.of(context).colorScheme.primary, size: 56),
                   ),
                 ),
                 const SizedBox(height: 28),
-                const Text(
+                Text(
                   'No account found',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 26,
                     fontWeight: FontWeight.w800,
-                    color: adTextPrimary,
+                    color: authTextPrimary(context),
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -70,7 +69,7 @@ class NoAccountFoundScreen extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 15,
                     height: 1.45,
-                    color: adTextPrimary.withValues(alpha: 0.65),
+                    color: authTextPrimary(context).withValues(alpha: 0.65),
                   ),
                 ),
                 const SizedBox(height: 36),
@@ -88,8 +87,9 @@ class NoAccountFoundScreen extends StatelessWidget {
                     SmoothRoute(page: const StaffSignUpScreen()),
                   ),
                 ),
-              ],
-            ),
+                ],
+              ),
+            ],
           ),
         ),
       ),

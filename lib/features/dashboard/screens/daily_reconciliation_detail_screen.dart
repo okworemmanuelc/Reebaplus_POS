@@ -165,11 +165,16 @@ class _DailyReconciliationDetailScreenState
         var orderRevenue = 0;
         for (final i in o.items) {
           orderRevenue += i.item.quantity * i.item.unitPriceKobo;
-          skus.add(i.product.id);
           items += i.item.quantity;
-          final cur = byProduct[i.product.id];
-          byProduct[i.product.id] =
-              (name: i.product.name, qty: (cur?.qty ?? 0) + i.item.quantity);
+          // Quick-sale lines (§12.3) count toward revenue + items sold, but
+          // have no product → excluded from the SKU set and top-item breakdown.
+          final product = i.product;
+          if (product != null) {
+            skus.add(product.id);
+            final cur = byProduct[product.id];
+            byProduct[product.id] =
+                (name: product.name, qty: (cur?.qty ?? 0) + i.item.quantity);
+          }
         }
         salesKobo += orderRevenue;
         byStaff.update(o.order.staffId, (v) => v + orderRevenue,

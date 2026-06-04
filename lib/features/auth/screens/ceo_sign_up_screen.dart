@@ -10,7 +10,6 @@ import 'package:reebaplus_pos/core/data/currencies.dart';
 import 'package:reebaplus_pos/core/data/nigerian_states.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
-import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/features/auth/onboarding/onboarding_draft.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_form_kit.dart';
@@ -594,7 +593,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: adBg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: BrandedAuthBackground(
         child: SafeArea(
           child: _booting
@@ -631,8 +630,8 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
                 Opacity(
                   opacity: showBack ? 1 : 0,
                   child: IconButton(
-                    icon: const Icon(Icons.arrow_back_ios,
-                        color: adTextPrimary, size: 20),
+                    icon: Icon(Icons.arrow_back_ios,
+                        color: authTextPrimary(context), size: 20),
                     onPressed: showBack ? _back : null,
                   ),
                 ),
@@ -685,7 +684,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
             textInputAction: TextInputAction.done,
             autofocus: true,
             onSubmitted: (_) => _submitBusinessName(),
-            style: const TextStyle(color: adTextPrimary),
+            style: TextStyle(color: authTextPrimary(context)),
             decoration: AppDecorations.authInputDecoration(
               context,
               label: 'Business name',
@@ -737,14 +736,14 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
           TextField(
             controller: _storeNameCtrl,
             textCapitalization: TextCapitalization.words,
-            style: const TextStyle(color: adTextPrimary),
+            style: TextStyle(color: authTextPrimary(context)),
             decoration: AppDecorations.authInputDecoration(
               context,
               label: 'Store name',
               prefixIcon: Icons.store_mall_directory_outlined,
             ).copyWith(
               hintText: 'Abuja Branch',
-              hintStyle: TextStyle(color: adTextPrimary.withValues(alpha: 0.35)),
+              hintStyle: TextStyle(color: authTextPrimary(context).withValues(alpha: 0.35)),
             ),
           ),
         ),
@@ -753,7 +752,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
           TextField(
             controller: _storeAddressCtrl,
             textCapitalization: TextCapitalization.words,
-            style: const TextStyle(color: adTextPrimary),
+            style: TextStyle(color: authTextPrimary(context)),
             decoration: AppDecorations.authInputDecoration(
               context,
               label: 'Address',
@@ -785,12 +784,12 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
         Row(
           children: [
             Icon(Icons.payments_outlined,
-                size: 18, color: adTextPrimary.withValues(alpha: 0.6)),
+                size: 18, color: authTextPrimary(context).withValues(alpha: 0.6)),
             const SizedBox(width: 8),
             Text(
               'Currency: $currency',
               style: TextStyle(
-                color: adTextPrimary.withValues(alpha: 0.75),
+                color: authTextPrimary(context).withValues(alpha: 0.75),
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
               ),
@@ -799,7 +798,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
             Text(
               '(editable later in Business Info)',
               style: TextStyle(
-                color: adTextPrimary.withValues(alpha: 0.45),
+                color: authTextPrimary(context).withValues(alpha: 0.45),
                 fontSize: 12,
               ),
             ),
@@ -825,7 +824,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
             textInputAction: TextInputAction.done,
             autofocus: true,
             onSubmitted: (_) => _submitFullName(),
-            style: const TextStyle(color: adTextPrimary),
+            style: TextStyle(color: authTextPrimary(context)),
             decoration: AppDecorations.authInputDecoration(
               context,
               label: 'Full name',
@@ -853,7 +852,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
             textInputAction: TextInputAction.done,
             autofocus: true,
             onSubmitted: (_) => _sendingOtp ? null : _submitEmail(),
-            style: const TextStyle(color: adTextPrimary),
+            style: TextStyle(color: authTextPrimary(context)),
             decoration: AppDecorations.authInputDecoration(
               context,
               label: 'Email address',
@@ -874,22 +873,14 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
   }
 
   Widget _buildOtpStep() {
-    return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(
-        28,
-        12,
-        28,
-        MediaQuery.of(context).viewInsets.bottom + 24,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Text(
+    return AuthCenteredScroll(
+      children: [
+          Text(
             'Check your email',
             style: TextStyle(
               fontSize: 26,
               fontWeight: FontWeight.w800,
-              color: adTextPrimary,
+              color: authTextPrimary(context),
             ),
           ),
           const SizedBox(height: 8),
@@ -898,7 +889,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
             style: TextStyle(
               fontSize: 15,
               height: 1.4,
-              color: adTextPrimary.withValues(alpha: 0.65),
+              color: authTextPrimary(context).withValues(alpha: 0.65),
             ),
           ),
           const SizedBox(height: 28),
@@ -909,7 +900,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
               hasError: _otpError != null,
               ignorePointers: _otpLockedOut,
               readOnly: _otpVerifying,
-              textColor: adTextPrimary,
+              textColor: authTextPrimary(context),
               onSubmit: () {
                 if (_otpCtrl.text.trim().length == 6) _verifyOtp();
               },
@@ -920,7 +911,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
             child: Text(
               'Code expires in 5 minutes',
               style: TextStyle(
-                color: adTextPrimary.withValues(alpha: 0.5),
+                color: authTextPrimary(context).withValues(alpha: 0.5),
                 fontSize: 13,
               ),
             ),
@@ -948,7 +939,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
                 ? Text(
                     'Resend code in 0:${_resendCountdown.toString().padLeft(2, '0')}',
                     style: TextStyle(
-                      color: adTextPrimary.withValues(alpha: 0.5),
+                      color: authTextPrimary(context).withValues(alpha: 0.5),
                       fontSize: 13,
                     ),
                   )
@@ -958,26 +949,24 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
                     child: const Text('Resend code'),
                   ),
           ),
-        ],
-      ),
+      ],
     );
   }
 
   Widget _buildPinStep() {
     final confirming = _step == 7;
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(28, 12, 28, 24),
-      child: Column(
-        children: [
+    return AuthCenteredScroll(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
           if (_committing)
             _buildCommitting()
           else ...[
             Text(
               confirming ? 'Confirm your PIN' : 'Create a PIN',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 26,
                 fontWeight: FontWeight.w800,
-                color: adTextPrimary,
+                color: authTextPrimary(context),
               ),
             ),
             const SizedBox(height: 8),
@@ -988,7 +977,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 15,
-                color: adTextPrimary.withValues(alpha: 0.65),
+                color: authTextPrimary(context).withValues(alpha: 0.65),
               ),
             ),
             const SizedBox(height: 28),
@@ -1001,8 +990,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
             const SizedBox(height: 12),
             PinKeypad(onDigit: _onPinDigit, onBackspace: _onPinBackspace),
           ],
-        ],
-      ),
+      ],
     );
   }
 
@@ -1013,16 +1001,16 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
         children: [
           CircleAvatar(
             radius: 44,
-            backgroundColor: amberPrimary.withValues(alpha: 0.12),
-            child: const Icon(Icons.check_rounded, size: 48, color: amberPrimary),
+            backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+            child: Icon(Icons.check_rounded, size: 48, color: Theme.of(context).colorScheme.primary),
           ),
           const SizedBox(height: 24),
-          const Text(
+          Text(
             'Setting up your business…',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w700,
-              color: adTextPrimary,
+              color: authTextPrimary(context),
             ),
           ),
         ],
@@ -1047,13 +1035,13 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
                   color: Colors.greenAccent, size: 80),
             ),
             const SizedBox(height: 32),
-            const Text(
+            Text(
               'Welcome, your business is ready!',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.w800,
-                color: adTextPrimary,
+                color: authTextPrimary(context),
               ),
             ),
             const SizedBox(height: 12),
@@ -1062,7 +1050,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 15,
-                color: adTextPrimary.withValues(alpha: 0.65),
+                color: authTextPrimary(context).withValues(alpha: 0.65),
               ),
             ),
           ],
@@ -1095,8 +1083,8 @@ class _StepDots extends StatelessWidget {
           height: 8,
           decoration: BoxDecoration(
             color: active
-                ? amberPrimary
-                : adTextPrimary.withValues(alpha: 0.18),
+                ? Theme.of(context).colorScheme.primary
+                : authTextPrimary(context).withValues(alpha: 0.18),
             borderRadius: BorderRadius.circular(4),
           ),
         );
@@ -1130,34 +1118,34 @@ class _TypeCard extends StatelessWidget {
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
             color: selected
-                ? amberPrimary.withValues(alpha: 0.12)
-                : adSurface.withValues(alpha: 0.6),
+                ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.12)
+                : Theme.of(context).colorScheme.surface.withValues(alpha: 0.6),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: selected
-                  ? amberPrimary
-                  : adTextPrimary.withValues(alpha: 0.12),
+                  ? Theme.of(context).colorScheme.primary
+                  : authTextPrimary(context).withValues(alpha: 0.12),
               width: selected ? 2 : 1,
             ),
           ),
           child: Row(
             children: [
               Icon(icon,
-                  color: selected ? amberPrimary : adTextPrimary, size: 26),
+                  color: selected ? Theme.of(context).colorScheme.primary : authTextPrimary(context), size: 26),
               const SizedBox(width: 16),
               Expanded(
                 child: Text(
                   label,
-                  style: const TextStyle(
-                    color: adTextPrimary,
+                  style: TextStyle(
+                    color: authTextPrimary(context),
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
               if (selected)
-                const Icon(Icons.check_circle_rounded,
-                    color: amberPrimary, size: 22),
+                Icon(Icons.check_circle_rounded,
+                    color: Theme.of(context).colorScheme.primary, size: 22),
             ],
           ),
         ),
@@ -1201,7 +1189,7 @@ class _AutocompleteField extends StatelessWidget {
           textCapitalization: TextCapitalization.words,
           onChanged: onChanged,
           onSubmitted: (_) => onFieldSubmitted(),
-          style: const TextStyle(color: adTextPrimary),
+          style: TextStyle(color: authTextPrimary(context)),
           decoration:
               AppDecorations.authInputDecoration(context, label: label, prefixIcon: icon),
         );
@@ -1210,7 +1198,7 @@ class _AutocompleteField extends StatelessWidget {
         return Align(
           alignment: Alignment.topLeft,
           child: Material(
-            color: adSurface2,
+            color: Theme.of(context).colorScheme.surface,
             elevation: 4,
             borderRadius: BorderRadius.circular(10),
             child: ConstrainedBox(
@@ -1225,7 +1213,7 @@ class _AutocompleteField extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 16, vertical: 12),
                             child: Text(o,
-                                style: const TextStyle(color: adTextPrimary)),
+                                style: TextStyle(color: authTextPrimary(context))),
                           ),
                         ))
                     .toList(),

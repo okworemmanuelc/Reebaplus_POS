@@ -106,6 +106,259 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 
 ---
 
+## Session 94 — 2026-06-04 — Proper light theme for the whole auth/onboarding flow (§4.3)
+
+**Built today:**
+- Fixed the light-mode bug across the auth flow (Welcome, Login, PIN, OTP, CEO/Staff Sign Up, Who's-working, Email entry, etc.): these screens forced a dark branded backdrop while their input fields followed the device's light/dark setting, so in light mode the labels, icons, and (in places) typed text were dark-on-dark and effectively invisible. Everything is now theme-aware.
+- The branded auth backdrop now has a proper light variant: in light mode it uses the theme's light background with dark texture dots; dark mode is unchanged. The corner glow now follows the selected business colour (green theme → green glow, etc.) instead of always amber, so the flow matches the accent across all themes.
+- All auth text (titles, subtitles, labels, typed input text, icons) now derives from the active theme, so it's legible in both light and dark and on every accent. Added two small shared helpers — `authTextPrimary(context)` / `authTextMuted(context)` — and made the shared title/subtitle styles theme-aware.
+- The amber accents that were hardcoded throughout the flow (PIN dots, primary buttons/links, selected states, success ticks, the avatar fallback colour) now follow the active accent. Scaffold backgrounds, card surfaces, and borders on these screens are theme-aware too (no more dark flashes at the screen edges in light mode).
+- Inline error text on auth forms now uses the theme's error colour (readable on light and dark).
+
+**Files touched:**
+- lib/core/theme/app_decorations.dart (new `authTextPrimary` / `authTextMuted` helpers)
+- lib/features/auth/widgets/branded_auth_background.dart (theme-aware light/dark + accent glow)
+- lib/features/auth/widgets/auth_form_kit.dart (theme-aware title/subtitle + error colour)
+- lib/features/auth/screens/*.dart (welcome, login, create_pin, otp_verification, ceo_sign_up, staff_sign_up, who_is_working, email_entry, existing_account, no_account_found, coming_soon)
+- lib/features/auth/widgets/pin_keypad.dart
+- reebaplus_master_plan.md (§4.3)
+
+**Database changes:**
+- None.
+
+**Master plan sections covered:**
+- §4.3 Visual style (auth/onboarding).
+
+**Plan updates made during session:**
+- §4.3 rewritten: the auth flow is now explicitly theme-aware (follows device light/dark AND the selected accent); the corner glow follows the active accent; light mode uses a light base with dark dots. Previously §4.3 specified a dark-only branded backdrop. User-requested this session (light theme for onboarding/login/pin/who's-working + glow-follows-accent).
+
+**Tested:**
+- `flutter analyze lib` — clean, no issues. (Verified the de-const conversions, removed 12 now-unused `colors.dart` imports.)
+- Confirmed every former `adTextPrimary`/`amberPrimary`/`adBg`/`adSurface`/`adBorder` reference in the auth screens is gone, replaced with theme-aware equivalents.
+
+**Known issues / left open:**
+- On-device pass pending: run the app in **light mode** and walk the full auth flow on a couple of accents (e.g. amber + green): confirm backgrounds are light, all text and typed input is dark/legible, the glow matches the accent, and inputs show their content. Then repeat in dark mode to confirm no regression.
+
+**Next session should:**
+- Do the on-device light/dark auth pass above.
+
+---
+
+## Session 93 — 2026-06-04 — Theme redesign: one font everywhere, calmer Purple/Green, new Black & White accent (§10.1)
+
+**Built today:**
+- Made every colour theme use the same font as the Blue theme — the plain system font. The Amber, Purple, and Green themes had quietly switched to a different font (DM Sans); they now all match Blue, so text looks the same whichever accent the business picks. The text sizes and weights are unchanged.
+- Redesigned the **Green** theme: the old green was a bright, neon mint that was hard on the eyes. It's now a deeper, calmer forest green, and the page background no longer has a green tint — it's a clean neutral grey in both light and dark mode. Buttons use the deeper green so white button text stays readable.
+- Redesigned the **Purple** theme background: the dark mode used to have a purple tint on its panels. All backgrounds and panels are now neutral grey in both modes; purple only shows on buttons, icons, and accents. The light-mode purple is slightly deeper for better contrast.
+- Added a new **Black & White** accent (just for fun): black buttons/icons on white in light mode, white on black in dark mode. The "good/bad" status colours (green for profit, red for errors/loss, amber for warnings) stay coloured so money figures and errors are still easy to read.
+- The new accent appears as a fifth card in CEO Settings → Appearance, syncs to every device like the others, and is remembered per device.
+
+**Files touched:**
+- lib/core/theme/colors.dart
+- lib/core/theme/app_theme.dart
+- lib/core/theme/theme_notifier.dart
+- lib/main.dart
+- lib/core/settings/appearance_settings_screen.dart
+- reebaplus_master_plan.md
+
+**Database changes:**
+- None. (The accent choice is stored in the existing `business_design_system` setting; the new value is just the text "bw".)
+
+**Master plan sections covered:**
+- §10.1 Appearance — CEO accent colour picker.
+
+**Plan updates made during session:**
+- §10.1 updated: the accent list now reads "Amber, Blue, Purple, Green, or Black & White," and a note that all accents share one typeface (the system default font). The B&W accent and the font-unification were both user-requested this session.
+
+**Tested:**
+- `flutter analyze` on the theme files, main.dart, and the appearance screen — clean (no issues). Removed the now-unused DM Sans font helper and import.
+- `flutter test test/settings/appearance_settings_screen.dart` — passes (picking an accent still writes + enqueues the synced setting).
+- Note: 6 tests in the settings suite (`role_permissions_detail_test.dart`, `roles_permissions_screen_test.dart`) fail, but they fail the same way on a clean baseline with these theme changes stashed — they're a pre-existing permission-count mismatch (expecting 33 permissions, finding 30) from other in-progress work, unrelated to this session.
+
+**Known issues / left open:**
+- On-device pass still pending: switch through all five accents in CEO Settings → Appearance, toggle light/dark under Display, and eyeball Green (darker, no tint), Purple (no tint), the shared font, and B&W (monochrome chrome, coloured status). Icon gradients (FAB, primary buttons) should read with good contrast on every theme.
+- The bundled DM Sans font files (assets/google_fonts/) are now unused dead weight. Left in place (removing assets/the google_fonts dependency is riskier than the small bundle-size win). main.dart still keeps the harmless `GoogleFonts.config` line.
+
+**Next session should:**
+- Do the on-device pass above, then continue with the in-progress permission-catalogue work (the 30-vs-33 test mismatch).
+
+---
+
+## Session 92 — 2026-06-04 — Login/logout security: wrong-user-PIN fix, guarded full-wipe Log Out, multi-user identity hardening (§7 / §8)
+
+**Built today:**
+- Fixed the wrong-user-PIN bug (#5): after entering a staff member's email + OTP, the PIN screen used to show whoever last logged in on the till (e.g. the Manager) and only their PIN worked. Now the OTP-authenticated person is carried straight into the PIN screen, and the PIN is checked against that exact person only — never another local user, even one on a different business who happens to share the same email or PIN.
+- The login email lookup after OTP now binds the row for the business you actually signed into (a multi-business email holds one row per business), instead of "the most recently touched one".
+- "Log Out" now fully wipes the device (#4): it removes the account and all local data so the next launch needs Email + OTP and a NEW PIN. "Switch User" is unchanged: the fast shift-change that keeps everyone's PINs.
+- ROOT CAUSE of "PIN survived logout" (surfaced by the CRITICAL log): `clearAllData()` wipes every table inside one transaction, but the append-only ledger tables (fund/stock/wallet/payment transactions, activity_logs, crate_ledger) carry `BEFORE DELETE` triggers that `RAISE(ABORT)`. `PRAGMA foreign_keys = OFF` does NOT disable triggers, so on a real till (always has ledger rows) the first ledger delete aborted the whole transaction → nothing wiped → the users/PIN row survived. Fix: `clearAllData` now captures the delete-guard triggers' DDL, drops them, wipes, then recreates them verbatim (append-only protection restored even if the wipe throws). Reproduced with a failing test (one `activity_logs` row) that now passes; also asserted the guards are restored after the wipe. The in-memory tests passed before only because they had no ledger rows.
+- Follow-up fix (same session) — Log Out was leaving the PIN working: two bugs. (1) The unsynced-data guard counted `failed` sync rows (which pile up on any real device) and then *silently* aborted the wipe with only a snackbar — so it looked like a logout but nothing was wiped and the old PIN still worked. Now, if there's unsynced data, you get an explicit dialog: "Stay logged in" vs "Log out & lose them" — never a silent block. (2) The wipe swallowed any error and reported success; now it RETRIES and VERIFIES the local `users` table (which holds the PIN hash) is actually empty before finishing, logging CRITICAL if it ever isn't. After a successful wipe, re-login goes Email → OTP → Create new PIN.
+- Log Out's wipe is deliberately separate from the automatic sign-outs (another device signs in, 12-hour shift expiry, expired session) — those never wipe the till.
+- DESIGN REVISED (same session, with the user): dropped the full-device-wipe logout in favour of a LIGHTER per-user logout. Reason: on a shared offline-first till, wiping all data on every logout means a full cloud re-pull before anyone can work (bad when offline), re-enrols every staffer, and nukes other users' data. New behaviour — `AuthService.logOutCurrentUser()`: resets only the leaving user's PIN to setup-required (`clearUserPin`, old PIN can't unlock again), revokes their session, clears the device pointer + tokens. Keeps the business's data, the sync queue, and other staff's PINs. Re-login = email + OTP + a NEW PIN. Removed `logOutAndWipe`, `_wipeLocalDataVerified`, `SyncDao.pendingCountAllTenants`, and the unsynced two-step dialog (no data-loss risk now — nothing the cloud needs is deleted). `clearAllData` (with the ledger-trigger fix) stays, used only by fresh CEO onboarding.
+- This revision ALSO fixes a `FOREIGN KEY constraint failed (787)` the user hit logging in after a full wipe: the wipe emptied the DB, then a `user_businesses` row got restored (realtime racing the background pull) before its parent `roles`/`users` row → uncaught FK error. The lighter logout never empties the DB, so re-login only updates existing rows and every FK parent is already present. (Latent, separate: a genuinely empty-DB restore — e.g. a brand-new device joining an existing business — could still race; `_restoreTableData` could be hardened to defer FK failures. Flagged, not changed, since it's deep in the actively-edited sync engine.)
+- On a shared till with more than one staff, a cold start now returns to the "Who's working?" picker instead of assuming the last person (#6). Single-staff devices still go straight to that person's PIN (and keep fingerprint unlock).
+- Closed cross-business data leaks (#6): the Home staff list now only loads the current business's staff; the active-business name no longer guesses the first business when more than one is on the device; fingerprint unlock is only offered when a real device-user identity is resolved.
+
+**Files touched:**
+- reebaplus_master_plan.md (plan updates, see below)
+- lib/features/auth/screens/otp_verification_screen.dart
+- lib/features/auth/screens/login_screen.dart
+- lib/shared/services/auth_service.dart (getUsersByPin userId scope; new logOutAndWipe)
+- lib/shared/widgets/app_drawer.dart (Log Out confirm + guarded wipe)
+- lib/core/database/daos.dart (pendingCountAllTenants, countActiveStaffForBusiness, getUsersForCurrentBusiness)
+- lib/core/providers/app_providers.dart (currentBusinessProvider no-guess fallback)
+- lib/features/dashboard/screens/home_screen.dart (business-scoped staff read)
+- lib/main.dart (multi-staff cold-start → picker)
+- test/auth/pin_email_scoping_test.dart (userId scoping case)
+- test/auth/login_logout_isolation_test.dart (new)
+- test/sync/users_read_leak_test.dart (new — read-side leak scanner)
+
+**Database changes:**
+- None (no new tables/columns; three new read/count DAO methods + query-scoping changes only).
+
+**Master plan sections covered:**
+- §7 Login Flow, §8 Who Is Working Picker.
+
+**Plan updates made during session:**
+- §7.2 refined: on a multi-staff shared till, a **cold start returns to the Who Is Working picker** instead of assuming the last device user's PIN. Single-staff devices still go straight to PIN.
+- Added §7.2a "Identity is carried, never re-derived (security invariant)": once a user is authenticated by email+OTP, that exact identity is carried into the PIN screen; the PIN screen must never re-derive who-is-signing-in from sticky device state. This is the root-cause fix class for the wrong-user-PIN bug.
+- Added §7.6 "Full logout wipes the device (shared-till hygiene)": **Log Out** (distinct from **Switch User**) does a **guarded full wipe** of all local data — guarded so it flushes the sync queue first and blocks if anything is unsynced (no silent loss of offline sales). Switch User / lock / auto-lock stay the no-wipe fast path.
+- Why: user reported (#4) data + PIN surviving logout, (#5) entering a Stock keeper's email+OTP landing on the Manager's PIN screen, (#6) the last user's email always prefilling. Decisions taken with the user: Log Out = full device wipe; keep two exit modes; full hardening sweep.
+
+**Tested:**
+- `flutter analyze` clean on every touched file (project-wide only pre-existing `avoid_print` infos in test/database/roles_v13_report.dart).
+- `flutter test test/auth/ test/sync/` — all 118 pass, including: the extended PIN-scoping test (userId scoping isolates the exact identity even when two businesses share an email + PIN), the new `login_logout_isolation_test.dart` (getUserByEmail business binding, countActiveStaffForBusiness routing, pendingCountAllTenants wipe guard), and the new read-side leak scanner.
+- Not yet verified on the emulator — recommend a manual pass of the three scenarios (OTP as a different staffer; Log Out wipe with and without unsynced items; multi-staff cold start → picker).
+
+**Known issues / left open:**
+- Pre-existing (NOT from this session): 6 tests in `test/settings/` fail on a permission-catalogue count drift (tests expect 33 permissions, the seed produces 30) — `roles_permissions_screen_test.dart`, `role_permissions_detail_test.dart`, `activity_logs_access_toggle_test.dart`. The permission seed/catalogue is in `app_database.dart`; these test files are unchanged by this session and the count is unrelated to the auth/logout work. Looks like in-progress permission-key work — flag for whoever owns it.
+- The logout wipe's queue flush only actively pushes the CURRENT business's queue; if another business on the device has unsynced rows it safely BLOCKS the wipe (never silently loses data) but can't drain them itself. Acceptable conservative default; revisit if multi-business-on-one-till becomes common.
+
+**Next session should:**
+- Emulator-verify the three scenarios above, then resolve the unrelated permission-count drift in the settings tests if it's still red.
+
+---
+
+## Session 91 — 2026-06-04 — Staff Settings page + Profile / Staff-Detail redesign (§10.5 / §27 / §26.4)
+
+**What the user asked for:**
+- A Settings page for staff below CEO where they can edit their onboarding info (name, avatar) and preferences, with the CEO + Manager notified when onboarding info is altered. Move their appearance (Display) setting there. Then redesign the staff profile page (Staff Management → tap a member) to look like the Profile screen — modern, best of both — and apply the same design to the Profile screen.
+
+**Built today:**
+- New **Staff Settings** page (roles below CEO only): Profile edit (name/avatar) + Change PIN + Display (light/dark). Reached from a new "Settings" sidebar item. The "Display" tile was moved out of the side menu for these roles (CEO keeps it).
+- Editing name/avatar now notifies every active CEO + Manager (new §26.4 event `staff.profile_updated`), reusing the existing notification pipeline. CEO editing own profile does not notify; PIN change is local-only and does not notify.
+- Redesigned the Profile screen and the Staff Detail screen to share one modern set of profile widgets (header card, stat grid, info card). All staff-detail actions and permission gates kept as-is.
+
+**Files touched:**
+- reebaplus_master_plan.md, BUILD_LOG.md
+- lib/features/settings/screens/staff_settings_screen.dart (new)
+- lib/features/profile/widgets/edit_profile_sheet.dart (new), lib/features/profile/widgets/profile_ui.dart (new)
+- lib/features/profile/screens/profile_screen.dart, lib/features/staff/screens/staff_detail_screen.dart
+- lib/shared/widgets/app_drawer.dart, lib/shared/widgets/notifications_modal.dart
+
+**Database changes:**
+- None. Reuses existing DAOs (updateUserProfile, fireNotification, logActivity, setUserPin).
+
+**Master plan sections covered:**
+- §10.5 (new — Staff Settings), §27.1/§27.2/§27.3 (Settings sidebar item), §26.4 (staff profile-updated notification).
+
+**Plan updates made during session:**
+- Added §10.5 Staff Settings, the "Settings" sidebar item (§27), and the §26.4 "Staff updated their profile (fires to CEO + Manager)" event. The feature was not previously in the plan; documented before building per the guardrails.
+
+**Tested:**
+- `flutter analyze` — clean on all touched files (no new warnings/errors; remaining 18 infos are pre-existing `avoid_print` in test/database/roles_v13_report.dart).
+- `flutter test test/sync/` — all 99 pass, incl. the Layer C raw-write leak scanner (new notification + profile writes route through enqueueing DAOs).
+- On-device emulator pass: pending.
+
+**Known issues / left open:**
+- On-device verification pending.
+
+**Next session should:**
+- Verify on the emulator: staff Settings entry/edit/notification + redesigned screens.
+
+---
+
+## Session 90 — 2026-06-04 — Quick Sales are now recorded and appear in reports (§12.3 / §25.2 / §26.4)
+
+**What the user asked for:**
+- "How are quick sales recorded? Plus they should also be mentioned in reports when producing reports." (Follow-on to the order-creator task built in Session 87.)
+
+**The problem found:**
+- Quick sales were not recorded at all. A quick-sale cart line has no product id, and `OrderService._buildOrderItems` threw an `ArgumentError` at checkout for any line without one — so a cart with a quick-sale item could never be checked out. They never became orders, so they were absent from Orders, Funds, the wallet, and every report. The §12.3 activity-log and §26.4 notification were also unimplemented.
+
+**Built today (after the user approved the plan — "revenue only" for reports, plus the defensive RPC patch + CEO/Manager notification):**
+- A Quick Sale is now a real order line with **no product** (`order_items.product_id` made nullable — local schema v35, cloud migration `0091`). The typed name is carried in the line's price snapshot and shown everywhere via a new `OrderItemDataWithProductData.displayName` (product name when present, else snapshot name, else "Quick Sale").
+- Quick-sale lines **bypass inventory** (§26.4): `OrdersDao.createOrder` skips the inventory deduction, the `stock_transactions` row, and the inventory-cache enqueue for null-product lines; the rejected-sale compensation skips them too. Payment, Funds-credit, and wallet legs are unchanged (they work off order totals).
+- **Reports:** quick sales count in the **Sales Report** and **Daily Reconciliation** revenue + items sold, and are **excluded from the Profit Report** (no captured cost → treated as uncosted). They're omitted from per-product "top item" / SKU breakdowns (no product). All three report screens null-guarded.
+- **Audit:** on checkout, an order containing a quick-sale line writes a `quick_sale` activity-log entry and fires a `quick_sale_used` notification (warning) to **CEO + Manager** (§26.4).
+- **Cloud (defensive):** `0091` also patches `pos_record_sale_v2` to skip the inventory lock/deduction + stock-transaction for a null-product item (`CONTINUE WHEN product_id IS NULL`). The v2 RPC is currently OFF (the live path is v1), so this only matters once v2 is enabled — included now to avoid a landmine.
+
+**Files touched:**
+- lib/core/database/app_database.dart (order_items.productId nullable; schemaVersion 35; onUpgrade v35 block) + app_database.g.dart (regen)
+- lib/core/database/daos.dart (createOrder null-product skips; OrderItemDataWithProductData nullable product + displayName; fold keeps null-product lines)
+- lib/shared/services/order_service.dart (_buildOrderItems builds null-product line; _compensateRejectedSale skip; _auditQuickSale activity log + notification)
+- lib/features/orders/screens/orders_screen.dart (order-card item list + both receipt mappings use displayName)
+- lib/features/orders/widgets/crate_return_modal.dart (null-guard product in crate math)
+- lib/features/dashboard/screens/{profit_report_screen,sales_detail_screen,daily_reconciliation_detail_screen}.dart (null-guards / displayName)
+- supabase/migrations/0091_order_items_nullable_product.sql (new — DROP NOT NULL + RPC patch; deployed)
+- test/sync/dispatch/{record_sale_dispatch_test,orders_dao_cancel_dispatch_test}.dart, test/orders/pr_4c_test.dart (wrap productId fixtures in Value())
+
+**Database changes:**
+- Local Drift v34 → **v35**: `order_items.product_id` now nullable (alterTable rebuild, idempotent guard).
+- Cloud `0091`: `order_items.product_id` DROP NOT NULL; `pos_record_sale_v2` skips inventory for null-product lines. **Deployed via `supabase db push`** (0091 was the only un-applied migration; no divergence).
+
+**Master plan sections covered / updated:**
+- §12.3 — added the "recorded as a real order line" note (nullable line, bypass inventory, revenue-only in reports, activity log + notification).
+- §25.2 — added the "Quick Sales in reports" note (in Sales + Reconciliation revenue, excluded from Profit).
+- §26.4 — marked the "Quick Sale used" notification implemented (`quick_sale_used`, warning).
+
+**Tested:**
+- `flutter analyze` — 0 errors (pre-existing `avoid_print` infos only).
+- `flutter test test/sync/` — 99 passed. `test/orders/` — 22 passed. `test/database/` — passed.
+- On-device pass **pending** (the v34→v35 migration runs at next launch on existing installs; the migration is the idiomatic Drift alterTable rebuild with the startup SchemaAudit as backstop).
+
+**Known issues / left open:**
+- On-device smoke test of an actual quick-sale checkout (and the v35 migration on an existing install) still to be run on the emulator.
+
+**Next session should:**
+- On-device: do a quick-sale checkout end-to-end (POS ⚡ → cart → checkout → Orders shows the line with its name → Sales Report counts it, Profit Report excludes it → CEO/Manager get the notification).
+
+---
+
+## Session 89 — 2026-06-04 — Auth-flow escape hatches: "Switch account" (login → picker) + "My account isn't here" (picker → Welcome) (§8/§4)
+
+**What the user asked for (two messages):**
+- Add a "Switch account" button on the login PIN-entry screen so they can go back to the "Who's working?" picker. Hide it when there are no other users of the same business.
+- Add a button on the "Who's working?" picker that takes the user back to the Welcome screen — for when their account isn't in the list.
+
+**Built today:**
+- **"Switch account" on the PIN screen (§8).** New top-left button (back arrow + label). Tapping it returns to the "Who's working?" picker. When the picker is still underneath in the navigation stack (the normal multi-staff path that pushes the PIN screen), it pops back to that live picker; on the cold-start root login or the 0/1-staff shortcut path it replaces the screen with a fresh picker instead. The button only appears when the same business has at least one *other* active staff member — it reads the same live active-staff list the picker itself uses. A solo business never sees it.
+- **"My account isn't here" on the picker (§4).** New footer button under the staff list. Pushes the Welcome screen so a staff member who isn't listed can sign in, create a business, or join with an invite code. Always present whenever the picker renders (i.e. multi-staff). Non-destructive — it does not clear the device user, so backing out returns to the picker unchanged.
+
+**Files touched:**
+- lib/features/auth/screens/login_screen.dart
+- lib/features/auth/screens/who_is_working_screen.dart
+
+**Database changes:**
+- None. Pure UI/navigation — no synced-table writes, no schema change.
+
+**Master plan sections covered:**
+- Section 8 — Who Is Working picker (added a way back to it from the login PIN screen).
+- Section 4 — Welcome screen (added a way to reach it from the picker when your account isn't listed).
+
+**Plan updates made during session:**
+- None.
+
+**Tested:**
+- `flutter analyze` clean on the touched files (login_screen.dart, who_is_working_screen.dart, main.dart). On-device pass still pending.
+
+**Known issues / left open:**
+- The existing bottom "Not {name}? Switch account" link on the PIN screen (which clears the device user and goes to email entry) is unchanged and still present — it's a different action (fresh email login vs. picking another staff already on this till).
+
+**Next session should:**
+- Verify on-device: the PIN-screen button shows only for multi-staff businesses and lands back on the picker from all three entry paths (pushed, replaced, cold-start root); the picker's "My account isn't here" reaches Welcome and the back gesture returns to the picker.
+
+---
+
 ## Session 88 — 2026-06-04 — Live suspend sign-out (§9.5/§8.3) + CEO staff-action notifications (§26.4)
 
 **What the user asked for (one message, three tasks):**
@@ -182,7 +435,7 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 - `flutter analyze lib/features/orders/screens/orders_screen.dart` — no issues. On-device pass still pending.
 
 **Known issues / left open:**
-- **Quick sales (open).** Investigated this session: quick sales are currently NOT recorded at all — `OrderService._buildOrderItems` throws an `ArgumentError` at checkout because quick-sale cart items carry no product id, and `order_items.productId` is a non-null FK to products. The §12.3 "tracked in Activity Logs" and §26.4 "Quick Sale used" notification are also unimplemented. So they cannot appear in reports because they never become orders. Making them recordable + visible in reports needs design decisions (product-less order line storage incl. cloud RPC, inventory-bypass per §26.4, and how the Profit Report treats a line with no buying price). Presented to the user for direction; not built yet.
+- **Quick sales — RESOLVED in Session 90 (above).** Recording + reports + activity log + notification shipped. Original investigation: quick sales were NOT recorded at all — `OrderService._buildOrderItems` throws an `ArgumentError` at checkout because quick-sale cart items carry no product id, and `order_items.productId` is a non-null FK to products. The §12.3 "tracked in Activity Logs" and §26.4 "Quick Sale used" notification are also unimplemented. So they cannot appear in reports because they never become orders. Making them recordable + visible in reports needs design decisions (product-less order line storage incl. cloud RPC, inventory-bypass per §26.4, and how the Profit Report treats a line with no buying price). Presented to the user for direction; not built yet.
 
 **Next session should:**
 - Resolve the quick-sale recording approach with the user, then implement recording + activity log + notification + report inclusion.

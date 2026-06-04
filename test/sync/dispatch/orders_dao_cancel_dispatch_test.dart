@@ -96,7 +96,7 @@ OrderItemsCompanion _itemCompanion(_CancelSeed s, String businessId) {
   return OrderItemsCompanion.insert(
     businessId: businessId,
     orderId: 'placeholder', // overwritten by createOrder
-    productId: s.productId,
+    productId: Value(s.productId),
     storeId: s.storeId,
     quantity: 2,
     unitPriceKobo: 100000,

@@ -101,6 +101,13 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
   /// false = fresh device / first login → show email screen
   bool? _hasDeviceUser;
 
+  /// Cold-start routing for a known device with MORE THAN ONE active staff:
+  /// return to the Who Is Working picker instead of assuming the last device
+  /// user's PIN (master plan §7.2 — identity is chosen, never inherited).
+  /// null/false = single-staff device → personalized PIN (keeps biometric
+  /// unlock). Computed once in [_checkDeviceUser].
+  bool _deviceMultiStaff = false;
+
 
   /// Regenerated on auth-state changes to force MaterialApp's internal
   /// Navigator to rebuild its route stack (clears stale MainLayout).
@@ -185,10 +192,24 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
 
   Future<void> _checkDeviceUser() async {
     final userId = await _auth.getDeviceUserId();
+    // Decide cold-start routing: a known device with >1 active staff returns
+    // to the Who Is Working picker (master plan §7.2) rather than the last
+    // device user's PIN. Computed before setState so both flags land together.
+    bool multiStaff = false;
+    if (userId != null) {
+      final db = ref.read(databaseProvider);
+      final user = await db.storesDao.getUserById(userId);
+      if (user != null) {
+        final count = await db.userBusinessesDao
+            .countActiveStaffForBusiness(user.businessId);
+        multiStaff = count > 1;
+      }
+    }
     if (mounted) {
       _auth.deviceUserIdNotifier.value = userId;
       setState(() {
         _hasDeviceUser = userId != null;
+        _deviceMultiStaff = multiStaff;
       });
     }
   }
@@ -266,12 +287,14 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
             DesignSystem.purple => AppTheme.purpleLight(),
             DesignSystem.amber => AppTheme.amberLight(),
             DesignSystem.green => AppTheme.greenLight(),
+            DesignSystem.bw => AppTheme.bwLight(),
             DesignSystem.blue => AppTheme.light(),
           },
           darkTheme: switch (theme.designSystem) {
             DesignSystem.purple => AppTheme.purpleDarkTheme(),
             DesignSystem.amber => AppTheme.amberDarkTheme(),
             DesignSystem.green => AppTheme.greenDarkTheme(),
+            DesignSystem.bw => AppTheme.bwDarkTheme(),
             DesignSystem.blue => AppTheme.dark(),
           },
           navigatorKey: _navigatorKey,
@@ -288,9 +311,14 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
               // transitional bucket re-enter via EmailEntry / LoginScreen.
               if (!_hasDeviceUser!) return const WelcomeScreen();
               // Known device. A lock / Switch User / auto-lock returns to the
-              // Who Is Working picker (master plan §8.5); a cold start lands
-              // straight on the personalized PIN screen.
-              if (_auth.showPickerOnUnlock) return const WhoIsWorkingScreen();
+              // Who Is Working picker (master plan §8.5). On a cold start, a
+              // multi-staff shared till ALSO returns to the picker so the right
+              // person is chosen explicitly (§7.2) — never assume the last
+              // device user. A single-staff device goes straight to that user's
+              // personalized PIN screen (keeps biometric unlock).
+              if (_auth.showPickerOnUnlock || _deviceMultiStaff) {
+                return const WhoIsWorkingScreen();
+              }
               return const LoginScreen();
             }
 

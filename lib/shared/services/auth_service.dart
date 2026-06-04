@@ -98,9 +98,21 @@ class AuthService extends ValueNotifier<UserData?> {
   /// Returns every user whose stored PBKDF2 hash matches [pin]. Sentinel /
   /// placeholder rows (no hash yet) never match — they must go through
   /// [setUserPin] first.
-  Future<List<UserData>> getUsersByPin(String pin, {String? email}) async {
+  Future<List<UserData>> getUsersByPin(
+    String pin, {
+    String? email,
+    String? userId,
+  }) async {
     final query = _db.select(_db.users);
-    if (email != null && email.isNotEmpty) {
+    // Scope the candidate set as tightly as the caller knows the identity.
+    // When the signer was already identified (picker card or post-OTP preset),
+    // pin to their exact user id (globally unique) so a different business's
+    // row that happens to share this email — or any other staff who shares
+    // this PIN — can never match. Fall back to email only when no identity is
+    // known. See master plan §7.2a.
+    if (userId != null && userId.isNotEmpty) {
+      query.where((u) => u.id.equals(userId));
+    } else if (email != null && email.isNotEmpty) {
       query.where((u) => u.email.equals(email));
     }
     final candidates = await query.get();
@@ -828,6 +840,75 @@ class AuthService extends ValueNotifier<UserData?> {
     //    At this point _hasDeviceUser is already false → routes to WelcomeScreen.
     //    Order matters: clear nav first so store-listeners fire while
     //    the businessId resolver still returns a valid id (see logout()).
+    _nav.clearStoreLock();
+    _nav.resetNavigation();
+    value = null;
+  }
+
+  /// Resets a user's local PIN to setup-required so the OLD PIN can no longer
+  /// unlock the device. Used by [logOutCurrentUser]; the user re-establishes a
+  /// new PIN after their next email/OTP (master plan §7.4). Mirrors the §5 #4
+  /// exception of [setUserPin] — the PIN columns are local-only.
+  Future<void> clearUserPin(String userId) async {
+    // sync-exempt: §5 #4 — pin/pinHash/pinSalt/pinIterations are local-only
+    // columns by schema design; they do not exist in Supabase.
+    await (_db.update(_db.users)..where((u) => u.id.equals(userId))).write(
+      const UsersCompanion(
+        pin: Value(setupRequiredPin),
+        pinHash: Value(null),
+        pinSalt: Value(null),
+        pinIterations: Value(null),
+      ),
+    );
+  }
+
+  /// Deliberate "Log Out" from the drawer (master plan §7.6). Signs the current
+  /// user out and clears THAT user's local credentials only — it is NOT a
+  /// device wipe:
+  ///   • their PIN is reset to setup-required (the old PIN can't unlock again),
+  ///   • their session row is revoked,
+  ///   • the device pointer + Supabase/Google tokens are cleared.
+  /// The business's shared data, the sync queue, and OTHER staff's PINs are all
+  /// KEPT — so the offline-first till stays usable and needs no re-pull. Next
+  /// launch demands Email + OTP, then a NEW PIN (per §7.4).
+  ///
+  /// Separate from [fullLogout] (the involuntary remote-kick / shift-expiry /
+  /// session-expired path), which must NOT reset the user's PIN.
+  Future<void> logOutCurrentUser() async {
+    final user = value;
+
+    // Kill this user's PIN first so re-login cannot accept the old one.
+    if (user != null) {
+      try {
+        await clearUserPin(user.id);
+      } catch (e) {
+        debugPrint('[AuthService] logOutCurrentUser clearUserPin error: $e');
+      }
+    }
+
+    // Revoke this device's session row for the user.
+    final sid = currentSessionId;
+    if (sid != null) {
+      try {
+        await _db.sessionsDao.revokeSession(sid);
+      } catch (e) {
+        debugPrint('[AuthService] logOutCurrentUser revokeSession error: $e');
+      }
+      currentSessionId = null;
+    }
+
+    // Stop sync (no user bound after this), clear the device pointer + tokens,
+    // reset nav, and drop the in-memory user → main.dart routes to Welcome.
+    _sync.stopRealtimeSync();
+    await _secure.clearAll();
+    deviceUserIdNotifier.value = null;
+    _supabase.auth.signOut(scope: SignOutScope.local).catchError((e) =>
+        debugPrint('[AuthService] logOutCurrentUser signOut error: $e'));
+    try {
+      await GoogleSignIn().signOut();
+    } catch (e) {
+      debugPrint('[AuthService] logOutCurrentUser Google signOut error: $e');
+    }
     _nav.clearStoreLock();
     _nav.resetNavigation();
     value = null;

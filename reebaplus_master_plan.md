@@ -145,8 +145,9 @@ This is the first screen users see on a fresh install and after a full logout. N
 
 ### 4.3 Visual style
 
-- Match the existing dark theme with yellow/orange accent. The accent (business colour) is CEO-selectable in CEO Settings → Appearance (§10.1) and applies business-wide; default amber. Light/dark/system stays a per-device choice.
-- Background: dark base with a subtle pattern (faint dotted or grid) and a soft yellow gradient glow from one corner.
+- The accent (business colour) is CEO-selectable in CEO Settings → Appearance (§10.1) and applies business-wide; default amber. Light/dark/system stays a per-device choice.
+- The whole auth/onboarding flow (Welcome, CEO/Staff Sign Up, Login, OTP, PIN, Who-is-working, etc.) is theme-aware: it follows the device's light/dark mode AND the selected accent. In dark mode it keeps the branded dark base; in light mode the base is the theme's light background with dark text. All content (titles, labels, typed input text, icons) is theme-aware so it stays legible in both modes — never hardcode a single-mode colour on an auth screen.
+- Background: a base surface with a subtle pattern (faint dotted grid) and a soft gradient glow from one corner. The glow follows the active accent colour (e.g. green theme → green glow); dots are light on the dark base and dark on the light base.
 - Small fade-in animation on load — logo, name, tagline, and buttons fade in gently.
 
 ---
@@ -211,8 +212,14 @@ Triggered by tapping "Already have an account? Sign in" on the Welcome screen. O
 
 ### 7.2 Every login after that on the same device
 
-- PIN screen with email already filled in and shown.
+- Single-staff device: PIN screen with email already filled in and shown.
+- Multi-staff shared till: a cold start returns to the Who Is Working picker (§8) so the right person is chosen explicitly — the device never assumes the last user. Tapping a card opens that person's PIN screen. (This is the same anti-assumption rule as §8: identity is always chosen, never inherited from "whoever logged in last".)
 - Goes straight to last-used business → Home. User can switch business from inside the app.
+
+### 7.2a Identity is carried, never re-derived (security invariant)
+
+- Whenever a user has been authenticated by email + OTP, that exact identity is carried forward into the PIN screen. The PIN screen must never re-derive "who is signing in" from sticky device state (the last device user / last email). On a shared till those are only prefill conveniences for the email box — never the basis for deciding whose PIN to check or whose data to bind.
+- A PIN can only ever unlock the identity that was authenticated/selected. Two staff on the same till who happen to share a PIN are disambiguated by the chosen identity, not by "the last user".
 
 ### 7.3 Forgot PIN flow
 
@@ -226,6 +233,13 @@ Triggered by tapping "Already have an account? Sign in" on the Welcome screen. O
 - The 6-digit PIN is a **device unlock** factor, not a portable identity. Its hash (`pin_hash` / `pin_salt` / `pin_iterations`) lives only in the local `users` row and is **never** sent to the cloud. The portable identity is the email + OTP.
 - A new device re-establishes the PIN locally: the user verifies by email OTP, then sets a device PIN (re-entering the same digits is fine — it's a fresh local hash). The Phase-2 "PIN portability across devices/businesses" goal (§28) is met this way — by local re-establishment after OTP — **not** by cloud-storing the PIN. A readable 6-digit hash column would be trivially brute-forceable, which is why fintech apps keep the PIN device-local.
 - If server-side verification is ever genuinely required, the only acceptable form is a rate-limited `SECURITY DEFINER` verify RPC that takes a candidate PIN and returns a boolean — never a readable hash column the client can pull.
+
+### 7.6 Log Out clears the leaving user (not a device wipe)
+
+- "Log Out" is distinct from "Switch User". Log Out signs the current user out and **clears that user's PIN** (`pin_hash`/`pin_salt`/`pin_iterations` → null, `pin` → setup-required) and revokes their session, so their **old PIN can no longer unlock the device** — they must re-authenticate with Email + OTP and set a **new PIN** (per §7.4). It also clears the device pointer + token, so the next launch demands Email + OTP with a blank email box (no sticky prefill of the last user).
+- Log Out is deliberately **NOT a full device wipe**. The till is a shared, offline-first device: the business's data (orders, inventory, the sync queue) and **other staff's PINs** are kept, so the till stays usable offline and never needs a full re-pull after one person logs out. (This is why there's no unsynced-data block — nothing the cloud needs is deleted.) It only removes the leaving user's local credentials. A confirmation is shown first.
+- "Switch User" / lock / auto-lock are the everyday fast path — they keep the current user's PIN and return to the Who Is Working picker (§8.5). Log Out is the deliberate "I'm leaving this device" exit that forces a fresh email/OTP + new PIN next time for that person.
+- A full local wipe (`clearAllData`) is reserved for fresh CEO onboarding, not logout.
 
 ---
 
@@ -346,7 +360,7 @@ Where the CEO tunes everything about the business. Menu screen with tappable sec
 - Roles & Permissions — four role cards (CEO, Manager, Cashier, Stock keeper). Tap to open.
 - Activity Logs access — toggle for which roles can view activity logs (CEO only by default).
 - Sync Issues access — toggle for which roles can open the Sync Issues troubleshooting screen (gated by the `sync.view` permission). The CEO always has access; other roles default off. (Sync Issues is an infra/troubleshooting screen, not otherwise in the role tables.)
-- Appearance — CEO picks the business colour (accent): Amber, Blue, Purple, or Green. Synced, so it applies to every device in the business. Light/dark/system mode is NOT here — that stays a per-device comfort choice, set from "Display" in the side menu. Default colour: amber.
+- Appearance — CEO picks the business colour (accent): Amber, Blue, Purple, Green, or Black & White. Synced, so it applies to every device in the business. Light/dark/system mode is NOT here — that stays a per-device comfort choice, set from "Display" in the side menu. Default colour: amber. All accents share one typeface (the system default font).
 - Danger Zone — CEO-only, sits at the bottom, visually separated. Holds **Delete Business** (delete the account, the business, and everything attached to it). Full behaviour in §10.3.
 
 ### 10.2 Roles & Permissions sub-page (per role)
@@ -387,6 +401,24 @@ The **last Phase 1 item to build** (see §3). A CEO can permanently delete their
 - Create custom roles beyond the four defaults.
 - Custom permission groups.
 - More tunable limits beyond discount, expense, and price-change toggle.
+
+### 10.5 Staff Settings (roles below CEO) (2026-06-04, user)
+
+CEO Settings (§10.1) is CEO-only — it tunes the whole business. Staff **below CEO**
+(Manager, Cashier, Stock keeper) get their own lightweight **Settings** page instead,
+reached from a "Settings" sidebar item (§27.2). It is *personal*, not business-wide,
+and holds only what an individual staff member may change about themselves:
+
+- **Profile** — edit their own **name and avatar colour** (the same self-service edit
+  described in §27.1; email stays out of scope — needs OTP). Saving fires the §26.4
+  "Staff updated their profile" notification to every CEO + Manager.
+- **Change PIN** — update their own device-unlock PIN (local-only, not synced).
+- **Display** — the per-device light/dark/system mode, **moved here** from the side
+  menu for these roles (the CEO keeps "Display" in the side menu). The business accent
+  colour is *not* here — that stays CEO-only under §10.1 Appearance.
+
+No new permission key: the page is role-gated (shown only to roles below CEO) and
+re-checks at build. The CEO never sees it (they use CEO Settings).
 
 ---
 
@@ -466,6 +498,18 @@ The screen where sales actually happen. POS and Cart are gated on `sales.make`: 
 - On unlock, modal opens to enter: product name, unit price, quantity.
 - Item is added to cart and calculated normally.
 - All Quick Sales are tracked in Activity Logs.
+
+> Recorded as a real order line (2026-06-04, user). A Quick Sale checks out like
+> any sale: it becomes a normal order line with **no product** (`order_items.
+> product_id` is nullable — schema v35 / cloud `0091`); the typed name is carried
+> in the line's price snapshot and shown everywhere via the line's display name.
+> Because the item is not in inventory it **bypasses inventory** (§26.4) — no
+> stock deduction, no stock-transaction, no inventory-cache row. **Reports:** a
+> Quick Sale **counts in the Sales Report and the Daily Reconciliation revenue +
+> items sold**, but is **excluded from the Profit Report** (no buying price is
+> captured, so its cost is unknown — like any uncosted line). On checkout it
+> writes an activity-log entry (`quick_sale`) and fires the §26.4 "Quick Sale
+> used" notification to CEO + Manager.
 
 ### 12.4 Category chips and product grid
 
@@ -1447,6 +1491,12 @@ CSV/PDF export with selectable time frame. Deferred to Phase 3.
 - Funds Register Report — daily open/close per account, mismatches flagged.
 - Profit Report — CEO only. Revenue, cost of goods, gross profit, margins.
 
+> Quick Sales in reports (2026-06-04, user). A Quick Sale (§12.3) is a real sale
+> with no product/cost, so it **counts in the Sales Report and the Daily
+> Reconciliation revenue + items sold**, but is **excluded from the Profit
+> Report** (unknown cost — treated like any uncosted line). It carries no
+> product, so it is omitted from the per-product "top item" / SKU breakdowns.
+
 - Stock Approvals — CEO + Manager. Stock-keeper Add/Remove requests awaiting approval (§16.6.1). A tappable card per request expands to the detail with Approve / Reject; a count badge shows what's outstanding. (Added 2026-06-04, user.)
 
 Note: **expense** pending approvals are not on Reports — they live on the Expenses screen and notification bell (§20.4). The Stock Approvals card above is the one exception, added 2026-06-04 on user request to surface stock-keeper adjustment approvals (§16.6.1) in the Reports tab.
@@ -1564,6 +1614,11 @@ Opens the relevant screen (Inventory for low stock, Expense for pending approval
 - New staff invite accepted (fires to inviter + CEO).
 - Staff suspended/reactivated (fires to CEO).
 - Role changed (fires to CEO + affected staff).
+- Staff updated their profile (fires to CEO + Manager). Added 2026-06-04 (user) —
+  when a staff member **below CEO** edits their own onboarding info (name / avatar)
+  from the Staff Settings page (§10.5), every active CEO and Manager is notified
+  (the editor is never self-notified). A CEO editing their own profile does not
+  fire it. PIN changes are local-only and do not notify.
 - Staff hit 5 wrong PIN attempts → forced Forgot PIN (fires to CEO).
 
 > Actor is never self-notified (2026-06-04, user). The CEO-facing staff events
@@ -1576,7 +1631,7 @@ Opens the relevant screen (Inventory for low stock, Expense for pending approval
 
 - Sale cancelled (fires to CEO + Manager).
 - Refund issued (fires to CEO + Manager).
-- Quick Sale used (fires to CEO + Manager for audit, since it bypasses inventory).
+- Quick Sale used (fires to CEO + Manager for audit, since it bypasses inventory). Implemented 2026-06-04 — notification type `quick_sale_used`, warning severity, fired on checkout when the order contains a Quick Sale line (§12.3).
 - Pending order awaiting confirmation > 24h (fires to Manager, CEO).
 
 **Suppliers**
@@ -1625,6 +1680,11 @@ Hardcoded for now. Custom notification settings = Phase 2.
 > Management, the Who's-Working picker, and on receipts as the seller); avatar
 > colour follows the existing per-device avatar behaviour. Editing the email
 > (login identity) stays out of scope for now — it needs OTP re-verification.
+>
+> Staff Settings (2026-06-04, user). For roles **below CEO**, the same name/avatar
+> edit (plus Change PIN and the Display mode) also lives on the dedicated Staff
+> Settings page (§10.5), reached from the new "Settings" sidebar item. When a
+> staff member edits their profile, every CEO + Manager is notified (§26.4).
 
 ### 27.2 Sidebar items (visually grouped, no text headings)
 
@@ -1654,6 +1714,7 @@ Hardcoded for now. Custom notification settings = Phase 2.
 - Reports
 - Activity Logs
 - CEO Settings
+- Settings (staff self-service — shown to roles below CEO only; §10.5)
 
 ### 27.3 Visibility by role
 
@@ -1673,6 +1734,7 @@ Hardcoded for now. Custom notification settings = Phase 2.
 | Reports | Yes | Yes | Hidden | Hidden |
 | Activity Logs | Yes | If toggled | Hidden | Hidden |
 | CEO Settings | Yes | Hidden | Hidden | Hidden |
+| Settings (staff self-service, §10.5) | Hidden | Yes | Yes | Yes |
 
 ### 27.4 Bottom nav
 

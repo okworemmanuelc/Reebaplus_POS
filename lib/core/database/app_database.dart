@@ -785,7 +785,10 @@ class OrderItems extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get orderId => text().references(Orders, #id)();
-  TextColumn get productId => text().references(Products, #id)();
+  // Nullable since v35 (§12.3): a Quick Sale line is an item not in inventory,
+  // so it has no product. Its display name lives in [priceSnapshot]. Quick-sale
+  // lines bypass inventory (§26.4) — no stock_transactions / inventory rows.
+  TextColumn get productId => text().nullable().references(Products, #id)();
   TextColumn get storeId => text().references(Stores, #id)();
   IntColumn get quantity => integer()();
   IntColumn get unitPriceKobo => integer()();
@@ -1555,7 +1558,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 34;
+  int get schemaVersion => 35;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3002,6 +3005,25 @@ class AppDatabase extends _$AppDatabase {
           );
         }
       }
+      if (from < 35) {
+        // v35 (master plan §12.3 quick sales): order_items.product_id becomes
+        // nullable so a Quick Sale line (an item not in inventory) can be
+        // recorded as a real order line with no product. Mirrors
+        // supabase/migrations/0091_order_items_nullable_product.sql. The line's
+        // name lives in price_snapshot; quick-sale lines bypass inventory
+        // (§26.4) so no stock_transactions / inventory rows are written.
+        // Rebuild via alterTable (no columns dropped, so the bump trigger
+        // re-creates cleanly from sqlite_master). Idempotent: only rebuild
+        // while product_id is still NOT NULL.
+        final info =
+            await customSelect('PRAGMA table_info(order_items)').get();
+        final pidNotNull = info.any((r) =>
+            r.read<String>('name') == 'product_id' &&
+            r.read<int>('notnull') == 1);
+        if (pidNotNull) {
+          await m.alterTable(TableMigration(orderItems));
+        }
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -3019,16 +3041,48 @@ class AppDatabase extends _$AppDatabase {
   SchemaAuditResult? get lastSchemaAudit => _lastSchemaAudit;
 
   Future<void> clearAllData() async {
+    // Append-only ledger tables carry BEFORE DELETE triggers that RAISE(ABORT)
+    // (e.g. `fund_transactions_no_delete`, `<ledger>_no_delete`). PRAGMA
+    // foreign_keys = OFF does NOT disable triggers, so on a real till — which
+    // always has ledger rows (sales, stock, fund movements) — the first ledger
+    // delete aborts the whole transaction and NOTHING is wiped, leaving the
+    // PIN-bearing `users` row behind. A full device wipe must legitimately drop
+    // those guards: capture each delete-event trigger's DDL, drop it, wipe,
+    // then recreate it verbatim (even if the wipe throws). The bump_* (UPDATE)
+    // and _immutable (UPDATE) triggers don't fire on DELETE, so they're left.
+    final triggers = await customSelect(
+      "SELECT name, sql FROM sqlite_master WHERE type = 'trigger'",
+    ).get();
+    final deleteGuardRe =
+        RegExp(r'(BEFORE|AFTER|INSTEAD\s+OF)\s+DELETE\s+ON', caseSensitive: false);
+    final deleteGuards = triggers.where((r) {
+      final sql = r.read<String?>('sql') ?? '';
+      return deleteGuardRe.hasMatch(sql);
+    }).toList();
+
     // PRAGMA foreign_keys cannot be toggled inside a transaction — must run on
     // the executor before transaction() opens.
     await customStatement('PRAGMA foreign_keys = OFF');
     try {
+      for (final r in deleteGuards) {
+        await customStatement(
+          'DROP TRIGGER IF EXISTS ${r.read<String>('name')}',
+        );
+      }
       await transaction(() async {
         for (final table in allTables) {
           await delete(table).go();
         }
       });
     } finally {
+      // Recreate the guards from their own captured DDL — restores the
+      // append-only protection even if the wipe above threw.
+      for (final r in deleteGuards) {
+        final sql = r.read<String?>('sql');
+        if (sql != null && sql.isNotEmpty) {
+          await customStatement(sql);
+        }
+      }
       await customStatement('PRAGMA foreign_keys = ON');
     }
   }

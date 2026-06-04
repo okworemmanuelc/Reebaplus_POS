@@ -476,11 +476,39 @@ class AppDrawer extends ConsumerWidget {
           outlined: true,
           iconColor: t.colorScheme.error,
           labelColor: t.colorScheme.error,
-          onTap: () {
-            Navigator.pop(context); // close the drawer first
-            ref
-                .read(authProvider)
-                .fullLogout(); // terminally logs out → main.dart shows email screen
+          onTap: () async {
+            // Log Out (master plan §7.6): signs THIS user out and resets their
+            // PIN so the old PIN can't unlock again — they re-auth with email +
+            // a code and a new PIN. It is NOT a device wipe: the till's data and
+            // other staff's PINs are kept. All roles use this one button.
+            // Capture the provider up front — `ref` is invalidated once this
+            // widget unmounts mid-await.
+            final auth = ref.read(authProvider);
+            final confirmed = await showDialog<bool>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('Log out of this device?'),
+                content: const Text(
+                  "You'll need your email + a one-time code, and a new PIN, to "
+                  'sign back in. The till keeps its data and other staff stay '
+                  'signed in.\n\n'
+                  'To just switch staff, use Switch User instead.',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(false),
+                    child: const Text('Cancel'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(true),
+                    child: const Text('Log out'),
+                  ),
+                ],
+              ),
+            );
+            if (confirmed != true) return;
+            if (context.mounted) Navigator.pop(context); // close the drawer
+            await auth.logOutCurrentUser(); // → main.dart routes to Welcome
           },
         ),
         SizedBox(height: context.getRSize(12)),

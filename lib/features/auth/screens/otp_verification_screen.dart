@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -13,7 +14,6 @@ import 'package:reebaplus_pos/features/auth/screens/existing_account_screen.dart
 import 'package:reebaplus_pos/features/auth/screens/login_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/no_account_found_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/smooth_route.dart';
-import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_form_kit.dart';
 import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
 import 'package:reebaplus_pos/features/auth/widgets/shake_widget.dart';
@@ -201,7 +201,13 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
     // device with an existing cloud account, we let the user confirm the
     // business before pulling data and seeding a local row.
     final account = await auth.fetchSupabaseAccount();
-    var localUser = await auth.getUserByEmail(widget.email);
+    // Scope the local-row lookup to the business this OTP just authenticated
+    // for — a multi-business email holds one row per business, and binding the
+    // wrong tenant's row is a cross-business leak (master plan §7.2a).
+    var localUser = await auth.getUserByEmail(
+      widget.email,
+      preferredBusinessId: account?.businessId,
+    );
 
     if (!mounted) return;
 
@@ -216,7 +222,11 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
       // Returning device — sync silently and refresh the local row.
       await auth.syncOnLogin(account.businessId);
       await auth.upsertLocalUserFromProfile();
-      localUser = await auth.getUserByEmail(widget.email) ?? localUser;
+      localUser = await auth.getUserByEmail(
+            widget.email,
+            preferredBusinessId: account.businessId,
+          ) ??
+          localUser;
       if (!mounted) return;
     }
 
@@ -236,9 +246,14 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
       final isSetupRequired = user.pin == AuthService.setupRequiredPin;
       final hasPin = user.pin.isNotEmpty && !isSetupRequired;
       if (hasPin && !widget.isPinReset) {
-        // Existing user on a new device → enter their existing PIN.
+        // Existing user on a new device → enter their existing PIN. Pass the
+        // OTP-authenticated user as presetUser so the PIN screen binds THIS
+        // identity, not whoever was the last device user. Without this, on a
+        // shared till the PIN screen re-derived identity from getDeviceUserId()
+        // and showed the previous user's email + only accepted their PIN
+        // (the wrong-user-PIN bug). Master plan §7.2a.
         Navigator.of(context).pushReplacement(
-          SmoothRoute(page: const LoginScreen()),
+          SmoothRoute(page: LoginScreen(presetUser: user)),
         );
       } else {
         // New staff OR resetting PIN — create their PIN for the first time.
@@ -286,100 +301,93 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const textColor = adTextPrimary;
+    final textColor = authTextPrimary(context);
 
     return Scaffold(
-      backgroundColor: adBg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: BrandedAuthBackground(
         child: SafeArea(
-          child: SingleChildScrollView(
-            padding: EdgeInsets.fromLTRB(
-              28,
-              12,
-              28,
-              MediaQuery.of(context).viewInsets.bottom + 24,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Back button
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: IconButton(
-                    icon: const Icon(Icons.arrow_back_ios,
-                        color: textColor, size: 20),
-                    onPressed: () => Navigator.of(context).pop(),
+          child: Stack(
+            children: [
+              // Back button — pinned top-left so the content can centre.
+              Align(
+                alignment: Alignment.topLeft,
+                child: IconButton(
+                  icon: Icon(Icons.arrow_back_ios,
+                      color: textColor, size: 20),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ),
+              AuthCenteredScroll(
+                children: [
+                  Text('Check your email', style: authTitleStyle(context)),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Enter the 6-digit code sent to\n${_maskEmail(widget.email)}',
+                    style: authSubtitleStyle(context),
                   ),
-                ),
-                const SizedBox(height: 8),
+                  const SizedBox(height: 28),
 
-                const Text('Check your email', style: authTitleStyle),
-                const SizedBox(height: 8),
-                Text(
-                  'Enter the 6-digit code sent to\n${_maskEmail(widget.email)}',
-                  style: authSubtitleStyle,
-                ),
-                const SizedBox(height: 28),
-
-                // OTP input — single invisible field driving 6 styled boxes
-                ShakeWidget(
-                  key: _shakeKey,
-                  child: OtpBoxRow(
-                    controller: _otpController,
-                    hasError: _errorMessage != null,
-                    onSubmit: _canSubmit ? _submit : null,
-                    ignorePointers: _isLockedOut,
-                    readOnly: _loading,
-                    textColor: textColor,
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                Center(
-                  child: Text(
-                    'Code expires in 5 minutes',
-                    style: TextStyle(
-                      color: textColor.withValues(alpha: 0.5),
-                      fontSize: 13,
+                  // OTP input — single invisible field driving 6 styled boxes
+                  ShakeWidget(
+                    key: _shakeKey,
+                    child: OtpBoxRow(
+                      controller: _otpController,
+                      hasError: _errorMessage != null,
+                      onSubmit: _canSubmit ? _submit : null,
+                      ignorePointers: _isLockedOut,
+                      readOnly: _loading,
+                      textColor: textColor,
                     ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Center(child: AuthErrorText(_errorMessage)),
-                const SizedBox(height: 8),
+                  const SizedBox(height: 12),
 
-                if (_verified)
-                  const AppButton(
-                    text: 'Verified  ✓',
-                    variant: AppButtonVariant.success,
-                    onPressed: null,
-                  )
-                else
-                  AppButton(
-                    text: 'Verify',
-                    isLoading: _loading,
-                    onPressed: _canSubmit ? _submit : null,
+                  Center(
+                    child: Text(
+                      'Code expires in 5 minutes',
+                      style: TextStyle(
+                        color: textColor.withValues(alpha: 0.5),
+                        fontSize: 13,
+                      ),
+                    ),
                   ),
-                const SizedBox(height: 16),
+                  const SizedBox(height: 8),
+                  Center(child: AuthErrorText(_errorMessage)),
+                  const SizedBox(height: 8),
 
-                // Resend button with countdown
-                Center(
-                  child: _resendCountdown > 0
-                      ? Text(
-                          'Resend code in 0:${_resendCountdown.toString().padLeft(2, '0')}',
-                          style: TextStyle(
-                            color: textColor.withValues(alpha: 0.5),
-                            fontSize: 13,
+                  if (_verified)
+                    const AppButton(
+                      text: 'Verified  ✓',
+                      variant: AppButtonVariant.success,
+                      onPressed: null,
+                    )
+                  else
+                    AppButton(
+                      text: 'Verify',
+                      isLoading: _loading,
+                      onPressed: _canSubmit ? _submit : null,
+                    ),
+                  const SizedBox(height: 16),
+
+                  // Resend button with countdown
+                  Center(
+                    child: _resendCountdown > 0
+                        ? Text(
+                            'Resend code in 0:${_resendCountdown.toString().padLeft(2, '0')}',
+                            style: TextStyle(
+                              color: textColor.withValues(alpha: 0.5),
+                              fontSize: 13,
+                            ),
+                          )
+                        : TextButton(
+                            onPressed:
+                                (_loading || _isLockedOut) ? null : _resend,
+                            child: const Text('Resend code'),
                           ),
-                        )
-                      : TextButton(
-                          onPressed:
-                              (_loading || _isLockedOut) ? null : _resend,
-                          child: const Text('Resend code'),
-                        ),
-                ),
-              ],
-            ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
