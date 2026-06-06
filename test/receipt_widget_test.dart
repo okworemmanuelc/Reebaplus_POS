@@ -14,7 +14,11 @@ void main() {
     {'name': 'Star Lager', 'price': 1000.0, 'qty': 2.0},
   ];
 
-  Widget host({required bool showWalletInfo, double? walletBalance}) {
+  Widget host({
+    required bool showWalletInfo,
+    double? walletBalance,
+    String? storeAddress,
+  }) {
     return MaterialApp(
       home: Scaffold(
         body: SingleChildScrollView(
@@ -28,6 +32,7 @@ void main() {
             customerName: 'Ada Obi',
             walletBalance: walletBalance,
             showWalletInfo: showWalletInfo,
+            storeAddress: storeAddress,
           ),
         ),
       ),
@@ -54,6 +59,21 @@ void main() {
   testWidgets('ticked but null balance renders nothing', (tester) async {
     await tester.pumpWidget(host(showWalletInfo: true, walletBalance: null));
     expect(find.textContaining('Wallet Balance'), findsNothing);
+  });
+
+  testWidgets('store address shows and the old "Branch:" line is gone (§15.1)',
+      (tester) async {
+    await tester.pumpWidget(host(
+      showWalletInfo: false,
+      storeAddress: '14 Market Road, Lagos Island',
+    ));
+    expect(find.text('14 Market Road, Lagos Island'), findsOneWidget);
+    expect(find.textContaining('Branch:'), findsNothing);
+  });
+
+  testWidgets('no store address line when storeAddress is null', (tester) async {
+    await tester.pumpWidget(host(showWalletInfo: false, storeAddress: null));
+    expect(find.textContaining('Branch:'), findsNothing);
   });
 
   testWidgets('QR code is removed (§15.3 / hard rule #8)', (tester) async {

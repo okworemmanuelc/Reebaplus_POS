@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:reebaplus_pos/core/widgets/app_fab.dart';
@@ -763,7 +764,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => SupplierDetailScreen(supplier: s),
+                          builder: (_) =>
+                              SupplierDetailScreen(supplierId: s.id),
                         ),
                       ).then((_) => setState(() {})),
                       child: Container(
@@ -2114,9 +2116,13 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       hintText: hint,
       readOnly: readOnly,
       keyboardType: isNumber
-          ? const TextInputType.numberWithOptions(decimal: true)
+          ? (isCurrency
+              ? const TextInputType.numberWithOptions(decimal: true)
+              : TextInputType.number)
           : TextInputType.text,
-      inputFormatters: isCurrency ? [CurrencyInputFormatter()] : null,
+      inputFormatters: isCurrency
+          ? [CurrencyInputFormatter()]
+          : (isNumber ? [FilteringTextInputFormatter.digitsOnly] : null),
       fillColor: Theme.of(context).cardColor,
     );
   }

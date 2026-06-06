@@ -15,6 +15,7 @@ import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/date_period.dart';
+import 'package:reebaplus_pos/core/utils/store_address.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -87,14 +88,14 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     });
   }
 
-  /// Resolves a storeId to its branch name.
-  Future<String?> _resolveBranchName(String? storeId) async {
+  /// Resolves a storeId to its receipt address (country excluded, §15.1).
+  Future<String?> _resolveStoreAddress(String? storeId) async {
     if (storeId == null) return null;
     final db = ref.read(databaseProvider);
     final stores = await db.storesDao.getActiveStores();
     return stores
         .where((w) => w.id == storeId)
-        .map((w) => w.name)
+        .map((w) => receiptStoreAddress(w.location))
         .firstOrNull;
   }
 
@@ -650,9 +651,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                     : null,
                 // §19.7: Refund replaces the old Cancel button on the Pending
                 // tab and is hidden unless the user may cancel a sale. It
-                // reverses the sale (stock, payment, both wallet legs, Funds
-                // debit dated to today) and moves the order to Cancelled. The
-                // Completed and Cancelled tabs have no Refund button (§19.8).
+                // reverses the sale (stock, payment, both wallet legs) and moves
+                // the order to Cancelled. The Completed and Cancelled tabs have
+                // no Refund button (§19.8).
                 onRefund: (status == 'pending' && canRefund)
                     ? () => _refundPendingOrder(item.order)
                     : null,
@@ -715,28 +716,11 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
   }
 
   /// §19.7: Refund a Pending order (Manager/CEO — gated at the call site via
-  /// sales.cancel). A refund moves cash out of the till, so it first requires
-  /// an **open funds day** for the order's store (§23.8) — gated here, before
-  /// the reason is asked, the same way the POS gate blocks sales. The reversal
-  /// runs in OrdersDao.markCancelled and is dated to **today** (the refund day,
-  /// §23.5): stock restored, payment voided, **both wallet legs reversed** (the
-  /// wallet returns to its pre-sale balance, §14.3), and the Funds account
-  /// debited today. The order moves to the Cancelled tab.
+  /// sales.cancel). The reversal runs in OrdersDao.markCancelled: stock
+  /// restored, payment voided, and **both wallet legs reversed** (the wallet
+  /// returns to its pre-sale balance, §14.3). The order moves to the Cancelled
+  /// tab.
   void _refundPendingOrder(OrderData order) async {
-    final today = await ref.read(todaysBusinessDateProvider.future);
-    final storeId = order.storeId;
-    final day = storeId == null
-        ? null
-        : await ref.read(databaseProvider).fundDaysDao.getDay(storeId, today);
-    if (!mounted) return;
-    if (day == null || day.status != 'open') {
-      AppNotification.showError(
-        context,
-        'Open the day before issuing a refund.',
-      );
-      return;
-    }
-
     final reasonController = TextEditingController();
     final refundLabel = formatCurrency(order.amountPaidKobo / 100.0);
 
@@ -802,7 +786,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                       ? null
                       : () {
                           Navigator.pop(ctx);
-                          _executeRefund(order, reason, today);
+                          _executeRefund(order, reason);
                         },
                 ),
               ],
@@ -816,14 +800,12 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
   void _executeRefund(
     OrderData order,
     String reason,
-    String businessDate,
   ) async {
     final staffId = ref.read(authProvider).currentUser?.id ?? '';
     await ref.read(orderServiceProvider).markAsCancelled(
           order.id,
           reason,
           staffId,
-          businessDate: businessDate,
         );
     if (mounted) {
       AppNotification.showSuccess(
@@ -842,7 +824,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     DateTime? reshareDate;
     DateTime? reprintDate;
 
-    final branchName = await _resolveBranchName(richOrder.order.storeId);
+    final storeAddress = await _resolveStoreAddress(richOrder.order.storeId);
 
     if (!context.mounted) return;
 
@@ -915,7 +897,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                           deliveryRef: null,
                           orderStatus: currentOrder.status,
                           refundAmount: currentOrder.amountPaidKobo / 100.0,
-                          branchName: branchName,
+                          storeAddress: storeAddress,
                           businessName: ref.read(currentBusinessNameProvider),
                         ),
                       ),
@@ -939,7 +921,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                               _printReceipt(
                                 context,
                                 richOrder,
-                                branchName: branchName,
+                                storeAddress: storeAddress,
                               );
                             },
                           ),
@@ -989,7 +971,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
   Future<void> _printReceipt(
     BuildContext context,
     OrderWithItems richOrder, {
-    String? branchName,
+    String? storeAddress,
   }) async {
     final order = richOrder.order;
 
@@ -1019,8 +1001,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
         return;
       }
 
-      final finalBranchName =
-          branchName ?? await _resolveBranchName(order.storeId);
+      final finalStoreAddress =
+          storeAddress ?? await _resolveStoreAddress(order.storeId);
 
       final walletBalance = richOrder.customer == null
           ? null
@@ -1048,7 +1030,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
         deliveryRef: deliveryReceipt?.referenceNumber,
         orderStatus: order.status,
         refundAmount: order.amountPaidKobo / 100.0,
-        branchName: finalBranchName,
+        storeAddress: finalStoreAddress,
         businessName: ref.read(currentBusinessNameProvider),
       );
 

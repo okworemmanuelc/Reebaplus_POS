@@ -112,7 +112,6 @@ Future<_Seed> _seed(AppDatabase db, String businessName) async {
       'suppliers.manage','shipments.manage',
       'staff.invite','staff.suspend','staff.change_role',
       'activity_logs.view','settings.manage',
-      'funds.open_day','funds.close_day','funds.view',
     ],
     'manager': [
       'sales.make','sales.cancel','sales.discount.give',
@@ -121,7 +120,6 @@ Future<_Seed> _seed(AppDatabase db, String businessName) async {
       'reports.see_sales','reports.see_cost_prices','reports.see_expenses',
       'customers.add','customers.update','customers.delete','customers.wallet.update',
       'staff.invite','staff.suspend','staff.change_role',
-      'funds.open_day','funds.close_day','funds.view',
     ],
     'cashier': [
       'sales.make','stock.view','reports.see_sales',

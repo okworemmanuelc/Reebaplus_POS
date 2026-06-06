@@ -16,10 +16,10 @@ import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 
 /// Daily Reconciliation Report (§25.2 / §25.9) — the drill-down list. The global
 /// rolling window (§30.11) selects the span; this lists one tappable card per
-/// **calendar day** inside it that has a Close Day and/or a saved stock count.
-/// Each card headlines items sold + net cash variance and flags a mismatch when
-/// the day had a cash shortage or a stock shortage. Tapping opens that day's full
-/// reconciliation. Role-gated upstream (CEO/Manager only, §25.3).
+/// **calendar day** inside it that has a saved stock count. Each card headlines
+/// items sold and flags a mismatch when the day had a stock shortage. Tapping
+/// opens that day's full reconciliation. Role-gated upstream (CEO/Manager only,
+/// §25.3). (The Close Day cash-audit half was removed with Funds Register, §23.)
 class DailyReconciliationListScreen extends ConsumerStatefulWidget {
   const DailyReconciliationListScreen({super.key, required this.initialPeriod});
 
@@ -40,7 +40,6 @@ class _DailyReconciliationListScreenState
   }
 
   List<_Day> _buildDays(String? tz) {
-    final closings = ref.watch(allFundDayClosingsProvider).valueOrNull ?? const [];
     final stockCounts = ref.watch(allStockCountsProvider).valueOrNull ?? const [];
     final orders = ref.watch(allOrdersProvider).valueOrNull ?? const [];
 
@@ -48,11 +47,6 @@ class _DailyReconciliationListScreenState
     _Day dayOf(String date) =>
         byDay.putIfAbsent(date, () => _Day(date: date));
 
-    for (final c in closings) {
-      final d = dayOf(c.businessDate);
-      d.netVarianceKobo += c.varianceKobo;
-      if (c.varianceKobo != 0) d.cashMismatch = true;
-    }
     // Collapse re-saved counts to the latest session per (date, store) so a
     // shortage corrected in a later count of the same day stops flagging.
     final sortedCounts = [...stockCounts]
@@ -80,8 +74,7 @@ class _DailyReconciliationListScreenState
     final days = byDay.values.where((d) {
       final start = DateTime.tryParse(d.date);
       if (start == null) return false;
-      // A day overlaps the rolling window iff it ends within it (mirrors the
-      // Funds Register Report's business-day filter).
+      // A day overlaps the rolling window iff it ends within it.
       return period.includes(start.add(const Duration(days: 1)));
     }).toList()
       ..sort((a, b) => b.date.compareTo(a.date)); // YYYY-MM-DD sorts chronologically
@@ -94,14 +87,13 @@ class _DailyReconciliationListScreenState
         [
           d.date,
           '${d.itemsSold}',
-          (d.netVarianceKobo / 100.0).toStringAsFixed(2),
           d.hasMismatch ? 'Yes' : 'No',
         ],
     ];
     try {
       await shareCsv(
         csv: buildCsv(
-          ['Date', 'Items sold', 'Net variance', 'Mismatch'],
+          ['Date', 'Items sold', 'Mismatch'],
           rows,
         ),
         fileName: 'daily_reconciliation_${_period.replaceAll(' ', '_')}',
@@ -184,9 +176,6 @@ class _DailyReconciliationListScreenState
 
   Widget _dayCard(ThemeData theme, _Day d) {
     final mismatch = d.hasMismatch;
-    final varianceColor = d.netVarianceKobo != 0
-        ? theme.colorScheme.error
-        : theme.hintColor;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -219,9 +208,9 @@ class _DailyReconciliationListScreenState
                             .copyWith(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 4),
                     Text(
-                      '${fmtNumber(d.itemsSold)} items sold  ·  net ${formatCurrency(d.netVarianceKobo / 100.0)}',
+                      '${fmtNumber(d.itemsSold)} items sold',
                       style:
-                          context.bodySmall.copyWith(color: varianceColor),
+                          context.bodySmall.copyWith(color: theme.hintColor),
                     ),
                   ],
                 ),
@@ -253,9 +242,7 @@ class _Day {
   _Day({required this.date});
   final String date;
   int itemsSold = 0;
-  int netVarianceKobo = 0;
-  bool cashMismatch = false;
   bool stockShortage = false;
 
-  bool get hasMismatch => cashMismatch || stockShortage;
+  bool get hasMismatch => stockShortage;
 }

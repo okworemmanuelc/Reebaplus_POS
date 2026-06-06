@@ -31,6 +31,10 @@ import 'package:reebaplus_pos/features/auth/screens/success_dashboard_entry_scre
 import 'package:reebaplus_pos/features/auth/screens/access_granted_screen.dart';
 import 'package:reebaplus_pos/features/diagnostics/screens/schema_error_screen.dart';
 import 'package:reebaplus_pos/features/sync/screens/first_sync_screen.dart';
+import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
+import 'package:reebaplus_pos/features/subscription/subscription_thanks.dart';
+import 'package:reebaplus_pos/features/subscription/screens/thank_you_subscription_screen.dart';
+import 'package:reebaplus_pos/features/subscription/screens/subscription_locked_screen.dart';
 
 import 'package:timezone/data/latest.dart' as tz;
 
@@ -128,6 +132,13 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
   bool _supabaseHasSession = true;
   StreamSubscription<AuthState>? _supabaseAuthSub;
 
+  /// Low-frequency tick that refreshes the PRO / FREE TRIAL name badges (§32).
+  /// A trial expires by the device clock with no realtime event; without this an
+  /// idle foreground app would keep showing FREE TRIAL until the next pull or
+  /// rebuild. (The app is no longer locked on expiry — the gate overlay was
+  /// removed; only these informational badges depend on the tick now.)
+  Timer? _subscriptionClockTimer;
+
   @override
   void initState() {
     super.initState();
@@ -142,6 +153,22 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
     // (signedOut, refresh-token rotation failure). Subscribed after
     // supabaseReady so we don't race the SDK's storage restore.
     supabaseReady.whenComplete(_subscribeToSupabaseAuth);
+
+    // §32: nudge the subscription badges so a trial that crosses its deadline
+    // while the app sits idle in the foreground is reflected within a minute,
+    // and re-pull the businesses row so an admin-console status change (or a
+    // missed realtime event) is picked up within a minute too — not only on the
+    // next full pull. Drives the live lock/unlock + thank-you gate.
+    _subscriptionClockTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+      if (!mounted) return;
+      ref.read(subscriptionClockTickProvider.notifier).state++;
+      final bizId = _auth.currentUser?.businessId;
+      if (bizId != null) {
+        unawaited(
+          ref.read(supabaseSyncServiceProvider).refreshBusinessRow(bizId),
+        );
+      }
+    });
   }
 
   void _subscribeToSupabaseAuth() {
@@ -219,6 +246,7 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
     _auth.deviceUserIdNotifier.removeListener(_onDeviceUserChanged);
     _auth.removeListener(_onAuthChanged);
     _supabaseAuthSub?.cancel();
+    _subscriptionClockTimer?.cancel();
     super.dispose();
   }
 
@@ -340,7 +368,7 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
             if (localBusinesses == null || localBusinesses.isEmpty) {
               return FirstSyncScreen(businessId: user.businessId);
             }
- 
+
             // Check for special post-login screens set by BiometricSetupScreen.
             final pendingRoute = auth.pendingPostLoginRoute;
             if (pendingRoute != PostLoginRoute.none) {
@@ -360,6 +388,24 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
             if (user.storeId == null) {
               return StoreAssignmentScreen(user: user);
             }
+
+            // Subscription gate (master plan §32). The PRO / FREE TRIAL name
+            // badges and Settings → Subscription surface status everywhere; here
+            // the gate also (a) LOCKS the app on a known-expired trial or an
+            // inactive subscription, and (b) shows a one-time Thank-You on a
+            // fresh activation. Grace (unknown status / no deadline) never locks.
+            final subAccess = ref.watch(currentBusinessSubscriptionProvider);
+            if (subAccess.isLocked) {
+              return SubscriptionLockedScreen(access: subAccess);
+            }
+            final subBusiness = ref.watch(currentBusinessProvider);
+            if (subBusiness != null &&
+                ref
+                    .watch(subscriptionThanksProvider)
+                    .shouldCelebrate(subBusiness)) {
+              return ThankYouSubscriptionScreen(business: subBusiness);
+            }
+
             return const MainLayout();
           }(),
         ),

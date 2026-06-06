@@ -11,6 +11,8 @@ import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 const _kMaxDiscount = 'max_discount_percent';
 const _kMaxExpenseKobo = 'max_expense_approval_kobo';
@@ -21,13 +23,10 @@ const _kMaxExpenseKobo = 'max_expense_approval_kobo';
 /// moment its feature ships.
 /// - `sales.discount.give` is governed entirely by the per-role discount slider
 ///   (`max_discount_percent`), so its on/off toggle is redundant.
-/// - `customers.update` ("Update customer details") has no edit-customer UI yet
-///   (§18) — the toggle would be inert; un-hide when the edit flow ships.
 /// - `shipments.manage` ("Manage incoming shipments") has no Track-Shipments
 ///   screen yet (§22) — un-hide when that screen ships.
 const kHiddenPermissionKeys = {
   'sales.discount.give',
-  'customers.update',
   'shipments.manage',
 };
 
@@ -73,10 +72,13 @@ class _RolePermissionsDetailScreenState
   int? _lastSavedExpenseKobo;
   // Manager-only: CEO toggle that unlocks the Home store picker (§11.2).
   bool _viewAllStores = false;
-  // Permission scope (§10.2.1). Business is the real, default scope; Store is a
-  // Phase-1 placeholder ("coming with multi-store"). User-scope overrides live
-  // on the staff member's profile, not here.
+  // Permission scope (§10.2.1). Business is the default scope (applies to every
+  // store); Store overrides this role's permissions for one chosen store.
+  // User-scope overrides live on the staff member's profile, not here.
   bool _storeScope = false;
+  // Store scope: which store's overrides are being edited. null → default to the
+  // first store (resolved at build time, never via setState during build).
+  String? _selectedStoreId;
 
   RoleData get role => widget.role;
   bool get _isCeo => role.slug == 'ceo';
@@ -224,6 +226,10 @@ class _RolePermissionsDetailScreenState
     final canManage = hasPermission(ref, 'settings.manage');
 
     return Scaffold(
+      // Single keyboard lift via the ListView's deviceBottomInset bottom padding
+      // below; disabling Scaffold resize avoids double-counting the keyboard
+      // (root-nav screen sees the real inset). Same as add_expense.
+      resizeToAvoidBottomInset: false,
       backgroundColor: t.scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(
@@ -294,9 +300,10 @@ class _RolePermissionsDetailScreenState
           _scopeSelector(t),
           const SizedBox(height: 10),
           Text(
-            'Business applies to every store. Per-store overrides and a single '
-            'staff member\'s overrides come with multi-store — set a person\'s '
-            'overrides from their profile (Staff Management).',
+            'Business applies to every store. Store overrides this role\'s '
+            'permissions for one store (the default for everyone working there). '
+            'A single staff member\'s overrides live on their profile '
+            '(Staff Management).',
             style: TextStyle(
               fontSize: 12,
               height: 1.4,
@@ -305,7 +312,7 @@ class _RolePermissionsDetailScreenState
           ),
           const SizedBox(height: 20),
           if (_storeScope)
-            _storeScopePlaceholder(t)
+            ..._buildStoreScope(t, perms, granted, byKey)
           else ...[
           if (_isCeo)
             Padding(
@@ -404,9 +411,114 @@ class _RolePermissionsDetailScreenState
     );
   }
 
-  /// Store-scope body — a Phase-1 placeholder. Per-store permission overrides
-  /// arrive with multi-store (§10.2.1 / §2.2); nothing is stored or enforced.
-  Widget _storeScopePlaceholder(ThemeData t) {
+  /// Store-scope body (§10.2.1 Store scope). Pick a store, then override this
+  /// role's permission toggles for that store: each toggle shows the effective
+  /// value (the business default, unless the store overrides it). Flipping it
+  /// away from the business default stores an override; flipping it back clears
+  /// it (inherit). Boolean toggles only — the per-role limits stay role-level.
+  List<Widget> _buildStoreScope(
+    ThemeData t,
+    List<PermissionData> perms,
+    Set<String> businessDefaults,
+    Map<String, PermissionData> byKey,
+  ) {
+    // The CEO is never overridable (always all-on) — store overrides don't apply.
+    if (_isCeo) {
+      return [
+        _storeScopeNote(
+          t,
+          'The CEO always has full access — per-store overrides don\'t apply.',
+        ),
+      ];
+    }
+
+    final stores =
+        ref.watch(allStoresProvider).valueOrNull ?? const <StoreData>[];
+    if (stores.isEmpty) {
+      return [
+        _storeScopeNote(
+          t,
+          'Add a store first (Stores) to set per-store permissions.',
+        ),
+      ];
+    }
+
+    // Resolve the selected store without setState-during-build: fall back to the
+    // first store when nothing is picked or the pick is stale.
+    final selectedId = (_selectedStoreId != null &&
+            stores.any((s) => s.id == _selectedStoreId))
+        ? _selectedStoreId!
+        : stores.first.id;
+
+    // This store's overrides for this role, keyed for lookup.
+    final overrides = ref
+            .watch(storeRolePermissionsProvider(
+                (storeId: selectedId, roleId: role.id)))
+            .valueOrNull ??
+        const <StoreRolePermissionData>[];
+    final overrideByKey = {for (final o in overrides) o.permissionKey: o};
+
+    // Effective set for this store = business defaults ± store overrides (same
+    // as the runtime resolver's store layer).
+    final effective = businessDefaults.toSet();
+    for (final o in overrides) {
+      if (o.isGranted) {
+        effective.add(o.permissionKey);
+      } else {
+        effective.remove(o.permissionKey);
+      }
+    }
+
+    // Group by category in master-plan order; append any unknown categories.
+    final groups = <String, List<PermissionData>>{};
+    for (final cat in _categoryOrder) {
+      final items = perms.where((p) => p.category == cat).toList();
+      if (items.isNotEmpty) groups[cat] = items;
+    }
+    for (final p in perms) {
+      if (!_categoryOrder.contains(p.category)) {
+        groups.putIfAbsent(p.category, () => []).add(p);
+      }
+    }
+
+    return [
+      _storePicker(t, stores, selectedId),
+      const SizedBox(height: 16),
+      for (final entry in groups.entries) ...[
+        SettingsSectionTitle(entry.key),
+        const SizedBox(height: 8),
+        _storePermissionGroupCard(t, selectedId, entry.value, businessDefaults,
+            effective, overrideByKey, byKey),
+        const SizedBox(height: 20),
+      ],
+      const SizedBox(height: 4),
+      AppButton(
+        text: 'Restore store defaults',
+        icon: FontAwesomeIcons.arrowRotateLeft,
+        variant: AppButtonVariant.outline,
+        onPressed: overrides.isEmpty
+            ? null
+            : () => _restoreStoreDefaults(selectedId, overrides.length),
+      ),
+      const SizedBox(height: 8),
+      Text(
+        overrides.isEmpty
+            ? 'This store uses the ${role.name} business defaults.'
+            : 'Clears all ${overrides.length} '
+                'override${overrides.length == 1 ? '' : 's'} for this store and '
+                'returns it to the ${role.name} business defaults.',
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: 12,
+          color: t.colorScheme.onSurface.withValues(alpha: 0.5),
+        ),
+      ),
+    ];
+  }
+
+  /// A simple glass note for the Store scope when there's nothing to edit
+  /// (CEO role, or no stores yet).
+  Widget _storeScopeNote(ThemeData t, String message) {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: AppDecorations.glassCard(context, radius: 16),
@@ -419,17 +531,7 @@ class _RolePermissionsDetailScreenState
           ),
           const SizedBox(height: 12),
           Text(
-            'Per-store permissions',
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              color: t.colorScheme.onSurface,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Coming with multi-store. For now, every store uses the business '
-            'defaults set under the Business tab.',
+            message,
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 13,
@@ -437,6 +539,222 @@ class _RolePermissionsDetailScreenState
               color: t.colorScheme.onSurface.withValues(alpha: 0.6),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  /// Store picker for the Store scope — choose which store's overrides to edit.
+  Widget _storePicker(ThemeData t, List<StoreData> stores, String selectedId) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      decoration: AppDecorations.glassCard(context, radius: 14),
+      child: Row(
+        children: [
+          Icon(
+            Icons.storefront_outlined,
+            size: 20,
+            color: t.colorScheme.onSurface.withValues(alpha: 0.6),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            'Store',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: t.colorScheme.onSurface.withValues(alpha: 0.8),
+            ),
+          ),
+          const Spacer(),
+          Flexible(
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: selectedId,
+                isExpanded: true,
+                alignment: Alignment.centerRight,
+                borderRadius: BorderRadius.circular(12),
+                items: [
+                  for (final s in stores)
+                    DropdownMenuItem(
+                      value: s.id,
+                      child: Text(
+                        s.name,
+                        textAlign: TextAlign.right,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                ],
+                onChanged: (v) {
+                  if (v != null) setState(() => _selectedStoreId = v);
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Force [key] to [target] for [storeId]+this role. Stores an override only
+  /// when [target] differs from the business default; when they match, the
+  /// override is cleared so the permission inherits the business default again.
+  Future<void> _setStoreEffective(
+    String storeId,
+    String key,
+    bool target,
+    bool businessDefault,
+  ) async {
+    await _db.storeRolePermissionsDao.setOverride(
+        storeId, role.id, key, target == businessDefault ? null : target);
+  }
+
+  Future<void> _toggleStore(
+    String storeId,
+    String key,
+    bool enable,
+    Set<String> businessDefaults,
+    Set<String> effective,
+  ) async {
+    if (!_guard()) return;
+    bool defaultOf(String k) => businessDefaults.contains(k);
+
+    if (enable) {
+      await _setStoreEffective(storeId, key, true, defaultOf(key));
+      await _db.activityLogDao.log(
+        action: 'settings.store_permission.override',
+        description: 'Granted "$key" for ${role.name} at this store (override)',
+        staffId: _db.currentUserId,
+      );
+      return;
+    }
+
+    // Turning a permission off also forces off any effectively-granted
+    // permission that depends on it (§10.2 dependency gating) — a child can't
+    // stay on once its parent is off. Mirrors the per-role / per-user cascade.
+    final cascaded =
+        descendantsOf(key).where(effective.contains).toList()..sort();
+    await _setStoreEffective(storeId, key, false, defaultOf(key));
+    for (final dep in cascaded) {
+      await _setStoreEffective(storeId, dep, false, defaultOf(dep));
+    }
+    final suffix =
+        cascaded.isEmpty ? '' : ' (also revoked: ${cascaded.join(', ')})';
+    await _db.activityLogDao.log(
+      action: 'settings.store_permission.override',
+      description:
+          'Revoked "$key" for ${role.name} at this store (override)$suffix',
+      staffId: _db.currentUserId,
+    );
+  }
+
+  /// Restore store defaults — clear every override for [storeId]+this role so
+  /// the store reverts to the business defaults. Confirmed first (two-step gate),
+  /// then re-guarded after the await.
+  Future<void> _restoreStoreDefaults(String storeId, int overrideCount) async {
+    if (!_guard()) return;
+    final t = Theme.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: t.colorScheme.surface,
+        title: const Text('Restore store defaults?'),
+        content: Text(
+          'This removes all $overrideCount custom permission '
+          'override${overrideCount == 1 ? '' : 's'} for the ${role.name} role '
+          'at this store and returns it to the business defaults.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: t.colorScheme.error),
+            child: const Text('Restore'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    if (!_guard()) return; // re-check after the await (permission may have changed)
+
+    final cleared = await _db.storeRolePermissionsDao
+        .clearAllForStoreRole(storeId, role.id);
+    await _db.activityLogDao.log(
+      action: 'settings.store_permission.restore_defaults',
+      description: 'Restored ${role.name} business defaults at a store '
+          '(cleared $cleared override${cleared == 1 ? '' : 's'})',
+      staffId: _db.currentUserId,
+    );
+    if (mounted) {
+      AppNotification.showSuccess(
+          context, 'Restored ${role.name} defaults for this store.');
+    }
+  }
+
+  /// A glass card of per-store permission toggles for one category. Each toggle
+  /// shows the effective value for the store (business default ± override); a
+  /// child is locked off while its parent is effectively off.
+  Widget _storePermissionGroupCard(
+    ThemeData t,
+    String storeId,
+    List<PermissionData> perms,
+    Set<String> businessDefaults,
+    Set<String> effective,
+    Map<String, StoreRolePermissionData> overrideByKey,
+    Map<String, PermissionData> byKey,
+  ) {
+    return Container(
+      decoration: AppDecorations.glassCard(context, radius: 16),
+      child: Column(
+        children: [
+          for (final perm in perms)
+            () {
+              final parent = parentOf(perm.key);
+              final parentOff = parent != null && !effective.contains(parent);
+              final isOverridden = overrideByKey.containsKey(perm.key);
+              final businessDefault = businessDefaults.contains(perm.key);
+
+              String? subtitle;
+              if (parentOff) {
+                subtitle = 'Requires "${byKey[parent]?.description ?? parent}"';
+              } else if (isOverridden) {
+                subtitle =
+                    'Overridden — business default is ${businessDefault ? 'on' : 'off'}';
+              }
+
+              return SwitchListTile(
+                title: Text(
+                  perm.description,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: t.colorScheme.onSurface,
+                  ),
+                ),
+                subtitle: subtitle == null
+                    ? null
+                    : Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: t.colorScheme.onSurface.withValues(
+                            alpha: parentOff ? 0.5 : 0.7,
+                          ),
+                          fontWeight: (!parentOff && isOverridden)
+                              ? FontWeight.w600
+                              : FontWeight.normal,
+                        ),
+                      ),
+                value: !parentOff && effective.contains(perm.key),
+                onChanged: parentOff
+                    ? null
+                    : (v) => _toggleStore(
+                        storeId, perm.key, v, businessDefaults, effective),
+                activeThumbColor: t.colorScheme.primary,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+              );
+            }(),
         ],
       ),
     );
@@ -598,7 +916,9 @@ class _RolePermissionsDetailScreenState
             TextField(
               controller: _expenseCtrl,
               focusNode: _expenseFocus,
-              keyboardType: TextInputType.number,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               inputFormatters: [CurrencyInputFormatter()],
               onSubmitted: (_) {
                 if (_guard()) _commitExpense();

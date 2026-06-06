@@ -1192,11 +1192,18 @@ class AuthService extends ValueNotifier<UserData?> {
     try {
       final supabase = _supabase;
 
-      // Start the OAuth flow — opens the browser.
+      // Start the OAuth flow in an IN-APP browser (Chrome Custom Tab on
+      // Android, SFSafariViewController on iOS) — NOT the external Chrome app.
+      // supabase_flutter dismisses the in-app view automatically once it
+      // handles the `reebaplus://login-callback` redirect, so the browser
+      // closes itself when sign-in completes. With externalApplication the
+      // system browser tab can't be closed by the app and lingers on the
+      // redirect page after login. Custom Tabs still share Chrome's cookies,
+      // so the Google account picker (already-signed-in accounts) still shows.
       final success = await supabase.auth.signInWithOAuth(
         OAuthProvider.google,
         redirectTo: 'reebaplus://login-callback',
-        authScreenLaunchMode: LaunchMode.externalApplication,
+        authScreenLaunchMode: LaunchMode.inAppBrowserView,
       );
 
       if (!success) {

@@ -33,6 +33,7 @@ const Map<String, String> kPermissionParent = {
   'customers.delete': 'customers.add',
   'customers.wallet.update': 'customers.add',
   'customers.set_debt_limit': 'customers.add',
+  'customers.wallet.withdraw': 'customers.add',
   'customers.wallet.totals.view': 'customers.add',
   // Staff — suspend / change-role live inside Staff Management, whose entry is
   // gated by `staff.invite`.
@@ -40,9 +41,6 @@ const Map<String, String> kPermissionParent = {
   'staff.change_role': 'staff.invite',
   // Suppliers — incoming shipments come from suppliers.
   'shipments.manage': 'suppliers.manage',
-  // Funds Register — opening/closing the day happens inside the register.
-  'funds.open_day': 'funds.view',
-  'funds.close_day': 'funds.view',
 };
 
 /// The direct parent of [key], or null if it has none.

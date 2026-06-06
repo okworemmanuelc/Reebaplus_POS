@@ -24,6 +24,21 @@ import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 
+/// Pure store-confinement filter (§11.2 / §28 multi-store). Given all active
+/// [stores] and the set of store ids the user is [assigned] to, returns the
+/// stores they may sell from. `assigned == null` means "may view every store"
+/// (CEO, or a Manager the CEO granted all-stores) → all stores. A confined user
+/// with no assignment falls back to all stores so POS never dead-ends on "no
+/// store" (the §9.5 staff-assignment editor normally guarantees at least one).
+List<StoreData> selectableStoresFor(
+  List<StoreData> stores,
+  Set<String>? assigned,
+) {
+  if (assigned == null) return stores;
+  final mine = stores.where((s) => assigned.contains(s.id)).toList();
+  return mine.isEmpty ? stores : mine;
+}
+
 class PosHomeScreen extends ConsumerStatefulWidget {
   const PosHomeScreen({super.key});
 
@@ -51,22 +66,54 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
     });
   }
 
+  /// The stores the current user may sell from (§11.2 confinement / §28
+  /// multi-store): every active store for a CEO / all-stores Manager, otherwise
+  /// only their assigned store(s). Reads the live stores stream first so it works
+  /// on a cold start (the table fills after a fresh-login pull).
+  Future<List<StoreData>> _confineToSelectable() async {
+    final db = ref.read(databaseProvider);
+    final all = await db.storesDao.watchActiveStores().first;
+    final slug = ref.read(currentUserRoleProvider)?.slug;
+    final canViewAllStores = slug == 'ceo' ||
+        (slug == 'manager' && ref.read(managerCanViewAllStoresProvider));
+    final userId = ref.read(authProvider).currentUser?.id;
+    if (canViewAllStores || userId == null) return all;
+    final assigned =
+        (await db.userStoresDao.getForUser(userId)).map((s) => s.storeId).toSet();
+    return selectableStoresFor(all, assigned);
+  }
+
   Future<void> _initStore() async {
-    if (ref.read(navigationProvider).lockedStoreId.value == null) {
-      // Stream-based first read: yields as soon as the stores table
-      // has at least one row, including after a fresh-login pull. The
-      // earlier one-shot `.get()` returned [] on a cold start and left
-      // the store unlocked.
-      final db = ref.read(databaseProvider);
-      final houses = await db.storesDao.watchActiveStores().first;
-      if (houses.isNotEmpty && mounted) {
-        ref.read(navigationProvider).setLockedStore(houses.first.id);
-        // build() reads lockedStoreId via .read (a ValueNotifier, not watched),
-        // so the day-open gate would otherwise not re-evaluate when the store
-        // locks after first paint — leaving a cold-start window where POS shows
-        // unblocked. Force one rebuild so the gate runs with the locked store.
-        setState(() {});
-      }
+    final nav = ref.read(navigationProvider);
+    final selectable = await _confineToSelectable();
+    if (selectable.isEmpty || !mounted) return;
+
+    // Keep an already-valid selection (sticky across POS re-entry within the
+    // session). Only (re)default when the locked store is unset or isn't one the
+    // user may sell from — e.g. a confined staff member whose lock still points
+    // at the global first store, or a store they're no longer assigned to.
+    final current = nav.lockedStoreId.value;
+    if (current != null && selectable.any((s) => s.id == current)) return;
+
+    // Default to the first selectable store so POS is immediately usable.
+    // build() reads lockedStoreId via .read (a ValueNotifier, not watched), so
+    // force one rebuild after locking it post-first-paint.
+    nav.setLockedStore(selectable.first.id);
+    setState(() {});
+
+    // §28 "pick your store" gate: a confined staff member assigned to MORE THAN
+    // one store confirms which one they're working from. One-time per session —
+    // once a valid store is locked, the early-return above skips re-prompting.
+    final slug = ref.read(currentUserRoleProvider)?.slug;
+    final canViewAllStores = slug == 'ceo' ||
+        (slug == 'manager' && ref.read(managerCanViewAllStoresProvider));
+    if (!canViewAllStores && selectable.length > 1) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final subtext = Theme.of(context).textTheme.bodySmall?.color ??
+            Theme.of(context).iconTheme.color!;
+        _showStorePicker(context, subtext);
+      });
     }
   }
 
@@ -99,28 +146,6 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
           ),
         ),
       );
-    }
-
-    // §23.4 / hard rule #10: POS is blocked until the day is opened (opening
-    // cash set) for the current store. Only applies once the store + today's
-    // business date resolve; while the gate stream is still loading we show a
-    // blank placeholder rather than flashing the block.
-    final storeId = ref.read(navigationProvider).lockedStoreId.value;
-    final today = ref.watch(todaysBusinessDateProvider).valueOrNull;
-    if (storeId != null && today != null) {
-      final isOpen = ref
-          .watch(isDayOpenProvider((storeId: storeId, businessDate: today)))
-          .valueOrNull;
-      if (isOpen == null) {
-        return SharedScaffold(
-          activeRoute: 'pos',
-          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-          body: const SafeArea(child: SizedBox.shrink()),
-        );
-      }
-      if (!isOpen) {
-        return _buildDayNotOpenBlock(context);
-      }
     }
 
     if (_controller == null) {
@@ -239,8 +264,24 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
     Color textCol,
     Color subtextCol,
   ) {
-    // §12.1: the store selector is CEO-only (CEO can switch selling store).
-    final isCeo = ref.watch(currentUserRoleProvider)?.slug == 'ceo';
+    // §12.1 / §28: the store selector shows whenever the user has more than one
+    // store they may sell from — every active store for a CEO / all-stores
+    // Manager, otherwise their assigned store(s). Single-store users see no
+    // switcher (nothing to switch).
+    final slug = ref.watch(currentUserRoleProvider)?.slug;
+    final canViewAllStores = slug == 'ceo' ||
+        (slug == 'manager' && ref.watch(managerCanViewAllStoresProvider));
+    final userId = ref.watch(authProvider).currentUser?.id;
+    final allStores =
+        ref.watch(allStoresProvider).valueOrNull ?? const <StoreData>[];
+    final Set<String>? assignedIds = (canViewAllStores || userId == null)
+        ? null
+        : (ref.watch(myUserStoresProvider(userId)).valueOrNull ??
+                const <UserStoreData>[])
+            .map((s) => s.storeId)
+            .toSet();
+    final showStoreSwitcher =
+        selectableStoresFor(allStores, assignedIds).length > 1;
     // §12.1: POS header shows the business name (live, so a Business Info
     // rename reflects here) with the current store as the subtitle.
     final bizName = ref.watch(currentBusinessNameProvider);
@@ -267,7 +308,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
             if (!_controller!.isSearching) _searchController.clear();
           },
         ),
-        if (isCeo)
+        if (showStoreSwitcher)
           IconButton(
             icon: Icon(
               FontAwesomeIcons.store,
@@ -376,67 +417,6 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
           FontAwesomeIcons.bolt,
           size: context.getRSize(18),
           color: Theme.of(context).colorScheme.primary,
-        ),
-      ),
-    );
-  }
-
-  /// The POS Opening-Cash block (§23.4 / hard rule #10). Manager/CEO can tap
-  /// through to the Funds Register Open Day; Cashier is told to wait.
-  Widget _buildDayNotOpenBlock(BuildContext context) {
-    // Tap-through to Open Day is gated on the `funds.open_day` permission (hard
-    // rule #6), not the role slug — so a CEO-revoked Manager is told to wait,
-    // consistent with the Funds Register form.
-    final canOpen = hasPermission(ref, 'funds.open_day');
-    final theme = Theme.of(context);
-    final onSurface = theme.colorScheme.onSurface;
-
-    final content = Padding(
-      padding: const EdgeInsets.all(32),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            FontAwesomeIcons.cashRegister,
-            size: 48,
-            color: onSurface.withValues(alpha: 0.3),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            'Opening cash not set',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-              color: onSurface,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            canOpen
-                ? "Tap to enter today's opening cash and start selling."
-                : 'Wait for a Manager or CEO to open the day.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 14,
-              color: onSurface.withValues(alpha: 0.6),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    return SharedScaffold(
-      activeRoute: 'pos',
-      backgroundColor: theme.scaffoldBackgroundColor,
-      body: SafeArea(
-        child: Center(
-          child: canOpen
-              ? InkWell(
-                  borderRadius: BorderRadius.circular(20),
-                  onTap: () => ref.read(navigationProvider).setIndex(11),
-                  child: content,
-                )
-              : content,
         ),
       ),
     );
@@ -585,8 +565,9 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
     BuildContext context,
     Color subtextCol,
   ) async {
-    final db = ref.read(databaseProvider);
-    final stores = await db.storesDao.getActiveStores();
+    // Confined to the stores the user may sell from (§11.2): a non-CEO sees only
+    // their assigned store(s), never the whole business's stores.
+    final stores = await _confineToSelectable();
     if (!context.mounted) return;
     final surface = Theme.of(context).colorScheme.surface;
     final text = Theme.of(context).colorScheme.onSurface;

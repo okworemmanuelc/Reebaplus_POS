@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
+import 'package:reebaplus_pos/core/data/business_types.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
 
 import 'package:reebaplus_pos/core/utils/number_format.dart';
@@ -11,7 +12,6 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/customers/widgets/add_customer_sheet.dart';
 import 'package:reebaplus_pos/core/utils/stock_calculator.dart';
-import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -30,7 +30,6 @@ import 'package:reebaplus_pos/shared/services/cart_service.dart';
 
 class CartScreen extends ConsumerStatefulWidget {
   final List<Map<String, dynamic>> cart;
-  final double crateDeposit;
   final Customer? activeCustomer;
   final Function(Customer?) onCustomerChanged;
   final VoidCallback? onCheckoutSuccess;
@@ -38,7 +37,6 @@ class CartScreen extends ConsumerStatefulWidget {
   const CartScreen({
     super.key,
     required this.cart,
-    required this.crateDeposit,
     this.activeCustomer,
     required this.onCustomerChanged,
     this.onCheckoutSuccess,
@@ -50,7 +48,6 @@ class CartScreen extends ConsumerStatefulWidget {
 
 class _CartScreenState extends ConsumerState<CartScreen>
     with SingleTickerProviderStateMixin {
-  late double _crateDeposit;
   Customer? _activeCustomer;
   List<ManufacturerData> _manufacturers = [];
   List<StoreData> _stores = [];
@@ -75,7 +72,6 @@ class _CartScreenState extends ConsumerState<CartScreen>
   @override
   void initState() {
     super.initState();
-    _crateDeposit = 0;
     _activeCustomer = widget.activeCustomer;
     _clearCtrl = AnimationController(
       vsync: this,
@@ -649,146 +645,6 @@ class _CartScreenState extends ConsumerState<CartScreen>
     }
   }
 
-  void _showEditCrateDeposit() {
-    final ctrl = TextEditingController(
-      text: _crateDeposit == 0 ? '' : _crateDeposit.toInt().toString(),
-    );
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetCtx) {
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => Navigator.pop(sheetCtx),
-          child: DraggableScrollableSheet(
-            initialChildSize: 0.5,
-            minChildSize: 0.5,
-            maxChildSize: 0.9,
-            snap: true,
-            snapSizes: const [0.5, 0.9],
-            builder: (context, scrollController) {
-              return GestureDetector(
-                onTap: () {}, // Prevent tap from reaching the barrier
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surface,
-                    borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(28),
-                    ),
-                  ),
-                  padding: EdgeInsets.fromLTRB(
-                    context.getRSize(24),
-                    context.getRSize(16),
-                    context.getRSize(24),
-                    context.deviceBottomInset + 24,
-                  ),
-                  child: ListView(
-                    controller: scrollController,
-                    children: [
-                      Center(
-                        child: Container(
-                          width: context.getRSize(40),
-                          height: context.getRSize(4),
-                          decoration: BoxDecoration(
-                            color: _border,
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                      ),
-                      SizedBox(height: context.getRSize(20)),
-                      Row(
-                        children: [
-                          Container(
-                            padding: EdgeInsets.all(context.getRSize(10)),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  Theme.of(
-                                    context,
-                                  ).colorScheme.primary.withValues(alpha: 0.7),
-                                  Theme.of(context).colorScheme.primary,
-                                ],
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Icon(
-                              FontAwesomeIcons.beerMugEmpty,
-                              size: context.getRSize(16),
-                              color: Colors.white,
-                            ),
-                          ),
-                          SizedBox(width: context.getRSize(12)),
-                          Text(
-                            'Deposit Paid',
-                            style: TextStyle(
-                              fontSize: context.getRFontSize(18),
-                              fontWeight: FontWeight.w800,
-                              color: _text,
-                            ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: context.getRSize(6)),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          'Enter the deposit amount paid for crates',
-                          style: TextStyle(
-                            fontSize: context.getRFontSize(13),
-                            color: _subtext,
-                          ),
-                        ),
-                      ),
-                      SizedBox(height: context.getRSize(20)),
-                      AppInput(
-                        controller: ctrl,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [CurrencyInputFormatter()],
-                        autofocus: true,
-                        prefixText: '$activeCurrencySymbol ',
-                        hintText: '0',
-                        fillColor: Theme.of(context).cardColor,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
-                      SizedBox(height: context.getRSize(24)),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: AppButton(
-                              text: 'Cancel',
-                              variant: AppButtonVariant.ghost,
-                              onPressed: () => Navigator.pop(sheetCtx),
-                            ),
-                          ),
-                          SizedBox(width: context.getRSize(12)),
-                          Expanded(
-                            child: AppButton(
-                              text: 'Confirm',
-                              variant: AppButtonVariant.primary,
-                              onPressed: () {
-                                final val = parseCurrency(ctrl.text);
-                                setState(() => _crateDeposit = val);
-                                Navigator.pop(sheetCtx);
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        );
-      },
-    );
-  }
-
   /// Small "−10%" / "−₦500" badge on a discounted cart line (§13.3).
   Widget _discountBadge(Map<String, dynamic> item) {
     final kind = item['discountKind'] as String?;
@@ -868,13 +724,32 @@ class _CartScreenState extends ConsumerState<CartScreen>
     // The deposit price per bottle is read live from the manufacturer's
     // current `depositAmountKobo`, so a CEO edit reflects everywhere
     // immediately. CrateSizeGroups are no longer the gating identifier.
-    final bottleItems = cartItems
-        .where(
-          (i) =>
-              (i['unit'] as String?)?.toLowerCase() == 'bottle' &&
-              (i['trackEmpties'] as bool? ?? false),
-        )
-        .toList();
+    // §13.4 / rule #13 — empty-crate features (the deposit section here + at
+    // checkout, the crate breakdown, the customer crate-credit offset) only
+    // exist for Bar / Beer Distributor businesses. A non-crate business can
+    // still have a Bottle product with trackEmpties on (it's the default unit
+    // and the product-creation toggle isn't business-gated), so gate on the
+    // business type — the same check Inventory's Empty Crates tab uses. Gating
+    // bottleItems at the source empties everything downstream (deposit lines,
+    // crateLines passed to checkout, customer crate-credit) for non-crate types.
+    final businessId = ref.read(authProvider).currentUser?.businessId;
+    final isCrate = isCrateBusiness(
+      ref
+          .watch(localBusinessesProvider)
+          .valueOrNull
+          ?.where((b) => b.id == businessId)
+          .map((b) => b.type)
+          .firstOrNull,
+    );
+    final bottleItems = !isCrate
+        ? const <Map<String, dynamic>>[]
+        : cartItems
+            .where(
+              (i) =>
+                  (i['unit'] as String?)?.toLowerCase() == 'bottle' &&
+                  (i['trackEmpties'] as bool? ?? false),
+            )
+            .toList();
     final hasBottles = bottleItems.isNotEmpty;
 
     // Compute aggregate deposit across items.
@@ -912,6 +787,12 @@ class _CartScreenState extends ConsumerState<CartScreen>
     final sortedMfrIds = mfrQtys.keys.toList()
       ..sort((a, b) => (mfrNames[a] ?? '').compareTo(mfrNames[b] ?? ''));
 
+    // §13.4 Ring 3 — per-brand crate lines handed to checkout, where the
+    // deposit is now captured (auto-filled rate × crates, editable/zeroable).
+    // Only manufacturer-grouped bottle lines are passed: the deposit + crate
+    // balance are keyed per manufacturer (createOrder skips items with no
+    // manufacturerId), so ungrouped bottles can't be deposit-tracked.
+    final crateLines = <Map<String, dynamic>>[];
     for (final mfrId in sortedMfrIds) {
       depositLines.add(
         _CrateDepositLine(
@@ -921,6 +802,13 @@ class _CartScreenState extends ConsumerState<CartScreen>
           amount: mfrAmounts[mfrId]!,
         ),
       );
+      final mfr = _manufacturers.where((m) => m.id == mfrId).firstOrNull;
+      crateLines.add({
+        'manufacturerId': mfrId,
+        'name': mfrNames[mfrId]!,
+        'crates': mfrQtys[mfrId]!,
+        'rateKobo': mfr?.depositAmountKobo ?? 0,
+      });
     }
 
     for (final entry in ungroupedAmounts.entries) {
@@ -958,9 +846,11 @@ class _CartScreenState extends ConsumerState<CartScreen>
       (s, i) => s + (((i['discountKobo'] as int?) ?? 0) / 100.0),
     );
 
-    // Total = Subtotal - Discounts + Deposit Paid (manually entered) - Credit
-    // computedDeposit is informational only — not added to the payable total
-    final tot = sub - discountTotal + _crateDeposit - customerCrateCredit;
+    // Goods total = Subtotal − Discounts − Credit. The crate deposit is no
+    // longer entered here — it's captured (auto-filled per brand) at checkout
+    // and added to the payable there (§13.4 Ring 3). computedDeposit stays
+    // informational on the Empty Crates card below.
+    final tot = sub - discountTotal - customerCrateCredit;
 
     final customerName = _activeCustomer?.name ?? 'Walk-in Customer';
     final activeBalanceKobo = _activeCustomer == null
@@ -1624,112 +1514,6 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                       ),
                                       SizedBox(height: context.getRSize(8)),
                                     ],
-                                    // Deposit Paid tappable button — always visible
-                                    GestureDetector(
-                                      onTap: () => _showEditCrateDeposit(),
-                                      child: Container(
-                                        width: double.infinity,
-                                        padding: EdgeInsets.symmetric(
-                                          horizontal: context.getRSize(16),
-                                          vertical: context.getRSize(14),
-                                        ),
-                                        decoration: BoxDecoration(
-                                          gradient: LinearGradient(
-                                            colors: [
-                                              Theme.of(context)
-                                                  .colorScheme
-                                                  .primary
-                                                  .withValues(alpha: 0.08),
-                                              Theme.of(context)
-                                                  .colorScheme
-                                                  .primary
-                                                  .withValues(alpha: 0.04),
-                                            ],
-                                          ),
-                                          borderRadius: BorderRadius.circular(
-                                            14,
-                                          ),
-                                          border: Border.all(
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .primary
-                                                .withValues(alpha: 0.12),
-                                          ),
-                                        ),
-                                        child: Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Row(
-                                              children: [
-                                                Container(
-                                                  padding: EdgeInsets.all(
-                                                    context.getRSize(8),
-                                                  ),
-                                                  decoration: BoxDecoration(
-                                                    gradient: LinearGradient(
-                                                      colors: [
-                                                        blueLight,
-                                                        Theme.of(
-                                                          context,
-                                                        ).colorScheme.primary,
-                                                      ],
-                                                    ),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          10,
-                                                        ),
-                                                  ),
-                                                  child: Icon(
-                                                    FontAwesomeIcons
-                                                        .beerMugEmpty,
-                                                    size: context.getRSize(13),
-                                                    color: Colors.white,
-                                                  ),
-                                                ),
-                                                SizedBox(
-                                                  width: context.getRSize(10),
-                                                ),
-                                                Text(
-                                                  'Deposit Paid',
-                                                  style: TextStyle(
-                                                    fontSize: context
-                                                        .getRFontSize(14),
-                                                    fontWeight: FontWeight.w700,
-                                                    color: _text,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                            Row(
-                                              children: [
-                                                Text(
-                                                  formatCurrency(_crateDeposit),
-                                                  style: TextStyle(
-                                                    fontSize: context
-                                                        .getRFontSize(15),
-                                                    fontWeight: FontWeight.w800,
-                                                    color: Theme.of(
-                                                      context,
-                                                    ).colorScheme.primary,
-                                                  ),
-                                                ),
-                                                SizedBox(
-                                                  width: context.getRSize(6),
-                                                ),
-                                                Icon(
-                                                  FontAwesomeIcons.penToSquare,
-                                                  size: context.getRSize(13),
-                                                  color: Theme.of(
-                                                    context,
-                                                  ).colorScheme.primary,
-                                                ),
-                                              ],
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
                                     SizedBox(height: context.getRSize(16)),
                                     Container(height: 1, color: _border),
                                     SizedBox(height: context.getRSize(16)),
@@ -1776,7 +1560,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                                       Map<String, dynamic>
                                                     >.from(cartItems),
                                                 subtotal: sub,
-                                                crateDeposit: _crateDeposit,
+                                                crateLines: crateLines,
                                                 total: tot,
                                                 customer: currentCustomer,
                                                 onCheckoutSuccess:

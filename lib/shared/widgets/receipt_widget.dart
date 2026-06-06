@@ -20,6 +20,12 @@ class ReceiptWidget extends StatelessWidget {
   /// §15.1 — wallet info is printed only when the cashier ticked the
   /// "Add wallet info to receipt" checkbox at checkout. Off by default.
   final bool showWalletInfo;
+
+  /// §13.4 — the customer's empty-crate standing, shown under wallet info when
+  /// [showWalletInfo] is on: total crates the customer owes, and total crates
+  /// credited to them (owed back by the business). 0 = nothing to show.
+  final int cratesOwed;
+  final int cratesCredit;
   final DateTime? reprintDate;
   final DateTime? reshareDate;
   final String? riderName;
@@ -30,8 +36,9 @@ class ReceiptWidget extends StatelessWidget {
   /// manufacturerId → name — used to label crate deposit rows by manufacturer.
   final Map<String, String>? manufacturerNames;
 
-  /// Name of the store / branch that processed this sale.
-  final String? branchName;
+  /// Address of the store that processed this sale, country excluded (§15.1).
+  /// Resolved from the order's `store_id`, so reprints show the recording store.
+  final String? storeAddress;
 
   /// The business name (§15.1) — shown as the receipt header. Read live from
   /// the `businesses` row so a rename in Business Info (§10.1) reflects here.
@@ -51,6 +58,8 @@ class ReceiptWidget extends StatelessWidget {
     this.cashReceived,
     this.walletBalance,
     this.showWalletInfo = false,
+    this.cratesOwed = 0,
+    this.cratesCredit = 0,
     this.reprintDate,
     this.reshareDate,
     this.riderName,
@@ -58,7 +67,7 @@ class ReceiptWidget extends StatelessWidget {
     this.orderStatus,
     this.refundAmount,
     this.manufacturerNames,
-    this.branchName,
+    this.storeAddress,
     this.businessName,
   });
 
@@ -168,9 +177,10 @@ class ReceiptWidget extends StatelessWidget {
                 color: textCol,
               ),
             ),
-          if (branchName != null && branchName!.isNotEmpty) ...[
+          if (storeAddress != null && storeAddress!.isNotEmpty) ...[
             Text(
-              'Branch: $branchName',
+              storeAddress!,
+              textAlign: TextAlign.center,
               style: TextStyle(fontSize: context.getRFontSize(12), color: sub),
             ),
           ],
@@ -436,6 +446,31 @@ class ReceiptWidget extends StatelessWidget {
                 ),
               ),
             ),
+            // §13.4 — empty-crate standing is part of the customer's account.
+            if (cratesOwed > 0)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Empty Crates Owed: $cratesOwed',
+                  style: TextStyle(
+                    fontSize: context.getRFontSize(13),
+                    fontWeight: FontWeight.w600,
+                    color: textCol,
+                  ),
+                ),
+              ),
+            if (cratesCredit > 0)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Empty Crates Credit: $cratesCredit',
+                  style: TextStyle(
+                    fontSize: context.getRFontSize(13),
+                    fontWeight: FontWeight.w600,
+                    color: textCol,
+                  ),
+                ),
+              ),
           ],
 
           SizedBox(height: context.getRSize(24)),

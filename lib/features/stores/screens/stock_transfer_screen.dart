@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
@@ -60,8 +61,8 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
 
   Future<void> _submit() async {
     // Re-check at the write boundary (hard rule #6): stock transfer is reached
-    // from the CEO-only Stores tab, so it needs `settings.manage`.
-    if (!ref.read(currentUserPermissionsProvider).contains('settings.manage')) {
+    // from the CEO-only Stores tab, so it needs `stores.manage`.
+    if (!ref.read(currentUserPermissionsProvider).contains('stores.manage')) {
       return;
     }
     final qty = double.tryParse(_qtyCtrl.text) ?? 0;
@@ -162,6 +163,10 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // Single keyboard lift via the footer's deviceBottomInset padding below;
+      // disabling Scaffold resize avoids double-counting the keyboard (root-nav
+      // screen sees the real inset). Same as add_expense.
+      resizeToAvoidBottomInset: false,
       backgroundColor: _bg,
       appBar: AppBar(
         backgroundColor: _surface,
@@ -413,7 +418,9 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
                     AppInput(
                       labelText: 'Unit Price $activeCurrencySymbol',
                       controller: _priceCtrl,
-                      keyboardType: TextInputType.number,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       inputFormatters: [CurrencyInputFormatter()],
                       hintText: '0.0',
                     ),
@@ -429,6 +436,7 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
                       labelText: 'Quantity',
                       controller: _qtyCtrl,
                       keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       hintText: '0',
                     ),
                   ],

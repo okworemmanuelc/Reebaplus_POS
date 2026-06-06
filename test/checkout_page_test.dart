@@ -92,7 +92,6 @@ void main() {
             body: CheckoutPage(
               cart: cart,
               subtotal: 2500.0,
-              crateDeposit: 0.0,
               total: 2500.0,
               customer: Customer.walkIn(),
             ),
@@ -156,7 +155,6 @@ void main() {
             body: CheckoutPage(
               cart: cart,
               subtotal: 1000.0,
-              crateDeposit: 0.0,
               total: 1000.0,
               customer: Customer.walkIn(),
             ),

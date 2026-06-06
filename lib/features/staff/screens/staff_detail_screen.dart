@@ -245,6 +245,133 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
         context, suspending ? 'Staff suspended.' : 'Staff reactivated.');
   }
 
+  /// One-line summary of the staff member's assigned stores for the header pill.
+  String _storeSummary(List<String> names) {
+    if (names.isEmpty) return 'Unassigned';
+    if (names.length == 1) return names.first;
+    return '${names.length} stores';
+  }
+
+  /// §9.5 staff store-assignment editor. Opens a multi-select of the business's
+  /// stores, pre-checked with the member's current `user_stores` set, and on
+  /// Save applies the diff: newly-checked → assign (upsert), unchecked →
+  /// unassign (hard tombstone). The member must keep at least one store, so Save
+  /// is disabled when nothing is selected.
+  Future<void> _editStoreAssignments(UserData user) async {
+    // Defense-in-depth (hard rule #6): re-check the permission before running.
+    if (!ref
+        .read(currentUserPermissionsProvider)
+        .contains('staff.assign_stores')) {
+      return;
+    }
+    final allStores =
+        ref.read(allStoresProvider).valueOrNull ?? const <StoreData>[];
+    if (allStores.isEmpty) {
+      AppNotification.showError(context, 'No stores to assign.');
+      return;
+    }
+    final current = (ref.read(myUserStoresProvider(user.id)).valueOrNull ??
+            const <UserStoreData>[])
+        .map((s) => s.storeId)
+        .toSet();
+    final selected = {...current};
+
+    final t = Theme.of(context);
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: t.colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setSheet) {
+            return Padding(
+              padding: EdgeInsets.fromLTRB(
+                context.getRSize(20),
+                context.getRSize(16),
+                context.getRSize(20),
+                context.getRSize(16) + context.deviceBottomInset,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Assigned stores',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: context.getRFontSize(18),
+                    ),
+                  ),
+                  SizedBox(height: context.getRSize(4)),
+                  Text(
+                    'Pick the store(s) ${user.name} works at.',
+                    style: TextStyle(
+                      fontSize: context.getRFontSize(13),
+                      color: t.textTheme.bodySmall?.color,
+                    ),
+                  ),
+                  SizedBox(height: context.getRSize(12)),
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          for (final s in allStores)
+                            CheckboxListTile(
+                              contentPadding: EdgeInsets.zero,
+                              controlAffinity: ListTileControlAffinity.leading,
+                              value: selected.contains(s.id),
+                              title: Text(s.name),
+                              onChanged: (v) => setSheet(() {
+                                if (v == true) {
+                                  selected.add(s.id);
+                                } else {
+                                  selected.remove(s.id);
+                                }
+                              }),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: context.getRSize(12)),
+                  AppButton(
+                    text: 'Save',
+                    onPressed:
+                        selected.isEmpty ? null : () => Navigator.pop(ctx, true),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (saved != true) return;
+    final toAdd = selected.difference(current);
+    final toRemove = current.difference(selected);
+    if (toAdd.isEmpty && toRemove.isEmpty) return;
+
+    final db = ref.read(databaseProvider);
+    for (final storeId in toAdd) {
+      await db.userStoresDao.assign(user.id, storeId);
+    }
+    for (final storeId in toRemove) {
+      await db.userStoresDao.unassign(user.id, storeId);
+    }
+    await db.activityLogDao.log(
+      action: 'staff.assign_stores',
+      description: 'Updated store assignments',
+      staffId: db.currentUserId,
+    );
+    if (!mounted) return;
+    AppNotification.showSuccess(context, 'Store assignments updated.');
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
@@ -270,9 +397,27 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
 
     final user = users[membership.userId];
     final role = rolesById[membership.roleId];
-    final store = ref.watch(storeByIdProvider(user?.storeId ?? '')).valueOrNull;
+    // §9.5 multi-store: the assignment is the set of stores in user_stores (the
+    // same source the Home store-lock reads), not the single legacy users.store.
+    final assignedStores =
+        ref.watch(myUserStoresProvider(user?.id ?? '')).valueOrNull ??
+            const <UserStoreData>[];
+    final allStores =
+        ref.watch(allStoresProvider).valueOrNull ?? const <StoreData>[];
+    final storeNameById = {for (final s in allStores) s.id: s.name};
+    final assignedStoreNames = assignedStores
+        .map((a) => storeNameById[a.storeId])
+        .whereType<String>()
+        .toList()
+      ..sort();
     final suspended = membership.status == 'suspended';
     final roleOptions = _invitableRoles(roles, mySlug);
+    // §9.5 staff store-assignment editor. The CEO isn't store-assigned (sees
+    // every store), so it's not offered on a CEO target. Hidden, not greyed,
+    // without the permission (hard rule #7); re-checked at the write site.
+    final canAssignStores = !widget.readOnly &&
+        role?.slug != 'ceo' &&
+        hasPermission(ref, 'staff.assign_stores');
 
     return Scaffold(
       backgroundColor: t.scaffoldBackgroundColor,
@@ -311,7 +456,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                     ),
                     ProfilePill(
                       icon: FontAwesomeIcons.store,
-                      label: store?.name ?? 'Unassigned',
+                      label: _storeSummary(assignedStoreNames),
                     ),
                   ],
                 ),
@@ -339,7 +484,14 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                 SizedBox(height: context.getRSize(24)),
                 ProfileInfoCard(
                   title: 'Account Details',
-                  rows: _infoRows(membership, user, role, store, subtext),
+                  rows: _infoRows(
+                    membership,
+                    user,
+                    role,
+                    assignedStoreNames,
+                    canAssignStores ? () => _editStoreAssignments(user) : null,
+                    subtext,
+                  ),
                 ),
                 // Manage actions — hidden in view-only (own card). Each action
                 // has its OWN permission (§9): Change role -> staff.change_role,
@@ -385,14 +537,18 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
     UserBusinessData membership,
     UserData user,
     RoleData? role,
-    StoreData? store,
+    List<String> assignedStoreNames,
+    VoidCallback? onEditStores,
     Color subtext,
   ) {
     final rows = <ProfileInfoRow>[
       ProfileInfoRow(
         icon: FontAwesomeIcons.store,
-        label: 'Assigned store',
-        value: store?.name ?? '—',
+        label: 'Assigned store${assignedStoreNames.length == 1 ? '' : 's'}',
+        value: assignedStoreNames.isEmpty
+            ? (onEditStores == null ? '—' : 'Unassigned')
+            : assignedStoreNames.join(', '),
+        onTap: onEditStores,
       ),
       ProfileInfoRow(
         icon: FontAwesomeIcons.envelope,

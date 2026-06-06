@@ -82,8 +82,8 @@ Keep this section updated at the top so it's easy to see what's done at a glance
 - [~] Customers + Customer Profile (section 18) *(Session 31: soft-delete, Crates-tab gate, required phone, customers.set_debt_limit permission. Open: Edit flow, GPS capture, Add-Funds payment method)*
 - [ ] Orders (section 19)
 - [ ] Expenses + Pending Approval flow (section 20)
-- [ ] Supplier Accounts (section 21)
-- [ ] Track Shipments (section 22)
+- [~] Supplier Accounts (section 21) *(Session 110: reframed to a real DB-backed per-supplier ledger — Invoice Total / Payment via "Record Activity"; absorbs the former Track Shipments)*
+- [REMOVED 2026-06-06] Track Shipments (section 22) *(folded into Supplier Accounts, Session 110 — §22 is now a tombstone)*
 - [ ] Funds Register (section 23)
 - [ ] Activity Logs (section 24)
 - [ ] Reports (section 25)
@@ -103,6 +103,954 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 ## Session entries
 
 (New entries go below this line. Most recent at the top.)
+
+---
+
+## Session 114 — 2026-06-06 — Crates tab: top "+" card to record crate returns (§13.4)
+
+**Built today:**
+- Added a **"+" card pinned at the top of the Crates tab** in the customer profile ("Record crate return"). Tapping it opens a modal that takes a **manufacturer** (dropdown) + a **crate count**, records the empties into physical stock, and nets the customer's crate balance for that brand. If the customer **owes** crates, it reduces what they owe; if they owe **nothing** for that brand, it records a **crate credit** ("N crates credit" — the business now holds their crates).
+- This top card **replaces** the old per-row "+" that only appeared on brands the customer already owed. Now a return can be recorded for **any** manufacturer, including ones with no debt. The card shows even when the customer has no crate activity yet.
+- No new feature engine: it reuses the existing `recordCrateReturnByCustomer` DAO method (same path the order crate-return modal uses) — a negative balance delta that reduces owed or goes to credit. Physical stock bumped via `addEmptyCrates`.
+
+**Files touched:**
+- lib/features/customers/screens/customer_detail_screen.dart (rewrote `_buildCratesTab`; added `_buildCrateReturnCard`, `_buildCrateBalanceRow`, `_showRecordCrateReturnSheet`; removed `_recordCrateReturn`; added app_dropdown import)
+- reebaplus_master_plan.md (§13.4 + §18.3 Crates-tab description)
+
+**Database changes:**
+- None. Pure UI change; no schema, no migration, no cloud, no new permission key (reuses `sales.make`, the existing crate-return gate).
+
+**Master plan sections covered:**
+- §13.4 — Empty Crates: added the customer-profile "+" card entry point for recording returns.
+- §18.3 — customer profile Crates tab description updated.
+
+**Plan updates made during session:**
+- §13.4 — documented the top "+" card (manufacturer + count → reduces owed or records a credit), noting it replaces the per-row "+". §18.3 — Crates tab line now mentions the per-manufacturer balance list + the "+" card.
+
+**Tested:**
+- `flutter analyze lib/` → No issues found.
+- `flutter test test/crates/ test/sync/dispatch/crate_ledger_dao_dispatch_test.dart` → all 36 pass (the DAO write path the new modal calls is unchanged and still covered).
+
+**Known issues / left open:**
+- Permission gate is `sales.make` (same as the prior per-row "+"); no dedicated crate permission exists. On-device emulator smoke check not yet run.
+
+---
+
+## Session 113 — 2026-06-06 — Removed the subscription lockout overlay (§32)
+
+**Built today:**
+- Removed the in-app subscription **lockout overlay** entirely. When a trial expired
+  or a business was Inactive, a full-screen "Subscribe / Sign out" paywall used to
+  cover Home (and it played a "Thank you for subscribing" celebration on unlock).
+  That whole overlay is gone — the app is **no longer blocked** by subscription state.
+- Subscription state is now **informational only**: it still shows in the
+  **Settings → Subscription** screen and as the **PRO / FREE TRIAL** name badges
+  (drawer + profile). Those were kept and are unchanged.
+- Home now renders directly (no `Stack` wrapper / no always-mounted overlay).
+
+**Files touched:**
+- lib/features/subscription/widgets/subscription_overlay.dart (deleted)
+- lib/main.dart (removed the overlay import + the `Stack`/`Positioned.fill` gate →
+  plain `MainLayout`; repointed the 60s clock-tick comment to the surviving badges)
+- reebaplus_master_plan.md (§32 — lockout behaviour marked removed, former wording
+  kept for history; §32.1 badges/settings screen unchanged)
+- BUILD_LOG.md
+
+**Database changes:**
+- None. The `businesses` subscription columns, the migration (0101), the sync wiring,
+  and the read-only/app-can't-write guards all stay in place — only the lockout UI
+  was removed.
+
+**Master plan sections covered:**
+- §32 — Subscriptions and Access Gating (lockout removed; status now informational).
+
+**Plan updates made during session:**
+- §32 updated: the "fully locked" / blocking-overlay / self-heal / thank-you
+  celebration text is struck through and annotated as removed 2026-06-06; the intro
+  and Inactive status lines now say the app is not locked. Kept the historical text
+  so we remember what existed.
+
+**Tested:**
+- `flutter analyze` — 0 errors (19 pre-existing info lints in test files only).
+- `flutter test test/subscription/` — 8/8 green (helper, isLocked, badgeLabel still
+  covered; `isLocked` is now unused in app code but retained + tested).
+- Grep confirms no remaining references to the deleted overlay anywhere.
+
+**Known issues / left open:**
+- `SubscriptionAccess.isLocked` is now dead in app code (only the deleted overlay used
+  it). Left in place — it's tested and harmless. Remove if a future cleanup wants it.
+- In-app Paystack payment (§32.2) still the planned next phase, unchanged.
+
+**Next session should:**
+- Optionally verify on the emulator that an expired/Inactive business opens Home
+  normally (no overlay) while the PRO / FREE TRIAL badge + Settings → Subscription
+  screen still reflect status. Then the §32.2 Paystack flow when ready.
+
+---
+
+## Session 112 — 2026-06-06 — Subscription UI + PRO/FREE TRIAL name badges (§32.1)
+
+**Revised same day (user feedback):**
+- PRO / FREE TRIAL tag now sits **inline right after the user's name** in the drawer
+  (was grouped beside the role tag).
+- The inactive/trial-expired state no longer shows a full lockout screen. Home stays
+  rendered with a blocking **overlay** (ModalBarrier + card) carrying **Subscribe**
+  and **Sign out** buttons. New widget `subscription_overlay.dart`; old
+  `subscription_locked_screen.dart` deleted; main.dart now stacks the overlay over
+  MainLayout when locked. §32 updated to describe the overlay.
+- Copy reworded: dropped "Local ₦5,000 / $5"; overlay/screen now read "Click the
+  button below to renew your subscription — ₦5,000 per month" (₦5,000 local / $10
+  international).
+
+**Revised again same day (live-sync fix + celebration):**
+- Fixed "set Active in console didn't reflect live": the overlay now **self-heals** —
+  while the paywall is shown it re-pulls the business row on mount, on app resume,
+  and every 15s (via `pullChanges`), so the unlock lands even if a `businesses`
+  realtime event is dropped. (Also confirmed `businesses` is in the realtime
+  publication; the console must write with the service_role key or the §32 trigger
+  silently rejects the change.)
+- The overlay is now **always mounted** over Home and self-manages phases. On the
+  locked→Active transition it shows an animated **"Thank you for subscribing"**
+  celebration (bouncing medallion + sparkles + fade-in, built with Flutter
+  animation primitives, no new packages), then auto-dismisses. A business already
+  Active at launch shows no celebration.
+
+**Built today:**
+- A **CEO Settings → Subscription** screen: shows the plan (Local ₦5,000/$5 or
+  International $10), a status pill (Free Trial / Active / Trial ended / Inactive),
+  and the trial countdown ("12 days left") or renewal date. Read-only — only the
+  console changes status. Has a "Subscribe / Renew" button (placeholder dialog for
+  now; the real Paystack flow is the next task).
+- A tag next to the current user's name: **PRO** when the business is paid (Active),
+  **FREE TRIAL** during the 30-day trial. Shown in the side-drawer header and the
+  user's Profile header. Nothing shown when trial-expired / inactive / unknown.
+
+**Files touched:**
+- lib/features/subscription/subscription_access.dart (new `badgeLabel` getter)
+- lib/features/subscription/widgets/subscription_badge.dart (new — self-watching pill)
+- lib/core/settings/subscription_screen.dart (new — read-only status screen)
+- lib/core/settings/settings_screen.dart (new "Subscription" menu row)
+- lib/shared/widgets/app_drawer.dart (header Row → Wrap + PRO/FREE TRIAL badge)
+- lib/features/profile/screens/profile_screen.dart (PRO/FREE TRIAL ProfilePill)
+- reebaplus_master_plan.md (§32.1 in-app surface, §32.2 planned Paystack payment)
+- test/subscription/subscription_access_test.dart (badgeLabel cases)
+
+**Database changes:**
+- None. Read-only UI over the existing §32 columns.
+
+**Master plan sections covered:**
+- §32.1 (in-app subscription screen + name badges), §32.2 (planned in-app payment).
+
+**Plan updates made during session:**
+- Added §32.1 / §32.2. Decision logged: in-app payment will use **Paystack**, built
+  as the NEXT task (screen + badges first). The app cannot self-activate (DB trigger),
+  so payment activation will be a Supabase Edge Function via service_role.
+
+**Tested:**
+- flutter analyze 0 errors; test/subscription/ 8/8 green (incl. badgeLabel).
+
+**Known issues / left open:**
+- "Subscribe / Renew" button is a placeholder dialog until the Paystack flow lands.
+- In-app payment (Paystack checkout + verify/activate Edge Function) is the next task;
+  needs a Paystack account + secret key and a new Flutter dependency (CLAUDE.md §6).
+
+**Next session should:**
+- Build the Paystack checkout + the Supabase Edge Function that verifies the payment
+  and sets subscription_status='active' / current_period_end via service_role; update
+  §32's "no in-app payment" note.
+
+---
+
+## Session 111 — 2026-06-06 — App subscriptions & access gating (§32)
+
+**Built today:**
+- Subscription gating, app side. The separate web admin console sets each
+  business's plan + status in the cloud; the app reads it and locks itself when
+  a business's free trial has expired or its status is Inactive.
+- States: Trial (auto 30-day from sign-up), Active, Inactive. Plans: Local
+  (₦5,000/$5) and International ($10) — operator-chosen, shown on the locked
+  screen only; the *status* is what gates access.
+- When locked, the whole app is replaced by a full-screen "subscription locked"
+  screen with Sign Out only, for every role. The lock is live — flipping a
+  business to Active in the console un-locks a running app within seconds (and
+  the reverse), riding the existing businesses realtime channel.
+- The subscription columns are cloud-authoritative / app-read-only: the device
+  can never push them (left off the businesses push whitelist + a DB trigger
+  blocks the customer JWT), so a cashier can't self-activate.
+- Grace by default: an unknown subscription state never locks. On rollout every
+  existing business is given a fresh 30-day trial so nobody is locked on day one.
+
+**Files touched:**
+- reebaplus_master_plan.md (new §32)
+- supabase/migrations/0101_business_subscription.sql (new)
+- lib/core/database/app_database.dart (Businesses columns, schemaVersion 43, from<43 onUpgrade) + app_database.g.dart (regenerated)
+- lib/core/services/supabase_sync_service.dart (restore grace default + whitelist guard comment)
+- lib/core/providers/stream_providers.dart (currentBusinessSubscriptionProvider + subscriptionClockTickProvider)
+- lib/features/subscription/subscription_access.dart (new — pure helper + enum)
+- lib/features/subscription/screens/subscription_locked_screen.dart (new)
+- lib/main.dart (gate in home() + 60s clock-tick timer)
+- test/subscription/subscription_access_test.dart (new)
+- test/sync/normalize_payload_whitelist_test.dart (added subscription-columns-dropped case)
+
+**Database changes:**
+- New columns on businesses (cloud + local Drift): subscription_status
+  ('trial'/'active'/'inactive', default 'trial'), subscription_plan
+  ('local'/'international', nullable), trial_ends_at, current_period_end.
+- Migration 0101: adds the columns, gives every existing business a fresh 30-day
+  trial, a BEFORE INSERT trigger that stamps trial_ends_at = now()+30d for new
+  sign-ups, and a BEFORE UPDATE trigger that blocks the authenticated/anon roles
+  from changing subscription columns (console writes them via service_role).
+- Drift schemaVersion 42 → 43 (a from<43 onUpgrade adds the four columns; v42 is
+  the parallel Supplier-Accounts ledger).
+
+**Master plan sections covered:**
+- §32 Subscriptions and Access Gating (new section).
+
+**Plan updates made during session:**
+- Added §32 to the master plan before writing any code (per CLAUDE.md rule #1 —
+  subscriptions were not previously in the plan).
+
+**Tested:**
+- flutter analyze: 0 errors across the project.
+- test/subscription/ (7/7) + test/sync/ (108 total) all green, including the new
+  "subscription columns dropped on push" whitelist case and the unchanged
+  registration test (businesses keys on id, not business_id, so it didn't trip).
+- build_runner regenerated cleanly (subscription fields on BusinessData + the
+  parallel supplier-ledger schema).
+
+**Known issues / left open:**
+- Migration 0101 NOT yet pushed to the cloud. Deploy ordering: the parallel
+  Supplier-Accounts migration intends to be 0100 but isn't on disk yet — push
+  0100 first, then 0101, or Supabase will flag 0101 as newer-than-last-applied.
+- Console-side wiring is external: its "Save" must UPDATE businesses
+  .subscription_status / subscription_plan / current_period_end (and optionally
+  trial_ends_at) using the service_role key.
+- Not yet run on the emulator end-to-end (needs the cloud push first; with no
+  cloud columns the app stays in grace and behaves normally).
+- Trial expiry trusts the device clock (offline-first); server Active/Inactive is
+  the real enforcement once online.
+
+**Next session should:**
+- Push 0100 (supplier ledger) then 0101 (subscriptions); wire the console's Save
+  to service_role; run on the emulator and flip a business Active↔Inactive to
+  confirm the live lock/un-lock.
+
+---
+
+## Session 110 — 2026-06-06 — Supplier Accounts: real per-supplier ledger (Invoice Total / Payment)
+
+**Built today:**
+- Turned Supplier Accounts (§21) from a mock/in-memory screen into a real, DB-backed per-supplier ledger, modelled on the customer wallet but inverted. Each supplier has a **"Record Activity"** button on its detail screen that records either an **Invoice Total** (goods received — a debit, shown red/negative, "we owe the supplier") or a **Payment** (money paid — a credit). Balance = sum(payments) − sum(invoices); negative/red = we owe.
+- Payments require **proof**: a receipt photo/file OR a typed reference/note (covers bank transfers and cash with no paper receipt). Receipts are stored as a local file path (same as expense receipts — the image stays on the device; everything else syncs).
+- Suppliers are now editable (CEO only) with bank details (account name, number, bank) + notes, and soft-deletable. The Suppliers list shows each supplier's live balance (red when owed). The Payments tab now lists real payment entries with period + supplier filters.
+- Corrections are by **void** (an append-only compensating entry), never edit/delete.
+
+**Plan updates made during session:**
+- §21 rewritten (balance = payments − invoices from the ledger; §21.4 is now "Record Activity"; new §21.10 ledger semantics). **§22 Track Shipments REMOVED** (tombstone) — folded into the ledger. Cross-refs fixed (§3, Ring 1, §26 notifications, §27 sidebar+role table, §29). The user chose: replace Track Shipments, local-only receipts, proof = photo-OR-reference.
+
+**Files touched:**
+- lib/core/database/app_database.dart, daos.dart (+ regenerated .g.dart) — new `supplier_ledger_entries` table, `suppliers` bank/notes columns, `SupplierLedgerDao`, CatalogDao update/softDelete/watchById, schema v41→v42 migration.
+- lib/core/services/supabase_sync_service.dart — `_pullOrder` + `_restoreTableData` registration.
+- lib/shared/services/supplier_account_service.dart (new), lib/core/providers/app_providers.dart — service + providers.
+- lib/features/payments/widgets/supplier_form_sheet.dart (new), record_supplier_activity.dart (new); rebuilt lib/features/inventory/screens/supplier_detail_screen.dart; rewired lib/features/payments/screens/payments_screen.dart; fixed the supplier nav call in inventory_screen.dart.
+- Deleted lib/features/payments/widgets/add_payment_sheet.dart (the old in-memory payment sheet — now orphaned by the rewrite; its Session 109 keyboard-jump fix is moot, and the new RecordPaymentSheet opens at full size so it doesn't jump).
+- supabase/migrations/0102_supplier_ledger_entries.sql (new).
+
+**Database changes:**
+- New synced, append-only table `supplier_ledger_entries` (mirrors `wallet_transactions`). New nullable `suppliers` columns: bank_account_name, bank_account_number, bank_name, notes. Drift schema **v41 → v42**.
+- Cloud migration **0102** written (table + RLS via `current_user_business_ids()` + realtime + pull-RPC; drops the stale `supplier_payments`). **NOT yet deployed** — a parallel `0101_business_subscription.sql` (other in-progress work) sits ahead of it and remote is at 0099; deploy `0101` then `0102` together with `supabase db push` **before** a v42 build reaches any device (else the first ledger upsert 42P01s and the new suppliers columns drop on push).
+
+**Master plan sections covered:**
+- §21 Supplier Accounts (full reframe), §22 Track Shipments (removed).
+
+**Tested:**
+- `flutter analyze` — clean (only pre-existing info-lints in test files).
+- `flutter test test/sync/` — 100/100 green (registration completeness, ledger guards, raw-write leak scanner all pass with the new table + service).
+- `flutter test test/database/` — 62/62 green (migration_upgrade now exercises paths ending at v42; schema audit reconciles onCreate vs onUpgrade).
+
+**Known issues / left open:**
+- Cloud migration 0102 not deployed (see Database changes — blocked on the parallel 0101). Local app is offline-first and fully functional without it.
+- On-device pass still needed: record an invoice (red/negative), a payment with a receipt and one with only a reference (proof rule), void an entry, edit/delete a supplier (CEO), and confirm a second device pulls the rows.
+- Receipt images do not cross-sync (local path only, by design — same as expenses).
+
+---
+
+## Session 109 — 2026-06-06 — Sweep: fix every form/modal that jumps when the keyboard opens
+
+**Built today:**
+- Followed up on the crate-return keyboard-jump fix (Session 107) by sweeping the whole app — with a multi-agent audit over all 37 screens/modals that have a typing field — for the same class of bug, since the user saw it on Add Expense and the supplier Add Payment too.
+- Found and fixed the same jump in two more places that behave like the crate modal (the form auto-grows when the keyboard opens): **supplier Add Payment** and **Receive Delivery**. Fix: open the sheet at its full size so it has no room to grow (matches how Add Customer already works).
+- Found and fixed a second, related cause on five full-screen forms reached from the side drawer, where the keyboard's height was being counted twice (once by the screen auto-resizing, once by the button's own spacing) — so the form leapt too far up. Fix: stop the screen from auto-resizing and let the single existing spacing handle it (exactly what Add Expense already does). Those five: **Add Product / Add Stock, Stock Transfer, a role's Permissions detail, Stores settings, Sync Issues**.
+- Confirmed Add Expense was already correct (it had this fix) and used it as the reference.
+
+**Not changed (and why):** the audit also flagged the Checkout form and four small Inventory pop-ups (add/update manufacturer, update crate group, add supplier). These open from the bottom-tab screens, where the system already zeroes out the keyboard measurement they'd double-count — so there is no real jump there (consistent with Checkout's Amount Paid never jumping despite heavy use). Left untouched to stay surgical; the redundant line in those pop-ups is a harmless no-op. Worth an on-device glance to confirm.
+
+**Files touched:**
+- lib/features/payments/widgets/add_payment_sheet.dart
+- lib/features/deliveries/widgets/receive_delivery_sheet.dart
+- lib/features/inventory/screens/add_product_screen.dart
+- lib/features/stores/screens/stock_transfer_screen.dart
+- lib/core/settings/role_permissions_detail_screen.dart
+- lib/core/settings/stores_settings_screen.dart
+- lib/features/sync/screens/sync_issues_screen.dart
+
+**Database changes:**
+- None.
+
+**Master plan sections covered:**
+- UI bug-fix sweep only; no behaviour or plan changes.
+
+**Plan updates made during session:**
+- None.
+
+**Tested:**
+- `flutter analyze` clean on all 8 changed files (incl. Session 107's crate modal).
+- Affected permission tests: the 6 failures in role_permissions_detail / roles_permissions_screen are PRE-EXISTING from the in-progress parallel permissions work (catalogue count in flux 33→31, permission_dependencies.dart mid-edit); each passes in isolation and none touch keyboard/layout. The test that exercises the field on the screen I changed ("editing max expense approval") passes.
+- Still needs an on-device pass on a physical phone: open supplier Add Payment, Receive Delivery, Add Product, Stock Transfer, a role's Permissions detail, Stores settings, Sync Issues → tap a field → form should slide up once, smoothly, no leap.
+
+**Known issues / left open:**
+- None from this sweep. (The 4 Inventory pop-ups + Checkout were assessed as non-bugs; see "Not changed" above.)
+
+---
+
+## Session 108 — 2026-06-06 — Supplier Accounts: real per-supplier ledger (Invoice Total / Payment)
+
+**Built today:**
+- Reframed Supplier Accounts (§21) from a mock/in-memory screen into a real, DB-backed per-supplier ledger that mirrors the customer wallet — but inverted. Each supplier gets a "Record Activity" button that records either an **Invoice Total** (goods received — a debit, shown red/negative, "we owe the supplier") or a **Payment** (money paid — a credit). Balance = sum(payments) − sum(invoices); negative/red = we owe.
+- Payments require **proof**: a receipt photo/file OR a typed reference/note (covers bank transfers and cash with no paper receipt). Receipts are stored as a local file path (same as expense receipts — image doesn't cross-sync; everything else does).
+- Suppliers are now editable (CEO only) with bank details (account name, number, bank) + notes.
+
+**Plan updates made during session:**
+- §21 rewritten: §21.3 balance now = payments − invoices from the supplier ledger; §21.4 is now "Record Activity" (Invoice Total or Payment, with required proof); §21.7 ledger entries are append-only (void, not edit); new §21.10 supplier-ledger semantics.
+- **§22 Track Shipments REMOVED** (tombstone) — folded into Supplier Accounts; the separate Pending/Received tracker and Mark-Received flow are gone. Cross-refs fixed: §3 build order, Ring 1 note, §26 notification triggers, §27 sidebar + role table, §29 Phase 3 deferral.
+- Reason: the user wants invoices and payments recorded in one place on the supplier, like the customer wallet — not split across two features.
+
+**Database changes:** *(in progress)*
+- New synced, append-only table `supplier_ledger_entries` (mirrors `wallet_transactions`). New nullable `suppliers` columns: bank_account_name, bank_account_number, bank_name, notes. Drift schema v41 → v42; cloud migration 0100.
+
+**Master plan sections covered:**
+- §21 Supplier Accounts (full reframe), §22 Track Shipments (removed).
+
+**Tested:**
+- *(pending — see build order in the plan: test/sync green, flutter analyze, emulator smoke test)*
+
+**Known issues / left open:**
+- *(to be filled at session end)*
+
+---
+
+## Session 107 — 2026-06-06 — Fix: crate-return ("confirm order") form jumping up when the keyboard opens
+
+**Built today:**
+- Fixed a bug a user reported on a real phone: in the "Record Crate Returns" modal (the crate-confirmation step when you mark an order delivered), tapping a crate-count box made the whole form leap upward — as if a second keyboard had opened — every time the keyboard appeared.
+- Cause: the modal was built on a drag-to-resize sheet that automatically grows itself bigger whenever something inside needs to be scrolled into view. When the keyboard pops up to reveal the field you tapped, that auto-grow kicked in and the sheet jumped from 60% to 90% of the screen on top of the normal keyboard shift. It only showed on a physical phone because the emulator types with the computer keyboard, so the on-screen keyboard never appears.
+- Fix: switched the modal to a plain height-limited sheet (capped at the same 90% it could reach before) that no longer auto-grows. The on-screen keyboard now just slides up and the buttons lift cleanly above it — no jump. Same fix already used for the cart's change-customer sheet.
+
+**Files touched:**
+- lib/features/orders/widgets/crate_return_modal.dart
+
+**Database changes:**
+- None.
+
+**Master plan sections covered:**
+- §13.4 (crate reconciliation modal) — UI bug fix only, no behaviour change.
+
+**Plan updates made during session:**
+- None.
+
+**Tested:**
+- `flutter analyze` clean on the changed file.
+- `flutter test test/crates/crate_issue_at_sale_test.dart` — all 22 pass (the deposit-split logic was untouched).
+- Still needs an on-device check: open an order → Confirm → tap a crate-count field and confirm the form no longer jumps.
+
+**Known issues / left open:**
+- None from this fix.
+
+---
+
+## Session 106 — 2026-06-06 — Multi-store: per-store permission scope (Store layer, §10.2.1)
+
+**Built today:**
+- The CEO can now set a role's permissions **per store**, not just business-wide. On a role's Roles & Permissions page, the **Store** tab (previously a "coming with multi-store" placeholder) is now live: pick a store, then flip that role's permission toggles for that one store. Each toggle shows the **effective** value (the business default, unless the store changes it) — flip it away from the business default to override, flip it back to inherit again. A **Restore store defaults** button clears every override for that store+role at once.
+- Real-world use: at your main store a cashier can give discounts / see cost prices, but at a branch you can turn those off — without changing the cashier's role everywhere.
+- **How it resolves at runtime** (your call this session): a staff member's permissions are figured out in the order **their own overrides → their store's overrides → the role's business defaults** (most-specific wins). "Their store" is the store they're working at — the one they picked at POS (Session 105), or their single assigned store. A multi-store person who hasn't picked a store yet just gets business + personal defaults. The CEO is always full-access and is never affected by store or personal overrides.
+- This rides entirely on existing pieces: the same override shape as the per-staff overrides (Session 100), the same active-store the POS picker already sets.
+
+**Files touched:**
+- lib/core/database/app_database.dart (new `StoreRolePermissions` synced table; schema v40 → **v41** + onUpgrade block; registered in the synced-tables list)
+- lib/core/database/daos.dart (new `StoreRolePermissionsDao` — set/clear an override, restore-all; enqueues like the per-staff overrides)
+- lib/core/services/supabase_sync_service.dart (wired the new table into all five sync apply sites: realtime-delete, pull order, hard-delete reconcile set, reconcile-delete, and the restore upsert)
+- lib/core/providers/stream_providers.dart (new `storeRolePermissionsProvider`; the permission resolver now layers User > Store > Business; extracted a pure `resolveEffectivePermissions` for testing)
+- lib/core/settings/role_permissions_detail_screen.dart (Store tab made live — store picker + per-store toggle list + Restore store defaults)
+- supabase/migrations/0099_store_role_permissions.sql (new — table + RLS + bump trigger + realtime + REPLICA IDENTITY FULL + pull-snapshot; **pushed to remote**)
+- test/permissions/resolve_effective_permissions_test.dart (new — 7 tests for the layering order)
+- test/permissions/store_role_permissions_dao_test.dart (new — 5 tests for the DAO round-trip + tombstones)
+- test/database/migration_upgrade_test.dart (new v40 → v41 group)
+
+**Database changes:**
+- New synced table `store_role_permissions` (`business_id`, `store_id`, `role_id`, `permission_key`, `is_granted`) — local schema **v41**, cloud migration **0099**. Hard-delete junction (like `role_permissions`/`user_permission_overrides`): a cleared override is hard-deleted + tombstoned, and the table is `REPLICA IDENTITY FULL` so the realtime DELETE actually propagates. No new permission **keys** (catalogue unchanged).
+
+**Master plan sections covered:**
+- §10.2.1 — Store scope. Rewrote the "Store is a placeholder" paragraph: all three scopes (Business / Store / User) now ship; documented the table shape and the active-store resolution order (the decision you made this session).
+
+**Plan updates made during session:**
+- §10.2.1 updated before coding (per the plan-change rule): Store scope is built; added `is_granted` to the documented `store_role_permissions` shape (it's an override layer, not presence-only); spelled out that resolution is against the **active store** (locked/picked store, else sole assigned store).
+
+**Tested:**
+- `flutter analyze` — clean on all touched files (and the whole project shows only pre-existing info-lints).
+- `flutter test test/sync/` — 100 pass (the new table satisfies every sync guardrail: registration completeness, leak scanner, replica-identity, enqueue guard).
+- New permission tests — 12 pass (7 resolver-layering + 5 DAO). Migration v41 test passes. `roles_v13_seed_test` still green (catalogue count unchanged).
+- The Store-tab UI itself (picker + toggles) is glue best confirmed on-device.
+
+**Known issues / left open:**
+- **Pre-existing, NOT from this work:** `test/settings/role_permissions_detail_test.dart` has 8 red tests. They assert a permission count (33) and tap toggle labels ("Edit product prices", "View stock levels") that no longer exist — the catalogue's descriptions were renamed and the hidden-key set changed by the parallel permissions work. The test file is byte-identical to HEAD and references labels found nowhere in `lib/`, so it was already red before this session; my change only runs on the Store tab (default is Business), so it can't affect these. Left for whoever owns the catalogue churn to refresh the labels/count.
+- On-device check needed: as CEO, set a per-store override (e.g. turn off "see cost prices" for Cashier at one store), then confirm a cashier working at that store loses it while a cashier at another store keeps it.
+- Remaining deferred Phase 2 multi-store items: per-store reports sweep (E), stock-transfer UI.
+
+**Next session should:**
+- On-device per-store permission check (above), then reassess E (per-store reports) — the last sizeable deferred multi-store slice.
+
+---
+
+## Session 105 — 2026-06-05 — Multi-store: POS "pick your store" + confine the selling store to assignments
+
+**Built today:**
+- Now that a staff member can be assigned to more than one store (Session 103), POS lets them choose which store they're selling from. On opening POS, a staff member who works at **more than one** store is prompted once to pick; a staff member with **one** store is selected automatically. The choice sticks for the rest of the session (and the store switcher in the POS header lets them change it).
+- **Fixed a real bug:** POS used to lock onto the *first* store in the business regardless of who you are. A cashier assigned to "Branch B" could land on "Branch A" and ring sales against the wrong store. POS now defaults to (and is limited to) the **stores you're actually assigned to**. The CEO (and a Manager the CEO granted "view all stores") still sees every store.
+- The store switcher icon in the POS header now appears for anyone with **more than one** store to choose from (not just the CEO), and the picker only lists the stores that person is allowed to sell from. Single-store users see no switcher (nothing to switch).
+- By design (your call), this is an **in-app** step on POS entry, not a separate login screen — so the in-progress login/auth work was left untouched.
+
+**Files touched:**
+- lib/features/pos/screens/pos_home_screen.dart (confinement helper + assignment-aware default/gate/switcher)
+- test/pos/selectable_stores_test.dart (new — unit test for the store-confinement filter)
+
+**Database changes:**
+- None. No new tables, columns, permissions, or migrations. Pure app logic over the existing `user_stores` assignments and the `manager_view_all_stores` role setting.
+
+**Master plan sections covered:**
+- §12.1 — POS header store selector (rewritten: shown when the user has >1 sellable store; confined to assigned stores for non-CEO; the in-app "pick your store" gate).
+- §28 — Phase 2 multi-store list (marked the active-store selection shipped, in-app form; stock-transfer UI + per-store report filters still deferred).
+
+**Plan updates made during session:**
+- §12.1 reworded (store selector is no longer CEO-only; it follows the §11.2 confinement rule and includes the pick-your-store gate). §28 multi-store bullet updated. The literal "store picker on login" was deliberately implemented as an in-app POS gate instead of a login screen — recorded the rationale (avoids the actively-edited auth flow; the active store only matters for POS/checkout).
+
+**Tested:**
+- `flutter analyze` on the changed file — no issues.
+- New unit test for the confinement filter (all-stores / confined / single / no-assignment fallback / unknown ids) — 5 pass.
+- Note: the picker/gate wiring itself is UI glue best confirmed on-device.
+
+**Known issues / left open:**
+- On-device check needed: a cashier assigned to two stores should be prompted on POS entry and only see their two stores; a single-store cashier should auto-select with no prompt; the CEO should still see all stores.
+- Home screen keeps its own local store filter (unchanged); it doesn't yet mirror the POS selection. Out of scope for this change (POS is where the selling store matters).
+- Remaining deferred Phase 2 multi-store items: per-store permission scope (D, §10.2.1), per-store reports sweep (E), stock-transfer UI.
+
+**Next session should:**
+- On-device multi-store POS check (above), then reassess D / E.
+
+---
+
+## Session 104 — 2026-06-05 — Number keypad + numbers-only on every numeric input field
+
+**Built today:**
+- Every money, quantity, count, percent and phone field across the app now opens the **number keypad** (not the alphanumeric keyboard) and **only accepts valid numbers** — letters and stray symbols are blocked as you type. This covers the checkout **Amount Paid** and **Deposit** fields the user reported, plus the crate-return field and every other numeric box on every screen and modal.
+- The shared money formatter was upgraded so money fields now also accept **kobo decimals** (e.g. ₦1,500.50) and the percent-discount field accepts decimals (e.g. 12.5%), while it keeps showing thousands separators (₦1,500). Before, the formatter silently threw away anything after the decimal point.
+- One real feature was preserved on purpose: the cart and quick-sale **quantity** boxes stay **fractional** (for "allow fractional sales" products, e.g. 0.5), while stock counts — which the database stores as whole numbers — are locked to whole digits.
+- A background multi-agent sweep of the whole codebase was run to make sure nothing was missed; it found four more stragglers (a monthly-target box, the add-expense amount, a delivery quantity, and the expense-approval limit), which were all fixed.
+
+**Files touched:**
+- lib/core/utils/currency_input_formatter.dart (the keystone change — decimal-aware, with a `grouping` flag)
+- lib/features/pos/screens/checkout_page.dart, lib/features/pos/widgets/quick_sale_modal.dart, lib/features/pos/widgets/edit_item_modal.dart
+- lib/features/expenses/screens/expenses_screen.dart, lib/features/expenses/screens/add_expense_screen.dart
+- lib/features/inventory/screens/product_detail_screen.dart, lib/features/inventory/screens/add_product_screen.dart, lib/features/inventory/widgets/update_product_sheet.dart, lib/features/inventory/screens/inventory_screen.dart
+- lib/features/stores/screens/stock_transfer_screen.dart, lib/features/deliveries/widgets/receive_delivery_sheet.dart, lib/features/payments/widgets/add_payment_sheet.dart
+- lib/features/customers/widgets/add_customer_sheet.dart, lib/features/customers/widgets/edit_customer_sheet.dart
+- lib/core/settings/business_info_screen.dart, lib/core/settings/role_permissions_detail_screen.dart
+- test/utils/currency_input_formatter_test.dart (new)
+
+**Database changes:**
+- None.
+
+**Master plan sections covered:**
+- None added or changed — this is a UI input-handling fix only (no new screens, buttons, or features).
+
+**Plan updates made during session:**
+- None.
+
+**Tested:**
+- New unit test for the money formatter — 13 cases, all pass (grouping, up to 2 decimals, trailing dot, leading dot → "0.", strips letters, parseCurrency round-trip).
+- `flutter analyze` clean on all changed files (full-project run shows only pre-existing `avoid_print` infos in a test file).
+- Re-ran checkout / POS / expenses / customers test suites — green. The expense-approval-limit widget test (the only existing test that touches a field I changed) passes.
+
+**Known issues / left open:**
+- 5 tests in `test/settings/role_permissions_detail_test.dart` fail (permission toggles / cascade dependencies / a 33-vs-31 catalogue count). These are **not** from this session — they're the in-progress parallel permissions work (permission_dependencies.dart etc. are modified in git status); no field I touched is involved, and there's no causal path from a keyboardType to a permission count.
+- On-device/emulator visual pass still pending (verify the keypad shows and decimals post correctly at checkout).
+
+**Next session should:**
+- Do the emulator pass for the numeric fields, then look into the role-permissions test failures as part of the permissions work.
+
+---
+
+## Session 103 — 2026-06-05 — Staff multi-store assignment (CEO can add/remove a staff member's stores)
+
+**Built today:**
+- On a staff member's profile (Staff → tap a member), the **"Assigned store"** line is now editable for a permitted manager. Tapping it opens a checklist of the business's stores; tick the ones the person works at and Save. The header pill and the row now reflect the full set ("2 stores" when more than one).
+- This is **multi-store**: a staff member can now work at more than one branch. The Home screen already knew how to handle that — a person assigned to several stores gets a small store picker, and is otherwise locked to their store(s) — so this session just adds the way to *set* that.
+- A new staff member still starts on the single store chosen on their invite; the CEO adds the rest here afterward. A member must keep at least one store (Save is disabled with none ticked). The CEO themselves isn't store-assigned (they see every store), so this isn't shown on a CEO.
+- New permission, **"Assign staff to stores"** (`staff.assign_stores`), in CEO Settings → Roles & Permissions → Staff section. **CEO-only by default**; the CEO can switch it on for another role. Separate from Change role / Suspend.
+- Every change is written to the activity log.
+
+**Files touched:**
+- lib/features/staff/screens/staff_detail_screen.dart (multi-store display + the assignment checklist sheet, gated on the new permission)
+- lib/core/database/daos.dart (UserStoresDao: reworked `assign` to be idempotent + added `unassign`)
+- lib/core/database/app_database.dart (new permission key in the catalogue; schema 38 → 39 with a re-seed step for existing devices)
+- lib/core/services/supabase_sync_service.dart (taught the sync engine to apply a `user_stores` deletion across devices — realtime delete, reconcile set, reconcile delete)
+- supabase/migrations/0096_add_staff_assign_stores_permission.sql (new — the permission key + CEO backfill)
+- supabase/migrations/0097_user_stores_replica_identity_full.sql (new — lets a store-removal propagate live to other devices)
+- test/database/roles_v13_seed_test.dart (catalogue count 31 → 32 + spot-check), test/database/migration_upgrade_test.dart (new v39 re-seed test), test/sync/realtime_delete_test.dart (new user_stores delete test)
+
+**Database changes:**
+- New permission key `staff.assign_stores` (category "Staff"). Client: local schema bumped 38 → 39, which inserts the catalogue row on existing devices. Cloud: migration 0096 inserts the catalogue row and backfills the grant to every existing CEO role. New businesses get it automatically.
+- `user_stores` (the staff↔store table) became a "hard-delete" table — removing an assignment deletes the row and tells the cloud to forget it (same pattern as a revoked role permission). Migration 0097 sets that table to REPLICA IDENTITY FULL so a removal shows up live on other devices (without it, the cloud's realtime layer drops the delete). No new tables or columns.
+
+**Master plan sections covered:**
+- §9.5 — staff detail screen (added the multi-store assignment editor + the `staff.assign_stores` permission).
+- §28 — Phase 2 multi-store list (marked staff multi-store assignment as shipped; login picker / stock-transfer UI / per-store report filters still deferred).
+
+**Plan updates made during session:**
+- §9.5 reworded to spell out the staff store-assignment editor (it wasn't written down before — only invite-time single-store assignment was). §28 multi-store bullet annotated with what's shipped vs still deferred. CLAUDE.md "Current build phase" note updated to list the authorized Phase 2 multi-store slices (stores.manage, receipt address, staff multi-store assignment) while keeping everything else out of scope. Done before coding, per the plan-change rule.
+
+**Tested:**
+- `flutter analyze` on all changed files — no issues.
+- Roles + migration + full sync suites — all 115 pass (incl. the new v39 re-seed test, the new `user_stores` realtime-delete test, and the replica-identity safeguard that initially went red and prompted migration 0097).
+
+**Deployed:**
+- `supabase db push` applied 0096 + 0097 to remote; `supabase migration list` confirms both now on remote. Existing CEOs are backfilled with the staff.assign_stores grant (picked up on next sync), and user_stores is now REPLICA IDENTITY FULL so store-removals propagate live.
+
+**Known issues / left open:**
+- Brief window per device: after the grant is backfilled cloud-side, an existing CEO's device shows the new "Assign staff to stores" capability only once it has pulled the new role_permissions row (next sync). Normal sync resolves it.
+- Legacy single `users.store` pointer is left as the sign-up "primary" and isn't kept in lock-step with removals — harmless, because the Home store-lock reads the `user_stores` set, not that pointer.
+- Remaining deferred Phase 2 multi-store items: login store picker (C), per-store permission scope (D, §10.2.1), per-store reports sweep (E).
+
+**Next session should:**
+- Verify on two devices: add/remove a store for a staff member and confirm it appears live on the other device. Then reassess whether to pick up C / D / E.
+
+---
+
+## Session 102 — 2026-06-05 — New "Add, edit, and remove stores" permission (stores.manage)
+
+**Built today:**
+- Added a dedicated permission, **"Add, edit, and remove stores"** (`stores.manage`), in CEO Settings → Roles & Permissions → the Stores section (top of the list). **CEO-only by default**; the CEO can switch it on for another role.
+- Store management used to be gated by the generic "Manage business settings" permission. Now the sidebar **Stores** screen (add / edit / delete a store, and stock transfer between stores) and the Settings → Stores name/address editor all check the new store permission instead. For the default roles nothing changes — only the CEO could manage stores before, and only the CEO can now.
+- The role page needed no new code: a permission tagged with the "Stores" category automatically appears as a toggle in that section.
+
+**Files touched:**
+- lib/core/database/app_database.dart (added the key to the catalogue; schema 37 → 38 with a re-seed step for existing devices)
+- lib/shared/widgets/app_drawer.dart (sidebar Stores item now checks stores.manage)
+- lib/features/stores/screens/stores_screen.dart, stock_transfer_screen.dart (guards)
+- lib/core/settings/stores_settings_screen.dart (guard)
+- supabase/migrations/0095_add_stores_manage_permission.sql (new)
+- test/database/roles_v13_seed_test.dart (catalogue count 30 → 31 + spot-check), test/database/migration_upgrade_test.dart (new v38 re-seed test)
+
+**Database changes:**
+- New permission key `stores.manage` (category "Stores"). Client: local schema bumped 37 → 38, which inserts the catalogue row on existing devices. Cloud: migration 0095 inserts the catalogue row and backfills the grant to every existing CEO role so they keep store access. New businesses get it automatically (the CEO is granted every catalogue key).
+
+**Master plan sections covered:**
+- §10.2 — Roles & Permissions, Stores section (updated to note the toggle is now backed by stores.manage, CEO-only by default).
+
+**Plan updates made during session:**
+- §10.2 reworded to record stores.manage (key, category, CEO-only default, what it gates, client v38 + cloud 0095). This is the §10.2 Phase-1 "Add, edit, and remove stores" toggle finally wired to a real key.
+
+**Tested:**
+- `flutter analyze` on all changed files — no issues.
+- Roles + migration + full sync test suites — all 113 pass (incl. the v38 re-seed test and the sync registration guard).
+
+**Deployed:**
+- `supabase db push` applied 0093, 0094, and 0095 to remote (the user authorized pushing all three; 0093/0094 were the prior session's crate-deposit cloud work, also pending). `supabase migration list` confirms all three now on remote. Existing CEOs are backfilled with the stores.manage grant; devices pick it up on next sync.
+
+**Known issues / left open:**
+- Brief window per device: after the grant is backfilled cloud-side, an existing CEO's device shows the Stores sidebar item only once it has pulled the new role_permissions row (next sync). Normal sync resolves it.
+- Deferred Phase 2 multi-store items remain open: staff multi-store assignment (B), login store picker (C), per-store permission scope (D, §10.2.1), per-store reports sweep (E).
+
+---
+
+## Session 102 — 2026-06-05 — Refund Cash from a customer wallet (CEO/Manager) + release a stuck crate deposit (§18.3)
+
+**The ask:**
+- After the crates for a sale came back, the customer's "Crate deposit held: ₦12,000" had no way to be cleared, because the only place that releases a held deposit is the mark-delivered crate-return screen — and that sale was already completed. The user wanted a way to **refund a customer's wallet money as cash** (their held deposit and/or any spendable credit), **recorded**, and restricted to **Manager or CEO**.
+
+**Plan check first:** a wallet withdrawal / cash refund was **not** in the master plan (§18.3 only had Add Funds + Set Limit). Per the build guardrails it was added to the plan before coding — §18.3 (the new "Refund Cash" button + flow), §18.4 (a "Refund cash from wallet" role row: CEO + Manager only), and the §2.5 permission list.
+
+**Built today:**
+- A new **"Refund"** button on the customer's Wallet card, shown only to CEO/Manager. It opens a sheet that shows what can actually be refunded — broken into "Wallet credit" and "Crate deposit held" — lets the staff enter an amount (defaults to the full available), and add a note.
+- **Where the money goes depends on whether the wallet is in debt (user refinement, same day):**
+  - **In debt** → the held deposit is refunded **to the wallet** (reduces what the customer owes) — **no cash option**, no method picker; the button reads "Refund to Wallet". e.g. White Pages owed ₦30,100 with ₦12,000 held → after the refund they owe ₦18,100 and hold ₦0 (exactly the reconciled figure from the screenshots).
+  - **Not in debt** → paid out as **cash** via a method picker (Cash / Bank Transfer / POS card / Other); the button reads "Refund Cash".
+- The money is drawn from the **held deposit first**, then from spendable credit, and is **capped at what's available** — a debt can never be turned into a cash payout. This is the only in-app way to release a **completed** sale's held crate deposit.
+- Every refund is **recorded**: a `crate_deposit_refunded` entry that clears "held", plus either a cash refund payment row (cash path) or a `crate_refund` wallet credit (to-wallet path) and/or a `refund` debit that lowers spendable; an activity-log line; and a notification to CEO + Manager.
+- New permission **`customers.wallet.withdraw`** (CEO + Manager by default) gates the button and is re-checked at the moment of refunding.
+
+**Files touched:**
+- reebaplus_master_plan.md (§18.3 / §18.4 / §2.5 — the plan update)
+- lib/core/database/app_database.dart (permission catalogue + schema v40 migration; bumped schemaVersion 39 → 40)
+- lib/core/permissions/permission_dependencies.dart (new key depends on customers.add)
+- lib/shared/services/wallet_service.dart (`refundCash`)
+- lib/features/customers/data/services/customer_service.dart (`refundCashFromWallet` wrapper)
+- lib/features/customers/screens/customer_detail_screen.dart (Refund Cash button + sheet)
+- supabase/migrations/0098_add_customers_wallet_withdraw_permission.sql (catalogue + new-business seed + CEO/Manager backfill)
+- test/wallet/wallet_logic_test.dart, test/database/migration_upgrade_test.dart, test/database/roles_v13_seed_test.dart
+
+**Database changes:**
+- Local schema **v40**: adds the `customers.wallet.withdraw` permission to the catalogue (a data-only migration; no new tables/columns).
+- Cloud migration **0098** (pushed to remote this session): adds the key to the catalog, grants it to every existing CEO + Manager, and updates the new-business seed so future Managers get it too.
+
+**Plan updates made during session:**
+- Added the Refund Cash flow + the `customers.wallet.withdraw` permission to the master plan (§18.3 / §18.4 / §2.5) before building, per the guardrails.
+
+**Tested:**
+- `flutter analyze lib/` clean.
+- `flutter test test/wallet/ test/crates/ test/database/ test/sync/ test/orders/` → all pass, incl. 5 refundCash tests (held-only cash, credit-only cash, combined cash, the **in-debt → to-wallet** White-Pages case, nothing-to-refund) and the v39 → v40 migration test.
+
+**Known issues / left open:**
+- Releasing a held deposit here is **money-only** — it does not touch empty-crate stock. The physical empties are handled separately (the mark-delivered crate-return screen for Pending orders, or a manual stock adjustment).
+- When the wallet is in debt the refund goes to the wallet (reduces debt); cash is only offered when the wallet is not in debt. There is no "partial cash + partial to-wallet" — the destination is decided by debt status.
+- The `funds.*` rows still listed in the cloud `seed_default_roles_for_business` are dead grants from the removed Funds Register (preserved verbatim in 0098 to keep it a surgical clone); cleaning them up is a separate task.
+- Brief per-device window: an existing CEO/Manager sees the Refund Cash button once their device pulls the new role_permissions grant (next sync).
+
+---
+
+## Session 101 — 2026-06-05 — Receipts show the store's address instead of the branch name
+
+**Built today:**
+- Receipts no longer print a "Branch:" line with the store name. They now print the **store's address** under the business name — on both the on-screen receipt and the thermal printout.
+- The **country is left off** the address. A store's address is saved as one line ("street, city/state, country"), so the receipt simply shows everything except the last part (the country).
+- The address shown is the address of the **store that made the sale**, looked up from the order itself. So if you reprint an old receipt — from Orders, or from a customer's history — it shows the branch that actually recorded that sale, not whichever store you happen to be on now. (The three reprint screens already looked the store up from the order, so this came for free.)
+
+**Files touched:**
+- lib/core/utils/store_address.dart (new — the helper that drops the country)
+- lib/features/pos/services/receipt_builder.dart (thermal receipt)
+- lib/shared/widgets/receipt_widget.dart (on-screen receipt)
+- lib/features/pos/screens/checkout_page.dart (sale → receipt)
+- lib/features/orders/screens/orders_screen.dart (reprint/reshare)
+- lib/features/customers/screens/customer_detail_screen.dart (reprint from history)
+- test/utils/store_address_test.dart (new), test/receipt_widget_test.dart (added 2 cases)
+
+**Database changes:**
+- None. Uses the existing `stores.location` field.
+
+**Master plan sections covered:**
+- Section 15.1 — Receipt contents (updated to specify store address, country excluded, resolved from the order's store).
+
+**Plan updates made during session:**
+- §15.1 reworded: the old "Business name + branch (store name)" line became "Business name + store address (country excluded), resolved from the sale's store_id." Done at the user's request.
+
+**Tested:**
+- `flutter analyze` on all 6 touched files — no issues.
+- New unit test for the country-stripping helper (6 cases) — pass.
+- Receipt widget test: added a case asserting the address renders and no "Branch:" line remains, plus a null-address case — all pass. Existing checkout/receipt tests still pass.
+- Not yet driven live in the emulator (logic is covered by the widget + unit tests); on-device print check still worth a glance.
+
+**Known issues / left open:**
+- The rest of multi-store management (dedicated `stores.manage` permission, staff multi-store assignment, login store picker, per-store permission scope) is still open — see the multi-store plan discussed this session.
+
+---
+
+## Session 100 — 2026-06-05 — Checkout payment simplified to two methods (Cash/Transfer or Wallet) + Credit Sale
+
+**Built today:**
+- Simplified the Checkout payment screen. The "Full Cash / Card" and "Partial Cash / Card" cards are gone. The cashier now sees two payment-method chips — **Cash / Transfer** and **Pay from Wallet** — plus the kept **Register as Credit Sale** card.
+- **Cash / Transfer:** picking it opens an "Amount Paid" box. If the customer pays less than the total, the shortfall is added to their wallet as debt; if they pay more, the extra tops up their wallet; exact payment leaves the wallet untouched. All of this happens after Confirm Payment.
+- **Pay from Wallet:** no amount to type — the whole order is charged to the wallet. Whatever credit they have is used up first, and anything left over becomes debt. (Shows the current balance and what the balance will be after the sale.)
+- **Register as Credit Sale:** unchanged in spirit — nothing paid now, the whole total becomes debt. Registered customers only.
+- The screen now warns the cashier (red banner) before Confirm, and blocks on Confirm, whenever a sale would push the customer past their debt limit (or they have no limit set). A fully-paid or overpaid sale is never blocked.
+- Kept the "Add wallet info to receipt" checkbox.
+- Removed the old "apply existing credit / Outstanding paid" sub-flow — it's now automatic (Pay from Wallet uses credit first, then books the rest as debt).
+- Walk-ins (no wallet) only see Cash / Transfer and pay in full; an empty amount counts as paid-in-full so it's still one tap.
+
+**Files touched:**
+- lib/features/pos/screens/checkout_page.dart
+- reebaplus_master_plan.md (§14.1, §14.2 rewritten)
+- BUILD_LOG.md
+
+**Database changes:**
+- None. The money engine (orders DAO two-leg wallet posting) was already correct: net wallet = amount paid − order total, which gives shortfall-as-debt and excess-as-topup for free. No schema or DAO change.
+
+**Master plan sections covered:**
+- §14.1 — Checkout layout (payment section description updated).
+- §14.2 — Payment Method, fully rewritten for the new two-chip + Credit Sale design.
+
+**Plan updates made during session:**
+- §14.2 rewritten (dated 2026-06-05). Supersedes the prior Full/Partial cards, the 2026-06-01/2026-06-03 "apply existing credit / Outstanding paid" sub-flow, and the 2026-06-03 "default to Pay from Wallet" selection (now defaults to Cash / Transfer to avoid accidental full-debt credit sales). Underlying §14.3 two-leg wallet math unchanged.
+
+**Tested:**
+- flutter analyze on checkout_page.dart — clean.
+- flutter test test/wallet/ test/orders/ — all pass (15).
+- flutter test test/sync/ — all pass (99); no new raw writes, all money still routes through OrderService.addOrder → OrdersDao.createOrder which enqueues.
+
+**Known issues / left open:**
+- No widget test for the new checkout UI; the engine math is covered by existing wallet/order tests. On-device smoke check (shortfall→debt, excess→topup, wallet-can't-cover→debt, over-limit warning/block) still worth a manual pass.
+
+**Next session should:**
+- Optionally add a checkout widget/golden test, or move on to the next Ring item.
+
+---
+
+## Session 100 — 2026-06-05 — Reconcile crate-deposit sales made on an out-of-date device (§13.4 follow-up)
+
+**The report:**
+- A sale was rung up on a phone running an older version of the app. Afterwards the same customer ("White Pages") showed two different wallet balances on two phones: one showed **−₦30,100** with a separate "Crate deposit held: ₦12,000" line; the other (the older phone) showed **−₦18,100** and no deposit line. The ₦12,000 gap is exactly the held deposit.
+
+**What was actually wrong (and what wasn't):**
+- The wallet rows themselves are identical and correct on both phones — they synced fine. The difference is purely how each app *version* adds them up. The latest version correctly **excludes the refundable crate deposit from the spendable balance** (so −₦30,100 is the true amount owed, and the ₦12,000 deposit is shown on its own line). The older phone's build predates that rule, so it folds the deposit back into the balance and shows −₦18,100. **There is no data corruption** — once the old phone updates to the latest version it will show −₦30,100 too. No balance is stored; every screen recomputes it live from the ledger, so the display self-corrects on update.
+
+**Two real gaps were found and fixed:**
+- The wallet history was showing the raw code word **"crate_deposit"** instead of a readable label (visible on both phones). Added friendly labels for the whole deposit family — "Crate deposit (held)", "Deposit refunded", "Deposit forfeited", "Crate refund", and "Adjustment".
+- A deposit sale made on an older device records the held money but may **not** record the newer per-brand detail the crate-return screen reads. Without that detail, the return screen used to treat the brand as "no deposit" and the held money would have **no way to be refunded** — stuck as "held" forever. The return screen now **rebuilds the per-brand deposit from the order's recorded deposit total + the current per-brand rate**, so the held deposit always has a settlement path and nets back to zero on return. Split logic is exact (shares always sum to the recorded total).
+
+**Files touched:**
+- lib/features/customers/screens/customer_detail_screen.dart (friendly wallet labels)
+- lib/features/orders/widgets/crate_return_modal.dart (legacy-deposit reconstruction + `allocateLegacyDeposit` helper)
+- test/crates/crate_issue_at_sale_test.dart (allocation + end-to-end "orphaned held deposit settles to 0" tests)
+
+**Tested:**
+- `flutter analyze lib/` clean; `flutter test test/crates/ test/wallet/ test/orders/ test/sync/` → all pass (145), including 2 new tests proving an orphaned held deposit (no per-brand lines) settles to 0 once reconstructed.
+
+**Known / left open:**
+- The held-deposit refund only triggers from the **mark-delivered** step (pending → completed). A deposit sale that was already *completed* on the old device has no money-track refund entry point — that would be a new flow, out of scope here (master plan doesn't specify one; the crate-track "+" on the customer Crates tab covers physical-crate acknowledgement only).
+- The only way to make the older phone show the correct balance is to **update it** — a deployed old build can't be changed from here.
+
+---
+
+## Session 99 — 2026-06-05 — Sign in with Google now follows the same login path as email/OTP
+
+**Built today:**
+- "Sign in with Google" was taking a slightly different path than the normal email-code sign-in, and that difference caused two real problems for existing users. The Google button's handler had been copied from the email/OTP screen earlier, then the email/OTP screen got fixed later — but the Google copy never got those same fixes. So the two drifted apart. We brought the Google path back in line.
+- Problem 1 (people who belong to more than one business): when looking up the local account, the Google path didn't say *which* business it was for. On a phone that holds data for more than one business under the same email, it could pick the wrong business's account. Now it scopes the lookup to the business the Google sign-in actually authenticated for — same as the email path.
+- Problem 2 (shared till with more than one staff member): after Google sign-in, the PIN screen could show the *previous* person who used the device instead of the person who just signed in — and only accept that previous person's PIN. Now the Google path hands the just-signed-in person straight to the PIN screen, so the right name and PIN are used.
+- Also removed two early "remember this device user" writes the Google path did before the PIN was even entered. They were redundant (the app already saves those at real login) and on a shared till they prematurely overwrote who the device belonged to.
+- Onboarding for a brand-new Google user was checked and is already correct — it goes to "No account found" → "Create a new business" → CEO sign-up, exactly like the email flow (master plan §7.1). No change there.
+- Then did the root-cause cleanup that the duplication caused in the first place: pulled the "where do we go now the email is verified" decision out of BOTH screens into one shared helper (`auth_post_verify_route.dart`). The email/OTP screen and the Google handler now call the same function, so a future fix can't be applied to one and missed on the other again. Each screen still does its own page transition — only the *decision* is shared. Verified the email/OTP path behaves exactly as before.
+
+**Files touched:**
+- lib/features/auth/auth_post_verify_route.dart (new — the shared post-verification routing decision)
+- lib/features/auth/screens/email_entry_screen.dart (the `_signInWithGoogle` handler)
+- lib/features/auth/screens/otp_verification_screen.dart (now calls the shared helper instead of its own copy)
+
+**Database changes:**
+- None.
+
+**Master plan sections covered:**
+- §7.1 — onboarding entry for a new email (confirmed unchanged/correct)
+- §7.2a — per-business account scoping and the shared-till "right person on the PIN screen" rule (the two fixes)
+
+**Plan updates made during session:**
+- None.
+
+**Tested:**
+- `flutter analyze` — clean, no new warnings across the three touched files.
+- `flutter test` — same result before and after the change: 312 pass, 58 skipped, 6 fail. The 6 failures are all in test/settings/ (roles & permissions screen), pre-existing and unrelated — caused by the branch's in-progress permissions work (a test still expects "All 33 permissions"). The shared-helper extraction added no new failures.
+- The Google login path and the email/OTP path now run the exact same decision code; the email/OTP path was verified to behave as before.
+
+**Known issues / left open:**
+- The duplicated routing is now gone (extracted to the shared helper), so the drift risk is closed.
+- On-device emulator pass still pending (real Google OAuth sign-in): confirm an existing user lands on the PIN screen showing themselves, and a multi-business user binds the right business.
+
+**Next session should:**
+- Do the on-device Google sign-in pass above, or move on.
+
+---
+
+## Session 98 — 2026-06-05 — Allow biometrics for the device owner when reaching PIN entry via Who Is Working
+
+**Built today:**
+- On a shared till, the fingerprint button on the PIN screen used to be hidden whenever you reached that screen by tapping a card in the "Who's Working" picker. That was a blanket safety rule, because fingerprint unlocks the device's own account, not whichever staff card was tapped.
+- Now the rule is smarter: if the card you tapped IS the account that was set up on this device (the device owner, whose PIN and fingerprint were created here), the fingerprint button shows again. Tapping any OTHER staff member's card still hides it and requires a PIN — fingerprint can't unlock the wrong person.
+- Also tightened it so the fingerprint button stays hidden for an owner who has logged out (their PIN is reset until they create a new one).
+
+**Files touched:**
+- lib/features/auth/screens/login_screen.dart
+
+**Database changes:**
+- None.
+
+**Master plan sections covered:**
+- §7.2a (shared-till PIN scoping) / §8.4 (Who Is Working picker) — biometrics safety relaxed only for the device-owner account.
+
+**Plan updates made during session:**
+- None.
+
+**Tested:**
+- `flutter analyze lib/features/auth/screens/login_screen.dart` — no issues. On-device biometric pass still pending (emulator can't exercise fingerprint).
+
+**Known issues / left open:**
+- None.
+
+**Next session should:**
+- Continue Crate Deposit Accounting (Session 97 left Rings 3/5/6/7 open).
+
+---
+
+## Session 97 — 2026-06-05 — Crate Deposit Accounting, Rings 1/3/4/5/6: schema + "still owing" bug fix + checkout deposit capture + held-deposit wallet + return settlement (§13.4)
+
+**Built today:**
+- Built the **entire** empty-crate-tracking + deposit-accounting feature end to end (all rings): schema groundwork (Ring 1), the "still owing" bug fix (Ring 4), the deposit data layer (Ring 3 back-end), checkout deposit capture (Ring 3 front-end), wallet netting read-side (Ring 6 read), held-deposit wallet writes (Ring 6 write), the return-settlement modal (Ring 5), and the deposits-held balancing report (Ring 7). Cloud migrations 0093/0094 are deployed.
+- **Ring 3 checkout UI — the deposit moved from the cart to checkout.** The cart no longer has the manual "Deposit Paid" box; it just shows the Empty Crates breakdown (informational) and passes the per-brand crate lines forward. At checkout, registered customers paying Cash / Transfer now see a "Crate Deposit" section that shows the **full/expected deposit (rate × crates) as a reference at the top**, with one row per brand each **starting at ₦0**. The cashier taps a brand to enter how much was actually paid (blank/0 = no deposit → crates tracked instead; a "Use full" shortcut fills the expected amount). The deposit is added on top of the goods total as the payable. Walk-ins and Wallet / Credit Sale show no deposit (no cash is handed over → the crates are owed/tracked). A guard blocks confirming if the cash paid doesn't even cover the deposit.
+- **Ring 6 write — the held deposit now lands on the wallet at the sale.** The sale's wallet legs are split: the goods debit and the cash-toward-goods credit exclude the deposit, and the paid deposit is posted as one `crate_deposit` held credit. Net spendable is exactly as before; the deposit just sits in the held bucket (excluded from spendable, shown as "Crate deposit held"). A no-deposit sale posts the same two legs as before — no behaviour change.
+- **Ring 5 — the Confirm Crate Returns modal now settles deposits properly.** It always opens when the order has crate-tracked bottles (the old "skip if deposit covered" guard is gone — crates must be counted back either way). It reads the per-brand `order_crate_lines` written at the sale, so each brand shows what was taken and its track (No deposit / Part / Full); rows pre-fill to the expected count for full/no-deposit brands and blank for part. On Confirm it branches per brand: **no-deposit (crate-track)** nets the crate ledger as before (leftover = crates owed); **deposit-paid (money-track)** settles in money — refund the unforfeited deposit (to wallet credit or as cash, cashier's choice), record the kept-crate portion as a forfeit (income via reports), and book any partial-deposit shortfall as a normal wallet debt. The held deposit always nets back to 0 once a return is settled.
+- **Ring 7 — the Crate Deposits balancing report.** A new report (Reports hub → "Crate Deposits", crate businesses + CEO/Manager only) shows the headline **Deposits held now**, the breakdown **Taken − Refunded − Kept = Held**, and a per-customer list of who's holding a deposit, with CSV export. It proves the books balance straight off the one wallet ledger (no separate deposit store). A unit test asserts the identity across a mix of full/partial returns + an unsettled sale.
+- **Cloud deployed.** Migrations 0093 (the `order_crate_lines` table + RLS via `current_user_business_ids()` + realtime + `pos_pull_snapshot`) and 0094 (the `wallet_transactions.reference_type` CHECK widen for the crate-deposit family) are now applied on the cloud, so the checkout's deposit upserts and the held/refund/forfeit wallet rows sync without 42P01/23514. (0095 — a parallel `stores.manage` permission migration — was applied in the same push.)
+- **Bug fixed (found in on-device checkout testing): `order_crate_lines` UNIQUE 2067 right after Confirm Payment.** `OrderCrateLinesDao.insertLine` let the LOCAL insert use the table's `clientDefault` id while enqueuing a companion with the id Absent — so the cloud minted a DIFFERENT id, and that row echoing back tried to insert under the new id and collided with the local row on `UNIQUE(business_id, order_id, manufacturer_id)`. Fix: `insertLine` now sets an explicit id so local + cloud share it (matches every other DAO). Plus a self-heal in the sync apply path (`_restoreTableData` `order_crate_lines`) deletes any stale same-natural-key row under a different id before applying the cloud's authoritative row, so devices that already diverged recover on the next pull. Regression test asserts the enqueued upsert payload's id equals the local row's id.
+- **Tweak (testing feedback): checkout deposit defaults to ₦0.** Each crate brand now starts at ₦0 with the full/expected deposit shown as a reference at the top of the section + per row; the cashier enters how much was actually paid (a "Use full" shortcut remains). Was previously auto-filled to the full deposit.
+- **Tweak (testing feedback): `crate_refund` reads first in wallet history.** A return settlement posts the `crate_refund` credit and its paired `crate_deposit_refunded` debit in the same second; the history tiebreak now floats `crate_refund` (the money-back the customer sees) to the top of its timestamp group via an INT CASE expr. Test asserts it sorts above the paired debit.
+- **Added (testing feedback): acknowledge crate returns from the Customer Profile.** The Crates tab now shows a "+" on each **owed** brand; tapping it records how many crates came back (capped at the owed count) — adds them to physical empty stock and nets the customer's owed balance down via the same `recordCrateReturnByCustomer` ledger the order-return flow uses. The list updates live. Gated on `sales.make` (till-side transaction permission; hidden otherwise, with a write-boundary re-check).
+- **Added (testing feedback): empty-crate standing on the receipt.** When "Add wallet info to receipt" is ticked, the receipt now also prints "Empty Crates Owed: N" and/or "Empty Crates Credit: N" (it's part of the customer's account, like the wallet balance). Snapshotted at confirm AFTER the sale's crates are issued; shown on both the on-screen receipt and the thermal print; registered customers only.
+- **Fixed (rule #13 gap, found in verification): the cart + checkout crate-deposit sections were NOT gated to crate businesses.** They keyed only on "cart has a bottle product with trackEmpties on" — but `Bottle` is the default unit for a new product and `trackEmpties` defaults on for bottles, with the product-creation toggle NOT business-gated. So a non-crate business (Supermarket, Pharmacy, …) selling a bottle would have seen the deposit UI. Now the cart empties `bottleItems` at the source for non-crate types (so the breakdown, the per-brand crateLines passed to checkout, and the customer crate-credit offset all vanish), and checkout's `_depositApplies` also requires `isCrateBusiness` (defense in depth). Both via the same `isCrateBusiness(...)` check Inventory/Reports use.
+- **Fixed (rule #13 root cause + write boundary):** closed the two gaps noted above. (1) The "Track empty crate returns" toggle in BOTH product-creation surfaces (`add_product_screen`, `update_product_sheet`) is now hidden for non-crate businesses, and the saved value is forced off via an `_effectiveTrackEmpties = _isCrateBusiness && _trackEmpties` getter (so a hidden default-on checkbox can't persist `trackEmpties: true`). (2) `createOrder`'s crate-issue block is now guarded on `isCrateBusiness(business.type)` — even a legacy/edge non-crate product with `trackEmpties` on will NOT write `order_crate_lines` or `crate_ledger` rows. Tests: a non-crate business writes no crate data even selling a bottle+trackEmpties product; the crate suite seeds a 'Bar' business so the crate path still runs. Still open (data cleanup, not behaviour): any non-crate products already created with `trackEmpties = true` before this fix keep the flag (harmless now — the write boundary ignores them).
+- **Ring 6 netting (read + display side):** the customer "balance" everywhere now means SPENDABLE money — it excludes the refundable crate-deposit slice (so a deposit can't be spent on goods and isn't counted as debt). A separate "deposits held" figure sums the deposit slice. Both come from the one wallet ledger by filtering on the label — no second pot of money. The customer wallet card now shows a "Crate deposit held" line beside the (spendable) Wallet Balance (only when non-zero), and the Total In/Out tiles exclude the deposit slice. No visible change yet (no deposit rows exist until the write-side ships), but every balance becomes correct the moment they do.
+- **Ring 3 data layer:** at a sale, the app now records a per-order, per-brand `order_crate_lines` row (crates taken + the deposit price snapshot from the manufacturer + the deposit paid). It also decides per brand: if a deposit was paid for that brand, no crate is counted as "owed" (it'll be settled in money later); if no deposit, the crate is counted as owed (the bug-fix path). The checkout screen doesn't yet collect the per-brand deposit, so for now every crate brand is treated as "no deposit" — but the back-end + the decision logic are in place and tested.
+- **The "still owing" bug is fixed.** Root cause: the app never recorded the crates a customer TOOK at a sale — it only ever subtracted the ones they brought back. So "brought everything back" could never reach zero. Now, when a sale includes crate-tracked bottles for a registered customer, the app records those crates as "out" per brand; bringing them back subtracts. Return everything → reaches zero → shows "Clear / not owing." Walk-ins and non-crate products are untouched.
+- Added a new table, `order_crate_lines`, that will store — per order, per brand — how many crates the customer took, the deposit price per crate at the time, and how much deposit they actually paid. The Confirm Crate Returns screen will read this in a later ring.
+- Widened the customer wallet so an entry can be labelled as a refundable "crate deposit" (held money), separate from ordinary spendable money. Four new labels: the deposit, its refund, its forfeit, and a deposit-turned-into-credit.
+- Wrote the matching cloud database changes (two migration files) but did NOT deploy them yet — see "left open".
+
+**Files touched:**
+- lib/core/database/app_database.dart (new OrderCrateLines table; wallet CHECK widened; new kCrateDepositReferenceTypes const; schemaVersion 36→37; v37 migration step)
+- lib/core/database/daos.dart (new OrderCrateLinesDao; new CrateLedgerDao.recordCrateIssueByCustomer; OrdersDao gains Manufacturers access; createOrder records crates issued + writes order_crate_lines + gates issued on a per-brand deposit map; wallet balance SUMs now exclude the deposit family; new getDepositsHeldKobo/watchDepositsHeldKobo + CustomersDao forwarders)
+- lib/shared/services/order_service.dart (addOrder threads crateDepositPaidByManufacturer through)
+- lib/core/database/daos.dart createOrder — Ring 6 wallet-leg split: held deposit carved out of the goods debit + cash-toward-goods credit and posted as a `crate_deposit` held credit (v1 path; v2 RPC still needs the leg cloud-side)
+- lib/features/pos/screens/cart_screen.dart (removed the manual Deposit Paid box + its modal; cart total is goods-only; builds + passes per-brand crateLines to checkout)
+- lib/features/pos/screens/checkout_page.dart (per-brand auto-filled deposit capture; payable = goods + deposit; deposit≤cash guard; passes the map + total to addOrder; receipt shows the deposit/grand total)
+- lib/core/database/daos.dart OrdersDao.settleCrateDepositReturn — Ring 5 money-track settlement (forfeit / refund-to-wallet-or-cash / shortfall debt; held nets to 0)
+- lib/features/orders/widgets/crate_return_modal.dart — Ring 5: Guard 2 removed (always opens); reads order_crate_lines; per-brand track tag + pre-fill; branches crate-track vs money-track on Confirm; refund-to-wallet/cash toggle
+- lib/shared/widgets/main_layout.dart (dropped the now-removed CartScreen.crateDeposit arg)
+- lib/features/customers/screens/customer_detail_screen.dart (wallet card "Crate deposit held" line; Total In/Out excludes the deposit slice)
+- lib/core/services/supabase_sync_service.dart (sync apply sites for the new table)
+- lib/core/database/app_database.g.dart, daos.g.dart (regenerated)
+- test/crates/crate_issue_at_sale_test.dart (new — proves the bug fix + the deposit gating)
+- supabase/migrations/0093_order_crate_lines.sql (new, NOT pushed)
+- supabase/migrations/0094_wallet_reference_type_crate.sql (new, NOT pushed)
+
+**Database changes:**
+- New synced table `order_crate_lines` (local Drift + cloud).
+- `wallet_transactions.reference_type` allows the crate-deposit family: `crate_deposit`, `crate_deposit_refunded`, `crate_deposit_forfeited`, `crate_refund`.
+- Local schema bumped to v37 with an idempotent upgrade step (mirrors the cloud migrations).
+
+**Master plan sections covered:**
+- §13.4 — empty crate tracking + deposits (foundation only). Approved plan: ~/.claude/plans/atomic-wondering-sunbeam.md
+
+**Plan updates made during session:**
+- None. (The plan accounts for the Funds Register removal happening in parallel: deposit money is tracked on the wallet + as recorded refunds/income, not a funds account.)
+
+**Tested:**
+- `flutter analyze` clean (lib + database).
+- `flutter test test/sync/` — all pass (the new table is correctly registered and routes through enqueue; leak scanner green).
+- `flutter test test/database/migration_upgrade_test.dart test/crates/` — pass; upgrade runs cleanly through v37.
+- `flutter test test/crates/crate_issue_at_sale_test.dart` (new, 8 tests) — proves: issue +N then return N → balance 0 (not owing); short return → shortage owed; a crate sale increments the balance and a full return nets to 0; non-crate products and walk-ins create no balance; order_crate_lines is written with the manufacturer rate snapshot; a deposit-paid (money-track) brand records NO crate balance but stores the deposit; AND wallet netting — spendable excludes the deposit family, deposits-held sums it, crate_refund is spendable, a forfeit debit nets held to 0.
+- `flutter test test/sync/ test/crates/ test/orders/ test/wallet/` — all pass (createOrder change is safe; leak scanner green).
+- After Ring 3 UI + Ring 6 write: `flutter analyze` on the touched files (cart, checkout, daos, order_service, main_layout) clean; `flutter test test/crates/ test/wallet/` pass (27) — new cases prove a paid deposit posts a held `crate_deposit` leg, the goods debit excludes it, spendable nets to 0 and deposits-held equals the deposit; and a no-deposit sale posts only the two goods legs (unchanged). `flutter test test/sync/` green.
+- NOTE: repo-wide `flutter analyze lib/` is currently red — but only from an **unrelated in-progress parallel edit** (the receipt header is mid-refactor: `branchName` → `storeAddress`/`businessName` in `receipt_builder.dart`, with a new untracked `lib/core/utils/store_address.dart`). All 6 errors are that dangling `branchName`; none are from the crate-deposit work. Left untouched (someone else's mid-flight feature).
+
+**Known issues / left open:**
+- **Cloud migrations 0093/0094 are DEPLOYED** (confirmed via `supabase migration list` — both Local = Remote). 0092 (funds-drop) was already applied beforehand, so the push had no destructive side effect. 0095 (parallel `stores.manage` permission) was applied in the same push.
+- **Ring 3 UI — DONE.** Checkout now collects the per-brand deposit (auto-filled rate × crates, editable/zeroable) and populates `crateDepositPaidByManufacturer`. The cart's manual deposit box is gone.
+- **Ring 6 write — DONE.** A paid deposit now posts a held `crate_deposit` wallet leg at the sale, carved out of the goods legs; the held figure is real (no longer always 0). v2 RPC caveat: the cloud `pos_record_sale_v2` still does not mint the credit/held legs, so this is correct only on the v1 (classic) sync path — must be added cloud-side before record_sale v2 is enabled.
+- **Parallel-edit break (NOT mine):** the receipt header is being refactored in parallel and is currently broken (`branchName` removed from `receipt_builder.dart` but still referenced) — left for that author to finish; it blocks a clean repo-wide build / `flutter run` until resolved.
+- **Design decision (resolved by user 2026-06-05):** the deposit CAN be owed — it doesn't have to be paid in cash upfront. So the deposit paid at checkout can be partial (or zero); the unpaid-but-expected portion is resolved at RETURN time (decision 6 part-deposit: the shortfall becomes a general wallet debt). A *held* (paid) deposit is excluded from spendable; an *owed* deposit becomes a normal debt at return. Checkout enforces deposit ≤ cash paid (you can't hold money you didn't receive); Wallet/Credit Sale collect no deposit (crates owed/tracked).
+- **Ring 5 — DONE** (confirm-modal always opens, reads order_crate_lines, money-track settlement: refund/forfeit/shortfall; tested at DAO level). **Forfeit income = reports-only** (user decision 2026-06-05): the `crate_deposit_forfeited` wallet debit is the only record; a report sums it as income. No new income row, no schema change.
+- **Ring 7 (deposits-held balancing report) — DONE.** Remaining gap: the return modal does NOT yet write an `activity_logs` entry per settlement (the pre-existing crate-return path didn't log either; deferred to keep this surgical — a small follow-up).
+- Open questions in the plan still standing: forfeit-income recording (proposed: report-derived from the forfeit wallet entries), reconciling pre-existing crate balances, and walk-in deposits.
+
+**Next session should:**
+- Add the held/credit wallet legs to the cloud `pos_record_sale_v2` RPC before enabling `feature.domain_rpcs_v2.record_sale` (today the held leg is correct on the v1/classic path only).
+- Optional follow-up: log an `activity_logs` entry per crate-return settlement (forfeit/refund/debt).
+- Verify on the emulator once the parallel receipt refactor (`branchName` → `storeAddress`/`businessName`) lands and the build is green again — end-to-end: sell with full/part/no deposit → confirm returns → check the wallet "held" line and the Crate Deposits report.
+- Push cloud 0093/0094 (coordinated with the 0092 funds-drop) and add the held/credit legs to the v2 `pos_record_sale_v2` RPC before enabling it.
+
+---
+
+## Session 96 — 2026-06-04 — Remove the Funds Register feature entirely (§23)
+
+**Built today (in progress):**
+- Removing the whole Funds Register feature at the user's request: the sidebar item and screens (Open Day, Close Day, Accounts), the Funds Register Report, the per-store money accounts (Cash Till / POS machine / Bank), the daily open/close cash reconciliation, and the money ledger that credited sales/top-ups and debited expenses/refunds.
+- The app is now **gateless**: POS no longer needs "Opening Cash" to start, and there is no open/close-the-day ceremony. Sales, refunds, and expenses can happen any time.
+- Money is now tracked as recorded activity instead of per-account balances. Money in (sales, wallet top-ups) is compared against money out (expenses, supplier payments, refunds) from the Orders / Expenses / Supplier / wallet records. Payment method (cash / transfer / card) is still recorded on each sale, expense and payment — only the receiving account is gone.
+- Tradeoff the user accepted: this also removes the end-of-day "count the till vs. expected" reconciliation (a theft/shrinkage check).
+
+**Branch:** `feat/remove-funds-register`.
+
+**Files touched:**
+- Docs: `reebaplus_master_plan.md`, `CLAUDE.md`, `BUILD_LOG.md`.
+- Deleted: `lib/features/funds/` (both screens), `test/funds/`, `test/sync/funds_restore_test.dart`, `test/expenses/expense_approval_funds_test.dart`, `test/orders/order_service_money_math_test.dart`.
+- Schema/data: `lib/core/database/app_database.dart` (v36 drop + deregister), `lib/core/database/daos.dart`, `lib/core/providers/stream_providers.dart`, `lib/core/services/supabase_sync_service.dart`, `lib/core/permissions/permission_dependencies.dart`, `supabase/migrations/0092_drop_funds_register.sql`.
+- Services: `lib/shared/services/order_service.dart`, `lib/shared/services/wallet_service.dart`, `lib/features/customers/data/services/customer_service.dart`.
+- UI: `main_layout.dart`, `app_drawer.dart`, `reports_hub_screen.dart`, `daily_reconciliation_detail_screen.dart`, `daily_reconciliation_list_screen.dart`, `pos_home_screen.dart`, `checkout_page.dart`, `customer_detail_screen.dart`, `add_expense_screen.dart`, `expenses_screen.dart`, `orders_screen.dart`, `staff_permissions_screen.dart`.
+- Tests fixed for signature changes: `wallet_logic_test.dart`, `pr_4c_test.dart`, `orders_dao_cancel_dispatch_test.dart`, `roles_v13_seed_test.dart`, `roles_v13_report.dart`, `migration_upgrade_test.dart`.
+
+**Database changes:**
+- Dropped the four funds tables (`funds_accounts`, `fund_days`, `fund_transactions`, `fund_day_closings`) and the `expenses.funds_account_id` column — locally via Drift schema bump **v35 → v36** and in the cloud via Supabase migration **`0092_drop_funds_register.sql`** (recreates `pos_record_expense` ignoring `p_funds_account_id`, and `pos_pull_snapshot` minus the funds tables). Removed the three `funds.*` permission keys from the local catalogue.
+
+**Master plan sections covered:**
+- §23 (replaced with a removal tombstone), plus the cross-references in §3, §14.2, §14.3, §17.3, §19.5, §19.7, §20.5, §21.9, §25.2, §25.3, §25.9, §26.4, §27, §30.3, §30.11.
+
+**Plan updates made during session:**
+- This is a **plan change**: Funds Register was removed from Phase 1 at user request (two decisions confirmed — gateless POS, and full data-layer removal incl. cloud drop). Master plan §23 is now a tombstone; Hard Rules #10 and #11 and coding-rule #5 are retired in place (kept numbered so existing references don't break); rule #8 lists Funds Register as a removed feature; rule #14 reworded.
+- The customer Add-Funds sheet now offers a plain **Cash / Bank Transfer** payment-method picker (matching master plan §18.2) instead of the funds-account picker.
+
+**Tested:**
+- `flutter analyze lib` → **No issues found.** `flutter analyze test` → only pre-existing `avoid_print` infos.
+- `flutter test` → **304 passing.** The only 6 failures are the **pre-existing `test/settings/` permission-catalogue failures from the parallel permissions work** (they hardcode `33` / "All 33 permissions" while the fresh-install catalogue is now 30). Not touched — flagged to that work's owner per instruction.
+- Sync guardrails (`test/sync/`) green; the v36 migration test (revert-then-reupgrade) green.
+
+**Known issues / left open:**
+- **Cloud `0092` pushed and applied** (`supabase db push` — only 0092 was pending; remote was current through 0091). Drops the four funds tables + `expenses.funds_account_id` and recreates the two RPCs.
+- **Heads-up for the parallel Supplier Accounts (§21) work:** applying `0092` printed `NOTICE: drop cascades to constraint supplier_payments_funds_account_id_fkey on table supplier_payments`. The cloud already has a `supplier_payments` table (from that parallel work — it is **not** in this branch's `lib/` or `supabase/migrations/`) carrying a `funds_account_id` FK to `funds_accounts`. Dropping `funds_accounts` CASCADE removed that **FK constraint** (the column itself remains, now dangling). I did **not** touch that column — it belongs to an in-flight feature I can't see in full. When the Supplier Accounts work rebases on this removal, it must drop `supplier_payments.funds_account_id` (and its local equivalent) since supplier payments no longer route to a funds account (§21.9).
+- Confirm two-device sync is clean (no 42P01 on the dropped tables) once a second device pulls.
+- **6 orphaned funds role-grants remain** in the seed (`role_permissions` rows for `funds.view`/`open_day`/`close_day` granted to CEO+Manager). They are **harmless**: the local Roles & Permissions screen renders from the catalogue (funds keys removed → no "Funds" category shows), there is no local FK, and the cloud `permissions` catalogue still carries the keys so the grants stay FK-valid cloud-side. The `role_permissions` count test still passes at 65. Clean these (and the cloud catalogue rows) in a follow-up if a fully tidy permissions table is wanted.
+- **Lost test coverage:** `order_service_money_math_test.dart` was deleted (its subject — funds credit/debit/reversal — no longer exists). Wallet-leg net-zero behaviour is still covered by `wallet_logic_test.dart` and `pr_4c_test.dart`.
+
+**On-device fix (2026-06-05) — v36 migration crashed with `SqliteException(787): FOREIGN KEY constraint failed` on `DROP TABLE funds_accounts`:**
+- **Cause:** the real app opens the DB with `PRAGMA foreign_keys = ON` (connection `setup:` in `_openConnection`), so FK enforcement is live during `onUpgrade`. `DROP TABLE` performs an implicit `DELETE FROM` that checks FKs. The crashing till had **also** run the parallel Supplier Accounts work, so its local DB carried a `supplier_payments.funds_account_id → funds_accounts` FK that **this branch's schema never defines** — exactly the cloud coupling the `0092` cascade surfaced, but local. The v36 block dropped the three known funds children + the expenses column, but couldn't see that stray referrer, so the `funds_accounts` drop orphaned a payment row and aborted.
+- **Fix:** wrap the v36 teardown in `PRAGMA foreign_keys = OFF` … drops … `PRAGMA foreign_keys = ON` (the canonical SQLite pattern for tearing down interrelated tables). `onUpgrade` is not in a transaction — the same reason `m.alterTable` can toggle FK — so the PRAGMA takes effect. The drop now succeeds regardless of residual/unknown referrers; SQLite does not recheck existing rows when FK is re-enabled, so the dangling `supplier_payments` column is left harmless for the parallel work to clean up. One file: `lib/core/database/app_database.dart` (v36 block only).
+- **Regression test:** added the group **"onUpgrade → v36 (Funds Register removal, FK-safe teardown)"** to `test/database/migration_upgrade_test.dart`. It recreates `funds_accounts` + a stray `supplier_payments` referrer with a real payment row and drives `onUpgrade(35 → current)` with FK enforcement **on at raw-open** (the shared `openAndInit()` helper omits the production `setup:`, so its `onUpgrade` runs FK-off and would pass even without the fix — this local open is what gives the test teeth). Verified it throws the exact `787` with the fix neutralised and is green with it in place. Full `test/database/` + `test/sync/` → **157 passing**; `flutter analyze lib` clean.
+
+**Next session should:**
+- Push cloud `0092` and verify two-device sync; run the app on the emulator to confirm POS opens with no opening-cash gate, checkout completes with no account picker, Add Funds / expenses / refunds work, and the drawer + reports show no Funds Register.
+
+---
+
+## Session 95 — 2026-06-04 — Edit Customer Details (§18)
+
+**Built today:**
+- Added a pen icon next to the customer name on the Customer Profile page. Tapping it opens an "Edit Customer Details" sheet.
+- The sheet is prefilled with everything captured when the customer was added — name, price tier, assigned store, address, Google Maps location, and phone — so the user edits in place instead of retyping.
+- The sheet can't be closed by tapping outside it or dragging it down, so edits aren't lost by accident. It closes only via the back arrow in the header (or the system back button) or the "Save Details" button.
+- The pen icon only shows for users who have the "Update customer details" permission (CEO/Manager by default), and the permission is re-checked again when Save is pressed. Walk-in customers never show the pen.
+- Un-hid the "Update customer details" toggle in CEO Settings → Roles & Permissions (it was hidden before because no edit screen existed). CEOs can now grant or revoke it per role and per staff member.
+
+**Files touched:**
+- lib/features/customers/widgets/edit_customer_sheet.dart (new)
+- lib/features/customers/screens/customer_detail_screen.dart
+- lib/features/customers/data/services/customer_service.dart
+- lib/core/database/daos.dart
+- lib/core/settings/role_permissions_detail_screen.dart
+
+**Database changes:**
+- None. The `customers.update` permission key and its CEO/Manager defaults already existed in the catalogue and cloud seed; this session just gives them a UI and enforcement.
+
+**Master plan sections covered:**
+- §18 — Customers (edit existing customer details)
+
+**Plan updates made during session:**
+- None.
+
+**Tested:**
+- `flutter analyze` clean on all touched files.
+- `flutter test test/sync/` — all 100 pass. The new update path writes through the DAO and enqueues the full customer row (same pattern as soft-delete), so the sync raw-write leak scanner stays green.
+
+**Known issues / left open:**
+- On-device pass pending (emulator workflow).
+
+**Next session should:**
+- Verify the edit flow on the emulator: open a customer, tap the pen, confirm prefill, change a field, Save, and confirm the profile updates and the change syncs to a second device.
 
 ---
 

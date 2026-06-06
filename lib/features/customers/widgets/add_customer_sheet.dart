@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
@@ -231,6 +232,9 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
                             controller: _phoneCtrl,
                             hintText: 'e.g. 08012345678',
                             keyboardType: TextInputType.phone,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                            ],
                             validator: (v) => (v == null || v.trim().isEmpty)
                                 ? 'This field is required'
                                 : null,

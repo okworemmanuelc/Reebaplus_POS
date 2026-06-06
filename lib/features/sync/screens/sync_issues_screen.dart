@@ -257,6 +257,10 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
     final businessId = ref.read(authProvider).currentUser?.businessId;
 
     return Scaffold(
+      // Single keyboard lift via the ListView's deviceBottomInset bottom padding
+      // below; disabling Scaffold resize avoids double-counting the keyboard
+      // (root-nav screen sees the real inset). Same as add_expense.
+      resizeToAvoidBottomInset: false,
       backgroundColor: t.scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text(

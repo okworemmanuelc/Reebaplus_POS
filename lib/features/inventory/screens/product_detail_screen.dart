@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:image_picker/image_picker.dart';
@@ -949,6 +950,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                 _lowStockController,
                 width: 70,
                 keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               ),
             ),
             _divider(context),
@@ -1026,7 +1028,10 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                 trailing: _textTrailing(
                   _emptyCrateValueController,
                   width: 90,
-                  keyboardType: TextInputType.number,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  inputFormatters: [CurrencyInputFormatter()],
                   prefix: activeCurrencySymbol,
                 ),
               ),
@@ -1433,6 +1438,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                         controller: _monthlyTargetController,
                         readOnly: !(_editMode && _isCeo),
                         keyboardType: TextInputType.number,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                         onChanged: (val) {
                           setState(() {
                             _monthlyTarget = int.tryParse(val) ?? 0;
@@ -1800,6 +1806,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     TextEditingController controller, {
     double width = 120,
     TextInputType? keyboardType,
+    List<TextInputFormatter>? inputFormatters,
     String? prefix,
   }) {
     return Container(
@@ -1817,6 +1824,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         controller: controller,
         readOnly: !_editMode,
         keyboardType: keyboardType,
+        inputFormatters: inputFormatters,
         textAlign: TextAlign.end,
         onChanged: (v) => setState(() {}),
         border: InputBorder.none,

@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
-import 'package:reebaplus_pos/shared/services/auth_service.dart';
+import 'package:reebaplus_pos/features/auth/auth_post_verify_route.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/features/auth/screens/create_pin_screen.dart';
@@ -197,71 +197,30 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
     // Mark this session as email-authenticated (triggers second OTP after PIN).
     await auth.saveAuthMethod('email');
 
-    // Look up the cloud account (if any) and the local user. On a fresh
-    // device with an existing cloud account, we let the user confirm the
-    // business before pulling data and seeding a local row.
-    final account = await auth.fetchSupabaseAccount();
-    // Scope the local-row lookup to the business this OTP just authenticated
-    // for — a multi-business email holds one row per business, and binding the
-    // wrong tenant's row is a cross-business leak (master plan §7.2a).
-    var localUser = await auth.getUserByEmail(
+    // Resolve where to go now the email is verified. Shared with the Google
+    // sign-in handler (auth_post_verify_route.dart) so the §7.2a account-scoping
+    // and shared-till PIN rules live in one place and can't drift between the
+    // two entry points. LoginRoute passes the OTP-authenticated user as
+    // presetUser so the PIN screen binds THIS identity, not the last device
+    // user (the wrong-user-PIN bug on a shared till).
+    final route = await resolvePostVerifyRoute(
+      auth,
       widget.email,
-      preferredBusinessId: account?.businessId,
+      isPinReset: widget.isPinReset,
     );
-
     if (!mounted) return;
 
-    if (account != null && localUser == null) {
-      Navigator.of(context).pushReplacement(
-        SmoothRoute(page: ExistingAccountScreen(email: widget.email, account: account)),
-      );
-      return;
-    }
-
-    if (account != null && localUser != null) {
-      // Returning device — sync silently and refresh the local row.
-      await auth.syncOnLogin(account.businessId);
-      await auth.upsertLocalUserFromProfile();
-      localUser = await auth.getUserByEmail(
-            widget.email,
-            preferredBusinessId: account.businessId,
-          ) ??
-          localUser;
-      if (!mounted) return;
-    }
-
-    // OTP verified — route based on whether the user exists locally.
-    if (localUser == null) {
-      // No cloud account and no local user (account == null was the only path
-      // left here) → brand-new email. Master plan §7.1: offer "No account
-      // found" with the two real entry points rather than silently dropping
-      // into sign-up. The email is now verified, so Create skips email/OTP.
-      Navigator.of(context).pushReplacement(
-        SmoothRoute(page: NoAccountFoundScreen(email: widget.email)),
-      );
-    } else {
-      final user = localUser;
-      // A row seeded from the cloud profile has the sentinel PIN — the user
-      // needs to set up a PIN on this device before they can sign in.
-      final isSetupRequired = user.pin == AuthService.setupRequiredPin;
-      final hasPin = user.pin.isNotEmpty && !isSetupRequired;
-      if (hasPin && !widget.isPinReset) {
-        // Existing user on a new device → enter their existing PIN. Pass the
-        // OTP-authenticated user as presetUser so the PIN screen binds THIS
-        // identity, not whoever was the last device user. Without this, on a
-        // shared till the PIN screen re-derived identity from getDeviceUserId()
-        // and showed the previous user's email + only accepted their PIN
-        // (the wrong-user-PIN bug). Master plan §7.2a.
-        Navigator.of(context).pushReplacement(
-          SmoothRoute(page: LoginScreen(presetUser: user)),
-        );
-      } else {
-        // New staff OR resetting PIN — create their PIN for the first time.
-        Navigator.of(context).pushReplacement(
-          SmoothRoute(page: CreatePinScreen(user: user)),
-        );
-      }
-    }
+    Navigator.of(context).pushReplacement(
+      SmoothRoute(
+        page: switch (route) {
+          ExistingAccountRoute(:final account) =>
+            ExistingAccountScreen(email: widget.email, account: account),
+          NoAccountFoundRoute() => NoAccountFoundScreen(email: widget.email),
+          LoginRoute(:final user) => LoginScreen(presetUser: user),
+          CreatePinRoute(:final user) => CreatePinScreen(user: user),
+        },
+      ),
+    );
   }
 
   Future<void> _resend() async {

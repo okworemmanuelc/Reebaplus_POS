@@ -28,7 +28,6 @@ const _categoryOrder = [
   'Suppliers',
   'Staff',
   'System',
-  'Funds',
 ];
 
 /// Per-staff permission overrides (master plan §10.2.1). Reached from a staff

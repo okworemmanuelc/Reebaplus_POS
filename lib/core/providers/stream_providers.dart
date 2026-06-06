@@ -14,6 +14,7 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/theme/theme_notifier.dart';
 import 'package:reebaplus_pos/core/utils/business_time.dart';
 import 'package:reebaplus_pos/shared/utils/role_display.dart';
+import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
 
 // ── Orders ──────────────────────────────────────────────────────────────────
 final allOrdersProvider = StreamProvider<List<OrderWithItems>>((ref) {
@@ -255,6 +256,22 @@ final userPermissionOverridesProvider =
       .watchForUser(userId);
 });
 
+/// Per-store role permission overrides for a specific (store, role) (§10.2.1
+/// Store scope). A row forces `permissionKey` on (`isGranted` true) or off
+/// (false) for everyone working in that store, overriding the role's business
+/// default; no row = inherit. Keyed by a (storeId, roleId) record so the
+/// resolver (active store + current role) and the role-page editor (picked
+/// store + edited role) can both watch exactly the slice they need.
+final storeRolePermissionsProvider = StreamProvider.family<
+    List<StoreRolePermissionData>, ({String storeId, String roleId})>(
+  (ref, key) {
+    return ref
+        .watch(databaseProvider)
+        .storeRolePermissionsDao
+        .watchFor(key.storeId, key.roleId);
+  },
+);
+
 /// Per-role tunable settings (max discount %, max expense approval kobo).
 final roleSettingsProvider =
     StreamProvider.family<List<RoleSettingData>, String>((ref, roleId) {
@@ -393,35 +410,121 @@ final currentUserMembershipStatusProvider = Provider<String?>((ref) {
   return memberships.first.status;
 });
 
+/// A counter that forces [currentBusinessSubscriptionProvider] to recompute even
+/// when no underlying row changed. A trial expires by the device clock with no
+/// realtime event, so bump this on app resume (AutoLockWrapper) — and on a
+/// low-frequency timer — to re-evaluate the deadline mid-session (§32).
+final subscriptionClockTickProvider = StateProvider<int>((ref) => 0);
+
+/// Effective subscription access for the bound business (master plan §32).
+///
+/// The cloud-authoritative state lives on the local `businesses` mirror; the
+/// admin console flips it and the `businesses` realtime channel re-emits via
+/// [currentBusinessProvider], so a switch to Inactive locks the running app
+/// live (mirrors the suspend live-lock). [SubscriptionAccess.grace] — no
+/// business bound, unknown status, or a null trial date — never locks. Drives
+/// the gate in main.dart's home() chain.
+final currentBusinessSubscriptionProvider = Provider<SubscriptionAccess>((ref) {
+  // Recompute when the clock tick advances (a trial crossing its deadline).
+  ref.watch(subscriptionClockTickProvider);
+  final business = ref.watch(currentBusinessProvider);
+  if (business == null) return SubscriptionAccess.grace;
+  return computeSubscriptionAccess(
+    business.subscriptionStatus,
+    business.trialEndsAt,
+    DateTime.now(),
+  );
+});
+
 /// The set of permission keys granted to the current user's role (e.g.
 /// `staff.invite`, `sales.make`). Empty until the role + its grants are
 /// resolved locally. Use [hasPermission] for a single-key check.
+/// Pure permission resolution (§10.2.1), most-specific wins:
+/// **User > Store > Business**. Start from the role's business grants, then
+/// apply the active store's overrides, then the user's overrides. CEO is all-on
+/// and skips both override layers. Each override is `(key, granted)`: granted
+/// true = force-grant, false = force-revoke; an absent key inherits the layer
+/// below. Extracted as a pure function so the layering order is unit-testable
+/// independently of Riverpod. NOTE: flat application only — no dependency-cascade
+/// resolution here (that's enforced at write time in the editors, per the
+/// project's "no runtime effective-resolution" rule).
+Set<String> resolveEffectivePermissions({
+  required bool isCeo,
+  required Iterable<String> roleGrants,
+  required Iterable<({String key, bool granted})> storeOverrides,
+  required Iterable<({String key, bool granted})> userOverrides,
+}) {
+  final effective = roleGrants.toSet();
+  if (isCeo) return effective;
+  for (final o in storeOverrides) {
+    if (o.granted) {
+      effective.add(o.key);
+    } else {
+      effective.remove(o.key);
+    }
+  }
+  for (final o in userOverrides) {
+    if (o.granted) {
+      effective.add(o.key);
+    } else {
+      effective.remove(o.key);
+    }
+  }
+  return effective;
+}
+
 final currentUserPermissionsProvider = Provider<Set<String>>((ref) {
   final role = ref.watch(currentUserRoleProvider);
   if (role == null) return const <String>{};
   final grants = ref.watch(rolePermissionsProvider(role.id)).valueOrNull;
   if (grants == null) return const <String>{};
-  final effective = grants.map((g) => g.permissionKey).toSet();
-  // The CEO is always all-on and is never overridable (§10.2.1) — skip overrides.
-  if (role.slug == 'ceo') return effective;
-  // Apply this staff member's per-user overrides on top of the role default:
-  // isGranted true = force-grant, false = force-revoke (§10.2.1). Absence of a
-  // row = inherit, so only the explicit overrides touch the set.
+  // The CEO is always all-on and is never overridable (§10.2.1) — skip both the
+  // store and user layers (and don't even watch their streams for the CEO).
+  if (role.slug == 'ceo') return grants.map((g) => g.permissionKey).toSet();
+
   final userId = ref.watch(authProvider).currentUser?.id;
-  if (userId != null) {
-    final overrides =
-        ref.watch(userPermissionOverridesProvider(userId)).valueOrNull;
-    if (overrides != null) {
-      for (final o in overrides) {
-        if (o.isGranted) {
-          effective.add(o.permissionKey);
-        } else {
-          effective.remove(o.permissionKey);
-        }
+
+  // Store layer (§10.2.1 Store scope): the ACTIVE store the user is working at —
+  // the selected/locked store (the §12.1 pick-your-store gate), falling back to
+  // their sole assigned store. null (e.g. a multi-store user who hasn't picked a
+  // store yet) → no store layer, so effective = business ± user.
+  String? activeStoreId = ref.watch(lockedStoreProvider).value;
+  if (activeStoreId == null && userId != null) {
+    final myStores = ref.watch(myUserStoresProvider(userId)).valueOrNull;
+    if (myStores != null && myStores.length == 1) {
+      activeStoreId = myStores.first.storeId;
+    }
+  }
+  final storeOverrides = <({String key, bool granted})>[];
+  if (activeStoreId != null) {
+    final rows = ref
+        .watch(storeRolePermissionsProvider(
+            (storeId: activeStoreId, roleId: role.id)))
+        .valueOrNull;
+    if (rows != null) {
+      for (final o in rows) {
+        storeOverrides.add((key: o.permissionKey, granted: o.isGranted));
       }
     }
   }
-  return effective;
+
+  // User layer (most-specific) — per-staff overrides win over store + business.
+  final userOverrides = <({String key, bool granted})>[];
+  if (userId != null) {
+    final rows = ref.watch(userPermissionOverridesProvider(userId)).valueOrNull;
+    if (rows != null) {
+      for (final o in rows) {
+        userOverrides.add((key: o.permissionKey, granted: o.isGranted));
+      }
+    }
+  }
+
+  return resolveEffectivePermissions(
+    isCeo: false,
+    roleGrants: grants.map((g) => g.permissionKey),
+    storeOverrides: storeOverrides,
+    userOverrides: userOverrides,
+  );
 });
 
 /// True if the current user's role grants [key]. Thin reader over
@@ -536,23 +639,22 @@ final managerCanViewAllStoresProvider = Provider<bool>((ref) {
   return false;
 });
 
-// ── Funds Register (master plan §23) ─────────────────────────────────────────
+// ── Business-day & reconciliation helpers ────────────────────────────────────
 
 /// Today's business-day calendar date (`YYYY-MM-DD`) in the business timezone.
-/// The single definition shared by the POS Open-Day gate, the Open Day flow,
-/// and the live balances view so they always agree on "today". Computed from
-/// the business timezone, never the raw device clock (R3 in the plan).
+/// The single shared definition so day-bucketed reads (sales / expense
+/// reconciliation) always agree on "today". Computed from the business
+/// timezone, never the raw device clock.
 final todaysBusinessDateProvider = FutureProvider<String>((ref) async {
   final db = ref.watch(databaseProvider);
   final bizId = db.currentBusinessId;
   final tz = bizId == null ? 'UTC' : await getBusinessTimezone(db, bizId);
   final now = DateTime.now();
-  // An always-on shared till must re-gate and re-bucket sales when the local
-  // day rolls over. A FutureProvider caches its value forever, so without this
-  // the till stays stuck on the day it was opened — POS keeps selling into the
-  // new calendar day without a fresh Open Day, and sales bucket under the old
-  // date (Hard Rule #11 / Funds plan R3). Self-invalidate just after the next
-  // business-day boundary so watchers recompute "today".
+  // An always-on shared till must re-bucket sales when the local day rolls
+  // over. A FutureProvider caches its value forever, so without this the till
+  // stays stuck on the day it was opened and sales bucket under the old date.
+  // Self-invalidate just after the next business-day boundary so watchers
+  // recompute "today".
   final timer = Timer(
     untilNextBusinessDay(now, tz) + const Duration(seconds: 2),
     ref.invalidateSelf,
@@ -576,80 +678,6 @@ final businessTimezoneProvider = FutureProvider<String>((ref) async {
 /// empty-crates section. Point-in-time pool balance, not a day-scoped movement.
 final emptyCratesByManufacturerProvider = StreamProvider<Map<String, int>>((ref) {
   return ref.watch(databaseProvider).inventoryDao.watchEmptyCratesByManufacturer();
-});
-
-/// Active funds accounts for a store (Cash Till first). Drives the Accounts
-/// list and the checkout receiving-account picker.
-final fundsAccountsForStoreProvider =
-    StreamProvider.family<List<FundsAccountData>, String>((ref, storeId) {
-  return ref
-      .watch(databaseProvider)
-      .fundsAccountsDao
-      .watchActiveAccountsForStore(storeId);
-});
-
-/// Whether the day is open for (store, businessDate) — THE POS gate.
-final isDayOpenProvider =
-    StreamProvider.family<bool, ({String storeId, String businessDate})>(
-        (ref, key) {
-  return ref
-      .watch(databaseProvider)
-      .fundDaysDao
-      .watchIsDayOpen(key.storeId, key.businessDate);
-});
-
-/// The day-header row for (store, businessDate) — null until opened. Lets the
-/// Funds Register pick its state (open form / balances+Close / closed summary).
-final fundDayProvider =
-    StreamProvider.family<FundDayData?, ({String storeId, String businessDate})>(
-        (ref, key) {
-  return ref
-      .watch(databaseProvider)
-      .fundDaysDao
-      .watchDay(key.storeId, key.businessDate);
-});
-
-/// The most recent still-open day for [storeId] strictly before businessDate,
-/// or null — drives the §23.8 unclosed-previous-day banner.
-final unclosedDayBeforeProvider =
-    StreamProvider.family<FundDayData?, ({String storeId, String businessDate})>(
-        (ref, key) {
-  return ref
-      .watch(databaseProvider)
-      .fundDaysDao
-      .watchUnclosedDayBefore(key.storeId, key.businessDate);
-});
-
-/// Live per-account expected balances (kobo) for (store, businessDate).
-final fundDayBalancesProvider = StreamProvider.family<Map<String, int>,
-    ({String storeId, String businessDate})>((ref, key) {
-  return ref
-      .watch(databaseProvider)
-      .fundTransactionsDao
-      .watchStoreBalancesForDay(key.storeId, key.businessDate);
-});
-
-/// Per-account Close Day reconciliation snapshots for (store, businessDate) —
-/// the cash-audit rows the Daily Reconciliation Report (§25.9) renders.
-final fundDayClosingsProvider = StreamProvider.family<List<FundDayClosingData>,
-    ({String storeId, String businessDate})>((ref, key) {
-  return ref
-      .watch(databaseProvider)
-      .fundDayClosingsDao
-      .watchForDay(key.storeId, key.businessDate);
-});
-
-/// Every Close Day reconciliation snapshot in the business, newest day first —
-/// the Funds Register Report (§25.2) filters these to the selected period.
-final allFundDayClosingsProvider =
-    StreamProvider<List<FundDayClosingData>>((ref) {
-  return ref.watch(databaseProvider).fundDayClosingsDao.watchAllForBusiness();
-});
-
-/// Every funds account in the business (incl. soft-deleted), for resolving the
-/// account name on each Funds Register Report row.
-final allFundsAccountsProvider = StreamProvider<List<FundsAccountData>>((ref) {
-  return ref.watch(databaseProvider).fundsAccountsDao.watchAllForBusiness();
 });
 
 // ── Daily Stock Count (master plan §17) ──────────────────────────────────────

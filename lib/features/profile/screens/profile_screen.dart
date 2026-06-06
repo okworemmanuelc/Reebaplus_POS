@@ -11,6 +11,7 @@ import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/shared/utils/role_display.dart';
 import 'package:reebaplus_pos/features/profile/widgets/edit_profile_sheet.dart';
 import 'package:reebaplus_pos/features/profile/widgets/profile_ui.dart';
+import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
@@ -89,6 +90,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final roleName = role?.name ?? 'Member';
     final roleColor = roleTagColor(role?.slug);
 
+    // §32: PRO (paid) / FREE TRIAL pill shown in the header when subscribed.
+    final subAccess = ref.watch(currentBusinessSubscriptionProvider);
+
     final appBar = AppBar(
       backgroundColor: _surface,
       elevation: 0,
@@ -131,6 +135,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             roleLabel: roleName,
             roleColor: roleColor,
             pills: [
+              if (subAccess.badgeLabel != null)
+                ProfilePill(
+                  icon: subAccess == SubscriptionAccess.active
+                      ? FontAwesomeIcons.crown
+                      : FontAwesomeIcons.solidClock,
+                  label: subAccess.badgeLabel!,
+                  color: subAccess == SubscriptionAccess.active
+                      ? Theme.of(context).colorScheme.primary
+                      : const Color(0xFFF59E0B),
+                ),
               ProfilePill(icon: FontAwesomeIcons.store, label: storeName),
             ],
           ),

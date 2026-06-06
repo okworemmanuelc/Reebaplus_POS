@@ -19,13 +19,15 @@ class ThermalReceiptService {
     double? cashReceived,
     double? walletBalance,
     bool showWalletInfo = false,
+    int cratesOwed = 0,
+    int cratesCredit = 0,
     DateTime? reprintDate,
     DateTime? reshareDate,
     String? riderName,
     String? deliveryRef,
     String? orderStatus,
     double? refundAmount,
-    String? branchName,
+    String? storeAddress,
     String? businessName,
   }) async {
     // Generate profile for 58mm printer
@@ -87,9 +89,9 @@ class ThermalReceiptService {
         ),
       );
     }
-    if (branchName != null && branchName.isNotEmpty) {
+    if (storeAddress != null && storeAddress.isNotEmpty) {
       bytes += generator.text(
-        'Branch: $branchName',
+        storeAddress,
         styles: const PosStyles(align: PosAlign.center),
       );
     }
@@ -226,6 +228,21 @@ class ThermalReceiptService {
         'Wallet Balance:',
         '${formatCurrency(walletBalance).replaceAll('₦', 'N')} $tag',
       );
+      // §13.4 — empty-crate standing is part of the customer's account.
+      if (cratesOwed > 0) {
+        bytes += _buildTwoColumnRow(
+          generator,
+          'Empty Crates Owed:',
+          '$cratesOwed',
+        );
+      }
+      if (cratesCredit > 0) {
+        bytes += _buildTwoColumnRow(
+          generator,
+          'Empty Crates Credit:',
+          '$cratesCredit',
+        );
+      }
     }
 
     bytes += generator.text('');

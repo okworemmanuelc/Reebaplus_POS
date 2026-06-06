@@ -1,10 +1,12 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import 'package:reebaplus_pos/core/data/business_types.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
@@ -89,9 +91,28 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
   bool get _canAddStock =>
       ref.read(currentUserPermissionsProvider).contains('stock.add');
 
+  /// §13.4 / rule #13 — empty-crate tracking is Bar / Beer Distributor only.
+  /// Gate the toggle (below) + force the saved value off for non-crate types.
+  bool get _isCrateBusiness {
+    final bid = ref.read(authProvider).currentUser?.businessId;
+    return isCrateBusiness(
+      ref
+          .read(localBusinessesProvider)
+          .valueOrNull
+          ?.where((b) => b.id == bid)
+          .map((b) => b.type)
+          .firstOrNull,
+    );
+  }
+
+  /// trackEmpties as actually saved — forced off for non-crate businesses.
+  bool get _effectiveTrackEmpties => _isCrateBusiness && _trackEmpties;
+
   /// Empty-crate value in kobo, or null when not tracking empties / left blank.
   int? get _emptyCrateValueKobo {
-    if (!(_trackEmpties && _unit.toLowerCase() == 'bottle')) return null;
+    if (!(_effectiveTrackEmpties && _unit.toLowerCase() == 'bottle')) {
+      return null;
+    }
     final raw = _emptyCrateValueCtrl.text.trim();
     if (raw.isEmpty) return null;
     return (parseCurrency(raw) * 100).round();
@@ -425,7 +446,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
         emptyCrateValueKobo: _emptyCrateValueKobo,
         categoryId: _selectedCategory?.id,
         unit: _unit,
-        trackEmpties: _trackEmpties,
+        trackEmpties: _effectiveTrackEmpties,
         allowFractionalSales: _allowFractionalSales,
         imagePath: _imagePath,
         lowStockThreshold: lowStock,
@@ -778,6 +799,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                       labelText: 'Low Stock Alert *',
                       hintText: '5',
                       keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     ),
                     const SizedBox(height: 16),
 
@@ -919,7 +941,9 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                     const SizedBox(height: 16),
 
                     // ── TRACK EMPTIES + CRATE VALUE (directly below Manufacturer) ─
-                    if (_unit.toLowerCase() == 'bottle') ...[
+                    // Crate-only (rule #13): hidden for non-Bar/Beer-distributor
+                    // businesses; _effectiveTrackEmpties forces it off on save.
+                    if (_unit.toLowerCase() == 'bottle' && _isCrateBusiness) ...[
                       CheckboxListTile(
                         value: _trackEmpties,
                         onChanged: (v) =>
@@ -1033,6 +1057,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                         labelText: 'QUANTITY TO ADD',
                         hintText: '0',
                         keyboardType: TextInputType.number,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       ),
                       const SizedBox(height: 4),
                       Text(

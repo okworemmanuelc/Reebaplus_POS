@@ -305,8 +305,7 @@ void main() {
       final orderId = (await db.select(db.orders).getSingle()).id;
       final originalSale = await db.select(db.stockTransactions).getSingle();
 
-      await db.ordersDao.markCancelled(orderId, 'changed mind', s.staffId,
-          businessDate: '2026-05-01');
+      await db.ordersDao.markCancelled(orderId, 'changed mind', s.staffId);
 
       final all = await db.select(db.stockTransactions).get();
       expect(

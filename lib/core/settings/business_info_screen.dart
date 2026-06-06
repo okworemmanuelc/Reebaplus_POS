@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/data/business_types.dart';
@@ -153,6 +154,9 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
                         TextField(
                           controller: _phoneController,
                           keyboardType: TextInputType.phone,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
                           decoration: AppDecorations.authInputDecoration(
                             context,
                             label: 'Phone number',

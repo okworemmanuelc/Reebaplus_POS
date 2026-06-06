@@ -1,0 +1,45 @@
+-- 0097_user_stores_replica_identity_full.sql
+--
+-- Live realtime DELETE propagation for `user_stores` — promoted to a hard-delete
+-- table by the §9.5 staff store-assignment editor (2026-06-05). Un-assigning a
+-- staff member from a store now hard-deletes the junction row via
+-- `enqueueDelete` (UserStoresDao.unassign), so `user_stores` joins
+-- `_hardDeleteReconcileTables`.
+--
+-- Problem (identical to 0064 / 0090)
+-- ---------------------------------
+-- Supabase Realtime authorizes every change against the row's RLS SELECT policy
+-- before broadcasting it. For a DELETE, the only columns available in the old
+-- record are those in the table's REPLICA IDENTITY. `user_stores` carries a
+-- business-scoped RLS policy:
+--
+--   user_stores -> user_stores_tenant_rw
+--                  (USING business_id IN (current_user_business_ids()))   -- 0050
+--
+-- but its replica identity is the Postgres DEFAULT = primary key (`id`) only.
+-- So `business_id` is absent from a delete's old record, the RLS check runs
+-- against a NULL business_id, fails, and Realtime DROPS the DELETE event before
+-- it reaches subscribed clients.
+--
+-- Net effect on a multi-device business: when a CEO removes a staff member from
+-- a store, the assignment row is hard-deleted locally + the tombstone enqueued,
+-- the cloud deletes the row, but the staff member's other devices never see the
+-- DELETE live — the store would only drop off on the next full snapshot
+-- reconcile (app restart / re-login). Adding a store (INSERT/UPSERT) propagates
+-- fine; removing one would not revert live.
+--
+-- Fix
+-- ---
+-- REPLICA IDENTITY FULL makes the old record carry every column, so Realtime can
+-- authorize the DELETE against the real `business_id` and deliver it live. Cost
+-- is a little extra WAL volume on UPDATE/DELETE — negligible for this small,
+-- low-write table. Idempotent: re-running is a no-op. The client already applies
+-- the realtime DELETE (`_deleteLocalRowById` case 'user_stores') and reconciles
+-- it on a full snapshot (`_hardDeleteReconcileTables`).
+
+ALTER TABLE public.user_stores REPLICA IDENTITY FULL;
+
+-- =============================================================================
+-- Verification (run by hand after deploy):
+--   SELECT relreplident FROM pg_class WHERE relname = 'user_stores';  -- 'f' = FULL
+-- =============================================================================

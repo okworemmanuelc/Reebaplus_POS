@@ -79,11 +79,10 @@ More keys can be added as features grow:
 - `stock.add`, `stock.view`, `stock.adjust`
 - `expenses.create`, `expenses.approve`
 - `reports.see_sales`, `reports.see_profit`, `reports.see_cost_prices`, `reports.see_expenses`
-- `customers.add`, `customers.update`, `customers.delete`, `customers.wallet.update`, `customers.wallet.totals.view`
+- `customers.add`, `customers.update`, `customers.delete`, `customers.wallet.update`, `customers.set_debt_limit`, `customers.wallet.withdraw`, `customers.wallet.totals.view`
 - `suppliers.manage`, `shipments.manage`
 - `staff.invite`, `staff.suspend`, `staff.change_role`
 - `activity_logs.view`, `settings.manage`, `settings.delete_business` (CEO-only, locked ON; §10.3)
-- `funds.open_day`, `funds.close_day`, `funds.view`
 
 ### 2.6 Live sync across devices
 
@@ -105,20 +104,20 @@ Each step unlocks the next. Build in this order:
 - [x] Point of Sale, guarded by role.
 - [x] Cart flow with discounts, role caps, fractional sales, per-cashier saved carts (§13). *(Session 20.)*
 - [~] Inventory and Product Details, role-aware — includes the destructive product price-column migration (buying / retailer / wholesaler). *(moved ahead of Checkout 2026-05-30: products + prices must be finished before the sales flow.)* *(screens + v18 tier-price migration built; tier-price-at-sale fix landed Session 35 — POS/Cart now charge the selected tier. Remaining: barcode field UI is Ring 3.)*
-- [~] Funds Register (new — multi-account model). Phase 1 done: accounts (Cash Till auto + CEO adds POS/Bank), Open Day, the POS Opening-Cash gate, and crediting the chosen account on each sale (§23). Phase 1 remaining: Close Day + expected-vs-actual reconciliation (§23.6/§23.8) — confirmed Phase 1 per decision C1 (2026-05-31). *(moved ahead of Checkout 2026-05-30: §14 Step-2 "pick receiving account" + hard rule #10 both require it. Phase 2 — Funds History (§23.2) — deferred.)*
-- [x] Checkout flow with wallet integration (§14). *(Two-step payment + receiving account with Funds Register, Session 26; "Add wallet info to receipt" checkbox added Session 30. §14 complete.)*
+- [REMOVED 2026-06-04] Funds Register — the entire feature (per-account balances, Open/Close Day, the POS opening-cash gate, and the money ledger) was removed at user request. POS is now gateless; money is tracked as recorded sales / expenses / refunds / supplier-payments rather than per-account balances. See §23.
+- [x] Checkout flow with wallet integration (§14). *(Two-step payment, Session 26; "Add wallet info to receipt" checkbox added Session 30. §14 complete. The receiving-account step was removed with Funds Register, 2026-06-04.)*
 - [~] Customers screen with wallet (§18). *(Re-pass Session 31: soft-delete CEO/Manager, Crates-tab gated to Bar/Beer, required phone, new customers.set_debt_limit permission. Still open: Edit flow (updateCustomer is a stub), GPS location capture, Add-Funds payment-method selector.)*
 - [~] Orders (Pending, Completed, Cancelled).
 - [~] Daily Stock Count.
-- [x] Expenses with pending approval flow. *(Full impl Session 59: approval flow, Funds Register debit-on-approve + reversal, searchable categories, per-business/per-store monthly budget, edit/delete, stats. Cloud 0073 pending deploy.)*
-- [ ] Supplier Accounts.
-- [ ] Track Shipments (new).
+- [x] Expenses with pending approval flow. *(Full impl Session 59: approval flow, searchable categories, per-business/per-store monthly budget, edit/delete, stats. Cloud 0073 pending deploy. The Funds Register debit-on-approve/reversal was removed with Funds Register, 2026-06-04.)*
+- [~] Supplier Accounts — per-supplier ledger (Invoice Total / Payment), real DB-backed (§21). *(Absorbs the former Track Shipments §22, removed 2026-06-06.)*
+- [REMOVED 2026-06-06] Track Shipments — folded into Supplier Accounts; see the §22 tombstone.
 - [~] Activity Logs.
 - [~] Reports.
 - [ ] Notifications.
 - [ ] **Delete Business & Account (CEO Danger Zone)** — the last Phase 1 item. CEO permanently deletes their account, their business, and every business-scoped row, via one atomic cloud RPC (deliberate hard-delete exception to hard rule #9). Two-gate confirmation (type business name + PIN), online-only, then full local wipe and logout. Full spec in §10.3. *(Build last — after Ring 3, once every feature it cascades over exists.)*
 
-> **Remaining work re-grouped 2026-05-31 into Rings 0-3 — see PIVOT_PLAN.md §8.0.** Ring order: Ring 0 (foundation invariants) — POS/Cart wholesaler-tier price fix, Activity Logs generic-schema migration + notifications.severity column + logActivity()/fireNotification() helpers, money-math consistency regression net. Ring 1 (close the money loop) — Funds Register Close Day + reconciliation (built first; the funds-debit primitive), Orders Cancel reversal, Orders Refund, Customers Add Funds via WalletService.topup, Expenses approval/stats/budget, Supplier Accounts + Track Shipments (shared payments+shipments model). Ring 2 (operational daily loop) — Customers Edit (real DAO write), Customers GPS capture, Daily Stock Count + Record Damages. Ring 3 (reporting & cross-cutting verification) — Funds History, Daily Reconciliation Report, Notifications verification pass, Activity Logs feature screen, Reports hub + missing reports, barcode scanner, Deliveries removal, loading-state fade-in sweep, sync regression test, end-to-end QA.
+> **Remaining work re-grouped 2026-05-31 into Rings 0-3 — see PIVOT_PLAN.md §8.0.** Ring order: Ring 0 (foundation invariants) — POS/Cart wholesaler-tier price fix, Activity Logs generic-schema migration + notifications.severity column + logActivity()/fireNotification() helpers, money-math consistency regression net. Ring 1 (close the money loop) — Orders Cancel reversal, Orders Refund, Customers Add Funds via WalletService.topup, Expenses approval/stats/budget, Supplier Accounts (per-supplier ledger; absorbs the former Track Shipments, removed 2026-06-06). Ring 2 (operational daily loop) — Customers Edit (real DAO write), Customers GPS capture, Daily Stock Count + Record Damages. Ring 3 (reporting & cross-cutting verification) — Daily Reconciliation Report, Notifications verification pass, Activity Logs feature screen, Reports hub + missing reports, barcode scanner, Deliveries removal, loading-state fade-in sweep, sync regression test, end-to-end QA.
 
 ---
 
@@ -318,9 +317,24 @@ Each code can be used by only one person, expires after 7 days, can be revoked a
 
 ### 9.5 Tap a staff card → full new screen
 
-- Avatar, name, role, status, assigned store (shows "Store 1" for now).
+- Avatar, name, role, status, and the staff member's assigned store(s).
 - Total sales made.
 - Last 5 logins.
+- **Assigned stores (multi-store, Phase 2, 2026-06-05, user).** The staff
+  member's store assignment is the set of stores they work at — held in
+  `user_stores`, the source of truth the Home store-lock already reads (a member
+  assigned to more than one store gets the limited store picker, §16.2). A new
+  staff member starts assigned to the one store chosen on their invite; the CEO
+  can then **add or remove stores** for that member from this screen. The
+  "Assigned store" detail row is tappable (for a permitted manager, on a
+  below-CEO member) and opens a multi-select of the business's stores; saving
+  applies the diff (`assign` upserts a `user_stores` row, un-assign hard-deletes
+  it — junction-row tombstone, same path as a revoked role permission). A member
+  must keep at least one store. Gated by **`staff.assign_stores`** (category
+  Staff, CEO-only by default, revocable per role — separate from
+  `staff.change_role` / `staff.suspend`). The CEO is never store-assigned (sees
+  every store), so this is not shown on a CEO target. Hidden, not greyed,
+  without the permission (hard rule #7).
 - Action buttons: Change role, Suspend (or Reactivate if suspended). Each is
   gated by its own permission — Change role = `staff.change_role`, Suspend =
   `staff.suspend` (both CEO + Manager by default, revocable per role; separate
@@ -366,7 +380,7 @@ Where the CEO tunes everything about the business. Menu screen with tappable sec
 ### 10.2 Roles & Permissions sub-page (per role)
 
 - All permissions shown as toggles, grouped by category (Sales, Products, Stock, Reports, Customers, etc.). Exception: `sales.discount.give` has no toggle — whether a role can discount is governed entirely by the **Max discount %** limit shown under the Sales section (0% = no discount), so a separate on/off toggle would be redundant. The key remains in the catalogue, unenforced.
-- **Stores** section sits first, at the very top. It groups the Manager-only **Allow viewing other stores** toggle (Default OFF; when ON, the Manager's Home store picker is unlocked — see §11.2 — so they can view other stores and request restock; stored per role in `role_settings` key `manager_view_all_stores`) together with the **Add, edit, and remove stores** permission toggle directly below it. The `Stores`-category permission group always renders here at the top, never at the bottom of the list.
+- **Stores** section sits first, at the very top. It groups the Manager-only **Allow viewing other stores** toggle (Default OFF; when ON, the Manager's Home store picker is unlocked — see §11.2 — so they can view other stores and request restock; stored per role in `role_settings` key `manager_view_all_stores`) together with the **Add, edit, and remove stores** permission toggle directly below it. The `Stores`-category permission group always renders here at the top, never at the bottom of the list. The "Add, edit, and remove stores" toggle is backed by the **`stores.manage`** permission key (category `Stores`, **CEO-only by default**, built 2026-06-05); it gates the sidebar Stores screen (add / edit / delete / stock transfer) and the Settings → Stores name/address editor — all of which previously rode on the generic `settings.manage`. Catalogue + CEO backfill: client schema v38 (`INSERT OR IGNORE`) and cloud `0095_add_stores_manage_permission.sql`.
 - The **Max discount %** limit (per role) sits directly under the Sales section near the top (Default: Manager 10%, Cashier 0%) — it is the discount control.
 - The **Max expense approval** amount (per role) sits directly under the Expenses section (Default: Manager amount set by CEO).
 - CEO role: all toggles locked ON (greyed out) so CEO's access can never be accidentally removed.
@@ -381,9 +395,9 @@ Permission settings are layered by scope, most-specific wins: **User > Store > B
 - **Store (default for users in that store).** A store can override a role's permissions just for that store; that becomes the default for every user working in that store. Reached from the role's page via a scope selector (Business / Store).
 - **User (override the rest) — BUILT (Phase 1).** The CEO opens an **individual staff member's profile** (Staff Management → tap a staff member → **Permission access → Customize**) and adjusts *that one person's* permission access. Each permission toggle shows the **effective** value (the role default, unless overridden); flipping it away from the role default stores an override, flipping it back to the role default clears the override (inherit). A user override wins over both the store and business defaults. This lives on the staff profile, **not** the per-role Roles & Permissions page (which is by role, not by person). The CEO is never overridable (always all-on). Per-user overrides do **not** depend on multi-store, so they ship in Phase 1; they cover the boolean permission toggles only (the per-role limits — discount %, expense approval — stay role-level). A **Restore defaults** button at the bottom of this screen clears *all* of the staff member's overrides at once and returns them to the role defaults; it asks for confirmation first (so a stray tap can't wipe them) and is disabled when the person has no overrides. (Not shown for the CEO, who has none.)
 
-**Phase 1 ships Business and User scopes fully.** The **Store** selector on the role page is a **visible placeholder, disabled and labelled "coming with multi-store"** — per-store overrides need the multi-store UI, which is Phase 2 (§2.2). Until then, effective permissions = the role default ± the staff member's own overrides.
+**All three scopes ship.** Business and User shipped in Phase 1; the **Store** scope shipped 2026-06-06 as an authorized Phase 2 multi-store slice. On the role page, selecting **Store** reveals a store picker and the role's permission toggles for the chosen store: each toggle shows the **effective** value for that store (the business default, unless the store overrides it), flipping it away from the business default stores a per-store override, flipping it back clears it (inherit). A **Restore store defaults** action clears every override for that store+role at once. The CEO is never overridable (always all-on).
 
-**Storage & resolution.** Per-user overrides live in the synced tenant table `user_permission_overrides` (`business_id`, `user_id`, `permission_key`, `is_granted`); presence of a row = an override, `is_granted` true/false = force-grant/force-revoke, absence = inherit the role default. It follows the §5 sync contract (in `_syncedTenantTables`, written through a DAO that enqueues, stream provider added). The runtime resolver (`currentUserPermissionsProvider`) merges role grants ± the user's overrides (CEO skips overrides). The future **Store** layer will add `store_role_permissions` (`business_id`, `store_id`, `role_id`, `permission_key`) following the same business→store fallback pattern as `expense_budgets` (§20.6), extending the resolver to the full **User > Store > Business** order.
+**Storage & resolution.** Per-user overrides live in the synced tenant table `user_permission_overrides` (`business_id`, `user_id`, `permission_key`, `is_granted`); presence of a row = an override, `is_granted` true/false = force-grant/force-revoke, absence = inherit the role default. It follows the §5 sync contract (in `_syncedTenantTables`, written through a DAO that enqueues, stream provider added). The **Store** layer is the synced tenant table `store_role_permissions` (`business_id`, `store_id`, `role_id`, `permission_key`, `is_granted`) — the same override shape as `user_permission_overrides` but keyed by store+role: a row forces a permission on/off for everyone working in that store, absence = inherit the business (role) default. It follows the same §5 contract (synced, DAO-enqueued, hard-delete junction like `role_permissions`, REPLICA IDENTITY FULL for live realtime deletes, stream provider). The runtime resolver (`currentUserPermissionsProvider`) merges the layers most-specific-wins, **User > Store > Business**: it starts from the role's business grants, applies the **active store's** overrides, then the user's overrides. The *active store* is the store the person is working at — the selected/locked store (the §12.1 pick-your-store gate), falling back to their sole assigned store; when neither resolves (e.g. a multi-store user who hasn't picked a store yet), no store layer applies and effective = business ± user. The CEO skips both the store and user override layers (always all-on).
 
 ### 10.3 Delete Business & Account (Danger Zone)
 
@@ -479,8 +493,8 @@ The screen where sales actually happen. POS and Cart are gated on `sales.make`: 
 
 ### 12.1 Header
 
-- Hamburger menu, app logo, business name with current store as subtitle (e.g., "Keffi"), search icon, store selector icon (CEO only), notification bell.
-- Store selector icon visible only to CEO — lets them switch which store they're selling from.
+- Hamburger menu, app logo, business name with current store as subtitle (e.g., "Keffi"), search icon, store selector icon, notification bell.
+- **Store selector (2026-06-05).** Shows whenever the user has **more than one store they may sell from** — every active store for a CEO / all-stores Manager, otherwise their **assigned** store(s) (§11.2/§28 confinement). Single-store users see no selector. On entering POS, a confined staff member assigned to more than one store is prompted once to pick which store they're working from (the §28 "pick your store" gate, in-app rather than a separate login screen, by design); the choice sticks for the session. The selected store drives the product grid, the price tier, and the order's `store_id` at checkout. (Was CEO-only until staff multi-store assignment shipped, §9.5.)
 
 ### 12.2 Filters row
 
@@ -594,6 +608,7 @@ Tap any cart item to open this modal. Contains:
 - For walk-in customers: this section is hidden entirely. Walk-ins must return crates equal to receipt at the same time as the sale.
 - Walk-in customers who have already paid the full deposit for empty crates can purchase goods without taking crates home.
 - Inventory of empty crates is still adjusted automatically when the order is confirmed (for walk-ins too).
+- **Recording a return from the customer profile (2026-06-06, user).** The customer profile's **Crates tab** has a **"+" card pinned at the top** ("Record crate return"). It opens a modal that takes a **manufacturer** + a **crate count**, records the empties into physical stock, and nets the customer's balance for that manufacturer (the same ledger the order-return modal uses): it **reduces an owed balance**, or — when the customer **owes nothing** for that brand — records a **crate credit** (the business now holds their crates), shown as "N crates credit". This top card **replaces** the earlier per-row "+" that only appeared on owed brands, so a return can be recorded for any manufacturer (including one with no debt). Gated on `sales.make` (hidden otherwise); the card shows even when the customer has no crate activity yet. This is the registered-customer, outside-an-order path; the mark-delivered crate-return modal (§19.5) still covers crates returned with a Pending order.
 
 ### 13.5 Save Cart and Recall
 
@@ -614,58 +629,52 @@ Opens when user taps Proceed to Checkout on Cart.
 
 - Order Summary (line items, subtotal, crate deposit if applicable, total).
 - Customer card.
-- Payment Method section (two-step — see 14.2).
+- Payment Method section (method chips + Credit Sale card — see 14.2).
 - Checkbox: "Add wallet info to receipt" (off by default).
 - Confirm Payment button.
 
-### 14.2 Payment Method — two-step
+### 14.2 Payment Method (redesigned 2026-06-05, user)
 
-Step 1 — Pick how customer is paying:
+Pick how the customer is paying. The Full-payment and Partial-payment cards were
+removed; the cashier now sees **two payment-method chips** plus the retained
+**Register as Credit Sale** card:
 
-- Full payment now (covers the total).
-- Partial payment now (rest becomes credit).
-- Credit sale (entire amount becomes credit). NOT available for walk-ins.
-- Pay from wallet (if registered customer has wallet credit).
+- **Cash / Transfer** — the customer pays now. The cashier enters the **amount
+  paid**, and the wallet absorbs the difference against the order total:
+  - **shortfall** (paid < total) → booked as **debt** on the customer's wallet;
+  - **excess** (paid > total) → **tops up** the wallet;
+  - **exact** → wallet unchanged.
+- **Pay from Wallet** — charge the **whole order total** to the wallet. No amount
+  is entered: available wallet credit is consumed and any **shortfall becomes
+  debt**. (Registered customers only; walk-ins have no wallet, hard rule 14.)
+- **Register as Credit Sale** — nothing is paid now; the **whole total becomes
+  debt**. Registered customers only.
 
-Step 2 — Pick the receiving account:
+The payment **method** (cash / transfer) is recorded on the order. There is no
+receiving-account step — the Funds Register was removed (§23).
 
-- Cash Till.
-- POS machine X (if multiple, pick which one).
-- Bank Account X (if multiple, pick which one).
+Walk-ins (no wallet) only ever see **Cash / Transfer** and must pay in full; they
+see neither the wallet chip nor the Credit Sale card.
 
-Selected account is credited in the Funds Register.
+**Debt-limit gate.** Any sale that would leave the wallet in **debt** is blocked
+**and the cashier is notified** when the resulting debt would breach the
+customer's **debt limit**, or when the customer has **no debt limit set**. A
+fully-paid or overpaid Cash / Transfer never adds debt, so it is never gated —
+even for a customer already in debt. The live preview shows the resulting wallet
+balance and a red over-limit warning before Confirm. (See §983: a sale over the
+debt limit is blocked.)
 
-> Full payment — apply existing wallet credit (2026-06-01, user). When a
-> **registered customer with positive wallet credit** chooses **Full payment**
-> and that credit is **less than the order total**, checkout first **applies the
-> wallet credit toward the order** and shows what is left to settle: it displays
-> the **balance after the wallet is emptied** (the wallet drops to **₦0**) and
-> the **outstanding** amount (total − wallet credit). The cashier then ticks an
-> **"Outstanding paid"** checkbox and picks the **receiving account** (Cash Till
-> / POS / Bank) for that outstanding cash, then confirms. The cash collected
-> **flows through the wallet** (it posts as a wallet credit too, §14.3), so the
-> wallet ends at exactly **₦0**. Walk-ins are unaffected (no wallet). If the
-> customer's wallet credit already **covers** the total, this is the existing
-> "Pay from wallet" path; if the customer has **no** credit, Full payment is
-> unchanged (collect the total into the chosen account).
->
-> Outstanding left unpaid → booked as debt (2026-06-03, user). The "Outstanding
-> paid" checkbox is **optional**. If the cashier **leaves it unticked**, the
-> outstanding is **not** collected as cash — instead it is **booked as debt on
-> the customer's wallet** (the wallet goes **negative** by the outstanding, i.e.
-> credit the customer now owes the business), and no receiving account is needed.
-> This is allowed **only while the resulting debt stays within the customer's
-> debt limit** (the same gate as a partial / credit sale) — if it would
-> breach the limit, or the customer has **no** debt limit set, checkout is
-> blocked and the cashier must tick the box and collect the cash. The debt syncs
-> live through the wallet like any credit sale.
->
-> Default selection (2026-06-03, user). On opening Checkout, a **registered
-> customer** defaults to **"Pay from Wallet"** (Full payment → wallet sub-option
-> pre-selected). **Walk-ins** stay on **Cash / Card** (no wallet, hard rule 14).
-> If the customer has **no wallet credit**, the existing "no credit available"
-> hint shows and the cashier switches to Cash / Card — the default is just the
-> starting selection, not a constraint.
+**Default selection.** Checkout opens on **Cash / Transfer** for everyone — in
+this model a wallet default would book a full-total debt on a thoughtless confirm
+when the customer has no credit, so the cashier opts into Pay from Wallet /
+Credit Sale.
+
+> Supersedes (2026-06-05): the prior Full / Partial cards, the "apply existing
+> wallet credit" + "Outstanding paid" sub-flow (2026-06-01 / 2026-06-03), and the
+> "default to Pay from Wallet" selection (2026-06-03). Partial payment is now just
+> a Cash / Transfer with an amount below the total; applying existing credit is
+> automatic (Pay from Wallet consumes credit first, then books the rest as debt).
+> The underlying two-leg wallet math (§14.3) is unchanged — net = paid − total.
 
 ### 14.3 Wallet flow
 
@@ -684,13 +693,10 @@ Wallet is the source of truth for registered customers' money movements.
 > netting to `paid − total` (0 when fully paid; negative = the customer owes).
 > This includes **fully-paid cash sales** (debit total, credit total, net 0) —
 > previously the code skipped the wallet entirely when nothing was owed, which
-> broke the "wallet history is the source of truth" rule (#4). The **Funds
-> Register is a separate ledger**: the cash/card/transfer still credits the
-> chosen account (§14.2) for the till count — the wallet's payment-credit leg
-> records the same money against the *customer's* account, not the business's,
-> so there is no double-count. **"Owes" = the wallet balance, and is shown only
-> when that balance is below zero.** Walk-ins are unaffected (no wallet; straight
-> to the account; cannot owe).
+> broke the "wallet history is the source of truth" rule (#4). **"Owes" = the
+> wallet balance, and is shown only when that balance is below zero.** Walk-ins
+> are unaffected (no wallet; cannot owe). *(The Funds Register that used to credit
+> the chosen account for the till count was removed 2026-06-04, §23.)*
 
 > Ledger ordering (2026-06-01, user). The customer's wallet history is
 > **newest-activity-first**. The order **charge (debit)** is the last step of a
@@ -716,7 +722,15 @@ Shown after Confirm Payment, and accessible from Orders > Completed tab.
 
 ### 15.1 Contents
 
-- Business name + branch (store name) + Sales Receipt.
+- Business name + **store address** + Sales Receipt. The address is the
+  **recording store's own address** (the `stores.location` of the sale's
+  `store_id`), resolved from the **order**, not the device's currently-selected
+  store — so a reprinted/reshared receipt always shows the branch that actually
+  made the sale. **Country is excluded** from the receipt address: the stored
+  `location` is the fused `"<street>, <city/state>, <country>"` string, so the
+  receipt shows everything **except the trailing country segment** (street +
+  city/state only). The old `Branch: <store name>` line is **removed** — the
+  address replaces it. (2026-06-05, user.)
 - Customer details (name, address, phone for registered customers).
 - Order number (short format: ORD-000002) + date + time.
 - Line items with quantities and prices.
@@ -933,8 +947,7 @@ Accessed from the Stock Take icon at the top of the Inventory screen.
 - Multiple counts per day allowed, each with timestamp.
 - Each saved count is recorded as a session (store, date, products counted, the per-product shortages/surpluses). The **Stock Count History** lists these per store, newest first — every saved count appears, including one with no changes.
 - Saving triggers the daily reconciliation report → goes to CEO and Manager in Reports tab.
-- A saved count for the store that day also **unlocks Close Day** for that store (§23.6 stock-count gate).
-- Reconciliation report includes: shortages/unaccounted items, items sold, best-selling item, best-performing staff, cash balance, empty crates balance (Bar/Beer Distributor only).
+- Reconciliation report includes: shortages/unaccounted items, items sold, best-selling item, best-performing staff, empty crates balance (Bar/Beer Distributor only). *(The cash-balance/Close-Day gate was removed with Funds Register, 2026-06-04, §23.)*
 
 ### 17.4 Access
 
@@ -965,9 +978,13 @@ Stock keeper, Manager, CEO. Cashier blocked.
 
 - Avatar, name, price tier badge, phone, address, "Since [Month Year]".
 - Edit button (CEO and Manager only).
-- Wallet Balance card: balance, debt limit, "Set Limit" button (CEO and Manager only), period filter, "Add Funds" button.
+- Wallet Balance card: balance, debt limit, "Set Limit" button (CEO and Manager only), period filter, "Add Funds" button, "Refund Cash" button (CEO and Manager only).
 - Add Funds flow: amount + payment method (Cash, Bank Transfer, POS card, Other) + optional note → updates wallet.
-- 3 tabs: Wallet, Orders, Crates (Crates tab hidden for non-Bar/Beer Distributor businesses).
+- **Refund flow (CEO and Manager only — 2026-06-05, user).** Pays the customer back money the business holds for them: a **positive spendable wallet credit** and/or a **held crate deposit** once the crates are back. The sheet shows what's available to refund — broken into "Wallet credit" and "Crate deposit held" — and the amount entered is drawn from the held deposit first, then from spendable credit, capped at the total available. **The destination depends on whether the wallet is in debt (user, 2026-06-05):**
+  - **Wallet in debt** → the held deposit is refunded **to the wallet** (a `crate_refund` spendable credit) so it **reduces what the customer owes** — **no cash option**. (Spendable credit is zero when in debt, so only the deposit is refundable.) e.g. a customer owing ₦30,100 with ₦12,000 held → after the refund they owe ₦18,100 and hold ₦0.
+  - **Wallet not in debt** → paid out as **cash** via the chosen method (Cash / Bank Transfer / POS card / Other).
+  In both cases it is **recorded** — a `crate_deposit_refunded` debit clears "held"; the cash path adds a `payment_transactions` refund row, the to-wallet path adds the `crate_refund` credit — plus an `activity_logs` entry and a notification to CEO + Manager (§26.4). Gated by the new `customers.wallet.withdraw` permission. This is the only in-app way to release a **completed** sale's held crate deposit (the mark-delivered crate-return modal only covers Pending orders, §13.4).
+- 3 tabs: Wallet, Orders, Crates (Crates tab hidden for non-Bar/Beer Distributor businesses). The Crates tab lists the customer's per-manufacturer crate balance (owed / clear / credit) and has a top "+" card to record crates brought back (§13.4).
 
 ### 18.4 Role access
 
@@ -979,6 +996,7 @@ Stock keeper, Manager, CEO. Cashier blocked.
 | Soft delete | Yes | Yes | No | — |
 | Set debt limit | Yes | Yes | No | — |
 | Add funds to wallet | Yes | Yes | Yes | — |
+| Refund cash from wallet | Yes | Yes | No | — |
 | View wallet totals (Total In / Total Out) | Yes | Yes | Hidden by default¹ | — |
 
 > ¹ **Wallet totals (2026-06-01, user):** the **Total In / Total Out** tiles on
@@ -1055,7 +1073,7 @@ Uses short Order ID (e.g., ORD-000001), not the long UUID. Shows customer name, 
 ### 19.5 Pending order flow
 
 > Decision (2026-06-01, user): **revenue is recognized at checkout**, not at
-> Confirm — the sale and its money (Funds credit + wallet legs, §14.3) are
+> Confirm — the sale and its money (the wallet legs, §14.3) are
 > already booked when the order is created. Moving a Pending order to Completed
 > is therefore a purely **operational** milestone, not a financial one. It
 > signals three things only: the order is now **closed to refund** (§19.7/§19.8),
@@ -1081,16 +1099,11 @@ Wrong items → cancel and create a new order. When an order is in Pending, the 
 
 - Reason required.
 - Full refund only. It **reverses every leg the sale posted**: inventory
-  restored, payment voided, the **wallet legs reversed** (so the customer's
-  wallet returns to its pre-sale balance, §14.3), and the **Funds Register
-  account debited** for the cash that goes back out.
-- **Dating (2026-06-01, user):** the reversal is dated to the **refund day —
-  the day/till the cash actually leaves — not the original sale day.** So a
-  refund only ever affects *today's* Funds Register and *today's* Close Day; a
-  day that was already closed is never reopened (§23.5, §23.8).
-- **Requires an open funds day** (like a sale requires Opening Cash, §23.8):
-  cash can't leave the till before the day is opened. Blocked with a clear
-  message otherwise.
+  restored, payment voided, and the **wallet legs reversed** (so the customer's
+  wallet returns to its pre-sale balance, §14.3). *(The Funds Register account
+  debit for the cash going back out was removed with Funds Register, 2026-06-04,
+  §23 — the refund is recorded as a cancelled order, not posted to an account
+  balance, and no open day is required.)*
 - The order moves to the Cancelled tab (which tracks Refunds Issued, §19.2).
 - Logs the refund (before/after) and fires the §26.4 'sale cancelled/refunded'
   notification.
@@ -1157,25 +1170,22 @@ Wrong items → cancel and create a new order. When an order is in Pending, the 
 - Approved: expense becomes normal, counted in budget.
 - Rejected: expense stays in list with "Rejected" badge and CEO's reason. Manager is notified.
 
-### 20.5 Cash and account rules
+### 20.5 Payment-method and approval rules
 
-- Cash payment automatically reduces Cash Till for the day.
-- Bank Transfer reduces selected Bank Account balance.
-- POS card reduces selected POS machine balance.
-- Other does not affect any tracked balance.
+- The expense records its **payment method** (Cash, Bank Transfer, POS card,
+  Other) for reporting; it no longer posts a debit to any account balance.
+- An expense counts toward spend (budget, Stats, Daily Reconciliation) only once
+  it is **approved**: an auto-approved expense (CEO, or a Manager within their
+  limit) counts at record time; a Pending expense (Manager over limit) counts
+  only when the CEO **approves** it; a **Rejected** expense never counts.
 
-> **When the money leaves the account (2026-06-02, user):** the Funds Register
-> debit is posted **when the expense becomes approved**, never while it is
-> Pending. An auto-approved expense (CEO, or a Manager within their limit) debits
-> immediately at record time; a Pending expense (Manager over limit) debits only
-> when the CEO **approves** it; a **Rejected** expense never touches funds. The
-> debit is dated to the **open funds day on which it posts** (today), mirroring
-> the refund-day rule (§19.7) — a closed day is never reopened. Like a refund,
-> recording/approving an expense that moves a tracked account (Cash / Bank / POS)
-> **requires an open funds day** (§23.8); blocked with a clear message otherwise.
-> "Other"-method expenses move no tracked account, so they do not need an open
-> day. The receipt photo (§20.2) is stored as a **local file path** in Phase 1;
-> cloud upload + cross-device sync of the image is deferred.
+> **Funds Register removed (2026-06-04, user).** Expenses used to post a Funds
+> Register debit on approval against the chosen account (Cash Till / Bank / POS),
+> dated to the open funds day, and recording a tracked-method expense required an
+> open day. The Funds Register was removed (§23): there is no account balance to
+> debit and **no open-day requirement** — an expense can be recorded and approved
+> any time. The receipt photo (§20.2) is stored as a **local file path** in Phase
+> 1; cloud upload + cross-device sync of the image is deferred.
 
 ### 20.6 Stats tab
 
@@ -1207,23 +1217,31 @@ Wrong items → cancel and create a new order. When an order is in Pending, the 
 
 ### 21.3 Supplier Details screen
 
-- Bank icon, supplier name.
-- Amount Paid + Amount Owed card. Calculation: Total Payments Made − Total Shipments Value. Negative means you owe the supplier. Positive means the supplier owes you.
-- Available Empty Crates section (Bar / Beer Distributor only).
+- Bank icon, supplier name, contact + bank details.
+- Balance card. Calculation: SUM(payments) − SUM(invoice totals), from the supplier ledger (§21.10). Negative (shown red) = you owe the supplier; positive = the supplier owes you (a credit balance).
+- "Record Activity" button → records either an Invoice Total or a Payment (§21.4 / §21.10).
 - Period selector chips.
-- Shipments section at the bottom (renamed from "Goods Received") with per-period totals and the shipment list.
+- Activity ledger at the bottom: invoice entries (red / negative) and payment entries (green / positive), each with its date and a note/receipt indicator, filtered by period.
+- Available Empty Crates section (Bar / Beer Distributor only) — real-data wiring deferred; the current mock display is not part of this ledger pass.
 
-### 21.4 Record Payment form
+### 21.4 Record Activity (Invoice Total or Payment)
 
-- Supplier Name (searchable dropdown).
+The "Record Activity" button on Supplier Details (and the floating button on the Payments tab) opens a chooser: **Invoice Total** or **Record Payment**.
+
+**Invoice Total** (goods received — a debit, shown red / negative):
+
+- Amount.
+- Date received (defaults to today).
+- Note (optional).
+
+**Record Payment** (money paid to the supplier — a credit):
+
 - Amount.
 - Payment Method: Cash, Bank Transfer, POS card, Other.
 - Date (defaults to today).
-- Reference Number (optional).
-- Notes (optional).
-- Save Payment button.
+- Proof of payment — **required**: attach a receipt (camera/photo or file) **OR** enter a reference / note (e.g. bank-transfer reference, cheque number, or a short written explanation when no physical receipt exists). One of the two is mandatory.
 
-No "Link to Delivery / Shipment" field — removed.
+No "Link to Delivery / Shipment" field.
 
 ### 21.5 Add Supplier form
 
@@ -1239,182 +1257,95 @@ CEO only by default. Toggleable to Manager in CEO Settings. Cashier and Stock ke
 
 ### 21.7 Edit / Delete
 
-- Both suppliers and payments are soft-delete only.
-- Payments edit within 24h by CEO.
-- Suppliers edit by CEO only.
+- Suppliers: soft-delete only; edit by CEO only.
+- Ledger entries (invoices & payments): append-only — never edited or hard-deleted. Corrections are made by **voiding** an entry (a compensating reversal), CEO only.
 
 ### 21.8 No Stats tab
 
 Supplier Accounts does not have a Stats tab.
 
-### 21.9 Account rules
+### 21.9 Payment-method rules
 
-Cash payment to supplier reduces Cash Till. Other payment methods reduce their respective accounts in Funds Register.
+A supplier payment records its **payment method** (Cash, Bank Transfer, POS card,
+Other) for reporting. *(It no longer reduces a Funds Register account balance —
+Funds Register was removed 2026-06-04, §23.)*
 
----
+### 21.10 Supplier ledger (semantics)
 
-## 22. Track Shipments
+Each supplier has an append-only ledger (mirrors the customer wallet, §14.3). Every
+Record Activity action appends one entry:
 
-New sidebar item. Manages incoming shipments from suppliers. Fully decoupled from the Inventory "Add Stock" flow — stock additions and shipment recording are separate actions. Auto-linking deferred to Phase 3.
+- **Invoice Total → debit (negative):** increases what we owe the supplier.
+- **Payment → credit (positive):** reduces what we owe.
 
-### 22.1 Layout
-
-- Header: Track Shipments / Manage incoming goods / notification bell.
-- 2 tabs: Pending, Received.
-- Search by supplier name.
-- Supplier filter.
-- Period selector (default Month).
-- "Add Shipment" floating button.
-
-### 22.2 Pending tab
-
-- List of pending shipments per supplier.
-- Each card: supplier name, expected value, expected date, days until expected.
-- Tap to view/edit or mark received.
-
-### 22.3 Received tab
-
-- List of received shipments.
-- Each card: supplier name, value, date received, thumbnail of invoice photo.
-- Tap to view full details.
-
-### 22.4 Add Shipment form (creates a Pending shipment)
-
-- Supplier (searchable dropdown).
-- Expected value.
-- Expected date.
-- Notes (optional).
-- Save.
-
-### 22.5 Mark Received modal
-
-- Upload invoice photo (camera or gallery).
-- Total value of goods on invoice.
-- Date received (auto-filled to today, editable).
-- Save → moves shipment from Pending to Received and subtracts value from Total Payments on the supplier's account.
-
-### 22.6 Role access
-
-CEO only by default. Toggleable to Manager in CEO Settings. Cashier and Stock keeper hidden.
+Balance = SUM(signed amounts). Negative = we owe the supplier (red); positive = the
+supplier owes us (credit). Entries are never edited or hard-deleted; corrections are
+made by voiding (a compensating reversal entry). Payment receipts are stored as a
+**local file path** (Phase 1, like expense receipts §20.2 — the image does not
+cross-sync between devices; the amount, method, date, and reference/note always sync).
 
 ---
 
-## 23. Funds Register
+## 22. Track Shipments — REMOVED (2026-06-06, user)
 
-New sidebar item. Replaces the old Cash Register concept. Tracks balances for every payment method (Cash, POS machines, bank accounts) per store. Each day is its own complete ledger — no running balances carried week-over-week.
+Track Shipments has been **folded into Supplier Accounts** (§21) and removed as a
+separate feature. Recording an **Invoice Total** on a supplier's ledger (§21.4 /
+§21.10) is now the single way goods-received value is captured — there is no separate
+Pending/Received shipment tracker and no separate "Mark Received" flow. This section is
+kept as a tombstone so cross-references read coherently.
 
-### 23.1 Daily model
+**What was removed:**
 
-Every day works like a fresh start. At the start of the day:
+- The Track Shipments sidebar item and its Pending / Received tabs.
+- The Add Shipment (expected value / expected date) and Mark Received modals.
+- The separate invoice-photo upload on Mark Received (a payment's receipt now lives on
+  the supplier-ledger payment entry, §21.4).
 
-- Cash till: opening cash counted and entered (whatever the manager left in the float).
-- POS machines: each starts at zero.
-- Bank accounts: each starts at zero.
+**What replaces it:** the supplier ledger's Invoice Total entries (§21.10). Expected /
+pending-shipment forecasting is not carried forward (out of scope; revisit in a later
+phase if needed).
 
-Through the day, sales, refunds, expenses, and supplier payments move money between these accounts based on the payment method used.
+---
 
-At the end of the day, all money in POS machines and bank accounts is withdrawn (transferred out manually by the manager — the app just notes it). Cash till closing is counted.
+## 23. Funds Register — REMOVED (2026-06-04, user)
 
-Next day begins fresh: POS and bank back at zero, cash at whatever the manager leaves as opening float.
+The entire Funds Register feature has been **removed** from the app at the user's
+request. This section is kept as a tombstone so the rest of the plan's
+cross-references (§14, §19.7, §20.5, §21.9, §25, §26.4, §27, §30.3) read
+coherently.
 
-### 23.2 Sidebar sections
+**What was removed:**
 
-- Open Day — set the day's starting balances per store.
-- Close Day — enter closing/withdrawn amounts per store.
-- Funds History — view past days' open/close records and reconciliations.
-- Accounts — CEO manages the list of accounts per store.
+- The Funds Register sidebar item and its screens (Open Day, Close Day, Accounts,
+  Funds History) and the Funds Register Report (§25.2).
+- The per-store money accounts — Cash Till, POS machines, Bank accounts — and
+  their per-account, reset-daily balances.
+- The daily **Open Day / Close Day** ceremony and the expected-vs-counted cash
+  reconciliation (variance flagging, mismatch notifications).
+- The append-only money ledger that credited sales/wallet top-ups and debited
+  expenses/refunds/supplier payments to an account.
+- The four database tables (`funds_accounts`, `fund_days`, `fund_transactions`,
+  `fund_day_closings`) and the `expenses.funds_account_id` column — dropped
+  locally (Drift schema v36) and in the cloud (Supabase migration 0092).
+- The three permissions `funds.view`, `funds.open_day`, `funds.close_day`.
 
-### 23.3 Per-store accounts
+**What replaces it:**
 
-- 1 Cash Till (auto-created, always exists).
-- 0+ POS machines (CEO adds, names them).
-- 0+ Bank accounts (CEO adds, names them).
+- **POS is gateless.** There is no opening-cash requirement and no day
+  open/close. Sales, refunds, and expenses can happen any time.
+- Money is tracked as **recorded activity**, not per-account balances. Money in
+  (sales, wallet top-ups) is compared against money out (expenses, supplier
+  payments, refunds) from the recorded transactions — the Orders list, Expenses,
+  Supplier Accounts, the customer wallet ledger (§14.3, still the source of truth
+  for registered customers), and the Daily Reconciliation Report (§25.2, minus
+  its cash-audit card).
+- Payment **method** (cash / transfer / card / POS / wallet) is still recorded on
+  each order/expense/payment — only the receiving **account** is gone.
 
-### 23.4 Opening Day
-
-Manager/CEO enters per store:
-
-- Cash Till: opening cash counted.
-- Every POS machine: opening balance (default 0, editable).
-- Every bank account: opening balance (default 0, editable).
-
-Until this is done, POS is blocked.
-
-### 23.5 During the day
-
-Every transaction moves the right account up or down:
-
-- Sales: account up (based on payment method).
-- Refunds: account down — **on the refund day** (the day the cash leaves), not
-  the day the original sale was made (§19.7). Each day's Funds Register only
-  ever reflects activity that happened on that day; a closed day is never
-  *automatically* reopened by a later refund. (An explicit, manual **Reopen
-  Day** — same day only — is a separate user action; see §23.6.)
-- Expenses: account down.
-- Supplier payments: account down.
-
-The app shows a live "expected balance" per account in the Funds Register screen.
-
-### 23.6 Closing Day
-
-Manager/CEO enters per store:
-
-- Cash Till: closing cash counted.
-- Every POS machine: amount withdrawn (since the machine should be cleared).
-- Every bank account: amount withdrawn / transferred out.
-
-App calculates expected vs actual for each account. Mismatches go into the reconciliation report along with the stock reconciliation.
-
-A **Close Day** button sits at the bottom of the Funds Register screen (visible to
-CEO/Manager once the day is open, gated by `funds.close_day`). Closing fires a
-§26.4 notification to **CEO and Manager** that the day is closed and the
-reconciliation is ready (the funds-mismatch alert to the CEO still fires
-separately when any account is off). The full Daily Reconciliation Report screen
-(§25.9) remains its planned Ring 3 item.
-
-**Stock-count gate (2026-06-02, user).** Closing the **current** business day is
-blocked until a Daily Stock Count (§17) has been saved for that store that day —
-the day's reconciliation needs the stock audit alongside the cash audit. The
-Close Day button still shows; tapping it without a saved count opens a "Take
-stock first" prompt with a shortcut to the Stock Count screen, and does **not**
-close the day. **Exception:** closing a *stale previous* day (the §23.8
-unclosed-previous-day path) is exempt — that day can no longer be counted, and
-blocking it would deadlock the next day from ever opening. So the gate applies
-only when the day being closed is today; back-dated closes proceed unchanged.
-
-**Reopen Day — same day only (2026-06-02, user).** A closed day can be **reopened
-while it is still the same business day** — e.g. the day was closed too early and
-sales need to resume. A **Reopen Day** button appears on the closed-day summary
-(gated by `funds.close_day` — whoever may close may reopen). Reopening clears that
-day's Close Day reconciliation snapshots, flips the header back to open, and lets
-POS resume; the ledger (each day's transactions) is untouched, so the expected
-balance is preserved and a later re-close records a fresh reconciliation. **Once
-the business day has rolled over, the day can no longer be reopened** — past days
-stay closed (the closed-day summary, and thus the button, only ever shows for
-today). This is the only way a closed day reopens; it is never automatic (§23.5).
-Logged to Activity Logs as `funds.reopen_day`.
-
-> Confirmed Phase 1 (2026-05-31, decision C1) — the earlier §3 build-order parenthetical that deferred this to Phase 2 is superseded; Funds History (§23.2) remains Phase 2.
-
-### 23.7 Role access
-
-- CEO: any store.
-- Manager: own store only.
-- Cashier & Stock keeper: hidden completely.
-
-### 23.8 Blocking rules
-
-- POS blocked until Open Day is done. Block message differs by role:
-  - Cashier: "Opening cash not set. Wait for Manager or CEO."
-  - Manager/CEO: "Opening cash not set. Tap to enter."
-- Refunds (§19.7) are blocked until Open Day is done too — a refund moves real
-  cash out of the till, so it needs an open day to land on (the void debit is
-  dated to today, §23.5).
-- New day blocked until previous day's Close Day is entered.
-- Notifications fire to CEO and Manager every morning the previous day remains unclosed.
-- Big banner shown when entering the screen if a previous day is unclosed.
-
-> Confirmed Phase 1 (2026-05-31, decision C1) — the earlier §3 build-order parenthetical that deferred this to Phase 2 is superseded; Funds History (§23.2) remains Phase 2.
+> Tradeoff the user accepted: removing Funds Register also removes the
+> expected-vs-counted cash-drawer reconciliation (a shrinkage/theft control).
+> Balancing is now done from the recorded money-in vs money-out totals rather
+> than an enforced daily till count.
 
 ---
 
@@ -1484,11 +1415,10 @@ CSV/PDF export with selectable time frame. Deferred to Phase 3.
 ### 25.2 Reports list
 
 - Sales Report — revenue, volume, top items, top staff, by period and store.
-- Daily Reconciliation Report — auto-generated when the stock take is saved. The day's roll-up: total SKUs/items sold, the Close Day cash audit (expected vs actual per account, **fund shortages / misappropriations flagged**), empty crates details (Bar/Beer Distributor only), outstanding customer debts, and expenses recorded that day — plus the stock audit, sales summary, best staff, and top item. Opens via the period drill-down cards (§25.9). Draws its debt/expense figures from the existing Customer Ledger / Expense Tracker subsystems (a summary, not a duplicate). Depends on Close Day + Daily Stock Count, so it is built after both (Ring 3).
+- Daily Reconciliation Report — auto-generated when the stock take is saved. The day's roll-up: total SKUs/items sold, empty crates details (Bar/Beer Distributor only), outstanding customer debts, and expenses recorded that day — plus the stock audit, sales summary, best staff, and top item. Opens via the period drill-down cards (§25.9). Draws its debt/expense figures from the existing Customer Ledger / Expense Tracker subsystems (a summary, not a duplicate). *(The Close Day cash-audit card was removed with Funds Register, 2026-06-04, §23.)* Depends on Daily Stock Count, so it is built after it (Ring 3).
 - Expense Tracker — by category, trend, vs budget.
 - Customer Ledger — wallet balances, top debtors, top credit balances.
 - Supplier Accounts Report — outstanding balances, total paid, total received per supplier.
-- Funds Register Report — daily open/close per account, mismatches flagged.
 - Profit Report — CEO only. Revenue, cost of goods, gross profit, margins.
 
 > Quick Sales in reports (2026-06-04, user). A Quick Sale (§12.3) is a real sale
@@ -1516,7 +1446,6 @@ Note: **expense** pending approvals are not on Reports — they live on the Expe
 | Expense Tracker | All | Own store | Hidden | Hidden |
 | Customer Ledger | All | Own store | Hidden | Hidden |
 | Supplier Accounts | All | If toggled | Hidden | Hidden |
-| Funds Register | All | Own store | Hidden | Hidden |
 | Profit Report | Yes | Hidden | Hidden | Hidden |
 
 > Reconciled 2026-06-02 (user) — the Reports hub is **CEO + Manager only**, per
@@ -1556,8 +1485,8 @@ CSV from day one. PDF in Phase 3.
 
 The Daily Reconciliation Report does not open straight to a single detail screen; it opens to a list of **tappable day cards**, driven by the global period filter (§25.5 / §30.11):
 
-- The selected period (Today / This Week / This Month / This Year / To Date) chooses the **span**; the report lists **one card per calendar day** inside that span that has a Close Day and/or a saved stock count. Tapping a card opens that day's full reconciliation.
-- Each day card shows a headline (items sold, net cash variance) and a **mismatch indicator** when that day had a Close Day shortage / unaccounted funds or a stock shortage.
+- The selected period (Today / This Week / This Month / This Year / To Date) chooses the **span**; the report lists **one card per calendar day** inside that span that has a saved stock count. Tapping a card opens that day's full reconciliation.
+- Each day card shows a headline (items sold) and a **mismatch indicator** when that day had a stock shortage. *(The Close Day cash-variance indicator was removed with Funds Register, 2026-06-04, §23.)*
 - Reconciliation is per **calendar day** (§30.11 keeps the daily reconciliation calendar-bound), so there is no week/month/year aggregation — the selected period only widens or narrows how many day cards are listed.
 - Role visibility follows §25.3 (Cashier & Stock keeper never see this report). CSV export per §25.6 / §25.7.
 
@@ -1565,7 +1494,7 @@ This per-day drill-down is specific to the Daily Reconciliation Report; the othe
 
 > Updated 2026-06-02 (user) — the original Day/Week/Month/Year period-card model predated the §30.11 unification; reconciled to **one card per calendar day within the selected period** (no span aggregation), matching §30.11's per-calendar-day rule. (§30.11 was reversed back to calendar periods on 2026-06-04 — the per-calendar-day rule here is unchanged.)
 
-> Confirmed Phase 1 (2026-06-01) — the Daily Reconciliation Report's content roll-up (SKUs sold, closing-day cash audit, empty crates, debts, expenses, fund-shortage flags) and the period-card drill-down were added on user request. The Sales Report card is **kept** (a distinct report). Build order unchanged: this stays a Ring 3 item, after Close Day (Ring 0/1) and Daily Stock Count (Ring 2) produce its data.
+> Confirmed Phase 1 (2026-06-01) — the Daily Reconciliation Report's content roll-up (SKUs sold, empty crates, debts, expenses) and the period-card drill-down were added on user request. The Sales Report card is **kept** (a distinct report). Build order unchanged: this stays a Ring 3 item, after Daily Stock Count (Ring 2) produces its data. *(The closing-day cash-audit / fund-shortage portion was removed with Funds Register, 2026-06-04, §23.)*
 
 ---
 
@@ -1589,11 +1518,8 @@ Opens the relevant screen (Inventory for low stock, Expense for pending approval
 
 **Money / Operations**
 
-- Opening cash not set (every morning for Manager/CEO if not done).
-- Previous day not closed (blocks new day, fires to Manager/CEO).
 - Expense pending approval (fires to CEO when Manager submits over-limit).
 - Expense approved/rejected (fires to Manager who submitted).
-- Funds Register mismatch flagged at close (fires to CEO).
 - Customer hit debt limit (fires to Cashier at sale time as a block).
 - Customer crate balance went negative (fires to Manager/CEO).
 
@@ -1636,8 +1562,7 @@ Opens the relevant screen (Inventory for low stock, Expense for pending approval
 
 **Suppliers**
 
-- Pending shipment overdue (expected date passed but not received — fires to Manager, CEO).
-- New shipment received (fires to Manager, CEO).
+- Supplier payment recorded (fires to Manager, CEO — a cash outflow). *(The former pending-shipment-overdue / new-shipment-received triggers were dropped with Track Shipments, §22, 2026-06-06.)*
 
 **System**
 
@@ -1695,10 +1620,8 @@ Hardcoded for now. Custom notification settings = Phase 2.
 
 *Visual group break.*
 
-- Funds Register
 - Expenses
 - Supplier Accounts
-- Track Shipments
 
 *Visual group break.*
 
@@ -1724,10 +1647,8 @@ Hardcoded for now. Custom notification settings = Phase 2.
 | Point of Sale | Yes | Yes | Yes | Hidden |
 | Orders | Yes | Yes | Items only | Items only |
 | Inventory | Yes | Yes | Yes (view only) | Yes |
-| Funds Register | Yes | Yes | Hidden | Hidden |
 | Expenses | Yes | Yes | Hidden | Hidden |
 | Supplier Accounts | Yes | If toggled | Hidden | Hidden |
-| Track Shipments | Yes | If toggled | Hidden | Hidden |
 | Customers | Yes | Yes | Yes | Hidden |
 | Staff Management | Yes | Limited | Hidden | Hidden |
 | Stores | Yes | Hidden | Hidden | Hidden |
@@ -1745,7 +1666,8 @@ Hardcoded for now. Custom notification settings = Phase 2.
 
 - Cart (now bottom nav only).
 - Warehouse (renamed to Stores).
-- Cash Register (replaced by Funds Register).
+- Cash Register (removed; the Funds Register that replaced it was also removed 2026-06-04, §23).
+- Funds Register (removed 2026-06-04, §23).
 - Deliveries (deferred to Phase 3).
 
 ---
@@ -1754,7 +1676,7 @@ Hardcoded for now. Custom notification settings = Phase 2.
 
 These are flagged for the second release. The architecture supports them — only the UI is held back for now.
 
-- Multi-store UI: store picker on login (if staff assigned to multiple stores), stock transfer screens, per-store filters in reports, ability for CEO to add/remove stores.
+- Multi-store UI: store picker on login (if staff assigned to multiple stores), stock transfer screens, per-store filters in reports, ability for CEO to add/remove stores. *(Partly shipped: stores list/management screen + `stores.manage`; receipt store-address; **staff multi-store assignment** — the CEO add/remove of a staff member's `user_stores` set from the staff profile, `staff.assign_stores`, §9.5, 2026-06-05; **multi-store active-store selection** — a confined staff member assigned to >1 store picks which store they sell from, in-app on POS entry (not a separate login screen, by design) and confined to their assigned stores, §12.1, 2026-06-05. Still deferred: stock transfer UI, per-store report filters.)*
 - CEO can create custom roles beyond the four defaults.
 - Custom permission groups.
 - Per-card Home visibility toggles per role.
@@ -1772,7 +1694,7 @@ These are flagged for the second release. The architecture supports them — onl
 Larger features deferred to the third release:
 
 - Deliveries + Rider management (full screens, rider status tracking, route assignment, etc.). For now, when a rider is assigned to a Pending order, the rider's name just appears on the receipt — no status tracking, no rider management screen.
-- Auto-linking stock additions to shipments (soft suggestion or auto-create when Stock keeper adds stock from a supplier with a recent Pending shipment).
+- Supplier shipment forecasting (the former Track Shipments pending/received tracker, §22, removed 2026-06-06) — re-introduce expected-shipment tracking and auto-linking stock additions to a supplier's recent invoices if a later phase needs it.
 - PDF export for reports.
 - Activity Logs export.
 - Logistics flow expansion.
@@ -1791,9 +1713,12 @@ Every screen, button, and action checks the user's permissions before rendering 
 
 For registered customers, every money movement flows through the wallet, including cash sales. Wallet history is the complete audit trail.
 
-### 30.3 Funds Register multi-account model
+### 30.3 Funds Register multi-account model — REMOVED (2026-06-04, user)
 
-Cash Till, POS machines, and Bank accounts each have their own balance, tracked per store, reset daily.
+The per-store, reset-daily account model (Cash Till, POS machines, Bank accounts)
+was removed with the Funds Register feature (§23). Money is now tracked as
+recorded activity (sales / expenses / supplier payments / refunds), not per-account
+balances.
 
 ### 30.4 Empty crates flow
 
@@ -1855,10 +1780,97 @@ Destructive or significant actions confirm before proceeding (suspend staff, cha
 >
 > **Scope / exceptions:** This governs Home, Reports, Orders, Expenses, Supplier
 > Accounts (Payments + Supplier detail), and the Customer wallet. It does **not**
-> change the calendar-day-bound machinery — Funds
-> Register Open/Close Day and the daily reconciliation (§23) stay
-> per-calendar-day. **Inventory History (§16.8)** keeps its own labels
+> change the calendar-day-bound machinery — the daily reconciliation (§25.9) stays
+> per-calendar-day. *(Funds Register Open/Close Day, formerly also per-calendar-day,
+> was removed 2026-06-04, §23.)* **Inventory History (§16.8)** keeps its own labels
 > ("Today / 7 Days / 30 Days / All"). The Phase-3 Deliveries screen is untouched.
+
+---
+
+## 32. Subscriptions and Access Gating
+
+*(Added 2026-06-06.)*
+
+Reebaplus is a paid app. Each business pays a monthly fee after a free trial. The
+business owner does **not** pay or manage the subscription inside the POS app — the
+**operator** (us) manages every business's subscription from a separate **web admin
+console** ("Admin Hub"). The POS app only **reads** the subscription state and
+**surfaces it** (a status screen and name badges). There is no in-app payment screen.
+
+> **Update 2026-06-06 — no in-app lockout.** The blocking paywall/lockout overlay
+> (and its "Thank you for subscribing" celebration) was **removed**. An expired
+> trial or Inactive status **no longer blocks the app**; the subscription state is
+> now purely informational — surfaced via the Settings → Subscription screen and the
+> PRO / FREE TRIAL name badges (§32.1). The console remains the source of truth and
+> the app still cannot write subscription state. The lockout wording below is kept
+> for history.
+
+**Plans and price**
+
+- **Local** — ₦5,000 / $5 per month (Nigerian businesses).
+- **International** — $10 per month (businesses outside Nigeria).
+- The plan is chosen by the operator in the console. It is shown on the
+  Settings → Subscription screen but does **not** itself change what the app does.
+
+**Status (set by the console)**
+
+- **Trial** — a free **30-day** trial. Every new business starts here automatically;
+  the trial runs 30 days from sign-up. While the trial is live, the app works fully.
+- **Active** — paid and current. The app works fully.
+- **Inactive** — not paid (trial ended without payment, or the operator switched it
+  off). ~~The app is **fully locked**.~~ The app is **no longer locked** (lockout
+  removed 2026-06-06); the status simply shows as Inactive / Trial ended in §32.1.
+
+**What the app does with it**
+
+- The subscription state lives on the business record in the cloud and is
+  **read-only inside the app** — only the console can change it. A cashier or even
+  the CEO cannot turn their own subscription back on from the app.
+- It is **informational only** (since 2026-06-06): the state is surfaced through the
+  **Settings → Subscription** screen and the **PRO / FREE TRIAL** name badges
+  (§32.1). The app is **never blocked** by it — every role keeps full access
+  regardless of a trial-expired / Inactive status.
+- Status still updates **live**: console changes arrive via the `businesses`
+  realtime channel and the regular pull, so the badge and status screen reflect a
+  switch to Active / Inactive within seconds — but nothing is locked or unlocked.
+- **Grace / unknown:** if the app does not yet know a business's subscription state
+  (brand-new install before its first sync, or an unknown value), no badge is shown.
+- **Offline:** the trial countdown shown in the badge / status screen uses the
+  device clock, so a FREE TRIAL badge can lapse with no internet; it is display-only.
+
+> **Removed 2026-06-06 (former behaviour, kept for history):** ~~when a trial
+> expired or status was Inactive, a blocking full-screen overlay (Subscribe / Sign
+> out) covered Home for every role, blocked all interaction and the back button,
+> self-healed by re-pulling the business row on mount / resume / every 15s, and on
+> the locked→Active transition swapped to an animated "Thank you for subscribing"
+> celebration before auto-dismissing.~~
+
+**Rollout:** when this ships, every business that already exists is given a fresh
+30-day trial so no current user is ever locked out on launch day.
+
+### 32.1 In-app subscription surface *(added 2026-06-06)*
+
+- **CEO Settings → Subscription** screen (CEO-only, under the existing
+  `settings.manage` gate). Read-only: it shows the plan (Local ₦5,000/$5,
+  International $10), the status (Free Trial / Active / Trial ended / Inactive),
+  and the trial-countdown or renewal date. It does **not** change subscription
+  state — the console remains the source of truth (the DB trigger blocks app
+  writes). It carries a "Subscribe / Renew" button.
+- **Name tag:** next to the current user's name — **PRO** when the business is
+  paid (Active), **FREE TRIAL** during the 30-day trial — shown in the side
+  drawer header and the user's Profile header. Nothing shown when trial-expired,
+  inactive, or unknown.
+
+### 32.2 In-app payment *(planned next phase — not yet built)*
+
+In-app renewal/payment will use **Paystack** (NGN ₦5,000 / USD $5 Local, USD $10
+International). Because the app is blocked from writing subscription state, the
+flow is: app takes payment → a **Supabase Edge Function verifies the transaction
+with Paystack's API** and sets `subscription_status='active'` +
+`current_period_end` via the **service_role** key → the realtime channel unlocks
+the app. When this lands, the "no in-app payment" note in §32 above is replaced
+by this flow. Until then, the "Subscribe / Renew" button shows a "renew from the
+console" placeholder.
 
 ---
 

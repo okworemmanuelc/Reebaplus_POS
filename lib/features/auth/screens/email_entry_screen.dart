@@ -12,7 +12,7 @@ import 'package:reebaplus_pos/features/auth/screens/otp_verification_screen.dart
 import 'package:reebaplus_pos/features/auth/screens/create_pin_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/no_account_found_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/existing_account_screen.dart';
-import 'package:reebaplus_pos/shared/services/auth_service.dart';
+import 'package:reebaplus_pos/features/auth/auth_post_verify_route.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_form_kit.dart';
 import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart' show UserData;
@@ -111,99 +111,36 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
     // Save auth method as google
     await auth.saveAuthMethod('google');
 
-    // Look up the cloud account (if any) and the local user. Mirrors the
-    // post-OTP flow: on a fresh device with an existing cloud account, the
-    // user confirms the business before we pull data and seed a local row.
-    final account = await auth.fetchSupabaseAccount();
-    var localUser = await auth.getUserByEmail(email);
+    // Resolve where to go now Google has verified the email. Shared with the
+    // email/OTP path (auth_post_verify_route.dart) so the §7.2a account-scoping
+    // and shared-till PIN rules stay in one place. Google sign-in is never a
+    // PIN reset, so isPinReset stays false. setCurrentUser persists the device
+    // user / last-email at real login, so we don't write them here.
+    final route = await resolvePostVerifyRoute(auth, email);
     if (!mounted) return;
-
-    if (account != null && localUser == null) {
-      setState(() => _loading = false);
-      Navigator.of(context).pushReplacement(
-        PageRouteBuilder(
-          pageBuilder: (_, __, ___) =>
-              ExistingAccountScreen(email: email, account: account),
-          transitionsBuilder: (_, animation, __, child) {
-            final curve = CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeInOutCubic,
-            );
-            return FadeTransition(opacity: curve, child: child);
-          },
-          transitionDuration: const Duration(milliseconds: 500),
-        ),
-      );
-      return;
-    }
-
-    if (account != null && localUser != null) {
-      // Returning device — sync silently and refresh the local row.
-      await auth.syncOnLogin(account.businessId);
-      await auth.upsertLocalUserFromProfile();
-      localUser = await auth.getUserByEmail(email) ?? localUser;
-      if (!mounted) return;
-    }
-
     setState(() => _loading = false);
 
-    if (localUser == null) {
-      // Brand-new email (no cloud account, no local user) — master plan §7.1:
-      // show "No account found" with the two real entry points. Google already
-      // verified the email, so Create skips the in-flow email/OTP steps.
-      Navigator.of(context).pushReplacement(
-        PageRouteBuilder(
-          pageBuilder: (_, __, ___) => NoAccountFoundScreen(email: email),
-          transitionsBuilder: (_, animation, __, child) {
-            final curve = CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeInOutCubic,
-            );
-            return FadeTransition(opacity: curve, child: child);
-          },
-          transitionDuration: const Duration(milliseconds: 500),
-        ),
-      );
-      return;
-    }
+    final Widget page = switch (route) {
+      ExistingAccountRoute(:final account) =>
+        ExistingAccountScreen(email: email, account: account),
+      NoAccountFoundRoute() => NoAccountFoundScreen(email: email),
+      LoginRoute(:final user) => LoginScreen(presetUser: user),
+      CreatePinRoute(:final user) => CreatePinScreen(user: user),
+    };
 
-    final user = localUser;
-    final isSetupRequired = user.pin == AuthService.setupRequiredPin;
-    final hasPin = user.pin.isNotEmpty && !isSetupRequired;
-
-    await auth.saveDeviceUserId(user.id);
-    await auth.saveLastLoggedInEmail(email);
-    if (!mounted) return;
-
-    if (hasPin) {
-      Navigator.of(context).pushReplacement(
-        PageRouteBuilder(
-          pageBuilder: (_, __, ___) => const LoginScreen(),
-          transitionsBuilder: (_, animation, __, child) {
-            final curve = CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeInOutCubic,
-            );
-            return FadeTransition(opacity: curve, child: child);
-          },
-          transitionDuration: const Duration(milliseconds: 500),
-        ),
-      );
-    } else {
-      Navigator.of(context).pushReplacement(
-        PageRouteBuilder(
-          pageBuilder: (_, __, ___) => CreatePinScreen(user: user),
-          transitionsBuilder: (_, animation, __, child) {
-            final curve = CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeInOutCubic,
-            );
-            return FadeTransition(opacity: curve, child: child);
-          },
-          transitionDuration: const Duration(milliseconds: 500),
-        ),
-      );
-    }
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => page,
+        transitionsBuilder: (_, animation, __, child) {
+          final curve = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeInOutCubic,
+          );
+          return FadeTransition(opacity: curve, child: child);
+        },
+        transitionDuration: const Duration(milliseconds: 500),
+      ),
+    );
   }
 
   Future<void> _submit() async {

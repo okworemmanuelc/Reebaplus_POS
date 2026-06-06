@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/data/business_types.dart';
+import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -13,7 +15,7 @@ import 'package:reebaplus_pos/features/dashboard/screens/daily_reconciliation_li
 import 'package:reebaplus_pos/features/dashboard/screens/stock_approvals_screen.dart';
 import 'package:reebaplus_pos/features/expenses/screens/expenses_screen.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/customer_ledger_screen.dart';
-import 'package:reebaplus_pos/features/funds/screens/funds_register_report_screen.dart';
+import 'package:reebaplus_pos/features/dashboard/screens/crate_deposits_report_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 
 class ReportsHubScreen extends ConsumerStatefulWidget {
@@ -36,6 +38,18 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
     // card is additionally guarded so it is hidden (never greyed — rule #7) for
     // any role lacking it. The CEO-only Profit card lands in the §25 Profit pass.
     final isMgrUp = isManagerOrAbove(ref);
+    // §13.4 / rule #13 — crate-deposit features only exist for Bar & Beer
+    // distributor businesses. Gate the Crate Deposits report card on the same
+    // business-type check the Inventory Empty Crates tab uses (case-insensitive).
+    final businessId = ref.read(authProvider).currentUser?.businessId;
+    final isCrate = isCrateBusiness(
+      ref
+          .watch(localBusinessesProvider)
+          .valueOrNull
+          ?.where((b) => b.id == businessId)
+          .map((b) => b.type)
+          .firstOrNull,
+    );
     // §16.6.1 — count of stock-keeper adjustments awaiting this viewer's
     // approval (a CEO sees all stores; a Manager only their assigned store(s)).
     final pendingApprovals =
@@ -173,20 +187,20 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
                   );
                 },
               ),
-            if (isMgrUp && hasPermission(ref, 'funds.view'))
+            // §13.4 Ring 7 — Crate Deposits balancing report. Crate-only
+            // (rule #13) + CEO/Manager (§25.3, role-gated like Customer Ledger).
+            if (isMgrUp && isCrate)
               _buildReportCard(
                 context,
-                title: 'Funds Register Report',
-                subtitle: 'Daily Open & Close',
-                icon: FontAwesomeIcons.vault,
+                title: 'Crate Deposits',
+                subtitle: 'Held · Refunded · Kept',
+                icon: FontAwesomeIcons.beerMugEmpty,
                 color: Colors.teal,
                 locked: false,
                 onTap: () {
                   Navigator.push(
                     context,
-                    slideDownRoute(
-                      FundsRegisterReportScreen(initialPeriod: _selectedPeriod),
-                    ),
+                    slideDownRoute(const CrateDepositsReportScreen()),
                   );
                 },
               ),

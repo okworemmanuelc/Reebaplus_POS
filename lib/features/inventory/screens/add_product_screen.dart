@@ -1,6 +1,8 @@
 import 'package:drift/drift.dart' as drift;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/core/data/business_types.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
@@ -368,9 +370,32 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     if (picked != null) setState(() => _expiryDate = picked);
   }
 
+  /// §13.4 / rule #13 — empty-crate tracking only exists for Bar / Beer
+  /// Distributor businesses. `Bottle` is the default unit and the toggle below
+  /// defaults on, so gate it on the business type — otherwise a non-crate
+  /// business would silently create trackEmpties products (which leak the crate
+  /// deposit UI into the cart/checkout and accrue crate-owed ledger rows).
+  bool get _isCrateBusiness {
+    final bid = ref.read(authProvider).currentUser?.businessId;
+    return isCrateBusiness(
+      ref
+          .read(localBusinessesProvider)
+          .valueOrNull
+          ?.where((b) => b.id == bid)
+          .map((b) => b.type)
+          .firstOrNull,
+    );
+  }
+
+  /// trackEmpties as actually saved — forced off for non-crate businesses even
+  /// if the (hidden) checkbox state is on.
+  bool get _effectiveTrackEmpties => _isCrateBusiness && _trackEmpties;
+
   /// Empty-crate value in kobo, or null when not tracking empties / left blank.
   int? get _emptyCrateValueKobo {
-    if (!(_trackEmpties && _unit.toLowerCase() == 'bottle')) return null;
+    if (!(_effectiveTrackEmpties && _unit.toLowerCase() == 'bottle')) {
+      return null;
+    }
     final raw = _emptyCrateValueCtrl.text.trim();
     if (raw.isEmpty) return null;
     return (parseCurrency(raw) * 100).round();
@@ -454,7 +479,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
           emptyCrateValueKobo: _emptyCrateValueKobo,
           categoryId: _selectedCategory?.id,
           unit: _unit,
-          trackEmpties: _trackEmpties,
+          trackEmpties: _effectiveTrackEmpties,
           allowFractionalSales: _allowFractionalSales,
           lowStockThreshold: lowStock,
           subtitle: _subtitleCtrl.text.trim().isEmpty
@@ -611,7 +636,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
           wholesalerPriceKobo: drift.Value(wholesaleKobo),
           buyingPriceKobo: drift.Value(buyingKobo),
           unit: drift.Value(_unit),
-          trackEmpties: drift.Value(_trackEmpties),
+          trackEmpties: drift.Value(_effectiveTrackEmpties),
           emptyCrateValueKobo: crateValueKobo == null
               ? const drift.Value.absent()
               : drift.Value(crateValueKobo),
@@ -671,6 +696,10 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     final canEditBuying = hasPermission(ref, 'products.edit_buying_price');
 
     return Scaffold(
+      // Single keyboard lift via the bottomNavigationBar's deviceBottomInset
+      // padding below; disabling Scaffold resize avoids double-counting the
+      // keyboard (root-nav screen sees the real inset). Same as add_expense.
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(
         leading: const BackButton(),
         title: Text(isExisting ? 'Add Stock' : 'Add Product'),
@@ -893,6 +922,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                   labelText: 'Low Stock Alert *',
                   hintText: '5',
                   keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 ),
                 const SizedBox(height: 16),
 
@@ -1015,7 +1045,9 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                 const SizedBox(height: 16),
 
                 // ── TRACK EMPTIES + CRATE VALUE (directly below Manufacturer) ─
-                if (_unit.toLowerCase() == 'bottle') ...[
+                // Crate-only (rule #13): hidden for non-Bar/Beer-distributor
+                // businesses; _effectiveTrackEmpties also forces it off on save.
+                if (_unit.toLowerCase() == 'bottle' && _isCrateBusiness) ...[
                   CheckboxListTile(
                     value: _trackEmpties,
                     onChanged: (v) =>
@@ -1103,6 +1135,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                     : 'INITIAL QUANTITY *',
                 hintText: '0',
                 keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               ),
               const SizedBox(height: 16),
               _sectionLabel('STORE *', subtext),

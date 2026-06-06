@@ -2,7 +2,7 @@
 //
 // Verifies schema v13 (PIVOT_PLAN step 2):
 //   * The seven new tables exist.
-//   * The global `permissions` table is seeded with 31 rows.
+//   * The global `permissions` table is seeded with 32 rows.
 //   * A fresh business gets 4 roles (with the right slugs), 65
 //     role_permissions (CEO 31 / Manager 25 / Cashier 6 / Stock keeper 3),
 //     8 role_settings (with the right default values), 1 user_businesses
@@ -69,16 +69,17 @@ void main() {
       final keys = perms.map((p) => p.key).toSet();
       expect(keys.contains('sales.make'), isTrue);
       expect(keys.contains('expenses.approve'), isTrue);
-      expect(keys.contains('funds.open_day'), isTrue);
       expect(keys.contains('settings.manage'), isTrue);
+      expect(keys.contains('stores.manage'), isTrue); // §10.2
+      expect(keys.contains('staff.assign_stores'), isTrue); // §9.5
 
       // Categories from master plan §10.2 grouping.
       final categories =
           perms.map((p) => p.category).toSet().toList()..sort();
       expect(
         categories,
-        equals(['Customers', 'Expenses', 'Funds', 'Products', 'Reports',
-                'Sales', 'Staff', 'Stock', 'Suppliers', 'System']),
+        equals(['Customers', 'Expenses', 'Products', 'Reports',
+                'Sales', 'Staff', 'Stock', 'Stores', 'Suppliers', 'System']),
       );
     });
 

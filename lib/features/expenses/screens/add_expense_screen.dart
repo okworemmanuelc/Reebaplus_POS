@@ -70,7 +70,6 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       _refCtrl.text = e.reference ?? '';
       _selectedDate = e.expenseDate;
       _paymentMethodCode = e.paymentMethod ?? 'cash';
-      _selectedAccountId = e.fundsAccountId;
       _existingReceiptPath = e.receiptPath;
       // Category name is resolved from the id by the parent and passed via the
       // controller below in didChangeDependencies-free way: seed from provider.
@@ -116,7 +115,6 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
   bool _categorySeeded = false;
 
   String _paymentMethodCode = 'cash';
-  String? _selectedAccountId;
   DateTime _selectedDate = DateTime.now();
 
   Color get _surface => Theme.of(context).colorScheme.surface;
@@ -157,22 +155,6 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     );
     if (date != null) {
       setState(() => _selectedDate = date);
-    }
-  }
-
-  List<FundsAccountData> _accountsForMethod(
-    List<FundsAccountData> all,
-    String method,
-  ) {
-    switch (method) {
-      case 'cash':
-        return all.where((a) => a.accountType == 'cash_till').toList();
-      case 'transfer':
-        return all.where((a) => a.accountType == 'bank').toList();
-      case 'pos':
-        return all.where((a) => a.accountType == 'pos_machine').toList();
-      default:
-        return const [];
     }
   }
 
@@ -236,52 +218,10 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     final storeId = currentUser.storeId;
 
     final method = _paymentMethodCode;
-    final tracked = method != 'other';
-
-    // Resolve the chosen Funds Register account for tracked methods.
-    String? accountId;
-    if (tracked) {
-      if (storeId == null) {
-        AppNotification.showError(context,
-            'No store assigned to you — choose "Other" or contact the CEO.');
-        return;
-      }
-      final all = ref.read(fundsAccountsForStoreProvider(storeId)).valueOrNull ??
-          const <FundsAccountData>[];
-      final matching = _accountsForMethod(all, method);
-      accountId = _selectedAccountId ??
-          (matching.isNotEmpty ? matching.first.id : null);
-      if (accountId == null) {
-        AppNotification.showError(
-          context,
-          'No ${_methodLabel(method)} account set up. Add one in Funds '
-          'Register, or choose "Other".',
-        );
-        return;
-      }
-    }
 
     // §20.4 — over a Manager's approval limit becomes Pending; CEO is unlimited.
     final limit = ref.read(currentUserMaxExpenseApprovalKoboProvider);
     final status = (limit != null && amtKobo > limit) ? 'pending' : 'approved';
-
-    // §20.5 — money moves now only when the expense auto-approves AND pays from
-    // a tracked account; that needs an open funds day to land on.
-    String? businessDate;
-    if (status == 'approved' && tracked) {
-      final bd = await ref.read(todaysBusinessDateProvider.future);
-      businessDate = bd;
-      final day = await db.fundDaysDao.getDay(storeId!, bd);
-      if (!mounted) return;
-      if (day == null || day.status != 'open') {
-        AppNotification.showError(
-          context,
-          'Open the day in Funds Register before recording a '
-          'cash / bank / POS expense.',
-        );
-        return;
-      }
-    }
 
     await db.expensesDao.addExpense(
       categoryName: category,
@@ -293,9 +233,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       recordedBy: currentUser.id,
       expenseDate: _selectedDate,
       receiptPath: _receiptFile?.path,
-      fundsAccountId: accountId,
       status: status,
-      businessDate: businessDate,
     );
 
     if (mounted) {
@@ -342,14 +280,6 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         .take(6)
         .toList()
       ..sort();
-
-    final tracked = _paymentMethodCode != 'other' && !_isEditing;
-    final storeId = ref.read(authProvider).currentUser?.storeId;
-    final accounts = (tracked && storeId != null)
-        ? (ref.watch(fundsAccountsForStoreProvider(storeId)).valueOrNull ??
-            const <FundsAccountData>[])
-        : const <FundsAccountData>[];
-    final methodAccounts = _accountsForMethod(accounts, _paymentMethodCode);
 
     return Scaffold(
       backgroundColor: _surface,
@@ -483,12 +413,14 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                     ),
                   SizedBox(height: context.getRSize(16)),
 
-                  // Amount (immutable on edit — funds ledger is append-only)
+                  // Amount (immutable on edit — corrected by delete + re-record)
                   AppInput(
                     labelText: 'Amount',
                     controller: _amountCtrl,
                     enabled: !_isEditing,
-                    keyboardType: TextInputType.number,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     inputFormatters: [CurrencyInputFormatter()],
                     hintText: '0.00',
                     validator: (v) => v == null || v.trim().isEmpty
@@ -511,8 +443,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                     ),
                   SizedBox(height: context.getRSize(16)),
 
-                  // Payment Method — immutable on edit (funds ledger is
-                  // append-only), so show it read-only there.
+                  // Payment Method — immutable on edit, so show it read-only there.
                   if (_isEditing)
                     AppInput(
                       labelText: 'Payment Method',
@@ -535,18 +466,11 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                         if (val != null) {
                           setState(() {
                             _paymentMethodCode = val;
-                            _selectedAccountId = null;
                           });
                         }
                       },
                     ),
                   SizedBox(height: context.getRSize(16)),
-
-                  // Receiving / paying account (tracked methods only)
-                  if (tracked) ...[
-                    _accountPicker(methodAccounts),
-                    SizedBox(height: context.getRSize(16)),
-                  ],
 
                   AppInput(
                     labelText: 'Date',
@@ -677,86 +601,6 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _accountPicker(List<FundsAccountData> methodAccounts) {
-    final selected = _selectedAccountId ??
-        (methodAccounts.isNotEmpty ? methodAccounts.first.id : null);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: EdgeInsets.only(bottom: context.getRSize(8)),
-          child: Text(
-            'Pay from account',
-            style: TextStyle(
-              fontSize: context.getRFontSize(12),
-              fontWeight: FontWeight.w700,
-              color: _subtext,
-            ),
-          ),
-        ),
-        if (methodAccounts.isEmpty)
-          Container(
-            padding: EdgeInsets.all(context.getRSize(14)),
-            decoration: BoxDecoration(
-              color: _cardBg,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _border),
-            ),
-            child: Text(
-              'No ${_methodLabel(_paymentMethodCode)} account yet. Add one in '
-              'Funds Register, or choose "Other".',
-              style: TextStyle(
-                fontSize: context.getRFontSize(12),
-                color: _subtext,
-              ),
-            ),
-          )
-        else
-          ...methodAccounts.map((a) {
-            final isSel = a.id == selected;
-            final label = a.accountType == 'cash_till' ? 'Cash Till' : a.name;
-            return GestureDetector(
-              onTap: () => setState(() => _selectedAccountId = a.id),
-              child: Container(
-                margin: EdgeInsets.only(bottom: context.getRSize(8)),
-                padding: EdgeInsets.all(context.getRSize(14)),
-                decoration: BoxDecoration(
-                  color: isSel
-                      ? danger.withValues(alpha: 0.08)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: isSel ? danger : _border,
-                    width: isSel ? 1.5 : 1,
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      isSel
-                          ? Icons.radio_button_checked
-                          : Icons.radio_button_unchecked,
-                      size: context.getRSize(20),
-                      color: isSel ? danger : _subtext,
-                    ),
-                    SizedBox(width: context.getRSize(12)),
-                    Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: context.getRFontSize(14),
-                        fontWeight: FontWeight.w600,
-                        color: _text,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }),
-      ],
     );
   }
 }

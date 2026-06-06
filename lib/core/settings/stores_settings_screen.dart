@@ -69,7 +69,7 @@ class _StoresSettingsScreenState extends ConsumerState<StoresSettingsScreen> {
     // Defense-in-depth (hard rule #6): the drawer hides the entry, but the
     // write site re-checks too. ref.read (not hasPermission/watch) — this is a
     // callback, matching staff_detail_screen.dart.
-    if (!ref.read(currentUserPermissionsProvider).contains('settings.manage')) {
+    if (!ref.read(currentUserPermissionsProvider).contains('stores.manage')) {
       AppNotification.showError(context, 'You don\'t have permission to do that.');
       return;
     }
@@ -108,9 +108,13 @@ class _StoresSettingsScreenState extends ConsumerState<StoresSettingsScreen> {
     final t = Theme.of(context);
     // Screen-level gate (hard rule #6) + keeps the permission chain warm for
     // the save-site guard.
-    final canManage = hasPermission(ref, 'settings.manage');
+    final canManage = hasPermission(ref, 'stores.manage');
 
     return Scaffold(
+      // Single keyboard lift via the ListView's deviceBottomInset bottom padding
+      // below; disabling Scaffold resize avoids double-counting the keyboard
+      // (root-nav screen sees the real inset). Same as add_expense.
+      resizeToAvoidBottomInset: false,
       backgroundColor: t.scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text(

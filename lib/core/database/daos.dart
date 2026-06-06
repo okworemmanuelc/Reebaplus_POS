@@ -3,6 +3,7 @@ import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:timezone/timezone.dart' as tz;
+import 'package:reebaplus_pos/core/data/business_types.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/business_scoped_dao.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
@@ -48,6 +49,50 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
     await into(suppliers).insert(row);
     await db.syncDao.enqueueUpsert('suppliers', row);
     return id;
+  }
+
+  /// One supplier, live (header for the Supplier Details screen). Null once
+  /// soft-deleted or out of business scope.
+  Stream<SupplierData?> watchSupplierById(String id) {
+    return (select(suppliers)
+          ..where((t) => t.id.equals(id) & whereBusiness(t) & t.isDeleted.not())
+          ..limit(1))
+        .watchSingleOrNull();
+  }
+
+  /// Edit a supplier (§21.5/§21.7 — CEO only, enforced at the UI). Writes the
+  /// passed columns, then full-row enqueues: a partial suppliers upsert would
+  /// omit the NOT NULL name/business_id (Postgres 23502).
+  Future<void> updateSupplier(SuppliersCompanion companion) async {
+    final id = companion.id.value;
+    final comp = companion.copyWith(lastUpdatedAt: Value(DateTime.now()));
+    await (update(suppliers)
+          ..where((t) => t.id.equals(id) & whereBusiness(t)))
+        .write(comp);
+    final row = await (select(suppliers)
+          ..where((t) => t.id.equals(id) & whereBusiness(t)))
+        .getSingleOrNull();
+    if (row != null) {
+      await db.syncDao.enqueueUpsert('suppliers', row.toCompanion(true));
+    }
+  }
+
+  /// Soft-delete a supplier (hard rule #9 — suppliers are soft-delete only,
+  /// §21.7). Routed through enqueueUpsert so the tombstone syncs.
+  Future<void> softDeleteSupplier(String id) async {
+    final now = DateTime.now();
+    await (update(suppliers)
+          ..where((t) => t.id.equals(id) & whereBusiness(t)))
+        .write(SuppliersCompanion(
+      isDeleted: const Value(true),
+      lastUpdatedAt: Value(now),
+    ));
+    final row = await (select(suppliers)
+          ..where((t) => t.id.equals(id) & whereBusiness(t)))
+        .getSingleOrNull();
+    if (row != null) {
+      await db.syncDao.enqueueUpsert('suppliers', row.toCompanion(true));
+    }
   }
 
   Future<String> insertProduct(ProductsCompanion companion) async {
@@ -954,8 +999,10 @@ class ManufacturerCrateStats {
     PaymentTransactions,
     WalletTransactions,
     CustomerWallets,
-    FundTransactions,
     Businesses,
+    // §13.4 — read the per-brand deposit rate (Manufacturers.depositAmountKobo)
+    // to snapshot it onto order_crate_lines at sale.
+    Manufacturers,
   ],
 )
 class OrdersDao extends DatabaseAccessor<AppDatabase>
@@ -1100,8 +1147,10 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     String? storeId,
     int walletDebitKobo = 0,
     String paymentMethod = 'cash',
-    String? fundsAccountId,
-    String? businessDate,
+    // §13.4 — deposit actually paid at checkout, per manufacturer/brand. Empty
+    // = no per-brand deposit captured yet (every crate brand is "no deposit" →
+    // crate-track). Ring 3 checkout UI populates this.
+    Map<String, int> crateDepositPaidByManufacturer = const {},
   }) {
     return db.transaction(() async {
       final orderId = order.id.present ? order.id.value : UuidV7.generate();
@@ -1148,6 +1197,87 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
             productId: productId,
             requested: qty,
           );
+        }
+      }
+
+      // §13.4 crate dispatch + per-brand deposit record. For a REGISTERED
+      // customer, record the crates taken at the sale, per brand:
+      //   • write an order_crate_lines row (crates taken + the deposit RATE
+      //     snapshot + the deposit PAID) — the Confirm Crate Returns modal reads
+      //     this to classify full / part / no-deposit and settle returns;
+      //   • for NO-DEPOSIT brands (depositPaid == 0, "crate-track") record an
+      //     'issued' ledger row + balance increment, so a later return nets to
+      //     zero — this is the fix for the "returned everything but still shows
+      //     owing" bug.
+      // Brands paid for in money ("money-track") DON'T get a crate balance
+      // (decision 5: paid money → settle in money; the held deposit lives in the
+      // wallet, added in Ring 6). Walk-ins hold no crate balance (rule #14).
+      // Runs on BOTH sync paths: these rows are client-authored (pos_record_sale_v2
+      // does not mint them). Crates per brand = bottle/track-empties line
+      // quantities grouped by manufacturer (unit.toLowerCase() == 'bottle' &&
+      // trackEmpties), the same basis the modal uses. The deposit rate is
+      // per-manufacturer (Manufacturers.depositAmountKobo) — the crate value is
+      // shared across a manufacturer's products.
+      // §13.4 / rule #13 — crate tracking is Bar / Beer Distributor only. Guard
+      // the whole block on the business type (the write-boundary enforcement):
+      // even if a non-crate business somehow has a bottle+trackEmpties product
+      // (the product-creation toggle now blocks new ones, but legacy/edge rows
+      // may exist), it must NOT accrue crate ledger / order_crate_lines rows.
+      final crateBiz = await (select(businesses)
+            ..where((b) => b.id.equals(requireBusinessId()))
+            ..limit(1))
+          .getSingleOrNull();
+      if (customerId != null && isCrateBusiness(crateBiz?.type)) {
+        final cratesByManufacturer = <String, int>{};
+        for (final item in items) {
+          final productId = item.productId.value;
+          if (productId == null) continue; // quick-sale line: no product
+          final product = await (select(products)
+                ..where((p) => p.id.equals(productId) & whereBusiness(p))
+                ..limit(1))
+              .getSingleOrNull();
+          if (product == null) continue;
+          final mfrId = product.manufacturerId;
+          if (mfrId == null) continue;
+          if (product.unit.toLowerCase() != 'bottle' || !product.trackEmpties) {
+            continue;
+          }
+          cratesByManufacturer.update(
+            mfrId,
+            (v) => v + item.quantity.value,
+            ifAbsent: () => item.quantity.value,
+          );
+        }
+        for (final entry in cratesByManufacturer.entries) {
+          final mfrId = entry.key;
+          final crates = entry.value;
+          final mfr = await (select(manufacturers)
+                ..where((m) => m.id.equals(mfrId) & whereBusiness(m))
+                ..limit(1))
+              .getSingleOrNull();
+          final rateKobo = mfr?.depositAmountKobo ?? 0;
+          final depositPaid = crateDepositPaidByManufacturer[mfrId] ?? 0;
+
+          await db.orderCrateLinesDao.insertLine(
+            OrderCrateLinesCompanion.insert(
+              businessId: requireBusinessId(),
+              orderId: orderId,
+              manufacturerId: mfrId,
+              cratesTaken: crates,
+              depositRateKobo: Value(rateKobo),
+              depositPaidKobo: Value(depositPaid),
+            ),
+          );
+
+          if (depositPaid == 0) {
+            await db.crateLedgerDao.recordCrateIssueByCustomer(
+              customerId: customerId,
+              manufacturerId: mfrId,
+              quantity: crates,
+              performedBy: staffId,
+              orderId: orderId,
+            );
+          }
         }
       }
 
@@ -1255,26 +1385,6 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         );
         await into(paymentTransactions).insert(payComp);
         await db.syncDao.enqueueUpsert('payment_transactions', payComp);
-
-        // Funds Register credit (§14.2 / §23.5 / hard rule #5): the cash /
-        // card / transfer portion that landed in the chosen account. Wallet
-        // and credit sales have amountPaidKobo == 0, so they never reach here.
-        // The "a paid sale MUST name an account" rule is enforced at the
-        // business entry (OrderService.addOrder); here we credit when one is
-        // provided. V1 path only — if `feature.domain_rpcs_v2.record_sale` is
-        // ever enabled, the server must mint this row inside pos_record_sale_v2
-        // instead (see Funds Register plan, risk R2).
-        if (fundsAccountId != null && businessDate != null) {
-          await db.fundTransactionsDao.creditSale(
-            fundsAccountId: fundsAccountId,
-            storeId: storeId ?? items.first.storeId.value,
-            businessDate: businessDate,
-            amountKobo: amountPaidKobo,
-            orderId: orderId,
-            paymentId: payId,
-            performedBy: staffId,
-          );
-        }
       }
 
       // §14.3 full wallet ledger (rule #4): every registered sale runs through
@@ -1282,14 +1392,11 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       // and a credit for the amount paid at checkout (money in) — so the net
       // (paid − total) is the customer's position: 0 when fully paid, negative
       // when they owe. This includes fully-paid cash sales (debit total +
-      // credit total, net 0), so the wallet history is complete. The Funds
-      // Register is a SEPARATE ledger: the cash/card/transfer still credited the
-      // chosen account above; this credit leg records the same money against the
-      // customer's wallet, not the business's account — so there is no
-      // double-count. The credit leg reuses the existing top-up reference types
-      // (by method, mirroring WalletService) so no CHECK widening is needed.
-      // Walk-ins (customerId == null) never touch the wallet (rule #14) — they
-      // pay in full straight to the account.
+      // credit total, net 0), so the wallet history is complete. The credit leg
+      // records the money against the customer's wallet. It reuses the existing
+      // top-up reference types (by method, mirroring WalletService) so no CHECK
+      // widening is needed. Walk-ins (customerId == null) never touch the wallet
+      // (rule #14).
       //
       // v1 path. The v2 RPC (pos_record_sale_v2) still mints only the debit via
       // p_wallet_amount_kobo — it MUST also mint this credit leg before
@@ -1317,16 +1424,37 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         // order charge (the last step of the sale) sits at the top. Net
         // (paid − total) is unchanged by the timestamp/ordering.
         final legTime = DateTime.now();
+
+        // §13.4 Ring 6 — held-deposit carve-out. The deposit actually paid at
+        // checkout (sum of the per-brand map) is refundable money the business
+        // HOLDS, not goods revenue and not spendable wallet credit. So it must
+        // not inflate the goods debt nor count as spendable. We carve it out of
+        // BOTH legs and re-post it as a single `crate_deposit` held credit:
+        //   • goods debit   = totalAmountKobo − depositHeld  (the real purchase)
+        //   • goods credit  = amountPaidKobo  − depositHeld  (cash toward goods)
+        //   • held credit   = depositHeld                    (deposit family)
+        // Net SPENDABLE = (paid − held) − (total − held) = paid − total — exactly
+        // the same position as before; only the deposit slice moves to the held
+        // bucket (excluded from the spendable balance, §5 read-side). When no
+        // deposit was paid this reduces to the original two legs unchanged.
+        // [totalAmountKobo] is the grand total (goods + deposit) the checkout
+        // passes, and the checkout guards paid ≥ deposit, so neither leg goes
+        // negative; clamp defensively anyway.
+        final depositHeldKobo = crateDepositPaidByManufacturer.values
+            .fold<int>(0, (s, v) => s + v)
+            .clamp(0, totalAmountKobo);
+        final goodsDebitKobo = totalAmountKobo - depositHeldKobo;
+        final goodsCreditKobo = (amountPaidKobo - depositHeldKobo).clamp(0, amountPaidKobo);
         //
-        // Leg 1 — debit the order total (the purchase leaves the wallet).
+        // Leg 1 — debit the goods total (the purchase leaves the wallet).
         final debitComp = WalletTransactionsCompanion.insert(
           id: Value(UuidV7.generate()),
           businessId: requireBusinessId(),
           walletId: wallet.id,
           customerId: cid,
           type: 'debit',
-          amountKobo: totalAmountKobo,
-          signedAmountKobo: -totalAmountKobo,
+          amountKobo: goodsDebitKobo,
+          signedAmountKobo: -goodsDebitKobo,
           referenceType: 'order_payment',
           orderId: Value(orderId),
           performedBy: Value(staffId),
@@ -1336,17 +1464,18 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         await into(walletTransactions).insert(debitComp);
         await db.syncDao.enqueueUpsert('wallet_transactions', debitComp);
 
-        // Leg 2 — credit the amount paid now (money into the wallet). Skipped
-        // when nothing is paid at checkout (pure credit / pay-from-wallet sale).
-        if (amountPaidKobo > 0) {
+        // Leg 2 — credit the cash applied to goods (money into the wallet).
+        // Skipped when nothing is left after the deposit carve-out (pure
+        // credit / pay-from-wallet sale, or the payment only covered deposit).
+        if (goodsCreditKobo > 0) {
           final creditComp = WalletTransactionsCompanion.insert(
             id: Value(UuidV7.generate()),
             businessId: requireBusinessId(),
             walletId: wallet.id,
             customerId: cid,
             type: 'credit',
-            amountKobo: amountPaidKobo,
-            signedAmountKobo: amountPaidKobo,
+            amountKobo: goodsCreditKobo,
+            signedAmountKobo: goodsCreditKobo,
             referenceType:
                 paymentMethod == 'cash' ? 'topup_cash' : 'topup_transfer',
             orderId: Value(orderId),
@@ -1356,6 +1485,28 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
           );
           await into(walletTransactions).insert(creditComp);
           await db.syncDao.enqueueUpsert('wallet_transactions', creditComp);
+        }
+
+        // Leg 3 — the held deposit (refundable, excluded from spendable). One
+        // `crate_deposit` credit for the whole sale's paid deposit; the per-brand
+        // split lives on order_crate_lines for the return modal to settle.
+        if (depositHeldKobo > 0) {
+          final heldComp = WalletTransactionsCompanion.insert(
+            id: Value(UuidV7.generate()),
+            businessId: requireBusinessId(),
+            walletId: wallet.id,
+            customerId: cid,
+            type: 'credit',
+            amountKobo: depositHeldKobo,
+            signedAmountKobo: depositHeldKobo,
+            referenceType: 'crate_deposit',
+            orderId: Value(orderId),
+            performedBy: Value(staffId),
+            createdAt: Value(legTime),
+            lastUpdatedAt: Value(legTime),
+          );
+          await into(walletTransactions).insert(heldComp);
+          await db.syncDao.enqueueUpsert('wallet_transactions', heldComp);
         }
       }
 
@@ -1380,6 +1531,132 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
+  /// §13.4 Ring 5 — settle a MONEY-TRACK brand's deposit when its crates come
+  /// back at Confirm. The brand's held deposit (`paidKobo`, posted as one
+  /// `crate_deposit` credit at the sale) is fully resolved here:
+  ///   • forfeit = deposit value of the crates KEPT ((taken − returned) × rate),
+  ///     capped at what was paid → a `crate_deposit_forfeited` debit. That debit
+  ///     is the ONLY record of the kept deposit; reports sum it as income
+  ///     (forfeit = reports-only, user decision 2026-06-05). No new income row.
+  ///   • refund = the rest of the held deposit the forfeit didn't consume →
+  ///     a `crate_deposit_refunded` debit (drops held) PLUS either a
+  ///     `crate_refund` spendable credit (refund to the wallet) or a
+  ///     payment_transactions 'refund' cash-out row (refund as cash).
+  ///   • shortfall = when the kept crates are worth MORE than a PARTIAL deposit,
+  ///     the extra is a normal spendable wallet debt (`adjustment` debit,
+  ///     decision 6).
+  /// After this the order's deposit-family rows net to 0 (held fully resolved).
+  /// Stock (addEmptyCrates) and the no-deposit crate-track path are the caller's
+  /// job — this only moves money. Walk-ins never reach here (no wallet).
+  Future<void> settleCrateDepositReturn({
+    required String customerId,
+    required String manufacturerId,
+    required String orderId,
+    required int takenCrates,
+    required int returnedCrates,
+    required int rateKobo,
+    required int paidKobo,
+    required bool refundAsCash,
+    required String performedBy,
+  }) async {
+    if (paidKobo <= 0) return; // not money-track — nothing to settle
+    final kept = takenCrates - returnedCrates < 0
+        ? 0
+        : (takenCrates - returnedCrates > takenCrates
+            ? takenCrates
+            : takenCrates - returnedCrates);
+    final forfeitValue = kept * rateKobo;
+    final forfeitRecorded = forfeitValue < paidKobo ? forfeitValue : paidKobo;
+    final refundAmount = paidKobo - forfeitRecorded;
+    final extraDebt = forfeitValue > paidKobo ? forfeitValue - paidKobo : 0;
+
+    await transaction(() async {
+      final wallet = await (select(customerWallets)
+            ..where((w) =>
+                whereBusiness(w) &
+                w.customerId.equals(customerId) &
+                w.isDeleted.not())
+            ..limit(1))
+          .getSingleOrNull();
+      if (wallet == null) {
+        throw StateError(
+            'Customer $customerId has no wallet — cannot settle crate deposit');
+      }
+      final legTime = DateTime.now();
+
+      Future<void> postWallet(int signed, String refType) async {
+        final comp = WalletTransactionsCompanion.insert(
+          id: Value(UuidV7.generate()),
+          businessId: requireBusinessId(),
+          walletId: wallet.id,
+          customerId: customerId,
+          type: signed >= 0 ? 'credit' : 'debit',
+          amountKobo: signed.abs(),
+          signedAmountKobo: signed,
+          referenceType: refType,
+          orderId: Value(orderId),
+          performedBy: Value(performedBy),
+          createdAt: Value(legTime),
+          lastUpdatedAt: Value(legTime),
+        );
+        await into(walletTransactions).insert(comp);
+        await db.syncDao.enqueueUpsert('wallet_transactions', comp);
+      }
+
+      // Forfeit: held → income (reports sum the forfeited rows).
+      if (forfeitRecorded > 0) {
+        await postWallet(-forfeitRecorded, 'crate_deposit_forfeited');
+      }
+
+      // Refund: drop the rest of the held deposit, then return it as wallet
+      // credit (spendable) or cash (payment row, no spendable change).
+      if (refundAmount > 0) {
+        final refundedTxnId = UuidV7.generate();
+        final refundedComp = WalletTransactionsCompanion.insert(
+          id: Value(refundedTxnId),
+          businessId: requireBusinessId(),
+          walletId: wallet.id,
+          customerId: customerId,
+          type: 'debit',
+          amountKobo: refundAmount,
+          signedAmountKobo: -refundAmount,
+          referenceType: 'crate_deposit_refunded',
+          orderId: Value(orderId),
+          performedBy: Value(performedBy),
+          createdAt: Value(legTime),
+          lastUpdatedAt: Value(legTime),
+        );
+        await into(walletTransactions).insert(refundedComp);
+        await db.syncDao.enqueueUpsert('wallet_transactions', refundedComp);
+
+        if (refundAsCash) {
+          // payment_transactions requires EXACTLY ONE reference (order/shipment/
+          // expense/wallet_txn/delivery). Link via the wallet txn — which itself
+          // carries the orderId — mirroring WalletService's topup payment row.
+          final payComp = PaymentTransactionsCompanion.insert(
+            id: Value(UuidV7.generate()),
+            businessId: requireBusinessId(),
+            amountKobo: refundAmount,
+            method: 'cash',
+            type: 'refund',
+            performedBy: Value(performedBy),
+            walletTxnId: Value(refundedTxnId),
+            lastUpdatedAt: Value(legTime),
+          );
+          await into(paymentTransactions).insert(payComp);
+          await db.syncDao.enqueueUpsert('payment_transactions', payComp);
+        } else {
+          await postWallet(refundAmount, 'crate_refund');
+        }
+      }
+
+      // Shortfall: kept crates worth more than a partial deposit → wallet debt.
+      if (extraDebt > 0) {
+        await postWallet(-extraDebt, 'adjustment');
+      }
+    });
+  }
+
   Future<void> markCompleted(String orderId, [String? staffId]) {
     return db.transaction(() async {
       final comp = OrdersCompanion(
@@ -1396,19 +1673,14 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
-  /// Cancel an order: append compensating stock rows + void payments.
-  /// Refund/cancel an order. [businessDate] is the **refund day** (`YYYY-MM-DD`,
-  /// the caller's "today") — the Funds Register reversal is dated to it, not to
-  /// the original sale day, so the cash-out lands on the day it actually leaves
-  /// the till (§19.7 / §23.5). The caller (the Pending-tab Refund flow) resolves
-  /// today's business date and gates on an open day before calling, the same way
-  /// the POS gate works for sales.
+  /// Cancel/refund an order (§19.7): append compensating stock rows, void the
+  /// payments, and reverse both wallet legs so the customer's wallet returns to
+  /// its pre-sale balance. Inventory is restored.
   Future<void> markCancelled(
     String orderId,
     String reason,
-    String staffId, {
-    required String businessDate,
-  }) async {
+    String staffId,
+  ) async {
     final flagValue =
         await db.systemConfigDao.get('feature.domain_rpcs_v2.cancel_order');
     final useDomainRpc = flagValue == 'true' || flagValue == '"true"';
@@ -1442,11 +1714,8 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
           'p_actor_id': staffId,
           'p_order_id': orderId,
           'p_cancellation_reason': reason,
-          // Refund day — the server must date the Funds void-debit to this, not
-          // the original sale day (mirror of the v1 path below). R2: until
-          // pos_cancel_order honours this AND mints the wallet payment-leg
-          // reversal, don't enable feature.domain_rpcs_v2.cancel_order.
-          'p_business_date': businessDate,
+          // R2: until pos_cancel_order mints the wallet payment-leg reversal,
+          // don't enable feature.domain_rpcs_v2.cancel_order.
         };
         await db.syncDao
             .enqueue('domain:pos_cancel_order', jsonEncode(payload));
@@ -1556,41 +1825,6 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         );
         await into(walletTransactions).insert(compReverse);
         await db.syncDao.enqueueUpsert('wallet_transactions', compReverse);
-      }
-
-      // Funds Register reversal (§19.7 / §23.5 / hard rule #5): the sale
-      // credited the cash/card/transfer portion to a funds account (createOrder
-      // → creditSale). The refund takes that money back out — but it leaves
-      // TODAY's till, so the compensating 'void' debit is dated to [businessDate]
-      // (the refund day), NOT the original sale day. That keeps each day's Close
-      // Day matching the physical cash that moved that day, and never reopens a
-      // day that was already closed. fund_transactions is append-only, so we
-      // append the debit rather than mutate the credit. The original credit's
-      // account + amount are preserved; only the date moves to today.
-      final saleCredits = await (select(fundTransactions)
-            ..where((t) =>
-                whereBusiness(t) &
-                t.orderId.equals(orderId) &
-                t.referenceType.equals('sale')))
-          .get();
-      for (final credit in saleCredits) {
-        final voidComp = FundTransactionsCompanion.insert(
-          id: Value(UuidV7.generate()),
-          businessId: requireBusinessId(),
-          fundsAccountId: credit.fundsAccountId,
-          storeId: credit.storeId,
-          businessDate: businessDate,
-          type: 'debit',
-          amountKobo: credit.amountKobo,
-          signedAmountKobo: -credit.amountKobo,
-          referenceType: 'void',
-          orderId: Value(orderId),
-          paymentId: Value(credit.paymentId),
-          performedBy: Value(staffId),
-          lastUpdatedAt: Value(now),
-        );
-        await into(fundTransactions).insert(voidComp);
-        await db.syncDao.enqueueUpsert('fund_transactions', voidComp);
       }
     });
   }
@@ -2076,6 +2310,37 @@ class CustomersDao extends DatabaseAccessor<AppDatabase>
     }
   }
 
+  /// §18 — edit an existing customer's editable details (the same fields the
+  /// Add Customer sheet captures). Writes locally then enqueues the FULL row
+  /// (via [_enqueueFullCustomer]) so the cloud gets a complete upsert — a
+  /// partial customers upsert omits the NOT NULL name → 23502 and would never
+  /// sync. Same enqueue pattern as [softDeleteCustomer].
+  Future<void> updateCustomerDetails({
+    required String customerId,
+    required String name,
+    String? phone,
+    String? address,
+    String? googleMapsLocation,
+    required String priceTier,
+    String? storeId,
+  }) async {
+    await (update(customers)..where(
+          (t) => t.id.equals(customerId) & whereBusiness(t),
+        ))
+        .write(
+          CustomersCompanion(
+            name: Value(name),
+            phone: Value(phone),
+            address: Value(address),
+            googleMapsLocation: Value(googleMapsLocation),
+            priceTier: Value(priceTier),
+            storeId: Value(storeId),
+            lastUpdatedAt: Value(DateTime.now()),
+          ),
+        );
+    await _enqueueFullCustomer(customerId);
+  }
+
   // ── Wallet forwarders ────────────────────────────────────────────────────
   // Balance is derived from the WalletTransactions ledger; the legacy
   // `customers.wallet_balance_kobo` cache column is gone. These forwarders
@@ -2096,6 +2361,18 @@ class CustomersDao extends DatabaseAccessor<AppDatabase>
 
   Stream<Map<String, int>> watchAllWalletBalancesKobo() {
     return attachedDatabase.walletTransactionsDao.watchAllBalancesKobo();
+  }
+
+  /// §13.4 — crate deposit held for the customer (separate from the spendable
+  /// balance above). Shown as its own line on the wallet screen.
+  Stream<int> watchWalletDepositsHeldKobo(String customerId) {
+    return attachedDatabase.walletTransactionsDao
+        .watchDepositsHeldKobo(customerId);
+  }
+
+  Future<int> getWalletDepositsHeldKobo(String customerId) {
+    return attachedDatabase.walletTransactionsDao
+        .getDepositsHeldKobo(customerId);
   }
 
   Future<void> updateWalletLimit(String customerId, int limitKobo) {
@@ -2196,7 +2473,6 @@ class LastShipmentInfo {
     ExpenseCategories,
     ActivityLogs,
     PaymentTransactions,
-    FundTransactions,
   ],
 )
 class ExpensesDao extends DatabaseAccessor<AppDatabase>
@@ -2259,11 +2535,9 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
 
   /// Records an expense (§20). [status] is computed by the caller from the
   /// recorder's role + approval limit: 'approved' for a CEO or a Manager within
-  /// their limit; 'pending' for a Manager over limit. When the expense is
-  /// auto-approved AND pays from a tracked account (Cash / Bank / POS), the
-  /// Funds Register debit is posted immediately, dated to [businessDate] (the
-  /// open funds day, §20.5) — the caller must have confirmed the day is open. A
-  /// 'pending' expense moves no money until the CEO approves it (approveExpense).
+  /// their limit; 'pending' for a Manager over limit. The payment method is
+  /// recorded for reporting; an expense no longer posts to any account balance
+  /// (Funds Register removed, §23).
   Future<void> addExpense({
     required String categoryName,
     required int amountKobo,
@@ -2274,9 +2548,7 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
     required String recordedBy,
     DateTime? expenseDate,
     String? receiptPath,
-    String? fundsAccountId,
     String status = 'approved',
-    String? businessDate,
   }) async {
     final flagValue = await db.systemConfigDao
         .get('feature.domain_rpcs_v2.record_expense');
@@ -2287,10 +2559,6 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
     // method). Keeps analytics/reporting parity across the flag flip.
     final effectivePaymentMethod = paymentMethod ?? 'other';
     final pickedDate = expenseDate ?? DateTime.now();
-    // Only a tracked-account method moves money; 'other' never does (§20.5).
-    final tracked = effectivePaymentMethod != 'other' &&
-        fundsAccountId != null &&
-        storeId != null;
 
     await transaction(() async {
       final categoryId = await resolveCategoryId(categoryName);
@@ -2311,7 +2579,6 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
         recordedBy: Value(recordedBy),
         reference: Value(reference),
         storeId: Value(storeId),
-        fundsAccountId: Value(fundsAccountId),
         status: Value(status),
         expenseDate: Value(pickedDate),
         receiptPath: Value(receiptPath),
@@ -2364,7 +2631,6 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
           'p_expense_date': pickedDate.toIso8601String(),
           if (reference != null) 'p_reference': reference,
           if (storeId != null) 'p_store_id': storeId,
-          if (fundsAccountId != null) 'p_funds_account_id': fundsAccountId,
           if (receiptPath != null) 'p_receipt_path': receiptPath,
         };
         await db.syncDao
@@ -2375,23 +2641,7 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
         await db.syncDao.enqueueUpsert('payment_transactions', payComp);
       }
 
-      // 4. §20.5 — post the Funds Register debit only when the expense is
-      // already approved and pays from a tracked account. Pending expenses move
-      // no money until the CEO approves. Always via the table-upsert path (the
-      // fund_transactions ledger has no domain RPC of its own; refunds debit it
-      // the same way).
-      if (approved && tracked && businessDate != null) {
-        await _appendExpenseDebit(
-          fundsAccountId: fundsAccountId,
-          storeId: storeId,
-          amountKobo: amountKobo,
-          businessDate: businessDate,
-          paymentId: paymentId,
-          performedBy: recordedBy,
-        );
-      }
-
-      // 5. §20.4 / §26.4 — a Manager's over-limit expense lands Pending; alert
+      // 4. §20.4 / §26.4 — a Manager's over-limit expense lands Pending; alert
       // the CEO(s) so the approval surfaces on their notification bell (the
       // §20.1 "pending approval" badge). Fired inside the txn so it rolls back
       // with the insert.
@@ -2411,46 +2661,6 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
-  /// Appends a Funds Register debit for an expense, dated to [businessDate]
-  /// (the open funds day). Linked to the expense via [paymentId] (its
-  /// payment_transactions row) so a later reversal can find it. §20.5 / §23.5.
-  Future<void> _appendExpenseDebit({
-    required String fundsAccountId,
-    required String storeId,
-    required int amountKobo,
-    required String businessDate,
-    required String paymentId,
-    required String performedBy,
-  }) async {
-    final comp = FundTransactionsCompanion.insert(
-      id: Value(UuidV7.generate()),
-      businessId: requireBusinessId(),
-      fundsAccountId: fundsAccountId,
-      storeId: storeId,
-      businessDate: businessDate,
-      type: 'debit',
-      amountKobo: amountKobo,
-      signedAmountKobo: -amountKobo,
-      referenceType: 'expense',
-      paymentId: Value(paymentId),
-      performedBy: Value(performedBy),
-      lastUpdatedAt: Value(DateTime.now()),
-    );
-    await into(fundTransactions).insert(comp);
-    await db.syncDao.enqueueUpsert('fund_transactions', comp);
-  }
-
-  /// The payment_transactions id created for [expenseId] at record time — the
-  /// link used to attach / find its Funds Register debit.
-  Future<String> _expensePaymentId(String expenseId) async {
-    final pay = await (select(paymentTransactions)
-          ..where(
-              (t) => t.expenseId.equals(expenseId) & t.type.equals('expense'))
-          ..limit(1))
-        .getSingleOrNull();
-    return pay?.id ?? UuidV7.generate();
-  }
-
   /// Count of expenses awaiting CEO approval (§20.1 bell badge / pending
   /// section). Business-scoped, non-deleted.
   Stream<int> watchPendingCount() {
@@ -2464,19 +2674,16 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
         .map((row) => row?.read(expenses.id.count()) ?? 0);
   }
 
-  /// CEO approves a pending expense (§20.4). Sets status + approver, and — when
-  /// it pays from a tracked account — posts the Funds Register debit now, dated
-  /// to [businessDate] (today's open day, §20.5). The caller must have confirmed
-  /// the day is open. Notifies the recorder.
+  /// CEO approves a pending expense (§20.4). Sets status + approver and notifies
+  /// the recorder. (An approved expense no longer posts to any account balance —
+  /// Funds Register removed, §23.)
   Future<void> approveExpense({
     required String expenseId,
     required String approverId,
-    required String businessDate,
   }) async {
     // The status read+guard MUST live inside the transaction. Drift serializes
     // transactions on one connection, so a concurrent/double-tap approve sees
-    // the already-committed 'approved' status and no-ops — otherwise both would
-    // append a fund_transactions debit (double-debit). The conditional UPDATE
+    // the already-committed 'approved' status and no-ops. The conditional UPDATE
     // (status == 'pending') + affected-row check is the belt-and-suspenders.
     String? recordedBy;
     String? description;
@@ -2508,21 +2715,6 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
             ..where((t) => t.id.equals(expenseId) & whereBusiness(t)))
           .getSingle();
       await db.syncDao.enqueueUpsert('expenses', row.toCompanion(true));
-
-      final tracked = exp.paymentMethod != null &&
-          exp.paymentMethod != 'other' &&
-          exp.fundsAccountId != null &&
-          exp.storeId != null;
-      if (tracked) {
-        await _appendExpenseDebit(
-          fundsAccountId: exp.fundsAccountId!,
-          storeId: exp.storeId!,
-          amountKobo: exp.amountKobo,
-          businessDate: businessDate,
-          paymentId: await _expensePaymentId(expenseId),
-          performedBy: approverId,
-        );
-      }
 
       await db.activityLogDao.log(
         action: 'expense_approved',
@@ -2605,11 +2797,9 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
     }
   }
 
-  /// Edits the descriptive fields of an expense (§20.3 Edit). Amount, payment
-  /// method, and account are immutable after creation — the funds ledger is
-  /// append-only, so a wrong amount is corrected by soft-delete + re-create
-  /// (softDeleteExpense reverses any posted debit). The 24h / role gate is
-  /// enforced by the caller.
+  /// Edits the descriptive fields of an expense (§20.3 Edit). Amount and payment
+  /// method are immutable after creation — a wrong amount is corrected by
+  /// soft-delete + re-create. The 24h / role gate is enforced by the caller.
   Future<void> updateExpense({
     required String expenseId,
     required String performedBy,
@@ -2646,20 +2836,15 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
   }
 
   /// Soft-deletes an expense (§20.3, CEO only, hard rule #9 — enqueueUpsert, not
-  /// delete). If it had posted a Funds Register debit (approved + tracked), a
-  /// compensating credit is appended on today's open day [businessDate] so the
-  /// cash returns to the till (refund-day rule, §19.7). The caller must confirm
-  /// the day is open when a reversal is due.
+  /// delete). The 24h / role gate is enforced by the caller. (Funds Register was
+  /// removed, §23, so a delete no longer reverses any account balance.)
   Future<void> softDeleteExpense({
     required String expenseId,
     required String performedBy,
-    String? businessDate,
   }) async {
     // Read + delete-guard live inside the transaction (Drift serializes txns),
     // and the UPDATE is conditional on is_deleted = false, so a double-tap
-    // delete can't append the compensating 'void' credit twice (which would
-    // over-credit the till). Only the call that actually flips is_deleted
-    // reverses the funds debit.
+    // delete is idempotent.
     String? description;
     String? storeIdForLog;
     var didDelete = false;
@@ -2688,40 +2873,6 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
             ..where((t) => t.id.equals(expenseId) & whereBusiness(t)))
           .getSingle();
       await db.syncDao.enqueueUpsert('expenses', row.toCompanion(true));
-
-      final hadDebit = exp.status == 'approved' &&
-          exp.paymentMethod != null &&
-          exp.paymentMethod != 'other' &&
-          exp.fundsAccountId != null &&
-          exp.storeId != null;
-      if (hadDebit && businessDate != null) {
-        final payId = await _expensePaymentId(expenseId);
-        final debits = await (select(fundTransactions)
-              ..where((t) =>
-                  whereBusiness(t) &
-                  t.paymentId.equals(payId) &
-                  t.referenceType.equals('expense') &
-                  t.type.equals('debit')))
-            .get();
-        for (final d in debits) {
-          final credit = FundTransactionsCompanion.insert(
-            id: Value(UuidV7.generate()),
-            businessId: requireBusinessId(),
-            fundsAccountId: d.fundsAccountId,
-            storeId: d.storeId,
-            businessDate: businessDate,
-            type: 'credit',
-            amountKobo: d.amountKobo,
-            signedAmountKobo: d.amountKobo,
-            referenceType: 'void',
-            paymentId: Value(payId),
-            performedBy: Value(performedBy),
-            lastUpdatedAt: Value(now),
-          );
-          await into(fundTransactions).insert(credit);
-          await db.syncDao.enqueueUpsert('fund_transactions', credit);
-        }
-      }
     });
 
     if (didDelete) {
@@ -4311,6 +4462,46 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
   // registration so adding methods later doesn't require schema regen.
 }
 
+@DriftAccessor(tables: [OrderCrateLines])
+class OrderCrateLinesDao extends DatabaseAccessor<AppDatabase>
+    with _$OrderCrateLinesDaoMixin, BusinessScopedDao<AppDatabase> {
+  OrderCrateLinesDao(super.db);
+
+  /// All crate lines for an order (one per brand). Drives the Confirm Crate
+  /// Returns modal — crates taken, deposit rate snapshot, and deposit paid
+  /// (which decides full / part / no-deposit per brand, §13.4).
+  Future<List<OrderCrateLineData>> getForOrder(String orderId) {
+    return (select(orderCrateLines)
+          ..where((t) => whereBusiness(t) & t.orderId.equals(orderId)))
+        .get();
+  }
+
+  Stream<List<OrderCrateLineData>> watchForOrder(String orderId) {
+    return (select(orderCrateLines)
+          ..where((t) => whereBusiness(t) & t.orderId.equals(orderId)))
+        .watch();
+  }
+
+  /// Record one (order, brand) crate line at sale (§13.4) and enqueue it for
+  /// sync. Routed through the DAO so the write reaches the cloud (CLAUDE.md §5).
+  /// Stamps business_id + last_updated_at like the other synced-table writers.
+  Future<void> insertLine(OrderCrateLinesCompanion line) async {
+    // Set the id EXPLICITLY so the local insert and the enqueued cloud upsert
+    // share it. Without this, the local insert uses the table's clientDefault
+    // (a fresh uuid) while the enqueued companion has id Absent → the cloud
+    // mints a DIFFERENT id → its echo/pull tries to insert that id and collides
+    // with the local row on the UNIQUE(business_id, order_id, manufacturer_id)
+    // constraint (SqliteException 2067). Every other DAO sets id before write.
+    final row = line.copyWith(
+      id: line.id.present ? line.id : Value(UuidV7.generate()),
+      businessId: Value(requireBusinessId()),
+      lastUpdatedAt: Value(DateTime.now()),
+    );
+    await into(orderCrateLines).insert(row);
+    await db.syncDao.enqueueUpsert('order_crate_lines', row);
+  }
+}
+
 @DriftAccessor(tables: [StockAdjustmentRequests])
 class StockAdjustmentRequestsDao extends DatabaseAccessor<AppDatabase>
     with _$StockAdjustmentRequestsDaoMixin, BusinessScopedDao<AppDatabase> {
@@ -4713,6 +4904,22 @@ class CustomerWalletsDao extends DatabaseAccessor<AppDatabase>
   }
 }
 
+/// §13.4 Ring 7 — business-wide crate-deposit balancing figures (all kobo).
+/// Invariant: `heldKobo == takenKobo - refundedKobo - keptKobo`.
+class CrateDepositSummary {
+  final int takenKobo; // total deposits ever collected
+  final int refundedKobo; // total refunded back to customers
+  final int keptKobo; // total forfeited (income)
+  final int heldKobo; // deposits still being held now
+
+  const CrateDepositSummary({
+    required this.takenKobo,
+    required this.refundedKobo,
+    required this.keptKobo,
+    required this.heldKobo,
+  });
+}
+
 @DriftAccessor(
   tables: [WalletTransactions, CustomerWallets, PaymentTransactions, Orders],
 )
@@ -4720,7 +4927,10 @@ class WalletTransactionsDao extends DatabaseAccessor<AppDatabase>
     with _$WalletTransactionsDaoMixin, BusinessScopedDao<AppDatabase> {
   WalletTransactionsDao(super.db);
 
-  /// Computes the current wallet balance by summing all signed amounts.
+  /// Computes the current SPENDABLE wallet balance by summing signed amounts,
+  /// EXCLUDING the crate-deposit family (§13.4 decision 13: a refundable deposit
+  /// is money held for the customer — never their spendable credit nor their
+  /// debt). Use [getDepositsHeldKobo] for the held-deposit figure.
   /// Per PR 4d "Recommended void approach", we don't filter by voidedAt IS NULL
   /// because a compensating entry (opposite sign) will have been appended.
   Future<int> getBalanceKobo(String customerId) async {
@@ -4729,7 +4939,9 @@ class WalletTransactionsDao extends DatabaseAccessor<AppDatabase>
       ..addColumns([sumExpr])
       ..where(
         whereBusiness(walletTransactions) &
-            walletTransactions.customerId.equals(customerId),
+            walletTransactions.customerId.equals(customerId) &
+            walletTransactions.referenceType
+                .isNotIn(kCrateDepositReferenceTypes),
       );
     final row = await query.getSingleOrNull();
     return row?.read(sumExpr) ?? 0;
@@ -4741,7 +4953,9 @@ class WalletTransactionsDao extends DatabaseAccessor<AppDatabase>
       ..addColumns([sumExpr])
       ..where(
         whereBusiness(walletTransactions) &
-            walletTransactions.customerId.equals(customerId),
+            walletTransactions.customerId.equals(customerId) &
+            walletTransactions.referenceType
+                .isNotIn(kCrateDepositReferenceTypes),
       );
     return query.watchSingleOrNull().map((row) => row?.read(sumExpr) ?? 0);
   }
@@ -4750,7 +4964,11 @@ class WalletTransactionsDao extends DatabaseAccessor<AppDatabase>
     final sumExpr = walletTransactions.signedAmountKobo.sum();
     final query = selectOnly(walletTransactions)
       ..addColumns([walletTransactions.customerId, sumExpr])
-      ..where(whereBusiness(walletTransactions))
+      ..where(
+        whereBusiness(walletTransactions) &
+            walletTransactions.referenceType
+                .isNotIn(kCrateDepositReferenceTypes),
+      )
       ..groupBy([walletTransactions.customerId]);
     return query.watch().map((rows) {
       final out = <String, int>{};
@@ -4763,12 +4981,117 @@ class WalletTransactionsDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
+  /// §13.4 decision 15 — the crate deposit "held" for a customer: SUM(signed)
+  /// over the crate-deposit family ([kCrateDepositReferenceTypes]). A
+  /// `crate_deposit` credit, minus its later `crate_deposit_refunded` /
+  /// `crate_deposit_forfeited` debit, nets to 0 once the deposit is resolved —
+  /// so this is exactly `taken − refunds − kept`. Shown beside the spendable
+  /// balance on the wallet screen (decision 14).
+  Future<int> getDepositsHeldKobo(String customerId) async {
+    final sumExpr = walletTransactions.signedAmountKobo.sum();
+    final query = selectOnly(walletTransactions)
+      ..addColumns([sumExpr])
+      ..where(
+        whereBusiness(walletTransactions) &
+            walletTransactions.customerId.equals(customerId) &
+            walletTransactions.referenceType.isIn(kCrateDepositReferenceTypes),
+      );
+    final row = await query.getSingleOrNull();
+    return row?.read(sumExpr) ?? 0;
+  }
+
+  Stream<int> watchDepositsHeldKobo(String customerId) {
+    final sumExpr = walletTransactions.signedAmountKobo.sum();
+    final query = selectOnly(walletTransactions)
+      ..addColumns([sumExpr])
+      ..where(
+        whereBusiness(walletTransactions) &
+            walletTransactions.customerId.equals(customerId) &
+            walletTransactions.referenceType.isIn(kCrateDepositReferenceTypes),
+      );
+    return query.watchSingleOrNull().map((row) => row?.read(sumExpr) ?? 0);
+  }
+
+  /// §13.4 Ring 7 — business-wide crate-deposit balancing figures (kobo), summed
+  /// over the whole `wallet_transactions` deposit family:
+  ///   taken    = every `crate_deposit` credit collected,
+  ///   refunded = every `crate_deposit_refunded` given back (positive abs),
+  ///   kept     = every `crate_deposit_forfeited` income (positive abs),
+  ///   held     = taken − refunded − kept = deposits still being held.
+  /// By construction `held` equals the per-customer held figures summed, because
+  /// each refund/forfeit appends an offsetting deposit-family debit.
+  Stream<CrateDepositSummary> watchCrateDepositSummary() {
+    final sumExpr = walletTransactions.signedAmountKobo.sum();
+    final query = selectOnly(walletTransactions)
+      ..addColumns([walletTransactions.referenceType, sumExpr])
+      ..where(
+        whereBusiness(walletTransactions) &
+            walletTransactions.referenceType.isIn(kCrateDepositReferenceTypes),
+      )
+      ..groupBy([walletTransactions.referenceType]);
+    return query.watch().map((rows) {
+      int taken = 0, refundedSigned = 0, keptSigned = 0;
+      for (final r in rows) {
+        final ref = r.read(walletTransactions.referenceType);
+        final v = r.read(sumExpr) ?? 0;
+        if (ref == 'crate_deposit') {
+          taken = v;
+        } else if (ref == 'crate_deposit_refunded') {
+          refundedSigned = v; // negative (debits)
+        } else if (ref == 'crate_deposit_forfeited') {
+          keptSigned = v; // negative (debits)
+        }
+      }
+      return CrateDepositSummary(
+        takenKobo: taken,
+        refundedKobo: -refundedSigned,
+        keptKobo: -keptSigned,
+        heldKobo: taken + refundedSigned + keptSigned,
+      );
+    });
+  }
+
+  /// §13.4 Ring 7 — per-customer held deposit (kobo), customers with a non-zero
+  /// held balance only. Drives the report's customer breakdown.
+  Stream<Map<String, int>> watchDepositsHeldByCustomer() {
+    final sumExpr = walletTransactions.signedAmountKobo.sum();
+    final query = selectOnly(walletTransactions)
+      ..addColumns([walletTransactions.customerId, sumExpr])
+      ..where(
+        whereBusiness(walletTransactions) &
+            walletTransactions.referenceType.isIn(kCrateDepositReferenceTypes),
+      )
+      ..groupBy([walletTransactions.customerId]);
+    return query.watch().map((rows) {
+      final map = <String, int>{};
+      for (final r in rows) {
+        final cid = r.read(walletTransactions.customerId);
+        final v = r.read(sumExpr) ?? 0;
+        if (cid != null && v != 0) map[cid] = v;
+      }
+      return map;
+    });
+  }
+
   Stream<List<WalletTransactionData>> watchHistory(String customerId) {
     return (select(walletTransactions)
           ..where((t) => whereBusiness(t) & t.customerId.equals(customerId))
           ..orderBy([
             (t) =>
                 OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc),
+            // §13.4 — a crate-return settlement posts its `crate_refund` credit
+            // (the spendable "money back" the customer sees on the receipt) and
+            // its paired `crate_deposit_refunded`/`_forfeited` bookkeeping debits
+            // in the SAME second. Float crate_refund to the top of its group so
+            // the headline credit reads first. An INT CASE expr (0 before 1
+            // under ASC), not a bare boolean — the boolean form was unreliable
+            // in ORDER BY (see the signed-amount note below).
+            (t) => OrderingTerm(
+                  expression: const CustomExpression<int>(
+                    "CASE WHEN reference_type = 'crate_refund' THEN 0 ELSE 1 END",
+                  ),
+                  mode: OrderingMode.asc,
+                ),
             // §14.3 (bug #3) — newest activity first. A sale's two legs share
             // the same second (created_at is second-resolution + createOrder
             // stamps both legs the same instant), so this tiebreak decides their
@@ -4860,6 +5183,148 @@ class WalletTransactionsDao extends DatabaseAccessor<AppDatabase>
   }
 }
 
+/// §21.10 — append-only supplier ledger. Mirrors [WalletTransactionsDao] but
+/// inverted (invoice = debit, payment = credit) and with no crate-deposit split:
+/// the balance is a plain SUM(signed_amount_kobo). Negative = we owe the supplier.
+@DriftAccessor(tables: [SupplierLedgerEntries, Suppliers])
+class SupplierLedgerDao extends DatabaseAccessor<AppDatabase>
+    with _$SupplierLedgerDaoMixin, BusinessScopedDao<AppDatabase> {
+  SupplierLedgerDao(super.db);
+
+  /// Current balance (kobo). SUM(signed): payments (credit, +) minus invoices
+  /// (debit, −). Negative = we owe the supplier. Like the wallet, we don't filter
+  /// voidedAt — a void appends an opposite-sign compensating entry.
+  Future<int> getBalanceKobo(String supplierId) async {
+    final sumExpr = supplierLedgerEntries.signedAmountKobo.sum();
+    final query = selectOnly(supplierLedgerEntries)
+      ..addColumns([sumExpr])
+      ..where(
+        whereBusiness(supplierLedgerEntries) &
+            supplierLedgerEntries.supplierId.equals(supplierId),
+      );
+    final row = await query.getSingleOrNull();
+    return row?.read(sumExpr) ?? 0;
+  }
+
+  Stream<int> watchBalanceKobo(String supplierId) {
+    final sumExpr = supplierLedgerEntries.signedAmountKobo.sum();
+    final query = selectOnly(supplierLedgerEntries)
+      ..addColumns([sumExpr])
+      ..where(
+        whereBusiness(supplierLedgerEntries) &
+            supplierLedgerEntries.supplierId.equals(supplierId),
+      );
+    return query.watchSingleOrNull().map((row) => row?.read(sumExpr) ?? 0);
+  }
+
+  /// supplierId → balance (kobo), for the Suppliers list. Drives the live
+  /// red/negative balance chip per supplier.
+  Stream<Map<String, int>> watchAllBalancesKobo() {
+    final sumExpr = supplierLedgerEntries.signedAmountKobo.sum();
+    final query = selectOnly(supplierLedgerEntries)
+      ..addColumns([supplierLedgerEntries.supplierId, sumExpr])
+      ..where(whereBusiness(supplierLedgerEntries))
+      ..groupBy([supplierLedgerEntries.supplierId]);
+    return query.watch().map((rows) {
+      final out = <String, int>{};
+      for (final r in rows) {
+        final sid = r.read(supplierLedgerEntries.supplierId);
+        final sum = r.read(sumExpr);
+        if (sid != null) out[sid] = sum ?? 0;
+      }
+      return out;
+    });
+  }
+
+  /// Every payment entry across all suppliers, newest first — drives the
+  /// Supplier Accounts "Payments" tab. Excludes invoices and voids.
+  Stream<List<SupplierLedgerEntryData>> watchPaymentEntries() {
+    return (select(supplierLedgerEntries)
+          ..where((t) =>
+              whereBusiness(t) &
+              t.referenceType.isIn(const [
+                'payment_cash',
+                'payment_transfer',
+                'payment_pos',
+                'payment_other',
+              ]))
+          ..orderBy([
+            (t) =>
+                OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc),
+          ]))
+        .watch();
+  }
+
+  /// Ledger history for one supplier, newest first. Same deterministic tiebreak
+  /// as the wallet: createdAt DESC, then signedAmountKobo ASC (invoice debit
+  /// above payment credit when posted the same second).
+  Stream<List<SupplierLedgerEntryData>> watchHistory(String supplierId) {
+    return (select(supplierLedgerEntries)
+          ..where((t) => whereBusiness(t) & t.supplierId.equals(supplierId))
+          ..orderBy([
+            (t) =>
+                OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc),
+            (t) => OrderingTerm(
+                  expression: t.signedAmountKobo,
+                  mode: OrderingMode.asc,
+                ),
+          ]))
+        .watch();
+  }
+
+  /// Voids an entry by marking the original voided AND appending an opposite-sign
+  /// `void` compensating entry (append-only — §21.7, CEO only at the UI). Plain
+  /// enqueue path (no domain RPC in Phase 1).
+  Future<void> voidEntry({
+    required String entryId,
+    required String voidedBy,
+    required String reason,
+  }) async {
+    await transaction(() async {
+      final original = await (select(supplierLedgerEntries)
+            ..where((t) => t.id.equals(entryId))
+            ..limit(1))
+          .getSingleOrNull();
+      if (original == null) return;
+      if (original.voidedAt != null) return; // Already voided
+
+      final now = DateTime.now();
+      await (update(supplierLedgerEntries)
+            ..where((t) => t.id.equals(entryId)))
+          .write(SupplierLedgerEntriesCompanion(
+        voidedAt: Value(now),
+        voidedBy: Value(voidedBy),
+        voidReason: Value(reason),
+        lastUpdatedAt: Value(now),
+      ));
+
+      final compId = UuidV7.generate();
+      final compComp = SupplierLedgerEntriesCompanion.insert(
+        id: Value(compId),
+        businessId: requireBusinessId(),
+        supplierId: original.supplierId,
+        type: original.type == 'credit' ? 'debit' : 'credit',
+        amountKobo: original.amountKobo,
+        signedAmountKobo: -original.signedAmountKobo,
+        referenceType: 'void',
+        activityDate: now,
+        performedBy: Value(voidedBy),
+        referenceNote: Value(reason),
+        createdAt: Value(now),
+        lastUpdatedAt: Value(now),
+      );
+      await into(supplierLedgerEntries).insert(compComp);
+
+      final updatedOrig = await (select(supplierLedgerEntries)
+            ..where((t) => t.id.equals(entryId))
+            ..limit(1))
+          .getSingle();
+      await db.syncDao.enqueueUpsert('supplier_ledger_entries', updatedOrig);
+      await db.syncDao.enqueueUpsert('supplier_ledger_entries', compComp);
+    });
+  }
+}
+
 @DriftAccessor(tables: [CrateSizeGroups])
 class CrateSizeGroupsDao extends DatabaseAccessor<AppDatabase>
     with _$CrateSizeGroupsDaoMixin, BusinessScopedDao<AppDatabase> {
@@ -4917,463 +5382,6 @@ class CustomerCrateBalanceWithManufacturer {
     required this.balance,
     required this.manufacturer,
   });
-}
-
-// ── Funds Register DAOs (master plan §23) ────────────────────────────────────
-
-@DriftAccessor(tables: [FundsAccounts])
-class FundsAccountsDao extends DatabaseAccessor<AppDatabase>
-    with _$FundsAccountsDaoMixin, BusinessScopedDao<AppDatabase> {
-  FundsAccountsDao(super.db);
-
-  /// Active (non-deleted) accounts for [storeId] — Cash Till first (account
-  /// type sorts cash_till < pos_machine), then by name.
-  Stream<List<FundsAccountData>> watchActiveAccountsForStore(String storeId) {
-    return (select(fundsAccounts)
-          ..where((t) =>
-              whereBusiness(t) & t.storeId.equals(storeId) & t.isDeleted.not())
-          ..orderBy([
-            (t) => OrderingTerm(expression: t.accountType),
-            (t) => OrderingTerm(expression: t.name),
-          ]))
-        .watch();
-  }
-
-  /// One-shot business-scoped variant for the checkout account picker (reads
-  /// once so a multi-business device can't surface another business's account).
-  Future<List<FundsAccountData>> getActiveAccountsForStore(String storeId) {
-    return (select(fundsAccounts)
-          ..where((t) =>
-              whereBusiness(t) & t.storeId.equals(storeId) & t.isDeleted.not())
-          ..orderBy([
-            (t) => OrderingTerm(expression: t.accountType),
-            (t) => OrderingTerm(expression: t.name),
-          ]))
-        .get();
-  }
-
-  /// Every account in the business (incl. soft-deleted), for name lookups in the
-  /// Funds Register Report (§25.2) — historical Close Day snapshots may point at
-  /// an account that was later removed, so the report still needs its name.
-  Stream<List<FundsAccountData>> watchAllForBusiness() {
-    return (select(fundsAccounts)..where((t) => whereBusiness(t))).watch();
-  }
-
-  /// Idempotently ensures a Cash Till exists for [storeId] and returns it.
-  Future<FundsAccountData> ensureCashTill(String storeId) async {
-    final existing = await (select(fundsAccounts)
-          ..where((t) =>
-              whereBusiness(t) &
-              t.storeId.equals(storeId) &
-              t.accountType.equals('cash_till') &
-              t.isDeleted.not())
-          ..limit(1))
-        .getSingleOrNull();
-    if (existing != null) return existing;
-    final id = await createAccount(
-      storeId: storeId,
-      accountType: 'cash_till',
-      name: 'Cash Till',
-    );
-    return (select(fundsAccounts)..where((t) => t.id.equals(id))).getSingle();
-  }
-
-  /// Creates an account (cash_till | pos_machine | bank) + enqueues the upsert.
-  ///
-  /// UNIQUE(store_id, account_type, name) ignores is_deleted, so re-adding a
-  /// name that was soft-deleted earlier would violate it and crash. Treat that
-  /// as "bring the account back": reactivate the existing row instead. An
-  /// *active* duplicate is a genuine user error and throws a friendly message
-  /// for the caller to surface.
-  Future<String> createAccount({
-    required String storeId,
-    required String accountType,
-    required String name,
-    String? accountNumber,
-  }) async {
-    final existing = await (select(fundsAccounts)
-          ..where((t) =>
-              whereBusiness(t) &
-              t.storeId.equals(storeId) &
-              t.accountType.equals(accountType) &
-              t.name.equals(name))
-          ..limit(1))
-        .getSingleOrNull();
-    if (existing != null) {
-      if (!existing.isDeleted) {
-        throw StateError('An account named "$name" already exists');
-      }
-      await (update(fundsAccounts)
-            ..where((t) => t.id.equals(existing.id) & whereBusiness(t)))
-          .write(FundsAccountsCompanion(
-        isDeleted: const Value(false),
-        accountNumber: Value(accountNumber),
-        lastUpdatedAt: Value(DateTime.now()),
-      ));
-      final reactivated = await (select(fundsAccounts)
-            ..where((t) => t.id.equals(existing.id) & whereBusiness(t)))
-          .getSingle();
-      await db.syncDao
-          .enqueueUpsert('funds_accounts', reactivated.toCompanion(true));
-      return existing.id;
-    }
-    final id = UuidV7.generate();
-    final row = FundsAccountsCompanion.insert(
-      id: Value(id),
-      businessId: requireBusinessId(),
-      storeId: storeId,
-      accountType: accountType,
-      name: name,
-      accountNumber: Value(accountNumber),
-      lastUpdatedAt: Value(DateTime.now()),
-    );
-    await into(fundsAccounts).insert(row);
-    await db.syncDao.enqueueUpsert('funds_accounts', row);
-    return id;
-  }
-
-  /// Soft-deletes an account — §5 / hard rule #9: enqueueUpsert, never
-  /// enqueueDelete. Partial companion carries id + business_id so the cloud's
-  /// upsert flips is_deleted on the existing row (same shape as products).
-  Future<void> softDeleteAccount(String id) async {
-    final comp = FundsAccountsCompanion(
-      id: Value(id),
-      businessId: Value(requireBusinessId()),
-      isDeleted: const Value(true),
-      lastUpdatedAt: Value(DateTime.now()),
-    );
-    await (update(fundsAccounts)
-          ..where((t) => t.id.equals(id) & whereBusiness(t)))
-        .write(comp);
-    // Full-row enqueue: a partial funds_accounts upsert omits NOT NULL
-    // store_id / account_type / name.
-    final row = await (select(fundsAccounts)
-          ..where((t) => t.id.equals(id) & whereBusiness(t)))
-        .getSingleOrNull();
-    if (row != null) {
-      await db.syncDao.enqueueUpsert('funds_accounts', row.toCompanion(true));
-    }
-  }
-}
-
-@DriftAccessor(tables: [FundDays, FundsAccounts, FundTransactions, FundDayClosings])
-class FundDaysDao extends DatabaseAccessor<AppDatabase>
-    with _$FundDaysDaoMixin, BusinessScopedDao<AppDatabase> {
-  FundDaysDao(super.db);
-
-  Future<FundDayData?> getDay(String storeId, String businessDate) {
-    return (select(fundDays)
-          ..where((t) =>
-              whereBusiness(t) &
-              t.storeId.equals(storeId) &
-              t.businessDate.equals(businessDate))
-          ..limit(1))
-        .getSingleOrNull();
-  }
-
-  /// THE POS gate (hard rule #10): true iff an open day exists for the store.
-  Stream<bool> watchIsDayOpen(String storeId, String businessDate) {
-    return (select(fundDays)
-          ..where((t) =>
-              whereBusiness(t) &
-              t.storeId.equals(storeId) &
-              t.businessDate.equals(businessDate) &
-              t.status.equals('open')))
-        .watch()
-        .map((rows) => rows.isNotEmpty);
-  }
-
-  /// Opens the day for [storeId] (§23.4): inserts the day header + an 'opening'
-  /// credit per active account (even 0, so every account has a day-zero marker)
-  /// in one transaction. Throws if the day is already open (also guarded by the
-  /// UNIQUE(store_id, business_date) constraint).
-  Future<void> openDay({
-    required String storeId,
-    required String businessDate,
-    required Map<String, int> perAccountOpeningKobo,
-    required String performedBy,
-  }) async {
-    await transaction(() async {
-      final existing = await getDay(storeId, businessDate);
-      if (existing != null) {
-        throw StateError('Day already opened for this store');
-      }
-      // §23.8: a new day cannot open while a previous day for this store is
-      // still unclosed. The Close Day flow flips that prior day to 'closed';
-      // until then opening the next day is blocked (and the screen shows the
-      // unclosed-day banner). businessDate is YYYY-MM-DD, so a lexicographic
-      // compare is chronological.
-      final unclosed = await getUnclosedDayBefore(storeId, businessDate);
-      if (unclosed != null) {
-        throw StateError(
-          'Previous day not closed — close ${unclosed.businessDate} first',
-        );
-      }
-      final now = DateTime.now();
-      final dayRow = FundDaysCompanion.insert(
-        id: Value(UuidV7.generate()),
-        businessId: requireBusinessId(),
-        storeId: storeId,
-        businessDate: businessDate,
-        status: const Value('open'),
-        openedBy: Value(performedBy),
-        openedAt: Value(now.toUtc()),
-        lastUpdatedAt: Value(now),
-      );
-      await into(fundDays).insert(dayRow);
-      await db.syncDao.enqueueUpsert('fund_days', dayRow);
-
-      final accounts = await (select(fundsAccounts)
-            ..where((t) =>
-                whereBusiness(t) &
-                t.storeId.equals(storeId) &
-                t.isDeleted.not()))
-          .get();
-      for (final acct in accounts) {
-        final opening = perAccountOpeningKobo[acct.id] ?? 0;
-        final txn = FundTransactionsCompanion.insert(
-          id: Value(UuidV7.generate()),
-          businessId: requireBusinessId(),
-          fundsAccountId: acct.id,
-          storeId: storeId,
-          businessDate: businessDate,
-          type: 'credit',
-          amountKobo: opening,
-          signedAmountKobo: opening,
-          referenceType: 'opening',
-          performedBy: Value(performedBy),
-          createdAt: Value(now),
-          lastUpdatedAt: Value(now),
-        );
-        await into(fundTransactions).insert(txn);
-        await db.syncDao.enqueueUpsert('fund_transactions', txn);
-      }
-
-      await db.activityLogDao.log(
-        action: 'funds.open_day',
-        // No raw UUID in user-facing text (hard rule #4); the store is already
-        // carried in the structured storeId field below.
-        description: 'Opened the day',
-        staffId: performedBy,
-        storeId: storeId,
-      );
-    });
-  }
-
-  /// The most recent still-open day for [storeId] strictly before
-  /// [businessDate], or null. Powers the §23.8 "new day blocked until previous
-  /// Close Day" guard and the unclosed-day banner. businessDate is YYYY-MM-DD,
-  /// so the string compare is chronological.
-  Future<FundDayData?> getUnclosedDayBefore(
-    String storeId,
-    String businessDate,
-  ) {
-    return (select(fundDays)
-          ..where((t) =>
-              whereBusiness(t) &
-              t.storeId.equals(storeId) &
-              t.businessDate.isSmallerThanValue(businessDate) &
-              t.status.equals('open'))
-          ..orderBy([(t) => OrderingTerm.desc(t.businessDate)])
-          ..limit(1))
-        .getSingleOrNull();
-  }
-
-  /// Reactive day-header row for (store, date) — null when the day hasn't been
-  /// opened. Lets the Funds Register screen pick the right state (open form /
-  /// balances+Close / closed summary) and react when Close Day flips the status.
-  Stream<FundDayData?> watchDay(String storeId, String businessDate) {
-    return (select(fundDays)
-          ..where((t) =>
-              whereBusiness(t) &
-              t.storeId.equals(storeId) &
-              t.businessDate.equals(businessDate))
-          ..limit(1))
-        .watchSingleOrNull();
-  }
-
-  /// Reactive twin of [getUnclosedDayBefore] — drives the §23.8 unclosed-day
-  /// banner so it clears the instant that prior day is closed.
-  Stream<FundDayData?> watchUnclosedDayBefore(
-    String storeId,
-    String businessDate,
-  ) {
-    return (select(fundDays)
-          ..where((t) =>
-              whereBusiness(t) &
-              t.storeId.equals(storeId) &
-              t.businessDate.isSmallerThanValue(businessDate) &
-              t.status.equals('open'))
-          ..orderBy([(t) => OrderingTerm.desc(t.businessDate)])
-          ..limit(1))
-        .watchSingleOrNull();
-  }
-
-  /// Closes the day for [storeId] (§23.6). For each active account it records a
-  /// reconciliation snapshot — `expected` = the account's running balance
-  /// (SUM signed_amount_kobo) at close, `counted` = the actual the user entered
-  /// (cash counted for the till, amount withdrawn for POS/bank), `variance` =
-  /// counted − expected — then flips the day header to status='closed', logs
-  /// the close, and (when any account is off) fires the §26.4 mismatch alert to
-  /// the CEO. All in one transaction. Throws if the day isn't open / is already
-  /// closed. [perAccountCountedKobo] maps each active account id to its counted
-  /// amount; a missing account defaults to 0.
-  Future<void> closeDay({
-    required String storeId,
-    required String businessDate,
-    required Map<String, int> perAccountCountedKobo,
-    required String performedBy,
-  }) async {
-    await transaction(() async {
-      final day = await getDay(storeId, businessDate);
-      if (day == null) {
-        throw StateError('No day open for this store to close');
-      }
-      if (day.status == 'closed') {
-        throw StateError('Day already closed');
-      }
-
-      final accounts = await (select(fundsAccounts)
-            ..where((t) =>
-                whereBusiness(t) &
-                t.storeId.equals(storeId) &
-                t.isDeleted.not()))
-          .get();
-
-      final now = DateTime.now();
-      var anyMismatch = false;
-
-      for (final acct in accounts) {
-        final expected =
-            await db.fundTransactionsDao.getBalanceFor(acct.id, businessDate);
-        final counted = perAccountCountedKobo[acct.id] ?? 0;
-        final variance = counted - expected;
-        if (variance != 0) anyMismatch = true;
-
-        final closing = FundDayClosingsCompanion.insert(
-          id: Value(UuidV7.generate()),
-          businessId: requireBusinessId(),
-          fundDayId: day.id,
-          fundsAccountId: acct.id,
-          storeId: storeId,
-          businessDate: businessDate,
-          accountType: acct.accountType,
-          expectedKobo: expected,
-          countedKobo: counted,
-          varianceKobo: variance,
-          performedBy: Value(performedBy),
-          createdAt: Value(now),
-          lastUpdatedAt: Value(now),
-        );
-        await into(fundDayClosings).insert(closing);
-        await db.syncDao.enqueueUpsert('fund_day_closings', closing);
-      }
-
-      // Flip the header to closed (the FundDays row is mutable on close — not a
-      // ledger). Explicit lastUpdatedAt so the bump trigger stays a no-op and
-      // the enqueued row carries a deterministic timestamp.
-      await (update(fundDays)..where((t) => t.id.equals(day.id))).write(
-        FundDaysCompanion(
-          status: const Value('closed'),
-          closedBy: Value(performedBy),
-          closedAt: Value(now.toUtc()),
-          lastUpdatedAt: Value(now),
-        ),
-      );
-      final closedRow =
-          await (select(fundDays)..where((t) => t.id.equals(day.id)))
-              .getSingle();
-      await db.syncDao
-          .enqueueUpsert('fund_days', closedRow.toCompanion(true));
-
-      await db.activityLogDao.log(
-        action: 'funds.close_day',
-        description: anyMismatch
-            ? 'Closed the day — funds mismatch flagged'
-            : 'Closed the day',
-        staffId: performedBy,
-        storeId: storeId,
-      );
-
-      // §26.4: a mismatch at close fires to the CEO. Falls back to the closer
-      // (Manager/CEO — both may view Funds) if no CEO is resolved locally, so
-      // the alert is never broadcast to roles that can't see the Funds Register.
-      if (anyMismatch) {
-        final ceoUserId = await db.userBusinessesDao.getCeoUserId();
-        await db.notificationsDao.fireNotification(
-          type: 'funds_mismatch',
-          message:
-              'Funds Register mismatch flagged at close for $businessDate.',
-          severity: 'alert',
-          recipientUserId: ceoUserId ?? performedBy,
-        );
-      }
-
-      // §23.6 / §26.4 — notify CEO + Manager the day is closed and the
-      // reconciliation is ready. Funds is CEO/Manager-only, so target those
-      // roles rather than broadcasting to every member. The mismatch alert
-      // above still fires separately to the CEO on a variance. Falls back to
-      // the closer if no role resolves locally (offline), so the close is never
-      // silent.
-      final recipients =
-          await db.userBusinessesDao.getUserIdsForRoleSlugs(['ceo', 'manager']);
-      for (final uid in (recipients.isEmpty ? [performedBy] : recipients)) {
-        await db.notificationsDao.fireNotification(
-          type: 'funds_day_closed',
-          message: anyMismatch
-              ? 'Day $businessDate closed — reconciliation ready '
-                  '(funds mismatch flagged).'
-              : 'Day $businessDate closed — reconciliation ready.',
-          severity: anyMismatch ? 'warning' : 'info',
-          recipientUserId: uid,
-        );
-      }
-    });
-  }
-}
-
-@DriftAccessor(tables: [FundDayClosings])
-class FundDayClosingsDao extends DatabaseAccessor<AppDatabase>
-    with _$FundDayClosingsDaoMixin, BusinessScopedDao<AppDatabase> {
-  FundDayClosingsDao(super.db);
-
-  /// Per-account Close Day reconciliation snapshots for a store's day — the
-  /// cash-audit rows the Daily Reconciliation Report (§25.9) renders.
-  Stream<List<FundDayClosingData>> watchForDay(
-    String storeId,
-    String businessDate,
-  ) {
-    return (select(fundDayClosings)
-          ..where((t) =>
-              whereBusiness(t) &
-              t.storeId.equals(storeId) &
-              t.businessDate.equals(businessDate)))
-        .watch();
-  }
-
-  Future<List<FundDayClosingData>> getForDay(
-    String storeId,
-    String businessDate,
-  ) {
-    return (select(fundDayClosings)
-          ..where((t) =>
-              whereBusiness(t) &
-              t.storeId.equals(storeId) &
-              t.businessDate.equals(businessDate)))
-        .get();
-  }
-
-  /// Every Close Day reconciliation snapshot for the business, newest day first
-  /// — the rows the Funds Register Report (§25.2) renders across a period.
-  Stream<List<FundDayClosingData>> watchAllForBusiness() {
-    return (select(fundDayClosings)
-          ..where((t) => whereBusiness(t))
-          ..orderBy([
-            (t) => OrderingTerm.desc(t.businessDate),
-            (t) => OrderingTerm.desc(t.createdAt),
-          ]))
-        .watch();
-  }
 }
 
 @DriftAccessor(tables: [StockCounts])
@@ -5453,117 +5461,6 @@ class StockCountsDao extends DatabaseAccessor<AppDatabase>
             return storeId == null ? base : base & t.storeId.equals(storeId);
           }))
         .get();
-  }
-}
-
-@DriftAccessor(tables: [FundTransactions])
-class FundTransactionsDao extends DatabaseAccessor<AppDatabase>
-    with _$FundTransactionsDaoMixin, BusinessScopedDao<AppDatabase> {
-  FundTransactionsDao(super.db);
-
-  /// Appends a 'sale' credit for the cash/card/transfer that landed in
-  /// [fundsAccountId]. MUST be called inside an existing transaction (e.g.
-  /// OrdersDao.createOrder) — it does not open its own.
-  Future<void> creditSale({
-    required String fundsAccountId,
-    required String storeId,
-    required String businessDate,
-    required int amountKobo,
-    required String orderId,
-    String? paymentId,
-    String? performedBy,
-  }) async {
-    final now = DateTime.now();
-    final txn = FundTransactionsCompanion.insert(
-      id: Value(UuidV7.generate()),
-      businessId: requireBusinessId(),
-      fundsAccountId: fundsAccountId,
-      storeId: storeId,
-      businessDate: businessDate,
-      type: 'credit',
-      amountKobo: amountKobo,
-      signedAmountKobo: amountKobo,
-      referenceType: 'sale',
-      orderId: Value(orderId),
-      paymentId: Value(paymentId),
-      performedBy: Value(performedBy),
-      createdAt: Value(now),
-      lastUpdatedAt: Value(now),
-    );
-    await into(fundTransactions).insert(txn);
-    await db.syncDao.enqueueUpsert('fund_transactions', txn);
-  }
-
-  /// Appends a 'topup' credit for the cash/transfer a customer handed over to
-  /// top up their wallet — the money physically lands in [fundsAccountId], so
-  /// the Funds Register must reflect it (§18 / coding rule 5). MUST be called
-  /// inside an existing transaction (WalletService.topup) — it does not open
-  /// its own. Mirrors [creditSale] but keys on the payment, not an order.
-  Future<void> creditTopup({
-    required String fundsAccountId,
-    required String storeId,
-    required String businessDate,
-    required int amountKobo,
-    required String paymentId,
-    String? performedBy,
-  }) async {
-    final now = DateTime.now();
-    final txn = FundTransactionsCompanion.insert(
-      id: Value(UuidV7.generate()),
-      businessId: requireBusinessId(),
-      fundsAccountId: fundsAccountId,
-      storeId: storeId,
-      businessDate: businessDate,
-      type: 'credit',
-      amountKobo: amountKobo,
-      signedAmountKobo: amountKobo,
-      referenceType: 'topup',
-      paymentId: Value(paymentId),
-      performedBy: Value(performedBy),
-      createdAt: Value(now),
-      lastUpdatedAt: Value(now),
-    );
-    await into(fundTransactions).insert(txn);
-    await db.syncDao.enqueueUpsert('fund_transactions', txn);
-  }
-
-  /// Expected balance for an account on a day = SUM(signed_amount_kobo) of
-  /// non-voided rows (void appends a compensating entry, so no IS NULL filter).
-  Future<int> getBalanceFor(String fundsAccountId, String businessDate) async {
-    final sumExpr = fundTransactions.signedAmountKobo.sum();
-    final query = selectOnly(fundTransactions)
-      ..addColumns([sumExpr])
-      ..where(
-        whereBusiness(fundTransactions) &
-            fundTransactions.fundsAccountId.equals(fundsAccountId) &
-            fundTransactions.businessDate.equals(businessDate),
-      );
-    final row = await query.getSingleOrNull();
-    return row?.read(sumExpr) ?? 0;
-  }
-
-  /// Live per-account expected balances for a store on [businessDate].
-  Stream<Map<String, int>> watchStoreBalancesForDay(
-    String storeId,
-    String businessDate,
-  ) {
-    final sumExpr = fundTransactions.signedAmountKobo.sum();
-    final query = selectOnly(fundTransactions)
-      ..addColumns([fundTransactions.fundsAccountId, sumExpr])
-      ..where(
-        whereBusiness(fundTransactions) &
-            fundTransactions.storeId.equals(storeId) &
-            fundTransactions.businessDate.equals(businessDate),
-      )
-      ..groupBy([fundTransactions.fundsAccountId]);
-    return query.watch().map((rows) {
-      final out = <String, int>{};
-      for (final r in rows) {
-        final aid = r.read(fundTransactions.fundsAccountId);
-        if (aid != null) out[aid] = r.read(sumExpr) ?? 0;
-      }
-      return out;
-    });
   }
 }
 
@@ -5739,6 +5636,72 @@ class CrateLedgerDao extends DatabaseAccessor<AppDatabase>
             .enqueueUpsert('customer_crate_balances', updatedBalance);
       }
     });
+  }
+
+  /// §13.4 — record crates ISSUED to a customer at sale time. This is the
+  /// dispatch half of crate tracking that was missing and caused the "returned
+  /// everything but still shows owing" bug: the balance only ever DECREMENTED
+  /// on return, so `returned == taken` could never net to zero. Appends a
+  /// `+quantity` 'issued' ledger row and increments customer_crate_balances; the
+  /// existing 'returned' path then nets it back toward zero.
+  ///
+  /// No own transaction — the caller (OrdersDao.createOrder) is already inside
+  /// one. No domain RPC envelope: there is no pos_record_crate_issue, so
+  /// crate_ledger + the balance cache ride the per-table upsert path (same shape
+  /// as [recordCrateReturnByCustomer]'s flag-off branch). Works on both sale
+  /// sync paths because these rows are client-authored (pos_record_sale_v2 does
+  /// not mint them).
+  Future<void> recordCrateIssueByCustomer({
+    required String customerId,
+    required String manufacturerId,
+    required int quantity,
+    required String performedBy,
+    String? orderId,
+  }) async {
+    if (quantity <= 0) return;
+    final delta = quantity; // dispatch increases what the customer owes
+
+    final ledgerId = UuidV7.generate();
+    final ledgerComp = CrateLedgerCompanion.insert(
+      id: Value(ledgerId),
+      businessId: requireBusinessId(),
+      customerId: Value(customerId),
+      manufacturerId: Value(manufacturerId),
+      quantityDelta: delta,
+      movementType: 'issued',
+      referenceOrderId: Value(orderId),
+      performedBy: Value(performedBy),
+      lastUpdatedAt: Value(DateTime.now()),
+    );
+    await into(crateLedger).insert(ledgerComp);
+
+    await customStatement(
+      'INSERT INTO customer_crate_balances (id, business_id, customer_id, manufacturer_id, balance) '
+      'VALUES (?, ?, ?, ?, ?) '
+      'ON CONFLICT(business_id, customer_id, manufacturer_id) DO UPDATE SET '
+      'balance = balance + excluded.balance, '
+      'last_updated_at = CAST(strftime(\'%s\', CURRENT_TIMESTAMP) AS INTEGER)',
+      [
+        UuidV7.generate(),
+        requireBusinessId(),
+        customerId,
+        manufacturerId,
+        delta,
+      ],
+    );
+
+    await db.syncDao.enqueueUpsert('crate_ledger', ledgerComp);
+    final updatedBalance = await (select(customerCrateBalances)
+          ..where(
+            (t) =>
+                whereBusiness(t) &
+                t.customerId.equals(customerId) &
+                t.manufacturerId.equals(manufacturerId),
+          )
+          ..limit(1))
+        .getSingle();
+    await db.syncDao
+        .enqueueUpsert('customer_crate_balances', updatedBalance);
   }
 
   /// Verification logic to ensure cache tables match ledger sums.
@@ -6200,6 +6163,113 @@ class UserPermissionOverridesDao extends DatabaseAccessor<AppDatabase>
   }
 }
 
+@DriftAccessor(tables: [StoreRolePermissions])
+class StoreRolePermissionsDao extends DatabaseAccessor<AppDatabase>
+    with _$StoreRolePermissionsDaoMixin, BusinessScopedDao<AppDatabase> {
+  StoreRolePermissionsDao(super.db);
+
+  Stream<List<StoreRolePermissionData>> watchFor(
+      String storeId, String roleId) {
+    return (select(storeRolePermissions)
+          ..where((t) =>
+              whereBusiness(t) &
+              t.storeId.equals(storeId) &
+              t.roleId.equals(roleId))
+          ..orderBy([(t) => OrderingTerm.asc(t.permissionKey)]))
+        .watch();
+  }
+
+  Future<List<StoreRolePermissionData>> getFor(
+      String storeId, String roleId) {
+    return (select(storeRolePermissions)
+          ..where((t) =>
+              whereBusiness(t) &
+              t.storeId.equals(storeId) &
+              t.roleId.equals(roleId))
+          ..orderBy([(t) => OrderingTerm.asc(t.permissionKey)]))
+        .get();
+  }
+
+  /// Set or clear a store's override of [permissionKey] for [roleId] (§10.2.1
+  /// Store scope). [value] true = force-grant, false = force-revoke, null =
+  /// clear the override (inherit the role's business default). Idempotent on the
+  /// logical identity (store_id, role_id, permission_key): a value that already
+  /// matches is a no-op, so we never trip UNIQUE on a stale toggle or a row that
+  /// arrived from the cloud since the UI last built. Same shape as
+  /// [UserPermissionOverridesDao.setOverride].
+  Future<void> setOverride(
+    String storeId,
+    String roleId,
+    String permissionKey,
+    bool? value,
+  ) async {
+    final existing = await (select(storeRolePermissions)
+          ..where((t) =>
+              whereBusiness(t) &
+              t.storeId.equals(storeId) &
+              t.roleId.equals(roleId) &
+              t.permissionKey.equals(permissionKey))
+          ..limit(1))
+        .getSingleOrNull();
+
+    if (value == null) {
+      // Inherit — remove the override row and tombstone it cloud-side.
+      // `store_role_permissions` is not an append-only ledger, so hard-delete
+      // via `enqueueDelete` is the right path here.
+      if (existing == null) return;
+      await (delete(storeRolePermissions)
+            ..where((t) => t.id.equals(existing.id)))
+          .go();
+      await db.syncDao.enqueueDelete('store_role_permissions', existing.id);
+      return;
+    }
+
+    if (existing != null) {
+      if (existing.isGranted == value) return; // already at this value
+      final row = StoreRolePermissionsCompanion(
+        id: Value(existing.id),
+        businessId: Value(existing.businessId),
+        storeId: Value(existing.storeId),
+        roleId: Value(existing.roleId),
+        permissionKey: Value(existing.permissionKey),
+        isGranted: Value(value),
+        lastUpdatedAt: Value(DateTime.now()),
+      );
+      await (update(storeRolePermissions)
+            ..where((t) => t.id.equals(existing.id)))
+          .write(row);
+      await db.syncDao.enqueueUpsert('store_role_permissions', row);
+      return;
+    }
+
+    final row = StoreRolePermissionsCompanion.insert(
+      id: Value(UuidV7.generate()),
+      businessId: requireBusinessId(),
+      storeId: storeId,
+      roleId: roleId,
+      permissionKey: permissionKey,
+      isGranted: value,
+      lastUpdatedAt: Value(DateTime.now()),
+    );
+    await into(storeRolePermissions).insert(row);
+    await db.syncDao.enqueueUpsert('store_role_permissions', row);
+  }
+
+  /// Restore store defaults — clear EVERY override for [storeId] + [roleId] so
+  /// that store's permissions revert to the role's business defaults. Each row
+  /// is hard-deleted and tombstoned (`enqueueDelete`) so other devices drop it
+  /// too. Returns the number of overrides cleared.
+  Future<int> clearAllForStoreRole(String storeId, String roleId) async {
+    final rows = await getFor(storeId, roleId);
+    for (final r in rows) {
+      await (delete(storeRolePermissions)..where((t) => t.id.equals(r.id)))
+          .go();
+      await db.syncDao.enqueueDelete('store_role_permissions', r.id);
+    }
+    return rows.length;
+  }
+}
+
 @DriftAccessor(tables: [RoleSettings])
 class RoleSettingsDao extends DatabaseAccessor<AppDatabase>
     with _$RoleSettingsDaoMixin, BusinessScopedDao<AppDatabase> {
@@ -6282,8 +6352,7 @@ class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
   UserBusinessesDao(super.db);
 
   /// The user id of this business's CEO (the single owner, CLAUDE.md), or null
-  /// if none is resolved locally. Used to route §26.4 CEO-only notifications
-  /// (e.g. the Funds Register mismatch-at-close alert).
+  /// if none is resolved locally. Used to route §26.4 CEO-only notifications.
   Future<String?> getCeoUserId() async {
     final ceoRole = await db.rolesDao.getBySlug('ceo');
     if (ceoRole == null) return null;
@@ -6528,10 +6597,45 @@ class UserStoresDao extends DatabaseAccessor<AppDatabase>
     return rows.map((r) => r.userId).toList();
   }
 
-  /// Assign a user to a store. UNIQUE (user_id, store_id) guards
-  /// against duplicates.
-  Future<void> assign(UserStoresCompanion row) async {
+  /// Assign [userId] to [storeId] in the current business (§9.5 CEO staff
+  /// store-assignment editor). Idempotent — if the pair already exists it's a
+  /// no-op (also dodges the UNIQUE (user_id, store_id) constraint). Explicit
+  /// `id` so the cloud echo can't mint a different one and collide on the
+  /// natural key (SqliteException 2067). Synced via enqueueUpsert.
+  Future<void> assign(String userId, String storeId) async {
+    final existing = await (select(userStores)
+          ..where((t) =>
+              whereBusiness(t) &
+              t.userId.equals(userId) &
+              t.storeId.equals(storeId))
+          ..limit(1))
+        .getSingleOrNull();
+    if (existing != null) return; // already assigned — nothing to do
+    final row = UserStoresCompanion.insert(
+      id: Value(UuidV7.generate()),
+      businessId: requireBusinessId(),
+      userId: userId,
+      storeId: storeId,
+      lastUpdatedAt: Value(DateTime.now()),
+    );
     await into(userStores).insert(row);
     await db.syncDao.enqueueUpsert('user_stores', row);
+  }
+
+  /// Remove [userId]'s assignment to [storeId] (§9.5). Deletes the row and
+  /// enqueues the tombstone — `user_stores` is a junction table, not an
+  /// append-only ledger, so hard-delete via `enqueueDelete` is the right path
+  /// here (same pattern as RolePermissionsDao.revoke).
+  Future<void> unassign(String userId, String storeId) async {
+    final existing = await (select(userStores)
+          ..where((t) =>
+              whereBusiness(t) &
+              t.userId.equals(userId) &
+              t.storeId.equals(storeId))
+          ..limit(1))
+        .getSingleOrNull();
+    if (existing == null) return;
+    await (delete(userStores)..where((t) => t.id.equals(existing.id))).go();
+    await db.syncDao.enqueueDelete('user_stores', existing.id);
   }
 }

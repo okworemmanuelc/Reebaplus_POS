@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
 
 import 'package:reebaplus_pos/core/utils/number_format.dart';
+import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/date_period.dart';
@@ -609,7 +610,10 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
               TextField(
                 controller: controller,
                 autofocus: true,
-                keyboardType: TextInputType.number,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                inputFormatters: [CurrencyInputFormatter()],
                 style: TextStyle(color: _text),
                 decoration: InputDecoration(
                   prefixText: '$activeCurrencySymbol ',
@@ -639,8 +643,8 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
               text: 'Save',
               size: AppButtonSize.small,
               onPressed: () {
-                final v = double.tryParse(controller.text.trim());
-                if (v == null || v <= 0) {
+                final v = parseCurrency(controller.text.trim());
+                if (v <= 0) {
                   Navigator.pop(ctx);
                   return;
                 }
@@ -914,35 +918,10 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     final currentUser = ref.read(authProvider).currentUser;
     if (currentUser == null) return;
     final db = ref.read(databaseProvider);
-    final today = await ref.read(todaysBusinessDateProvider.future);
-
-    // §20.5: approving an expense that pays from a tracked account posts the
-    // funds debit — require an open day for the store first.
-    final tracked = exp.paymentMethod != null && exp.paymentMethod != 'other';
-    if (tracked) {
-      if (exp.storeId == null) {
-        if (!mounted) return;
-        AppNotification.showError(
-          context,
-          'Open the day in Funds Register before approving a cash/bank/POS expense.',
-        );
-        return;
-      }
-      final day = await db.fundDaysDao.getDay(exp.storeId!, today);
-      if (!mounted) return;
-      if (day == null || day.status != 'open') {
-        AppNotification.showError(
-          context,
-          'Open the day in Funds Register before approving a cash/bank/POS expense.',
-        );
-        return;
-      }
-    }
 
     await db.expensesDao.approveExpense(
       expenseId: exp.id,
       approverId: currentUser.id,
-      businessDate: today,
     );
     if (!mounted) return;
     AppNotification.showSuccess(context, 'Expense approved.');
@@ -1056,8 +1035,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
             style: TextStyle(color: _text, fontWeight: FontWeight.bold),
           ),
           content: Text(
-            'This removes the expense. An approved expense paid from a tracked '
-            'account also reverses its funds debit today.',
+            'This removes the expense.',
             style: TextStyle(color: _subtext, fontSize: 13),
           ),
           actions: [
@@ -1084,31 +1062,9 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     if (currentUser == null) return;
     final db = ref.read(databaseProvider);
 
-    // An approved, tracked-account expense reverses its funds debit on delete —
-    // require an open day, dated to today (§20.5).
-    final reversesDebit = exp.status == 'approved' &&
-        exp.paymentMethod != null &&
-        exp.paymentMethod != 'other' &&
-        exp.storeId != null;
-    String? businessDate;
-    if (reversesDebit) {
-      final today = await ref.read(todaysBusinessDateProvider.future);
-      final day = await db.fundDaysDao.getDay(exp.storeId!, today);
-      if (!mounted) return;
-      if (day == null || day.status != 'open') {
-        AppNotification.showError(
-          context,
-          'Open the day in Funds Register before deleting a cash/bank/POS expense.',
-        );
-        return;
-      }
-      businessDate = today;
-    }
-
     await db.expensesDao.softDeleteExpense(
       expenseId: exp.id,
       performedBy: currentUser.id,
-      businessDate: businessDate,
     );
     if (!mounted) return;
     AppNotification.showSuccess(context, 'Expense deleted.');

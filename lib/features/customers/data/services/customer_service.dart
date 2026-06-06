@@ -57,7 +57,19 @@ class CustomerService extends ValueNotifier<List<Customer>> {
     return data != null ? Customer.fromDb(data) : null;
   }
 
+  /// §18 — edit an existing customer's details (CEO/Manager only,
+  /// `customers.update`, gated at the UI + the sheet's save boundary). Routes
+  /// through the DAO (which enqueues the full row) and logs.
   Future<void> updateCustomer(Customer updatedCustomer) async {
+    await _db.customersDao.updateCustomerDetails(
+      customerId: updatedCustomer.id,
+      name: updatedCustomer.name,
+      phone: updatedCustomer.phone,
+      address: updatedCustomer.addressText,
+      googleMapsLocation: updatedCustomer.googleMapsLocation,
+      priceTier: updatedCustomer.priceTier.name,
+      storeId: updatedCustomer.storeId,
+    );
     await _log.logAction(
       'Customer Updated',
       'Updated details for customer: ${updatedCustomer.name}',
@@ -127,15 +139,11 @@ class CustomerService extends ValueNotifier<List<Customer>> {
     }
   }
 
-  /// §18 Add Funds — top up a registered customer's wallet AND credit the cash
-  /// /transfer into the chosen Funds Register account (coding rule 5). All three
-  /// ledger writes (wallet, payment, funds) are atomic via WalletService.topup.
+  /// §18 Add Funds — top up a registered customer's wallet. The wallet + payment
+  /// ledger writes are atomic via WalletService.topup.
   Future<void> topUpWallet({
     required String customerId,
     required int amountKobo,
-    required String fundsAccountId,
-    required String storeId,
-    required String businessDate,
     required String method, // 'cash' | 'transfer'
     required String staffId,
     String? note,
@@ -146,9 +154,6 @@ class CustomerService extends ValueNotifier<List<Customer>> {
       amountKobo: amountKobo,
       method: method,
       staffId: staffId,
-      fundsAccountId: fundsAccountId,
-      storeId: storeId,
-      businessDate: businessDate,
     );
     final naira = (amountKobo / 100).round();
     await _log.logAction(
@@ -156,6 +161,27 @@ class CustomerService extends ValueNotifier<List<Customer>> {
       'Topped up ${formatCurrency(naira)} to ${customer?.name ?? customerId}\'s wallet'
           '${note != null && note.isNotEmpty ? '. Note: $note' : ''}',
       customerId: customerId,
+    );
+  }
+
+  /// §18.3 Refund Cash (CEO/Manager only) — pay the customer back, in cash,
+  /// money the business holds for them (held crate deposit and/or positive
+  /// spendable credit). Delegates to WalletService.refundCash, which writes the
+  /// wallet + payment ledger, the activity log, and the notification atomically.
+  /// Returns the amount actually refunded after capping at what's available.
+  Future<int> refundCashFromWallet({
+    required String customerId,
+    required int amountKobo,
+    required String method, // 'cash' | 'transfer' | 'pos' | 'other'
+    required String staffId,
+    String? note,
+  }) {
+    return WalletService(_db).refundCash(
+      customerId: customerId,
+      amountKobo: amountKobo,
+      method: method,
+      staffId: staffId,
+      note: note,
     );
   }
 

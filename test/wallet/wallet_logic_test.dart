@@ -118,8 +118,7 @@ void main() {
         equals(-3000));
 
     // 2. Cancel order which triggers refund
-    await db.ordersDao.markCancelled(orderId, 'Customer changed mind', 'staff1',
-        businessDate: '2026-06-01');
+    await db.ordersDao.markCancelled(orderId, 'Customer changed mind', 'staff1');
 
     expect(await db.walletTransactionsDao.getBalanceKobo(customerId), equals(0));
 
@@ -192,5 +191,147 @@ void main() {
     // Current business balance should still be 0
     final balance = await db.walletTransactionsDao.getBalanceKobo(customerId);
     expect(balance, equals(0));
+  });
+
+  // §18.3 Refund Cash — pay the customer back, in cash, money the business holds
+  // for them (held crate deposit and/or positive spendable credit).
+  group('refundCash (§18.3 wallet cash refund)', () {
+    // Posts a raw wallet row (to set up held deposit / debt without a full sale).
+    Future<void> postRaw(int signed, String type, String refType) async {
+      final wallet = await db.customerWalletsDao.getByCustomerId(customerId);
+      await db.into(db.walletTransactions).insert(
+            WalletTransactionsCompanion.insert(
+              businessId: businessId,
+              walletId: wallet!.id,
+              customerId: customerId,
+              type: type,
+              amountKobo: signed.abs(),
+              signedAmountKobo: signed,
+              referenceType: refType,
+            ),
+          );
+    }
+
+    Future<int> paymentRowCount() async =>
+        (await db.select(db.paymentTransactions).get()).length;
+
+    test('refunds a HELD deposit → held nets to 0, spendable unchanged', () async {
+      await postRaw(250000, 'credit', 'crate_deposit'); // held 250000
+      expect(await db.walletTransactionsDao.getDepositsHeldKobo(customerId),
+          250000);
+
+      final refunded = await walletService.refundCash(
+        customerId: customerId,
+        amountKobo: 250000,
+        method: 'cash',
+        staffId: 'staff1',
+      );
+
+      expect(refunded, 250000);
+      expect(await db.walletTransactionsDao.getDepositsHeldKobo(customerId), 0,
+          reason: 'crate_deposit_refunded debit clears held');
+      expect(await db.walletTransactionsDao.getBalanceKobo(customerId), 0,
+          reason: 'deposit refund never touches spendable');
+      expect(await paymentRowCount(), 1, reason: 'one cash refund payment row');
+      final pay = await db.select(db.paymentTransactions).getSingle();
+      expect(pay.type, 'refund');
+      expect(pay.method, 'cash');
+      expect(pay.amountKobo, 250000);
+    });
+
+    test('refunds spendable CREDIT → spendable drops, held unchanged', () async {
+      await walletService.topup(
+        customerId: customerId,
+        amountKobo: 5000,
+        method: 'cash',
+        staffId: 'staff1',
+      );
+
+      final refunded = await walletService.refundCash(
+        customerId: customerId,
+        amountKobo: 5000,
+        method: 'transfer',
+        staffId: 'staff1',
+      );
+
+      expect(refunded, 5000);
+      expect(await db.walletTransactionsDao.getBalanceKobo(customerId), 0,
+          reason: 'refund debit reduces spendable to 0');
+      expect(await db.walletTransactionsDao.getDepositsHeldKobo(customerId), 0);
+      final history =
+          await db.walletTransactionsDao.watchHistory(customerId).first;
+      expect(history.any((t) => t.referenceType == 'refund' && t.type == 'debit'),
+          isTrue);
+    });
+
+    test('combined held + credit, full refund → both legs, both net to 0',
+        () async {
+      await postRaw(250000, 'credit', 'crate_deposit'); // held 250000
+      await walletService.topup(
+        customerId: customerId,
+        amountKobo: 5000,
+        method: 'cash',
+        staffId: 'staff1',
+      ); // spendable 5000
+
+      final refunded = await walletService.refundCash(
+        customerId: customerId,
+        amountKobo: 255000,
+        method: 'cash',
+        staffId: 'staff1',
+      );
+
+      expect(refunded, 255000);
+      expect(await db.walletTransactionsDao.getDepositsHeldKobo(customerId), 0);
+      expect(await db.walletTransactionsDao.getBalanceKobo(customerId), 0);
+      expect(await paymentRowCount(), 3,
+          reason: '1 topup + 2 refund payment rows (deposit + credit)');
+    });
+
+    test('White Pages case: in debt → held deposit refunded TO WALLET (reduces '
+        'debt), no cash', () async {
+      await postRaw(-3010000, 'debit', 'order_payment'); // spendable -30,100.00
+      await postRaw(1200000, 'credit', 'crate_deposit'); // held 12,000.00
+      expect(await db.walletTransactionsDao.getBalanceKobo(customerId), -3010000);
+
+      // Ask for far more than is available — caps at the held deposit, and
+      // because the wallet is in debt it goes to the wallet (no cash option).
+      final refunded = await walletService.refundCash(
+        customerId: customerId,
+        amountKobo: 99999999,
+        method: 'cash', // ignored on the to-wallet path
+        staffId: 'staff1',
+      );
+
+      expect(refunded, 1200000, reason: 'only the held deposit is refundable');
+      expect(await db.walletTransactionsDao.getDepositsHeldKobo(customerId), 0,
+          reason: 'held deposit released');
+      // -30,100.00 + 12,000.00 = -18,100.00 — exactly the reconciled balance.
+      expect(await db.walletTransactionsDao.getBalanceKobo(customerId), -1810000,
+          reason: 'deposit credited to wallet reduces the debt');
+      expect(await paymentRowCount(), 0,
+          reason: 'in debt → refunded to wallet, no cash payment row');
+      final history =
+          await db.walletTransactionsDao.watchHistory(customerId).first;
+      expect(
+          history.any((t) => t.referenceType == 'crate_refund' && t.type == 'credit'),
+          isTrue,
+          reason: 'crate_refund credit is the to-wallet leg');
+    });
+
+    test('nothing to refund (pure debt) → returns 0, no rows written', () async {
+      await postRaw(-5000, 'debit', 'order_payment');
+
+      final refunded = await walletService.refundCash(
+        customerId: customerId,
+        amountKobo: 5000,
+        method: 'cash',
+        staffId: 'staff1',
+      );
+
+      expect(refunded, 0);
+      expect(await paymentRowCount(), 0);
+      expect(await db.walletTransactionsDao.getBalanceKobo(customerId), -5000);
+    });
   });
 }

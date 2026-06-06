@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
+import 'package:reebaplus_pos/core/utils/number_format.dart';
 
 class WalletService {
   final AppDatabase _db;
@@ -12,20 +13,15 @@ class WalletService {
   WalletTransactionsDao get _walletTxDao => _db.walletTransactionsDao;
   CustomerWalletsDao get _customerWalletsDao => _db.customerWalletsDao;
 
-  /// Top up a customer's wallet.
+  /// Top up a customer's wallet (§18 Add Funds).
   ///
   /// Creates a WalletTransaction (credit) and a corresponding PaymentTransaction
-  /// (wallet_topup). When [fundsAccountId] + [storeId] + [businessDate] are
-  /// supplied, the cash/transfer also lands in that Funds Register account
-  /// (§18 Add Funds / coding rule 5) — atomically, in the same transaction.
+  /// (wallet_topup), atomically in one transaction.
   Future<void> topup({
     required String customerId,
     required int amountKobo,
     required String method, // 'cash' or 'transfer'
     required String staffId,
-    String? fundsAccountId,
-    String? storeId,
-    String? businessDate,
   }) async {
     final businessId = _walletTxDao.requireBusinessId();
     final wallet = await _customerWalletsDao.getByCustomerId(customerId);
@@ -89,21 +85,6 @@ class WalletService {
       } else {
         await _db.syncDao.enqueueUpsert('wallet_transactions', walletComp);
         await _db.syncDao.enqueueUpsert('payment_transactions', paymentComp);
-
-        // The money physically entered a Funds Register account — credit it so
-        // the daily expected balance stays accurate (§23 / coding rule 5).
-        if (fundsAccountId != null &&
-            storeId != null &&
-            businessDate != null) {
-          await _db.fundTransactionsDao.creditTopup(
-            fundsAccountId: fundsAccountId,
-            storeId: storeId,
-            businessDate: businessDate,
-            amountKobo: amountKobo,
-            paymentId: paymentTxnId,
-            performedBy: staffId,
-          );
-        }
       }
     });
   }
@@ -146,6 +127,142 @@ class WalletService {
     );
     await _db.into(_db.walletTransactions).insert(refundComp);
     await _db.syncDao.enqueueUpsert('wallet_transactions', refundComp);
+  }
+
+  /// §18.3 Refund (CEO / Manager only — the UI gates on
+  /// `customers.wallet.withdraw`). Pays the customer back money the business
+  /// HOLDS for them: their held crate deposit and/or positive spendable wallet
+  /// credit. [amountKobo] is drawn from the held deposit FIRST, then from
+  /// spendable credit, capped at what's available (a debt is never "refundable").
+  ///
+  /// **Destination is decided by the wallet's debt status (user, 2026-06-05):**
+  ///   • Wallet IN DEBT (spendable < 0) → the held deposit is refunded TO THE
+  ///     WALLET (a `crate_refund` spendable credit) so it REDUCES the debt — no
+  ///     cash leaves. (Spendable credit is 0 when in debt, so the deposit is the
+  ///     only thing refunded.) [method] is ignored on this path.
+  ///   • Wallet NOT in debt → paid out as CASH: a `payment_transactions` refund
+  ///     row per portion via [method].
+  /// Both paths post a `crate_deposit_refunded` debit for the deposit portion,
+  /// which clears "held". The credit portion (only > 0 when not in debt) is a
+  /// `refund` debit + cash row. Payment rows link via wallet_txn_id (the
+  /// PaymentTransactions exactly-one-reference rule).
+  ///
+  /// Also writes an `activity_logs` entry and fires a notification (§24 money
+  /// movement / §26.4 refund issued). Returns the amount actually refunded
+  /// (after capping) so the caller can confirm or report "nothing to refund".
+  Future<int> refundCash({
+    required String customerId,
+    required int amountKobo,
+    required String method, // 'cash' | 'transfer' | 'pos' | 'other'
+    required String staffId,
+    String? note,
+  }) async {
+    if (amountKobo <= 0) return 0;
+    final businessId = _walletTxDao.requireBusinessId();
+    final wallet = await _customerWalletsDao.getByCustomerId(customerId);
+    if (wallet == null) {
+      throw StateError('Customer $customerId has no wallet');
+    }
+
+    // Available = held deposit + positive spendable credit. A debt contributes 0.
+    final heldKobo = await _walletTxDao.getDepositsHeldKobo(customerId);
+    final spendableKobo = await _walletTxDao.getBalanceKobo(customerId);
+    final inDebt = spendableKobo < 0;
+    final depositAvailable = heldKobo > 0 ? heldKobo : 0;
+    final creditAvailable = spendableKobo > 0 ? spendableKobo : 0;
+    final available = depositAvailable + creditAvailable;
+    if (available <= 0) return 0;
+
+    final refundKobo = amountKobo > available ? available : amountKobo;
+    // Drain the held deposit first, then spendable credit.
+    final depositPortion =
+        refundKobo > depositAvailable ? depositAvailable : refundKobo;
+    final creditPortion = refundKobo - depositPortion;
+
+    await _db.transaction(() async {
+      final now = DateTime.now();
+
+      Future<String> postWalletLeg(int signed, String refType) async {
+        final id = UuidV7.generate();
+        final comp = WalletTransactionsCompanion.insert(
+          id: Value(id),
+          businessId: businessId,
+          walletId: wallet.id,
+          customerId: customerId,
+          type: signed >= 0 ? 'credit' : 'debit',
+          amountKobo: signed.abs(),
+          signedAmountKobo: signed,
+          referenceType: refType,
+          performedBy: Value(staffId),
+          createdAt: Value(now),
+          lastUpdatedAt: Value(now),
+        );
+        await _db.into(_db.walletTransactions).insert(comp);
+        await _db.syncDao.enqueueUpsert('wallet_transactions', comp);
+        return id;
+      }
+
+      Future<void> postCashRow(int portion, String walletTxnId) async {
+        final payComp = PaymentTransactionsCompanion.insert(
+          id: Value(UuidV7.generate()),
+          businessId: businessId,
+          amountKobo: portion,
+          method: method,
+          type: 'refund',
+          walletTxnId: Value(walletTxnId),
+          performedBy: Value(staffId),
+          lastUpdatedAt: Value(now),
+        );
+        await _db.into(_db.paymentTransactions).insert(payComp);
+        await _db.syncDao.enqueueUpsert('payment_transactions', payComp);
+      }
+
+      // Deposit portion always drops "held" via a crate_deposit_refunded debit.
+      if (depositPortion > 0) {
+        final refundedId =
+            await postWalletLeg(-depositPortion, 'crate_deposit_refunded');
+        if (inDebt) {
+          // To wallet: a spendable crate_refund credit reduces the debt. No cash.
+          await postWalletLeg(depositPortion, 'crate_refund');
+        } else {
+          // Cash out.
+          await postCashRow(depositPortion, refundedId);
+        }
+      }
+
+      // Credit portion (only > 0 when NOT in debt) → cash out via a refund debit.
+      if (creditPortion > 0) {
+        final refundId = await postWalletLeg(-creditPortion, 'refund');
+        await postCashRow(creditPortion, refundId);
+      }
+
+      // §24 money movement / §26.4 refund issued — audit + notify CEO/Manager.
+      final dest = inDebt ? 'to wallet (reduces debt)' : 'cash';
+      final parts = <String>[
+        if (depositPortion > 0) 'deposit ${formatCurrency(depositPortion / 100)}',
+        if (creditPortion > 0) 'credit ${formatCurrency(creditPortion / 100)}',
+      ];
+      await _db.activityLogDao.logActivity(
+        action: 'customer.wallet.refund',
+        description:
+            'Refunded ${formatCurrency(refundKobo / 100)} $dest from wallet'
+            '${parts.isNotEmpty ? ' (${parts.join(', ')})' : ''}'
+            '${note != null && note.trim().isNotEmpty ? ' — ${note.trim()}' : ''}',
+        staffId: staffId,
+        entityType: 'customer',
+        entityId: customerId,
+      );
+      await _db.notificationsDao.fireNotification(
+        type: 'wallet_refund',
+        message:
+            'Refund of ${formatCurrency(refundKobo / 100)} ($dest) issued from a '
+            'customer wallet',
+        severity: 'info',
+        linkedRecordId: customerId,
+      );
+    });
+
+    return refundKobo;
   }
 
   /// Calculates the current balance for a customer.

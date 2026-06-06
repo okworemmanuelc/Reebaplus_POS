@@ -146,6 +146,42 @@ void main() {
     expect(await db.select(db.notifications).get(), isEmpty);
   });
 
+  test('realtime DELETE removes a user_stores row locally', () async {
+    // §9.5 staff store-assignment: un-assign hard-deletes the junction row
+    // (enqueueDelete), so the DELETE echo must remove it on other devices.
+    final storeId = UuidV7.generate();
+    final userId = UuidV7.generate();
+    final assignId = UuidV7.generate();
+    await db.into(db.stores).insert(
+          StoresCompanion.insert(
+            id: Value(storeId),
+            businessId: businessId,
+            name: 'Store 1',
+          ),
+        );
+    await db.into(db.users).insert(
+          UsersCompanion.insert(
+            id: Value(userId),
+            businessId: businessId,
+            name: 'Cashier',
+            pin: 'hash',
+          ),
+        );
+    await db.into(db.userStores).insert(
+          UserStoresCompanion.insert(
+            id: Value(assignId),
+            businessId: businessId,
+            userId: userId,
+            storeId: storeId,
+          ),
+        );
+    expect(await db.select(db.userStores).get(), hasLength(1));
+
+    await sync.deleteLocalRowByIdForTesting('user_stores', assignId);
+    expect(await db.select(db.userStores).get(), isEmpty,
+        reason: 'realtime DELETE must remove the local user_stores row');
+  });
+
   test('realtime DELETE on an unhandled table is a safe no-op', () async {
     // Soft-delete tables never emit a true DELETE; if one ever did, the handler
     // must not throw. (roles is not a hard-delete table.)

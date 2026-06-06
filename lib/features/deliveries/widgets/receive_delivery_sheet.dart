@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
@@ -323,9 +324,13 @@ class _ReceiveDeliverySheetState extends ConsumerState<ReceiveDeliverySheet> {
     return AppInput(
       controller: ctrl,
       keyboardType: isNumber
-          ? const TextInputType.numberWithOptions(decimal: true)
+          ? (isCurrency
+              ? const TextInputType.numberWithOptions(decimal: true)
+              : TextInputType.number)
           : TextInputType.text,
-      inputFormatters: isCurrency ? [CurrencyInputFormatter()] : null,
+      inputFormatters: isCurrency
+          ? [CurrencyInputFormatter()]
+          : (isNumber ? [FilteringTextInputFormatter.digitsOnly] : null),
       labelText: label,
       hintText: hint,
       fillColor: _cardBg,
@@ -338,11 +343,15 @@ class _ReceiveDeliverySheetState extends ConsumerState<ReceiveDeliverySheet> {
       behavior: HitTestBehavior.opaque,
       onTap: () => Navigator.pop(context),
       child: DraggableScrollableSheet(
-        initialChildSize: 0.8,
+        // Open at maxChildSize: a draggable sheet auto-EXPANDS toward max when a
+        // focused field is scrolled into view as the keyboard opens, which lurches
+        // the whole form upward "like a second keyboard". Starting at max leaves
+        // no room to expand. Matches add_customer_sheet.
+        initialChildSize: 0.9,
         minChildSize: 0.5,
         maxChildSize: 0.9,
         snap: true,
-        snapSizes: const [0.5, 0.8, 0.9],
+        snapSizes: const [0.5, 0.9],
         builder: (context, scrollController) {
           double grandTotal = 0;
           for (var l in _lines) {

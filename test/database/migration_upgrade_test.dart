@@ -50,15 +50,6 @@ void main() {
     return rows.map((r) => r.read<String>('name')).toSet();
   }
 
-  Future<bool> tableExists(AppDatabase db, String table) async {
-    final rows = await db
-        .customSelect(
-          "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
-          variables: [Variable<String>(table)],
-        )
-        .get();
-    return rows.isNotEmpty;
-  }
 
   // Reverts the v20 (Funds Register) delta: drop the three funds tables (their
   // indexes + triggers drop with them). Shared by the scenarios below.
@@ -69,32 +60,6 @@ void main() {
     await db.customStatement('DROP TABLE IF EXISTS funds_accounts');
     await db.customStatement('PRAGMA foreign_keys = ON');
   }
-
-  group('onUpgrade v19 → v21 (Funds Register tables + account_number)', () {
-    test('upgrade succeeds and funds_accounts ends with account_number', () async {
-      // Build a fresh v21 DB, then revert to the v19 shape: funds tables did not
-      // exist at v19 (they arrive in v20). products is unchanged between v19 and
-      // v21, so nothing else to revert.
-      final db1 = await openAndInit();
-      await dropFundsTables(db1);
-      await db1.customStatement('PRAGMA user_version = 19');
-      await db1.close();
-
-      // Re-open → onUpgrade(19 → 21). Block 20 recreates the funds tables from
-      // the CURRENT schema (which already has account_number); block 21 must NOT
-      // blindly re-add account_number or this open throws "duplicate column".
-      final db2 = await openAndInit();
-      addTearDown(db2.close);
-
-      expect(await tableExists(db2, 'funds_accounts'), isTrue);
-      expect(await tableExists(db2, 'fund_days'), isTrue);
-      expect(await tableExists(db2, 'fund_transactions'), isTrue);
-
-      final cols = await columnsOf(db2, 'funds_accounts');
-      expect(cols.contains('account_number'), isTrue,
-          reason: 'v21 must leave funds_accounts.account_number present');
-    });
-  });
 
   group('onUpgrade v17 → v21 (product price salvage-map, decision Q4 revised)', () {
     test('carries retail→retailer and coalesce(distributor,retail)→wholesaler',
@@ -244,6 +209,151 @@ void main() {
     });
   });
 
+  group('onUpgrade v37 → v38 (stores.manage permission)', () {
+    test('re-seeds the permission row on a DB that lacks it', () async {
+      Future<int> permCount(AppDatabase db) async {
+        final r = await db
+            .customSelect(
+              "SELECT COUNT(*) c FROM permissions "
+              "WHERE key = 'stores.manage'",
+            )
+            .getSingle();
+        return r.read<int>('c');
+      }
+
+      // Fresh DB already seeds the key in onCreate (it's in _defaultPermissionRows).
+      // Delete it + revert to v37 so the re-open's v38 block has work to do.
+      final db1 = await openAndInit();
+      await db1.customStatement(
+        "DELETE FROM permissions WHERE key = 'stores.manage'",
+      );
+      expect(await permCount(db1), 0);
+      await db1.customStatement('PRAGMA user_version = 37');
+      await db1.close();
+
+      // Re-open → onUpgrade(37 → 38) must re-insert the catalog row.
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+      expect(await permCount(db2), 1,
+          reason: 'v38 block must seed stores.manage');
+    });
+  });
+
+  group('onUpgrade v38 → v39 (staff.assign_stores permission)', () {
+    test('re-seeds the permission row on a DB that lacks it', () async {
+      Future<int> permCount(AppDatabase db) async {
+        final r = await db
+            .customSelect(
+              "SELECT COUNT(*) c FROM permissions "
+              "WHERE key = 'staff.assign_stores'",
+            )
+            .getSingle();
+        return r.read<int>('c');
+      }
+
+      // Fresh DB already seeds the key in onCreate (it's in _defaultPermissionRows).
+      // Delete it + revert to v38 so the re-open's v39 block has work to do.
+      final db1 = await openAndInit();
+      await db1.customStatement(
+        "DELETE FROM permissions WHERE key = 'staff.assign_stores'",
+      );
+      expect(await permCount(db1), 0);
+      await db1.customStatement('PRAGMA user_version = 38');
+      await db1.close();
+
+      // Re-open → onUpgrade(38 → 39) must re-insert the catalog row.
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+      expect(await permCount(db2), 1,
+          reason: 'v39 block must seed staff.assign_stores');
+    });
+  });
+
+  group('onUpgrade v39 → v40 (customers.wallet.withdraw permission)', () {
+    test('re-seeds the permission row on a DB that lacks it', () async {
+      Future<int> permCount(AppDatabase db) async {
+        final r = await db
+            .customSelect(
+              "SELECT COUNT(*) c FROM permissions "
+              "WHERE key = 'customers.wallet.withdraw'",
+            )
+            .getSingle();
+        return r.read<int>('c');
+      }
+
+      // Fresh DB already seeds the key in onCreate (it's in _defaultPermissionRows).
+      // Delete it + revert to v39 so the re-open's v40 block has work to do.
+      final db1 = await openAndInit();
+      await db1.customStatement(
+        "DELETE FROM permissions WHERE key = 'customers.wallet.withdraw'",
+      );
+      expect(await permCount(db1), 0);
+      await db1.customStatement('PRAGMA user_version = 39');
+      await db1.close();
+
+      // Re-open → onUpgrade(39 → 40) must re-insert the catalog row.
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+      expect(await permCount(db2), 1,
+          reason: 'v40 block must seed customers.wallet.withdraw');
+    });
+  });
+
+  group('onUpgrade v40 → v41 (store_role_permissions table, §10.2.1 Store)', () {
+    Future<bool> tableExists(AppDatabase db, String name) async {
+      final r = await db
+          .customSelect(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='$name'",
+          )
+          .get();
+      return r.isNotEmpty;
+    }
+
+    test('creates the table (with its index + bump trigger) on a DB that lacks it',
+        () async {
+      // Fresh DB already has the table (onCreate). Drop it + revert to v40 so
+      // the re-open's v41 block has work to do.
+      final db1 = await openAndInit();
+      expect(await tableExists(db1, 'store_role_permissions'), isTrue);
+      await db1.customStatement('PRAGMA foreign_keys = OFF');
+      await db1
+          .customStatement('DROP TABLE IF EXISTS store_role_permissions');
+      await db1.customStatement('PRAGMA foreign_keys = ON');
+      expect(await tableExists(db1, 'store_role_permissions'), isFalse);
+      await db1.customStatement('PRAGMA user_version = 40');
+      await db1.close();
+
+      // Re-open → onUpgrade(40 → 41) must recreate the table.
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+      expect(await tableExists(db2, 'store_role_permissions'), isTrue,
+          reason: 'v41 block must create store_role_permissions');
+      expect(
+        await columnsOf(db2, 'store_role_permissions'),
+        containsAll(
+            {'id', 'business_id', 'store_id', 'role_id', 'permission_key',
+             'is_granted', 'created_at', 'last_updated_at'}),
+      );
+      // The sync index + bump trigger must exist too (so a fresh install and an
+      // upgrade end up identical, per the new-synced-table contract).
+      final idx = await db2
+          .customSelect(
+            "SELECT 1 FROM sqlite_master WHERE type='index' "
+            "AND name='idx_store_role_permissions_business_lua'",
+          )
+          .get();
+      expect(idx, isNotEmpty, reason: 'v41 must create the (business_id, '
+          'last_updated_at) sync index');
+      final trig = await db2
+          .customSelect(
+            "SELECT 1 FROM sqlite_master WHERE type='trigger' "
+            "AND name='bump_store_role_permissions_last_updated_at'",
+          )
+          .get();
+      expect(trig, isNotEmpty, reason: 'v41 must create the bump trigger');
+    });
+  });
+
   group('onUpgrade v24 → v25 (activity_logs generic shape + notif severity)', () {
     test(
         'backfills entity_type/entity_id, drops the FK columns, adds severity, '
@@ -363,44 +473,6 @@ void main() {
           [logNoEntity],
         ),
         throwsA(anything),
-      );
-    });
-  });
-
-  group('onUpgrade v26 → v27 (fund_day_closings table)', () {
-    test('creates fund_day_closings with the expected columns', () async {
-      // Build a fresh v27 DB, then revert the v27 delta: drop the new table
-      // (its index + bump trigger drop with it) and step user_version back.
-      final db1 = await openAndInit();
-      await db1.customStatement('PRAGMA foreign_keys = OFF');
-      await db1.customStatement('DROP TABLE IF EXISTS fund_day_closings');
-      await db1.customStatement('PRAGMA foreign_keys = ON');
-      await db1.customStatement('PRAGMA user_version = 26');
-      await db1.close();
-
-      // Re-open → onUpgrade(26 → 27) recreates the table from the v27 block.
-      final db2 = await openAndInit();
-      addTearDown(db2.close);
-
-      expect(await tableExists(db2, 'fund_day_closings'), isTrue);
-      final cols = await columnsOf(db2, 'fund_day_closings');
-      expect(
-        cols,
-        containsAll(<String>{
-          'id',
-          'business_id',
-          'fund_day_id',
-          'funds_account_id',
-          'store_id',
-          'business_date',
-          'account_type',
-          'expected_kobo',
-          'counted_kobo',
-          'variance_kobo',
-          'performed_by',
-          'created_at',
-          'last_updated_at',
-        }),
       );
     });
   });
@@ -540,6 +612,64 @@ void main() {
       expect(rows, hasLength(1));
       expect(rows.first.read<String?>('customer_id'), cust);
       expect(rows.first.read<String?>('manufacturer_id'), mfr);
+    });
+  });
+
+  group('onUpgrade → v36 (Funds Register removal, FK-safe teardown)', () {
+    test(
+        'drops funds_accounts even when a stray table still references it '
+        '(parallel Supplier Accounts coupling) — no 787', () async {
+      // Reproduces the on-device crash: a till that also ran the parallel
+      // Supplier Accounts work carries a supplier_payments.funds_account_id ->
+      // funds_accounts FK that THIS branch's schema never defines. With FK
+      // enforcement ON, the v36 `DROP TABLE funds_accounts` runs an implicit
+      // DELETE that orphans that payment row -> SqliteException(787). The current
+      // schema (onCreate) no longer has the funds tables, so recreate the parent
+      // + a stray child referrer, then drive onUpgrade across the v36 boundary.
+      final db1 = await openAndInit();
+
+      // funds_accounts (parent) — minimal shape; only the FK target id matters.
+      await db1.customStatement(
+        'CREATE TABLE funds_accounts (id TEXT NOT NULL PRIMARY KEY, '
+        'business_id TEXT NOT NULL)',
+      );
+      // Stray referrer from the parallel work — FK INTO funds_accounts.
+      await db1.customStatement(
+        'CREATE TABLE supplier_payments (id TEXT NOT NULL PRIMARY KEY, '
+        'funds_account_id TEXT REFERENCES funds_accounts (id))',
+      );
+      final acct = UuidV7.generate();
+      await db1.customStatement(
+        "INSERT INTO funds_accounts (id, business_id) VALUES ('$acct', 'b')",
+      );
+      await db1.customStatement(
+        "INSERT INTO supplier_payments (id, funds_account_id) "
+        "VALUES ('${UuidV7.generate()}', '$acct')",
+      );
+
+      await db1.customStatement('PRAGMA user_version = 35');
+      await db1.close();
+
+      // Re-open with FK enforcement enabled at raw-open (mirrors production's
+      // _openConnection setup) so onUpgrade runs with FK ON — the condition that
+      // makes the drop throw 787. The shared openAndInit() omits that setup, so
+      // its onUpgrade runs FK-OFF and would pass this test even WITHOUT the fix;
+      // this local open is what gives the regression teeth. The v36 block must
+      // NOT throw 787 — reaching past the forced open at all proves the fix.
+      final db2 = AppDatabase.forTesting(
+        NativeDatabase(
+          dbFile,
+          setup: (raw) => raw.execute('PRAGMA foreign_keys = ON'),
+        ),
+      );
+      addTearDown(db2.close);
+      await db2.customSelect('SELECT 1').get();
+
+      final funds = await db2.customSelect(
+        "SELECT name FROM sqlite_master "
+        "WHERE type='table' AND name='funds_accounts'",
+      ).get();
+      expect(funds, isEmpty, reason: 'v36 must drop funds_accounts');
     });
   });
 }

@@ -6,6 +6,7 @@ import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
+import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
@@ -366,6 +367,7 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
+                      inputFormatters: [CurrencyInputFormatter(grouping: false)],
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: context.getRFontSize(32),
@@ -605,6 +607,7 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
                 ),
+                inputFormatters: [CurrencyInputFormatter(grouping: false)],
                 hintText: _discountKind == 'percent' ? '0%' : '${activeCurrencySymbol}0',
               ),
             ),

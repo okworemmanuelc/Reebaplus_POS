@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 
 class AutoLockWrapper extends ConsumerStatefulWidget {
@@ -30,6 +31,7 @@ class _AutoLockWrapperState extends ConsumerState<AutoLockWrapper>
   // §"Bug fix" Pattern 1.
   late final AppDatabase _db;
   late final AuthService _auth;
+  late final SupabaseSyncService _sync;
 
   @override
   void initState() {
@@ -37,6 +39,7 @@ class _AutoLockWrapperState extends ConsumerState<AutoLockWrapper>
     WidgetsBinding.instance.addObserver(this);
     _db = ref.read(databaseProvider);
     _auth = ref.read(authProvider);
+    _sync = ref.read(supabaseSyncServiceProvider);
   }
 
   @override
@@ -80,6 +83,16 @@ class _AutoLockWrapperState extends ConsumerState<AutoLockWrapper>
       if (_auth.currentUser == null) {
         await prefs.remove(_pausedTimeKey);
         return;
+      }
+
+      // §32: re-pull the businesses row on resume so a subscription change made
+      // from the admin console while this device was backgrounded is reflected
+      // immediately (live lock / unlock + thank-you), not only on the next full
+      // pull. Best-effort and ref-free (uses captured _sync, not ref, after the
+      // awaits above); the local row update drives the gate's reactive recompute.
+      final subBizId = _auth.currentUser?.businessId;
+      if (subBizId != null) {
+        unawaited(_sync.refreshBusinessRow(subBizId));
       }
 
       final pausedMs = prefs.getInt(_pausedTimeKey);

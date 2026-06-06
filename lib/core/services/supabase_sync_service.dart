@@ -390,6 +390,11 @@ class SupabaseSyncService {
       'created_at',
       'last_updated_at',
       // NOTE: timezone is local-only (cloud schema doesn't have it).
+      // NOTE: subscription_status / subscription_plan / trial_ends_at /
+      // current_period_end are deliberately OMITTED (§32) — they are cloud-
+      // authoritative / app-read-only. The fail-closed scrub drops them so the
+      // device can never push them (only the admin console writes them). Do NOT
+      // add them here.
     },
   };
 
@@ -455,7 +460,7 @@ class SupabaseSyncService {
   /// Applies an incoming realtime DELETE locally. The cloud is the source of
   /// truth for the removal, so this deletes the local row WITHOUT enqueueing
   /// (§5 exception #1 — same contract as [_restoreTableData]; re-pushing would
-  /// loop). Only the three hard-delete tables (the `enqueueDelete` call sites)
+  /// loop). Only the hard-delete tables (the `enqueueDelete` call sites)
   /// ever emit a true DELETE; soft-deletes arrive as UPDATEs and flow through
   /// [_restoreTableData]. Typed deletes keep Drift stream queries (e.g. the
   /// role-permission toggle) reactive. Unknown tables are logged, not applied.
@@ -469,6 +474,14 @@ class SupabaseSyncService {
         await (_db.delete(_db.userPermissionOverrides)
               ..where((t) => t.id.equals(id)))
             .go();
+        break;
+      case 'store_role_permissions':
+        await (_db.delete(_db.storeRolePermissions)
+              ..where((t) => t.id.equals(id)))
+            .go();
+        break;
+      case 'user_stores':
+        await (_db.delete(_db.userStores)..where((t) => t.id.equals(id))).go();
         break;
       case 'saved_carts':
         await (_db.delete(_db.savedCarts)..where((t) => t.id.equals(id))).go();
@@ -1443,6 +1456,12 @@ class SupabaseSyncService {
     // here. Without this entry the pull/restore/realtime loops never ingest it
     // and an override set on one device never reaches the others.
     'user_permission_overrides',
+    // v41 (§10.2.1 Store scope) — per-store role permission overrides.
+    // References businesses + stores + roles (all pulled above) and the global
+    // permissions catalogue, so FK-safe here. Without this entry the
+    // pull/restore/realtime loops never ingest it and a store override set on
+    // one device never reaches the others.
+    'store_role_permissions',
     'user_businesses',
     'user_stores',
     // invite_codes references business/role/store/generated-by-user — all
@@ -1458,6 +1477,9 @@ class SupabaseSyncService {
     'customers',
     'orders',
     'order_items',
+    // §13.4 — per-order, per-brand crate deposit lines. References orders +
+    // manufacturers (both pulled above), so FK-safe here.
+    'order_crate_lines',
     'shipments',
     'purchase_items',
     'expense_categories',
@@ -1479,6 +1501,11 @@ class SupabaseSyncService {
     'stock_transactions',
     'customer_wallets',
     'wallet_transactions',
+    // v42 (§21.10) — append-only supplier ledger. References suppliers + users
+    // (both pulled above), so FK-safe here. Without this entry the
+    // pull/restore/realtime loops never ingest it and a supplier invoice/payment
+    // recorded on one device never reaches the others.
+    'supplier_ledger_entries',
     'saved_carts',
     'pending_crate_returns',
     'manufacturer_crate_balances',
@@ -1486,14 +1513,6 @@ class SupabaseSyncService {
     'system_config',
     'price_lists',
     'payment_transactions',
-    // Funds Register (§23). fund_transactions references funds_accounts +
-    // orders + payment_transactions, so it follows all three.
-    'funds_accounts',
-    'fund_days',
-    'fund_transactions',
-    // fund_day_closings references fund_days + funds_accounts + stores + users,
-    // all pulled above, so it's FK-safe here (§23.6 Close Day).
-    'fund_day_closings',
     // stock_counts references businesses + stores + users (all pulled above),
     // so it's FK-safe here (§17 Daily Stock Count). Added in this pass — it was
     // missing from the ingest loops since Session 58, so saved counts never
@@ -1694,8 +1713,9 @@ class SupabaseSyncService {
       skipped = {...skipped, ...fkSkipped};
     }
 
-    // Delete-aware reconciliation for the three hard-delete tables only
-    // (role_permissions, saved_carts, notifications). Realtime delivers DELETEs
+    // Delete-aware reconciliation for the hard-delete tables only (the
+    // `enqueueDelete` call sites — see _hardDeleteReconcileTables). Realtime
+    // delivers DELETEs
     // only to a live-subscribed device — Supabase never replays a missed DELETE
     // — and the restore path above is upsert-only (an incoming row absent
     // locally is kept). So a device that missed a live DELETE (offline,
@@ -1720,11 +1740,13 @@ class SupabaseSyncService {
   static const _hardDeleteReconcileTables = {
     'role_permissions',
     'user_permission_overrides',
+    'store_role_permissions',
+    'user_stores',
     'saved_carts',
     'notifications',
   };
 
-  /// Delete local rows of the three hard-delete tables whose id is absent from a
+  /// Delete local rows of the hard-delete tables whose id is absent from a
   /// COMPLETE [snapshot] for [businessId]. LOCAL-ONLY: applies cloud truth, so
   /// it never enqueues anything (§5 exception #1 — same contract as
   /// [_restoreTableData]; pushing the deletes back would loop).
@@ -1783,6 +1805,16 @@ class SupabaseSyncService {
             .go();
       case 'user_permission_overrides':
         return (_db.delete(_db.userPermissionOverrides)
+              ..where((t) =>
+                  t.businessId.equals(businessId) & t.id.isIn(ids).not()))
+            .go();
+      case 'store_role_permissions':
+        return (_db.delete(_db.storeRolePermissions)
+              ..where((t) =>
+                  t.businessId.equals(businessId) & t.id.isIn(ids).not()))
+            .go();
+      case 'user_stores':
+        return (_db.delete(_db.userStores)
               ..where((t) =>
                   t.businessId.equals(businessId) & t.id.isIn(ids).not()))
             .go();
@@ -1928,6 +1960,24 @@ class SupabaseSyncService {
     final List<dynamic> data =
         await query.timeout(const Duration(seconds: 25));
     return data;
+  }
+
+  /// Cheap single-row refresh of the `businesses` row from the cloud, applied
+  /// locally through the normal restore path (LWW guard included). Used by the
+  /// subscription gate (§32) on app resume / periodic tick / the locked
+  /// screen's "Check again", so an admin-console subscription change that this
+  /// device missed (it was backgrounded, or a realtime event was dropped) is
+  /// reflected without waiting for the next full pull. Best-effort: never
+  /// throws — a failed refresh just leaves the last-known local state.
+  Future<void> refreshBusinessRow(String businessId) async {
+    try {
+      final data = await _fetchOneTable('businesses', businessId, null);
+      if (data.isNotEmpty) {
+        await _restoreTableData('businesses', data);
+      }
+    } catch (e) {
+      debugPrint('[SyncService] refreshBusinessRow failed: $e');
+    }
   }
 
   /// Subscribes to real-time changes from Supabase for this business.
@@ -2741,6 +2791,11 @@ class SupabaseSyncService {
             // throws on every restore.
             r.putIfAbsent('timezone', () => 'UTC');
             r.putIfAbsent('onboardingComplete', () => false);
+            // §32: subscriptionStatus is NOT NULL in Drift; a row that predates
+            // the cloud column (brief migration window) would cast null→String
+            // and throw. The nullable subscription_plan / *_ends_at tolerate
+            // absent → null, so they need no default.
+            r.putIfAbsent('subscriptionStatus', () => 'trial');
             await _db
                 .into(_db.businesses)
                 .insertOnConflictUpdate(BusinessData.fromJson(r));
@@ -2881,6 +2936,30 @@ class SupabaseSyncService {
                 .insertOnConflictUpdate(row);
           }
           break;
+        case 'store_role_permissions':
+          for (var r in rows) {
+            final row = StoreRolePermissionData.fromJson(r);
+            // Same shape as role_permissions/user_permission_overrides: random
+            // `id`, logical identity (store_id, role_id, permission_key)
+            // enforced by UNIQUE. Two devices overriding the same (store, role,
+            // permission) mint different ids for the same triple, so upserting
+            // on `id` alone trips the unique constraint (2067). Drop any local
+            // row with the same logical key but a different id first, so the
+            // incoming cloud row applies cleanly and the device converges on the
+            // cloud's id. Restore path — local only, never enqueue (§5 exception
+            // #1; re-pushing loops).
+            await (_db.delete(_db.storeRolePermissions)
+                  ..where((t) =>
+                      t.storeId.equals(row.storeId) &
+                      t.roleId.equals(row.roleId) &
+                      t.permissionKey.equals(row.permissionKey) &
+                      t.id.equals(row.id).not()))
+                .go();
+            await _db
+                .into(_db.storeRolePermissions)
+                .insertOnConflictUpdate(row);
+          }
+          break;
         case 'role_settings':
           for (var r in rows) {
             await _db
@@ -2999,6 +3078,36 @@ class SupabaseSyncService {
               () => _db
                   .into(_db.orderItems)
                   .insertOnConflictUpdate(OrderItemData.fromJson(r)),
+            );
+          }
+          break;
+        case 'order_crate_lines':
+          for (var r in rows) {
+            // §13.4 — FK-resilient: references orders(order_id) +
+            // manufacturers(manufacturer_id). Skip-and-defer if a parent slice
+            // is late (a full re-pull catches it up). No JSON columns.
+            final data = OrderCrateLineData.fromJson(r);
+            await _insertResilient(
+              'order_crate_lines',
+              r,
+              fkSkipped,
+              () async {
+                // Cloud is authoritative. Heal any stale local row that holds
+                // the same natural key (business_id, order_id, manufacturer_id)
+                // under a DIFFERENT id — left behind by the pre-fix insertLine
+                // that let local/cloud ids diverge. Without this the cloud row's
+                // insert would hit the UNIQUE constraint (2067) forever.
+                await (_db.delete(_db.orderCrateLines)
+                      ..where((t) =>
+                          t.businessId.equals(data.businessId) &
+                          t.orderId.equals(data.orderId) &
+                          t.manufacturerId.equals(data.manufacturerId) &
+                          t.id.equals(data.id).not()))
+                    .go();
+                await _db
+                    .into(_db.orderCrateLines)
+                    .insertOnConflictUpdate(data);
+              },
             );
           }
           break;
@@ -3311,6 +3420,28 @@ class SupabaseSyncService {
             ),
           );
           break;
+        case 'supplier_ledger_entries':
+          // v42 (§21.10) — append-only supplier ledger; restore via the ledger
+          // path (catch-up insert + targeted void update), like
+          // wallet_transactions. References suppliers(supplier_id) +
+          // users(performed_by), so FK-resilient.
+          await _restoreLedgerTable(
+            rows,
+            tableName: 'supplier_ledger_entries',
+            fkSkipped: fkSkipped,
+            table: _db.supplierLedgerEntries,
+            fromJson: SupplierLedgerEntryData.fromJson,
+            voidedAtOf: (d) => d.voidedAt,
+            whereNotYetVoided: (t, d) =>
+                t.id.equals(d.id) & t.voidedAt.isNull(),
+            buildVoidCompanion: (d) => SupplierLedgerEntriesCompanion(
+              voidedAt: Value(d.voidedAt),
+              voidedBy: Value(d.voidedBy),
+              voidReason: Value(d.voidReason),
+              lastUpdatedAt: Value(d.lastUpdatedAt),
+            ),
+          );
+          break;
         case 'saved_carts':
           for (var r in rows) {
             r['cartData'] = _stringifyJsonb(r['cartData']);
@@ -3330,51 +3461,6 @@ class SupabaseSyncService {
                   .insertOnConflictUpdate(PendingCrateReturnData.fromJson(r)),
             );
           }
-          break;
-        // ── Funds Register (§23) ──────────────────────────────────────────
-        case 'funds_accounts':
-          for (var r in rows) {
-            await _insertResilient(
-              'funds_accounts',
-              r,
-              fkSkipped,
-              () => _db
-                  .into(_db.fundsAccounts)
-                  .insertOnConflictUpdate(FundsAccountData.fromJson(r)),
-            );
-          }
-          break;
-        case 'fund_days':
-          for (var r in rows) {
-            await _insertResilient(
-              'fund_days',
-              r,
-              fkSkipped,
-              () => _db
-                  .into(_db.fundDays)
-                  .insertOnConflictUpdate(FundDayData.fromJson(r)),
-            );
-          }
-          break;
-        case 'fund_transactions':
-          // Append-only ledger — insert-or-ignore (an UPDATE would trip the
-          // immutability trigger); void columns ride a targeted update.
-          await _restoreLedgerTable(
-            rows,
-            tableName: 'fund_transactions',
-            fkSkipped: fkSkipped,
-            table: _db.fundTransactions,
-            fromJson: FundTransactionData.fromJson,
-            voidedAtOf: (d) => d.voidedAt,
-            whereNotYetVoided: (t, d) =>
-                t.id.equals(d.id) & t.voidedAt.isNull(),
-            buildVoidCompanion: (d) => FundTransactionsCompanion(
-              voidedAt: Value(d.voidedAt),
-              voidedBy: Value(d.voidedBy),
-              voidReason: Value(d.voidReason),
-              lastUpdatedAt: Value(d.lastUpdatedAt),
-            ),
-          );
           break;
         default:
           debugPrint('[SyncService] Restore logic not implemented for $table');

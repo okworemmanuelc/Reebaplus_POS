@@ -27,6 +27,7 @@ import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/services/notification_service.dart';
 import 'package:reebaplus_pos/shared/services/crate_return_approval_service.dart';
 import 'package:reebaplus_pos/shared/services/order_service.dart';
+import 'package:reebaplus_pos/shared/services/supplier_account_service.dart';
 import 'package:reebaplus_pos/shared/services/printer_service.dart';
 import 'package:reebaplus_pos/shared/services/reorder_alert_service.dart';
 import 'package:reebaplus_pos/core/diagnostics/sync_diagnostic.dart';
@@ -127,10 +128,66 @@ final walletBalancesKoboProvider =
   return ref.read(databaseProvider).customersDao.watchAllWalletBalancesKobo();
 });
 
+/// §13.4 Ring 7 — business-wide crate-deposit balancing figures
+/// (taken / refunded / kept / held). Held = taken − refunded − kept.
+final crateDepositSummaryProvider =
+    StreamProvider.autoDispose<CrateDepositSummary>((ref) {
+  return ref
+      .read(databaseProvider)
+      .walletTransactionsDao
+      .watchCrateDepositSummary();
+});
+
+/// §13.4 Ring 7 — per-customer held deposit (kobo); only non-zero holders.
+final depositsHeldByCustomerProvider =
+    StreamProvider.autoDispose<Map<String, int>>((ref) {
+  return ref
+      .read(databaseProvider)
+      .walletTransactionsDao
+      .watchDepositsHeldByCustomer();
+});
+
 // ── Supplier ────────────────────────────────────────────────────────────────
 final supplierServiceProvider =
     ChangeNotifierProvider<SupplierService>((ref) {
   return SupplierService(ref.read(databaseProvider));
+});
+
+/// §21.10 — records Invoice Total / Payment activity on a supplier's ledger.
+final supplierAccountServiceProvider = Provider<SupplierAccountService>((ref) {
+  return SupplierAccountService(ref.read(databaseProvider));
+});
+
+/// supplierId → signed ledger balance (kobo), live. Negative = we owe the
+/// supplier. Drives the per-supplier balance chip on the Suppliers list.
+final supplierBalancesKoboProvider =
+    StreamProvider.autoDispose<Map<String, int>>((ref) {
+  return ref.read(databaseProvider).supplierLedgerDao.watchAllBalancesKobo();
+});
+
+/// One supplier row, live (Supplier Details header). Null once soft-deleted.
+final supplierByIdProvider =
+    StreamProvider.autoDispose.family<SupplierData?, String>((ref, id) {
+  return ref.read(databaseProvider).catalogDao.watchSupplierById(id);
+});
+
+/// One supplier's signed ledger balance (kobo), live.
+final supplierBalanceProvider =
+    StreamProvider.autoDispose.family<int, String>((ref, id) {
+  return ref.read(databaseProvider).supplierLedgerDao.watchBalanceKobo(id);
+});
+
+/// One supplier's full ledger history (invoices + payments + voids), newest
+/// first.
+final supplierLedgerHistoryProvider = StreamProvider.autoDispose
+    .family<List<SupplierLedgerEntryData>, String>((ref, id) {
+  return ref.read(databaseProvider).supplierLedgerDao.watchHistory(id);
+});
+
+/// Every payment entry across all suppliers, newest first — the Payments tab.
+final supplierPaymentEntriesProvider =
+    StreamProvider.autoDispose<List<SupplierLedgerEntryData>>((ref) {
+  return ref.read(databaseProvider).supplierLedgerDao.watchPaymentEntries();
 });
 
 // ── Delivery ────────────────────────────────────────────────────────────────

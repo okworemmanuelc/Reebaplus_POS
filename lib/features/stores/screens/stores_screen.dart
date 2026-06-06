@@ -191,11 +191,11 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                           : () async {
                               if (!formKey.currentState!.validate()) return;
                               // Re-check at the write boundary (hard rule #6) in
-                              // case `settings.manage` was revoked while the
+                              // case `stores.manage` was revoked while the
                               // sheet was open.
                               if (!ref
                                   .read(currentUserPermissionsProvider)
-                                  .contains('settings.manage')) {
+                                  .contains('stores.manage')) {
                                 return;
                               }
                               setSheet(() => saving = true);
@@ -376,7 +376,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                               // Re-check at the write boundary (hard rule #6).
                               if (!ref
                                   .read(currentUserPermissionsProvider)
-                                  .contains('settings.manage')) {
+                                  .contains('stores.manage')) {
                                 return;
                               }
                               setSheet(() => saving = true);
@@ -494,10 +494,10 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
             onPressed: () async {
               Navigator.pop(ctx);
               // Re-check at the write boundary (hard rule #6) — deleting a
-              // store needs `settings.manage`.
+              // store needs `stores.manage`.
               if (!ref
                   .read(currentUserPermissionsProvider)
-                  .contains('settings.manage')) {
+                  .contains('stores.manage')) {
                 return;
               }
               // Soft-delete the store: hard-delete would orphan
@@ -532,12 +532,12 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
   // ── Build ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    // Stores management is CEO-only — `settings.manage` (hard rule #6/#7). The
+    // Stores management is CEO-only — `stores.manage` (hard rule #6/#7). The
     // drawer entry is gated, but this tab is persistently mounted, so guard the
     // screen reactively too: if the grant is revoked live, the Add / Stock
     // Transfer entry points, the store cards' Edit/Delete, and the list all
     // disappear at once.
-    final canManage = hasPermission(ref, 'settings.manage');
+    final canManage = hasPermission(ref, 'stores.manage');
     return SharedScaffold(
       activeRoute: 'store',
       backgroundColor: _bg,

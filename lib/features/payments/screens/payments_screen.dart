@@ -4,25 +4,20 @@ import 'package:reebaplus_pos/core/widgets/app_fab.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
 
+import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
-
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/date_period.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/app_drawer.dart';
-import 'package:reebaplus_pos/features/payments/data/models/payment.dart';
-import 'package:reebaplus_pos/features/payments/widgets/add_payment_sheet.dart';
+import 'package:reebaplus_pos/features/payments/widgets/record_supplier_activity.dart';
+import 'package:reebaplus_pos/features/payments/widgets/supplier_form_sheet.dart';
 import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
-import 'package:reebaplus_pos/shared/widgets/app_input.dart';
-import 'package:reebaplus_pos/features/inventory/data/models/supplier.dart';
 import 'package:reebaplus_pos/features/inventory/screens/supplier_detail_screen.dart';
-import 'package:reebaplus_pos/features/inventory/data/models/inventory_log.dart';
-import 'package:reebaplus_pos/features/inventory/data/inventory_data.dart';
-import 'package:reebaplus_pos/features/inventory/data/models/crate_group.dart';
 
 class PaymentsScreen extends ConsumerStatefulWidget {
   const PaymentsScreen({super.key});
@@ -41,8 +36,6 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
   List<String> get _periodOptions =>
       datePeriodLabelsForRole(managerUp: isManagerOrAbove(ref));
 
-  /// [_periodFilter] clamped into [_periodOptions], so the dropdown value and
-  /// the list filter agree for capped viewers.
   String get _effectivePeriod => _periodOptions.contains(_periodFilter)
       ? _periodFilter
       : _periodOptions.last;
@@ -50,9 +43,10 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
   Color get _bg => Theme.of(context).scaffoldBackgroundColor;
   Color get _surface => Theme.of(context).colorScheme.surface;
   Color get _text => Theme.of(context).colorScheme.onSurface;
-  Color get _subtext => Theme.of(context).textTheme.bodySmall?.color ?? Theme.of(context).iconTheme.color!;
+  Color get _subtext =>
+      Theme.of(context).textTheme.bodySmall?.color ??
+      Theme.of(context).iconTheme.color!;
   Color get _border => Theme.of(context).dividerColor;
-  
 
   @override
   void initState() {
@@ -68,13 +62,9 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
-    // §22 access: Supplier Accounts is gated by `suppliers.manage` (CEO + Manager
-    // by default; independently revocable per staff via override). The drawer
-    // entry is already gated, but guard the screen too (CLAUDE.md coding rule #1)
-    // so a programmatic tab switch can't bypass it — and so a per-user override
-    // takes effect. Fail CLOSED: `perms` is empty while grants load → show a
-    // spinner rather than flashing no-access for a legitimate user.
+    ref.watch(currencySymbolProvider);
+    // §21 access: Supplier Accounts is gated by `suppliers.manage`. Fail CLOSED:
+    // `perms` is empty while grants load → spinner, not a flash of no-access.
     final perms = ref.watch(currentUserPermissionsProvider);
     if (!perms.contains('suppliers.manage')) {
       return Scaffold(
@@ -95,29 +85,29 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
       );
     }
     return Scaffold(
-          backgroundColor: _bg,
-          drawer: const AppDrawer(activeRoute: 'supplier_accounts'),
-          appBar: _buildAppBar(context),
-          body: Column(
-            children: [
-              _buildTabBar(context),
-              Expanded(
-                child: TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _buildPaymentsTab(context),
-                    _buildSuppliersTab(context),
-                  ],
-                ),
-              ),
-            ],
+      backgroundColor: _bg,
+      drawer: const AppDrawer(activeRoute: 'supplier_accounts'),
+      appBar: _buildAppBar(context),
+      body: Column(
+        children: [
+          _buildTabBar(context),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildPaymentsTab(context),
+                _buildSuppliersTab(context),
+              ],
+            ),
           ),
-          floatingActionButton: AppFAB(
-            heroTag: 'payments_fab',
-            onPressed: () => AddPaymentSheet.show(context),
-            icon: FontAwesomeIcons.plus,
-            label: 'Add Payment',
-          ),
+        ],
+      ),
+      floatingActionButton: AppFAB(
+        heroTag: 'payments_fab',
+        onPressed: () => RecordPaymentSheet.show(context),
+        icon: FontAwesomeIcons.plus,
+        label: 'Add Payment',
+      ),
     );
   }
 
@@ -174,11 +164,15 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
           Container(
             padding: EdgeInsets.all(context.getRSize(8)),
             decoration: BoxDecoration(
-              gradient: LinearGradient(colors: [Theme.of(context).colorScheme.primary.withValues(alpha: 0.7), Theme.of(context).colorScheme.primary]),
+              gradient: LinearGradient(colors: [
+                Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
+                Theme.of(context).colorScheme.primary
+              ]),
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+                  color:
+                      Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -260,21 +254,21 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
               ),
             ],
           ),
-            AppDropdown<String>(
-              value: _effectivePeriod,
-              width: context.getRSize(130),
-              items: _periodOptions.map((String val) {
-                return DropdownMenuItem<String>(value: val, child: Text(val));
-              }).toList(),
-              onChanged: (val) {
-                if (val != null) {
-                  setState(() {
-                    _periodFilter = val;
-                    _supplierFilter = 'All'; // Reset supplier filter on period change
-                  });
-                }
-              },
-            ),
+          AppDropdown<String>(
+            value: _effectivePeriod,
+            width: context.getRSize(130),
+            items: _periodOptions.map((String val) {
+              return DropdownMenuItem<String>(value: val, child: Text(val));
+            }).toList(),
+            onChanged: (val) {
+              if (val != null) {
+                setState(() {
+                  _periodFilter = val;
+                  _supplierFilter = 'All';
+                });
+              }
+            },
+          ),
         ],
       ),
     );
@@ -346,264 +340,46 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
   }
 
   Widget _buildPaymentsTab(BuildContext context) {
-    return Builder(
-      builder: (context) {
-        final paymentSvc = ref.watch(paymentServiceProvider);
-        final periodPayments = paymentSvc.getByPeriod(_effectivePeriod);
+    final entries =
+        ref.watch(supplierPaymentEntriesProvider).valueOrNull ??
+            const <SupplierLedgerEntryData>[];
+    final suppliers =
+        ref.watch(allSuppliersProvider).valueOrNull ?? const <SupplierData>[];
+    final nameById = {for (final s in suppliers) s.id: s.name};
 
-        // Compute unique suppliers for chips
-        final Set<String> supplierNames = {};
-        for (var p in periodPayments) {
-          supplierNames.add(p.supplierName);
-        }
-        final supplierList = supplierNames.toList()..sort();
-        supplierList.insert(0, 'All');
+    final window = datePeriodFromLabel(_effectivePeriod);
+    final periodEntries =
+        entries.where((e) => window.includes(e.activityDate)).toList();
 
-        // Apply supplier filter
-        final filteredPayments = periodPayments.where((p) {
-          if (_supplierFilter == 'All') return true;
-          return p.supplierName == _supplierFilter;
-        }).toList();
+    final supplierNames = <String>{
+      for (final e in periodEntries) nameById[e.supplierId] ?? 'Unknown',
+    }.toList()
+      ..sort();
+    supplierNames.insert(0, 'All');
 
-        filteredPayments.sort((a, b) => b.date.compareTo(a.date));
+    final filtered = periodEntries.where((e) {
+      if (_supplierFilter == 'All') return true;
+      return (nameById[e.supplierId] ?? 'Unknown') == _supplierFilter;
+    }).toList();
 
-        final totalForPeriod = filteredPayments.fold(
-          0.0,
-          (sum, p) => sum + p.amount,
-        );
+    final total =
+        filtered.fold<int>(0, (sum, e) => sum + e.amountKobo) / 100;
 
-        return Column(
-          children: [
-            _buildHeaderArea(context, totalForPeriod),
-            if (supplierList.length > 1)
-              _buildFilterChips(context, supplierList),
-            Expanded(child: _buildPaymentsList(context, filteredPayments)),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildSuppliersTab(BuildContext context) {
-    final supplierSvc = ref.watch(supplierServiceProvider);
-    final suppliers = supplierSvc.getAll();
     return Column(
       children: [
-        Padding(
-          padding: EdgeInsets.all(context.getRSize(16)),
-          child: AppButton(
-            text: 'Add Supplier',
-            variant: AppButtonVariant.secondary,
-            icon: FontAwesomeIcons.plus,
-            onPressed: _showAddSupplierDialog,
-          ),
-        ),
-        Expanded(
-          child: suppliers.isEmpty
-              ? Center(
-                  child: Text(
-                    'No suppliers added yet',
-                    style: TextStyle(color: _subtext),
-                  ),
-                )
-              : ListView.builder(
-                  padding: EdgeInsets.fromLTRB(
-                    context.getRSize(16),
-                    0,
-                    context.getRSize(16),
-                    context.getRSize(120) + context.deviceBottomInset,
-                  ),
-                  itemCount: suppliers.length,
-                  itemBuilder: (_, i) {
-                    final s = suppliers[i];
-                    return GestureDetector(
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => SupplierDetailScreen(supplier: s),
-                        ),
-                      ).then((_) => setState(() {})),
-                      child: Container(
-                        margin: EdgeInsets.only(bottom: context.getRSize(12)),
-                        padding: EdgeInsets.all(context.getRSize(16)),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).cardColor,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: _border),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: context.getRSize(48),
-                              height: context.getRSize(48),
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Icon(
-                                FontAwesomeIcons.buildingColumns,
-                                color: Theme.of(context).colorScheme.primary,
-                                size: context.getRSize(20),
-                              ),
-                            ),
-                            SizedBox(width: context.getRSize(16)),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    s.name,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: context.getRFontSize(16),
-                                      color: _text,
-                                    ),
-                                  ),
-                                  if (s.contactDetails.isNotEmpty) ...[
-                                    SizedBox(height: context.getRSize(4)),
-                                    Text(
-                                      s.contactDetails,
-                                      style: TextStyle(
-                                        color: _subtext,
-                                        fontSize: context.getRFontSize(13),
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                            Icon(
-                              Icons.chevron_right,
-                              color: _subtext,
-                              size: context.getRSize(20),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-        ),
+        _buildHeaderArea(context, total.toDouble()),
+        if (supplierNames.length > 1)
+          _buildFilterChips(context, supplierNames),
+        Expanded(child: _buildPaymentsList(context, filtered, nameById)),
       ],
     );
   }
 
-  void _showAddSupplierDialog() {
-    final nameCtrl = TextEditingController();
-    final contactCtrl = TextEditingController();
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => StatefulBuilder(
-        builder: (ctx, setB) => Padding(
-          padding: EdgeInsets.only(bottom: ctx.deviceBottomInset),
-          child: Container(
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(28),
-              ),
-            ),
-            padding: EdgeInsets.fromLTRB(
-              ctx.getRSize(20),
-              ctx.getRSize(20),
-              ctx.getRSize(20),
-              ctx.getRSize(32),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: _border,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                SizedBox(height: ctx.getRSize(20)),
-                Text(
-                  'Add New Supplier',
-                  style: TextStyle(
-                    fontSize: ctx.getRFontSize(20),
-                    fontWeight: FontWeight.w800,
-                    color: _text,
-                  ),
-                ),
-                SizedBox(height: ctx.getRSize(4)),
-                Text(
-                  'Enter the company and contact details',
-                  style: TextStyle(
-                    fontSize: ctx.getRFontSize(13),
-                    color: _subtext,
-                  ),
-                ),
-                SizedBox(height: ctx.getRSize(20)),
-                _inputField(
-                  'Supplier / Company Name',
-                  nameCtrl,
-                  'e.g. SABMiller Nigeria',
-                ),
-                SizedBox(height: ctx.getRSize(16)),
-                _inputField(
-                  'Contact Details / Rep Info',
-                  contactCtrl,
-                  'e.g. John Doe, 08012345678',
-                ),
-                SizedBox(height: ctx.getRSize(32)),
-                AppButton(
-                  text: 'Add Supplier',
-                  onPressed: () {
-                    if (nameCtrl.text.trim().isEmpty) return;
-                    final newSupplier = Supplier(
-                      id: 's${DateTime.now().millisecondsSinceEpoch}',
-                      name: nameCtrl.text.trim(),
-                      crateGroup: CrateGroup.nbPlc,
-                      trackInventory: true,
-                      contactDetails: contactCtrl.text.trim(),
-                      amountPaid: 0.0,
-                      supplierWallet: 0.0,
-                    );
-                    final log = InventoryLog(
-                      timestamp: DateTime.now(),
-                      user: ref.read(authProvider).currentUser?.name ?? 'Unknown',
-                      itemId: newSupplier.id,
-                      itemName: newSupplier.name,
-                      action: 'new_supplier',
-                      previousValue: 0,
-                      newValue: 0,
-                      note: 'Supplier added: ${newSupplier.name}',
-                    );
-                    setState(() {
-                      ref.read(supplierServiceProvider).addSupplier(newSupplier);
-                      kInventoryLogs.add(log);
-                    });
-                    Navigator.pop(ctx);
-                  },
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _inputField(String label, TextEditingController ctrl, String hint) {
-    return AppInput(
-      controller: ctrl,
-      labelText: label,
-      hintText: hint,
-      fillColor: _bg,
-    );
-  }
-
-  Widget _buildPaymentsList(BuildContext context, List<Payment> list) {
+  Widget _buildPaymentsList(
+    BuildContext context,
+    List<SupplierLedgerEntryData> list,
+    Map<String, String> nameById,
+  ) {
     if (list.isEmpty) {
       return Center(
         child: Column(
@@ -629,139 +405,171 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
     }
 
     return ListView.builder(
-      padding: EdgeInsets.all(
-        context.getRSize(16),
-      ).copyWith(bottom: context.getRSize(100) + context.deviceBottomInset),
+      padding: EdgeInsets.all(context.getRSize(16))
+          .copyWith(bottom: context.getRSize(100) + context.deviceBottomInset),
       itemCount: list.length,
       itemBuilder: (context, index) {
-        final payment = list[index];
-        return _PaymentCard(payment: payment);
+        final e = list[index];
+        return _PaymentCard(
+          entry: e,
+          supplierName: nameById[e.supplierId] ?? 'Unknown supplier',
+        );
       },
+    );
+  }
+
+  Widget _buildSuppliersTab(BuildContext context) {
+    final suppliers =
+        ref.watch(allSuppliersProvider).valueOrNull ?? const <SupplierData>[];
+    final balances =
+        ref.watch(supplierBalancesKoboProvider).valueOrNull ??
+            const <String, int>{};
+    return Column(
+      children: [
+        Padding(
+          padding: EdgeInsets.all(context.getRSize(16)),
+          child: AppButton(
+            text: 'Add Supplier',
+            variant: AppButtonVariant.secondary,
+            icon: FontAwesomeIcons.plus,
+            onPressed: () => SupplierFormSheet.show(context),
+          ),
+        ),
+        Expanded(
+          child: suppliers.isEmpty
+              ? Center(
+                  child: Text(
+                    'No suppliers added yet',
+                    style: TextStyle(color: _subtext),
+                  ),
+                )
+              : ListView.builder(
+                  padding: EdgeInsets.fromLTRB(
+                    context.getRSize(16),
+                    0,
+                    context.getRSize(16),
+                    context.getRSize(120) + context.deviceBottomInset,
+                  ),
+                  itemCount: suppliers.length,
+                  itemBuilder: (_, i) {
+                    final s = suppliers[i];
+                    final bal = balances[s.id] ?? 0;
+                    return _SupplierRow(
+                      supplier: s,
+                      balanceKobo: bal,
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              SupplierDetailScreen(supplierId: s.id),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
     );
   }
 }
 
-class _PaymentCard extends StatelessWidget {
-  final Payment payment;
+class _SupplierRow extends StatelessWidget {
+  final SupplierData supplier;
+  final int balanceKobo;
+  final VoidCallback onTap;
 
-  const _PaymentCard({required this.payment});
+  const _SupplierRow({
+    required this.supplier,
+    required this.balanceKobo,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    
-    final cardBg = Theme.of(context).cardColor;
-    final textCol = Theme.of(context).colorScheme.onSurface;
-    final subtextCol = Theme.of(context).textTheme.bodySmall?.color ?? Theme.of(context).iconTheme.color!;
-    final borderCol = Theme.of(context).dividerColor;
+    final text = Theme.of(context).colorScheme.onSurface;
+    final subtext = Theme.of(context).textTheme.bodySmall?.color ??
+        Theme.of(context).iconTheme.color!;
+    final border = Theme.of(context).dividerColor;
 
-    final dateStr = DateFormat('MMM d, y • h:mm a').format(payment.date);
+    final contact = [
+      if ((supplier.phone ?? '').isNotEmpty) supplier.phone!,
+      if ((supplier.address ?? '').isNotEmpty) supplier.address!,
+    ].join(' • ');
 
-    return Container(
-      margin: EdgeInsets.only(bottom: context.getRSize(12)),
-      decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderCol),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Padding(
+    final owed = balanceKobo < 0;
+    final balColor = owed ? danger : (balanceKobo > 0 ? success : subtext);
+    final balLabel = owed
+        ? 'Owed ${formatCurrency(balanceKobo.abs() / 100)}'
+        : (balanceKobo > 0
+            ? 'Credit ${formatCurrency(balanceKobo / 100)}'
+            : 'Settled');
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: EdgeInsets.only(bottom: context.getRSize(12)),
         padding: EdgeInsets.all(context.getRSize(16)),
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: border),
+        ),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              padding: EdgeInsets.all(context.getRSize(10)),
+              width: context.getRSize(48),
+              height: context.getRSize(48),
               decoration: BoxDecoration(
-                color: success.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
+                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
-                FontAwesomeIcons.arrowUpRightFromSquare,
-                color: success,
-                size: context.getRSize(14),
+                FontAwesomeIcons.buildingColumns,
+                color: Theme.of(context).colorScheme.primary,
+                size: context.getRSize(20),
               ),
             ),
-            SizedBox(width: context.getRSize(12)),
+            SizedBox(width: context.getRSize(16)),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          payment.supplierName,
-                          style: TextStyle(
-                            color: textCol,
-                            fontWeight: FontWeight.bold,
-                            fontSize: context.getRFontSize(15),
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      Text(
-                        formatCurrency(payment.amount),
-                        style: TextStyle(
-                          color: textCol,
-                          fontWeight: FontWeight.bold,
-                          fontSize: context.getRFontSize(15),
-                        ),
-                      ),
-                    ],
+                  Text(
+                    supplier.name,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: context.getRFontSize(16),
+                      color: text,
+                    ),
                   ),
-                  SizedBox(height: context.getRSize(6)),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        payment.paymentMethod,
-                        style: TextStyle(
-                          color: subtextCol,
-                          fontSize: context.getRFontSize(13),
-                          fontWeight: FontWeight.w600,
-                        ),
+                  if (contact.isNotEmpty) ...[
+                    SizedBox(height: context.getRSize(4)),
+                    Text(
+                      contact,
+                      style: TextStyle(
+                        color: subtext,
+                        fontSize: context.getRFontSize(13),
                       ),
-                      Text(
-                        dateStr,
-                        style: TextStyle(
-                          color: subtextCol,
-                          fontSize: context.getRFontSize(12),
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (payment.referenceNumber != null &&
-                      payment.referenceNumber!.isNotEmpty) ...[
-                    SizedBox(height: context.getRSize(8)),
-                    Row(
-                      children: [
-                        Icon(
-                          FontAwesomeIcons.hashtag,
-                          size: context.getRSize(10),
-                          color: subtextCol,
-                        ),
-                        SizedBox(width: context.getRSize(4)),
-                        Text(
-                          payment.referenceNumber!,
-                          style: TextStyle(
-                            color: subtextCol,
-                            fontSize: context.getRFontSize(12),
-                            fontFamily: 'monospace',
-                          ),
-                        ),
-                      ],
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
+                  SizedBox(height: context.getRSize(4)),
+                  Text(
+                    balLabel,
+                    style: TextStyle(
+                      color: balColor,
+                      fontSize: context.getRFontSize(13),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ],
               ),
+            ),
+            Icon(
+              Icons.chevron_right,
+              color: subtext,
+              size: context.getRSize(20),
             ),
           ],
         ),
@@ -770,9 +578,158 @@ class _PaymentCard extends StatelessWidget {
   }
 }
 
+class _PaymentCard extends StatelessWidget {
+  final SupplierLedgerEntryData entry;
+  final String supplierName;
 
+  const _PaymentCard({required this.entry, required this.supplierName});
 
+  String get _methodLabel {
+    switch (entry.paymentMethod) {
+      case 'cash':
+        return 'Cash';
+      case 'transfer':
+        return 'Bank Transfer';
+      case 'pos':
+        return 'POS Card';
+      case 'other':
+        return 'Other';
+      default:
+        return entry.paymentMethod ?? 'Payment';
+    }
+  }
 
+  @override
+  Widget build(BuildContext context) {
+    final cardBg = Theme.of(context).cardColor;
+    final textCol = Theme.of(context).colorScheme.onSurface;
+    final subtextCol = Theme.of(context).textTheme.bodySmall?.color ??
+        Theme.of(context).iconTheme.color!;
+    final borderCol = Theme.of(context).dividerColor;
+    final isVoided = entry.voidedAt != null;
 
+    final dateStr = DateFormat('MMM d, y').format(entry.activityDate);
+    final hasReceipt = (entry.receiptPath ?? '').isNotEmpty;
 
-
+    return Opacity(
+      opacity: isVoided ? 0.55 : 1,
+      child: Container(
+        margin: EdgeInsets.only(bottom: context.getRSize(12)),
+        decoration: BoxDecoration(
+          color: cardBg,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: borderCol),
+        ),
+        child: Padding(
+          padding: EdgeInsets.all(context.getRSize(16)),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: EdgeInsets.all(context.getRSize(10)),
+                decoration: BoxDecoration(
+                  color: success.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  FontAwesomeIcons.moneyBillTransfer,
+                  color: success,
+                  size: context.getRSize(14),
+                ),
+              ),
+              SizedBox(width: context.getRSize(12)),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            supplierName,
+                            style: TextStyle(
+                              color: textCol,
+                              fontWeight: FontWeight.bold,
+                              fontSize: context.getRFontSize(15),
+                              decoration: isVoided
+                                  ? TextDecoration.lineThrough
+                                  : null,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Text(
+                          formatCurrency(entry.amountKobo / 100),
+                          style: TextStyle(
+                            color: textCol,
+                            fontWeight: FontWeight.bold,
+                            fontSize: context.getRFontSize(15),
+                            decoration: isVoided
+                                ? TextDecoration.lineThrough
+                                : null,
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: context.getRSize(6)),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          _methodLabel,
+                          style: TextStyle(
+                            color: subtextCol,
+                            fontSize: context.getRFontSize(13),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          dateStr,
+                          style: TextStyle(
+                            color: subtextCol,
+                            fontSize: context.getRFontSize(12),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if ((entry.referenceNote ?? '').isNotEmpty ||
+                        hasReceipt) ...[
+                      SizedBox(height: context.getRSize(8)),
+                      Row(
+                        children: [
+                          Icon(
+                            hasReceipt
+                                ? FontAwesomeIcons.paperclip
+                                : FontAwesomeIcons.hashtag,
+                            size: context.getRSize(10),
+                            color: subtextCol,
+                          ),
+                          SizedBox(width: context.getRSize(4)),
+                          Expanded(
+                            child: Text(
+                              entry.referenceNote?.isNotEmpty == true
+                                  ? entry.referenceNote!
+                                  : 'Receipt attached',
+                              style: TextStyle(
+                                color: subtextCol,
+                                fontSize: context.getRFontSize(12),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

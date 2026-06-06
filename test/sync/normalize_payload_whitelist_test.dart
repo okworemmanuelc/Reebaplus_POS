@@ -55,6 +55,26 @@ void main() {
       expect(scrubbed['name'], 'Acme');
     });
 
+    test('businesses: subscription columns are app-read-only (dropped on push)',
+        () {
+      // §32: the app must never push subscription state — it is cloud-
+      // authoritative (only the admin console writes it). If these ever leak
+      // through, a cashier could self-activate from the device.
+      final scrubbed = SupabaseSyncService.scrubForTesting('businesses', {
+        'id': 'biz',
+        'name': 'Acme',
+        'subscription_status': 'active',
+        'subscription_plan': 'international',
+        'trial_ends_at': '2026-12-31T00:00:00Z',
+        'current_period_end': '2026-12-31T00:00:00Z',
+      });
+      expect(scrubbed.containsKey('subscription_status'), isFalse);
+      expect(scrubbed.containsKey('subscription_plan'), isFalse);
+      expect(scrubbed.containsKey('trial_ends_at'), isFalse);
+      expect(scrubbed.containsKey('current_period_end'), isFalse);
+      expect(scrubbed['name'], 'Acme');
+    });
+
     test('fail-closed: unknown columns dropped from whitelisted tables',
         () {
       final scrubbed = SupabaseSyncService.scrubForTesting('users', {

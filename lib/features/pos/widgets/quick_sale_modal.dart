@@ -71,6 +71,7 @@ class _QuickSaleModalState extends ConsumerState<QuickSaleModal> {
               size: context.getRSize(16),
             ),
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [CurrencyInputFormatter(grouping: false)],
           ),
           SizedBox(height: context.getRSize(12)),
           AppInput(

@@ -150,18 +150,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       }
 
       final isEnabled = prefs.getBool('biometrics_enabled') ?? false;
+
+      // _triggerBiometrics enters the app as getDeviceUserId(), so biometrics is
+      // only safe — and only correct — when the identified account IS this
+      // device's owner: the account that was created here, whose PIN and
+      // biometrics were set up on this device. That holds whether we arrived
+      // with no preset (the device user) or via the Who Is Working picker with
+      // the device owner's own card tapped. A picker-selected staff member who
+      // is NOT the device owner must use a PIN — offering biometrics would
+      // silently unlock the device owner instead (master plan §7.2a, §8.4).
+      // pinHash != null also gates out a post-Log-Out owner whose PIN was reset
+      // to setup-required (clearUserPin), until they re-establish a PIN.
+      final deviceUserId = await ref.read(authProvider).getDeviceUserId();
+      final isDeviceOwner = _identifiedUser != null &&
+          deviceUserId != null &&
+          _identifiedUser!.id == deviceUserId &&
+          _identifiedUser!.pinHash != null;
       if (mounted) {
-        // Biometrics authenticates the device owner, not a specific account, so
-        // it's unsafe for a picker-selected (preset) user on a shared till — it
-        // would resolve the last device user, not the chosen staff member.
-        // Disable it whenever a preset user is in play; that person uses a PIN.
-        // Also require a resolved device-user identity (_identifiedUser != null):
-        // _triggerBiometrics enters as getDeviceUserId(), so offering it with no
-        // resolved identity would silently unlock the last device user (§7.2a).
-        setState(() => _biometricsAvailable = available &&
-            isEnabled &&
-            widget.presetUser == null &&
-            _identifiedUser != null);
+        setState(() =>
+            _biometricsAvailable = available && isEnabled && isDeviceOwner);
       }
     } catch (_) {}
   }

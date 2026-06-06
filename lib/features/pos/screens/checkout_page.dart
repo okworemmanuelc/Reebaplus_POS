@@ -9,6 +9,7 @@ import 'package:screenshot/screenshot.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'package:reebaplus_pos/core/data/business_types.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/receipt_widget.dart';
@@ -22,6 +23,7 @@ import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
+import 'package:reebaplus_pos/core/utils/store_address.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/printer_picker.dart';
@@ -34,8 +36,14 @@ import 'package:reebaplus_pos/shared/services/cart_service.dart';
 class CheckoutPage extends ConsumerStatefulWidget {
   final List<Map<String, dynamic>> cart;
   final double subtotal;
-  final double crateDeposit;
+  // [total] is the GOODS total (subtotal − discounts − crate credit). The crate
+  // deposit is no longer part of it — it's captured here per brand (§13.4 Ring 3)
+  // and added to the payable on top.
   final double total;
+  // §13.4 Ring 3 — per-brand crate lines from the cart, one map per manufacturer:
+  // {manufacturerId, name, crates (double), rateKobo (int per crate)}. Drives the
+  // editable, auto-filled deposit capture below.
+  final List<Map<String, dynamic>> crateLines;
   final Customer? customer;
   final VoidCallback? onCheckoutSuccess;
 
@@ -43,8 +51,8 @@ class CheckoutPage extends ConsumerStatefulWidget {
     super.key,
     required this.cart,
     required this.subtotal,
-    required this.crateDeposit,
     required this.total,
+    this.crateLines = const [],
     this.customer,
     this.onCheckoutSuccess,
   });
@@ -53,17 +61,20 @@ class CheckoutPage extends ConsumerStatefulWidget {
   ConsumerState<CheckoutPage> createState() => _CheckoutPageState();
 }
 
-/// 3 payment methods:
-/// - fullCash  → full amount paid now (cash or card), no balance added
-/// - partialCash → partial payment, remainder added to customer balance
-/// - credit    → full amount added to customer balance (disabled for walk-in)
-enum PaymentType { fullCash, partialCash, credit }
+/// Payment modes after the Full / Partial cards were removed (2026-06-05):
+/// - cashTransfer → customer pays now (cash or transfer). The entered amount
+///   drives the wallet — a shortfall is booked as debt, an excess tops it up.
+/// - wallet       → charge the whole order to the wallet; available credit is
+///   consumed and any shortfall becomes debt. No amount entered.
+/// - credit       → nothing paid now; the whole total becomes debt. Registered
+///   customers only ("Register as Credit Sale").
+enum PayMode { cashTransfer, wallet, credit }
 
 class _CheckoutPageState extends ConsumerState<CheckoutPage> {
-  PaymentType _paymentType = PaymentType.fullCash;
-  bool _isWalletPayment = false;
-  // §14.2 Step 2 — chosen receiving account; null falls back to Cash Till.
-  String? _selectedFundsAccountId;
+  // Default to Cash / Transfer for everyone. In the post-2026-06-05 model a
+  // wallet default would book a full-total debt on a thoughtless confirm when
+  // the customer has no credit, so the cashier opts into Wallet / Credit Sale.
+  PayMode _mode = PayMode.cashTransfer;
   // §14.1 — opt in to printing wallet info on the receipt. Off by default;
   // only meaningful for registered customers (walk-ins have no wallet, §14.3).
   bool _addWalletInfoToReceipt = false;
@@ -75,10 +86,17 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   // "Printing receipt…" banner on the receipt view (no toast, no spinner).
   bool _isPrinting = false;
   Map<String, String> _manufacturerNames = {};
-  String? _branchName;
+  String? _storeAddress;
   StreamSubscription<List<ManufacturerData>>? _manufacturersSub;
   StreamSubscription<StoreData?>? _activeStoreSub;
   late final Customer? _initialCustomer;
+
+  // §13.4 Ring 3 — crate deposit PAID, per manufacturer (kobo). Auto-filled to
+  // rate × crates from widget.crateLines, the cashier may reduce or zero each
+  // brand. Only counts when the deposit applies (registered customer paying
+  // Cash / Transfer — see _depositApplies); held as refundable money, never
+  // revenue (§13.4). Keyed by manufacturerId → kobo.
+  final Map<String, int> _depositByMfr = {};
 
   // Computed on confirm — passed to receipt
 
@@ -91,10 +109,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   /// Null for walk-ins (no wallet).
   double? _receiptWalletBalance;
 
-  /// §14.2 bug #4 — the cashier confirmed the outstanding cash (after the wallet
-  /// credit is applied) was collected. Required before the apply-credit flow can
-  /// confirm.
-  bool _outstandingPaidConfirmed = false;
+  /// §13.4 — the customer's empty-crate standing AFTER this sale (incl. the
+  /// crates just issued), snapshotted at confirm for the receipt's wallet-info
+  /// block: total crates owed, and total crates credited to them.
+  int _receiptCratesOwed = 0;
+  int _receiptCratesCredit = 0;
 
   late final CartService _cart;
   bool get _isWalkIn => _initialCustomer == null || _initialCustomer.isWalkIn;
@@ -110,11 +129,15 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   void initState() {
     super.initState();
     _initialCustomer = widget.customer;
-    // §14.2 — default a registered customer to "Pay from Wallet". Walk-ins have
-    // no wallet (hard rule 14), so they stay on Cash / Card. When the customer
-    // has no wallet credit the existing sub-options surface the "no credit"
-    // hint and the cashier switches to Cash / Card.
-    _isWalletPayment = !_isWalkIn;
+    // §13.4 Ring 3 — each brand starts at ₦0; the cashier enters how much
+    // deposit was actually paid (the section shows the full/expected deposit as
+    // a reference + a per-brand "Use full" shortcut). A brand left at 0 is
+    // "no deposit" → crate-track (settled via the crates tab at return).
+    for (final line in widget.crateLines) {
+      final mfrId = line['manufacturerId'] as String?;
+      if (mfrId == null) continue;
+      _depositByMfr[mfrId] = 0;
+    }
     AppLogger.info(
       'CheckoutPage: Initializing with ${widget.cart.length} items. Total: ${widget.total}',
     );
@@ -131,10 +154,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
   void _onCustomerChanged() {
     if (mounted) {
-      setState(() {
-        _isWalletPayment = false;
-        _outstandingPaidConfirmed = false;
-      });
+      setState(() => _mode = PayMode.cashTransfer);
     }
   }
 
@@ -159,7 +179,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     if (storeId != null) {
       _activeStoreSub = db.storesDao.watchStore(storeId).listen((w) {
         if (!mounted) return;
-        setState(() => _branchName = w?.name);
+        setState(() => _storeAddress = receiptStoreAddress(w?.location));
       });
     }
   }
@@ -175,13 +195,17 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
   // ── helpers ────────────────────────────────────────────────────────────────
   String get _paymentLabel {
-    switch (_paymentType) {
-      case PaymentType.fullCash:
-        return _isWalletPayment ? 'Wallet Payment' : 'Full Cash / Card';
-      case PaymentType.partialCash:
-        return 'Partial Cash / Card';
-      case PaymentType.credit:
+    switch (_mode) {
+      case PayMode.wallet:
+        return 'Wallet Payment';
+      case PayMode.credit:
         return 'Credit Sale';
+      case PayMode.cashTransfer:
+        if (_isWalkIn) return 'Cash / Transfer';
+        final paidKobo = (_cashReceivedValue * 100).round();
+        if (paidKobo <= 0) return 'Credit Sale';
+        if (paidKobo < _totalKobo) return 'Partial Payment';
+        return 'Cash / Transfer';
     }
   }
 
@@ -204,22 +228,28 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   double get _currentCustomerWallet =>
       _isWalkIn ? 0.0 : _walletBalanceFor(_initialCustomer?.id);
 
-  double get _dynamicNewCustomerWallet {
-    final oldCustomerWallet = _currentCustomerWallet;
-    double effectiveCash;
-    switch (_paymentType) {
-      case PaymentType.fullCash:
-        // Wallet payment debits the wallet; cash payment leaves it unchanged
-        effectiveCash = _isWalletPayment ? 0 : widget.total;
-        break;
-      case PaymentType.partialCash:
-        effectiveCash = _cashReceivedValue;
-        break;
-      case PaymentType.credit:
-        effectiveCash = 0;
-        break;
-    }
-    return oldCustomerWallet - widget.total + effectiveCash;
+  /// Wallet balance (kobo) the customer would land on AFTER this sale in the
+  /// current mode. Negative = debt. For Cash / Transfer the entered amount
+  /// counts; Wallet / Credit Sale pay nothing now, so the full total is charged.
+  int get _projectedWalletKobo {
+    final paidKobo =
+        _mode == PayMode.cashTransfer ? (_cashReceivedValue * 100).round() : 0;
+    return _currentCustomerWalletKobo + paidKobo - _totalKobo;
+  }
+
+  /// True when this sale would book debt that breaches the customer's limit (or
+  /// no limit is set). Drives the live warning; the same gate blocks on confirm.
+  /// A fully-paid / overpaid Cash / Transfer never adds debt, so it's never
+  /// gated even if the customer is already in debt.
+  bool get _overDebtLimit {
+    if (_isWalkIn) return false;
+    final paidKobo =
+        _mode == PayMode.cashTransfer ? (_cashReceivedValue * 100).round() : 0;
+    if (paidKobo >= _totalKobo) return false;
+    final projectedKobo = _projectedWalletKobo;
+    if (projectedKobo >= 0) return false;
+    final limitKobo = _currentCustomerWalletLimitKobo;
+    return limitKobo <= 0 || projectedKobo < -limitKobo;
   }
 
   /// Live wallet balance (kobo) for the current customer (0 for walk-ins).
@@ -248,29 +278,49 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     return live?.walletLimitKobo ?? _initialCustomer?.walletLimitKobo ?? 0;
   }
 
-  int get _totalKobo => (widget.total * 100).round();
+  int get _goodsTotalKobo => (widget.total * 100).round();
 
-  /// Wallet credit (kobo) available to apply toward an order (0 if none / debt).
-  int get _walletCreditKobo {
-    final k = _currentCustomerWalletKobo;
-    return k > 0 ? k : 0;
+  /// True when the crate deposit is captured for this sale: a registered
+  /// customer (walk-ins have no wallet to hold it, rule #14) paying Cash /
+  /// Transfer (deposit is cash received now — a Wallet / Credit Sale hands over
+  /// no fresh deposit, so the crates fall back to "owed / crate-track"), with
+  /// crate brands in the cart.
+  /// §13.4 / rule #13 — the selected business is Bar / Beer Distributor. The
+  /// cart only passes crateLines for a crate business, but guard here too so the
+  /// deposit section can never render for a non-crate type (defense in depth).
+  bool get _isCrateBusiness {
+    final bid = ref.read(authProvider).currentUser?.businessId;
+    return isCrateBusiness(
+      ref
+          .read(localBusinessesProvider)
+          .valueOrNull
+          ?.where((b) => b.id == bid)
+          .map((b) => b.type)
+          .firstOrNull,
+    );
   }
 
-  /// Outstanding (kobo) after the wallet credit is applied to the order.
-  int get _outstandingAfterCreditKobo =>
-      (_totalKobo - _walletCreditKobo).clamp(0, _totalKobo);
-
-  /// §14.2 bug #4 — "Pay from Wallet" chosen but the credit only PARTIALLY
-  /// covers the order: apply the credit (wallet → ₦0) and collect the
-  /// outstanding into a Funds account. (When credit fully covers, it's the
-  /// plain pay-from-wallet path; when there's no credit, wallet payment is
-  /// blocked.)
-  bool get _isApplyCreditFlow =>
-      _paymentType == PaymentType.fullCash &&
-      _isWalletPayment &&
+  bool get _depositApplies =>
       !_isWalkIn &&
-      _walletCreditKobo > 0 &&
-      _walletCreditKobo < _totalKobo;
+      _mode == PayMode.cashTransfer &&
+      _isCrateBusiness &&
+      widget.crateLines.isNotEmpty;
+
+  /// Total deposit PAID at checkout (kobo) — 0 unless [_depositApplies].
+  int get _depositTotalKobo => _depositApplies
+      ? _depositByMfr.values.fold<int>(0, (s, v) => s + v)
+      : 0;
+
+  /// The full/expected deposit if every brand's crates were deposited in full
+  /// (rate × crates summed). Shown as a reference; not added to the payable.
+  int get _fullDepositKobo => widget.crateLines.fold<int>(0, (s, line) {
+        final rateKobo = (line['rateKobo'] as int?) ?? 0;
+        final crates = (line['crates'] as num?)?.toDouble() ?? 0;
+        return s + (rateKobo * crates).round();
+      });
+
+  /// The payable total the customer settles = goods + the deposit held.
+  int get _totalKobo => _goodsTotalKobo + _depositTotalKobo;
 
   // ── build ──────────────────────────────────────────────────────────────────
   @override
@@ -334,12 +384,24 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                 ...widget.cart.map(_orderItemTile),
                 Divider(height: 1, color: _border),
                 _summaryRow('Subtotal', widget.subtotal),
-                _summaryRow('Crate Deposit', widget.crateDeposit),
+                if (_depositTotalKobo > 0)
+                  _summaryRow('Crate Deposit', _depositTotalKobo / 100.0),
                 Divider(height: 1, color: _border),
-                _summaryRow('Total', widget.total, bold: true, accent: true),
+                _summaryRow(
+                  'Total',
+                  _totalKobo / 100.0,
+                  bold: true,
+                  accent: true,
+                ),
               ],
             ),
           ),
+
+          // ── Crate Deposit (editable, per brand) ───────────────────────
+          if (_depositApplies) ...[
+            SizedBox(height: context.getRSize(28)),
+            _buildCrateDepositSection(),
+          ],
 
           SizedBox(height: context.getRSize(28)),
           // ── Customer Info ─────────────────────────────────────────────
@@ -415,143 +477,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           _sectionLabel('Payment Method'),
           SizedBox(height: context.getRSize(12)),
 
-          // 1. Full Cash / Card
-          _paymentOption(
-            PaymentType.fullCash,
-            'Full Cash / Card Payment',
-            'Full amount paid now — no balance added',
-            FontAwesomeIcons.moneyBill,
-          ),
-
-          // Sub-options: Cash/Transfer vs Wallet — only for named customers
-          if (_paymentType == PaymentType.fullCash && !_isWalkIn)
-            _buildWalletSubOptions(),
-
-          // 2. Partial Cash / Card
-          _paymentOption(
-            PaymentType.partialCash,
-            'Partial Cash / Card Payment',
-            _isWalkIn
-                ? 'Not available for Walk-in customers'
-                : 'Enter amount paid — remainder added to balance',
-            FontAwesomeIcons.moneyBillTransfer,
-            disabled: _isWalkIn,
-          ),
-
-          // Partial amount input + live remaining
-          if (_paymentType == PaymentType.partialCash) ...[
-            SizedBox(height: context.getRSize(16)),
-            AppInput(
-              controller: _cashReceivedCtrl,
-              labelText: 'Amount Paid Now',
-              hintText: '₦ Enter amount',
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              inputFormatters: [CurrencyInputFormatter()],
-              onChanged: (v) => setState(() {}),
-            ),
-            SizedBox(height: context.getRSize(10)),
-            Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: context.getRSize(16),
-                vertical: context.getRSize(12),
-              ),
-              decoration: BoxDecoration(
-                color: Theme.of(
-                  context,
-                ).colorScheme.primary.withValues(alpha: 0.07),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.primary.withValues(alpha: 0.2),
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Remaining Wallet Balance',
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(13),
-                      fontWeight: FontWeight.w700,
-                      color: _text,
-                    ),
-                  ),
-                  Builder(
-                    builder: (context) {
-                      final newCustomerWallet = _dynamicNewCustomerWallet;
-                      final isDebt = newCustomerWallet < 0;
-                      final balStr = formatCurrency(newCustomerWallet);
-                      final valColor = isDebt ? Colors.amber.shade700 : success;
-
-                      return Text(
-                        newCustomerWallet == 0 ? formatCurrency(0) : balStr,
-                        style: TextStyle(
-                          fontSize: context.getRFontSize(15),
-                          fontWeight: FontWeight.w800,
-                          color: newCustomerWallet < 0 ? danger : valColor,
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(height: context.getRSize(4)),
-            if (!_isWalkIn)
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: context.getRSize(4)),
-                child: Text(
-                  'Remaining will be added to ${_initialCustomer!.name}\'s balance',
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(12),
-                    color: _subtext,
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-              ),
-            if (_isWalkIn)
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: context.getRSize(4)),
-                child: Text(
-                  'Remaining will appear on the receipt only (Walk-in)',
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(12),
-                    color: _subtext,
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-              ),
-          ],
-
-          // 3. Credit Sale — disabled for walk-in
-          _paymentOption(
-            PaymentType.credit,
-            'Register as Credit Sale',
-            _isWalkIn
-                ? 'Not available for Walk-in customers'
-                : 'Full amount added to customer\'s wallet',
-            FontAwesomeIcons.fileInvoiceDollar,
-            disabled: _isWalkIn,
-          ),
-
-          // §14.2 Step 2: pick the receiving account — only when cash / card /
-          // transfer actually lands in an account (not a wallet or credit
-          // sale). Apply-credit only collects cash when "outstanding paid" is
-          // ticked; left unticked the shortfall becomes debt, so no account.
-          if ((_paymentType == PaymentType.fullCash && !_isWalletPayment) ||
-              _paymentType == PaymentType.partialCash ||
-              (_isApplyCreditFlow && _outstandingPaidConfirmed))
-            _buildAccountPicker(),
-
-          // §14.1 — "Add wallet info to receipt" (off by default). Only shown
-          // for registered customers; walk-ins have no wallet (§14.3).
-          if (!_isWalkIn) ...[
-            SizedBox(height: context.getRSize(20)),
-            _buildWalletInfoCheckbox(),
-          ],
+          _buildPaymentMethods(),
 
           SizedBox(height: context.getRSize(32)),
           AppButton(
@@ -563,6 +489,277 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           ),
         ],
       ),
+    );
+  }
+
+  // ── Crate deposit (editable, per brand) ──────────────────────────────────────
+  /// §13.4 Ring 3 — the per-brand deposit capture. Each crate brand shows its
+  /// auto-filled deposit (rate × crates); tap a row to change or zero it. The
+  /// deposit is refundable money held for the customer (shown on the wallet as
+  /// "Crate deposit held"), not income — it's settled when the empties come back.
+  Widget _buildCrateDepositSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionLabel('Crate Deposit'),
+        SizedBox(height: context.getRSize(6)),
+        Text(
+          'Refundable deposit held for the empties. Each brand starts at '
+          '${formatCurrency(0)} — tap a brand to enter how much was paid.',
+          style: TextStyle(
+            fontSize: context.getRFontSize(12),
+            color: _subtext,
+          ),
+        ),
+        SizedBox(height: context.getRSize(12)),
+        // Full/expected deposit reference (rate × crates across all brands).
+        Container(
+          width: double.infinity,
+          padding: EdgeInsets.symmetric(
+            horizontal: context.getRSize(14),
+            vertical: context.getRSize(12),
+          ),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.07),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Flexible(
+                child: Text(
+                  'Full deposit if collected',
+                  style: TextStyle(
+                    fontSize: context.getRFontSize(13),
+                    fontWeight: FontWeight.w700,
+                    color: _text,
+                  ),
+                ),
+              ),
+              Text(
+                formatCurrency(_fullDepositKobo / 100.0),
+                style: TextStyle(
+                  fontSize: context.getRFontSize(15),
+                  fontWeight: FontWeight.w800,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(height: context.getRSize(12)),
+        Container(
+          decoration: BoxDecoration(
+            color: _surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: _border),
+          ),
+          child: Column(
+            children: [
+              for (int i = 0; i < widget.crateLines.length; i++) ...[
+                if (i > 0) Divider(height: 1, color: _border),
+                _crateDepositRow(widget.crateLines[i]),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _crateDepositRow(Map<String, dynamic> line) {
+    final mfrId = line['manufacturerId'] as String;
+    final name = (line['name'] as String?) ?? 'Brand';
+    final crates = (line['crates'] as num?)?.toDouble() ?? 0;
+    final rateKobo = (line['rateKobo'] as int?) ?? 0;
+    final paidKobo = _depositByMfr[mfrId] ?? 0;
+    final fullKobo = (rateKobo * crates).round();
+    final isFull = paidKobo == fullKobo;
+    final isNone = paidKobo == 0;
+    final tag = isNone ? 'No deposit' : (isFull ? 'Full' : 'Part');
+
+    return InkWell(
+      onTap: () => _editBrandDeposit(mfrId, name, fullKobo),
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: context.getRSize(16),
+          vertical: context.getRSize(12),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: EdgeInsets.all(context.getRSize(8)),
+              decoration: BoxDecoration(
+                color: Theme.of(
+                  context,
+                ).colorScheme.primary.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                FontAwesomeIcons.beerMugEmpty,
+                size: context.getRSize(14),
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+            SizedBox(width: context.getRSize(12)),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: context.getRFontSize(14),
+                      color: _text,
+                    ),
+                  ),
+                  SizedBox(height: context.getRSize(2)),
+                  Text(
+                    '${crates.toStringAsFixed(crates == crates.roundToDouble() ? 0 : 1)} '
+                    'crate${crates == 1 ? '' : 's'} · Full ${formatCurrency(fullKobo / 100.0)} · $tag',
+                    style: TextStyle(
+                      fontSize: context.getRFontSize(12),
+                      color: _subtext,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Text(
+              formatCurrency(paidKobo / 100.0),
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: context.getRFontSize(14),
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+            SizedBox(width: context.getRSize(8)),
+            Icon(
+              FontAwesomeIcons.penToSquare,
+              size: context.getRSize(13),
+              color: _subtext,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Edit the deposit paid for one brand. Pre-fills the current value (blank =
+  /// ₦0); the "Use full (₦X)" shortcut fills the full deposit; clearing/0 marks
+  /// the brand "No deposit" (crate-track). Modal-style sheet (back / Save only).
+  void _editBrandDeposit(String mfrId, String name, int fullKobo) {
+    final ctrl = TextEditingController(
+      text: (_depositByMfr[mfrId] ?? 0) == 0
+          ? ''
+          : ((_depositByMfr[mfrId] ?? 0) ~/ 100).toString(),
+    );
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: _surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (sheetCtx) {
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+            context.getRSize(24),
+            context.getRSize(16),
+            context.getRSize(24),
+            context.deviceBottomInset + context.getRSize(24),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: context.getRSize(40),
+                  height: context.getRSize(4),
+                  decoration: BoxDecoration(
+                    color: _border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              SizedBox(height: context.getRSize(20)),
+              Text(
+                'Deposit — $name',
+                style: TextStyle(
+                  fontSize: context.getRFontSize(18),
+                  fontWeight: FontWeight.w800,
+                  color: _text,
+                ),
+              ),
+              SizedBox(height: context.getRSize(6)),
+              Text(
+                'Full deposit is ${formatCurrency(fullKobo / 100.0)}. '
+                'Leave blank or 0 for no deposit (crates tracked instead).',
+                style: TextStyle(
+                  fontSize: context.getRFontSize(13),
+                  color: _subtext,
+                ),
+              ),
+              SizedBox(height: context.getRSize(20)),
+              AppInput(
+                controller: ctrl,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                inputFormatters: [CurrencyInputFormatter()],
+                autofocus: true,
+                prefixText: '$activeCurrencySymbol ',
+                hintText: '0',
+              ),
+              SizedBox(height: context.getRSize(12)),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () {
+                    ctrl.text = (fullKobo ~/ 100).toString();
+                  },
+                  icon: Icon(
+                    FontAwesomeIcons.wandMagicSparkles,
+                    size: context.getRSize(13),
+                  ),
+                  label: Text('Use full (${formatCurrency(fullKobo / 100.0)})'),
+                ),
+              ),
+              SizedBox(height: context.getRSize(12)),
+              Row(
+                children: [
+                  Expanded(
+                    child: AppButton(
+                      text: 'Back',
+                      variant: AppButtonVariant.ghost,
+                      onPressed: () => Navigator.pop(sheetCtx),
+                    ),
+                  ),
+                  SizedBox(width: context.getRSize(12)),
+                  Expanded(
+                    child: AppButton(
+                      text: 'Save',
+                      variant: AppButtonVariant.primary,
+                      onPressed: () {
+                        final val = (parseCurrency(ctrl.text) * 100).round();
+                        setState(() => _depositByMfr[mfrId] = val < 0 ? 0 : val);
+                        Navigator.pop(sheetCtx);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -677,135 +874,89 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       return;
     }
 
-    // Walk-in validation
-    if (_isWalkIn && _paymentType != PaymentType.fullCash) {
-      AppNotification.showError(context, 'Walk-in customers must pay in full');
-      return;
-    }
+    // ── Validate by mode ──────────────────────────────────────────────────
+    final paidKobo =
+        _mode == PayMode.cashTransfer ? (_cashReceivedValue * 100).round() : 0;
 
-    // Wallet payment validation (§14.2)
-    if (_paymentType == PaymentType.fullCash && _isWalletPayment) {
-      if (_walletCreditKobo <= 0) {
+    if (_isWalkIn) {
+      // Walk-ins have no wallet (hard rule 14): Cash / Transfer only, paid in
+      // full — any shortfall has nowhere to go. An empty amount means "paid the
+      // full total" (one-tap), so only a positive entry BELOW the total is a
+      // genuine underpayment to block.
+      if (_mode != PayMode.cashTransfer ||
+          (paidKobo > 0 && paidKobo < _totalKobo)) {
+        AppNotification.showError(context, 'Walk-in customers must pay in full');
+        return;
+      }
+    } else {
+      // Cash / Transfer needs an amount entered. To book the whole total as
+      // debt, the cashier picks "Register as Credit Sale" instead.
+      if (_mode == PayMode.cashTransfer && paidKobo <= 0) {
         AppNotification.showError(
           context,
-          'No wallet credit to pay from. Use Cash / Card or Partial Payment.',
+          'Enter the amount paid, or choose Register as Credit Sale.',
         );
         return;
       }
-      // Apply-credit flow (bug #4): the credit only partly covers the order.
-      // Either the cashier ticks "outstanding paid" (the rest is collected as
-      // cash), or the box is left unticked and the outstanding is booked as
-      // debt on the customer's wallet — allowed only while it stays within
-      // their debt limit (same gate as a partial/credit sale).
-      if (_isApplyCreditFlow && !_outstandingPaidConfirmed) {
-        final customer = _initialCustomer!;
-        final limitKobo = _currentCustomerWalletLimitKobo;
 
-        // No limit set → can't carry the debt; require the cash be collected.
-        if (limitKobo <= 0) {
-          AppNotification.showError(
-            context,
-            '${customer.name} has no debt limit set. Tick "outstanding paid" '
-            'to collect the cash, or set a debt limit in the customer profile.',
-          );
-          return;
+      // §13.4 — the crate deposit is held cash: the cashier can't book a held
+      // deposit they didn't receive. So the amount paid must at least cover the
+      // deposit; the remainder applies to goods (and may go to debt). To skip the
+      // deposit, the cashier zeroes the brand(s) above (→ crates tracked instead).
+      if (_depositTotalKobo > 0 && paidKobo < _depositTotalKobo) {
+        AppNotification.showError(
+          context,
+          'Amount paid must cover the crate deposit of '
+          '${formatCurrency(_depositTotalKobo / 100.0)}. '
+          'Reduce the deposit or collect more.',
+        );
+        return;
+      }
+
+      // Debt-limit gate. Only a sale that ADDS debt is gated — a fully-paid or
+      // overpaid Cash / Transfer never is (even for a customer already in debt).
+      // Balance + limit are read live (no awaited DB round-trip) so the
+      // over-limit message always flashes (#7).
+      if (paidKobo < _totalKobo) {
+        final projectedKobo =
+            _currentCustomerWalletKobo + paidKobo - _totalKobo;
+        if (projectedKobo < 0) {
+          final customer = _initialCustomer!;
+          final limitKobo = _currentCustomerWalletLimitKobo;
+          if (limitKobo <= 0) {
+            AppNotification.showError(
+              context,
+              '${customer.name} has no debt limit set. Set a debt limit in the '
+              'customer profile before booking this debt.',
+            );
+            return;
+          }
+          if (projectedKobo < -limitKobo) {
+            final overByKobo = (-projectedKobo) - limitKobo;
+            AppNotification.showError(
+              context,
+              'This sale exceeds ${customer.name}\'s debt limit of '
+              '${formatCurrency(limitKobo / 100.0)}. '
+              'Over limit by ${formatCurrency(overByKobo / 100.0)}.',
+            );
+            return;
+          }
         }
-
-        // Wallet goes to (current credit − full total); the shortfall is the
-        // outstanding that becomes debt. Block if it breaches the limit.
-        final newBalanceKobo = _currentCustomerWalletKobo - _totalKobo;
-        if (newBalanceKobo < -limitKobo) {
-          final overByKobo = (-newBalanceKobo) - limitKobo;
-          AppNotification.showError(
-            context,
-            'The outstanding exceeds ${customer.name}\'s debt limit of '
-            '${formatCurrency(limitKobo / 100.0)}. '
-            'Over limit by ${formatCurrency(overByKobo / 100.0)}. '
-            'Tick "outstanding paid" to collect the cash instead.',
-          );
-          return;
-        }
-      }
-    }
-
-    // Validation
-    if (_paymentType == PaymentType.partialCash && _cashReceivedValue <= 0) {
-      AppNotification.showError(context, 'Please enter the amount paid');
-      return;
-    }
-
-    // Debt limit validations (partial cash / credit sale only)
-    if (_paymentType == PaymentType.partialCash ||
-        _paymentType == PaymentType.credit) {
-      final customer = _initialCustomer!;
-      final limitKobo = _currentCustomerWalletLimitKobo;
-
-      // Block if no debt limit has been set
-      if (limitKobo <= 0) {
-        AppNotification.showError(
-          context,
-          '${customer.name} has no debt limit set. '
-          'Set a debt limit in the customer profile before allowing credit or partial payments.',
-        );
-        return;
-      }
-
-      // Block if this purchase would push the customer over their debt limit.
-      // Read the balance synchronously from the live ledger (no awaited DB
-      // round-trip) so the over-limit error always flashes — previously the
-      // await let the message drop behind an `if (mounted)` guard and the sale
-      // just went silent (#7).
-      final totalKobo = (widget.total * 100).round();
-      final amountPaidKobo = _paymentType == PaymentType.partialCash
-          ? (_cashReceivedValue * 100).round()
-          : 0;
-      final remainingKobo = totalKobo - amountPaidKobo;
-      final currentBalanceKobo = _currentCustomerWalletKobo;
-      final newBalanceKobo = currentBalanceKobo - remainingKobo;
-
-      if (newBalanceKobo < -limitKobo) {
-        final overByKobo = (-newBalanceKobo) - limitKobo;
-        AppNotification.showError(
-          context,
-          'This sale exceeds ${customer.name}\'s debt limit of '
-          '${formatCurrency(limitKobo / 100.0)}. '
-          'Over limit by ${formatCurrency(overByKobo / 100.0)}.',
-        );
-        return;
       }
     }
 
     setState(() => _isProcessing = true);
 
     try {
-      // Compute amounts in kobo
-      final totalKobo = (widget.total * 100).round();
-      int amountPaidKobo;
-
-      switch (_paymentType) {
-        case PaymentType.fullCash:
-          if (_isWalletPayment) {
-            // Pay from wallet. Apply-credit (bug #4) with the box ticked: the
-            // credit only partly covers, so collect the outstanding now (it
-            // flows through the wallet as a credit leg and credits the chosen
-            // Funds account). Otherwise — credit fully covers, OR apply-credit
-            // with the box left unticked — nothing is paid now and the full
-            // total debits the wallet credit, taking it negative by the
-            // outstanding (the debt the customer now owes).
-            amountPaidKobo = (_isApplyCreditFlow && _outstandingPaidConfirmed)
-                ? _outstandingAfterCreditKobo
-                : 0;
-          } else {
-            amountPaidKobo = totalKobo;
-          }
-          break;
-        case PaymentType.partialCash:
-          amountPaidKobo = (_cashReceivedValue * 100).round();
-          break;
-        case PaymentType.credit:
-          amountPaidKobo = 0;
-          break;
-      }
+      final totalKobo = _totalKobo;
+      // Walk-ins pay exactly the total (no wallet to absorb over/under). For a
+      // registered customer the entered amount drives the wallet legs:
+      // createOrder posts a debit of the total + a credit of amountPaid, so the
+      // net (paid − total) books a shortfall as debt or tops the wallet up on an
+      // excess (daos.dart). Wallet / Credit Sale pay nothing now (amountPaid 0):
+      // the full total debits the wallet, going into debt if credit can't cover.
+      final amountPaidKobo = _isWalkIn ? totalKobo : paidKobo;
+      final paymentSubType = _mode == PayMode.wallet ? 'wallet' : 'cash';
 
       // Snapshot the wallet balance BEFORE the legs post so the receipt shows
       // the true post-sale net (old + paid − total) instead of the pre-sale
@@ -818,31 +969,16 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       final storeId =
           nav.lockedStoreId.value ?? auth.currentUser?.storeId;
 
-      // Ensure branch name is resolved before proceeding to receipt
-      if (_branchName == null && storeId != null) {
+      // Ensure store address is resolved before proceeding to receipt
+      if (_storeAddress == null && storeId != null) {
         final db = ref.read(databaseProvider);
         final w = await (db.select(
           db.stores,
         )..where((t) => t.id.equals(storeId))).getSingleOrNull();
-        if (mounted) setState(() => _branchName = w?.name);
-      }
-
-      // §14.2 Step 2: the receiving Funds Register account. Defaults to the
-      // store's Cash Till when the cashier didn't pick one. The business date
-      // buckets the credit (the day is guaranteed open — the POS gate enforced
-      // it before checkout was reachable).
-      String? fundsAccountId = _selectedFundsAccountId;
-      if (fundsAccountId == null && storeId != null) {
-        final accounts = await ref
-            .read(databaseProvider)
-            .fundsAccountsDao
-            .getActiveAccountsForStore(storeId);
-        if (accounts.isNotEmpty) {
-          final till = accounts.where((a) => a.accountType == 'cash_till');
-          fundsAccountId = (till.isNotEmpty ? till.first : accounts.first).id;
+        if (mounted) {
+          setState(() => _storeAddress = receiptStoreAddress(w?.location));
         }
       }
-      final businessDate = ref.read(todaysBusinessDateProvider).valueOrNull;
 
       final orderNo = await ref
           .read(orderServiceProvider)
@@ -854,23 +990,47 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             paymentType: _paymentLabel,
             staffId: auth.currentUser?.id,
             storeId: storeId,
-            crateDepositPaidKobo: (widget.crateDeposit * 100).round(),
+            // §13.4 Ring 3/6 — the per-brand deposit captured above. The total
+            // (sum) tags the order as non-revenue; the map drives createOrder's
+            // held-deposit wallet leg + order_crate_lines + issued gating. Both
+            // are 0/empty unless the deposit applies (registered + Cash/Transfer).
+            crateDepositPaidKobo: _depositTotalKobo,
+            crateDepositPaidByManufacturer: _depositApplies
+                ? Map<String, int>.from(_depositByMfr)
+                : const {},
             discountKobo: widget.cart.fold<int>(
               0,
               (s, i) => s + ((i['discountKobo'] as int?) ?? 0),
             ),
-            // Apply-credit (bug #4) collects cash for the outstanding ONLY when
-            // the box was ticked → 'cash' sub-type that credits a Funds
-            // account. A fully covered wallet payment, or an apply-credit left
-            // as debt (box unticked), is the 'wallet' sub-type — no cash lands,
-            // the full total debits the wallet and the shortfall becomes debt.
-            paymentSubType: (_isWalletPayment &&
-                    !(_isApplyCreditFlow && _outstandingPaidConfirmed))
-                ? 'wallet'
-                : 'cash',
-            fundsAccountId: fundsAccountId,
-            businessDate: businessDate,
+            // 'wallet' debits the whole total from the wallet (no cash lands);
+            // 'cash' covers Cash / Transfer and Credit Sale — the entered amount
+            // (0 for a credit sale) credits the wallet, netting against the total.
+            paymentSubType: paymentSubType,
           );
+
+      // §13.4 — snapshot the customer's empty-crate standing AFTER the sale
+      // (createOrder has just issued this sale's crates) for the receipt's
+      // wallet-info block. Registered customers only (walk-ins hold no crates).
+      int cratesOwed = 0, cratesCredit = 0;
+      final crateCustomerId = _initialCustomer?.id;
+      if (!_isWalkIn && crateCustomerId != null) {
+        try {
+          final balances = await ref
+              .read(databaseProvider)
+              .customersDao
+              .watchCrateBalancesWithGroups(crateCustomerId)
+              .first;
+          for (final b in balances) {
+            if (b.balance > 0) {
+              cratesOwed += b.balance;
+            } else if (b.balance < 0) {
+              cratesCredit += -b.balance;
+            }
+          }
+        } catch (_) {
+          // Non-fatal — the receipt just omits the crate lines if this fails.
+        }
+      }
 
       // ── Success Flow ────────────────────────────────────────────────
       if (mounted) {
@@ -880,6 +1040,8 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           // Walk-ins have no wallet (§14.3).
           _receiptWalletBalance =
               _isWalkIn ? null : (oldWalletKobo + amountPaidKobo - totalKobo) / 100.0;
+          _receiptCratesOwed = cratesOwed;
+          _receiptCratesCredit = cratesCredit;
           _paymentConfirmed = true;
           _currentOrderId = orderNo;
         });
@@ -934,8 +1096,8 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                 orderId: _currentOrderId,
                 cart: widget.cart,
                 subtotal: widget.subtotal,
-                crateDeposit: widget.crateDeposit,
-                total: widget.total,
+                crateDeposit: _depositTotalKobo / 100.0,
+                total: _totalKobo / 100.0,
                 paymentMethod: _paymentLabel,
                 customerName: _customerDisplayName,
                 customerAddress: _initialCustomer?.addressText ?? 'N/A',
@@ -943,9 +1105,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                 cashReceived: _amountPaid,
                 walletBalance: _receiptWalletBalance,
                 showWalletInfo: !_isWalkIn && _addWalletInfoToReceipt,
+                cratesOwed: _receiptCratesOwed,
+                cratesCredit: _receiptCratesCredit,
                 riderName: 'Pick-up Order',
                 manufacturerNames: _manufacturerNames,
-                branchName: _branchName,
+                storeAddress: _storeAddress,
                 businessName: ref.watch(currentBusinessNameProvider),
               ),
             ),
@@ -1131,17 +1295,21 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         orderId: _currentOrderId,
         cart: widget.cart,
         subtotal: widget.subtotal,
-        crateDeposit: widget.crateDeposit,
-        total: widget.total,
+        crateDeposit: _depositTotalKobo / 100.0,
+        total: _totalKobo / 100.0,
         paymentMethod: _paymentLabel,
         customerName: _customerDisplayName,
         customerAddress: widget.customer?.addressText,
         customerPhone: widget.customer?.phone,
         cashReceived: _amountPaid,
-        walletBalance: _isWalkIn ? null : _dynamicNewCustomerWallet,
+        // Use the post-sale snapshot (set at confirm) — the live provider has
+        // already updated, so recomputing here would double-count the legs.
+        walletBalance: _receiptWalletBalance,
         showWalletInfo: !_isWalkIn && _addWalletInfoToReceipt,
+        cratesOwed: _receiptCratesOwed,
+        cratesCredit: _receiptCratesCredit,
         riderName: 'Pick-up Order',
-        branchName: _branchName,
+        storeAddress: _storeAddress,
         businessName: ref.read(currentBusinessNameProvider),
       );
 
@@ -1229,70 +1397,6 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
   // ── Wallet sub-options (shown under Full Cash when customer is named) ───────
 
-  /// §14.2 Step 2 — receiving-account picker. Lists the store's active funds
-  /// accounts; the selection defaults to Cash Till.
-  Widget _buildAccountPicker() {
-    final storeId = ref.read(navigationProvider).lockedStoreId.value ??
-        ref.read(authProvider).currentUser?.storeId;
-    if (storeId == null) return const SizedBox.shrink();
-    final accounts =
-        ref.watch(fundsAccountsForStoreProvider(storeId)).valueOrNull ??
-            const <FundsAccountData>[];
-    if (accounts.isEmpty) return const SizedBox.shrink();
-    final cashTill = accounts.where((a) => a.accountType == 'cash_till');
-    final selected = _selectedFundsAccountId ??
-        (cashTill.isNotEmpty ? cashTill.first.id : accounts.first.id);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(height: context.getRSize(20)),
-        _sectionLabel('Receiving Account'),
-        SizedBox(height: context.getRSize(12)),
-        ...accounts.map((a) {
-          final isSel = a.id == selected;
-          final label = a.accountType == 'cash_till' ? 'Cash Till' : a.name;
-          return GestureDetector(
-            onTap: () => setState(() => _selectedFundsAccountId = a.id),
-            child: Container(
-              margin: EdgeInsets.only(bottom: context.getRSize(8)),
-              padding: EdgeInsets.all(context.getRSize(14)),
-              decoration: BoxDecoration(
-                color:
-                    isSel ? blueMain.withValues(alpha: 0.08) : Colors.transparent,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: isSel ? blueMain : _border,
-                  width: isSel ? 1.5 : 1,
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    isSel
-                        ? Icons.radio_button_checked
-                        : Icons.radio_button_unchecked,
-                    size: context.getRSize(20),
-                    color: isSel ? blueMain : _subtext,
-                  ),
-                  SizedBox(width: context.getRSize(12)),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(14),
-                      fontWeight: FontWeight.w600,
-                      color: _text,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }),
-      ],
-    );
-  }
-
   /// §14.1 — "Add wallet info to receipt" toggle. When ticked, the customer's
   /// resulting wallet balance is printed on the receipt (§15.1). Off by default.
   Widget _buildWalletInfoCheckbox() {
@@ -1334,240 +1438,429 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     );
   }
 
-  Widget _buildWalletSubOptions() {
-    final walletBalance = _walletBalanceFor(widget.customer?.id);
-    final hasCredit = walletBalance > 0;
-
-    return Padding(
-      padding: EdgeInsets.only(
-        left: context.getRSize(4),
-        right: context.getRSize(4),
-        bottom: context.getRSize(10),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              _walletChip(
-                'Cash / Transfer',
-                !_isWalletPayment,
-                () => setState(() {
-                  _isWalletPayment = false;
-                  _outstandingPaidConfirmed = false;
-                }),
-              ),
-              SizedBox(width: context.getRSize(10)),
-              _walletChip(
-                'Pay from Wallet',
-                _isWalletPayment,
-                () => setState(() {
-                  _isWalletPayment = true;
-                  _outstandingPaidConfirmed = false;
-                }),
-              ),
-            ],
-          ),
-          if (_isWalletPayment) ...[
-            SizedBox(height: context.getRSize(12)),
-            Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: context.getRSize(16),
-                vertical: context.getRSize(12),
-              ),
-              decoration: BoxDecoration(
-                color: hasCredit
-                    ? success.withValues(alpha: 0.08)
-                    : danger.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: hasCredit
-                      ? success.withValues(alpha: 0.3)
-                      : danger.withValues(alpha: 0.3),
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Wallet Balance',
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(13),
-                      fontWeight: FontWeight.w700,
-                      color: _text,
-                    ),
-                  ),
-                  Text(
-                    formatCurrency(walletBalance),
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(15),
-                      fontWeight: FontWeight.w800,
-                      color: hasCredit ? success : danger,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // §14.2 bug #4 — the credit only partially covers the order: apply
-            // it and handle the rest. Ticking "outstanding paid" collects the
-            // shortfall as cash (wallet → ₦0); leaving it unticked books the
-            // shortfall as debt (wallet goes negative). The receiving account
-            // picker for the cash renders below (gated on _isApplyCreditFlow).
-            if (_isApplyCreditFlow) ...[
-              SizedBox(height: context.getRSize(10)),
-              _applyCreditRow(
-                'Wallet credit applied',
-                '−${formatCurrency(_walletCreditKobo / 100.0)}',
-              ),
-              _applyCreditRow(
-                'Wallet after sale',
-                formatCurrency(
-                  _outstandingPaidConfirmed
-                      ? 0
-                      : (_currentCustomerWalletKobo - _totalKobo) / 100.0,
-                ),
-              ),
-              _applyCreditRow(
-                _outstandingPaidConfirmed
-                    ? 'Outstanding to collect'
-                    : 'Outstanding (added as debt)',
-                formatCurrency(_outstandingAfterCreditKobo / 100.0),
-                emphasise: true,
-              ),
-              SizedBox(height: context.getRSize(10)),
-              _outstandingPaidCheckbox(),
-              if (!_outstandingPaidConfirmed) ...[
-                SizedBox(height: context.getRSize(6)),
-                Padding(
-                  padding:
-                      EdgeInsets.symmetric(horizontal: context.getRSize(4)),
-                  child: Text(
-                    'Leave unticked to add the '
-                    '${formatCurrency(_outstandingAfterCreditKobo / 100.0)} '
-                    'outstanding to $_customerDisplayName\'s debt.',
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(12),
-                      color: _subtext,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
-                ),
-              ],
-            ] else if (!hasCredit) ...[
-              SizedBox(height: context.getRSize(6)),
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: context.getRSize(4)),
-                child: Text(
-                  'No wallet credit available. Use Cash / Card or Partial '
-                  'Payment instead.',
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(12),
-                    color: danger,
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ],
-      ),
-    );
-  }
-
-  /// A label/value line in the apply-credit breakdown (§14.2 bug #4).
-  Widget _applyCreditRow(String label, String value, {bool emphasise = false}) {
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: context.getRSize(3)),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: context.getRFontSize(13),
-              fontWeight: emphasise ? FontWeight.w800 : FontWeight.w600,
-              color: emphasise ? _text : _subtext,
-            ),
-          ),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: context.getRFontSize(emphasise ? 15 : 13),
-              fontWeight: emphasise ? FontWeight.w800 : FontWeight.w700,
-              color: emphasise ? Theme.of(context).colorScheme.primary : _text,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// "Outstanding paid" confirmation for the apply-credit flow (§14.2 bug #4).
-  Widget _outstandingPaidCheckbox() {
-    final on = _outstandingPaidConfirmed;
-    return GestureDetector(
-      onTap: () => setState(
-        () => _outstandingPaidConfirmed = !_outstandingPaidConfirmed,
-      ),
-      child: Container(
-        padding: EdgeInsets.all(context.getRSize(12)),
-        decoration: BoxDecoration(
-          color: on ? success.withValues(alpha: 0.08) : _surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: on ? success : _border,
-            width: on ? 1.5 : 1,
-          ),
-        ),
-        child: Row(
+  // ── Payment methods (post-2026-06-05) ──────────────────────────────────────
+  // Two method chips (Cash / Transfer, Pay from Wallet) plus the retained
+  // "Register as Credit Sale" card. Walk-ins have no wallet (hard rule 14) — they
+  // only ever pay Cash / Transfer in full, so they see neither the wallet chip
+  // nor the credit-sale card.
+  Widget _buildPaymentMethods() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           children: [
-            Icon(
-              on ? Icons.check_box : Icons.check_box_outline_blank,
-              size: context.getRSize(20),
-              color: on ? success : _subtext,
-            ),
-            SizedBox(width: context.getRSize(10)),
             Expanded(
-              child: Text(
-                'Outstanding ${formatCurrency(_outstandingAfterCreditKobo / 100.0)} '
-                'was paid',
-                style: TextStyle(
-                  fontSize: context.getRFontSize(13),
-                  fontWeight: FontWeight.w600,
-                  color: _text,
-                ),
+              child: _methodChip(
+                'Cash / Transfer',
+                FontAwesomeIcons.moneyBill,
+                _mode == PayMode.cashTransfer,
+                () => setState(() => _mode = PayMode.cashTransfer),
               ),
             ),
+            if (!_isWalkIn) ...[
+              SizedBox(width: context.getRSize(10)),
+              Expanded(
+                child: _methodChip(
+                  'Pay from Wallet',
+                  FontAwesomeIcons.wallet,
+                  _mode == PayMode.wallet,
+                  () => setState(() => _mode = PayMode.wallet),
+                ),
+              ),
+            ],
           ],
         ),
-      ),
+
+        // Cash / Transfer → amount input + live resulting-balance preview.
+        if (_mode == PayMode.cashTransfer) _buildCashTransferInput(),
+
+        // Pay from Wallet → balance + resulting debt preview (no input).
+        if (_mode == PayMode.wallet) _buildWalletPreview(),
+
+        // Register as Credit Sale — retained card. Registered customers only.
+        if (!_isWalkIn) ...[
+          SizedBox(height: context.getRSize(16)),
+          _creditSaleCard(),
+          if (_mode == PayMode.credit) ...[
+            SizedBox(height: context.getRSize(10)),
+            _buildCreditPreview(),
+          ],
+        ],
+
+        // §14.1 — "Add wallet info to receipt" (off by default, registered only).
+        if (!_isWalkIn) ...[
+          SizedBox(height: context.getRSize(20)),
+          _buildWalletInfoCheckbox(),
+        ],
+      ],
     );
   }
 
-  Widget _walletChip(String label, bool selected, VoidCallback onTap) {
+  /// A payment-method chip (Cash / Transfer, Pay from Wallet).
+  Widget _methodChip(
+    String label,
+    IconData icon,
+    bool selected,
+    VoidCallback onTap,
+  ) {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         padding: EdgeInsets.symmetric(
-          horizontal: context.getRSize(16),
-          vertical: context.getRSize(8),
+          horizontal: context.getRSize(14),
+          vertical: context.getRSize(12),
         ),
         decoration: BoxDecoration(
-          color: selected ? blueMain.withValues(alpha: 0.12) : _surface,
-          borderRadius: BorderRadius.circular(20),
+          color: selected ? blueMain.withValues(alpha: 0.10) : _surface,
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: selected ? blueMain : _border,
             width: selected ? 2 : 1,
           ),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: context.getRFontSize(13),
-            fontWeight: selected ? FontWeight.bold : FontWeight.w500,
-            color: selected ? blueMain : _subtext,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: context.getRSize(16),
+              color: selected ? blueMain : _subtext,
+            ),
+            SizedBox(width: context.getRSize(8)),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: context.getRFontSize(13),
+                  fontWeight: selected ? FontWeight.bold : FontWeight.w600,
+                  color: selected ? blueMain : _subtext,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Cash / Transfer: the amount-paid field plus the live resulting-balance
+  /// preview (registered) or a pay-in-full reminder (walk-in).
+  Widget _buildCashTransferInput() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(height: context.getRSize(16)),
+        AppInput(
+          controller: _cashReceivedCtrl,
+          labelText: 'Amount Paid',
+          hintText: '₦ Enter amount paid',
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [CurrencyInputFormatter()],
+          onChanged: (v) => setState(() {}),
+        ),
+        if (_isWalkIn) ...[
+          SizedBox(height: context.getRSize(8)),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: context.getRSize(4)),
+            child: Text(
+              'Walk-in customers must pay the full ${formatCurrency(widget.total)}.',
+              style: TextStyle(
+                fontSize: context.getRFontSize(12),
+                color: _subtext,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
           ),
+        ] else ...[
+          SizedBox(height: context.getRSize(12)),
+          _resultPreview(),
+        ],
+      ],
+    );
+  }
+
+  /// Registered Cash / Transfer preview: resulting wallet balance + a hint
+  /// (shortfall → debt, excess → wallet, or fully paid) + a debt-limit warning.
+  Widget _resultPreview() {
+    final projectedKobo = _projectedWalletKobo; // negative = debt
+    final projected = projectedKobo / 100.0;
+    final isDebt = projectedKobo < 0;
+    final diffKobo = (_cashReceivedValue * 100).round() - _totalKobo;
+
+    String hint;
+    if (diffKobo < 0) {
+      hint = 'Shortfall ${formatCurrency(-diffKobo / 100.0)} added to '
+          '$_customerDisplayName\'s wallet as debt.';
+    } else if (diffKobo > 0) {
+      hint = 'Excess ${formatCurrency(diffKobo / 100.0)} added to '
+          '$_customerDisplayName\'s wallet.';
+    } else {
+      hint = 'Fully paid — no change to the wallet.';
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _previewBox(
+          'Resulting Wallet Balance',
+          projected,
+          isDebt ? danger : (projected > 0 ? success : _text),
+          isDebt ? ' (debt)' : (projected > 0 ? ' (credit)' : ''),
+        ),
+        SizedBox(height: context.getRSize(6)),
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: context.getRSize(4)),
+          child: Text(
+            hint,
+            style: TextStyle(
+              fontSize: context.getRFontSize(12),
+              color: _subtext,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ),
+        if (_overDebtLimit)
+          _debtLimitWarning(_currentCustomerWalletLimitKobo, projectedKobo),
+      ],
+    );
+  }
+
+  /// Pay from Wallet preview: current balance, the balance after this sale, a
+  /// short explanation, and a debt-limit warning if the credit can't cover it.
+  Widget _buildWalletPreview() {
+    final balance = _currentCustomerWallet;
+    final projectedKobo = _projectedWalletKobo; // current − total
+    final projected = projectedKobo / 100.0;
+    final isDebt = projectedKobo < 0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(height: context.getRSize(12)),
+        _previewBox(
+          'Wallet Balance',
+          balance,
+          balance < 0 ? danger : (balance > 0 ? success : _text),
+          balance < 0 ? ' (debt)' : (balance > 0 ? ' (credit)' : ''),
+        ),
+        SizedBox(height: context.getRSize(8)),
+        _previewBox(
+          'After This Sale',
+          projected,
+          isDebt ? danger : (projected > 0 ? success : _text),
+          isDebt ? ' (debt)' : (projected > 0 ? ' (credit)' : ''),
+        ),
+        SizedBox(height: context.getRSize(6)),
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: context.getRSize(4)),
+          child: Text(
+            isDebt
+                ? 'Wallet credit can\'t cover the order — the shortfall is added '
+                    'as debt.'
+                : 'The order is charged to the wallet credit.',
+            style: TextStyle(
+              fontSize: context.getRFontSize(12),
+              color: _subtext,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ),
+        if (_overDebtLimit)
+          _debtLimitWarning(_currentCustomerWalletLimitKobo, projectedKobo),
+      ],
+    );
+  }
+
+  /// Credit Sale preview: the resulting (debt) balance + debt-limit warning.
+  Widget _buildCreditPreview() {
+    final projectedKobo = _projectedWalletKobo; // current − total
+    final projected = projectedKobo / 100.0;
+    final isDebt = projectedKobo < 0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _previewBox(
+          'Resulting Wallet Balance',
+          projected,
+          isDebt ? danger : (projected > 0 ? success : _text),
+          isDebt ? ' (debt)' : (projected > 0 ? ' (credit)' : ''),
+        ),
+        if (_overDebtLimit)
+          _debtLimitWarning(_currentCustomerWalletLimitKobo, projectedKobo),
+      ],
+    );
+  }
+
+  /// A label / value box used by the payment previews.
+  Widget _previewBox(
+    String label,
+    double value,
+    Color valueColor,
+    String suffix,
+  ) {
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: context.getRSize(16),
+        vertical: context.getRSize(12),
+      ),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Flexible(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: context.getRFontSize(13),
+                fontWeight: FontWeight.w700,
+                color: _text,
+              ),
+            ),
+          ),
+          Text(
+            '${formatCurrency(value)}$suffix',
+            style: TextStyle(
+              fontSize: context.getRFontSize(15),
+              fontWeight: FontWeight.w800,
+              color: valueColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Red warning shown when a debt-adding sale breaches the customer's limit
+  /// (or none is set). The same condition blocks on Confirm Payment.
+  Widget _debtLimitWarning(int limitKobo, int projectedKobo) {
+    final msg = limitKobo <= 0
+        ? '$_customerDisplayName has no debt limit set — set one before booking '
+            'this debt.'
+        : 'Over $_customerDisplayName\'s debt limit of '
+            '${formatCurrency(limitKobo / 100.0)} by '
+            '${formatCurrency(((-projectedKobo) - limitKobo) / 100.0)}.';
+    return Padding(
+      padding: EdgeInsets.only(top: context.getRSize(8)),
+      child: Container(
+        padding: EdgeInsets.all(context.getRSize(12)),
+        decoration: BoxDecoration(
+          color: danger.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: danger.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              FontAwesomeIcons.triangleExclamation,
+              size: context.getRSize(14),
+              color: danger,
+            ),
+            SizedBox(width: context.getRSize(10)),
+            Expanded(
+              child: Text(
+                msg,
+                style: TextStyle(
+                  fontSize: context.getRFontSize(12),
+                  fontWeight: FontWeight.w600,
+                  color: danger,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// "Register as Credit Sale" — the one retained payment card (registered
+  /// customers only). Nothing is paid now; the whole total becomes wallet debt.
+  Widget _creditSaleCard() {
+    final active = _mode == PayMode.credit;
+    return GestureDetector(
+      onTap: () => setState(() => _mode = PayMode.credit),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: EdgeInsets.all(context.getRSize(14)),
+        decoration: BoxDecoration(
+          color: active
+              ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.08)
+              : _surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: active ? blueMain : _border,
+            width: active ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: context.getRSize(42),
+              height: context.getRSize(42),
+              decoration: BoxDecoration(
+                color: (active ? blueMain : _subtext).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                FontAwesomeIcons.fileInvoiceDollar,
+                size: context.getRSize(18),
+                color: active ? blueMain : _subtext,
+              ),
+            ),
+            SizedBox(width: context.getRSize(14)),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Register as Credit Sale',
+                    style: TextStyle(
+                      fontWeight: active ? FontWeight.bold : FontWeight.w600,
+                      fontSize: context.getRFontSize(14),
+                      color: active ? blueMain : _text,
+                    ),
+                  ),
+                  SizedBox(height: context.getRSize(2)),
+                  Text(
+                    'Nothing paid now — full amount added to the wallet as debt',
+                    style: TextStyle(
+                      fontSize: context.getRFontSize(12),
+                      color: _subtext,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              width: context.getRSize(22),
+              height: context.getRSize(22),
+              decoration: BoxDecoration(
+                color: active ? blueMain : Colors.transparent,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: active ? blueMain : _border,
+                  width: 2,
+                ),
+              ),
+              child: active
+                  ? Icon(
+                      Icons.check,
+                      size: context.getRSize(14),
+                      color: Colors.white,
+                    )
+                  : null,
+            ),
+          ],
         ),
       ),
     );
@@ -1722,111 +2015,4 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     );
   }
 
-  /// Payment option tile.
-  /// [disabled] is true for Credit Sale when walk-in customer.
-  Widget _paymentOption(
-    PaymentType type,
-    String label,
-    String subLabel,
-    IconData icon, {
-    bool disabled = false,
-  }) {
-    final active = !disabled && _paymentType == type;
-    final effectiveColor = disabled ? _subtext : (active ? blueMain : _text);
-    final iconColor = disabled ? _subtext : (active ? blueMain : _subtext);
-
-    return GestureDetector(
-      onTap: disabled
-          ? null
-          : () => setState(() {
-              _paymentType = type;
-              if (type != PaymentType.fullCash) _isWalletPayment = false;
-              _outstandingPaidConfirmed = false;
-            }),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        margin: EdgeInsets.only(bottom: context.getRSize(10)),
-        padding: EdgeInsets.all(context.getRSize(14)),
-        decoration: BoxDecoration(
-          color: disabled
-              ? _border.withValues(alpha: 0.10)
-              : active
-              ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.08)
-              : _surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: disabled
-                ? _border.withValues(alpha: 0.4)
-                : active
-                ? blueMain
-                : _border,
-            width: active ? 2 : 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: context.getRSize(42),
-              height: context.getRSize(42),
-              decoration: BoxDecoration(
-                color: iconColor.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, size: context.getRSize(18), color: iconColor),
-            ),
-            SizedBox(width: context.getRSize(14)),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontWeight: active ? FontWeight.bold : FontWeight.w600,
-                      fontSize: context.getRFontSize(14),
-                      color: effectiveColor,
-                    ),
-                  ),
-                  SizedBox(height: context.getRSize(2)),
-                  Text(
-                    subLabel,
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(12),
-                      color: disabled ? danger : _subtext,
-                      fontStyle: disabled ? FontStyle.italic : FontStyle.normal,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // Radio dot
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              width: context.getRSize(22),
-              height: context.getRSize(22),
-              decoration: BoxDecoration(
-                color: active ? blueMain : Colors.transparent,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: disabled
-                      ? _border.withValues(alpha: 0.4)
-                      : active
-                      ? blueMain
-                      : _border,
-                  width: 2,
-                ),
-              ),
-              child: active
-                  ? Icon(
-                      Icons.check,
-                      size: context.getRSize(14),
-                      color: Colors.white,
-                    )
-                  : null,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }

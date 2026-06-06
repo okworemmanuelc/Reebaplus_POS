@@ -10,6 +10,8 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/features/profile/screens/profile_screen.dart';
+import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
+import 'package:reebaplus_pos/features/subscription/widgets/subscription_badge.dart';
 import 'package:reebaplus_pos/features/settings/screens/staff_settings_screen.dart';
 import 'package:reebaplus_pos/features/staff/screens/staff_management_screen.dart';
 import 'package:reebaplus_pos/features/sync/screens/sync_issues_screen.dart';
@@ -46,6 +48,10 @@ class AppDrawer extends ConsumerWidget {
     // rows resolve locally; fall back to the theme primary while null.
     final role = ref.watch(currentUserRoleProvider);
     final roleColor = role == null ? primary : roleTagColor(role.slug);
+    // §32 PRO / FREE TRIAL tag next to the name — only when the business is paid
+    // or in trial (the badge itself decides which label).
+    final showSubBadge =
+        ref.watch(currentBusinessSubscriptionProvider).badgeLabel != null;
     return Container(
       width: double.infinity,
       padding: EdgeInsets.fromLTRB(
@@ -218,20 +224,36 @@ class AppDrawer extends ConsumerWidget {
               );
             },
           ),
-          Text(
-            user?.name ?? '',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurface,
-              fontSize: context.getRFontSize(18),
-              fontWeight: FontWeight.bold,
-            ),
+          Row(
+            children: [
+              Flexible(
+                child: Text(
+                  user?.name ?? '',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface,
+                    fontSize: context.getRFontSize(18),
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              // §32 PRO / FREE TRIAL tag — sits right after the name.
+              if (showSubBadge) ...[
+                SizedBox(width: context.getRSize(8)),
+                const SubscriptionBadge(),
+              ],
+            ],
           ),
           SizedBox(height: context.getRSize(6)),
-          Row(
+          Wrap(
+            spacing: context.getRSize(8),
+            runSpacing: context.getRSize(6),
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               // Role tag — colour by role (§27.1). Hidden until the role
               // resolves locally.
-              if (role != null) ...[
+              if (role != null)
                 Container(
                   padding: EdgeInsets.symmetric(
                     horizontal: context.getRSize(10),
@@ -250,8 +272,6 @@ class AppDrawer extends ConsumerWidget {
                     ),
                   ),
                 ),
-                SizedBox(width: context.getRSize(8)),
-              ],
               Container(
                 padding: EdgeInsets.symmetric(
                   horizontal: context.getRSize(10),
@@ -329,17 +349,6 @@ class AppDrawer extends ConsumerWidget {
           active: activeRoute == 'orders',
           onTap: () => _navigateTo(context, ref, 'orders'),
         ),
-        // Funds Register — Manager/CEO only (§23.7). Replaces the old Cash
-        // Register item (hard rule #8). funds.* are CEO + Manager permissions.
-        if (hasPermission(ref, 'funds.view') ||
-            hasPermission(ref, 'funds.open_day'))
-          _navItem(
-            context,
-            FontAwesomeIcons.vault,
-            'Funds Register',
-            active: activeRoute == 'funds_register',
-            onTap: () => _navigateTo(context, ref, 'funds_register'),
-          ),
         // Customers — hidden for Stock keeper (§27.3). customers.add is held by
         // CEO, Manager, Cashier — not Stock keeper.
         if (hasPermission(ref, 'customers.add'))
@@ -372,8 +381,8 @@ class AppDrawer extends ConsumerWidget {
             active: activeRoute == 'expenses',
             onTap: () => _navigateTo(context, ref, 'expenses'),
           ),
-        // Stores — CEO only (§27.3). settings.manage is CEO-only by default.
-        if (hasPermission(ref, 'settings.manage'))
+        // Stores — gated by stores.manage (§10.2), CEO-only by default.
+        if (hasPermission(ref, 'stores.manage'))
           _navItem(
             context,
             FontAwesomeIcons.store,
@@ -553,8 +562,6 @@ class AppDrawer extends ConsumerWidget {
       nav.setIndex(9);
     } else if (route == 'activity_logs') {
       nav.setIndex(10);
-    } else if (route == 'funds_register') {
-      nav.setIndex(11);
     }
   }
 

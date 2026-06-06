@@ -152,8 +152,7 @@ void main() {
       final s = await _seedCancelFixtures(db, businessId);
       final orderId = await _createSaleAndDrainQueue(db, s, businessId);
 
-      await db.ordersDao.markCancelled(orderId, 'changed mind', s.staffId,
-          businessDate: '2026-06-01');
+      await db.ordersDao.markCancelled(orderId, 'changed mind', s.staffId);
 
       // Local mirror: order cancelled, compensating stock_tx inserted,
       // payment voided, inventory restored.
@@ -189,8 +188,7 @@ void main() {
       final s = await _seedCancelFixtures(db, businessId);
       final orderId = await _createSaleAndDrainQueue(db, s, businessId);
 
-      await db.ordersDao.markCancelled(orderId, 'wrong customer', s.staffId,
-          businessDate: '2026-06-01');
+      await db.ordersDao.markCancelled(orderId, 'wrong customer', s.staffId);
 
       // Local: order header flipped, but no new compensating stock_tx row,
       // payment NOT voided, no wallet refund. Those land via

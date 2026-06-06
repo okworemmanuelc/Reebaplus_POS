@@ -33,7 +33,7 @@ Do not invent new roles. Phase 2 will add custom roles — until then, only thes
 
 ## Current build phase
 
-**Phase 1.** Phase 2 and Phase 3 features are listed in the master plan but are out of scope. If you find yourself reaching for them, stop.
+**Phase 1**, plus a few **Phase 2 multi-store** slices the user has authorized one at a time (each added to the master plan before building): the stores list/management screen + `stores.manage` permission, the receipt store-address, **staff multi-store assignment** (CEO add/remove of a staff member's `user_stores` set from the staff profile, `staff.assign_stores`, §9.5 — 2026-06-05), the **active-store POS picker** (in-app "pick your store" gate + confine the selling store to assignments, §12.1 — 2026-06-05), and **per-store permission scope** (the Store layer of §10.2.1 — a role's permissions can be overridden per store via `store_role_permissions`; resolver order User > Store > Business; 2026-06-06). Everything else in Phase 2 / Phase 3 is still out of scope — if you find yourself reaching for an unauthorized one (per-store report filters, stock-transfer UI, custom roles, etc.), stop and ask.
 
 ---
 
@@ -141,14 +141,15 @@ Adding a package has a cost beyond installing it: bundle size, security surface,
 8. **Never** reintroduce removed features:
    - QR code on the Receipt (removed).
    - Deliveries sidebar item (deferred to Phase 3).
-   - Cash Register sidebar item (replaced by Funds Register).
+   - Cash Register sidebar item (removed; the Funds Register that replaced it was also removed 2026-06-04).
+   - Funds Register, in full — sidebar item, Open/Close Day, the per-store accounts, the money ledger, and its report (removed 2026-06-04; master plan §23).
    - Cart sidebar item (it's bottom nav only now).
 9. **Never** hard-delete records. Customers, suppliers, payments, expenses, and staff use soft delete only (`is_deleted=true` via `enqueueUpsert`).
-10. **Never** allow sales to be made until Opening Cash is set for the day. Block POS with the role-appropriate message.
-11. **Never** allow a new day to start until the previous day is properly closed.
+10. **RETIRED (2026-06-04).** ~~Never allow sales to be made until Opening Cash is set for the day.~~ The Funds Register opening-cash gate was removed — POS is now **gateless** (sales any time, no open-day required). Master plan §23.
+11. **RETIRED (2026-06-04).** ~~Never allow a new day to start until the previous day is properly closed.~~ The Funds Register Open/Close Day ceremony was removed (§23); there is no day to open or close.
 12. **Never** block sales because of missing buying price — buying price is required at product creation, so this case shouldn't happen.
 13. **Never** show empty crate features for non-Bar and non-Beer-distributor businesses.
-14. **Never** route money through a customer wallet for walk-in customers. Walk-ins go straight to the chosen account.
+14. **Never** route money through a customer wallet for walk-in customers — walk-ins have no wallet; their payment is simply recorded on the order. *(Formerly "go straight to the chosen account" — the Funds Register accounts were removed 2026-06-04, §23.)*
 15. **Never** rename "Store" back to "Warehouse" anywhere in the UI. The rename is global.
 16. **Never** write directly to a synced table outside a DAO. See section 5.
 
@@ -170,7 +171,7 @@ Adding a package has a cost beyond installing it: bundle size, security surface,
 2. Every user-facing string uses the rename rules: "Store" not "Warehouse," "Home" not "Dashboard," etc.
 3. Every action that writes to the database also writes to `activity_logs` (except routine sales, which are tracked in Orders).
 4. Every money movement for a registered customer flows through their wallet. Wallet history is the source of truth.
-5. Every money movement for any customer affects the relevant Funds Register account (Cash Till, POS machine, or Bank account).
+5. **REMOVED (2026-06-04).** ~~Every money movement for any customer affects the relevant Funds Register account (Cash Till, POS machine, or Bank account).~~ The Funds Register was removed (§23). Money is tracked as recorded activity (sales / expenses / supplier payments / refunds) and, for registered customers, the wallet ledger (rule #4) — not per-account balances.
 6. Every loading state uses fade-in transitions. No rotating spinners.
 7. Every synced-table write goes through a DAO. See section 5.
 8. Every screen respects the bottom system-navigation inset. The app runs edge-to-edge (Android 15 / `targetSdk 35`), so any widget pinned to the bottom that ignores the inset paints **under** the nav bar or the gesture pill. See "Safe-area / system-navigation insets" below. This is permanent — every new screen follows it from day one, the same way permission guards do.
@@ -187,7 +188,7 @@ This convention does not change. New screens, modals, and bottom sheets must fol
 
 **The decision rule — ask: "when this widget is on screen, does it reach the PHYSICAL screen bottom?"**
 
-- **YES → use `context.deviceBottomInset`.** Covers: anything inside `showModalBottomSheet` / `showDialog` / `DraggableScrollableSheet` (modals always hide the bar); pushed detail screens (footers, scrollable bottoms); and drawer-accessed tab roots where the bottom nav bar is hidden — Customers, Payments, Expenses, Stores, Deliveries, Activity Log, Funds Register.
+- **YES → use `context.deviceBottomInset`.** Covers: anything inside `showModalBottomSheet` / `showDialog` / `DraggableScrollableSheet` (modals always hide the bar); pushed detail screens (footers, scrollable bottoms); and drawer-accessed tab roots where the bottom nav bar is hidden — Customers, Payments, Expenses, Stores, Deliveries, Activity Log.
 - **NO → leave it (0 is correct).** This is **only** the body of the five bottom-nav tab roots rendered above the visible bar — **Home, POS, Inventory, Orders (list), Cart**. The bar already insets them; adding `deviceBottomInset` makes a **gap above the bar**. Their existing `context.bottomInset` reads 0 there, which is correct — do **not** convert it. (But modals opened *from* these files still use `deviceBottomInset`.)
 - **Floating action buttons (`AppFAB`):** same YES/NO split — but the Scaffold's `floatingActionButton` slot does **not** add the system-nav inset on edge-to-edge (only a ~16px margin), so on a **3-button nav** the bar paints over the FAB (the gap is ~invisible on gesture nav, which is why this was missed at first). `AppFAB` lifts itself via `reserveBottomInset` (default **true**, using nav-only `context.deviceBottomPadding` so the keyboard isn't double-counted when a form FAB shows with the keyboard up). Set `reserveBottomInset: false` only on the visible-bar tab roots (POS, Stock), exactly like the NO rule above. Never wrap an `AppFAB` in your own bottom inset.
 - **Auth / onboarding screens** (`lib/features/auth/**`) run **before** `MainLayout`, so their `padding.bottom` / `context.bottomInset` already works — leave them.

@@ -9,6 +9,7 @@ import 'package:reebaplus_pos/core/settings/roles_permissions_screen.dart';
 import 'package:reebaplus_pos/core/settings/security_settings_screen.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
 import 'package:reebaplus_pos/core/settings/stores_settings_screen.dart';
+import 'package:reebaplus_pos/core/settings/subscription_screen.dart';
 import 'package:reebaplus_pos/core/settings/sync_issues_access_screen.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 
@@ -42,6 +43,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       title: 'Business Info',
       subtitle: 'Name, type, and currency',
       screen: BusinessInfoScreen(),
+    ),
+    (
+      icon: Icons.workspace_premium_rounded,
+      title: 'Subscription',
+      subtitle: 'Plan, status, and renewal',
+      screen: SubscriptionScreen(),
     ),
     (
       icon: Icons.store_rounded,

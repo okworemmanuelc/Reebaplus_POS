@@ -12,7 +12,6 @@ import 'package:reebaplus_pos/features/expenses/screens/expenses_screen.dart';
 import 'package:reebaplus_pos/features/stores/screens/stores_screen.dart';
 import 'package:reebaplus_pos/features/pos/screens/cart_screen.dart';
 import 'package:reebaplus_pos/features/deliveries/screens/deliveries_screen.dart';
-import 'package:reebaplus_pos/features/funds/screens/funds_register_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/activity_log_screen.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -34,9 +33,9 @@ class _MainLayoutState extends ConsumerState<MainLayout>
     with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   static void _voidOnCustomerChanged(dynamic _) {}
 
-  // 12 tabs = 12 Navigators (index 11 = Funds Register, master plan §23)
+  // 11 tabs = 11 Navigators (Funds Register removed, §23).
   final List<GlobalKey<NavigatorState>> _navigatorKeys = List.generate(
-    12,
+    11,
     (_) => GlobalKey<NavigatorState>(),
   );
 
@@ -65,12 +64,10 @@ class _MainLayoutState extends ConsumerState<MainLayout>
     const StoresScreen(), // 7
     const CartScreen(
       cart: [],
-      crateDeposit: 0.0,
       onCustomerChanged: _voidOnCustomerChanged,
     ), // 8
     const DeliveriesScreen(), // 9
     const ActivityLogScreen(), // 10
-    const FundsRegisterScreen(), // 11
   ];
 
   // Persistent pending-orders count — subscribed once, never recreated.
@@ -92,7 +89,7 @@ class _MainLayoutState extends ConsumerState<MainLayout>
     _nav = ref.read(navigationProvider);
     _nav.tabNavigatorKeys = _navigatorKeys;
 
-    _observers = List.generate(12, (i) => _TabPopObserver(tabIndex: i, nav: _nav));
+    _observers = List.generate(11, (i) => _TabPopObserver(tabIndex: i, nav: _nav));
 
     // Only pre-load the landing tab
     _initializedTabs.add(_nav.currentIndex.value);

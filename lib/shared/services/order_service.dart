@@ -29,8 +29,10 @@ class OrderService {
     int crateDepositPaidKobo = 0,
     int discountKobo = 0,
     String paymentSubType = 'cash',
-    String? fundsAccountId,
-    String? businessDate,
+    // §13.4 — deposit actually paid per manufacturer/brand (Ring 3). Empty until
+    // the checkout per-brand capture is wired; createOrder then treats every
+    // crate brand as "no deposit" (crate-track).
+    Map<String, int> crateDepositPaidByManufacturer = const {},
   }) async {
     if (staffId == null || staffId.isEmpty) {
       throw ArgumentError('staffId is required');
@@ -41,27 +43,6 @@ class OrderService {
     if (cart.isEmpty) {
       throw ArgumentError('cart is empty');
     }
-    // Hard rule #5: any money that actually arrives (cash / card / transfer)
-    // must land in a Funds Register account. Wallet and credit sales pay 0 now
-    // and route through the wallet, so they don't need one.
-    if (amountPaidKobo > 0) {
-      if (fundsAccountId == null || fundsAccountId.isEmpty) {
-        throw ArgumentError(
-          'A paid sale must credit a Funds Register account (fundsAccountId)',
-        );
-      }
-      // The Funds credit in OrdersDao.createOrder only fires when BOTH the
-      // account and the businessDate are present. If businessDate were null
-      // (e.g. todaysBusinessDateProvider not yet resolved) the payment row
-      // would still be written but the money would never land in any account.
-      // Fail loudly here instead of silently dropping the ledger entry.
-      if (businessDate == null || businessDate.isEmpty) {
-        throw ArgumentError(
-          'A paid sale must carry a businessDate to bucket the Funds credit',
-        );
-      }
-    }
-
     final orderId = UuidV7.generate();
     final orderNumber = await _ordersDao.generateOrderNumber();
 
@@ -108,9 +89,9 @@ class OrderService {
       // (already settled — received, or charged through the wallet, §14.3).
       // Confirm (OrdersDao.markCompleted) flips it to 'completed' and stamps
       // completedAt — for crate businesses that's after the Empty-Crates modal.
-      // Revenue is recognized here at checkout, not at Confirm; the Funds credit
-      // and wallet legs are already booked regardless of status. The v2 RPC
-      // forwards this status via p_status, so both sync paths agree.
+      // Revenue is recognized here at checkout, not at Confirm; the wallet legs
+      // are already booked regardless of status. The v2 RPC forwards this status
+      // via p_status, so both sync paths agree.
       status: 'pending',
       staffId: Value(staffId),
       storeId: Value(storeId),
@@ -127,8 +108,7 @@ class OrderService {
       storeId: storeId,
       walletDebitKobo: walletDebitKobo,
       paymentMethod: _resolvePaymentMethod(paymentSubType),
-      fundsAccountId: fundsAccountId,
-      businessDate: businessDate,
+      crateDepositPaidByManufacturer: crateDepositPaidByManufacturer,
     );
 
     // Surface server-side errors (insufficient_stock from a concurrent
@@ -393,21 +373,14 @@ class OrderService {
     return _ordersDao.markCompleted(orderId, staffId);
   }
 
-  /// Refund/cancel an order. [businessDate] is the refund day (the caller's
-  /// "today", `YYYY-MM-DD`) — the Funds Register reversal is dated to it so the
-  /// cash-out lands on the day it leaves the till (§19.7 / §23.5).
+  /// Refund/cancel an order (§19.7): reverses stock, payments, and the wallet
+  /// legs so the customer's wallet returns to its pre-sale balance.
   Future<void> markAsCancelled(
     String orderId,
     String reason,
-    String staffId, {
-    required String businessDate,
-  }) {
-    return _ordersDao.markCancelled(
-      orderId,
-      reason,
-      staffId,
-      businessDate: businessDate,
-    );
+    String staffId,
+  ) {
+    return _ordersDao.markCancelled(orderId, reason, staffId);
   }
 
   Future<void> assignRider(String orderId, String riderName) {

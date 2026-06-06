@@ -16,11 +16,11 @@ import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 
 /// One calendar day's full reconciliation (§25.2 / §25.9). Rolls up, for the
 /// given business date: the day's sales summary (SKUs / items sold / value /
-/// best staff / top item), the Close Day cash audit per account (expected vs
-/// counted, variance flagged), the saved stock count (shortage / surplus +
+/// best staff / top item), the saved stock count (shortage / surplus +
 /// itemised), the current outstanding customer debt and empty-crate holdings
 /// (summaries from the existing subsystems, not duplicates), and the approved
 /// expenses recorded that day. Read-only; role-gated upstream (CEO/Manager).
+/// (The Close Day cash audit was removed with Funds Register, §23.)
 class DailyReconciliationDetailScreen extends ConsumerStatefulWidget {
   const DailyReconciliationDetailScreen({super.key, required this.businessDate});
 
@@ -48,15 +48,6 @@ class _DailyReconciliationDetailScreenState
       ['Sales — total value', (d.salesKobo / 100.0).toStringAsFixed(2)],
       ['Sales — best staff', d.bestStaff ?? ''],
       ['Sales — top item', d.topItem ?? ''],
-      // Cash/funds rows only for `funds.view` holders (hard rule #6) — mirrors
-      // the gated cash card so the CSV can't leak balances the screen hides.
-      if (hasPermission(ref, 'funds.view')) ...[
-        for (final c in d.cash)
-          ['Cash: ${c.account}', 'expected ${(c.expectedKobo / 100.0).toStringAsFixed(2)}; '
-              'counted ${(c.countedKobo / 100.0).toStringAsFixed(2)}; '
-              'variance ${(c.varianceKobo / 100.0).toStringAsFixed(2)}'],
-        ['Cash — net variance', (d.netVarianceKobo / 100.0).toStringAsFixed(2)],
-      ],
       ['Stock — products counted', '${d.productsCounted}'],
       ['Stock — short (products/units)', '${d.shortageCount} / ${d.shortageUnits}'],
       ['Stock — surplus (products/units)', '${d.surplusCount} / ${d.surplusUnits}'],
@@ -116,13 +107,6 @@ class _DailyReconciliationDetailScreenState
         ),
         children: [
           _salesCard(theme, data),
-          // The cash/funds section exposes per-account balances — the data
-          // `funds.view` protects (hard rule #6). §25.3 keeps the rest of the
-          // reconciliation report Manager-accessible; only this block is gated.
-          if (hasPermission(ref, 'funds.view')) ...[
-            SizedBox(height: context.spacingM),
-            _cashCard(theme, data),
-          ],
           SizedBox(height: context.spacingM),
           _stockCard(theme, data),
           SizedBox(height: context.spacingM),
@@ -138,8 +122,6 @@ class _DailyReconciliationDetailScreenState
 
   _ReconData _compute(String? tz) {
     final orders = ref.watch(allOrdersProvider).valueOrNull ?? const [];
-    final closings = ref.watch(allFundDayClosingsProvider).valueOrNull ?? const [];
-    final accounts = ref.watch(allFundsAccountsProvider).valueOrNull ?? const [];
     final stockCounts = ref.watch(allStockCountsProvider).valueOrNull ?? const [];
     final balances =
         ref.watch(walletBalancesKoboProvider).valueOrNull ?? const {};
@@ -197,22 +179,6 @@ class _DailyReconciliationDetailScreenState
         topItem = p.name;
       }
     });
-
-    // ── Cash audit (Close Day snapshot, keyed by business date) ────────────
-    final accountById = {for (final a in accounts) a.id: a};
-    final dayClosings =
-        closings.where((c) => c.businessDate == _date).toList();
-    final cash = [
-      for (final c in dayClosings)
-        _CashRow(
-          account: accountById[c.fundsAccountId]?.name ?? _typeLabel(c.accountType),
-          expectedKobo: c.expectedKobo,
-          countedKobo: c.countedKobo,
-          varianceKobo: c.varianceKobo,
-        ),
-    ];
-    final netVarianceKobo =
-        dayClosings.fold<int>(0, (s, c) => s + c.varianceKobo);
 
     // ── Stock audit (saved stock count(s), keyed by business date) ─────────
     // A Save Count inserts a fresh session row, so re-counting a store the same
@@ -297,8 +263,6 @@ class _DailyReconciliationDetailScreenState
       bestStaffKobo: bestStaffKobo,
       topItem: topItem,
       topItemQty: topItemQty,
-      cash: cash,
-      netVarianceKobo: netVarianceKobo,
       hasStockCount: dayCounts.isNotEmpty,
       productsCounted: productsCounted,
       shortageCount: shortageCount,
@@ -312,19 +276,6 @@ class _DailyReconciliationDetailScreenState
       showCrates: showCrates,
       crates: crates,
     );
-  }
-
-  String _typeLabel(String type) {
-    switch (type) {
-      case 'cash_till':
-        return 'Cash Till';
-      case 'pos_machine':
-        return 'POS machine';
-      case 'bank':
-        return 'Bank';
-      default:
-        return type;
-    }
   }
 
   // ── Section widgets ──────────────────────────────────────────────────────
@@ -402,47 +353,6 @@ class _DailyReconciliationDetailScreenState
     ]);
   }
 
-  Widget _cashCard(ThemeData theme, _ReconData d) {
-    final mismatch = d.netVarianceKobo != 0;
-    return _card(
-      theme,
-      'Close Day cash audit',
-      FontAwesomeIcons.vault,
-      Colors.teal,
-      [
-        if (d.cash.isEmpty)
-          Text('Day not closed.',
-              style: context.bodySmall.copyWith(color: theme.hintColor))
-        else ...[
-          for (final c in d.cash) ...[
-            Text(c.account,
-                style:
-                    context.bodySmall.copyWith(fontWeight: FontWeight.w700)),
-            _line(theme, 'Expected', formatCurrency(c.expectedKobo / 100.0)),
-            _line(theme, 'Counted', formatCurrency(c.countedKobo / 100.0)),
-            _line(theme, 'Variance', formatCurrency(c.varianceKobo / 100.0),
-                danger: c.varianceKobo != 0),
-            const SizedBox(height: 6),
-          ],
-          Divider(color: theme.dividerColor.withValues(alpha: 0.2)),
-          _line(theme, 'Net variance',
-              formatCurrency(d.netVarianceKobo / 100.0),
-              danger: mismatch),
-          if (mismatch)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                'Fund shortage / unaccounted funds flagged.',
-                style: context.bodySmall
-                    .copyWith(color: theme.colorScheme.error),
-              ),
-            ),
-        ],
-      ],
-      danger: mismatch,
-    );
-  }
-
   Widget _stockCard(ThemeData theme, _ReconData d) {
     final hasShortage = d.shortageUnits > 0;
     return _card(
@@ -512,8 +422,6 @@ class _ReconData {
     required this.bestStaffKobo,
     required this.topItem,
     required this.topItemQty,
-    required this.cash,
-    required this.netVarianceKobo,
     required this.hasStockCount,
     required this.productsCounted,
     required this.shortageCount,
@@ -536,8 +444,6 @@ class _ReconData {
   final int bestStaffKobo;
   final String? topItem;
   final int topItemQty;
-  final List<_CashRow> cash;
-  final int netVarianceKobo;
   final bool hasStockCount;
   final int productsCounted;
   final int shortageCount;
@@ -550,19 +456,6 @@ class _ReconData {
   final int expensesCount;
   final bool showCrates;
   final List<_CrateRow> crates;
-}
-
-class _CashRow {
-  _CashRow({
-    required this.account,
-    required this.expectedKobo,
-    required this.countedKobo,
-    required this.varianceKobo,
-  });
-  final String account;
-  final int expectedKobo;
-  final int countedKobo;
-  final int varianceKobo;
 }
 
 class _ShortLine {
