@@ -407,8 +407,9 @@ The **last Phase 1 item to build** (see §3). A CEO can permanently delete their
 - **What "everything" means:** deleting the business removes every row owned by that `business_id` across all synced tenant tables — products and prices, stock, customers and wallets, suppliers, orders, payments, expenses, funds accounts and entries, crate ledgers, stores, roles, permissions grants, role settings, invite codes, staff memberships (`user_businesses` / `user_stores`), and activity logs. Nothing business-scoped survives.
 - **What happens to staff:** their membership in *this* business is removed. A staff member who belonged only to this business keeps their login account but now has no business — on their next sign-in they land on the Welcome screen and must create a business or join another by invite. (Their account itself is not deleted; only the CEO's own account is deleted, because that was the CEO's explicit request.)
 - **What happens to the CEO:** after the business is gone, the CEO's own user account (auth + local) is deleted, and the device is fully logged out back to the Welcome screen.
-- **Confirmation (irreversible-action ritual):** a two-gate confirmation, never a single tap. The CEO must (1) type the exact business name to confirm, and (2) re-enter their PIN. A plain-English warning lists what will be lost ("all sales, stock, customers, staff access, and money records for this business will be permanently deleted and cannot be recovered"). Only then is Delete enabled.
-- **How it syncs (deliberate exception to hard rule #9):** this is the one place a hard delete is correct — soft-delete would leave a tombstoned but recoverable business, which defeats the purpose. It runs as a single atomic domain RPC (e.g. `domain:delete_business`) that the cloud executes in one server-side transaction (cascade delete by `business_id`, plus the CEO's auth user), rather than per-row `enqueueDelete`. Only after the cloud confirms success does the device wipe the local rows for that business and log out. If the device is offline, the action is blocked with a clear message — account/business deletion must be confirmed by the server before anything local is destroyed, so it is never queued blindly. Add `delete_business` to the build's irreversible-action list when implemented.
+- **Confirmation (irreversible-action ritual):** never a single tap. A plain-English warning makes clear the action is **permanent and cannot be undone** and lists what will be lost ("all sales, stock, customers, staff access, and money records for this business will be permanently deleted and cannot be recovered"). The CEO then taps Delete and **re-enters their PIN** to confirm — the PIN is the confirmation gate. *(Updated 2026-06-07, user: the earlier "type the exact business name" gate was removed; PIN + the permanent-warning is the confirmation.)*
+- **How it syncs (deliberate exception to hard rule #9):** this is the one place a hard delete is correct — soft-delete would leave a tombstoned but recoverable business, which defeats the purpose. It runs as a single atomic cloud RPC (`public.delete_business(p_business_id)`, `SECURITY DEFINER`) that the cloud executes in one server-side transaction: a cascade delete of the whole business (every business-scoped table has `business_id … REFERENCES businesses(id) ON DELETE CASCADE`, so `DELETE FROM businesses` fans out automatically; the append-only ledger `forbid_delete` guards are disabled for the duration via `ALTER TABLE … DISABLE TRIGGER USER`), plus the CEO's `auth.users` row. **It is called directly online, never enqueued** (not a `domain:` queue envelope, because the §6 queue would retry it blindly when connectivity returns) — the client calls the RPC, and only after the cloud confirms success does the device wipe local data (`clearAllData()`) and full-logout to the Welcome screen. If the device is offline, the action is blocked with a clear message before anything local is destroyed. Add `delete_business` to the build's irreversible-action list when implemented.
+- **Notifying the console (added 2026-06-07, user):** the operator's web admin console (§32, "Admin Hub") must learn that a business was deleted so it can reconcile billing (e.g. cancel the Paystack subscription) and keep a compliance record. Because the business row itself is destroyed, the `delete_business` RPC writes — in the **same transaction**, just after the cascade — one row into a dedicated **cloud-only** audit table **`public.account_deletion_events`** (NOT a synced tenant table; the POS app never reads it, and it has **no FK to `businesses`** so it survives the cascade). The row snapshots `business_id`, `business_name`, `owner_user_id`, `owner_auth_user_id`, `owner_email`, the subscription `status`/`plan` at deletion time, `deleted_at`, and whether the in-RPC `auth.users` delete succeeded (`auth_user_deleted`, a backstop flag the console can act on). RLS restricts the table to `service_role` (the console's key); the SECURITY-DEFINER RPC inserts regardless of RLS. The console polls / realtime-subscribes this table and reconciles asynchronously — consistent with how subscription state already flows one-way through the cloud (§32).
 
 ### 10.4 Phase 2 (deferred)
 
@@ -494,7 +495,7 @@ The screen where sales actually happen. POS and Cart are gated on `sales.make`: 
 ### 12.1 Header
 
 - Hamburger menu, app logo, business name with current store as subtitle (e.g., "Keffi"), search icon, notification bell.
-- **Store selector (2026-06-05; moved to the navigation drawer 2026-06-06).** A single store picker lives in the **navigation drawer, just above "Home"** — not on the POS header. It is the **one app-wide active-store control**: the store chosen there drives the view filter on Home, Inventory, POS, the Customers list, and the Activity Log all at once (it replaced the per-screen store dropdowns those screens used to carry). It shows whenever the user has **more than one store they may select** — every active store for a CEO / all-stores Manager, otherwise their **assigned** store(s) (§11.2/§28 confinement). Single-store users (and confined staff assigned to just one store) see no selector. **"All Stores"** is offered only to all-stores viewers (CEO / all-stores Manager); picking it shows combined data on the overview screens — and on POS, which always needs a concrete selling store, the sale falls back to the user's **first selectable store** (shown in the POS header subtitle). The selected store drives the product grid, the price tier, and the order's `store_id` at checkout. There is no longer a one-time "pick your store" modal on POS entry (the old §28 gate); a confined multi-store staff member is auto-defaulted to their first assigned store and switches via the drawer picker. (Was CEO-only until staff multi-store assignment shipped, §9.5; was a POS-header icon until 2026-06-06.)
+- **Store selector (2026-06-05; moved to the navigation drawer 2026-06-06).** A single store picker lives in the **navigation drawer, just above "Home"** — not on the POS header. It is the **one app-wide active-store control**: the store chosen there drives the view filter on Home, Inventory, POS, the Customers list, the Activity Log, and the **Orders list** (added 2026-06-07 — orders are stamped with a `store_id` at checkout, so the Orders list shows only the active store's orders; "All Stores", offered to all-stores viewers, shows every store's orders) all at once (it replaced the per-screen store dropdowns those screens used to carry). It shows whenever the user has **more than one store they may select** — every active store for a CEO / all-stores Manager, otherwise their **assigned** store(s) (§11.2/§28 confinement). Single-store users (and confined staff assigned to just one store) see no selector. **"All Stores"** is offered only to all-stores viewers (CEO / all-stores Manager); picking it shows combined data on the overview screens — and on POS, which always needs a concrete selling store, the sale falls back to the user's **first selectable store** (shown in the POS header subtitle). The selected store drives the product grid, the price tier, and the order's `store_id` at checkout. There is no longer a one-time "pick your store" modal on POS entry (the old §28 gate); a confined multi-store staff member is auto-defaulted to their first assigned store and switches via the drawer picker. (Was CEO-only until staff multi-store assignment shipped, §9.5; was a POS-header icon until 2026-06-06.)
 
 ### 12.2 Filters row
 
@@ -1207,6 +1208,12 @@ Wrong items → cancel and create a new order. When an order is in Pending, the 
 | Set monthly budget | Yes | No | — | — |
 | Add custom category | Yes | Yes | — | — |
 
+> **"View Expenses" now follows the active-store picker (§20.8, 2026-06-07).**
+> "All stores" / "Own store" above is the *scope* the picker enforces — a CEO /
+> all-stores Manager can pick "All Stores" (aggregate) or any one store; a
+> confined viewer is pinned to their assigned store(s). The scope drives the
+> list, Stats, and the budget goal.
+
 ### 20.4 Pending approval flow
 
 - Manager records expense above their limit.
@@ -1244,35 +1251,72 @@ Wrong items → cancel and create a new order. When an order is in Pending, the 
 
 "No expenses found" — unchanged.
 
+### 20.8 Per-store expense scope (2026-06-07, user)
+
+Expenses are tracked per store, consistent with the active-store picker (§12.1)
+and per-store supplier ledgers (§21.11). Each expense carries a `store_id` — the
+store it was recorded against.
+
+- **Stamping.** A recorded expense is stamped with the **active store** (the
+  §12.1 nav-drawer store picker), using the same resolution as a POS sale: the
+  locked store, else the user's first selectable store. The Record Expense form
+  shows a read-only **"Recording for: store name"** line so the target store is
+  explicit; to record against a different store, switch the active store from the
+  menu (the drawer picker is the single store control — no per-screen dropdown).
+- **Viewing.** The active-store picker filters the whole Expenses screen — the
+  list, Stats, and the budget bar — exactly like Home / Inventory / POS /
+  Supplier Accounts:
+  - A **concrete store** selected → only that store's expenses (and its budget goal).
+  - **"All Stores"** (offered only to all-stores viewers — CEO / all-stores
+    Manager) → the business-wide aggregate across every store; each expense row
+    also shows which store recorded it.
+  - A store-confined viewer (e.g. a single-store Manager) is always pinned to
+    their active store; they never see another store's costs. This supersedes the
+    old role-based "CEO: all stores / Manager: own store" confinement in §20.3 —
+    the scope now follows the picker for everyone, with confinement enforced by
+    the picker's selectable set (§12.1).
+- **Budget.** The monthly budget bar/goal resolves by the **active store**: a
+  concrete store shows that store's goal (falling back to the business-wide goal
+  if it has none, §20.1); "All Stores" shows the business-wide goal. The CEO-only
+  "Set monthly budget" action sets the goal for the active scope (a concrete
+  store's goal, or the business-wide goal under "All Stores").
+- Expenses recorded before this change (no `store_id`) are treated as
+  **unassigned** — they appear only in the "All Stores" aggregate, not under any
+  single store.
+
+The `store_id` already exists on the `expenses` table (client schema v47 and
+cloud migration 0073), so this slice only wires it to the active-store picker —
+no schema or migration change.
+
 ---
 
 ## 21. Supplier Accounts
 
-### 21.1 Layout
+### 21.1 Layout (redesigned 2026-06-07, user)
 
 - Header: Supplier Accounts / Manage supplier payments / notification bell.
-- 2 tabs: Payments, Suppliers.
-- Total Payments card with period selector.
-- Supplier filter chips ("All" + each supplier).
-- Payment list with floating "Add Payment" button.
+- **Single screen — the Suppliers list (no tabs).** The old Payments tab (with its Total-Payments card, supplier filter chips, and "Add Payment" floating button) is removed.
+- A **"Transaction history" link** sits at the top of the list → opens the all-suppliers **Transaction History** screen: every ledger entry (invoices, payments, voids) across all suppliers, newest first, filtered by a **period dropdown**.
+- Floating **"Add Supplier"** button (replaces the old "Add Payment" FAB).
 
-### 21.2 Suppliers tab
+### 21.2 Suppliers list
 
-- "Add Supplier" button at top.
-- List of suppliers, tap to open Supplier Details.
+- List of suppliers, each showing its live ledger balance (red when owed); tap to open Supplier Details. Suppliers are **business-wide** — the same list shows in every store (§21.11); only the **balance** is scoped to the active store.
+- New supplier via the floating "Add Supplier" button.
+- A caption shows the balance scope ("Balances for: store name" or "All Stores"), reflecting the §12.1 active-store picker (§21.11).
 
 ### 21.3 Supplier Details screen
 
 - Bank icon, supplier name, contact + bank details.
-- Balance card. Calculation: SUM(payments) − SUM(invoice totals), from the supplier ledger (§21.10). Negative (shown red) = you owe the supplier; positive = the supplier owes you (a credit balance).
-- "Record Activity" button → records either an Invoice Total or a Payment (§21.4 / §21.10).
-- Period selector chips.
-- Activity ledger at the bottom: invoice entries (red / negative) and payment entries (green / positive), each with its date and a note/receipt indicator, filtered by period.
+- Balance card. Calculation: SUM(payments) − SUM(invoice totals), from the supplier ledger (§21.10), **scoped to the active store** (§21.11). Negative (shown red) = you owe the supplier; positive = the supplier owes you (a credit balance). The card notes the active-store scope.
+- Period selector as a **dropdown** (alongside the "Activity" heading).
+- Activity ledger: invoice entries (red / negative) and payment entries (green / positive), each with its date and a note/receipt indicator, filtered by period and by the active store. In an "All Stores" view each row also shows which store recorded it.
+- Floating **"Record Activity"** button → records either an Invoice Total or a Payment (§21.4 / §21.10). (Moved off the balance card to a bottom FAB, 2026-06-07.)
 - Available Empty Crates section (Bar / Beer Distributor only) — real-data wiring deferred; the current mock display is not part of this ledger pass.
 
 ### 21.4 Record Activity (Invoice Total or Payment)
 
-The "Record Activity" button on Supplier Details (and the floating button on the Payments tab) opens a chooser: **Invoice Total** or **Record Payment**.
+The floating "Record Activity" button on Supplier Details opens a chooser: **Invoice Total** or **Record Payment**.
 
 **Invoice Total** (goods received — a debit, shown red / negative):
 
@@ -1329,6 +1373,20 @@ supplier owes us (credit). Entries are never edited or hard-deleted; corrections
 made by voiding (a compensating reversal entry). Payment receipts are stored as a
 **local file path** (Phase 1, like expense receipts §20.2 — the image does not
 cross-sync between devices; the amount, method, date, and reference/note always sync).
+
+### 21.11 Per-store ledger scope (2026-06-07, user)
+
+Supplier **ledgers are tracked per store**, while supplier **records stay business-wide** (one supplier is visible in every store; you don't re-add a vendor per store). Each ledger entry carries a `store_id` — the store that recorded it.
+
+- **Stamping.** A Record Activity entry is stamped with the **active store** (the §12.1 nav-drawer store picker), using the same resolution as a POS sale: the locked store, else the user's first selectable store. The Record Activity sheets show a read-only **"Recording for: store name"** line so the target store is explicit; to record against a different store, switch the active store from the menu (the drawer picker remains the single store control — no per-screen store dropdown).
+- **Viewing.** The active-store picker filters the whole Supplier Accounts area, exactly like Home / Inventory / POS:
+  - A **concrete store** selected → balances, history, and the Transaction History screen show **only that store's** entries.
+  - **"All Stores"** (offered only to all-stores viewers — CEO / all-stores Manager) → the **business-wide aggregate** across every store; each transaction row also shows which store recorded it.
+- **Balance** is therefore per store: `SUM(signed amounts WHERE store matches the active store)`, or the business-wide sum under "All Stores".
+- **Voids** copy the original entry's `store_id`, so a reversal nets the same store's balance.
+- Entries recorded before this change (no `store_id`) are treated as **unassigned** — they appear only in the "All Stores" aggregate, not under any single store.
+
+The `store_id` is part of the append-only entry (immutable after insert) and syncs like the other columns; only the receipt image stays local (§21.10).
 
 ---
 
@@ -1460,12 +1518,20 @@ CSV/PDF export with selectable time frame. Deferred to Phase 3.
 
 ### 25.2 Reports list
 
-- Sales Report — revenue, volume, top items, top staff, by period and store.
-- Daily Reconciliation Report — auto-generated when the stock take is saved. The day's roll-up: total SKUs/items sold, empty crates details (Bar/Beer Distributor only), outstanding customer debts, and expenses recorded that day — plus the stock audit, sales summary, best staff, and top item. Opens via the period drill-down cards (§25.9). Draws its debt/expense figures from the existing Customer Ledger / Expense Tracker subsystems (a summary, not a duplicate). *(The Close Day cash-audit card was removed with Funds Register, 2026-06-04, §23.)* Depends on Daily Stock Count, so it is built after it (Ring 3).
-- Expense Tracker — by category, trend, vs budget.
-- Customer Ledger — wallet balances, top debtors, top credit balances.
+- Daily Reconciliation Report — the business roll-up, **store-scoped** via the §12.1 active-store picker (a concrete store, or **All Stores** for an all-stores viewer) and **groupable by Day / Week / Month / Year** (§25.9; **Manager capped at Month**). For the selected store + bucket it shows: sales summary (items/SKUs sold, value, best staff, top item), stock audit (shortage/surplus + itemised shortages), **valued shrinkage** (shortages + damages — at **cost** for the CEO, at **selling price** for a Manager, who never sees cost/profit), outstanding customer debt, expenses, empty crates (Bar/Beer Distributor only), **and — CEO only — a cost-based Profit & Loss** (Revenue − COGS − Expenses − Damages-at-cost = Net profit) **plus a recorded "statement of account"** (goods received, supplier payments, refunds — flows, not a balanced cash ledger; §23). Draws its debt/expense/supplier figures from the existing subsystems (a summary, not a duplicate). Depends on Daily Stock Count (Ring 3). *(The Close Day cash-audit card was removed with Funds Register, 2026-06-04, §23, and is not reintroduced.)*
 - Supplier Accounts Report — outstanding balances, total paid, total received per supplier.
 - Profit Report — CEO only. Revenue, cost of goods, gross profit, margins.
+
+> Removed from the Reports hub 2026-06-07 (user) — the standalone **Sales Report**,
+> **Expense Tracker**, and **Customer Ledger** hub cards were dropped from the
+> Business Reports screen (which was also redesigned: the global period filter moved
+> from a cramped AppBar dropdown into the canonical horizontal chip set above the
+> grid, §25.1 / §30.11). The underlying data is **not** gone — the sales summary /
+> Sales detail is still reachable from Home (§19), Expenses keeps its own drawer
+> screen (§20), and the per-customer wallet/credit history lives on each customer's
+> profile (§18 wallet ledger). The §25.3 rows for these three were removed to match.
+> The standalone `CustomerLedgerScreen` has no other entry point and is now dead
+> code (kept, not deleted, per the build guardrails).
 
 > Quick Sales in reports (2026-06-04, user). A Quick Sale (§12.3) is a real sale
 > with no product/cost, so it **counts in the Sales Report and the Daily
@@ -1493,6 +1559,12 @@ Note: **expense** pending approvals are not on Reports — they live on the Expe
 | Customer Ledger | All | Own store | Hidden | Hidden |
 | Supplier Accounts | All | If toggled | Hidden | Hidden |
 | Profit Report | Yes | Hidden | Hidden | Hidden |
+
+> Daily Reconciliation lens (2026-06-07, user) — the CEO sees the cost-based P&L
+> + statement of account inside the report; a Manager sees the same reconciliation
+> **without** any cost / COGS / margin / profit (shrinkage is shown at selling
+> price, an accountability figure). The cost wall is enforced in the data path,
+> not by hiding a card.
 
 > Reconciled 2026-06-02 (user) — the Reports hub is **CEO + Manager only**, per
 > §11.3 / §27.3. Earlier drafts of this matrix gave Cashier an "Own sales" Sales
@@ -1527,20 +1599,55 @@ CSV from day one. PDF in Phase 3.
 
 "No data for this period."
 
-### 25.9 Daily Reconciliation drill-down (period cards)
+### 25.9 Daily Reconciliation — store scope + period grouping (2026-06-07, user)
 
-The Daily Reconciliation Report does not open straight to a single detail screen; it opens to a list of **tappable day cards**, driven by the global period filter (§25.5 / §30.11):
+The Daily Reconciliation does not open straight to a single detail screen; it opens
+to a list of **tappable period cards**. Two controls drive it:
 
-- The selected period (Today / This Week / This Month / This Year / To Date) chooses the **span**; the report lists **one card per calendar day** inside that span that has a saved stock count. Tapping a card opens that day's full reconciliation.
-- Each day card shows a headline (items sold) and a **mismatch indicator** when that day had a stock shortage. *(The Close Day cash-variance indicator was removed with Funds Register, 2026-06-04, §23.)*
-- Reconciliation is per **calendar day** (§30.11 keeps the daily reconciliation calendar-bound), so there is no week/month/year aggregation — the selected period only widens or narrows how many day cards are listed.
-- Role visibility follows §25.3 (Cashier & Stock keeper never see this report). CSV export per §25.6 / §25.7.
+- **Store scope** — the §12.1 active-store picker (`lockedStoreId`). A concrete store
+  shows only that store's figures; **"All Stores"** (offered to all-stores viewers —
+  CEO / all-stores Manager) shows the business-wide aggregate; a confined Manager is
+  pinned to their assigned store(s). (Replaced the previous all-stores-only
+  behaviour, 2026-06-07.)
+- **Grouping** — **Day / Week / Month / Year**. The list shows one card per bucket at
+  the chosen grouping that has data, newest first. **A Manager is capped at Month (no
+  Year).** Weeks start Sunday (matches `date_period.dart` / §30.11).
 
-This per-day drill-down is specific to the Daily Reconciliation Report; the other reports keep the §25.6 single detail-screen + period-filter model.
+**Drill-down.** Tapping a bucket opens that bucket's reconciliation detail for the
+active store; a non-Day bucket also lists the next-finer buckets inside it as
+sub-cards (Year → Months → Weeks → Days), bottoming out at a single **Day** detail.
+Each card headlines items sold and flags a **stock-shortage mismatch**.
 
-> Updated 2026-06-02 (user) — the original Day/Week/Month/Year period-card model predated the §30.11 unification; reconciled to **one card per calendar day within the selected period** (no span aggregation), matching §30.11's per-calendar-day rule. (§30.11 was reversed back to calendar periods on 2026-06-04 — the per-calendar-day rule here is unchanged.)
+**Detail content** (for the bucket's span + active store): sales summary (items/SKUs
+sold, value, best staff, top item); stock audit (shortage/surplus + itemised
+shortages); **valued shrinkage** (shortages + damages — at **cost** for the CEO,
+**selling price** for a Manager); outstanding customer debt; expenses; empty crates
+(Bar/Beer Distributor only); **and — CEO only — a cost-based Profit & Loss** (Revenue
+− COGS − Expenses − Damages-at-cost = Net profit) **plus a recorded statement of
+account** (goods received, supplier payments, refunds — recorded flows, not a
+balanced cash ledger, §23). A Manager never sees cost, COGS, margin, profit, or
+goods-received (cost wall, §25.3); shrinkage shown at selling price is an
+accountability figure, not the company's true (cost) loss.
 
-> Confirmed Phase 1 (2026-06-01) — the Daily Reconciliation Report's content roll-up (SKUs sold, empty crates, debts, expenses) and the period-card drill-down were added on user request. The Sales Report card is **kept** (a distinct report). Build order unchanged: this stays a Ring 3 item, after Daily Stock Count (Ring 2) produces its data. *(The closing-day cash-audit / fund-shortage portion was removed with Funds Register, 2026-06-04, §23.)*
+Role visibility per §25.3 (Cashier & Stock keeper never see it). CSV export per
+§25.6 / §25.7; empty state §25.8.
+
+> Supersedes the previous per-calendar-day-only rule (2026-06-02): on user request
+> (2026-06-07) the report now **aggregates** Day/Week/Month/Year. The Day bucket is
+> still the leaf (anchored to that day's saved stock count); Week/Month/Year are
+> roll-ups of the days inside them. This also **folded in** the short-lived separate
+> "Business Statement / Store Reconciliation" report (former §25.10 — see tombstone).
+> Quick Sales still count in revenue/items but are excluded from COGS/profit.
+
+### 25.10 Business Statement / Store Reconciliation — MERGED into §25.9 (2026-06-07, user)
+
+A separate period-aggregated report was briefly specced (and partly built) earlier on
+2026-06-07, then **merged into the Daily Reconciliation** (§25.9) the same day at user
+request: rather than a second report, the Daily Reconciliation itself became
+store-scoped (via the §12.1 picker) and groupable by Day/Week/Month/Year, carrying the
+CEO P&L + statement of account and the valued shrinkage. There is **no standalone
+Business Statement / Store Reconciliation screen or hub card.** This tombstone is kept
+so cross-references read coherently.
 
 ---
 
@@ -1818,6 +1925,32 @@ unlikely tag collision — a clash degrades quietly, it never crashes a sale.
 **Backward compatibility:** orders created before this change keep their
 suffix-less `ORD-NNNNNN`. A legacy `ORD-000123` and a new `ORD-000123-XXXXXX`
 are different strings, so they never collide. No history is rewritten.
+
+**Legacy-collision self-heal (2026-06-07, user).** The tag fix prevents *new*
+collisions, but devices that recorded offline sales **before** it shipped can
+still hold a legacy `ORD-NNNNNN` that already exists in the cloud under a
+different id (another till's same-count sale). That order is stuck both ways:
+its upload fails with the `(business_id, order_number)` duplicate-key error, and
+because the local copy still occupies that number, the cloud's colliding order
+can never restore on this device — so every child of the cloud order
+(order_items, stock_transactions, wallet_transactions, crate_ledger,
+payment_transactions, order_crate_lines) is FK-orphaned on each pull and the
+sync loops forever (it is **not** a slow-connection problem; a faster link can't
+fix it). The self-heal renumbers the **local** order by appending **this
+device's** tag — `ORD-NNNNNN` → `ORD-NNNNNN-XXXXXX` (the same `XXXXXX` device tag
+above, derived from the device's own id) and re-enqueues it. It fires from
+**both** ends so a stuck device recovers regardless of which side is blocked:
+(1) **on pull** — when the cloud's authoritative order can't restore because a
+local order holds its number, the restore renumbers the **local blocker** and
+retries the insert in the same pull, so the cloud order *and* its children land
+at once (orders restore before their children, so the whole orphan set clears in
+one sync); (2) **on push** — when *this device's* order fails to upload with the
+duplicate-number error, its local copy is renumbered and re-enqueued so it
+uploads cleanly. Either way the number frees up and both tills' sales survive
+(they were genuinely different sales that happened to share a count). Renumber,
+never delete. The only visible change is the healed order's number gains its
+device-tag suffix, like every post-fix order; the receipt's original base number
+is preserved inside the new code (`ORD-000050` → `ORD-000050-XXXXXX`).
 
 ### 30.9 Soft deletes
 

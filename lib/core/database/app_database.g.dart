@@ -4694,6 +4694,20 @@ class $SupplierLedgerEntriesTable extends SupplierLedgerEntries
       'REFERENCES suppliers (id)',
     ),
   );
+  static const VerificationMeta _storeIdMeta = const VerificationMeta(
+    'storeId',
+  );
+  @override
+  late final GeneratedColumn<String> storeId = GeneratedColumn<String>(
+    'store_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES stores (id)',
+    ),
+  );
   static const VerificationMeta _typeMeta = const VerificationMeta('type');
   @override
   late final GeneratedColumn<String> type = GeneratedColumn<String>(
@@ -4860,6 +4874,7 @@ class $SupplierLedgerEntriesTable extends SupplierLedgerEntries
     id,
     businessId,
     supplierId,
+    storeId,
     type,
     amountKobo,
     signedAmountKobo,
@@ -4905,6 +4920,12 @@ class $SupplierLedgerEntriesTable extends SupplierLedgerEntries
       );
     } else if (isInserting) {
       context.missing(_supplierIdMeta);
+    }
+    if (data.containsKey('store_id')) {
+      context.handle(
+        _storeIdMeta,
+        storeId.isAcceptableOrUnknown(data['store_id']!, _storeIdMeta),
+      );
     }
     if (data.containsKey('type')) {
       context.handle(
@@ -5048,6 +5069,10 @@ class $SupplierLedgerEntriesTable extends SupplierLedgerEntries
         DriftSqlType.string,
         data['${effectivePrefix}supplier_id'],
       )!,
+      storeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}store_id'],
+      ),
       type: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}type'],
@@ -5118,6 +5143,7 @@ class SupplierLedgerEntryData extends DataClass
   final String id;
   final String businessId;
   final String supplierId;
+  final String? storeId;
   final String type;
   final int amountKobo;
   final int signedAmountKobo;
@@ -5136,6 +5162,7 @@ class SupplierLedgerEntryData extends DataClass
     required this.id,
     required this.businessId,
     required this.supplierId,
+    this.storeId,
     required this.type,
     required this.amountKobo,
     required this.signedAmountKobo,
@@ -5157,6 +5184,9 @@ class SupplierLedgerEntryData extends DataClass
     map['id'] = Variable<String>(id);
     map['business_id'] = Variable<String>(businessId);
     map['supplier_id'] = Variable<String>(supplierId);
+    if (!nullToAbsent || storeId != null) {
+      map['store_id'] = Variable<String>(storeId);
+    }
     map['type'] = Variable<String>(type);
     map['amount_kobo'] = Variable<int>(amountKobo);
     map['signed_amount_kobo'] = Variable<int>(signedAmountKobo);
@@ -5193,6 +5223,9 @@ class SupplierLedgerEntryData extends DataClass
       id: Value(id),
       businessId: Value(businessId),
       supplierId: Value(supplierId),
+      storeId: storeId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(storeId),
       type: Value(type),
       amountKobo: Value(amountKobo),
       signedAmountKobo: Value(signedAmountKobo),
@@ -5233,6 +5266,7 @@ class SupplierLedgerEntryData extends DataClass
       id: serializer.fromJson<String>(json['id']),
       businessId: serializer.fromJson<String>(json['businessId']),
       supplierId: serializer.fromJson<String>(json['supplierId']),
+      storeId: serializer.fromJson<String?>(json['storeId']),
       type: serializer.fromJson<String>(json['type']),
       amountKobo: serializer.fromJson<int>(json['amountKobo']),
       signedAmountKobo: serializer.fromJson<int>(json['signedAmountKobo']),
@@ -5256,6 +5290,7 @@ class SupplierLedgerEntryData extends DataClass
       'id': serializer.toJson<String>(id),
       'businessId': serializer.toJson<String>(businessId),
       'supplierId': serializer.toJson<String>(supplierId),
+      'storeId': serializer.toJson<String?>(storeId),
       'type': serializer.toJson<String>(type),
       'amountKobo': serializer.toJson<int>(amountKobo),
       'signedAmountKobo': serializer.toJson<int>(signedAmountKobo),
@@ -5277,6 +5312,7 @@ class SupplierLedgerEntryData extends DataClass
     String? id,
     String? businessId,
     String? supplierId,
+    Value<String?> storeId = const Value.absent(),
     String? type,
     int? amountKobo,
     int? signedAmountKobo,
@@ -5295,6 +5331,7 @@ class SupplierLedgerEntryData extends DataClass
     id: id ?? this.id,
     businessId: businessId ?? this.businessId,
     supplierId: supplierId ?? this.supplierId,
+    storeId: storeId.present ? storeId.value : this.storeId,
     type: type ?? this.type,
     amountKobo: amountKobo ?? this.amountKobo,
     signedAmountKobo: signedAmountKobo ?? this.signedAmountKobo,
@@ -5325,6 +5362,7 @@ class SupplierLedgerEntryData extends DataClass
       supplierId: data.supplierId.present
           ? data.supplierId.value
           : this.supplierId,
+      storeId: data.storeId.present ? data.storeId.value : this.storeId,
       type: data.type.present ? data.type.value : this.type,
       amountKobo: data.amountKobo.present
           ? data.amountKobo.value
@@ -5368,6 +5406,7 @@ class SupplierLedgerEntryData extends DataClass
           ..write('id: $id, ')
           ..write('businessId: $businessId, ')
           ..write('supplierId: $supplierId, ')
+          ..write('storeId: $storeId, ')
           ..write('type: $type, ')
           ..write('amountKobo: $amountKobo, ')
           ..write('signedAmountKobo: $signedAmountKobo, ')
@@ -5391,6 +5430,7 @@ class SupplierLedgerEntryData extends DataClass
     id,
     businessId,
     supplierId,
+    storeId,
     type,
     amountKobo,
     signedAmountKobo,
@@ -5413,6 +5453,7 @@ class SupplierLedgerEntryData extends DataClass
           other.id == this.id &&
           other.businessId == this.businessId &&
           other.supplierId == this.supplierId &&
+          other.storeId == this.storeId &&
           other.type == this.type &&
           other.amountKobo == this.amountKobo &&
           other.signedAmountKobo == this.signedAmountKobo &&
@@ -5434,6 +5475,7 @@ class SupplierLedgerEntriesCompanion
   final Value<String> id;
   final Value<String> businessId;
   final Value<String> supplierId;
+  final Value<String?> storeId;
   final Value<String> type;
   final Value<int> amountKobo;
   final Value<int> signedAmountKobo;
@@ -5453,6 +5495,7 @@ class SupplierLedgerEntriesCompanion
     this.id = const Value.absent(),
     this.businessId = const Value.absent(),
     this.supplierId = const Value.absent(),
+    this.storeId = const Value.absent(),
     this.type = const Value.absent(),
     this.amountKobo = const Value.absent(),
     this.signedAmountKobo = const Value.absent(),
@@ -5473,6 +5516,7 @@ class SupplierLedgerEntriesCompanion
     this.id = const Value.absent(),
     required String businessId,
     required String supplierId,
+    this.storeId = const Value.absent(),
     required String type,
     required int amountKobo,
     required int signedAmountKobo,
@@ -5499,6 +5543,7 @@ class SupplierLedgerEntriesCompanion
     Expression<String>? id,
     Expression<String>? businessId,
     Expression<String>? supplierId,
+    Expression<String>? storeId,
     Expression<String>? type,
     Expression<int>? amountKobo,
     Expression<int>? signedAmountKobo,
@@ -5519,6 +5564,7 @@ class SupplierLedgerEntriesCompanion
       if (id != null) 'id': id,
       if (businessId != null) 'business_id': businessId,
       if (supplierId != null) 'supplier_id': supplierId,
+      if (storeId != null) 'store_id': storeId,
       if (type != null) 'type': type,
       if (amountKobo != null) 'amount_kobo': amountKobo,
       if (signedAmountKobo != null) 'signed_amount_kobo': signedAmountKobo,
@@ -5541,6 +5587,7 @@ class SupplierLedgerEntriesCompanion
     Value<String>? id,
     Value<String>? businessId,
     Value<String>? supplierId,
+    Value<String?>? storeId,
     Value<String>? type,
     Value<int>? amountKobo,
     Value<int>? signedAmountKobo,
@@ -5561,6 +5608,7 @@ class SupplierLedgerEntriesCompanion
       id: id ?? this.id,
       businessId: businessId ?? this.businessId,
       supplierId: supplierId ?? this.supplierId,
+      storeId: storeId ?? this.storeId,
       type: type ?? this.type,
       amountKobo: amountKobo ?? this.amountKobo,
       signedAmountKobo: signedAmountKobo ?? this.signedAmountKobo,
@@ -5590,6 +5638,9 @@ class SupplierLedgerEntriesCompanion
     }
     if (supplierId.present) {
       map['supplier_id'] = Variable<String>(supplierId.value);
+    }
+    if (storeId.present) {
+      map['store_id'] = Variable<String>(storeId.value);
     }
     if (type.present) {
       map['type'] = Variable<String>(type.value);
@@ -5645,6 +5696,7 @@ class SupplierLedgerEntriesCompanion
           ..write('id: $id, ')
           ..write('businessId: $businessId, ')
           ..write('supplierId: $supplierId, ')
+          ..write('storeId: $storeId, ')
           ..write('type: $type, ')
           ..write('amountKobo: $amountKobo, ')
           ..write('signedAmountKobo: $signedAmountKobo, ')
@@ -43875,6 +43927,34 @@ final class $$StoresTableReferences
     );
   }
 
+  static MultiTypedResultKey<
+    $SupplierLedgerEntriesTable,
+    List<SupplierLedgerEntryData>
+  >
+  _supplierLedgerEntriesRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.supplierLedgerEntries,
+        aliasName: $_aliasNameGenerator(
+          db.stores.id,
+          db.supplierLedgerEntries.storeId,
+        ),
+      );
+
+  $$SupplierLedgerEntriesTableProcessedTableManager
+  get supplierLedgerEntriesRefs {
+    final manager = $$SupplierLedgerEntriesTableTableManager(
+      $_db,
+      $_db.supplierLedgerEntries,
+    ).filter((f) => f.storeId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _supplierLedgerEntriesRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
   static MultiTypedResultKey<$CustomersTable, List<CustomerData>>
   _customersRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.customers,
@@ -44316,6 +44396,32 @@ class $$StoresTableFilterComposer
                 $removeJoinBuilderFromRootComposer,
           ),
     );
+    return f(composer);
+  }
+
+  Expression<bool> supplierLedgerEntriesRefs(
+    Expression<bool> Function($$SupplierLedgerEntriesTableFilterComposer f) f,
+  ) {
+    final $$SupplierLedgerEntriesTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierLedgerEntries,
+          getReferencedColumn: (t) => t.storeId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierLedgerEntriesTableFilterComposer(
+                $db: $db,
+                $table: $db.supplierLedgerEntries,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
     return f(composer);
   }
 
@@ -44886,6 +44992,32 @@ class $$StoresTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> supplierLedgerEntriesRefs<T extends Object>(
+    Expression<T> Function($$SupplierLedgerEntriesTableAnnotationComposer a) f,
+  ) {
+    final $$SupplierLedgerEntriesTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.supplierLedgerEntries,
+          getReferencedColumn: (t) => t.storeId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SupplierLedgerEntriesTableAnnotationComposer(
+                $db: $db,
+                $table: $db.supplierLedgerEntries,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
   Expression<T> customersRefs<T extends Object>(
     Expression<T> Function($$CustomersTableAnnotationComposer a) f,
   ) {
@@ -45334,6 +45466,7 @@ class $$StoresTableTableManager
           PrefetchHooks Function({
             bool businessId,
             bool usersRefs,
+            bool supplierLedgerEntriesRefs,
             bool customersRefs,
             bool ordersRefs,
             bool storeCrateBalancesRefs,
@@ -45414,6 +45547,7 @@ class $$StoresTableTableManager
               ({
                 businessId = false,
                 usersRefs = false,
+                supplierLedgerEntriesRefs = false,
                 customersRefs = false,
                 ordersRefs = false,
                 storeCrateBalancesRefs = false,
@@ -45436,6 +45570,7 @@ class $$StoresTableTableManager
                   db: db,
                   explicitlyWatchedTables: [
                     if (usersRefs) db.users,
+                    if (supplierLedgerEntriesRefs) db.supplierLedgerEntries,
                     if (customersRefs) db.customers,
                     if (ordersRefs) db.orders,
                     if (storeCrateBalancesRefs) db.storeCrateBalances,
@@ -45499,6 +45634,27 @@ class $$StoresTableTableManager
                               ._usersRefsTable(db),
                           managerFromTypedResult: (p0) =>
                               $$StoresTableReferences(db, table, p0).usersRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.storeId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (supplierLedgerEntriesRefs)
+                        await $_getPrefetchedData<
+                          StoreData,
+                          $StoresTable,
+                          SupplierLedgerEntryData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$StoresTableReferences
+                              ._supplierLedgerEntriesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$StoresTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).supplierLedgerEntriesRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.storeId == item.id,
@@ -45881,6 +46037,7 @@ typedef $$StoresTableProcessedTableManager =
       PrefetchHooks Function({
         bool businessId,
         bool usersRefs,
+        bool supplierLedgerEntriesRefs,
         bool customersRefs,
         bool ordersRefs,
         bool storeCrateBalancesRefs,
@@ -48735,6 +48892,7 @@ typedef $$SupplierLedgerEntriesTableCreateCompanionBuilder =
       Value<String> id,
       required String businessId,
       required String supplierId,
+      Value<String?> storeId,
       required String type,
       required int amountKobo,
       required int signedAmountKobo,
@@ -48756,6 +48914,7 @@ typedef $$SupplierLedgerEntriesTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> businessId,
       Value<String> supplierId,
+      Value<String?> storeId,
       Value<String> type,
       Value<int> amountKobo,
       Value<int> signedAmountKobo,
@@ -48824,6 +48983,24 @@ final class $$SupplierLedgerEntriesTableReferences
       $_db.suppliers,
     ).filter((f) => f.id.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_supplierIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $StoresTable _storeIdTable(_$AppDatabase db) => db.stores.createAlias(
+    $_aliasNameGenerator(db.supplierLedgerEntries.storeId, db.stores.id),
+  );
+
+  $$StoresTableProcessedTableManager? get storeId {
+    final $_column = $_itemColumn<String>('store_id');
+    if ($_column == null) return null;
+    final manager = $$StoresTableTableManager(
+      $_db,
+      $_db.stores,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_storeIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -48979,6 +49156,29 @@ class $$SupplierLedgerEntriesTableFilterComposer
           }) => $$SuppliersTableFilterComposer(
             $db: $db,
             $table: $db.suppliers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableFilterComposer get storeId {
+    final $$StoresTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableFilterComposer(
+            $db: $db,
+            $table: $db.stores,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -49155,6 +49355,29 @@ class $$SupplierLedgerEntriesTableOrderingComposer
     return composer;
   }
 
+  $$StoresTableOrderingComposer get storeId {
+    final $$StoresTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableOrderingComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
   $$UsersTableOrderingComposer get performedBy {
     final $$UsersTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -49314,6 +49537,29 @@ class $$SupplierLedgerEntriesTableAnnotationComposer
     return composer;
   }
 
+  $$StoresTableAnnotationComposer get storeId {
+    final $$StoresTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableAnnotationComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
   $$UsersTableAnnotationComposer get performedBy {
     final $$UsersTableAnnotationComposer composer = $composerBuilder(
       composer: this,
@@ -49377,6 +49623,7 @@ class $$SupplierLedgerEntriesTableTableManager
           PrefetchHooks Function({
             bool businessId,
             bool supplierId,
+            bool storeId,
             bool performedBy,
             bool voidedBy,
           })
@@ -49408,6 +49655,7 @@ class $$SupplierLedgerEntriesTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> businessId = const Value.absent(),
                 Value<String> supplierId = const Value.absent(),
+                Value<String?> storeId = const Value.absent(),
                 Value<String> type = const Value.absent(),
                 Value<int> amountKobo = const Value.absent(),
                 Value<int> signedAmountKobo = const Value.absent(),
@@ -49427,6 +49675,7 @@ class $$SupplierLedgerEntriesTableTableManager
                 id: id,
                 businessId: businessId,
                 supplierId: supplierId,
+                storeId: storeId,
                 type: type,
                 amountKobo: amountKobo,
                 signedAmountKobo: signedAmountKobo,
@@ -49448,6 +49697,7 @@ class $$SupplierLedgerEntriesTableTableManager
                 Value<String> id = const Value.absent(),
                 required String businessId,
                 required String supplierId,
+                Value<String?> storeId = const Value.absent(),
                 required String type,
                 required int amountKobo,
                 required int signedAmountKobo,
@@ -49467,6 +49717,7 @@ class $$SupplierLedgerEntriesTableTableManager
                 id: id,
                 businessId: businessId,
                 supplierId: supplierId,
+                storeId: storeId,
                 type: type,
                 amountKobo: amountKobo,
                 signedAmountKobo: signedAmountKobo,
@@ -49495,6 +49746,7 @@ class $$SupplierLedgerEntriesTableTableManager
               ({
                 businessId = false,
                 supplierId = false,
+                storeId = false,
                 performedBy = false,
                 voidedBy = false,
               }) {
@@ -49543,6 +49795,21 @@ class $$SupplierLedgerEntriesTableTableManager
                                     referencedColumn:
                                         $$SupplierLedgerEntriesTableReferences
                                             ._supplierIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (storeId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.storeId,
+                                    referencedTable:
+                                        $$SupplierLedgerEntriesTableReferences
+                                            ._storeIdTable(db),
+                                    referencedColumn:
+                                        $$SupplierLedgerEntriesTableReferences
+                                            ._storeIdTable(db)
                                             .id,
                                   )
                                   as T;
@@ -49604,6 +49871,7 @@ typedef $$SupplierLedgerEntriesTableProcessedTableManager =
       PrefetchHooks Function({
         bool businessId,
         bool supplierId,
+        bool storeId,
         bool performedBy,
         bool voidedBy,
       })

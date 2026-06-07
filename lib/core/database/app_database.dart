@@ -202,6 +202,9 @@ class SupplierLedgerEntries extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get supplierId => text().references(Suppliers, #id)();
+  // §21.11 — the store this entry was recorded against. Nullable: legacy entries
+  // (pre-v47) and onboarding-era writes carry none → shown only in "All Stores".
+  TextColumn get storeId => text().nullable().references(Stores, #id)();
   TextColumn get type => text()(); // credit | debit
   IntColumn get amountKobo => integer()();
   IntColumn get signedAmountKobo => integer()();
@@ -1673,7 +1676,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 46;
+  int get schemaVersion => 48;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -2676,7 +2679,16 @@ class AppDatabase extends _$AppDatabase {
         if (cgIsNotNull) {
           await customStatement('DROP TRIGGER IF EXISTS crate_ledger_immutable');
           await customStatement('DROP TRIGGER IF EXISTS crate_ledger_no_delete');
-          await m.alterTable(TableMigration(crateLedger));
+          // `store_id` was added to crate_ledger later (v44, guarded ALTER) but
+          // the live table object already carries it, so the rebuild must treat
+          // it as a NEW column (populated NULL) rather than copying it from the
+          // pre-v44 table — otherwise the copy SELECTs a column that doesn't yet
+          // exist. The v44 guarded ALTER then sees it present and skips. Without
+          // this, a ≤v28→v29 upgrade crashes ("no such column store_id").
+          await m.alterTable(TableMigration(
+            crateLedger,
+            newColumns: [crateLedger.storeId],
+          ));
           // drift's alterTable re-applies the rebuilt table's existing indexes
           // (with their OLD definitions), so DROP-then-CREATE here: it makes the
           // CREATEs idempotent AND swaps idx_crate_ledger_owner_group to its new
@@ -3399,6 +3411,60 @@ class AppDatabase extends _$AppDatabase {
           );
         }
       }
+      if (from < 47) {
+        // v47 (§21.11): per-store supplier ledgers. Add the nullable store_id
+        // to supplier_ledger_entries and fold it into the append-only immutable
+        // guard. Mirrors supabase/migrations/0109_supplier_ledger_store_id.sql.
+        //
+        // 1. Add the column (guard: a DB stepped back to < 47 by the
+        //    revert-then-re-upgrade tests may already carry it).
+        final hasStore = await customSelect(
+          "SELECT 1 FROM pragma_table_info('supplier_ledger_entries') "
+          "WHERE name = 'store_id'",
+        ).get();
+        if (hasStore.isEmpty) {
+          await customStatement(
+            'ALTER TABLE supplier_ledger_entries ADD COLUMN store_id TEXT '
+            'REFERENCES stores(id)',
+          );
+        }
+        // 2. Per-store scan index (matches _postCreateStatements so onCreate ==
+        //    onUpgrade).
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_supplier_ledger_business_store_supplier '
+          'ON supplier_ledger_entries (business_id, store_id, supplier_id)',
+        );
+        // 3. store_id is now in the immutable column list, so the immutable
+        //    trigger's WHEN clause changed. Drop + recreate BOTH append-only
+        //    triggers from the single `_ledgerTables` source so the rebuilt
+        //    trigger SQL matches a fresh onCreate exactly.
+        await customStatement(
+          'DROP TRIGGER IF EXISTS supplier_ledger_entries_immutable',
+        );
+        await customStatement(
+          'DROP TRIGGER IF EXISTS supplier_ledger_entries_no_delete',
+        );
+        for (final stmt in _ledgerTriggerStatements(
+          _ledgerTables.firstWhere(
+            (l) => l.table == 'supplier_ledger_entries',
+          ),
+        )) {
+          await customStatement(stmt);
+        }
+      }
+      if (from < 48) {
+        // v48 (master plan §10.3): add the settings.delete_business permission
+        // — gates the CEO-only "Delete Business & Account" Danger Zone. CEO-only
+        // by default; the CEO grant arrives from the cloud via pull (CEO backfill
+        // in supabase/migrations/0112_delete_business_and_account.sql). Hidden
+        // from the per-role toggle list via kHiddenPermissionKeys. Idempotent —
+        // key is the PK.
+        await customStatement(
+          "INSERT OR IGNORE INTO permissions (key, description, category) "
+          "VALUES ('settings.delete_business', "
+          "'Delete the business and account', 'System')",
+        );
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -3643,7 +3709,7 @@ const List<String> _v13HotPathIndexStatements = [
 // Identical on every device and on the cloud (mirror this list in
 // supabase/migrations/0043_seed_permissions_and_backfill_businesses.sql).
 // Each row: (key, description, category). Category groups toggles in
-// the CEO Settings > Roles & Permissions sub-page. 33 keys total.
+// the CEO Settings > Roles & Permissions sub-page. 35 keys total.
 const List<List<String>> _defaultPermissionRows = [
   // Stores — rendered first on the role page (§10.2). CEO-only by default.
   ['stores.manage', 'Add, edit, and remove stores', 'Stores'],
@@ -3697,6 +3763,9 @@ const List<List<String>> _defaultPermissionRows = [
   ['activity_logs.view', 'View activity logs', 'System'],
   ['sync.view', 'View sync issues', 'System'],
   ['settings.manage', 'Manage business settings', 'System'],
+  // §10.3 Danger Zone. CEO-only, hidden from the per-role toggle list
+  // (kHiddenPermissionKeys). Cloud catalog + CEO backfill: 0112.
+  ['settings.delete_business', 'Delete the business and account', 'System'],
 ];
 
 // SQL statements that seed the global permissions table. Built once
@@ -3795,11 +3864,12 @@ const List<_LedgerImmutability> _ledgerTables = [
     'created_at',
   ]),
   // v42 (§21.10) — supplier ledger: only the void columns + last_updated_at
-  // may change after insert.
+  // may change after insert. v47 (§21.11) added the immutable store_id.
   _LedgerImmutability('supplier_ledger_entries', [
     'id',
     'business_id',
     'supplier_id',
+    'store_id',
     'type',
     'amount_kobo',
     'signed_amount_kobo',
@@ -3883,6 +3953,8 @@ List<String> get _postCreateStatements {
     'CREATE INDEX idx_wallet_txn_business_cust_time ON wallet_transactions (business_id, customer_id, created_at)',
     // v42 (§21.10) — supplier ledger history per supplier, newest first.
     'CREATE INDEX idx_supplier_ledger_business_supplier_time ON supplier_ledger_entries (business_id, supplier_id, created_at)',
+    // v47 (§21.11) — per-store balance/history scans (active-store filter).
+    'CREATE INDEX idx_supplier_ledger_business_store_supplier ON supplier_ledger_entries (business_id, store_id, supplier_id)',
     'CREATE INDEX idx_crate_ledger_owner_group ON crate_ledger (business_id, customer_id, manufacturer_id, created_at)',
     'CREATE INDEX idx_inventory_business_ps ON inventory (business_id, product_id, store_id)',
     'CREATE INDEX idx_stock_txn_prod_loc_time ON stock_transactions (product_id, location_id, created_at)',

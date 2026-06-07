@@ -16,11 +16,13 @@ class SupplierAccountService {
   SupplierLedgerDao get _ledgerDao => _db.supplierLedgerDao;
 
   /// Record an Invoice Total — goods received (a debit, shown red/negative).
+  /// [storeId] is the store this activity is recorded against (§21.11).
   Future<void> recordInvoice({
     required String supplierId,
     required int amountKobo,
     required DateTime dateReceived,
     required String staffId,
+    String? storeId,
     String? note,
   }) async {
     if (amountKobo <= 0) {
@@ -34,6 +36,7 @@ class SupplierAccountService {
         id: Value(UuidV7.generate()),
         businessId: businessId,
         supplierId: supplierId,
+        storeId: Value(storeId),
         type: 'debit',
         amountKobo: amountKobo,
         signedAmountKobo: -amountKobo,
@@ -69,6 +72,7 @@ class SupplierAccountService {
     required String method, // 'cash' | 'transfer' | 'pos' | 'other'
     required DateTime paidOn,
     required String staffId,
+    String? storeId,
     String? receiptPath,
     String? referenceNote,
   }) async {
@@ -89,6 +93,7 @@ class SupplierAccountService {
         id: Value(UuidV7.generate()),
         businessId: businessId,
         supplierId: supplierId,
+        storeId: Value(storeId),
         type: 'credit',
         amountKobo: amountKobo,
         signedAmountKobo: amountKobo,

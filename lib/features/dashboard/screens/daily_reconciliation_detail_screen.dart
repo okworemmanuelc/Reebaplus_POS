@@ -1,80 +1,48 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
-import 'package:reebaplus_pos/core/data/business_types.dart';
-import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
-import 'package:reebaplus_pos/core/utils/business_time.dart';
 import 'package:reebaplus_pos/core/utils/csv_export.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/dashboard/reconciliation/recon_data.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
+import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 
-/// One calendar day's full reconciliation (§25.2 / §25.9). Rolls up, for the
-/// given business date: the day's sales summary (SKUs / items sold / value /
-/// best staff / top item), the saved stock count (shortage / surplus +
-/// itemised), the current outstanding customer debt and empty-crate holdings
-/// (summaries from the existing subsystems, not duplicates), and the approved
-/// expenses recorded that day. Read-only; role-gated upstream (CEO/Manager).
-/// (The Close Day cash audit was removed with Funds Register, §23.)
-class DailyReconciliationDetailScreen extends ConsumerStatefulWidget {
-  const DailyReconciliationDetailScreen({super.key, required this.businessDate});
+/// One reconciliation bucket's detail (§25.9) — a Day / Week / Month / Year span
+/// in the active store scope. Rolls up sales, stock audit, valued shrinkage,
+/// debts, expenses and crates; for the **CEO** it also shows a cost-based P&L and
+/// a recorded statement of account. A **Manager** never sees cost / COGS / margin
+/// / profit / goods-received (cost wall, §25.3); their shrinkage is valued at
+/// selling price (an accountability figure). A non-Day bucket lists the
+/// next-finer buckets inside it as a drill-down breakdown.
+class DailyReconciliationDetailScreen extends ConsumerWidget {
+  const DailyReconciliationDetailScreen({
+    super.key,
+    required this.start,
+    required this.endExclusive,
+    required this.grouping,
+    required this.title,
+  });
 
-  /// `YYYY-MM-DD` business day this screen reconciles.
-  final String businessDate;
-
-  @override
-  ConsumerState<DailyReconciliationDetailScreen> createState() =>
-      _DailyReconciliationDetailScreenState();
-}
-
-class _DailyReconciliationDetailScreenState
-    extends ConsumerState<DailyReconciliationDetailScreen> {
-  String get _date => widget.businessDate;
-
-  String _prettyDate() {
-    final d = DateTime.tryParse(_date);
-    return d == null ? _date : DateFormat('EEE, d MMM yyyy').format(d);
-  }
-
-  Future<void> _exportCsv(_ReconData d) async {
-    final rows = <List<String>>[
-      ['Sales — items sold', '${d.items}'],
-      ['Sales — SKUs sold', '${d.skus}'],
-      ['Sales — total value', (d.salesKobo / 100.0).toStringAsFixed(2)],
-      ['Sales — best staff', d.bestStaff ?? ''],
-      ['Sales — top item', d.topItem ?? ''],
-      ['Stock — products counted', '${d.productsCounted}'],
-      ['Stock — short (products/units)', '${d.shortageCount} / ${d.shortageUnits}'],
-      ['Stock — surplus (products/units)', '${d.surplusCount} / ${d.surplusUnits}'],
-      ['Outstanding customer debt', (d.totalOwedKobo / 100.0).toStringAsFixed(2)],
-      ['Expenses recorded (approved)', (d.expensesKobo / 100.0).toStringAsFixed(2)],
-    ];
-    try {
-      await shareCsv(
-        csv: buildCsv(['Metric', 'Value'], rows),
-        fileName: 'reconciliation_$_date',
-        subject: 'Daily Reconciliation — $_date',
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not export: $e')),
-        );
-      }
-    }
-  }
+  final DateTime start;
+  final DateTime endExclusive;
+  final ReconGrouping grouping;
+  final String title;
 
   @override
-  Widget build(BuildContext context) {
-    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
+  Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(currencySymbolProvider); // rebuild money on currency change
     final theme = Theme.of(context);
-    final tz = ref.watch(businessTimezoneProvider).valueOrNull;
-    final data = _compute(tz);
+    final isCeo = ref.watch(currentUserRoleProvider)?.slug == 'ceo';
+    final scopeLabel = ref.watch(activeStoreLabelProvider);
+    final d = computeReconData(ref,
+        start: start, endExclusive: endExclusive, isCeo: isCeo);
+    final children = grouping.finer == null
+        ? const <ReconBucket>[]
+        : buildReconBuckets(ref,
+            start: start, endExclusive: endExclusive, grouping: grouping.finer!);
 
     return SharedScaffold(
       activeRoute: 'dashboard',
@@ -85,9 +53,9 @@ class _DailyReconciliationDetailScreenState
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Reconciliation',
+            Text(title,
                 style: context.h3.copyWith(fontWeight: FontWeight.bold)),
-            Text(_prettyDate(),
+            Text(scopeLabel,
                 style: context.bodySmall.copyWith(color: theme.hintColor)),
           ],
         ),
@@ -96,7 +64,7 @@ class _DailyReconciliationDetailScreenState
             tooltip: 'Export CSV',
             icon: Icon(FontAwesomeIcons.fileCsv,
                 size: 18, color: context.primaryColor),
-            onPressed: () => _exportCsv(data),
+            onPressed: () => _exportCsv(context, d, isCeo, scopeLabel),
           ),
           const SizedBox(width: 8),
         ],
@@ -106,182 +74,280 @@ class _DailyReconciliationDetailScreenState
           bottom: context.spacingM + context.deviceBottomPadding,
         ),
         children: [
-          _salesCard(theme, data),
-          SizedBox(height: context.spacingM),
-          _stockCard(theme, data),
-          SizedBox(height: context.spacingM),
-          _moneyCard(theme, data),
-          if (data.showCrates) ...[
+          _salesCard(context, theme, d),
+          if (isCeo) ...[
             SizedBox(height: context.spacingM),
-            _cratesCard(theme, data),
+            _plCard(context, theme, d),
+            SizedBox(height: context.spacingM),
+            _statementCard(context, theme, d),
+          ],
+          SizedBox(height: context.spacingM),
+          _shrinkageCard(context, theme, d, retail: !isCeo),
+          SizedBox(height: context.spacingM),
+          _stockCard(context, theme, d),
+          if (!isCeo) ...[
+            SizedBox(height: context.spacingM),
+            _debtsExpensesCard(context, theme, d),
+          ],
+          if (d.showCrates) ...[
+            SizedBox(height: context.spacingM),
+            _cratesCard(context, theme, d),
+          ],
+          if (children.isNotEmpty) ...[
+            SizedBox(height: context.spacingM),
+            _breakdown(context, theme, children),
           ],
         ],
       ),
     );
   }
 
-  _ReconData _compute(String? tz) {
-    final orders = ref.watch(allOrdersProvider).valueOrNull ?? const [];
-    final stockCounts = ref.watch(allStockCountsProvider).valueOrNull ?? const [];
-    final balances =
-        ref.watch(walletBalancesKoboProvider).valueOrNull ?? const {};
-    final expenses = ref.watch(allExpensesProvider).valueOrNull ?? const [];
-    final users = ref.watch(usersByBusinessProvider).valueOrNull ?? const {};
-    final businesses = ref.watch(localBusinessesProvider).valueOrNull ?? const [];
-    final crateCounts =
-        ref.watch(emptyCratesByManufacturerProvider).valueOrNull ?? const {};
-    final manufacturers =
-        ref.watch(allManufacturersProvider).valueOrNull ?? const [];
+  // ── Cards ───────────────────────────────────────────────────────────────
 
-    // ── Sales summary (day-bucketed by the business timezone) ──────────────
-    final skus = <String>{};
-    var items = 0;
-    var salesKobo = 0;
-    final byStaff = <String?, int>{};
-    final byProduct = <String, ({String name, int qty})>{};
-    final salesReady = tz != null;
-    if (salesReady) {
-      for (final o in orders) {
-        if (o.order.status != 'completed') continue;
-        if (businessDateString(o.order.createdAt, tz) != _date) continue;
-        var orderRevenue = 0;
-        for (final i in o.items) {
-          orderRevenue += i.item.quantity * i.item.unitPriceKobo;
-          items += i.item.quantity;
-          // Quick-sale lines (§12.3) count toward revenue + items sold, but
-          // have no product → excluded from the SKU set and top-item breakdown.
-          final product = i.product;
-          if (product != null) {
-            skus.add(product.id);
-            final cur = byProduct[product.id];
-            byProduct[product.id] =
-                (name: product.name, qty: (cur?.qty ?? 0) + i.item.quantity);
-          }
-        }
-        salesKobo += orderRevenue;
-        byStaff.update(o.order.staffId, (v) => v + orderRevenue,
-            ifAbsent: () => orderRevenue);
-      }
-    }
-    String? bestStaff;
-    var bestStaffKobo = 0;
-    byStaff.forEach((staffId, value) {
-      if (value > bestStaffKobo) {
-        bestStaffKobo = value;
-        bestStaff = staffId == null ? 'Unassigned' : (users[staffId]?.name ?? 'Staff');
-      }
-    });
-    String? topItem;
-    var topItemQty = 0;
-    byProduct.forEach((_, p) {
-      if (p.qty > topItemQty) {
-        topItemQty = p.qty;
-        topItem = p.name;
-      }
-    });
+  Widget _salesCard(BuildContext context, ThemeData theme, ReconData d) {
+    return _card(context, theme, 'Sales summary', FontAwesomeIcons.chartLine,
+        context.primaryColor, [
+      _line(context, theme, 'Items sold', fmtNumber(d.itemsSold)),
+      _line(context, theme, 'Products (SKUs) sold', fmtNumber(d.skus)),
+      _line(context, theme, 'Total sales',
+          formatCurrency(d.totalRevenueKobo / 100.0), strong: true),
+      _line(context, theme, 'Best staff',
+          d.bestStaff == null
+              ? '—'
+              : '${d.bestStaff} (${formatCurrency(d.bestStaffKobo / 100.0)})'),
+      _line(context, theme, 'Top item',
+          d.topItem == null ? '—' : '${d.topItem} (×${d.topItemQty})'),
+    ]);
+  }
 
-    // ── Stock audit (saved stock count(s), keyed by business date) ─────────
-    // A Save Count inserts a fresh session row, so re-counting a store the same
-    // day produces several rows for one (store, date). Collapse to the LATEST
-    // session per store (newest createdAt) before rolling up — genuinely
-    // distinct stores still aggregate, but a re-save replaces rather than
-    // double-counts the figures (rule #4).
-    final dayCounts = stockCounts.where((c) => c.businessDate == _date).toList()
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    final seenStores = <String?>{};
-    var productsCounted = 0;
-    var shortageCount = 0;
-    var shortageUnits = 0;
-    var surplusCount = 0;
-    var surplusUnits = 0;
-    final shortages = <_ShortLine>[];
-    for (final c in dayCounts) {
-      if (!seenStores.add(c.storeId)) continue; // older re-save of this store
-      productsCounted += c.productsCounted;
-      shortageCount += c.shortageCount;
-      shortageUnits += c.shortageUnits;
-      surplusCount += c.surplusCount;
-      surplusUnits += c.surplusUnits;
-      for (final l in (jsonDecode(c.linesJson) as List)
-          .cast<Map<String, dynamic>>()) {
-        final diff = (l['d'] as num).toInt();
-        if (diff < 0) {
-          shortages.add(_ShortLine(
-            name: l['n'] as String? ?? 'Product',
-            system: (l['s'] as num).toInt(),
-            actual: (l['a'] as num).toInt(),
-            diff: diff,
-          ));
-        }
-      }
-    }
+  Widget _plCard(BuildContext context, ThemeData theme, ReconData d) {
+    final net = d.netProfitKobo;
+    final netColor =
+        net >= 0 ? const Color(0xFF22C55E) : theme.colorScheme.error;
+    return _card(context, theme, 'Profit & Loss', FontAwesomeIcons.chartPie,
+        netColor, [
+      _line(context, theme, 'Revenue',
+          formatCurrency(d.costedRevenueKobo / 100.0)),
+      _line(context, theme, 'Cost of goods sold',
+          '− ${formatCurrency(d.cogsKobo / 100.0)}'),
+      _divider(theme),
+      _line(context, theme, 'Gross profit',
+          formatCurrency(d.grossProfitKobo / 100.0),
+          strong: true),
+      _line(context, theme, 'Expenses (${d.expensesCount})',
+          '− ${formatCurrency(d.expensesKobo / 100.0)}'),
+      _line(context, theme, 'Damages (at cost)',
+          '− ${formatCurrency(d.damageCostKobo / 100.0)}'),
+      _divider(theme),
+      _line(context, theme, 'Net profit', formatCurrency(net / 100.0),
+          strong: true, color: netColor),
+      if (d.uncostedItems > 0) ...[
+        const SizedBox(height: 6),
+        Text(
+          'Excludes ${fmtNumber(d.uncostedItems)} item(s) sold with no recorded '
+          'buying price (e.g. quick sales).',
+          style: context.bodySmall.copyWith(color: theme.hintColor),
+        ),
+      ],
+    ]);
+  }
 
-    // ── Debts (current outstanding — summary of the wallet ledger) ─────────
-    final totalOwedKobo =
-        balances.values.where((b) => b < 0).fold<int>(0, (s, b) => s - b);
+  Widget _statementCard(BuildContext context, ThemeData theme, ReconData d) {
+    return _card(context, theme, 'Statement of account',
+        FontAwesomeIcons.moneyBillTransfer, Colors.blueAccent, [
+      _line(context, theme, 'Goods received',
+          formatCurrency(d.goodsReceivedKobo / 100.0)),
+      _line(context, theme, 'Paid to suppliers',
+          formatCurrency(d.supplierPaidKobo / 100.0)),
+      _line(context, theme, 'Refunds', formatCurrency(d.refundsKobo / 100.0)),
+      _line(context, theme, 'Outstanding customer debt',
+          formatCurrency(d.totalOwedKobo / 100.0),
+          color: d.totalOwedKobo > 0 ? theme.colorScheme.error : null),
+      if (d.showCrates)
+        _line(context, theme, 'Crate deposits held (now)',
+            formatCurrency(d.crateDepositKobo / 100.0)),
+      const SizedBox(height: 6),
+      Text(
+        'Recorded money flows — not a balanced cash ledger. Goods received is a '
+        'purchase (an asset), not a P&L cost.',
+        style: context.bodySmall.copyWith(color: theme.hintColor),
+      ),
+    ]);
+  }
 
-    // ── Expenses recorded that day (approved only) ─────────────────────────
-    var expensesKobo = 0;
-    var expensesCount = 0;
-    if (salesReady) {
-      for (final e in expenses) {
-        if (e.expense.isDeleted) continue;
-        if (e.expense.status != 'approved') continue;
-        if (businessDateString(e.expense.createdAt, tz) != _date) continue;
-        expensesKobo += e.expense.amountKobo;
-        expensesCount++;
-      }
-    }
-
-    // ── Empty crates (Bar / Beer Distributor only; current holdings) ───────
-    final bizId = ref.watch(databaseProvider).currentBusinessId;
-    String? bizType;
-    for (final b in businesses) {
-      if (b.id == bizId) {
-        bizType = b.type;
-        break;
-      }
-    }
-    final showCrates = isCrateBusiness(bizType);
-    final crates = <_CrateRow>[];
-    if (showCrates) {
-      final nameById = {for (final m in manufacturers) m.id: m.name};
-      crateCounts.forEach((mfrId, count) {
-        if (count > 0) {
-          crates.add(_CrateRow(name: nameById[mfrId] ?? 'Manufacturer', count: count));
-        }
-      });
-      crates.sort((a, b) => b.count.compareTo(a.count));
-    }
-
-    return _ReconData(
-      salesReady: salesReady,
-      skus: skus.length,
-      items: items,
-      salesKobo: salesKobo,
-      bestStaff: bestStaff,
-      bestStaffKobo: bestStaffKobo,
-      topItem: topItem,
-      topItemQty: topItemQty,
-      hasStockCount: dayCounts.isNotEmpty,
-      productsCounted: productsCounted,
-      shortageCount: shortageCount,
-      shortageUnits: shortageUnits,
-      surplusCount: surplusCount,
-      surplusUnits: surplusUnits,
-      shortages: shortages,
-      totalOwedKobo: totalOwedKobo,
-      expensesKobo: expensesKobo,
-      expensesCount: expensesCount,
-      showCrates: showCrates,
-      crates: crates,
+  Widget _shrinkageCard(BuildContext context, ThemeData theme, ReconData d,
+      {required bool retail}) {
+    final shortageVal = retail ? d.shortageRetailKobo : d.shortageCostKobo;
+    final damageVal = retail ? d.damageRetailKobo : d.damageCostKobo;
+    final danger = d.shortageUnits > 0;
+    return _card(
+      context,
+      theme,
+      retail ? 'Sellable value unaccounted' : 'Stock shrinkage (at cost)',
+      FontAwesomeIcons.triangleExclamation,
+      Colors.redAccent,
+      [
+        _line(context, theme, 'Stock shortages',
+            '${fmtNumber(d.shortageUnits)} unit(s) · ${formatCurrency(shortageVal / 100.0)}',
+            danger: danger),
+        _line(context, theme, 'Damages recorded',
+            '${fmtNumber(d.damageUnits)} unit(s) · ${formatCurrency(damageVal / 100.0)}'),
+        _divider(theme),
+        _line(context, theme, 'Total',
+            formatCurrency((shortageVal + damageVal) / 100.0),
+            strong: true),
+        if (retail) ...[
+          const SizedBox(height: 6),
+          Text(
+            'Valued at selling price — an accountability figure, not the '
+            'company\'s cost of the loss.',
+            style: context.bodySmall.copyWith(color: theme.hintColor),
+          ),
+        ],
+      ],
+      danger: danger,
     );
   }
 
-  // ── Section widgets ──────────────────────────────────────────────────────
+  Widget _stockCard(BuildContext context, ThemeData theme, ReconData d) {
+    final hasShortage = d.shortageUnits > 0;
+    return _card(
+      context,
+      theme,
+      'Stock audit',
+      FontAwesomeIcons.boxesStacked,
+      Colors.blueAccent,
+      [
+        if (!d.hasStockCount)
+          Text('No stock count taken in this period.',
+              style: context.bodySmall.copyWith(color: theme.hintColor))
+        else ...[
+          _line(context, theme, 'Products counted',
+              fmtNumber(d.productsCounted)),
+          _line(context, theme, 'Short',
+              '${fmtNumber(d.shortageCount)} products · ${fmtNumber(d.shortageUnits)} units',
+              danger: hasShortage),
+          _line(context, theme, 'Surplus',
+              '${fmtNumber(d.surplusCount)} products · ${fmtNumber(d.surplusUnits)} units'),
+          if (d.shortages.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text('Shortages',
+                style: context.bodySmall.copyWith(fontWeight: FontWeight.w700)),
+            for (final s in d.shortages)
+              _line(context, theme, s.name,
+                  '${s.diff} (had ${s.system}, counted ${s.actual})',
+                  danger: true),
+          ],
+        ],
+      ],
+      danger: hasShortage,
+    );
+  }
 
-  Widget _card(ThemeData theme, String title, IconData icon, Color color,
-      List<Widget> children,
+  Widget _debtsExpensesCard(BuildContext context, ThemeData theme, ReconData d) {
+    return _card(context, theme, 'Debts & expenses',
+        FontAwesomeIcons.moneyBillWave, Colors.redAccent, [
+      _line(context, theme, 'Outstanding customer debt (business-wide)',
+          formatCurrency(d.totalOwedKobo / 100.0),
+          danger: d.totalOwedKobo > 0),
+      _line(context, theme, 'Expenses recorded (${d.expensesCount})',
+          formatCurrency(d.expensesKobo / 100.0)),
+    ]);
+  }
+
+  Widget _cratesCard(BuildContext context, ThemeData theme, ReconData d) {
+    return _card(context, theme, 'Empty crates (held now)',
+        FontAwesomeIcons.boxOpen, Colors.brown, [
+      _line(context, theme, 'Crates held', '${fmtNumber(d.crateUnits)} crate(s)'),
+    ]);
+  }
+
+  Widget _breakdown(
+      BuildContext context, ThemeData theme, List<ReconBucket> children) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: EdgeInsets.only(left: context.spacingS, bottom: context.spacingS),
+          child: Text('Breakdown by ${children.first.grouping.label.toLowerCase()}',
+              style: context.bodyMedium.copyWith(fontWeight: FontWeight.bold)),
+        ),
+        for (final b in children) ...[
+          _bucketCard(context, theme, b),
+          SizedBox(height: context.spacingS),
+        ],
+      ],
+    );
+  }
+
+  Widget _bucketCard(BuildContext context, ThemeData theme, ReconBucket b) {
+    final mismatch = b.hasShortage;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(context.radiusL),
+        onTap: () => Navigator.push(
+          context,
+          slideDownRoute(DailyReconciliationDetailScreen(
+            start: b.start,
+            endExclusive: b.endExclusive,
+            grouping: b.grouping,
+            title: b.label,
+          )),
+        ),
+        child: Container(
+          padding: EdgeInsets.all(context.spacingM),
+          decoration: BoxDecoration(
+            color: context.surfaceColor,
+            borderRadius: BorderRadius.circular(context.radiusL),
+            border: Border.all(
+              color: mismatch
+                  ? theme.colorScheme.error.withValues(alpha: 0.3)
+                  : theme.dividerColor.withValues(alpha: 0.2),
+            ),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(b.label,
+                        style: context.bodyMedium
+                            .copyWith(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    Text('${fmtNumber(b.itemsSold)} items sold',
+                        style:
+                            context.bodySmall.copyWith(color: theme.hintColor)),
+                  ],
+                ),
+              ),
+              if (mismatch)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.error.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text('Mismatch',
+                      style: context.bodySmall.copyWith(
+                          color: theme.colorScheme.error,
+                          fontWeight: FontWeight.w700)),
+                ),
+              const SizedBox(width: 8),
+              Icon(Icons.chevron_right_rounded, color: theme.hintColor),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Shared widgets ────────────────────────────────────────────────────────
+
+  Widget _card(BuildContext context, ThemeData theme, String title,
+      IconData icon, Color color, List<Widget> children,
       {bool danger = false}) {
     return Container(
       padding: EdgeInsets.all(context.spacingM),
@@ -313,8 +379,9 @@ class _DailyReconciliationDetailScreenState
     );
   }
 
-  Widget _line(ThemeData theme, String label, String value,
-      {bool danger = false}) {
+  Widget _line(BuildContext context, ThemeData theme, String label, String value,
+      {bool strong = false, bool danger = false, Color? color}) {
+    final c = color ?? (danger ? theme.colorScheme.error : null);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
@@ -327,152 +394,59 @@ class _DailyReconciliationDetailScreenState
           const SizedBox(width: 8),
           Text(value,
               style: context.bodySmall.copyWith(
-                fontWeight: danger ? FontWeight.bold : FontWeight.w600,
-                color: danger ? theme.colorScheme.error : null,
+                fontWeight: strong ? FontWeight.w800 : FontWeight.w600,
+                color: c,
               )),
         ],
       ),
     );
   }
 
-  Widget _salesCard(ThemeData theme, _ReconData d) {
-    return _card(theme, 'Sales summary', FontAwesomeIcons.chartLine,
-        context.primaryColor, [
-      if (!d.salesReady)
-        Text('Loading…',
-            style: context.bodySmall.copyWith(color: theme.hintColor))
-      else ...[
-        _line(theme, 'Items sold', fmtNumber(d.items)),
-        _line(theme, 'Products (SKUs) sold', fmtNumber(d.skus)),
-        _line(theme, 'Total sales', formatCurrency(d.salesKobo / 100.0)),
-        _line(theme, 'Best staff',
-            d.bestStaff == null ? '—' : '${d.bestStaff} (${formatCurrency(d.bestStaffKobo / 100.0)})'),
-        _line(theme, 'Top item',
-            d.topItem == null ? '—' : '${d.topItem} (×${d.topItemQty})'),
+  Widget _divider(ThemeData theme) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Divider(
+            height: 1, color: theme.dividerColor.withValues(alpha: 0.25)),
+      );
+
+  Future<void> _exportCsv(
+      BuildContext context, ReconData d, bool isCeo, String scope) async {
+    String money(int kobo) => (kobo / 100.0).toStringAsFixed(2);
+    final rows = <List<String>>[
+      ['Items sold', '${d.itemsSold}'],
+      ['Products (SKUs) sold', '${d.skus}'],
+      ['Total sales', money(d.totalRevenueKobo)],
+      if (isCeo) ...[
+        ['Revenue (costed)', money(d.costedRevenueKobo)],
+        ['Cost of goods sold', money(d.cogsKobo)],
+        ['Gross profit', money(d.grossProfitKobo)],
+        ['Net profit', money(d.netProfitKobo)],
+        ['Goods received', money(d.goodsReceivedKobo)],
+        ['Paid to suppliers', money(d.supplierPaidKobo)],
+        ['Refunds', money(d.refundsKobo)],
+        ['Stock shortages (units)', '${d.shortageUnits}'],
+        ['Stock shrinkage (at cost)', money(d.shortageCostKobo + d.damageCostKobo)],
+      ] else ...[
+        ['Stock shortages (units)', '${d.shortageUnits}'],
+        ['Sellable value unaccounted',
+          money(d.shortageRetailKobo + d.damageRetailKobo)],
       ],
-    ]);
+      ['Expenses recorded', money(d.expensesKobo)],
+      ['Outstanding customer debt', money(d.totalOwedKobo)],
+      if (d.showCrates) ['Empty crates held (units)', '${d.crateUnits}'],
+    ];
+    final name = isCeo ? 'business_statement' : 'store_reconciliation';
+    try {
+      await shareCsv(
+        csv: buildCsv(['Metric', 'Value'], rows),
+        fileName: '${name}_${title.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_')}',
+        subject: 'Reconciliation — $scope — $title',
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not export: $e')),
+        );
+      }
+    }
   }
-
-  Widget _stockCard(ThemeData theme, _ReconData d) {
-    final hasShortage = d.shortageUnits > 0;
-    return _card(
-      theme,
-      'Stock audit',
-      FontAwesomeIcons.boxesStacked,
-      Colors.blueAccent,
-      [
-        if (!d.hasStockCount)
-          Text('No stock count taken.',
-              style: context.bodySmall.copyWith(color: theme.hintColor))
-        else ...[
-          _line(theme, 'Products counted', fmtNumber(d.productsCounted)),
-          _line(theme, 'Short',
-              '${fmtNumber(d.shortageCount)} products · ${fmtNumber(d.shortageUnits)} units',
-              danger: hasShortage),
-          _line(theme, 'Surplus',
-              '${fmtNumber(d.surplusCount)} products · ${fmtNumber(d.surplusUnits)} units'),
-          if (d.shortages.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text('Shortages',
-                style:
-                    context.bodySmall.copyWith(fontWeight: FontWeight.w700)),
-            for (final s in d.shortages)
-              _line(theme, s.name, '${s.diff} (had ${s.system}, counted ${s.actual})',
-                  danger: true),
-          ],
-        ],
-      ],
-      danger: hasShortage,
-    );
-  }
-
-  Widget _moneyCard(ThemeData theme, _ReconData d) {
-    return _card(theme, 'Debts & expenses', FontAwesomeIcons.moneyBillWave,
-        Colors.redAccent, [
-      _line(theme, 'Outstanding customer debt',
-          formatCurrency(d.totalOwedKobo / 100.0),
-          danger: d.totalOwedKobo > 0),
-      if (!d.salesReady)
-        _line(theme, 'Expenses recorded', 'Loading…')
-      else
-        _line(theme, 'Expenses recorded (${d.expensesCount})',
-            formatCurrency(d.expensesKobo / 100.0)),
-    ]);
-  }
-
-  Widget _cratesCard(ThemeData theme, _ReconData d) {
-    return _card(theme, 'Empty crates (held now)', FontAwesomeIcons.boxOpen,
-        Colors.brown, [
-      if (d.crates.isEmpty)
-        Text('No empty crates held.',
-            style: context.bodySmall.copyWith(color: theme.hintColor))
-      else
-        for (final c in d.crates) _line(theme, c.name, fmtNumber(c.count)),
-    ]);
-  }
-}
-
-class _ReconData {
-  _ReconData({
-    required this.salesReady,
-    required this.skus,
-    required this.items,
-    required this.salesKobo,
-    required this.bestStaff,
-    required this.bestStaffKobo,
-    required this.topItem,
-    required this.topItemQty,
-    required this.hasStockCount,
-    required this.productsCounted,
-    required this.shortageCount,
-    required this.shortageUnits,
-    required this.surplusCount,
-    required this.surplusUnits,
-    required this.shortages,
-    required this.totalOwedKobo,
-    required this.expensesKobo,
-    required this.expensesCount,
-    required this.showCrates,
-    required this.crates,
-  });
-
-  final bool salesReady;
-  final int skus;
-  final int items;
-  final int salesKobo;
-  final String? bestStaff;
-  final int bestStaffKobo;
-  final String? topItem;
-  final int topItemQty;
-  final bool hasStockCount;
-  final int productsCounted;
-  final int shortageCount;
-  final int shortageUnits;
-  final int surplusCount;
-  final int surplusUnits;
-  final List<_ShortLine> shortages;
-  final int totalOwedKobo;
-  final int expensesKobo;
-  final int expensesCount;
-  final bool showCrates;
-  final List<_CrateRow> crates;
-}
-
-class _ShortLine {
-  _ShortLine({
-    required this.name,
-    required this.system,
-    required this.actual,
-    required this.diff,
-  });
-  final String name;
-  final int system;
-  final int actual;
-  final int diff;
-}
-
-class _CrateRow {
-  _CrateRow({required this.name, required this.count});
-  final String name;
-  final int count;
 }

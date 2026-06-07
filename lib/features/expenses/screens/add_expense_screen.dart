@@ -222,7 +222,10 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     final auth = ref.read(authProvider);
     final currentUser = auth.currentUser;
     if (currentUser == null) return;
-    final storeId = currentUser.storeId;
+    // §20.8 — stamp the active store (locked, else first selectable), the same
+    // resolution a POS sale and a supplier activity use; not the recorder's home
+    // store. The "Recording for:" banner shows this store in the form.
+    final storeId = ref.read(activeWriteStoreProvider).id;
 
     final method = _paymentMethodCode;
 
@@ -269,6 +272,56 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     return code[0].toUpperCase() + code.substring(1);
   }
 
+  /// §20.8 — read-only "Recording for: <store>" banner so the target store is
+  /// explicit. To record against a different store, switch the active store from
+  /// the menu (the drawer picker is the single store control).
+  Widget _recordingForBanner(BuildContext context, String label) {
+    final primary = Theme.of(context).colorScheme.primary;
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: context.getRSize(12),
+        vertical: context.getRSize(10),
+      ),
+      decoration: BoxDecoration(
+        color: primary.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _border),
+      ),
+      child: Row(
+        children: [
+          Icon(FontAwesomeIcons.store,
+              size: context.getRSize(13), color: primary),
+          SizedBox(width: context.getRSize(8)),
+          Expanded(
+            child: Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: 'Recording for: ',
+                    style: TextStyle(
+                      color: _subtext,
+                      fontSize: context.getRFontSize(12),
+                    ),
+                  ),
+                  TextSpan(
+                    text: label,
+                    style: TextStyle(
+                      color: primary,
+                      fontSize: context.getRFontSize(12),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Seed the category field once from the (resolved) category name map.
@@ -292,6 +345,13 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
         .take(6)
         .toList()
       ..sort();
+
+    // §20.8 — when more than one store is selectable, show which store this
+    // expense will be recorded against (the active store). Store is immutable on
+    // edit, so only show it while creating.
+    final writeStore = ref.watch(activeWriteStoreProvider);
+    final showStoreBanner =
+        !_isEditing && ref.watch(selectableStoresProvider).length > 1;
 
     return Scaffold(
       backgroundColor: _surface,
@@ -379,6 +439,10 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                   vertical: context.getRSize(10),
                 ),
                 children: [
+                  if (showStoreBanner) ...[
+                    _recordingForBanner(context, writeStore.label),
+                    SizedBox(height: context.getRSize(16)),
+                  ],
                   // Category (searchable + create-on-the-fly)
                   AppInput(
                     labelText: 'Category',

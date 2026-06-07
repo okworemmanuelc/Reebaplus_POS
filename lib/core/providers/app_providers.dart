@@ -58,6 +58,13 @@ final lockedStoreProvider =
     ChangeNotifierProvider<ValueNotifier<String?>>((ref) {
   return ref.watch(navigationProvider).lockedStoreId;
 });
+// §12.1: true once the user explicitly picked a concrete active store this
+// session (vs MainLayout's silent confined-user default). Drives the POS
+// "pick a store" gate for every user with more than one store.
+final storeExplicitlyChosenProvider =
+    ChangeNotifierProvider<ValueNotifier<bool>>((ref) {
+  return ref.watch(navigationProvider).storeExplicitlyChosen;
+});
 
 // ── Secure Storage ─────────────────────────────────────────────────────────
 final secureStorageProvider = Provider<SecureStorageService>(
@@ -163,9 +170,14 @@ final supplierAccountServiceProvider = Provider<SupplierAccountService>((ref) {
 
 /// supplierId → signed ledger balance (kobo), live. Negative = we owe the
 /// supplier. Drives the per-supplier balance chip on the Suppliers list.
+/// Scoped to the active store (§21.11); null lock = "All Stores" aggregate.
 final supplierBalancesKoboProvider =
     StreamProvider.autoDispose<Map<String, int>>((ref) {
-  return ref.read(databaseProvider).supplierLedgerDao.watchAllBalancesKobo();
+  final storeId = ref.watch(lockedStoreProvider).value;
+  return ref
+      .read(databaseProvider)
+      .supplierLedgerDao
+      .watchAllBalancesKobo(storeId: storeId);
 });
 
 /// One supplier row, live (Supplier Details header). Null once soft-deleted.
@@ -174,23 +186,37 @@ final supplierByIdProvider =
   return ref.read(databaseProvider).catalogDao.watchSupplierById(id);
 });
 
-/// One supplier's signed ledger balance (kobo), live.
+/// One supplier's signed ledger balance (kobo), live. Active-store scoped (§21.11).
 final supplierBalanceProvider =
     StreamProvider.autoDispose.family<int, String>((ref, id) {
-  return ref.read(databaseProvider).supplierLedgerDao.watchBalanceKobo(id);
+  final storeId = ref.watch(lockedStoreProvider).value;
+  return ref
+      .read(databaseProvider)
+      .supplierLedgerDao
+      .watchBalanceKobo(id, storeId: storeId);
 });
 
 /// One supplier's full ledger history (invoices + payments + voids), newest
-/// first.
+/// first. Active-store scoped (§21.11).
 final supplierLedgerHistoryProvider = StreamProvider.autoDispose
     .family<List<SupplierLedgerEntryData>, String>((ref, id) {
-  return ref.read(databaseProvider).supplierLedgerDao.watchHistory(id);
+  final storeId = ref.watch(lockedStoreProvider).value;
+  return ref
+      .read(databaseProvider)
+      .supplierLedgerDao
+      .watchHistory(id, storeId: storeId);
 });
 
-/// Every payment entry across all suppliers, newest first — the Payments tab.
-final supplierPaymentEntriesProvider =
+/// Every ledger entry (invoices + payments + voids) across all suppliers,
+/// newest first — drives the Transaction history screen. Active-store scoped
+/// (§21.11); null lock = "All Stores" aggregate.
+final supplierAllHistoryProvider =
     StreamProvider.autoDispose<List<SupplierLedgerEntryData>>((ref) {
-  return ref.read(databaseProvider).supplierLedgerDao.watchPaymentEntries();
+  final storeId = ref.watch(lockedStoreProvider).value;
+  return ref
+      .read(databaseProvider)
+      .supplierLedgerDao
+      .watchAllHistory(storeId: storeId);
 });
 
 // ── Delivery ────────────────────────────────────────────────────────────────
@@ -227,6 +253,7 @@ final supabaseSyncServiceProvider = Provider<SupabaseSyncService>((ref) {
   return SupabaseSyncService(
     ref.read(databaseProvider),
     ref.read(supabaseClientProvider),
+    ref.read(secureStorageProvider),
   );
 });
 

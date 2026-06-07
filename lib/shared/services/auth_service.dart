@@ -23,6 +23,16 @@ enum PostLoginRoute { none, successDashboard, accessGranted }
 /// gates on auth, so cloud writes queue safely until the JWT is back.
 enum SessionRefreshResult { refreshed, alreadyValid, offline, failedAuth }
 
+/// Thrown by [AuthService.deleteBusinessAndAccount] when the irreversible
+/// delete cannot proceed. Carries a plain-English [message] safe to show the
+/// CEO. The local device is left fully intact whenever this is thrown.
+class DeleteBusinessException implements Exception {
+  final String message;
+  const DeleteBusinessException(this.message);
+  @override
+  String toString() => message;
+}
+
 /// Holds the currently logged-in user.
 /// `value` is null when nobody is logged in.
 class AuthService extends ValueNotifier<UserData?> {
@@ -854,6 +864,71 @@ class AuthService extends ValueNotifier<UserData?> {
     _nav.clearStoreLock();
     _nav.resetNavigation();
     value = null;
+  }
+
+  /// Permanently deletes the CEO's business + account (master plan §10.3) — the
+  /// one deliberate hard-delete (hard rule #9 exception).
+  ///
+  /// Online-only and **never enqueued**. The `delete_business` cloud RPC runs
+  /// the entire cascade (every business-scoped table goes via
+  /// `business_id … ON DELETE CASCADE`) plus the CEO's `auth.users` row in one
+  /// server-side transaction, and notifies the operator console by writing a
+  /// row to the cloud-only `account_deletion_events` table. We call it directly
+  /// rather than queuing a `domain:` envelope because the §6 sync queue would
+  /// retry it blindly on reconnect, after the account is already gone.
+  ///
+  /// Only after the cloud confirms success do we wipe local data and full-logout
+  /// to Welcome. On any failure (offline, not-CEO, name mismatch, network) this
+  /// throws a [DeleteBusinessException] WITHOUT touching local data, so a failed
+  /// attempt leaves the device fully intact.
+  // sync-exempt: §10.3 — the cloud `delete_business` RPC is the authoritative
+  // hard delete; the local `clearAllData()` wipe mirrors a business the server
+  // has already destroyed, so there is nothing to enqueue (same shape as the
+  // onboarding mirrors). No raw synced-table write happens in this method.
+  Future<void> deleteBusinessAndAccount({
+    required String businessId,
+  }) async {
+    // Block offline up front — account deletion must be server-confirmed before
+    // anything local is destroyed (§10.3), so never queue it blindly.
+    if (!_sync.isOnline.value) {
+      throw const DeleteBusinessException(
+        'You must be online to delete your business. '
+        'Connect to the internet and try again.',
+      );
+    }
+
+    try {
+      await _supabase.rpc('delete_business', params: {
+        'p_business_id': businessId,
+      });
+    } on PostgrestException catch (e) {
+      debugPrint('[AuthService] delete_business RPC failed: ${e.code} ${e.message}');
+      throw DeleteBusinessException(_deleteBusinessMessage(e));
+    } catch (e) {
+      debugPrint('[AuthService] delete_business network error: $e');
+      throw const DeleteBusinessException(
+        'Could not reach the server to delete your business. '
+        'Check your connection and try again.',
+      );
+    }
+
+    // The cloud confirmed the business is gone. Wipe local data, then full
+    // logout to Welcome. clearAllData failing must NOT block logout — the
+    // authoritative delete already succeeded server-side.
+    try {
+      await _db.clearAllData();
+    } catch (e) {
+      debugPrint('[AuthService] deleteBusiness clearAllData error: $e');
+    }
+    await fullLogout();
+  }
+
+  /// Maps a `delete_business` RPC error to plain English for the CEO.
+  String _deleteBusinessMessage(PostgrestException e) {
+    if (e.message.contains('not_ceo_of_business') || (e.code == '42501')) {
+      return 'Only the business owner can delete the business.';
+    }
+    return 'Could not delete your business. Please try again.';
   }
 
   /// Resets a user's local PIN to setup-required so the OLD PIN can no longer

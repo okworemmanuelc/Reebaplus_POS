@@ -106,6 +106,545 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 
 ---
 
+## Session 137 — 2026-06-07 — App icon: the dark-theme Ribaplus logo is now the launcher icon
+
+**Built today:**
+- Made the **Ribaplus logo** (the same blue "RP / Ribaplus" mark shown on the splash screen) the app's launcher icon, on the **dark navy/charcoal background (#0B1220)** the user chose — the "dark theme" look. It replaces the old default Flutter icon everywhere.
+- Generated it with the standard **flutter_launcher_icons** tool (added as a dev-only dependency — it does not ship inside the app).
+- A small helper script (`tool/generate_app_icon.dart`) builds the two source images the generator needs from the logo, using the project's existing `image` package (no new runtime dependency):
+  - `reebaplus_icon.png` — the logo centered on the navy background (used for iOS, older Android, web, macOS, Windows).
+  - `reebaplus_icon_fg.png` — the logo padded on transparency, for the modern Android **adaptive icon** (Android lays it over the navy background, so it looks right inside the rounded/circle mask on newer phones).
+- To regenerate later: `dart run tool/generate_app_icon.dart && dart run flutter_launcher_icons`.
+
+**Files touched:**
+- pubspec.yaml (flutter_launcher_icons dev dependency + icon config), pubspec.lock
+- tool/generate_app_icon.dart (new helper script)
+- assets/images/reebaplus_icon.png, assets/images/reebaplus_icon_fg.png (new icon source images)
+- android/app/src/main/res/mipmap-*/ic_launcher.png (all densities), drawable-*/ic_launcher_foreground.png, mipmap-anydpi-v26/ic_launcher.xml, values/colors.xml (new — holds the navy background colour)
+- ios/Runner/Assets.xcassets/AppIcon.appiconset/* (all sizes + Contents.json)
+- macos/.../AppIcon.appiconset/*, web/icons/*, web/favicon.png, web/manifest.json, windows/runner/resources/app_icon.ico
+
+**Database changes:**
+- None.
+
+**Master plan sections covered:**
+- None — this is app branding/packaging, not a master-plan feature. No new screens, buttons, roles, or synced tables; no permission surface touched.
+
+**Plan updates made during session:**
+- None.
+
+**Tested:**
+- Inspected the generated icon pixels: background reads solid navy #0B1220 and is fully opaque (verified iOS has no alpha, as iOS requires); the logo sits centered and uncropped on Android adaptive (extra 16% safe-zone inset) and on the legacy/iOS square icons. `flutter analyze` clean on the new script; `flutter pub get` resolved without conflicts.
+- Not yet seen installed on the emulator — Android caches launcher icons, so confirming on-device needs a fresh install (`flutter run`).
+
+**Known issues / left open:**
+- Icons were regenerated for **all** platforms (Android, iOS, web, macOS, Windows) for consistency. The real target is the Android till; if you'd rather leave web/macOS/Windows on their old icons, say so and I'll scope the change back to Android + iOS only.
+
+---
+
+## Session 136 — 2026-06-07 — Business Reports hub: removed 3 cards + redesigned the period filter
+
+**Built today:**
+- Removed the **Sales Report**, **Expense Tracker**, and **Customer Ledger** cards from the Business Reports hub (user request). The data isn't gone — the sales summary still opens from Home, Expenses keeps its drawer screen, and customer wallet/credit history lives on each customer's profile.
+- Redesigned the Business Reports screen: the global period filter moved out of the cramped AppBar dropdown into a full-width **horizontal chip row** above the report grid (the canonical chip set the plan already called for, §25.1 / §30.11). The grid sizes itself to whatever cards actually render for the role/business type.
+
+**Files touched:**
+- lib/features/dashboard/screens/reports_hub_screen.dart
+- reebaplus_master_plan.md (§25.2 list + tombstone note)
+- BUILD_LOG.md
+
+**Database changes:**
+- None.
+
+**Master plan sections covered:**
+- §25.1 / §25.2 / §25.3 — Reports hub list & period filter.
+
+**Plan updates made during session:**
+- §25.2 — removed the Sales Report / Expense Tracker / Customer Ledger bullets and added a dated tombstone explaining the removal-from-hub and where the data still lives; noted the period-filter redesign. The §25.3 rows for those three were dropped to match.
+
+**Tested:**
+- `flutter analyze` on the screen — no issues.
+
+**Known issues / left open:**
+- `CustomerLedgerScreen` now has no entry point (dead code). Left in place per the build guardrails (mention, don't delete) — say the word to remove it. `sales_detail_screen` is still reachable from Home, so it stays.
+
+---
+
+## Session 135 — 2026-06-07 — Daily Reconciliation: store-scoped + Day/Week/Month/Year grouping; merged the §25.10 report into it
+
+**Course correction (supersedes the §25.10 build from Session 131):** the separate "Business Statement / Store Reconciliation" report built in Session 131 is **removed**. At user direction it is **merged into the Daily Reconciliation (§25.9)**: one report, store-scoped via the §12.1 sidebar picker, groupable by Day/Week/Month/Year, carrying the CEO P&L + statement of account and the valued shrinkage. Cash tracking was considered and **rejected by the user** (no cash entry, no split channels) — §23 stays closed; no Funds Register reintroduction.
+
+**Plan updates made during session (done before code, per guardrails):**
+- Rewrote master plan **§25.9** — Daily Reconciliation is now store-scoped (active-store picker; "All Stores" for all-stores viewers) and **groupable Day/Week/Month/Year** with a drill-down (Year→Month→Week→Day leaf). **Manager capped at Month.** Folded in: CEO cost P&L (Revenue−COGS−Expenses−Damages=Net) + statement of account; valued shrinkage (cost for CEO, selling price for Manager — no cost/profit shown to a Manager).
+- **§25.10** converted to a tombstone (merged into §25.9). Updated the §25.2 list bullet and removed the §25.3 matrix row; added a §25.3 note on the per-role lens.
+
+**Built today:**
+- New shared engine [recon_data.dart](lib/features/dashboard/reconciliation/recon_data.dart): the `ReconGrouping` Day/Week/Month/Year bucket math, `buildReconBuckets` (which periods have data, store-scoped, newest first) and `computeReconData` (the full roll-up for a span+store) — one money-math path for both list and detail.
+- Rewrote the Daily Reconciliation **list** → grouping selector (Manager: Day/Week/Month; CEO adds Year), store scope caption, one card per bucket, CSV export.
+- Rewrote the Daily Reconciliation **detail** → parameterised by span/grouping; CEO sees Sales + **P&L** + **statement of account** + cost shrinkage + stock audit + crates; a Manager sees Sales + **retail "sellable value unaccounted"** + stock audit + debts/expenses + crates (no cost/COGS/margin/profit). A non-Day bucket lists its finer buckets as a tappable **Breakdown** (Year→Month→Week→Day leaf).
+- Removed `business_statement_screen.dart` and its Reports-hub card; the hub "Daily Reconciliation" card now opens the store-scoped, groupable report.
+- Store scope reuses the app-wide active-store picker (`lockedStoreProvider` + `selectableStoresProvider` + `canViewAllStoresProvider`) — a concrete store, or All Stores for an all-stores viewer; a confined Manager is pinned to their store(s).
+
+**Files touched:**
+- reebaplus_master_plan.md (§25.2 / §25.3 / §25.9 / §25.10)
+- lib/features/dashboard/reconciliation/recon_data.dart (new)
+- lib/features/dashboard/screens/daily_reconciliation_list_screen.dart (rewritten)
+- lib/features/dashboard/screens/daily_reconciliation_detail_screen.dart (rewritten)
+- lib/features/dashboard/screens/reports_hub_screen.dart (removed Business Statement card + import; Daily Recon card uses the new no-arg constructor)
+- lib/features/dashboard/screens/business_statement_screen.dart (deleted)
+- lib/core/database/daos.dart + lib/core/providers/stream_providers.dart (kept Session-131 `watchAllAdjustments` + the 2 providers — now consumed by recon_data.dart)
+- BUILD_LOG.md
+
+**Database changes:**
+- None. Reads only; no schema/migration/sync-surface change.
+
+**Tested:**
+- `flutter analyze` — clean across the dashboard feature (the only 18 issues are pre-existing `avoid_print` in test/database/roles_v13_report.dart).
+- `flutter test test/sync/` — 115 pass.
+- NOT yet verified on the emulator.
+
+**Known issues / left open:**
+- "Selling price" for the Manager's valued shrinkage = `products.retailerPriceKobo` (walk-in retail). Wholesale-tier losses valued differently in reality; retail is the chosen accountability basis.
+- Boundary weeks in a Month breakdown can start in the previous month (a week straddling the 1st); its drill-down span covers the whole week. Edge case, left as-is.
+- Outstanding customer debt is business-wide (wallets aren't per store) — labelled as such in the Manager view.
+- The compute is pure-ish but reads providers via `WidgetRef`; still no unit test (matches the other report screens). Worth extracting `computeReconData` to a ref-free function for testing given the money sensitivity.
+
+**Next session should:**
+- Verify on the emulator: CEO sees P&L + statement + breakdown and can switch store / All Stores + Day/Week/Month/Year; a Manager sees no cost/profit, is store-confined, and has no Year option; CSV export for both.
+
+---
+
+## Session 134 — 2026-06-07 — Fix: voided ledger rows orphaning on "created_at is immutable"
+
+**Built today (bug fix):**
+- Fixed the Sync Issues orphan `payment_transactions: column created_at is immutable (only voided_at/voided_by/void_reason may change)` (P0001). When an order was cancelled, the void path re-pushed the **whole** payment row to record the void columns — and that full row carried `created_at`. The cloud stamps `created_at` itself and our local database stores it rounded down to whole seconds, so the two never match exactly; the cloud's append-only guard then rejected the update and the row got auto-archived as an orphan.
+- The fix tells the app to **never send `created_at`** for the three append-only ledgers whose void re-pushes the full row — supplier and customer wallet ledgers had the same hidden bug waiting to happen. Now the cloud owns `created_at`, voids only carry the columns that are actually allowed to change, and the existing orphan can be healed by tapping **Retry** on the Sync Issues screen (the re-push now passes).
+- The realtime `channelError` burst + `Failed host lookup … errno = 7` in the same log are unrelated — that's a brief loss of internet on the device (every channel re-subscribed a moment later). Not a code problem.
+
+**Files touched:**
+- lib/core/services/supabase_sync_service.dart (new `_ledgerCreatedAtScrubTables` set + drop `created_at` in the push scrub)
+- test/sync/normalize_payload_whitelist_test.dart (4 new tests)
+
+**Database changes:**
+- None. (No schema/migration change — purely what the client sends on push.)
+
+**Master plan sections covered:**
+- §5 sync contract / append-only ledgers (payment_transactions, wallet_transactions, supplier_ledger_entries).
+
+**Plan updates made during session:**
+- None.
+
+**Tested:**
+- `flutter analyze` clean on both changed files.
+- `flutter test test/sync/` — all 115 pass, including the 4 new scrub tests (created_at dropped for the 3 void-repushed ledgers, and intentionally **kept** for stock_transactions, which appends compensating rows instead of re-pushing).
+
+**Known issues / left open:**
+- The one already-archived orphan from before the fix: tap **Retry** (now succeeds) or **Discard**. The local row is already correctly voided either way.
+
+**Next session should:**
+- Nothing pending from this fix.
+
+---
+
+## Session 133 — 2026-06-07 — Expenses gated by store + "All Stores" (§20.8)
+
+**Plan updates made during session (done before any code, per guardrails):**
+- Added master plan **§20.8 "Per-store expense scope"** mirroring the supplier-ledger slice (§21.11): each expense is stamped with the active store, and the active-store picker filters the whole Expenses screen, with "All Stores" = aggregate for all-stores viewers.
+- Added a note under the §20.3 role table explaining "View Expenses" now follows the active-store picker.
+- Added this slice to the authorized Phase-2 list in CLAUDE.md.
+
+**Built today:**
+- Expenses are now **gated by the active-store picker**, exactly like Home / Inventory / POS / Supplier Accounts. A CEO (or all-stores Manager) can pick "All Stores" to see every store's expenses aggregated, or pick one store to see just that store's. A store-confined staffer (e.g. a single-store Manager) is pinned to their store and never sees another store's costs.
+- **Recording** an expense now stamps the **active store** (locked store, else the user's first selectable store — same rule a POS sale uses), not the recorder's home store. The Record Expense form shows a read-only **"Recording for: store name"** banner when more than one store is selectable.
+- The Expenses header shows a small **active-store caption** (the store name, or "All Stores") whenever the picker is in play.
+- In the **"All Stores"** view, each expense card (and each pending-approval row) shows **which store recorded it**; legacy expenses with no store show as "Unassigned".
+- The **monthly budget** bar/goal and the "this month vs budget" card now resolve by the **active store** (a concrete store's goal, or the business-wide goal under "All Stores"), so the spend and the goal always share the same scope. CEO-only "Set monthly budget" sets the goal for the active scope.
+
+**Files touched:**
+- lib/core/providers/stream_providers.dart (new `activeWriteStoreProvider`, `expenseScopeStoreIdProvider`; rewired `viewerScopedExpensesProvider` to the active-store scope)
+- lib/features/expenses/screens/add_expense_screen.dart (stamp active store + "Recording for:" banner)
+- lib/features/expenses/screens/expenses_screen.dart (scope caption, per-row store label, budget scope by active store)
+- reebaplus_master_plan.md (§20.8 + §20.3 note), CLAUDE.md (authorized-slices list)
+
+**Database changes:**
+- **None.** The `store_id` column already exists on `expenses` (client schema v47 and cloud migration 0073, already deployed). This was a wiring-only slice — no migration, no schema bump, no sync-registration change.
+
+**Master plan sections covered:**
+- §20.8 (new), §20.1/§20.3 (budget + role scope now follow the picker), consistent with §12.1 / §21.11.
+
+**Tested:**
+- `flutter analyze` clean on all changed files (full-project analyze: only pre-existing `avoid_print` infos in a test report file).
+- `flutter test test/sync/` → 111 passed (no table/column added, contract intact).
+- `flutter test test/expenses/` + the expenses-dao dispatch / budget-restore sync tests → all passed.
+
+**Known issues / left open:**
+- Not yet verified on-device (emulator). The receipt image stays local-only as before (Phase 1).
+
+**Next session should:**
+- Optionally on-device verify the picker filtering + the "Recording for:" banner across stores.
+
+---
+
+## Session 132 — 2026-06-07 — Delete Business & Account (Danger Zone, §10.3) + console notification
+
+**Plan updates made during session (done before any code, per guardrails):**
+
+- §10.3 — added the **console-notification** behaviour the user requested. When a
+  CEO deletes their business, the `delete_business` cloud RPC writes one row into
+  a new **cloud-only** audit table `account_deletion_events` (in the same
+  transaction as the cascade), which the operator's web admin console (§32) reads
+  to reconcile billing and keep a compliance record. Also corrected the "How it
+  syncs" wording: the RPC is called **directly online, never enqueued** as a
+  `domain:` envelope (the queue would retry it blindly after reconnect).
+
+**What was built:**
+
+- The **last Phase 1 item**: a CEO can permanently delete their business + account.
+  A red **Danger Zone** at the bottom of CEO Settings → **Delete Business** opens a
+  confirmation screen: a prominent "this is permanent and cannot be undone" warning,
+  then the CEO taps Delete and **re-enters their own PIN** to confirm (PIN is the
+  gate — the earlier "type the business name" step was removed per the user,
+  2026-06-07). Online-only — blocked with a clear message offline.
+- On confirm, one atomic cloud RPC `delete_business` wipes the entire business
+  server-side (every business-scoped table cascades from `DELETE FROM businesses`),
+  deletes the CEO's `auth.users` login, and notifies the console. Only after the
+  cloud confirms does the device wipe local data (`clearAllData()`) and sign out to
+  the Welcome screen. A failed attempt leaves the device fully intact.
+- New CEO-only permission `settings.delete_business` (locked on, hidden from the
+  per-role toggle list) gates the whole thing.
+
+**Files changed:**
+
+- reebaplus_master_plan.md (§10.3 console-notification + RPC wording)
+- supabase/migrations/0112_delete_business_and_account.sql (new)
+- lib/core/database/app_database.dart (schema v47→v48, catalogue key, seed list)
+- lib/core/settings/role_permissions_detail_screen.dart (kHiddenPermissionKeys)
+- lib/core/settings/delete_business_screen.dart (new — confirm screen)
+- lib/core/settings/settings_screen.dart (Danger Zone section)
+- lib/shared/services/auth_service.dart (deleteBusinessAndAccount + DeleteBusinessException)
+- test/database/roles_v13_seed_test.dart (catalogue count 34→35)
+
+**Database / migrations:**
+
+- New cloud-only table `account_deletion_events` (NOT a synced tenant table, no FK
+  to businesses so it survives the cascade; RLS = service_role only — the console's
+  key). Console reads it to learn a business was deleted.
+- Backfilled `ON DELETE CASCADE` on `stock_counts.business_id` and
+  `expense_budgets.business_id` — the only two business-scoped tables that lacked it
+  (audited the whole schema; everything else already cascaded), so a single
+  `DELETE FROM businesses` now fans out to the entire tenant.
+- New RPC `delete_business(p_business_id, p_business_name)` — SECURITY DEFINER, CEO
+  authority + typed-name check, disables the 5 append-only `forbid_delete` ledger
+  guards via `DISABLE TRIGGER USER` for the cascade, deletes the CEO `auth.users`
+  row (best-effort + recorded), writes the console-notification row.
+- New permission `settings.delete_business` (catalogue + CEO backfill; new
+  businesses get it automatically via the dynamic CEO grant in
+  `seed_default_roles_for_business`). Client schema v48 mirrors the catalogue.
+
+**Master-plan sections touched:**
+
+- §10.3 — Delete Business & Account; the new console-notification paragraph.
+
+**Tested:**
+
+- `flutter analyze` clean on all 6 changed app files.
+- `flutter test test/sync/ test/database/roles_v13_seed_test.dart` — all pass
+  (sync registration/leak/enqueue guards + roles seed, catalogue now 35 keys).
+
+**Still open / deferred:**
+
+- **Deploy:** `supabase db push` must apply 0112 (after 0109–0111) before the
+  feature works end-to-end. Not pushed this session.
+- The in-RPC `auth.users` delete is best-effort: if this project's `postgres` role
+  lacks DELETE on `auth.users`, the business is still gone and the console finishes
+  the auth-user cleanup using `account_deletion_events.auth_user_deleted=false`.
+  Confirm the privilege (or the console backstop) at deploy time.
+- Pre-existing analyze errors in `lib/features/expenses/screens/expenses_screen.dart`
+  (`storeName` param / positional args) are unrelated to this work (parallel edit) —
+  left untouched.
+- On-device pass pending (delete a throwaway business; confirm cloud rows gone +
+  one `account_deletion_events` row + device back at Welcome).
+
+---
+
+## Session 131 — 2026-06-07 — Period Business Statement (CEO P&L) + Store Reconciliation (Manager, retail) — §25.10
+
+**Plan updates made during session (done before any code, per guardrails):**
+- Added master plan **§25.10** — a new *period-level* report that aggregates across the selected period (Today / Week / Month / Year / To Date), distinct from the per-day Daily Reconciliation (§25.9, which stays per-calendar-day). Also added a row to the §25.3 visibility matrix and a bullet to the §25.2 reports list.
+- **What the user asked for and what was deliberately dropped:** the original ask included "cash withdrawn from machines / cash received per store reconciled against supplier payments." That is the **Funds Register**, removed 2026-06-04 (§23, hard rule #8). Dropped at user direction — not reintroduced. The cash-drawer (expected-vs-counted) theft control stays gone; theft signals in §25.10 are stock shortages, theft-tagged damages, and (CEO only) margin/expense movement.
+- **Two role lenses, one screen:**
+  - **CEO — Business Statement (cost-based):** a true P&L (Revenue − COGS − Expenses − Damages-at-cost = Net profit) plus a recorded cash-flow "statement of account" (goods received, supplier payments, refunds, crate deposits — flows, not a balanced ledger). Goods received is NOT a P&L cost (it's inventory/asset; COGS is the cost line).
+  - **Manager — Store Reconciliation (retail-valued, own store only):** sales + shortages/damages valued at **selling price** ("sellable value unaccounted"), expenses, debts, crates. No cost / COGS / margin / profit ever shown, so margin can't be back-derived. Built only from data a Manager is already entitled to.
+- CEO month-cap idea was dropped — full chip set incl. Year / To Date for both roles.
+
+**Built today:**
+- New report screen [business_statement_screen.dart](lib/features/dashboard/screens/business_statement_screen.dart). One screen, role-switched lens (CEO = cost P&L + statement of account; Manager = retail-valued Store Reconciliation, own store). Period-aggregated over the chip set (Today/Week/Month/Year/To Date). Store-scoped via the §12.1 active-store picker (`lockedStoreId`) + `selectableStoresProvider` confinement — a Manager can only ever see their assigned store(s).
+- Added a "Business Statement / Store Reconciliation" card to the Reports hub (CEO + Manager), title flips by role.
+- Damages roll-up classifies a stock adjustment as a loss by reason (`damage:<key>` from Record Damages, or free-text "Theft"/"Damage"/"Expired"/… from a Manager/CEO manual removal); excludes "Daily stock count adjustment" so a count shortage is never double-counted as a damage. Valued at **cost** for the CEO, **selling price** (retailer price) for the Manager.
+- Stock shortages read from saved stock counts (latest session per store/day), valued from each line's product id (`p` in linesJson) — cost for CEO, selling price for Manager ("sellable value unaccounted").
+- Supplier-ledger flows (CEO statement of account): goods received (invoice debits) + paid to suppliers (payment credits), skipping both halves of a voided pair (original `voidedAt` + the `void` reversal) for clean gross totals.
+
+**Files touched:**
+- reebaplus_master_plan.md (§25.2 / §25.3 / §25.10)
+- lib/features/dashboard/screens/business_statement_screen.dart (new)
+- lib/features/dashboard/screens/reports_hub_screen.dart (card + import + isCeo)
+- lib/core/database/daos.dart (InventoryDao.watchAllAdjustments)
+- lib/core/providers/stream_providers.dart (allStockAdjustmentsProvider, allSupplierLedgerEntriesProvider)
+- BUILD_LOG.md
+
+**Database changes:**
+- None. New reads only (a `select` watcher on the existing `stock_adjustments` table); reused the existing `SupplierLedgerDao.watchAllHistory`. No new tables/columns/migrations, no sync surface change.
+
+**Tested:**
+- `flutter analyze` on all changed files — clean.
+- `flutter test test/sync/` — 111 pass (no sync leak; the new DAO method is a read).
+- NOT yet verified on the emulator (next step).
+
+**Known issues / left open:**
+- The pure compute lives inside the widget (matches the existing Profit Report / reconciliation screens, which also have no unit test). A future refactor could extract it into a testable function — worthwhile given the financial/theft sensitivity.
+- "Selling price" = `products.retailerPriceKobo` (the walk-in retail price). Wholesale-tier sales valued the unsold/missing stock differently in reality; retailer price is the chosen accountability basis.
+- Statement of account is a **summary of recorded flows**, not a balanced cash ledger (no cash account since Funds Register removal, §23). It will not tie out to physical cash — by design.
+- Existing per-day reconciliation ([daily_reconciliation_detail_screen.dart](lib/features/dashboard/screens/daily_reconciliation_detail_screen.dart)) still does **not** store-filter (aggregates all stores); out of scope for this change, but a known inconsistency with §25.10's store gating.
+
+**Next session should:**
+- Verify on the emulator: log in as CEO (see P&L + statement) and as a Manager (see retail reconciliation only, own store; confirm no cost/profit leaks); switch the active-store picker and confirm scoping; check CSV export for both lenses.
+
+---
+
+## Session 130 — 2026-06-07 — Bottom nav bar no longer flickers when a dropdown / filter sheet opens
+
+**What was wrong (user report — bottom nav appears and disappears on Inventory / POS / Home):**
+- The bottom bar (Home / Stock / POS / Orders / Cart) is meant to hide only when you open a full **detail screen** inside a tab, and show on the tab's root. Its visibility was driven by `Navigator.canPop()` of the tab's nested navigator.
+- The problem: that "can pop" check counts **every** route on the tab, not just pages. Dropdown menus (the Inventory Category/Manufacturer pickers, the Home period picker), popup menus, and filter **bottom sheets** all push a transient route onto the *same* tab navigator (only `showDialog`/`showDatePicker` use the root navigator by default). So opening any of them flipped "can pop" to true and hid the bar — which then reappeared a frame later when you dismissed the overlay. That's the flicker. On Home, with the period dropdown's overlay up, the bar was simply gone.
+
+**Fix:**
+- The per-tab pop observer now counts only **page routes** (real pushed screens), not popup routes (menus, dropdowns, bottom sheets). The bar hides only when an actual detail page is on top of the tab's root, and ignores overlays — which sit *over* the bar anyway, so hiding it was never needed. No flicker.
+
+**Files touched:**
+- lib/shared/widgets/main_layout.dart (`_TabPopObserver` — track PageRoute depth instead of `navigator.canPop()`)
+
+**Database changes:**
+- None. (Pure UI/navigation fix — no schema, no sync.)
+
+**Master plan sections covered:**
+- None (bug fix, no plan change).
+
+**Tested:**
+- `flutter analyze` → 0 errors / 0 warnings (only pre-existing `avoid_print` info lints in test files).
+- Emulator smoke test still to do: open the Inventory Category/Manufacturer dropdowns and a filter sheet, and the Home period dropdown — confirm the bottom bar stays put; then push a real detail screen (tap a product) and confirm the bar hides, and returns on back.
+
+**Known issues / left open:**
+- None known. The earlier store-picker smoke test (Session 116) is still the other open manual check.
+
+---
+
+## Session 129 — 2026-06-07 — Legacy order-number collision self-heal (§30.8.1) — the real cause of the stuck "Catching up" sync
+
+**What was wrong (continued from Session 128, confirmed by the Manager's device logs):**
+- The "Catching up — 6 tables deferred" card claimed the connection was "too slow," but the logs proved otherwise: every skipped row across all 6 tables (order_items, order_crate_lines, stock_transactions, wallet_transactions, crate_ledger, payment_transactions) was FK-orphaned on the **same one missing parent order** (`019e9d13-82f5…`). Those children come from the cloud, and the cloud enforces foreign keys, so that order *does* exist in the cloud — it just can't land on this device because its order number collides with a local order under a different id (the same legacy pre-device-tag offline collision as the ORD-000050 push failure). The restore skips the colliding order, its children orphan, the pull holds the cursor and forces a full re-pull — **forever**, no matter how fast the connection. A stronger connection genuinely cannot fix it.
+
+**Built today (the self-heal the user chose) — TWO sides, because the first attempt didn't fix the device:**
+- **Pull-side heal (the one that actually fixes the stuck device).** When the cloud's authoritative order can't restore because a **local** order holds the same number under a different id, the restore now renumbers the **local blocker** (`ORD-000050` → `ORD-000050-XXXXXX`, this device's tag) and **retries the insert in the same pull** so the cloud order lands. Because orders restore *before* their children within a pull, the children then insert cleanly too — so the whole "Catching up" set clears in **one** sync, not several. Renumber, never delete (the local order is a real, different sale). This was the missing piece: the first attempt was push-only, but the blocking order had no pending upload (a pull-skip never touches the push queue, and Session 128's classification had already orphaned the upload), so the push heal never fired.
+- **Push-side heal.** When *this device's* order fails to **upload** with the order-number duplicate-key error, the local order is renumbered the same way and re-enqueued so it uploads cleanly. Complementary to the pull side (gets this device's colliding sale *into* the cloud). Per-row, idempotent.
+- Fixed the misleading "Catching up" card copy — it now says the held-back tables are *either* a slow connection *or* waiting on a record (usually an order) that hasn't arrived, and that the app heals it in the background within a sync or two.
+
+**How a stuck device recovers:** self-resolves on the next online pull — no manual Discard needed. The pull-side heal frees the number and lands the cloud order (+ children) in that one pull.
+
+**Files touched:**
+- lib/core/database/daos.dart (`OrdersDao.renumberForCollisionHeal`)
+- lib/core/services/supabase_sync_service.dart (PULL heal: `_insertResilient` gained a `healUniqueCollision` hook, orders restore passes `_healLocalOrderNumberBlocker`; PUSH heal: hook in the orders push path + `_isOrderNumberCollision` / `_resolveDeviceTag` / `_healOrderNumberCollisions`; SecureStorageService dependency)
+- lib/core/providers/app_providers.dart (inject secureStorageProvider into the sync service)
+- lib/features/sync/screens/sync_issues_screen.dart (honest "Catching up" copy)
+- reebaplus_master_plan.md (§30.8.1 — documented the legacy-collision self-heal)
+- test/sync/order_collision_heal_test.dart (DAO renumber: appends tag, re-enqueues full row, idempotent, missing-order no-op)
+- test/sync/order_collision_pull_heal_test.dart (new — end-to-end pull heal: restoring a cloud order whose number a local order holds renumbers the local blocker and lands the cloud order in the same pull; no-blocker case restores normally)
+
+**Database changes:**
+- None. (Order numbers are longer strings only; no schema/cloud change.)
+
+**Tests:** `flutter test test/sync/` → 111 pass; `flutter analyze lib` clean.
+
+**Still open / not done this session:** did not add a hard cap that *advances* the pull cursor past a permanently-unresolvable orphan (that risks dropping rows). With the self-heal the loop now converges on its own; the only case left looping would be an orphan whose parent is genuinely absent cloud-side (not a collision) — flagged for a future backstop if it ever shows up.
+
+---
+
+## Session 128 — 2026-06-07 — Stuck Sync Issues after offline→online: per-table push error classification + sessions created_at (§6.8)
+
+**What was wrong (from a Manager's Sync Issues screen after the device went offline then back online):**
+- A pile of `order_items:upsert` / `stock_transactions:upsert` rows stuck on "FK violation — Key is not present in table orders" (attempts climbing past 13), all pointing at one order. That order (`orders:upsert`, ORD-000050) was itself failing with a **duplicate-key** error — the cloud already had ORD-000050 under a different id. It was a legacy sale made on the old per-device order-number scheme (plain `ORD-000050`, no device-tag suffix — created before the §30.8.1 collision-proof fix), so two offline tills minted the same number. Because the order can never insert under its own id, its children could never satisfy their foreign key.
+- The real code bug: the **per-table upsert push path** retried *every* failure as a plain transient with uncapped backoff — so a duplicate-key (permanent) and an FK-violation (should wait a few pulls then give up) both spammed forever. The **domain-RPC push path already classified these correctly (§6.8)**; the table path was just missing the same logic.
+- Separately, `sessions:upsert` was failing with "null value in column created_at". `createSession` built its row without setting `createdAt`; the column filled locally from its SQL default, but the value never made it into the pushed payload, so the cloud's NOT NULL rejected it.
+
+**Built today:**
+- Brought the per-table upsert push path to §6.8 parity with the domain path: FK violations (23503) are now FK-deferred (long backoff, capped at 3 tries, then auto-moved to orphans for operator review); other constraint errors (duplicate key, check, etc.) are permanent and auto-orphan immediately; network/5xx stay transient. So a stuck chain like this now stops spamming on its own and shows up as orphaned items instead of retrying to infinity.
+- Fixed `createSession` to stamp `created_at` explicitly so it rides into the cloud push (same explicit-value rule we already use for ids).
+
+**Recovery for the existing stuck rows on that device:** the legacy ORD-000050 order can never sync (its number is taken in the cloud by a real, different sale), so its `orders` / `order_items` / `stock_transactions` queue rows should be **Discarded** from Sync Issues. With this fix they'd auto-orphan instead of retrying forever, but the already-stuck ones predate the fix — Discard clears them. (The "CATCHING UP — 6 tables deferred" card is not an error; it's the slow-connection deferred pull — tap Retry pull on a stronger connection.)
+
+**Files touched:**
+- lib/core/services/supabase_sync_service.dart (batched-upsert catch block now classifies 23503 / permanent / transient)
+- lib/core/database/daos.dart (`SessionsDao.createSession` sets createdAt explicitly)
+- test/sync/session_created_at_push_test.dart (new — asserts the pushed sessions payload carries created_at)
+
+**Database changes:**
+- None.
+
+**Tests:** `flutter test test/sync/` → 106 pass; `flutter analyze lib` clean.
+
+---
+
+## Session 127 — 2026-06-07 — Per-store supplier ledgers (§21.11) + fix payment-sync 42703 (stale append-only trigger after the purchase_id→shipment_id rename)
+
+**Two things this session.**
+
+### 1. Bug fix (cloud) — payment_transactions upserts failing with 42703
+
+- **Symptom:** Sync Issues showed `payment_transactions:upsert` failing 25× with `PostgrestException(42703): column "purchase_id" not found in data type payment_transactions`.
+- **Root cause:** the cloud append-only guard trigger bakes its immutable-column list into `TG_ARGV` at CREATE time (0001). Migration **0046 renamed `purchase_id → shipment_id`** on `payment_transactions` and `stock_transactions` but never recreated the triggers — so `enforce_append_only()` still tried to read `($1).purchase_id` on every `ON CONFLICT DO UPDATE` (a retry of an already-inserted row, or a void). The first INSERT of a payment succeeds (the trigger is BEFORE UPDATE), so **no payment data was lost** — only the retry loop was stuck.
+- **Fix:** cloud **0109** recreates the append_only trigger for those two tables; cloud **0110** re-derives the trigger for **all five** ledger tables from the live schema (durable — closes the whole class of rename-drift). An audit query found and fixed a second latent drift: `crate_ledger` still baked `crate_group_id` (renamed to `crate_size_group_id` in 0047) which would have broken crate voids. Post-deploy audit: **0 drifted columns**.
+- **No client change.** Stuck queue rows drain on the next retry (tap Retry now in Sync Issues).
+
+### 2. Per-store supplier ledgers (§21.11, authorized this session)
+
+Suppliers stay **business-wide** (one supplier visible in every store); each **ledger entry** is now stamped with a `store_id`. The §12.1 active-store picker filters the whole Supplier Accounts area — concrete store → that store's balances/history; **All Stores** (CEO / all-stores Manager) → business-wide aggregate (each row also shows which store recorded it). Recording stamps the active store (same `lockedStoreId ?? first-selectable` fallback as a POS sale), shown read-only as "Recording for: STORE". Voids copy the original's `store_id`.
+
+**Files touched:**
+- lib/core/database/app_database.dart — `SupplierLedgerEntries.storeId` (nullable FK→Stores); `store_id` added to its `_LedgerImmutability`; schemaVersion **46→47**; `if (from<47)` migration (guarded ADD COLUMN + drop/recreate the append-only triggers from the single `_ledgerTables` source + `(business_id, store_id, supplier_id)` index, mirrored into `_postCreateStatements`).
+- lib/core/database/daos.dart — `SupplierLedgerDao`: `_scope(storeId)` helper; optional `storeId` on getBalanceKobo/watchBalanceKobo/watchAllBalancesKobo/watchHistory/watchAllHistory; `voidEntry` copies `original.storeId`.
+- lib/shared/services/supplier_account_service.dart — `recordInvoice`/`recordPayment` accept + stamp `storeId`.
+- lib/core/providers/app_providers.dart — the 4 supplier-ledger providers watch `lockedStoreProvider` and pass `storeId`.
+- lib/core/providers/stream_providers.dart — new `activeStoreLabelProvider` (null lock → "All Stores").
+- lib/features/payments/widgets/record_supplier_activity.dart — `_resolveRecordStore` + "Recording for:" banner; pass storeId.
+- lib/features/payments/widgets/supplier_ledger_entry_tile.dart — optional `storeName` (shown in aggregate views).
+- lib/features/payments/screens/supplier_transactions_screen.dart — scope label + per-row store name on All Stores.
+- lib/features/inventory/screens/supplier_detail_screen.dart — balance-card scope label + per-row store name on All Stores.
+- lib/features/payments/screens/payments_screen.dart — "Balances for: SCOPE" caption.
+
+**Database changes:**
+- Client: schema **v47**, `supplier_ledger_entries.store_id` (nullable).
+- Cloud: **0111** `ALTER TABLE supplier_ledger_entries ADD COLUMN store_id uuid REFERENCES stores(id)` — deployed + verified. Pull snapshot picks it up via whole-row `to_jsonb` (no snapshot change).
+
+**Master plan sections covered:**
+- §21.1–21.3 captions for store scope; new **§21.11** (per-store ledger semantics). CLAUDE.md authorized-slices list updated.
+
+**Plan updates made during session:**
+- Added §21.11 and the per-store captions to §21.1–21.3; recorded the slice in CLAUDE.md.
+
+### 3. Fixed two pre-existing test failures (parallel-work drift, surfaced while validating this session)
+
+Both reproduced on committed HEAD with my changes stashed, so they predate this work; fixed now so the suite is green and the v47 migration validates end-to-end.
+
+- **`migration_upgrade_test` v28→v29 crash** (`no such column store_id` in the `crate_ledger` `TableMigration`). The committed `crate_ledger.store_id` (added v44, guarded ALTER) is on the live table object, so the v29 rebuild tried to copy a column the pre-v44 table didn't have. Fix: `TableMigration(crateLedger, newColumns: [crateLedger.storeId])` — Drift populates it NULL on rebuild; the v44 guarded ALTER then skips it. A real ≤v28→v29 upgrade-path crash, now fixed. (app_database.dart)
+- **`roles_v13_seed_test`** expected 33 seeded permissions; the catalogue legitimately has **34** (`_defaultPermissionRows`). Updated the assertion + stale header comment. (test/database/roles_v13_seed_test.dart)
+
+**Tested:**
+- `flutter analyze lib` — clean.
+- `flutter test test/database/ test/sync/` — **all 168 pass** (the full migration chain now runs `v28→v47` and `v35→v47`, validating the v47 supplier migration too).
+- Cloud 0109/0110/0111 deployed; append_only audit = 0 drift; `supplier_ledger_entries.store_id` = uuid confirmed.
+
+**Next session should:**
+- Emulator pass: record invoice/payment under store A vs "All Stores"; confirm balances split per store and aggregate; void nets the right store; second device pulls store_id.
+
+---
+
+## Session 126 — 2026-06-07 — Orders list scoped to the active store + store-scoping audit (§12.1)
+
+**Built today:**
+- The Orders list now follows the sidebar store picker, the same way Home and Inventory already do. If you've picked a store, you only see that store's orders (pending / completed / cancelled). If you're on "All Stores" (CEO / all-stores Manager only), you see every store's orders. Each order is already stamped with the store it was sold from, so this is purely a view filter — no data changed.
+- Audited every other screen to answer "what is NOT scoped to store?" Findings: the screens that *should* be store-aware already are — Home, Inventory, POS, Customers, Activity Log (§12.1) and Supplier Accounts balances/history (§21.11, shipped earlier today). Expenses is scoped by the viewer's own store by role (§20.3), by design. The only remaining cross-store views are the **Reports** (Profit, Sales detail, Daily reconciliation, Crate deposits, Customer ledger), which the master plan still lists as a **deferred Phase 2** item ("per-store report filters"). Everything else (Staff, Stores management, Roles & Permissions, the supplier records list, Subscription, Settings, Sync) is business-wide on purpose.
+
+**Files touched:**
+- lib/features/orders/screens/orders_screen.dart (filter the order list by `lockedStoreProvider`)
+- reebaplus_master_plan.md (§12.1 — added the Orders list to the screens the active-store picker drives)
+- BUILD_LOG.md
+
+**Database changes:**
+- None.
+
+**Known issues / still open:**
+- Per-store **Reports** filtering is still deferred (master plan Phase 2, §1741). Not built this session — flagged for a decision.
+
+---
+
+## Session 125 — 2026-06-07 — Supplier Accounts UI redesign (drop Payments tab, Add Supplier FAB, all-suppliers Transaction History, period dropdowns)
+
+**Built today (user-directed redesign of the §21 screens):**
+- **Supplier Accounts screen** is now a single screen — the **Suppliers list** (no tabs). The old **Payments tab** (Total-Payments card, supplier filter chips, "Add Payment" FAB) is gone.
+- The floating button is now **"Add Supplier"** (was "Add Payment"). A new **"Transaction history" link** sits at the top of the list.
+- New **Transaction History screen** — every ledger entry (invoices, payments, voids) across **all** suppliers, newest first, filtered by a **period dropdown**. Each row shows the supplier name.
+- **Supplier Details:** the "Record Activity" button moved off the balance card to a bottom **FAB**. The period selector changed from chips to a **dropdown**.
+- Pulled the ledger-row rendering into one shared widget (`SupplierLedgerEntryTile`) used by both Supplier Details and the new Transaction History screen (optionally shows the supplier name) — removed the duplicated card/icon/label code from the detail screen.
+
+**Files touched:**
+- lib/features/payments/screens/payments_screen.dart (rewritten: ConsumerWidget, no tabs, Add Supplier FAB, transaction-history link)
+- lib/features/payments/screens/supplier_transactions_screen.dart (new — all-suppliers history, period dropdown)
+- lib/features/payments/widgets/supplier_ledger_entry_tile.dart (new — shared ledger row)
+- lib/features/inventory/screens/supplier_detail_screen.dart (Record Activity → FAB; period chips → dropdown; uses shared tile)
+- lib/core/database/daos.dart (SupplierLedgerDao: + `watchAllHistory()`; removed now-unused `watchPaymentEntries()`)
+- lib/core/providers/app_providers.dart (+ `supplierAllHistoryProvider`; removed `supplierPaymentEntriesProvider`)
+
+**Database changes:**
+- None. (Pure UI/query change on the existing v42 `supplier_ledger_entries` ledger.)
+
+**Master plan sections covered:**
+- §21.1 / §21.2 / §21.3 / §21.4 — updated to the redesigned layout (single screen, Add Supplier FAB, Transaction history link, Record Activity FAB, period dropdowns).
+
+**Plan updates made during session:**
+- Rewrote §21.1 ("Layout" → single Suppliers screen, Transaction history link, Add Supplier FAB), §21.2 (Suppliers list), §21.3 (period dropdown + Record Activity FAB), and the §21.4 lead-in (removed the "Payments tab floating button" reference).
+
+**Tested:**
+- `flutter analyze lib` — clean (no issues).
+- `flutter test test/sync/` — all 105 pass (touched daos.dart; read-only query change, no sync-contract impact).
+- On-device emulator pass pending user verification.
+
+**Known issues / left open:**
+- Cloud migration 0102 (the v42 ledger schema) still **DEFERRED** — deploy 0101 (user's parallel subscription migration) then 0102 via `supabase db push` before a v42 build reaches any device. Unchanged by this UI pass.
+
+**Next session should:**
+- User to confirm on the emulator: Suppliers list + Transaction history link + Add Supplier FAB; supplier detail Record Activity FAB and period dropdown.
+
+---
+
+## Session 124 — 2026-06-07 — POS "pick a store" gate for every multi-store user (§12.1)
+
+**Built today:**
+- Strengthened the §12.1 active-store gate. Before, opening **POS** would silently sell from a default store: an all-stores viewer on **"All Stores"** sold from their *first* store, and a confined staff member assigned to several stores was silently pinned by MainLayout to their *first* store. Now POS blocks selling and shows a clear prompt — "Select a store to start selling" with a **Choose Store** button — for **any user with more than one store** until they explicitly pick the store they're selling from.
+- The Choose Store button opens the same store picker bottom sheet used by the nav drawer. Picking a store sets the **global active store**, so the choice is also reflected on the sidebar picker immediately, and the gate resolves to the normal POS for that store.
+- The key was distinguishing a deliberate pick from a silent default. Added a `storeExplicitlyChosen` flag on `NavigationService`: a user pick of a concrete store sets it true; picking "All Stores" or MainLayout's silent confined-user default (now `setLockedStore(..., explicit: false)`) leaves it false; logout/login reset it. POS gates whenever there are >1 stores and the flag is false. This keeps MainLayout's concrete default (so Inventory/Home etc. stay correctly store-scoped for confined users) while still forcing an explicit POS pick.
+- Single-store users are never gated. Stock keeper / no-`sales.make` users still hit the existing access gate first.
+- Refactored the store picker bottom sheet out of `app_drawer.dart` into a shared `showStorePickerSheet(...)` helper so the drawer and the new POS gate use one implementation (no duplication). Drawer behaviour is unchanged.
+
+**Files touched:**
+- lib/shared/widgets/store_picker_sheet.dart (new — shared bottom sheet helper)
+- lib/shared/widgets/app_drawer.dart (delegate to the shared helper; removed the private copy)
+- lib/features/pos/screens/pos_home_screen.dart (gate + `_buildStoreGate`)
+- lib/shared/services/navigation_service.dart (new `storeExplicitlyChosen` flag; `setLockedStore` explicit param; reset in clear/apply)
+- lib/core/providers/app_providers.dart (new `storeExplicitlyChosenProvider`)
+- lib/shared/widgets/main_layout.dart (auto-pick now passes `explicit: false`)
+- test/pos/store_selection_gate_test.dart (new — unit test for the flag logic)
+
+**Database changes:**
+- None.
+
+**Master plan sections covered:**
+- §12.1 — active-store POS picker / "pick your store" gate (already authorized).
+
+**Plan updates made during session:**
+- None. This is within the already-authorized §12.1 slice (in-app "pick your store" gate).
+
+**Tested:**
+- `flutter analyze lib` — clean (no issues).
+- `flutter test test/pos/` — store_selection_gate_test (7) + selectable_stores_test (5) pass. On-device emulator pass pending user verification.
+
+**Known issues / left open:**
+- The gate covers the POS selling surface. Checkout keeps its own pre-existing "All Stores" fallback as a backstop (e.g. a cart populated under a store, then sidebar switched back to All Stores and the Cart tab opened directly) — unchanged, out of scope here.
+- Brief cold-start flash: while a confined user's store assignments are still loading, `selectableStoresProvider` returns all stores, so the gate can flash for a single-store user until assignments resolve. Transient and harmless (mirrors the pre-existing "returns all while loading" behaviour).
+
+**Next session should:**
+- User to confirm on the emulator: (a) all-stores viewer → All Stores → POS prompts; (b) staff assigned to ≥2 stores → POS prompts on entry; (c) picking a store updates the sidebar and loads that store; (d) single-store staff are never prompted.
+
+---
+
 ## Session 123 — 2026-06-07 — Modal keyboard double-inset: finish the sweep (deviceBottomInset → deviceBottomPadding everywhere) + invert the rule; the modal "glitch" was debug-only
 
 **Built today:**

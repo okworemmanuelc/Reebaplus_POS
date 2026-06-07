@@ -100,4 +100,53 @@ void main() {
       expect(scrubbed['selling_price_kobo'], 1000);
     });
   });
+
+  // The append-only ledgers whose void path re-pushes the FULL row
+  // (payment/wallet/supplier-ledger) must never carry `created_at`: the cloud
+  // owns it (DEFAULT now()) and Drift truncates the local value to whole
+  // seconds, so a re-push can't match the stored value and the BEFORE UPDATE
+  // append-only trigger rejects it (P0001 → the row orphans). Dropping it on
+  // every push keeps voids legal and a mixed insert/void batch homogeneous.
+  group('append-only ledger created_at scrub', () {
+    for (final table in const [
+      'payment_transactions',
+      'wallet_transactions',
+      'supplier_ledger_entries',
+    ]) {
+      test('$table: created_at dropped, all other columns survive', () {
+        final scrubbed = SupabaseSyncService.scrubForTesting(table, {
+          'id': 'led-1',
+          'business_id': 'biz',
+          'amount_kobo': 5830000,
+          'created_at': '2026-06-07T20:23:10.123456Z',
+          // void columns are the only legitimate change on these tables
+          'voided_at': '2026-06-07T20:25:00.000000Z',
+          'voided_by': 'u1',
+          'void_reason': 'order_cancelled',
+          'last_updated_at': '2026-06-07T20:25:00.000000Z',
+        });
+        expect(scrubbed.containsKey('created_at'), isFalse,
+            reason: 'created_at is immutable on cloud; re-push would orphan');
+        // Everything else — keys, amount, and the mutable void columns — rides.
+        expect(scrubbed['id'], 'led-1');
+        expect(scrubbed['amount_kobo'], 5830000);
+        expect(scrubbed['voided_at'], '2026-06-07T20:25:00.000000Z');
+        expect(scrubbed['voided_by'], 'u1');
+        expect(scrubbed['void_reason'], 'order_cancelled');
+        expect(scrubbed['last_updated_at'], '2026-06-07T20:25:00.000000Z');
+      });
+    }
+
+    test('stock_transactions: created_at NOT scrubbed (append-only, never '
+        'full-row re-pushed → keeps event-time on cloud)', () {
+      final scrubbed = SupabaseSyncService.scrubForTesting('stock_transactions', {
+        'id': 'st-1',
+        'business_id': 'biz',
+        'created_at': '2026-06-07T20:23:10.123456Z',
+      });
+      expect(scrubbed['created_at'], '2026-06-07T20:23:10.123456Z',
+          reason: 'stock voids append compensating rows, never re-push the '
+              'original, so created_at is safe and intentionally preserved');
+    });
+  });
 }

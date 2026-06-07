@@ -296,6 +296,7 @@ class _RecordInvoiceSheetState extends ConsumerState<RecordInvoiceSheet>
             amountKobo: amountKobo,
             dateReceived: _dateReceived,
             staffId: staffId,
+            storeId: _resolveRecordStore(ref).id,
             note: _noteCtrl.text,
           );
       if (mounted) Navigator.pop(context);
@@ -365,6 +366,9 @@ class _RecordInvoiceSheetState extends ConsumerState<RecordInvoiceSheet>
                           vertical: context.getRSize(10),
                         ),
                         children: [
+                          _recordStoreBanner(
+                              context, _resolveRecordStore(ref).label),
+                          SizedBox(height: context.getRSize(16)),
                           AppInput(
                             labelText: 'Invoice Amount',
                             controller: _amountCtrl,
@@ -518,6 +522,7 @@ class _RecordPaymentSheetState extends ConsumerState<RecordPaymentSheet>
             method: _method,
             paidOn: _paidOn,
             staffId: staffId,
+            storeId: _resolveRecordStore(ref).id,
             receiptPath: _receipt?.path,
             referenceNote: _refCtrl.text,
           );
@@ -589,6 +594,9 @@ class _RecordPaymentSheetState extends ConsumerState<RecordPaymentSheet>
                           vertical: context.getRSize(10),
                         ),
                         children: [
+                          _recordStoreBanner(
+                              context, _resolveRecordStore(ref).label),
+                          SizedBox(height: context.getRSize(16)),
                           if (widget.supplierId == null) ...[
                             AppDropdown<String>(
                               labelText: 'Supplier',
@@ -767,6 +775,78 @@ class _RecordPaymentSheetState extends ConsumerState<RecordPaymentSheet>
       ],
     );
   }
+}
+
+/// §21.11 — the store a Record Activity write is stamped against: the locked
+/// active store, else the user's first selectable store (same fallback as a POS
+/// sale, checkout_page.dart). `label` is its display name for the banner.
+({String? id, String label}) _resolveRecordStore(WidgetRef ref) {
+  final locked = ref.read(lockedStoreProvider).value;
+  final selectable = ref.read(selectableStoresProvider);
+  final id = locked ??
+      (selectable.isNotEmpty
+          ? selectable.first.id
+          : ref.read(authProvider).currentUser?.storeId);
+  if (id == null) return (id: null, label: 'No store');
+  for (final s in selectable) {
+    if (s.id == id) return (id: id, label: s.name);
+  }
+  final all = ref.read(allStoresProvider).valueOrNull ?? const <StoreData>[];
+  for (final s in all) {
+    if (s.id == id) return (id: id, label: s.name);
+  }
+  return (id: id, label: 'Store');
+}
+
+/// Read-only "Recording for: <store>" banner shown in the Record Activity sheets
+/// (§21.11) so the target store is explicit. Switch stores via the menu picker.
+Widget _recordStoreBanner(BuildContext context, String label) {
+  final subtext = Theme.of(context).textTheme.bodySmall?.color ??
+      Theme.of(context).iconTheme.color!;
+  final border = Theme.of(context).dividerColor;
+  final primary = Theme.of(context).colorScheme.primary;
+  return Container(
+    padding: EdgeInsets.symmetric(
+      horizontal: context.getRSize(12),
+      vertical: context.getRSize(10),
+    ),
+    decoration: BoxDecoration(
+      color: primary.withValues(alpha: 0.06),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: border),
+    ),
+    child: Row(
+      children: [
+        Icon(FontAwesomeIcons.store, size: context.getRSize(13), color: primary),
+        SizedBox(width: context.getRSize(8)),
+        Expanded(
+          child: Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: 'Recording for: ',
+                  style: TextStyle(
+                    color: subtext,
+                    fontSize: context.getRFontSize(12),
+                  ),
+                ),
+                TextSpan(
+                  text: label,
+                  style: TextStyle(
+                    color: primary,
+                    fontSize: context.getRFontSize(12),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 Widget _formHeader(

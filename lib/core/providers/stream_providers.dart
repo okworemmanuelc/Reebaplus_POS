@@ -49,17 +49,28 @@ final pendingExpensesCountProvider = StreamProvider<int>((ref) {
   return ref.watch(databaseProvider).expensesDao.watchPendingCount();
 });
 
-/// Expenses visible to the current viewer (§20.3): a CEO sees all stores; every
-/// other role is scoped to their own store. Mirrors the Home store lock (§11.2)
-/// — the Expenses screen must NOT show one store's costs to another store's
-/// Manager, and the budget bar's spend must use the same scope as its goal.
+/// The store the Expenses screen is scoped to (§20.8): the active-store picker
+/// (§12.1) drives it for everyone, exactly like Home / Inventory / POS / Supplier
+/// Accounts. An all-stores viewer (CEO / all-stores Manager) follows the locked
+/// store — `null` means "All Stores" (the business-wide aggregate). A confined
+/// viewer is always pinned to their active store (locked, else their first
+/// selectable store) so they never see another store's costs.
+final expenseScopeStoreIdProvider = Provider.autoDispose<String?>((ref) {
+  final locked = ref.watch(lockedStoreProvider).value;
+  if (ref.watch(canViewAllStoresProvider)) return locked; // null = All Stores
+  return locked ?? ref.watch(activeWriteStoreProvider).id;
+});
+
+/// Expenses visible in the current scope (§20.8): the active store's expenses, or
+/// the business-wide aggregate under "All Stores". Replaces the old role-based
+/// "CEO: all / Manager: own store" confinement — the scope now follows the
+/// §12.1 picker. The budget bar's spend uses the same scope as its goal.
 final viewerScopedExpensesProvider =
     Provider<List<ExpenseWithCategory>>((ref) {
   final all = ref.watch(allExpensesProvider).valueOrNull ?? const [];
-  final role = ref.watch(currentUserRoleProvider);
-  if (role?.slug == 'ceo') return all;
-  final storeId = ref.watch(authProvider).currentUser?.storeId;
-  return all.where((e) => e.expense.storeId == storeId).toList();
+  final scopeStoreId = ref.watch(expenseScopeStoreIdProvider);
+  if (scopeStoreId == null) return all; // All Stores aggregate
+  return all.where((e) => e.expense.storeId == scopeStoreId).toList();
 });
 
 /// All live monthly budget goals for the business (§20.1/§20.3). The
@@ -762,6 +773,44 @@ final selectableStoresProvider = Provider<List<StoreData>>((ref) {
   return selectableStoresFor(all, assigned.map((s) => s.storeId).toSet());
 });
 
+/// Display label for the active-store scope (§21.11 supplier accounts and any
+/// other screen that wants to caption the current scope): the locked store's
+/// name, or "All Stores" when nothing is locked.
+final activeStoreLabelProvider = Provider.autoDispose<String>((ref) {
+  final id = ref.watch(lockedStoreProvider).value;
+  if (id == null) return 'All Stores';
+  final stores = ref.watch(allStoresProvider).valueOrNull ?? const <StoreData>[];
+  for (final s in stores) {
+    if (s.id == id) return s.name;
+  }
+  return 'Store';
+});
+
+/// The store a NEW write (an expense §20.8, a supplier activity §21.11, …) is
+/// stamped against: the locked active store, else the user's first selectable
+/// store, else their home store. `label` is its display name for a
+/// "Recording for: <store>" banner. Unlike [activeStoreLabelProvider] this never
+/// returns "All Stores" — a write always lands on one concrete store, the same
+/// fallback a POS sale uses (checkout_page.dart).
+final activeWriteStoreProvider =
+    Provider.autoDispose<({String? id, String label})>((ref) {
+  final locked = ref.watch(lockedStoreProvider).value;
+  final selectable = ref.watch(selectableStoresProvider);
+  final id = locked ??
+      (selectable.isNotEmpty
+          ? selectable.first.id
+          : ref.watch(authProvider).currentUser?.storeId);
+  if (id == null) return (id: null, label: 'No store');
+  for (final s in selectable) {
+    if (s.id == id) return (id: id, label: s.name);
+  }
+  final all = ref.watch(allStoresProvider).valueOrNull ?? const <StoreData>[];
+  for (final s in all) {
+    if (s.id == id) return (id: id, label: s.name);
+  }
+  return (id: id, label: 'Store');
+});
+
 // ── Business-day & reconciliation helpers ────────────────────────────────────
 
 /// Today's business-day calendar date (`YYYY-MM-DD`) in the business timezone.
@@ -823,4 +872,22 @@ final storeCrateBalancesProvider =
 /// without a manual refresh (§5).
 final allStockCountsProvider = StreamProvider<List<StockCountData>>((ref) {
   return ref.watch(databaseProvider).stockCountsDao.watchAllForBusiness();
+});
+
+/// Every applied stock adjustment for the business (newest first). Used by the
+/// §25.10 Business Statement / Store Reconciliation to value damages
+/// (`reason` `damage:<key>`, §17.2): at cost for the CEO P&L, at selling price
+/// for the Manager reconciliation.
+final allStockAdjustmentsProvider =
+    StreamProvider<List<StockAdjustmentData>>((ref) {
+  return ref.watch(databaseProvider).inventoryDao.watchAllAdjustments();
+});
+
+/// Every supplier-ledger entry across all suppliers (business-wide, newest
+/// first). Used by the §25.10 CEO statement of account for goods received
+/// (invoice debits) and supplier payments (payment credits). Store scoping is
+/// applied in the report from each entry's `storeId` (§21.11).
+final allSupplierLedgerEntriesProvider =
+    StreamProvider<List<SupplierLedgerEntryData>>((ref) {
+  return ref.watch(databaseProvider).supplierLedgerDao.watchAllHistory();
 });

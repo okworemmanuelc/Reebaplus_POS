@@ -514,6 +514,17 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
     with _$InventoryDaoMixin, BusinessScopedDao<AppDatabase> {
   InventoryDao(super.db);
 
+  /// Every applied stock adjustment for the business, newest first. Drives the
+  /// §25.10 Business Statement / Store Reconciliation damages roll-up — damages
+  /// are the adjustments whose `reason` is tagged `damage:<key>` (§17.2) with a
+  /// negative `quantityDiff`. Business-scoped.
+  Stream<List<StockAdjustmentData>> watchAllAdjustments() {
+    return (select(stockAdjustments)
+          ..where((t) => whereBusiness(t))
+          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+        .watch();
+  }
+
   Stream<List<ManufacturerData>> watchAllManufacturers() {
     return (select(manufacturers)
           ..where((t) => whereBusiness(t) & t.isDeleted.not())
@@ -1936,6 +1947,39 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
             .map((row) => row.read(orders.id.count()) ?? 0)
             .getSingle();
     return formatOrderNumber(count, deviceTag);
+  }
+
+  /// Heals a legacy order-number collision (§30.8.1). A pre-device-tag offline
+  /// order can carry a number the cloud already holds under a different id; its
+  /// upload then fails with the `(business_id, order_number)` duplicate-key
+  /// error AND, because the local copy still occupies that number, the cloud's
+  /// colliding order can never restore here (its children FK-orphan every pull).
+  /// Appending THIS device's [deviceTag] turns the number into the standard
+  /// `ORD-NNNNNN-XXXXXX` form, unique to this device, and re-enqueues it: the
+  /// renumbered order uploads cleanly and the freed number lets the cloud's
+  /// order land on the next pull. Both sales survive. Returns the new number, or
+  /// null if the order is gone or already carries this device's tag (idempotent).
+  Future<String?> renumberForCollisionHeal(
+      String orderId, String deviceTag) async {
+    final order = await (select(orders)
+          ..where((t) => t.id.equals(orderId) & whereBusiness(t)))
+        .getSingleOrNull();
+    if (order == null) return null;
+    // Idempotency: don't double-append if a prior heal already tagged it.
+    if (order.orderNumber.endsWith('-$deviceTag')) return null;
+    final newNumber = '${order.orderNumber}-$deviceTag';
+    await (update(orders)
+          ..where((t) => t.id.equals(orderId) & whereBusiness(t)))
+        .write(OrdersCompanion(
+      orderNumber: Value(newNumber),
+      lastUpdatedAt: Value(DateTime.now()),
+    ));
+    // Re-enqueue a FULL row so the cloud upsert carries every NOT NULL column.
+    final updated = await (select(orders)
+          ..where((t) => t.id.equals(orderId) & whereBusiness(t)))
+        .getSingle();
+    await db.syncDao.enqueueUpsert('orders', updated.toCompanion(true));
+    return newNumber;
   }
 
   // ── Timezone-aware analytics ───────────────────────────────────────────────
@@ -5627,15 +5671,21 @@ class SessionsDao extends DatabaseAccessor<AppDatabase>
   }) async {
     final businessId = requireBusinessId();
     final id = UuidV7.generate();
+    final now = DateTime.now();
+    // createdAt is set explicitly (not left to the column's SQL default) so the
+    // enqueued companion carries it into the cloud push. Otherwise the pushed
+    // payload omits created_at and the cloud's NOT NULL constraint rejects the
+    // upsert (23502). Same explicit-value rule as the id in synced writes.
     final row = SessionsCompanion.insert(
       id: Value(id),
       businessId: businessId,
       userId: userId,
-      expiresAt: DateTime.now().add(ttl),
+      expiresAt: now.add(ttl),
       userAgent: Value(userAgent),
       ipAddress: Value(ipAddress),
       deviceId: Value(deviceId),
-      lastUpdatedAt: Value(DateTime.now()),
+      createdAt: Value(now),
+      lastUpdatedAt: Value(now),
     );
     await into(sessions).insert(row);
     await db.syncDao.enqueueUpsert('sessions', row);
@@ -6035,39 +6085,49 @@ class SupplierLedgerDao extends DatabaseAccessor<AppDatabase>
     with _$SupplierLedgerDaoMixin, BusinessScopedDao<AppDatabase> {
   SupplierLedgerDao(super.db);
 
+  /// §21.11 — when [storeId] is non-null, scope to that store's entries; null =
+  /// business-wide ("All Stores" aggregate).
+  Expression<bool> _scope(String? storeId) {
+    final base = whereBusiness(supplierLedgerEntries);
+    return storeId == null
+        ? base
+        : base & supplierLedgerEntries.storeId.equals(storeId);
+  }
+
   /// Current balance (kobo). SUM(signed): payments (credit, +) minus invoices
   /// (debit, −). Negative = we owe the supplier. Like the wallet, we don't filter
-  /// voidedAt — a void appends an opposite-sign compensating entry.
-  Future<int> getBalanceKobo(String supplierId) async {
+  /// voidedAt — a void appends an opposite-sign compensating entry. [storeId]
+  /// scopes to one store (§21.11); null = business-wide.
+  Future<int> getBalanceKobo(String supplierId, {String? storeId}) async {
     final sumExpr = supplierLedgerEntries.signedAmountKobo.sum();
     final query = selectOnly(supplierLedgerEntries)
       ..addColumns([sumExpr])
       ..where(
-        whereBusiness(supplierLedgerEntries) &
+        _scope(storeId) &
             supplierLedgerEntries.supplierId.equals(supplierId),
       );
     final row = await query.getSingleOrNull();
     return row?.read(sumExpr) ?? 0;
   }
 
-  Stream<int> watchBalanceKobo(String supplierId) {
+  Stream<int> watchBalanceKobo(String supplierId, {String? storeId}) {
     final sumExpr = supplierLedgerEntries.signedAmountKobo.sum();
     final query = selectOnly(supplierLedgerEntries)
       ..addColumns([sumExpr])
       ..where(
-        whereBusiness(supplierLedgerEntries) &
+        _scope(storeId) &
             supplierLedgerEntries.supplierId.equals(supplierId),
       );
     return query.watchSingleOrNull().map((row) => row?.read(sumExpr) ?? 0);
   }
 
   /// supplierId → balance (kobo), for the Suppliers list. Drives the live
-  /// red/negative balance chip per supplier.
-  Stream<Map<String, int>> watchAllBalancesKobo() {
+  /// red/negative balance chip per supplier. [storeId] scopes per store (§21.11).
+  Stream<Map<String, int>> watchAllBalancesKobo({String? storeId}) {
     final sumExpr = supplierLedgerEntries.signedAmountKobo.sum();
     final query = selectOnly(supplierLedgerEntries)
       ..addColumns([supplierLedgerEntries.supplierId, sumExpr])
-      ..where(whereBusiness(supplierLedgerEntries))
+      ..where(_scope(storeId))
       ..groupBy([supplierLedgerEntries.supplierId]);
     return query.watch().map((rows) {
       final out = <String, int>{};
@@ -6080,31 +6140,32 @@ class SupplierLedgerDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
-  /// Every payment entry across all suppliers, newest first — drives the
-  /// Supplier Accounts "Payments" tab. Excludes invoices and voids.
-  Stream<List<SupplierLedgerEntryData>> watchPaymentEntries() {
+  /// Ledger history for one supplier, newest first. Same deterministic tiebreak
+  /// as the wallet: createdAt DESC, then signedAmountKobo ASC (invoice debit
+  /// above payment credit when posted the same second). [storeId] scopes per
+  /// store (§21.11); null = business-wide.
+  Stream<List<SupplierLedgerEntryData>> watchHistory(String supplierId,
+      {String? storeId}) {
     return (select(supplierLedgerEntries)
           ..where((t) =>
-              whereBusiness(t) &
-              t.referenceType.isIn(const [
-                'payment_cash',
-                'payment_transfer',
-                'payment_pos',
-                'payment_other',
-              ]))
+              _scope(storeId) & t.supplierId.equals(supplierId))
           ..orderBy([
             (t) =>
                 OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc),
+            (t) => OrderingTerm(
+                  expression: t.signedAmountKobo,
+                  mode: OrderingMode.asc,
+                ),
           ]))
         .watch();
   }
 
-  /// Ledger history for one supplier, newest first. Same deterministic tiebreak
-  /// as the wallet: createdAt DESC, then signedAmountKobo ASC (invoice debit
-  /// above payment credit when posted the same second).
-  Stream<List<SupplierLedgerEntryData>> watchHistory(String supplierId) {
+  /// Every ledger entry across all suppliers, newest first — drives the
+  /// "Transaction history" screen. Same deterministic tiebreak as watchHistory.
+  /// [storeId] scopes per store (§21.11); null = business-wide.
+  Stream<List<SupplierLedgerEntryData>> watchAllHistory({String? storeId}) {
     return (select(supplierLedgerEntries)
-          ..where((t) => whereBusiness(t) & t.supplierId.equals(supplierId))
+          ..where((t) => _scope(storeId))
           ..orderBy([
             (t) =>
                 OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc),
@@ -6147,6 +6208,8 @@ class SupplierLedgerDao extends DatabaseAccessor<AppDatabase>
         id: Value(compId),
         businessId: requireBusinessId(),
         supplierId: original.supplierId,
+        // §21.11 — net the same store the original was recorded against.
+        storeId: Value(original.storeId),
         type: original.type == 'credit' ? 'debit' : 'credit',
         amountKobo: original.amountKobo,
         signedAmountKobo: -original.signedAmountKobo,

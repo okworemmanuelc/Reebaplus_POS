@@ -131,13 +131,25 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
       appBar: _buildAppBar(context),
       body: Builder(
         builder: (context) {
-          // §20.3 — store-scoped to the viewer (CEO: all stores; others: own).
+          // §20.8 — scoped to the active store (picker); "All Stores" = aggregate.
           final allExpenses = ref.watch(viewerScopedExpensesProvider);
           final categoryNames =
               ref.watch(expenseCategoryNamesProvider).valueOrNull ??
                   const <String, String>{};
           final users = ref.watch(usersByBusinessProvider).valueOrNull ??
               const <String, UserData>{};
+
+          // §20.8 — active-store scope: caption it (when the picker is in play)
+          // and, under "All Stores", show which store recorded each expense.
+          final scopeStoreId = ref.watch(expenseScopeStoreIdProvider);
+          final stores =
+              ref.watch(allStoresProvider).valueOrNull ?? const <StoreData>[];
+          final storeNameById = {for (final s in stores) s.id: s.name};
+          final showScope = ref.watch(selectableStoresProvider).length > 1;
+          final scopeLabel = scopeStoreId == null
+              ? 'All Stores'
+              : (storeNameById[scopeStoreId] ?? 'Store');
+          final showRowStore = scopeStoreId == null && stores.length > 1;
 
           // Approved expenses inside the selected period (the headline total).
           final periodApproved = allExpenses
@@ -170,6 +182,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
                 approvedTotalKobo: approvedTotal,
                 budgetSpentKobo: budgetSpentKobo,
                 budgetPendingKobo: budgetPendingKobo,
+                scopeLabel: showScope ? scopeLabel : null,
               ),
               Expanded(
                 child: TabBarView(
@@ -180,6 +193,8 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
                       allExpenses: allExpenses,
                       categoryNames: categoryNames,
                       users: users,
+                      storeNameById: storeNameById,
+                      showRowStore: showRowStore,
                     ),
                     _buildStatsTab(
                       context,
@@ -336,6 +351,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     required int approvedTotalKobo,
     required int budgetSpentKobo,
     required int budgetPendingKobo,
+    String? scopeLabel,
   }) {
     return Container(
       color: _surface,
@@ -370,6 +386,27 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
                         letterSpacing: -0.5,
                       ),
                     ),
+                    // §20.8 — active-store scope caption (only when the picker
+                    // is in play, i.e. more than one selectable store).
+                    if (scopeLabel != null) ...[
+                      SizedBox(height: context.getRSize(4)),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(FontAwesomeIcons.store,
+                              size: context.getRSize(10), color: _subtext),
+                          SizedBox(width: context.getRSize(5)),
+                          Text(
+                            scopeLabel,
+                            style: TextStyle(
+                              color: _subtext,
+                              fontSize: context.getRFontSize(11),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
                 AppDropdown<String>(
@@ -406,9 +443,10 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     required int pendingKobo,
   }) {
     final isCeo = ref.watch(currentUserRoleProvider)?.slug == 'ceo';
-    final currentUser = ref.read(authProvider).currentUser;
     final budgets = ref.watch(expenseBudgetsProvider).valueOrNull ?? const [];
-    final scopeStoreId = isCeo ? null : currentUser?.storeId;
+    // §20.8 — the goal follows the active store (null = business-wide under
+    // "All Stores"), matching the list/spend scope above it.
+    final scopeStoreId = ref.watch(expenseScopeStoreIdProvider);
     final goalKobo = resolveMonthlyBudgetKobo(budgets, scopeStoreId);
 
     return Container(
@@ -680,6 +718,8 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     required List<ExpenseWithCategory> allExpenses,
     required Map<String, String> categoryNames,
     required Map<String, UserData> users,
+    required Map<String, String> storeNameById,
+    required bool showRowStore,
   }) {
     final canApprove = hasPermission(ref, 'expenses.approve');
     final pending = canApprove
@@ -712,7 +752,8 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
         ),
         children: [
           if (pending.isNotEmpty)
-            _buildPendingApprovals(context, pending, categoryNames, users),
+            _buildPendingApprovals(context, pending, categoryNames, users,
+                storeNameById, showRowStore),
           ...sortedCategories.expand((cat) {
             final catList = grouped[cat]!
               ..sort(
@@ -754,7 +795,9 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
                 ),
               ),
               ...catList.map((e) => _buildExpenseCard(context, e, categoryNames,
-                  users, withMenu: true)),
+                  users,
+                  withMenu: true,
+                  storeName: showRowStore ? _storeLabel(e, storeNameById) : null)),
             ];
           }),
         ],
@@ -790,6 +833,14 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     return 'Uncategorized';
   }
 
+  /// §20.8 — the store that recorded an expense, for the "All Stores" aggregate.
+  /// Legacy rows with no `store_id` show as "Unassigned".
+  String _storeLabel(ExpenseWithCategory e, Map<String, String> storeNameById) {
+    final id = e.expense.storeId;
+    if (id == null) return 'Unassigned';
+    return storeNameById[id] ?? 'Store';
+  }
+
   // ─────────────────────── PENDING APPROVALS (§20.4) ─────────────────────────
 
   Widget _buildPendingApprovals(
@@ -797,6 +848,8 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     List<ExpenseWithCategory> pending,
     Map<String, String> categoryNames,
     Map<String, UserData> users,
+    Map<String, String> storeNameById,
+    bool showRowStore,
   ) {
     return Container(
       margin: EdgeInsets.fromLTRB(
@@ -833,7 +886,13 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
             ],
           ),
           SizedBox(height: context.getRSize(10)),
-          ...pending.map((e) => _buildPendingRow(context, e, categoryNames, users)),
+          ...pending.map((e) => _buildPendingRow(
+                context,
+                e,
+                categoryNames,
+                users,
+                showRowStore ? _storeLabel(e, storeNameById) : null,
+              )),
         ],
       ),
     );
@@ -844,6 +903,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     ExpenseWithCategory e,
     Map<String, String> categoryNames,
     Map<String, UserData> users,
+    String? storeName,
   ) {
     final exp = e.expense;
     final cat = _categoryName(e, categoryNames);
@@ -886,7 +946,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
           ),
           SizedBox(height: context.getRSize(4)),
           Text(
-            '$cat · by $by',
+            storeName == null ? '$cat · by $by' : '$cat · by $by · $storeName',
             style: TextStyle(
               color: _subtext,
               fontSize: context.getRFontSize(12),
@@ -1154,12 +1214,14 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     Map<String, String> categoryNames,
     Map<String, UserData> users, {
     bool withMenu = false,
+    String? storeName,
   }) {
     final exp = e.expense;
     return _ExpenseCard(
       exp: exp,
       categoryName: _categoryName(e, categoryNames),
       recordedByName: _recordedByName(exp.recordedBy, users),
+      storeName: storeName,
       trailing: withMenu ? _buildCardMenu(exp) : null,
     );
   }
@@ -1309,13 +1371,11 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     );
   }
 
-  /// "This month vs budget" card (§20.3) — shown only when a monthly goal is
-  /// set for the current scope. Compares approved this-month spend to the goal.
+  /// "This month vs budget" card (§20.8) — shown only when a monthly goal is
+  /// set for the active-store scope. Compares approved this-month spend to the goal.
   Widget _buildBudgetComparisonCard(BuildContext context) {
-    final isCeo = ref.watch(currentUserRoleProvider)?.slug == 'ceo';
-    final currentUser = ref.read(authProvider).currentUser;
     final budgets = ref.watch(expenseBudgetsProvider).valueOrNull ?? const [];
-    final scopeStoreId = isCeo ? null : currentUser?.storeId;
+    final scopeStoreId = ref.watch(expenseScopeStoreIdProvider);
     final goalKobo = resolveMonthlyBudgetKobo(budgets, scopeStoreId);
     if (goalKobo == null || goalKobo == 0) return const SizedBox.shrink();
 
@@ -1544,12 +1604,16 @@ class _ExpenseCard extends StatelessWidget {
   final ExpenseData exp;
   final String categoryName;
   final String recordedByName;
+  /// §20.8 — when set (an "All Stores" aggregate view), the store that recorded
+  /// the expense is shown on the card. Null in a single-store-scoped view.
+  final String? storeName;
   final Widget? trailing;
 
   const _ExpenseCard({
     required this.exp,
     required this.categoryName,
     required this.recordedByName,
+    this.storeName,
     this.trailing,
   });
 
@@ -1721,6 +1785,28 @@ class _ExpenseCard extends StatelessWidget {
                           ],
                         ],
                       ),
+                      // §20.8 — store that recorded this expense ("All Stores").
+                      if (storeName != null) ...[
+                        SizedBox(height: context.getRSize(6)),
+                        Row(
+                          children: [
+                            Icon(FontAwesomeIcons.store,
+                                size: context.getRSize(10), color: subtextCol),
+                            SizedBox(width: context.getRSize(4)),
+                            Expanded(
+                              child: Text(
+                                storeName!,
+                                style: TextStyle(
+                                  color: subtextCol,
+                                  fontSize: context.getRFontSize(12),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),

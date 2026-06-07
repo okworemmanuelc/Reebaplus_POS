@@ -172,7 +172,9 @@ class _MainLayoutState extends ConsumerState<MainLayout>
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           if (nav.lockedStoreId.value == target) return;
-          nav.setLockedStore(target);
+          // explicit: false — this is the silent default, not a user pick, so the
+          // POS gate still prompts a multi-store confined user to choose (§12.1).
+          nav.setLockedStore(target, explicit: false);
         });
       }
     }
@@ -348,33 +350,65 @@ class _TabPopObserver extends NavigatorObserver {
   final int tabIndex;
   final NavigationService nav;
 
+  // Count of full-page routes (PageRoute) on this tab's stack, root included.
+  // The bottom nav bar hides only when a *detail page* is pushed (depth > 1).
+  //
+  // We must NOT count popup routes — dropdown menus, popup menus, and modal
+  // bottom sheets all push onto this tab's Navigator by default (only
+  // showDialog/showDatePicker default to the root navigator), and they are
+  // PopupRoutes, not PageRoutes. Querying navigator.canPop() (the old approach)
+  // counted them too, so the bar flickered away every time a filter dropdown or
+  // sheet opened on a root tab (Inventory / POS / Home) and reappeared a frame
+  // later on dismiss. A popup overlays the bar anyway — its presence underneath
+  // is harmless and correct, so it must never toggle visibility.
+  int _pageDepth = 0;
+
   void _sync() {
+    final canPop = _pageDepth > 1;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      nav.setTabCanPop(tabIndex, navigator?.canPop() ?? false);
+      nav.setTabCanPop(tabIndex, canPop);
     });
   }
 
   @override
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
     super.didPush(route, previousRoute);
-    _sync();
+    if (route is PageRoute) {
+      _pageDepth++;
+      _sync();
+    }
   }
 
   @override
   void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
     super.didPop(route, previousRoute);
-    _sync();
+    if (route is PageRoute) {
+      _pageDepth--;
+      _sync();
+    }
   }
 
   @override
   void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
     super.didRemove(route, previousRoute);
-    _sync();
+    if (route is PageRoute) {
+      _pageDepth--;
+      _sync();
+    }
   }
 
   @override
   void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
     super.didReplace(newRoute: newRoute, oldRoute: oldRoute);
-    _sync();
+    var changed = false;
+    if (oldRoute is PageRoute) {
+      _pageDepth--;
+      changed = true;
+    }
+    if (newRoute is PageRoute) {
+      _pageDepth++;
+      changed = true;
+    }
+    if (changed) _sync();
   }
 }

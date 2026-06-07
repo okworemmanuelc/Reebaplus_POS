@@ -5,6 +5,7 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/activity_logs_access_screen.dart';
 import 'package:reebaplus_pos/core/settings/appearance_settings_screen.dart';
 import 'package:reebaplus_pos/core/settings/business_info_screen.dart';
+import 'package:reebaplus_pos/core/settings/delete_business_screen.dart';
 import 'package:reebaplus_pos/core/settings/roles_permissions_screen.dart';
 import 'package:reebaplus_pos/core/settings/security_settings_screen.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
@@ -173,9 +174,84 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ),
                     const SizedBox(height: 16),
                   ],
+                  // Danger Zone (§10.3) — CEO-only, visually separated, pinned
+                  // at the bottom. Gated on settings.delete_business (only the
+                  // CEO holds it). Surfaces for an empty search or one that
+                  // matches its keywords.
+                  if (hasPermission(ref, 'settings.delete_business') &&
+                      (q.isEmpty || 'danger zone delete business account'.contains(q)))
+                    _buildDangerZone(context),
                 ],
               ),
             ),
+    );
+  }
+
+  Widget _buildDangerZone(BuildContext context) {
+    final t = Theme.of(context);
+    final error = t.colorScheme.error;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 16),
+        Divider(color: error.withValues(alpha: 0.25)),
+        const SizedBox(height: 12),
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 10),
+          child: Text(
+            'DANGER ZONE',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.1,
+              color: error,
+            ),
+          ),
+        ),
+        Material(
+          color: error.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(16),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: () => _open(context, const DeleteBusinessScreen()),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Icon(Icons.delete_forever_rounded, color: error),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Delete Business',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: error,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Permanently delete this business and your account',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            color: t.colorScheme.onSurface
+                                .withValues(alpha: 0.6),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.chevron_right,
+                      color: error.withValues(alpha: 0.6)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 

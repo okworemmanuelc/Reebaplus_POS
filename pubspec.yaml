@@ -83,6 +83,9 @@ dev_dependencies:
   flutter_lints: ^3.0.0
   drift_dev: ^2.11.0
   build_runner: ^2.4.6
+  # Dev-only: generates the launcher icons from the dark-theme logo.
+  # Not shipped in the app. Run `dart run flutter_launcher_icons` to regenerate.
+  flutter_launcher_icons: ^0.14.1
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -128,4 +131,29 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+# Launcher-icon generation (dev-only, via flutter_launcher_icons).
+# Source images are derived from the dark-theme logo by tool/generate_app_icon.dart:
+#   reebaplus_icon.png    — the logo on a dark navy/charcoal (#0B1220) background
+#   reebaplus_icon_fg.png — the padded transparent logo for Android adaptive icons
+# Regenerate with: dart run tool/generate_app_icon.dart && dart run flutter_launcher_icons
+flutter_launcher_icons:
+  image_path: "assets/images/reebaplus_icon.png"
+  min_sdk_android: 24
+  android: true
+  adaptive_icon_background: "#0B1220"
+  adaptive_icon_foreground: "assets/images/reebaplus_icon_fg.png"
+  ios: true
+  remove_alpha_ios: true
+  web:
+    generate: true
+    image_path: "assets/images/reebaplus_icon.png"
+    background_color: "#0B1220"
+    theme_color: "#0B1220"
+  macos:
+    generate: true
+    image_path: "assets/images/reebaplus_icon.png"
+  windows:
+    generate: true
+    image_path: "assets/images/reebaplus_icon.png"
 

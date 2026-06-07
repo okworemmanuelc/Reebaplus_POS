@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:intl/intl.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -11,9 +10,12 @@ import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/date_period.dart';
+import 'package:reebaplus_pos/core/widgets/app_fab.dart';
 import 'package:reebaplus_pos/features/payments/widgets/record_supplier_activity.dart';
 import 'package:reebaplus_pos/features/payments/widgets/supplier_form_sheet.dart';
+import 'package:reebaplus_pos/features/payments/widgets/supplier_ledger_entry_tile.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 
 /// §21.3 / §21.10 — Supplier Details on real ledger data. Balance =
 /// SUM(payments) − SUM(invoices); negative (red) = we owe the supplier.
@@ -104,6 +106,18 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
                       child: Text('Supplier not found',
                           style: TextStyle(color: _subtext))))
               : _buildBody(context, supplier),
+      floatingActionButton: (canManage && supplier != null)
+          ? AppFAB(
+              heroTag: 'supplier_record_fab',
+              onPressed: () => showSupplierActivityChooser(
+                context,
+                supplierId: supplier.id,
+                supplierName: supplier.name,
+              ),
+              icon: FontAwesomeIcons.plus,
+              label: 'Record Activity',
+            )
+          : null,
     );
   }
 
@@ -114,33 +128,57 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
     final balanceKobo = balanceAsync.valueOrNull ?? 0;
     final history = historyAsync.valueOrNull ?? const <SupplierLedgerEntryData>[];
 
+    // §21.11 — active-store scope. On "All Stores" the rows can span stores, so
+    // show which store recorded each one.
+    final scopeLabel = ref.watch(activeStoreLabelProvider);
+    final isAllStores = ref.watch(lockedStoreProvider).value == null;
+    final stores =
+        ref.watch(allStoresProvider).valueOrNull ?? const <StoreData>[];
+    final storeNameById = {for (final s in stores) s.id: s.name};
+
     final window = datePeriodFromLabel(_effectivePeriod);
     final filtered =
         history.where((e) => window.includes(e.activityDate)).toList();
 
     return ListView(
+      // Extra bottom space so the Record Activity FAB doesn't cover the last row.
       padding: EdgeInsets.all(context.getRSize(20)).copyWith(
-        bottom: context.getRSize(20) + context.deviceBottomPadding,
+        bottom: context.getRSize(96) + context.deviceBottomPadding,
       ),
       children: [
         _buildHeader(context, supplier),
         SizedBox(height: context.getRSize(24)),
-        _buildBalanceCard(context, balanceKobo),
-        SizedBox(height: context.getRSize(16)),
-        AppButton(
-          text: 'Record Activity',
-          icon: FontAwesomeIcons.plus,
-          onPressed: () => showSupplierActivityChooser(
-            context,
-            supplierId: supplier.id,
-            supplierName: supplier.name,
-          ),
-        ),
+        _buildBalanceCard(context, balanceKobo, scopeLabel),
         SizedBox(height: context.getRSize(24)),
-        _buildFilterTabs(context),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Activity',
+              style: TextStyle(
+                fontSize: context.getRFontSize(16),
+                fontWeight: FontWeight.w800,
+                color: _text,
+              ),
+            ),
+            AppDropdown<String>(
+              value: _effectivePeriod,
+              width: context.getRSize(140),
+              items: _periodOptions.map((val) {
+                return DropdownMenuItem<String>(value: val, child: Text(val));
+              }).toList(),
+              onChanged: (val) {
+                if (val != null) setState(() => _timeFilter = val);
+              },
+            ),
+          ],
+        ),
         SizedBox(height: context.getRSize(16)),
-        _buildHistory(context, filtered),
-        SizedBox(height: context.getRSize(40)),
+        _buildHistory(
+          context,
+          filtered,
+          storeNameById: isAllStores ? storeNameById : null,
+        ),
       ],
     );
   }
@@ -221,7 +259,8 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
     );
   }
 
-  Widget _buildBalanceCard(BuildContext context, int balanceKobo) {
+  Widget _buildBalanceCard(
+      BuildContext context, int balanceKobo, String scopeLabel) {
     // Negative balance = we owe the supplier (red). Positive = credit (green).
     final owed = balanceKobo < 0;
     final color = owed ? danger : (balanceKobo > 0 ? success : _text);
@@ -255,192 +294,50 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
               fontWeight: FontWeight.w800,
             ),
           ),
+          SizedBox(height: context.getRSize(4)),
+          // §21.11 — which store this balance is scoped to.
+          Text(
+            scopeLabel,
+            style: TextStyle(
+              fontSize: context.getRFontSize(12),
+              color: _subtext,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildFilterTabs(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: _periodOptions.map((f) {
-          final active = _effectivePeriod == f;
-          return Padding(
-            padding: EdgeInsets.only(right: context.getRSize(8)),
-            child: GestureDetector(
-              onTap: () => setState(() => _timeFilter = f),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                padding: EdgeInsets.symmetric(
-                  horizontal: context.getRSize(16),
-                  vertical: context.getRSize(8),
-                ),
-                decoration: BoxDecoration(
-                  color: active ? blueMain : _cardBg,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: active ? blueMain : _border),
-                ),
-                child: Text(
-                  f,
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(13),
-                    fontWeight: active ? FontWeight.bold : FontWeight.w600,
-                    color: active ? Colors.white : _subtext,
-                  ),
-                ),
-              ),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
   Widget _buildHistory(
-      BuildContext context, List<SupplierLedgerEntryData> entries) {
+    BuildContext context,
+    List<SupplierLedgerEntryData> entries, {
+    Map<String, String>? storeNameById,
+  }) {
+    if (entries.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: EdgeInsets.all(context.getRSize(20)),
+          child: Text(
+            'No activity in this period',
+            style: TextStyle(color: _subtext),
+          ),
+        ),
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Activity',
-          style: TextStyle(
-            fontSize: context.getRFontSize(16),
-            fontWeight: FontWeight.w800,
-            color: _text,
+        for (final e in entries)
+          SupplierLedgerEntryTile(
+            entry: e,
+            storeName: storeNameById == null
+                ? null
+                : (storeNameById[e.storeId] ??
+                    (e.storeId == null ? 'Unassigned' : null)),
           ),
-        ),
-        SizedBox(height: context.getRSize(16)),
-        if (entries.isEmpty)
-          Center(
-            child: Padding(
-              padding: EdgeInsets.all(context.getRSize(20)),
-              child: Text(
-                'No activity in this period',
-                style: TextStyle(color: _subtext),
-              ),
-            ),
-          )
-        else
-          ...entries.map(_buildEntryCard),
       ],
     );
-  }
-
-  Widget _buildEntryCard(SupplierLedgerEntryData e) {
-    final isVoided = e.voidedAt != null;
-    final credit = e.signedAmountKobo >= 0;
-    final color = isVoided ? _subtext : (credit ? success : danger);
-    final sign = e.signedAmountKobo < 0 ? '-' : '+';
-    final hasReceipt = (e.receiptPath ?? '').isNotEmpty;
-
-    return Opacity(
-      opacity: isVoided ? 0.55 : 1,
-      child: Container(
-        margin: EdgeInsets.only(bottom: context.getRSize(12)),
-        padding: EdgeInsets.all(context.getRSize(16)),
-        decoration: BoxDecoration(
-          color: _cardBg,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: _border),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: context.getRSize(40),
-              height: context.getRSize(40),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(
-                _iconFor(e.referenceType),
-                color: color,
-                size: context.getRSize(16),
-              ),
-            ),
-            SizedBox(width: context.getRSize(14)),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          _friendlyRefType(e.referenceType),
-                          style: TextStyle(
-                            fontSize: context.getRFontSize(15),
-                            fontWeight: FontWeight.bold,
-                            color: _text,
-                            decoration:
-                                isVoided ? TextDecoration.lineThrough : null,
-                          ),
-                        ),
-                      ),
-                      if (hasReceipt) ...[
-                        SizedBox(width: context.getRSize(6)),
-                        Icon(FontAwesomeIcons.paperclip,
-                            size: context.getRSize(11), color: _subtext),
-                      ],
-                    ],
-                  ),
-                  SizedBox(height: context.getRSize(4)),
-                  Text(
-                    DateFormat('d MMM y').format(e.activityDate) +
-                        ((e.referenceNote ?? '').isNotEmpty
-                            ? ' • ${e.referenceNote}'
-                            : ''),
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(12),
-                      color: _subtext,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(width: context.getRSize(8)),
-            Text(
-              '$sign${formatCurrency(e.amountKobo / 100)}',
-              style: TextStyle(
-                fontSize: context.getRFontSize(15),
-                fontWeight: FontWeight.w800,
-                color: color,
-                decoration: isVoided ? TextDecoration.lineThrough : null,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  IconData _iconFor(String refType) {
-    if (refType == 'invoice') return FontAwesomeIcons.fileInvoiceDollar;
-    if (refType == 'void') return FontAwesomeIcons.rotateLeft;
-    return FontAwesomeIcons.moneyBillTransfer;
-  }
-
-  String _friendlyRefType(String refType) {
-    switch (refType) {
-      case 'invoice':
-        return 'Invoice';
-      case 'payment_cash':
-        return 'Payment (Cash)';
-      case 'payment_transfer':
-        return 'Payment (Transfer)';
-      case 'payment_pos':
-        return 'Payment (POS)';
-      case 'payment_other':
-        return 'Payment (Other)';
-      case 'void':
-        return 'Void / reversal';
-      default:
-        return refType;
-    }
   }
 
   Future<void> _confirmDelete(SupplierData supplier) async {

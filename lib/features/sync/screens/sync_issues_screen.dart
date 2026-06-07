@@ -421,11 +421,13 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'The last full pull deferred ${tables.length} '
-            'table${tables.length == 1 ? '' : 's'} because the connection '
-            'was too slow to fetch them. Live activity still syncs '
-            'normally. Tap retry on a stronger connection to catch the '
-            'history up.',
+            'The last pull held back ${tables.length} '
+            'table${tables.length == 1 ? '' : 's'} — either the connection was '
+            'too slow to fetch them, or they reference a record (usually an '
+            'order) that has not arrived on this device yet. Live activity '
+            'still syncs normally. Tap retry on a stronger connection; if it '
+            'keeps coming back, the app is healing it in the background and it '
+            'should clear within a sync or two.',
             style: t.textTheme.bodySmall?.copyWith(
               color: t.colorScheme.onSurface.withValues(alpha: 0.7),
               height: 1.4,

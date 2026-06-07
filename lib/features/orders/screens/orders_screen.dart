@@ -121,13 +121,23 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       body: Builder(
         builder: (context) {
           final ordersAsync = ref.watch(allOrdersProvider);
+          // §12.1: the Orders list is scoped to the active store. A concrete
+          // store shows only its own orders; "All Stores" (null) shows every
+          // store's orders. Mirrors Home/Inventory.
+          final activeStoreId = ref.watch(lockedStoreProvider).value;
 
           return ordersAsync.when(
             loading: () =>
                 const Center(child: CircularProgressIndicator()),
             error: (e, _) => Center(child: Text('Error: $e')),
-            data: (allOrdersWithItems) {
+            data: (allOrders) {
               final now = DateTime.now();
+
+              final allOrdersWithItems = activeStoreId == null
+                  ? allOrders
+                  : allOrders
+                      .where((o) => o.order.storeId == activeStoreId)
+                      .toList();
 
               final pending = _applySearch(
                 allOrdersWithItems

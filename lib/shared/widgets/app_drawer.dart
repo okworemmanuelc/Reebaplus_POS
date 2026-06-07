@@ -17,6 +17,7 @@ import 'package:reebaplus_pos/features/settings/screens/staff_settings_screen.da
 import 'package:reebaplus_pos/features/staff/screens/staff_management_screen.dart';
 import 'package:reebaplus_pos/features/sync/screens/sync_issues_screen.dart';
 import 'package:reebaplus_pos/shared/utils/role_display.dart';
+import 'package:reebaplus_pos/shared/widgets/store_picker_sheet.dart';
 
 class AppDrawer extends ConsumerWidget {
   // Pass 'pos' or 'inventory' to highlight the correct nav item
@@ -688,8 +689,11 @@ class AppDrawer extends ConsumerWidget {
         borderRadius: BorderRadius.circular(14),
         child: InkWell(
           borderRadius: BorderRadius.circular(14),
-          onTap: () => _showStorePickerSheet(
-            context, ref, selectable, canViewAll, activeId),
+          onTap: () => showStorePickerSheet(
+            context,
+            ref,
+            onSelected: () => ref.read(navigationProvider).closeDrawer(),
+          ),
           child: Padding(
             padding: EdgeInsets.symmetric(
               horizontal: context.getRSize(16),
@@ -748,120 +752,6 @@ class AppDrawer extends ConsumerWidget {
           ),
         ),
       ),
-    );
-  }
-
-  /// Themed bottom sheet listing the user's selectable stores (plus "All Stores"
-  /// for all-stores viewers). Selecting one sets the global active store and
-  /// closes the drawer.
-  void _showStorePickerSheet(
-    BuildContext context,
-    WidgetRef ref,
-    List<StoreData> selectable,
-    bool canViewAll,
-    String? activeId,
-  ) {
-    final t = Theme.of(context);
-    final primary = t.colorScheme.primary;
-    final textColor = t.colorScheme.onSurface;
-    final subtextColor = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
-
-    final options = <({String? id, String name})>[
-      if (canViewAll) (id: null, name: 'All Stores'),
-      ...selectable.map((s) => (id: s.id, name: s.name)),
-    ];
-
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: t.colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetCtx) {
-        return Padding(
-          padding: EdgeInsets.only(
-            top: context.getRSize(8),
-            bottom: context.deviceBottomPadding + context.getRSize(8),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: context.getRSize(40),
-                height: context.getRSize(4),
-                margin: EdgeInsets.only(bottom: context.getRSize(12)),
-                decoration: BoxDecoration(
-                  color: subtextColor.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: context.getRSize(20)),
-                child: Row(
-                  children: [
-                    Text(
-                      'Select Store',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: context.getRFontSize(16),
-                        color: textColor,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(height: context.getRSize(8)),
-              ...options.map((o) {
-                final selected = o.id == activeId;
-                return InkWell(
-                  onTap: () {
-                    ref.read(navigationProvider).setLockedStore(o.id);
-                    Navigator.of(sheetCtx).pop();
-                    ref.read(navigationProvider).closeDrawer();
-                  },
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: context.getRSize(20),
-                      vertical: context.getRSize(14),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          o.id == null
-                              ? FontAwesomeIcons.layerGroup
-                              : FontAwesomeIcons.store,
-                          size: context.getRSize(15),
-                          color: selected ? primary : subtextColor,
-                        ),
-                        SizedBox(width: context.getRSize(14)),
-                        Expanded(
-                          child: Text(
-                            o.name,
-                            style: TextStyle(
-                              fontWeight:
-                                  selected ? FontWeight.bold : FontWeight.w600,
-                              fontSize: context.getRFontSize(14.5),
-                              color: selected ? primary : textColor,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (selected)
-                          Icon(
-                            FontAwesomeIcons.check,
-                            size: context.getRSize(14),
-                            color: primary,
-                          ),
-                      ],
-                    ),
-                  ),
-                );
-              }),
-            ],
-          ),
-        );
-      },
     );
   }
 

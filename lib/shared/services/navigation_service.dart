@@ -66,6 +66,14 @@ class NavigationService {
   /// viewer; confined users are always pinned to a concrete store by MainLayout.
   final ValueNotifier<String?> lockedStoreId = ValueNotifier<String?>(null);
 
+  /// §12.1: true once the user has *explicitly* picked a concrete active store
+  /// this session (via the store picker / a store-details deep-link), as opposed
+  /// to the silent concrete default MainLayout pins confined users to. The POS
+  /// "pick a store" gate uses this so every user with more than one store must
+  /// choose before selling, instead of selling from an auto-defaulted store.
+  /// Reset to false on logout and whenever the active store becomes "All Stores".
+  final ValueNotifier<bool> storeExplicitlyChosen = ValueNotifier<bool>(false);
+
   static final Map<int, String> indexToRoute = {
     0: 'dashboard',
     1: 'pos',
@@ -183,12 +191,14 @@ class NavigationService {
   void applyUserStoreLock(String? storeId) {
     storeLocked.value = false;
     lockedStoreId.value = null;
+    storeExplicitlyChosen.value = false;
   }
 
   /// Called on logout — removes all store restrictions.
   void clearStoreLock() {
     storeLocked.value = false;
     lockedStoreId.value = null;
+    storeExplicitlyChosen.value = false;
   }
 
   /// Resets navigation state to defaults. Call on logout so the next session
@@ -204,8 +214,13 @@ class NavigationService {
     currentTabCanPop.value = false;
   }
 
-  /// Manually update the store lock (e.g. for CEO switching locations in POS)
-  void setLockedStore(String? id) {
+  /// Manually update the active store (§12.1). [explicit] marks a deliberate
+  /// user pick — only an explicit pick of a *concrete* store counts as "chosen"
+  /// (picking "All Stores", `id == null`, never does), so the POS gate keeps
+  /// prompting multi-store users until they choose. MainLayout's silent
+  /// confined-user default passes `explicit: false`.
+  void setLockedStore(String? id, {bool explicit = true}) {
     lockedStoreId.value = id;
+    storeExplicitlyChosen.value = explicit && id != null;
   }
 }

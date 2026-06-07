@@ -19,6 +19,8 @@ import 'package:reebaplus_pos/features/pos/widgets/category_filter_bar.dart';
 import 'package:reebaplus_pos/features/pos/widgets/quick_sale_modal.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
+import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/shared/widgets/store_picker_sheet.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 
 class PosHomeScreen extends ConsumerStatefulWidget {
@@ -78,6 +80,20 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
       );
     }
 
+    // §12.1: POS always sells from one concrete store. Any user with more than
+    // one store must explicitly pick the store they're selling from before POS
+    // will sell — both an all-stores viewer on "All Stores" (active store null)
+    // and a confined multi-store user that MainLayout pinned to a silent default
+    // (active store set, but not explicitly chosen). Don't silently sell from a
+    // default store; gate behind an explicit pick. Choosing one sets the global
+    // active store (`lockedStoreId`), which the sidebar picker reflects too.
+    final selectable = ref.watch(selectableStoresProvider);
+    final activeStoreId = ref.watch(lockedStoreProvider).value;
+    final storeChosen = ref.watch(storeExplicitlyChosenProvider).value;
+    if (selectable.length >= 2 && (activeStoreId == null || !storeChosen)) {
+      return _buildStoreGate(context);
+    }
+
     if (_controller == null) {
       final bgCol = Theme.of(context).scaffoldBackgroundColor;
       return SharedScaffold(
@@ -91,10 +107,10 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
 
     // §12.1: POS always sells from one concrete store. Keep the controller's
     // "All Stores" fallback in sync with the user's first selectable store so the
-    // grid + checkout have a real store even when the global active store is
-    // "All Stores" (an all-stores viewer's null). Deferred to post-frame because
-    // setFallbackStore can re-subscribe + notify.
-    final selectable = ref.watch(selectableStoresProvider);
+    // grid + checkout always have a real store. Reached when a store is active,
+    // or when there's only one selectable store (the "no active store + ≥2
+    // stores" case is gated above); the fallback covers the lone-store user.
+    // Deferred to post-frame because setFallbackStore can re-subscribe + notify.
     final fallback = selectable.isNotEmpty ? selectable.first.id : null;
     if (_controller!.fallbackStoreId != fallback) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -198,6 +214,92 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
               ),
             );
       },
+    );
+  }
+
+  /// §12.1: shown to any user with more than one store who hasn't explicitly
+  /// picked the store they're selling from (an all-stores viewer on "All Stores",
+  /// or a confined multi-store user on MainLayout's silent default). POS sells
+  /// from exactly one store, so selling is blocked until the user picks one.
+  /// Choosing a store sets the global active store (`lockedStoreId`) and marks it
+  /// explicitly chosen, which the sidebar picker reflects too, and this gate then
+  /// resolves to the normal POS.
+  Widget _buildStoreGate(BuildContext context) {
+    final t = Theme.of(context);
+    final primary = t.colorScheme.primary;
+    final textCol = t.colorScheme.onSurface;
+    final subtextCol =
+        t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
+    final bizName = ref.watch(currentBusinessNameProvider);
+
+    return SharedScaffold(
+      activeRoute: 'pos',
+      backgroundColor: t.scaffoldBackgroundColor,
+      appBar: AppBar(
+        backgroundColor: t.colorScheme.surface,
+        elevation: 0,
+        leading: const MenuButton(),
+        title: AppBarHeader(
+          icon: FontAwesomeIcons.beerMugEmpty,
+          title: bizName.isNotEmpty ? bizName : 'Reebaplus POS',
+          subtitle: 'Point of Sale',
+        ),
+        actions: [const NotificationBell(), SizedBox(width: context.getRSize(16))],
+      ),
+      body: SafeArea(
+        top: false,
+        child: Center(
+          child: Padding(
+            padding: EdgeInsets.all(context.getRSize(32)),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: context.getRSize(72),
+                  height: context.getRSize(72),
+                  decoration: BoxDecoration(
+                    color: primary.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    FontAwesomeIcons.store,
+                    size: context.getRSize(28),
+                    color: primary,
+                  ),
+                ),
+                SizedBox(height: context.getRSize(20)),
+                Text(
+                  'Select a store to start selling',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: context.getRFontSize(17),
+                    color: textCol,
+                  ),
+                ),
+                SizedBox(height: context.getRSize(8)),
+                Text(
+                  'POS records every sale against one store. Choose the '
+                  'store you\'re selling from to continue.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: context.getRFontSize(13.5),
+                    color: subtextCol,
+                    height: 1.4,
+                  ),
+                ),
+                SizedBox(height: context.getRSize(24)),
+                AppButton(
+                  text: 'Choose Store',
+                  icon: FontAwesomeIcons.store,
+                  isFullWidth: false,
+                  onPressed: () => showStorePickerSheet(context, ref),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 

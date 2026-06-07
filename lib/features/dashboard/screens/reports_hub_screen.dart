@@ -8,13 +8,9 @@ import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/date_period.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
-import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
-import 'package:reebaplus_pos/features/dashboard/screens/sales_detail_screen.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/profit_report_screen.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/daily_reconciliation_list_screen.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/stock_approvals_screen.dart';
-import 'package:reebaplus_pos/features/expenses/screens/expenses_screen.dart';
-import 'package:reebaplus_pos/features/dashboard/screens/customer_ledger_screen.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/crate_deposits_report_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 
@@ -26,11 +22,8 @@ class ReportsHubScreen extends ConsumerStatefulWidget {
 }
 
 class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
-  String _selectedPeriod = kDatePeriodLabels.first; // Last 24 hours (§30.11)
+  String _selectedPeriod = kDatePeriodLabels.first; // Today (§30.11)
   final List<String> _periods = kDatePeriodLabels;
-
-  bool _isDateInPeriod(DateTime date, String period) =>
-      datePeriodFromLabel(period).includes(date);
 
   @override
   Widget build(BuildContext context) {
@@ -56,6 +49,75 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
     final pendingApprovals =
         ref.watch(viewerScopedPendingStockRequestsProvider).length +
             ref.watch(viewerScopedPendingQuickSaleRequestsProvider).length;
+
+    // Build the visible card list first so the grid can size itself to what
+    // actually renders (cards are hidden per role / business type — rule #7).
+    final cards = <Widget>[
+      // Pending Approvals (§16.6.1 + §12.3.1) — stock-keeper Add/Remove requests
+      // AND cashier Quick Sale requests await the affected store's Manager / the
+      // CEO here. Shown first as an action item; the badge counts the combined
+      // outstanding total.
+      if (isMgrUp)
+        _buildReportCard(
+          context,
+          title: 'Approvals',
+          subtitle: 'Stock & quick sales',
+          icon: FontAwesomeIcons.clipboardList,
+          color: Colors.orange,
+          badgeCount: pendingApprovals,
+          onTap: () => Navigator.push(
+            context,
+            slideDownRoute(const StockApprovalsScreen()),
+          ),
+        ),
+      // Daily Reconciliation (§25.9) — store-scoped via the §12.1 picker,
+      // groupable Day/Week/Month/Year (Manager capped at Month), with the CEO P&L
+      // + statement of account folded in. Its own period grouping drives it, so it
+      // does not read the hub period.
+      if (isMgrUp)
+        _buildReportCard(
+          context,
+          title: 'Daily Reconciliation',
+          subtitle: 'Day · Week · Month · Year',
+          icon: FontAwesomeIcons.clipboardCheck,
+          color: Colors.indigo,
+          onTap: () => Navigator.push(
+            context,
+            slideDownRoute(const DailyReconciliationListScreen()),
+          ),
+        ),
+      // §13.4 Ring 7 — Crate Deposits balancing report. Crate-only (rule #13) +
+      // CEO/Manager (§25.3, role-gated like Customer Ledger).
+      if (isMgrUp && isCrate)
+        _buildReportCard(
+          context,
+          title: 'Crate Deposits',
+          subtitle: 'Held · Refunded · Kept',
+          icon: FontAwesomeIcons.beerMugEmpty,
+          color: Colors.teal,
+          onTap: () => Navigator.push(
+            context,
+            slideDownRoute(const CrateDepositsReportScreen()),
+          ),
+        ),
+      // Profit Report — CEO only (§25.2/§25.3); reports.see_profit is granted to
+      // the CEO alone by default.
+      if (isMgrUp && hasPermission(ref, 'reports.see_profit'))
+        _buildReportCard(
+          context,
+          title: 'Profit Report',
+          subtitle: 'Margins & COGS',
+          icon: FontAwesomeIcons.chartPie,
+          color: Colors.green,
+          onTap: () => Navigator.push(
+            context,
+            slideDownRoute(
+              ProfitReportScreen(initialPeriod: _selectedPeriod),
+            ),
+          ),
+        ),
+    ];
+
     return SharedScaffold(
       activeRoute: 'dashboard',
       appBar: AppBar(
@@ -66,10 +128,6 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
         elevation: 0,
         backgroundColor: context.backgroundColor,
         leading: BackButton(color: context.primaryColor),
-        actions: [
-          _buildPeriodSelector(),
-          const SizedBox(width: 8),
-        ],
       ),
       body: Container(
         decoration: BoxDecoration(
@@ -82,169 +140,90 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
             ],
           ),
         ),
-        child: GridView.count(
-          crossAxisCount: 2,
-          padding: EdgeInsets.all(context.spacingM).copyWith(
-            bottom: context.spacingM + context.deviceBottomPadding,
-          ),
-          mainAxisSpacing: context.spacingM,
-          crossAxisSpacing: context.spacingM,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Pending Approvals (§16.6.1 + §12.3.1) — stock-keeper Add/Remove
-            // requests AND cashier Quick Sale requests await the affected
-            // store's Manager / the CEO here. Shown first as an action item; the
-            // badge counts the combined outstanding total.
-            if (isMgrUp)
-              _buildReportCard(
-                context,
-                title: 'Approvals',
-                subtitle: 'Stock & quick sales',
-                icon: FontAwesomeIcons.clipboardList,
-                color: Colors.orange,
-                locked: false,
-                badgeCount: pendingApprovals,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    slideDownRoute(const StockApprovalsScreen()),
-                  );
-                },
+            _buildPeriodBar(context),
+            Expanded(
+              child: GridView.count(
+                crossAxisCount: 2,
+                padding: EdgeInsets.fromLTRB(
+                  context.spacingM,
+                  context.spacingS,
+                  context.spacingM,
+                  context.spacingM + context.deviceBottomPadding,
+                ),
+                mainAxisSpacing: context.spacingM,
+                crossAxisSpacing: context.spacingM,
+                children: cards,
               ),
-            if (isMgrUp && hasPermission(ref, 'reports.see_sales'))
-              _buildReportCard(
-                context,
-                title: 'Sales Report',
-                subtitle: 'Revenue & Volume',
-                icon: FontAwesomeIcons.chartLine,
-                color: context.primaryColor,
-                locked: false,
-                onTap: () {
-                  final ordersAsync = ref.read(allOrdersProvider);
-                  ordersAsync.whenData((allOrders) {
-                    final filtered = allOrders
-                        .where((o) =>
-                            o.order.status == 'completed' &&
-                            _isDateInPeriod(o.order.createdAt, _selectedPeriod))
-                        .toList();
-                    Navigator.push(
-                      context,
-                      slideDownRoute(
-                        SalesDetailScreen(
-                          orders: filtered,
-                          mode: 'sales',
-                          period: _selectedPeriod,
-                        ),
-                      ),
-                    );
-                  });
-                },
-              ),
-            if (isMgrUp)
-              _buildReportCard(
-                context,
-                title: 'Daily Reconciliation',
-                subtitle: 'Day-by-Day Audit',
-                icon: FontAwesomeIcons.clipboardCheck,
-                color: Colors.indigo,
-                locked: false,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    slideDownRoute(
-                      DailyReconciliationListScreen(
-                        initialPeriod: _selectedPeriod,
-                      ),
-                    ),
-                  );
-                },
-              ),
-            if (isMgrUp && hasPermission(ref, 'reports.see_expenses'))
-              _buildReportCard(
-                context,
-                title: 'Expense Tracker',
-                subtitle: 'Outflow Analysis',
-                icon: FontAwesomeIcons.fileInvoiceDollar,
-                color: Colors.redAccent,
-                locked: false,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const ExpensesScreen()),
-                  );
-                },
-              ),
-            // Customer Ledger has no dedicated permission key, so it gates on
-            // role alone — CEO + Manager only (§25.3).
-            if (isMgrUp)
-              _buildReportCard(
-                context,
-                title: 'Customer Ledger',
-                subtitle: 'Wallet & Credit',
-                icon: FontAwesomeIcons.wallet,
-                color: Colors.purpleAccent,
-                locked: false,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    slideDownRoute(const CustomerLedgerScreen()),
-                  );
-                },
-              ),
-            // §13.4 Ring 7 — Crate Deposits balancing report. Crate-only
-            // (rule #13) + CEO/Manager (§25.3, role-gated like Customer Ledger).
-            if (isMgrUp && isCrate)
-              _buildReportCard(
-                context,
-                title: 'Crate Deposits',
-                subtitle: 'Held · Refunded · Kept',
-                icon: FontAwesomeIcons.beerMugEmpty,
-                color: Colors.teal,
-                locked: false,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    slideDownRoute(const CrateDepositsReportScreen()),
-                  );
-                },
-              ),
-            // Profit Report — CEO only (§25.2/§25.3); reports.see_profit is
-            // granted to the CEO alone by default.
-            if (isMgrUp && hasPermission(ref, 'reports.see_profit'))
-              _buildReportCard(
-                context,
-                title: 'Profit Report',
-                subtitle: 'Margins & COGS',
-                icon: FontAwesomeIcons.chartPie,
-                color: Colors.green,
-                locked: false,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    slideDownRoute(
-                      ProfitReportScreen(initialPeriod: _selectedPeriod),
-                    ),
-                  );
-                },
-              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildPeriodSelector() {
-    return Container(
-      width: 100,
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      child: AppDropdown<String>(
-        value: _selectedPeriod,
-        items: _periods
-            .map((p) => DropdownMenuItem(
-                value: p,
-                child: Text(p, style: const TextStyle(fontSize: 12))))
-            .toList(),
-        onChanged: (v) =>
-            setState(() => _selectedPeriod = v ?? kDatePeriodLabels.first),
+  // §25.1 / §30.11 — global period filter as the canonical horizontal chip set.
+  // Relocated out of the AppBar (where the cramped dropdown looked wrong) into a
+  // full-width bar above the report grid; the choice drives every report's
+  // initial period (each detail screen can still override, §25.5 / §25.6).
+  Widget _buildPeriodBar(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        context.spacingM,
+        context.spacingM,
+        context.spacingM,
+        context.spacingS,
+      ),
+      child: Row(
+        children: [
+          Icon(
+            FontAwesomeIcons.calendarDay,
+            size: context.getRSize(14),
+            color: Theme.of(context).hintColor,
+          ),
+          SizedBox(width: context.spacingS),
+          Expanded(
+            child: SizedBox(
+              height: context.getRSize(38),
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: EdgeInsets.zero,
+                itemCount: _periods.length,
+                separatorBuilder: (_, __) => SizedBox(width: context.spacingS),
+                itemBuilder: (context, i) => _buildPeriodChip(_periods[i]),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPeriodChip(String period) {
+    final selected = period == _selectedPeriod;
+    final color = context.primaryColor;
+    return GestureDetector(
+      onTap: () => setState(() => _selectedPeriod = period),
+      child: AnimatedContainer(
+        duration: AppAnimations.fast,
+        alignment: Alignment.center,
+        padding: EdgeInsets.symmetric(horizontal: context.spacingM),
+        decoration: BoxDecoration(
+          color: selected ? color : context.surfaceColor,
+          borderRadius: BorderRadius.circular(context.radiusL),
+          border: Border.all(
+            color: selected ? color : color.withValues(alpha: 0.18),
+          ),
+        ),
+        child: Text(
+          period,
+          style: context.bodySmall.copyWith(
+            color: selected ? Colors.white : Theme.of(context).hintColor,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
       ),
     );
   }
@@ -256,7 +235,6 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
     required IconData icon,
     required Color color,
     required VoidCallback onTap,
-    bool locked = false,
     int badgeCount = 0,
   }) {
     return Material(
@@ -309,29 +287,6 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
                   ),
                 ],
               ),
-              if (locked)
-                Positioned(
-                  top: 0,
-                  right: 0,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onSurface
-                          .withValues(alpha: 0.08),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.lock_outline_rounded,
-                      size: 14,
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onSurface
-                          .withValues(alpha: 0.3),
-                    ),
-                  ),
-                ),
               if (badgeCount > 0)
                 Positioned(
                   top: 0,

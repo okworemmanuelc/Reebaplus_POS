@@ -6,6 +6,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
+import 'package:reebaplus_pos/core/utils/order_number.dart';
+import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // sync-exempt-file: this is the sync engine — `_restoreTableData`,
@@ -120,6 +122,10 @@ class JwtClaimSnapshot {
 class SupabaseSyncService {
   final AppDatabase _db;
   final SupabaseClient _supabase;
+  // Resolves this device's order-number tag for the legacy-collision self-heal
+  // (§30.8.1). Optional so existing test constructions keep working; when null,
+  // the heal is skipped and the row classifies as a normal permanent failure.
+  final SecureStorageService? _secureStorage;
   final List<RealtimeChannel> _tableChannels = [];
   RealtimeChannel? _businessesChannel;
   StreamSubscription<int>? _autoPushSub;
@@ -204,7 +210,7 @@ class SupabaseSyncService {
     _wasOnline = nowOnline;
   }
 
-  SupabaseSyncService(this._db, this._supabase) {
+  SupabaseSyncService(this._db, this._supabase, [this._secureStorage]) {
     isOnline.addListener(_onOnlineChanged);
   }
 
@@ -422,6 +428,25 @@ class SupabaseSyncService {
     },
   };
 
+  /// Append-only ledger tables whose void path re-pushes the FULL local row to
+  /// stamp the void columns (payment_transactions §, wallet_transactions §6.x,
+  /// supplier_ledger_entries §21.10). `created_at` is immutable on the cloud
+  /// (`DEFAULT now()`, enforced by the BEFORE UPDATE append-only trigger) and
+  /// it diverges local↔cloud: the cloud stamps it server-side while Drift
+  /// stores the local value truncated to whole seconds. So a re-pushed row can
+  /// never byte-match the stored `created_at`, and the trigger rejects the
+  /// upsert (P0001, "column created_at is immutable") — the row then orphans.
+  /// Dropping `created_at` on EVERY push of these tables (insert AND void) keeps
+  /// the column out of all payloads: the cloud owns it, voids carry only the
+  /// mutable columns, and a mixed insert/void batch stays homogeneous (no
+  /// row gets its `created_at` NULL-ed by PostgREST's key-union). See the scrub
+  /// in [scrubForTesting].
+  static const _ledgerCreatedAtScrubTables = <String>{
+    'payment_transactions',
+    'wallet_transactions',
+    'supplier_ledger_entries',
+  };
+
   /// Translates a locally-built payload into the column names the cloud schema
   /// actually exposes. Local Drift uses `lastUpdatedAt`; cloud uses `updated_at`
   /// (or no equivalent). Products store the manufacturer display string in
@@ -446,6 +471,12 @@ class SupabaseSyncService {
     final whitelist = _pushableColumns[table];
     if (whitelist != null) {
       out.removeWhere((k, _) => !whitelist.contains(k));
+    }
+    // Never push an append-only ledger row's `created_at` — the cloud owns it
+    // and the value diverges local↔cloud, so a void's full-row re-push would
+    // trip the immutable-column trigger. See [_ledgerCreatedAtScrubTables].
+    if (_ledgerCreatedAtScrubTables.contains(table)) {
+      out.remove('created_at');
     }
     return out;
   }
@@ -767,14 +798,48 @@ class SupabaseSyncService {
         await _db.syncDao.markDoneBatch(validIds);
       } catch (e) {
         final code = e is PostgrestException ? (e.code ?? '?') : '?';
+        // Legacy order-number collision self-heal (§30.8.1). The cloud already
+        // holds one of these orders' numbers under a different id (a pre-device-
+        // tag offline dup). Renumber the local copy with THIS device's tag and
+        // re-enqueue so it uploads and frees the number for the cloud's order to
+        // restore. Per-row so a non-colliding order in the same batch isn't
+        // touched. Handled here → skip the generic classification below.
+        if (group.table == 'orders' &&
+            group.action == 'upsert' &&
+            _isOrderNumberCollision(e)) {
+          await _healOrderNumberCollisions(validPayloads, validIds);
+          continue;
+        }
+        // §6.8 failure classification — parity with the domain-RPC path
+        // (_pushDomainItems). Without it a per-table upsert that hits a cloud
+        // constraint retried forever (uncapped transient backoff):
+        //   - 23503 (foreign_key_violation) → FK-deferred: the parent row may
+        //     still arrive on the next pull; long backoff, capped at 3 then
+        //     orphaned (e.g. order_items whose order hasn't landed yet).
+        //   - other 23xxx / P0001 / privilege / bad-parameter → permanent →
+        //     orphan auto-move. A duplicate order_number can never insert under
+        //     its own id, so retrying is futile — surface it for operator review.
+        //   - everything else (network, 5xx) → transient → standard backoff.
+        final isFkViolation = code == '23503';
+        final isPermanent = !isFkViolation &&
+            (code == 'P0001' ||
+                code.startsWith('23') ||
+                code == 'insufficient_privilege' ||
+                code == 'invalid_parameter_value');
         debugPrint(
           '[SyncService] Batch push failed for ${group.table}:${group.action} '
-          '(${validIds.length} items, http=$code): $e',
+          '(${validIds.length} items, code=$code, permanent=$isPermanent, '
+          'fk_deferred=$isFkViolation): $e',
         );
         // On batch failure, mark every item failed individually so the
         // existing exponential-backoff per-row state machine still applies.
         for (final id in validIds) {
-          await _db.syncDao.markFailed(id, e.toString());
+          await _db.syncDao.markFailed(
+            id,
+            e.toString(),
+            permanent: isPermanent,
+            fkDeferred: isFkViolation,
+          );
         }
       }
     }
@@ -883,6 +948,99 @@ class SupabaseSyncService {
       } catch (e) {
         debugPrint('[SyncService] Domain RPC $rpcName transient error: $e');
         await _db.syncDao.markFailed(item.id, e.toString());
+      }
+    }
+  }
+
+  /// True for a Postgres duplicate-key error on the orders order-number unique
+  /// constraint — the legacy offline collision the self-heal targets (§30.8.1).
+  static bool _isOrderNumberCollision(Object e) {
+    if (e is! PostgrestException || e.code != '23505') return false;
+    final m = e.message.toLowerCase();
+    return m.contains('orders_business_id_order_number_key') ||
+        m.contains('order_number');
+  }
+
+  /// This device's stable order-number tag (§30.8.1), or null when no secure
+  /// storage is wired (test constructions) — in which case the heal no-ops and
+  /// the collision falls through to a normal permanent failure.
+  Future<String?> _resolveDeviceTag() async {
+    final storage = _secureStorage;
+    if (storage == null) return null;
+    return deviceOrderTag(await storage.getOrCreateDeviceId());
+  }
+
+  /// Pull-side counterpart to the push heal (§30.8.1). When a cloud order can't
+  /// restore because a LOCAL order holds the same `(business_id, order_number)`
+  /// under a different id (a legacy pre-tag offline dup), renumber the local
+  /// blocker — append this device's tag and re-enqueue — so the number frees up
+  /// and the cloud's authoritative order (and its FK-children) can land in this
+  /// same pull instead of orphaning forever. Renumber, never delete: the local
+  /// order is a real, different sale. Returns true if a blocker was renumbered.
+  Future<bool> _healLocalOrderNumberBlocker(OrderData cloudOrder) async {
+    final deviceTag = await _resolveDeviceTag();
+    if (deviceTag == null) return false;
+    final blocker = await (_db.select(_db.orders)
+          ..where((t) =>
+              t.businessId.equals(cloudOrder.businessId) &
+              t.orderNumber.equals(cloudOrder.orderNumber) &
+              t.id.equals(cloudOrder.id).not()))
+        .getSingleOrNull();
+    if (blocker == null) return false;
+    final newNumber =
+        await _db.ordersDao.renumberForCollisionHeal(blocker.id, deviceTag);
+    if (newNumber == null) return false;
+    debugPrint(
+      '[SyncService] freed order number "${cloudOrder.orderNumber}" — '
+      'renumbered local blocker ${blocker.id} → $newNumber so cloud order '
+      '${cloudOrder.id} can restore.',
+    );
+    return true;
+  }
+
+  /// Heals legacy order-number collisions (§30.8.1) for a failed `orders` upsert
+  /// batch. Re-pushes each order individually; an order whose number is already
+  /// taken in the cloud (under a different id) is renumbered with this device's
+  /// tag and re-enqueued, so it uploads cleanly and frees the old number for the
+  /// cloud's colliding order to restore. Non-colliding rows in the batch upload
+  /// normally; other errors fall back to the standard classification.
+  Future<void> _healOrderNumberCollisions(
+      List<Map<String, dynamic>> payloads, List<String> queueIds) async {
+    final deviceTag = await _resolveDeviceTag();
+    for (var i = 0; i < payloads.length; i++) {
+      final payload = payloads[i];
+      final queueId = queueIds[i];
+      try {
+        await _supabase.from('orders').upsert([payload]);
+        await _db.syncDao.markDoneBatch([queueId]);
+      } catch (e) {
+        if (deviceTag != null &&
+            _isOrderNumberCollision(e) &&
+            payload['id'] is String) {
+          final orderId = payload['id'] as String;
+          // Retire the failed item BEFORE the heal re-enqueues: coalescing only
+          // targets PENDING rows, so marking this 'done' first prevents the
+          // fresh upsert from merging back into the row we're abandoning.
+          await _db.syncDao.markDoneBatch([queueId]);
+          final newNumber =
+              await _db.ordersDao.renumberForCollisionHeal(orderId, deviceTag);
+          debugPrint(newNumber != null
+              ? '[SyncService] healed legacy order-number collision on order '
+                  '$orderId → $newNumber (re-enqueued).'
+              : '[SyncService] order $orderId collision unresolved (already '
+                  'tagged or gone); left as-is.');
+          continue;
+        }
+        // Not an order-number collision → classify like the batch path.
+        final code = e is PostgrestException ? (e.code ?? '?') : '?';
+        final isFk = code == '23503';
+        final isPerm = !isFk &&
+            (code == 'P0001' ||
+                code.startsWith('23') ||
+                code == 'insufficient_privilege' ||
+                code == 'invalid_parameter_value');
+        await _db.syncDao
+            .markFailed(queueId, e.toString(), permanent: isPerm, fkDeferred: isFk);
       }
     }
   }
@@ -2788,8 +2946,9 @@ class SupabaseSyncService {
     String table,
     Map<String, dynamic> r,
     Set<String>? fkSkipped,
-    Future<void> Function() doInsert,
-  ) async {
+    Future<void> Function() doInsert, {
+    Future<bool> Function()? healUniqueCollision,
+  }) async {
     try {
       await doInsert();
     } catch (e) {
@@ -2802,6 +2961,23 @@ class SupabaseSyncService {
       // and in the cloud. Root cause is client-side count-based numbering
       // (`generateOrderNumber`) — fixing that is a master-plan change.
       if (_isUniqueConstraintViolation(e)) {
+        // §30.8.1 legacy-collision self-heal: a caller (orders) can free the
+        // colliding natural key by renumbering the LOCAL blocker, then we retry
+        // so the cloud's authoritative row lands in THIS pull instead of
+        // orphaning its children forever.
+        if (healUniqueCollision != null) {
+          try {
+            if (await healUniqueCollision()) {
+              await doInsert();
+              return;
+            }
+          } catch (e2) {
+            debugPrint(
+              '[SyncService] unique-collision heal failed for $table '
+              '${r['id']}: $e2',
+            );
+          }
+        }
         debugPrint(
           '[SyncService] Skipped $table row ${r['id']} during restore — '
           'natural-key UNIQUE collision (another device minted the same '
@@ -3230,13 +3406,16 @@ class SupabaseSyncService {
             // stores(store_id) / customers(customer_id). If a parent slice
             // hasn't arrived yet, skip-and-defer instead of aborting the whole
             // pull (the deferred set forces a full re-pull that catches it up).
+            final data = OrderData.fromJson(r);
             await _insertResilient(
               'orders',
               r,
               fkSkipped,
-              () => _db
-                  .into(_db.orders)
-                  .insertOnConflictUpdate(OrderData.fromJson(r)),
+              () => _db.into(_db.orders).insertOnConflictUpdate(data),
+              // §30.8.1: a legacy local order may hold this cloud order's number
+              // under a different id, blocking it (and orphaning its children)
+              // every pull. Renumber the local blocker so the cloud row lands.
+              healUniqueCollision: () => _healLocalOrderNumberBlocker(data),
             );
           }
           break;

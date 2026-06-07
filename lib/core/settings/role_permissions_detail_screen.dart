@@ -25,9 +25,13 @@ const _kMaxExpenseKobo = 'max_expense_approval_kobo';
 ///   (`max_discount_percent`), so its on/off toggle is redundant.
 /// - `shipments.manage` ("Manage incoming shipments") has no Track-Shipments
 ///   screen yet (§22) — un-hide when that screen ships.
+/// - `settings.delete_business` (§10.3 Danger Zone) is CEO-only and never
+///   grantable to any other role — it is locked ON for the CEO (who holds it
+///   via the catalogue grant) and must never surface as a per-role toggle.
 const kHiddenPermissionKeys = {
   'sales.discount.give',
   'shipments.manage',
+  'settings.delete_business',
 };
 
 /// Permission categories in master-plan order. `allPermissionsProvider` returns
