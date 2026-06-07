@@ -103,7 +103,7 @@ class _DailyReconciliationDetailScreenState
       ),
       body: ListView(
         padding: EdgeInsets.all(context.spacingM).copyWith(
-          bottom: context.spacingM + context.deviceBottomInset,
+          bottom: context.spacingM + context.deviceBottomPadding,
         ),
         children: [
           _salesCard(theme, data),

@@ -12,6 +12,7 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
 
 import 'package:reebaplus_pos/core/utils/responsive.dart'; // RESPONSIVE: utility imported
+import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/features/inventory/data/models/crate_group.dart';
 import 'package:reebaplus_pos/features/inventory/data/models/supplier.dart';
@@ -33,7 +34,6 @@ import 'package:reebaplus_pos/features/inventory/widgets/inventory_history_tab.d
 import 'package:reebaplus_pos/features/inventory/widgets/update_product_sheet.dart';
 import 'package:reebaplus_pos/core/utils/product_name.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
-import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 
@@ -51,12 +51,12 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     // tickers in a set and releases each on dispose.
     with TickerProviderStateMixin {
   late TabController _tabController;
-  late NavigationService _nav;
   int _currentTab = 0;
   String _selectedManufacturer = 'all';
+  // Mirrors the §12.1 nav-drawer store picker ('all' = "All Stores"). Synced
+  // from `lockedStoreProvider` in `_buildSupplierFilter`; no per-screen dropdown.
   String _selectedStoreId = 'all';
   String _stockFilter = 'all'; // 'all' | 'low' | 'out' | 'expiry'
-  List<StoreData> _stores = [];
   List<ProductDataWithStock> _dbProducts = [];
   List<ManufacturerData> _dbManufacturers = [];
   List<CategoryData> _dbCategories = [];
@@ -72,14 +72,12 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
 
   bool _isFirstLoad = true;
   StreamSubscription<List<ProductDataWithStock>>? _productsSub;
-  StreamSubscription<List<StoreData>>? _storesSub;
   StreamSubscription<List<ManufacturerData>>? _manufacturersSub;
   StreamSubscription<List<CategoryData>>? _categoriesSub;
   StreamSubscription<List<CrateSizeGroupData>>? _crateSizeGroupsSub;
   StreamSubscription<Map<String, int>>? _bottlesSub;
   StreamSubscription<Map<String, int>>? _emptyCratesSub;
   StreamSubscription<int>? _emptyCratesSumSub;
-  bool _initialStoreSelectionDone = false;
   Color get _bg => Theme.of(context).scaffoldBackgroundColor;
   Color get _surface => Theme.of(context).colorScheme.surface;
 
@@ -201,9 +199,6 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     _tabController = TabController(length: _tabKeys.length, vsync: this);
     _tabController.addListener(_onTabChanged);
 
-    _nav = ref.read(navigationProvider);
-    _nav.selectedStoreId.addListener(_handleStoreNavigation);
-
     // Defer all DB stream subscriptions until after the first frame so the
     // shimmer skeleton renders immediately without competing with 8+ SQL
     // queries on the Drift background isolate.
@@ -211,26 +206,10 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       if (!mounted) return;
       final db = ref.read(databaseProvider);
 
-      // Stream stores so a remote add/rename/soft-delete on another
-      // device updates the dropdown without a manual refresh. The first
-      // emission also seeds the initial store selection and kicks
-      // off the products subscription.
-      _storesSub = db.storesDao.watchActiveStores().listen((list) {
-        if (!mounted) return;
-        setState(() {
-          _stores = list;
-          if (!_initialStoreSelectionDone) {
-            _initialStoreSelectionDone = true;
-            final mainStore = list
-                .where((w) => w.name.toLowerCase().contains('main store'))
-                .firstOrNull;
-            if (mainStore != null) {
-              _selectedStoreId = mainStore.id.toString();
-            }
-          }
-        });
-        if (_productsSub == null) _subscribeToProducts();
-      });
+      // §12.1: the active store now comes from the nav-drawer store picker.
+      // Bootstrap the products subscription once; `_buildSupplierFilter`
+      // re-subscribes whenever the picker (lockedStoreProvider) changes.
+      _subscribeToProducts();
 
       _manufacturersSub = db.inventoryDao.watchAllManufacturers().listen((
         data,
@@ -262,7 +241,6 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   @override
   void dispose() {
     _productsSub?.cancel();
-    _storesSub?.cancel();
     _manufacturersSub?.cancel();
     _categoriesSub?.cancel();
     _crateSizeGroupsSub?.cancel();
@@ -271,19 +249,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     _emptyCratesSumSub?.cancel();
     _searchCtrl.dispose();
     _tabController.dispose();
-    _nav.selectedStoreId.removeListener(_handleStoreNavigation);
     super.dispose();
-  }
-
-  void _handleStoreNavigation() {
-    final nav = _nav;
-    if (nav.storeLocked.value) return;
-    final id = nav.selectedStoreId.value;
-    if (id != null) {
-      setState(() => _selectedStoreId = id);
-      _subscribeToProducts();
-      nav.selectedStoreId.value = null;
-    }
   }
 
   void _subscribeToProducts() {
@@ -847,40 +813,17 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     }).toList()..sort((a, b) => a.manufacturer.compareTo(b.manufacturer));
   }
 
-  /// §16.7 store confinement for the Inventory filter. The CEO — and a Manager
-  /// the CEO has granted all-stores — may view every store; Cashier and Stock
-  /// keeper (and a Manager without the grant) are locked to their assigned
-  /// store(s). Mirrors the Home filter rule. `lockedStores` is empty while the
-  /// assignments are still resolving.
-  ({bool locked, List<StoreData> lockedStores}) _storeLock() {
-    final slug = ref.watch(currentUserRoleProvider)?.slug;
-    final canViewAllStores = slug == 'ceo' ||
-        (slug == 'manager' && ref.watch(managerCanViewAllStoresProvider));
-    final locked = slug != null && !canViewAllStores;
-    final userId = ref.read(authProvider).currentUser?.id;
-    final assignedStoreIds = (userId == null
-            ? const <UserStoreData>[]
-            : (ref.watch(myUserStoresProvider(userId)).valueOrNull ??
-                const <UserStoreData>[]))
-        .map((s) => s.storeId)
-        .toSet();
-    final lockedStores =
-        _stores.where((s) => assignedStoreIds.contains(s.id)).toList();
-    return (locked: locked, lockedStores: lockedStores);
-  }
-
   Widget _buildSupplierFilter(BuildContext context) {
-    // §16.7: roles below Manager (and a Manager without the all-stores grant)
-    // are confined to their assigned store(s). Mirrors the Home filter lock.
-    final lock = _storeLock();
-    if (lock.locked &&
-        lock.lockedStores.isNotEmpty &&
-        !lock.lockedStores.any((s) => s.id == _selectedStoreId)) {
-      // Pin a locked user's filter to an allowed store, re-subscribing once.
-      final id = lock.lockedStores.first.id;
+    // §12.1: the active store comes from the nav-drawer store picker. Mirror it
+    // into the local filter ('all' = "All Stores") and re-subscribe when it
+    // changes. Confinement is enforced upstream — the picker only offers the
+    // user's selectable stores, and MainLayout pins confined users to a real
+    // store — so there's no per-screen store dropdown here anymore.
+    final desiredStoreId = ref.watch(lockedStoreProvider).value ?? 'all';
+    if (_selectedStoreId != desiredStoreId) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || _selectedStoreId == id) return;
-        setState(() => _selectedStoreId = id);
+        if (!mounted || _selectedStoreId == desiredStoreId) return;
+        setState(() => _selectedStoreId = desiredStoreId);
         _subscribeToProducts();
       });
     }
@@ -894,72 +837,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       color: _surface,
       child: Row(
         children: [
-          Expanded(
-            child: _isFirstLoad
-                ? const SizedBox.shrink()
-                : (lock.locked
-                      // One assigned store → a locked chip; several → a dropdown
-                      // limited to those stores (no "All Stores").
-                      ? (lock.lockedStores.length > 1
-                            ? AppDropdown<String>(
-                                value: lock.lockedStores
-                                        .any((s) => s.id == _selectedStoreId)
-                                    ? _selectedStoreId
-                                    : lock.lockedStores.first.id,
-                                labelText: 'Store',
-                                items: lock.lockedStores
-                                    .map(
-                                      (w) => DropdownMenuItem(
-                                        value: w.id.toString(),
-                                        child: Text(
-                                          w.name,
-                                          style: TextStyle(color: _text),
-                                        ),
-                                      ),
-                                    )
-                                    .toList(),
-                                onChanged: (val) {
-                                  if (val != null) {
-                                    setState(() => _selectedStoreId = val);
-                                    _subscribeToProducts();
-                                  }
-                                },
-                              )
-                            : _buildLockedStoreChip(
-                                lock.lockedStores.firstOrNull,
-                              ))
-                      : AppDropdown<String>(
-                          value: _selectedStoreId,
-                          labelText: 'Store',
-                          items: [
-                            DropdownMenuItem(
-                              value: 'all',
-                              child: Text(
-                                'All Stores',
-                                style: TextStyle(color: _text),
-                              ),
-                            ),
-                            ..._stores.map(
-                              (w) => DropdownMenuItem(
-                                value: w.id.toString(),
-                                child: Text(
-                                  w.name,
-                                  style: TextStyle(color: _text),
-                                ),
-                              ),
-                            ),
-                          ],
-                          onChanged: (val) {
-                            if (val != null) {
-                              setState(() => _selectedStoreId = val);
-                              _subscribeToProducts();
-                            }
-                          },
-                        )),
-          ),
-          SizedBox(width: context.getRSize(12)),
           // Category dropdown (§16.4, amended): replaces the old chip row,
-          // sits between Store and Manufacturer, drives `_selectedCategoryId`.
+          // drives `_selectedCategoryId`. The store is now picked in the nav bar.
           Expanded(
             child: _isFirstLoad
                 ? const SizedBox.shrink()
@@ -1010,48 +889,6 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                     onChanged: (val) =>
                         setState(() => _selectedManufacturer = val ?? 'all'),
                   ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLockedStoreChip(StoreData? store) {
-    final label = store?.name ?? 'My Store';
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(12),
-        vertical: context.getRSize(10),
-      ),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _border),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            FontAwesomeIcons.store,
-            size: context.getRSize(12),
-            color: _subtext,
-          ),
-          SizedBox(width: context.getRSize(8)),
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: context.getRFontSize(13),
-                fontWeight: FontWeight.w600,
-                color: _text,
-              ),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          Icon(
-            FontAwesomeIcons.lock,
-            size: context.getRSize(10),
-            color: _subtext,
           ),
         ],
       ),
@@ -1373,6 +1210,23 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
 
   // ── CRATES TAB REDESIGNED ──────────────────────────────────────────────────
   Widget _buildCratesTab(BuildContext context) {
+    // Per-store crate balances (§16.8.1 Phase 2). Non-empty only when a store
+    // is locked; falls back to the business total (mfr.emptyCrateStock) when
+    // no store is locked (CEO browsing all stores).
+    final storeCrateBalances =
+        ref.watch(storeCrateBalancesProvider).valueOrNull ?? const [];
+    final isStoreLocked = ref.read(lockedStoreProvider).value != null;
+    final storeBalByMfr = {
+      for (final b in storeCrateBalances) b.manufacturerId: b.balance,
+    };
+
+    int emptyForMfr(ManufacturerData mfr) =>
+        isStoreLocked ? (storeBalByMfr[mfr.id] ?? 0) : mfr.emptyCrateStock;
+
+    final totalEmpty = isStoreLocked
+        ? storeBalByMfr.values.fold(0, (s, v) => s + v)
+        : _dbManufacturers.fold<int>(0, (s, m) => s + m.emptyCrateStock);
+
     return ListView(
       padding: EdgeInsets.fromLTRB(
         context.getRSize(16),
@@ -1382,7 +1236,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       ),
       children: [
         // 1. Stats Overview
-        _buildCrateStatsRow(context),
+        _buildCrateStatsRow(context, totalEmpty: totalEmpty),
 
         SizedBox(height: context.getRSize(24)),
 
@@ -1428,7 +1282,12 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                 totalValueKobo: 0,
               ),
             );
-            return _buildManufacturerCard(context, mfr, stat);
+            return _buildManufacturerCard(
+              context,
+              mfr,
+              stat,
+              emptyCount: emptyForMfr(mfr),
+            );
           }),
 
         if (_activeCrateSizeGroups.isNotEmpty) ...[
@@ -1439,11 +1298,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     );
   }
 
-  Widget _buildCrateStatsRow(BuildContext context) {
-    final totalEmpty = _dbManufacturers.fold<int>(
-      0,
-      (sum, m) => sum + m.emptyCrateStock,
-    );
+  Widget _buildCrateStatsRow(BuildContext context, {required int totalEmpty}) {
     final totalFull = _manufacturerCrateStats.fold<int>(
       0,
       (sum, s) => sum + s.fullCratesEquiv,
@@ -1524,10 +1379,11 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   Widget _buildManufacturerCard(
     BuildContext context,
     ManufacturerData mfr,
-    ManufacturerCrateStats stat,
-  ) {
+    ManufacturerCrateStats stat, {
+    required int emptyCount,
+  }) {
     final depositNaira = mfr.depositAmountKobo / 100;
-    final totalAssets = stat.fullCratesEquiv + mfr.emptyCrateStock;
+    final totalAssets = stat.fullCratesEquiv + emptyCount;
 
     return Container(
       margin: EdgeInsets.only(bottom: context.getRSize(12)),
@@ -1590,7 +1446,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                     ],
                   ),
                 ),
-                _manageMfrButton(context, mfr),
+                _manageMfrButton(context, mfr, emptyCount: emptyCount),
               ],
             ),
           ),
@@ -1612,7 +1468,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                 _mfrSimpleStat(
                   context,
                   'Empty',
-                  mfr.emptyCrateStock.toString(),
+                  emptyCount.toString(),
                   AppColors.warning,
                 ),
                 _mfrSimpleStat(
@@ -1661,9 +1517,13 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     );
   }
 
-  Widget _manageMfrButton(BuildContext context, ManufacturerData mfr) {
+  Widget _manageMfrButton(
+    BuildContext context,
+    ManufacturerData mfr, {
+    required int emptyCount,
+  }) {
     return InkWell(
-      onTap: () => _showUpdateManufacturerDialog(mfr),
+      onTap: () => _showUpdateManufacturerDialog(mfr, emptyCount: emptyCount),
       borderRadius: BorderRadius.circular(10),
       child: Container(
         padding: EdgeInsets.symmetric(
@@ -1729,9 +1589,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-        child: Container(
+      builder: (ctx) => Container(
           decoration: BoxDecoration(
             color: _surface,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
@@ -1740,7 +1598,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
             24,
             24,
             24,
-            24 + context.deviceBottomInset,
+            24 + ctx.deviceBottomPadding,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1789,41 +1647,50 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                   final mfrBusinessId =
                       ref.read(authProvider).currentUser?.businessId;
                   if (mfrBusinessId == null) return;
-                  await ref
-                      .read(databaseProvider)
-                      .inventoryDao
-                      .insertManufacturer(
-                        ManufacturersCompanion.insert(
-                          name: mfrName,
-                          businessId: mfrBusinessId,
-                          emptyCrateStock: Value(
-                            int.tryParse(stockCtrl.text.trim()) ?? 0,
+                  try {
+                    await ref
+                        .read(databaseProvider)
+                        .inventoryDao
+                        .insertManufacturer(
+                          ManufacturersCompanion.insert(
+                            name: mfrName,
+                            businessId: mfrBusinessId,
+                            emptyCrateStock: Value(
+                              int.tryParse(stockCtrl.text.trim()) ?? 0,
+                            ),
+                            depositAmountKobo: Value(
+                              ((parseCurrency(depositCtrl.text)) * 100).round(),
+                            ),
                           ),
-                          depositAmountKobo: Value(
-                            ((parseCurrency(depositCtrl.text)) * 100).round(),
-                          ),
-                        ),
+                        );
+                    await ref
+                        .read(activityLogProvider)
+                        .logAction(
+                          'add_manufacturer',
+                          '${ref.read(authProvider).currentUser?.name ?? 'Unknown'} added manufacturer: $mfrName',
+                        );
+                    if (context.mounted) Navigator.pop(ctx);
+                  } catch (_) {
+                    if (ctx.mounted) {
+                      AppNotification.showError(
+                        ctx,
+                        'Could not add manufacturer. Please try again.',
                       );
-                  await ref
-                      .read(activityLogProvider)
-                      .logAction(
-                        'add_manufacturer',
-                        '${ref.read(authProvider).currentUser?.name ?? 'Unknown'} added manufacturer: $mfrName',
-                      );
-                  if (context.mounted) Navigator.pop(ctx);
+                    }
+                  }
                 },
               ),
             ],
           ),
         ),
-      ),
     );
   }
 
-  void _showUpdateManufacturerDialog(ManufacturerData mfr) {
-    final stockCtrl = TextEditingController(
-      text: mfr.emptyCrateStock.toString(),
-    );
+  void _showUpdateManufacturerDialog(
+    ManufacturerData mfr, {
+    required int emptyCount,
+  }) {
+    final stockCtrl = TextEditingController(text: emptyCount.toString());
     final depositCtrl = TextEditingController();
     final crateValueCtrl = TextEditingController();
     const isCEO = true;
@@ -1837,11 +1704,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setB) => Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(ctx).viewInsets.bottom,
-          ),
-          child: Container(
+        builder: (ctx, setB) => Container(
             decoration: BoxDecoration(
               color: _surface,
               borderRadius: const BorderRadius.vertical(
@@ -1852,7 +1715,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
               24,
               24,
               24,
-              24 + context.deviceBottomInset,
+              24 + ctx.deviceBottomPadding,
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -2015,60 +1878,68 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                   variant: AppButtonVariant.primary,
                   onPressed: () async {
                     final db = ref.read(databaseProvider);
-                    // Update Stock
-                    await db.inventoryDao.updateManufacturerStock(
-                      mfr.id,
-                      int.tryParse(stockCtrl.text.trim()) ??
-                          mfr.emptyCrateStock,
-                    );
-
-                    // Update Deposit
-                    if (isCEO && depositCtrl.text.isNotEmpty) {
-                      final inputVal = parseCurrency(depositCtrl.text);
-                      final inputKobo = (inputVal * 100).round();
-                      int newDepositKobo = mfr.depositAmountKobo;
-                      if (depositMode == 'add') {
-                        newDepositKobo += inputKobo;
-                      } else {
-                        newDepositKobo = inputKobo;
-                      }
-                      await db.inventoryDao.updateManufacturerDeposit(
+                    try {
+                      // Update Stock
+                      await db.inventoryDao.updateManufacturerStock(
                         mfr.id,
-                        newDepositKobo,
+                        int.tryParse(stockCtrl.text.trim()) ?? emptyCount,
+                        storeId: ref.read(lockedStoreProvider).value,
                       );
-                    }
 
-                    // Update Product Crate Values
-                    if (isCEO && crateValueCtrl.text.isNotEmpty) {
-                      final inputVal = parseCurrency(crateValueCtrl.text);
-                      final inputKobo = (inputVal * 100).round();
-
-                      if (priceMode == 'add') {
-                        await db.catalogDao.updateManufacturerEmptyCrateValue(
+                      // Update Deposit
+                      if (isCEO && depositCtrl.text.isNotEmpty) {
+                        final inputVal = parseCurrency(depositCtrl.text);
+                        final inputKobo = (inputVal * 100).round();
+                        int newDepositKobo = mfr.depositAmountKobo;
+                        if (depositMode == 'add') {
+                          newDepositKobo += inputKobo;
+                        } else {
+                          newDepositKobo = inputKobo;
+                        }
+                        await db.inventoryDao.updateManufacturerDeposit(
                           mfr.id,
-                          inputKobo,
+                          newDepositKobo,
                         );
-                      } else {
-                        await db.catalogDao.updateManufacturerEmptyCrateValue(
-                          mfr.id,
-                          inputKobo,
+                      }
+
+                      // Update Product Crate Values
+                      if (isCEO && crateValueCtrl.text.isNotEmpty) {
+                        final inputVal = parseCurrency(crateValueCtrl.text);
+                        final inputKobo = (inputVal * 100).round();
+
+                        if (priceMode == 'add') {
+                          await db.catalogDao.updateManufacturerEmptyCrateValue(
+                            mfr.id,
+                            inputKobo,
+                          );
+                        } else {
+                          await db.catalogDao.updateManufacturerEmptyCrateValue(
+                            mfr.id,
+                            inputKobo,
+                          );
+                        }
+                      }
+
+                      await ref
+                          .read(activityLogProvider)
+                          .logAction(
+                            'update_manufacturer',
+                            '${ref.read(authProvider).currentUser?.name ?? 'Unknown'} updated crate stock/deposit for ${mfr.name}',
+                          );
+                      if (context.mounted) Navigator.pop(ctx);
+                    } catch (_) {
+                      if (ctx.mounted) {
+                        AppNotification.showError(
+                          ctx,
+                          'Could not save changes. Please try again.',
                         );
                       }
                     }
-
-                    await ref
-                        .read(activityLogProvider)
-                        .logAction(
-                          'update_manufacturer',
-                          '${ref.read(authProvider).currentUser?.name ?? 'Unknown'} updated crate stock/deposit for ${mfr.name}',
-                        );
-                    if (context.mounted) Navigator.pop(ctx);
                   },
                 ),
               ],
             ),
           ),
-        ),
       ),
     );
   }
@@ -2240,9 +2111,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-        child: Container(
+      builder: (ctx) => Container(
           decoration: BoxDecoration(
             color: _surface,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
@@ -2251,7 +2120,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
             24,
             24,
             24,
-            24 + context.deviceBottomInset,
+            24 + ctx.deviceBottomPadding,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -2279,23 +2148,31 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                   final newStock =
                       int.tryParse(stockCtrl.text.trim()) ??
                       grp.emptyCrateStock;
-                  await ref
-                      .read(databaseProvider)
-                      .inventoryDao
-                      .updateCrateGroupStock(grp.id, newStock);
-                  await ref
-                      .read(activityLogProvider)
-                      .logAction(
-                        'crate_group_update',
-                        '${ref.read(authProvider).currentUser?.name ?? 'Unknown'} set ${grp.name} crate stock to $newStock',
+                  try {
+                    await ref
+                        .read(databaseProvider)
+                        .inventoryDao
+                        .updateCrateGroupStock(grp.id, newStock);
+                    await ref
+                        .read(activityLogProvider)
+                        .logAction(
+                          'crate_group_update',
+                          '${ref.read(authProvider).currentUser?.name ?? 'Unknown'} set ${grp.name} crate stock to $newStock',
+                        );
+                    if (context.mounted) Navigator.pop(ctx);
+                  } catch (_) {
+                    if (ctx.mounted) {
+                      AppNotification.showError(
+                        ctx,
+                        'Could not update crate stock. Please try again.',
                       );
-                  if (context.mounted) Navigator.pop(ctx);
+                    }
+                  }
                 },
               ),
             ],
           ),
         ),
-      ),
     );
   }
 
@@ -2316,9 +2193,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-        child: Container(
+      builder: (ctx) => Container(
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
@@ -2327,7 +2202,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
             24,
             24,
             24,
-            24 + context.deviceBottomInset,
+            24 + ctx.deviceBottomPadding,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -2398,7 +2273,6 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
             ],
           ),
         ),
-      ),
     );
   }
 }

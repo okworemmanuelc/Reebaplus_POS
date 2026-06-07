@@ -7,7 +7,7 @@
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
-import 'package:reebaplus_pos/features/pos/screens/pos_home_screen.dart';
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 
 StoreData _store(String id) => StoreData(
       id: id,

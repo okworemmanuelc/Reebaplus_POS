@@ -20,6 +20,12 @@ class PosController extends ChangeNotifier {
   bool isSearching = false;
   String? currentStoreName;
 
+  /// The concrete store POS sells from when the global active store is "All
+  /// Stores" (`lockedStoreId == null`, an all-stores viewer). Set by the POS
+  /// screen from the user's first selectable store (§12.1). POS always needs one
+  /// real store for the grid + checkout even when the view filter is "All".
+  String? fallbackStoreId;
+
   bool isLoading = true;
   bool _disposed = false;
   StreamSubscription? _productsSub;
@@ -87,7 +93,7 @@ class PosController extends ChangeNotifier {
       return;
     }
 
-    final storeId = _navigationService.lockedStoreId.value;
+    final storeId = _navigationService.lockedStoreId.value ?? fallbackStoreId;
 
     if (storeId != null) {
       // Fetch store name
@@ -124,6 +130,14 @@ class PosController extends ChangeNotifier {
       selectedGroup = customer.priceTier;
       notifyListeners();
     }
+  }
+
+  /// Sets the "All Stores" fallback selling store (§12.1) and re-subscribes the
+  /// product grid if it changed and is currently the effective store.
+  void setFallbackStore(String? id) {
+    if (fallbackStoreId == id) return;
+    fallbackStoreId = id;
+    if (_navigationService.lockedStoreId.value == null) _subscribeToProducts();
   }
 
   void selectCategory(String? categoryId) {

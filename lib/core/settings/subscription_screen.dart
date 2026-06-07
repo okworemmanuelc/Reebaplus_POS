@@ -43,7 +43,7 @@ class SubscriptionScreen extends ConsumerWidget {
           : SettingsFadeIn(
               child: ListView(
                 padding: EdgeInsets.fromLTRB(
-                    24, 24, 24, 24 + context.deviceBottomInset),
+                    24, 24, 24, 24 + context.deviceBottomPadding),
                 children: [
                   const SettingsSectionTitle('PLAN & STATUS'),
                   const SizedBox(height: 16),

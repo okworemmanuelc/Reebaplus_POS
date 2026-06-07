@@ -5,6 +5,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
@@ -307,7 +308,7 @@ class _EditCustomerSheetState extends ConsumerState<EditCustomerSheet> {
                       context.getRSize(20),
                       context.getRSize(16),
                       context.getRSize(20),
-                      context.deviceBottomInset + context.getRSize(16),
+                      context.deviceBottomPadding + context.getRSize(16),
                     ),
                   child: AppButton(
                     text: 'Save Details',
@@ -332,12 +333,18 @@ class _EditCustomerSheetState extends ConsumerState<EditCustomerSheet> {
                           isWalkIn: false,
                           storeId: _selectedStoreId,
                         );
-                        await ref
-                            .read(customerServiceProvider)
-                            .updateCustomer(updated);
-                        if (!context.mounted) return;
-                        Navigator.pop(context);
-                        widget.onCustomerUpdated?.call(updated);
+                        try {
+                          await ref
+                              .read(customerServiceProvider)
+                              .updateCustomer(updated);
+                          if (!context.mounted) return;
+                          Navigator.pop(context);
+                          widget.onCustomerUpdated?.call(updated);
+                        } catch (_) {
+                          if (!context.mounted) return;
+                          AppNotification.showError(
+                              context, 'Could not update customer. Please try again.');
+                        }
                       }
                     },
                   ),

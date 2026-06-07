@@ -111,9 +111,10 @@ class _StoresSettingsScreenState extends ConsumerState<StoresSettingsScreen> {
     final canManage = hasPermission(ref, 'stores.manage');
 
     return Scaffold(
-      // Single keyboard lift via the ListView's deviceBottomInset bottom padding
-      // below; disabling Scaffold resize avoids double-counting the keyboard
-      // (root-nav screen sees the real inset). Same as add_expense.
+      // Body padding is nav-only (deviceBottomPadding): this screen is under
+      // MainLayout, whose Scaffold already resizes the body for the keyboard, so
+      // the inset must not re-add it. resizeToAvoidBottomInset:false is a harmless
+      // no-op here (the screen sees viewInsets 0 under MainLayout).
       resizeToAvoidBottomInset: false,
       backgroundColor: t.scaffoldBackgroundColor,
       appBar: AppBar(
@@ -132,7 +133,7 @@ class _StoresSettingsScreenState extends ConsumerState<StoresSettingsScreen> {
           : SettingsFadeIn(
               child: ListView(
                 padding: EdgeInsets.fromLTRB(
-                    24, 24, 24, 24 + context.deviceBottomInset),
+                    24, 24, 24, 24 + context.deviceBottomPadding),
                 children: [
                   for (final store in _stores) ...[
                     Container(

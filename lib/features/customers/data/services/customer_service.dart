@@ -187,7 +187,7 @@ class CustomerService extends ValueNotifier<List<Customer>> {
 
   Future<void> updateWalletLimit(String customerId, double newLimit) async {
     final customer = getById(customerId);
-    if (customer == null) return;
+    if (customer == null) throw StateError('updateWalletLimit: customer $customerId not found');
 
     final limitKobo = (newLimit * 100).round();
     await _db.customersDao.updateWalletLimit(customerId, limitKobo);

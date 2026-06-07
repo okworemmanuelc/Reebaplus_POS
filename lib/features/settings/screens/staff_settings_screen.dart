@@ -61,7 +61,7 @@ class StaffSettingsScreen extends ConsumerWidget {
     return SettingsFadeIn(
       child: ListView(
         padding:
-            EdgeInsets.fromLTRB(24, 24, 24, 24 + context.deviceBottomInset),
+            EdgeInsets.fromLTRB(24, 24, 24, 24 + context.deviceBottomPadding),
         children: [
           SettingsTile(
             icon: Icons.person_rounded,

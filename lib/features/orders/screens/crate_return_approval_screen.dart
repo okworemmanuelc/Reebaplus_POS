@@ -4,6 +4,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
@@ -36,7 +37,8 @@ class _CrateReturnApprovalScreenState
 
       await ref.read(crateReturnApprovalServiceProvider).approve(id, user.id);
       if (mounted) AppNotification.showSuccess(context, 'Return approved');
-    } catch (e) {
+    } catch (e, st) {
+      CrashReporter.record(e, st, context: 'orders.crate_return.approve');
       if (mounted) AppNotification.showError(context, e.toString());
     } finally {
       if (mounted) setState(() => _processing = false);
@@ -57,7 +59,8 @@ class _CrateReturnApprovalScreenState
           .read(crateReturnApprovalServiceProvider)
           .reject(id, user.id, reason);
       if (mounted) AppNotification.showSuccess(context, 'Return rejected');
-    } catch (e) {
+    } catch (e, st) {
+      CrashReporter.record(e, st, context: 'orders.crate_return.reject');
       if (mounted) AppNotification.showError(context, e.toString());
     } finally {
       if (mounted) setState(() => _processing = false);
@@ -161,7 +164,7 @@ class _CrateReturnApprovalScreenState
                 16,
                 16,
                 16,
-                16 + context.deviceBottomInset,
+                16 + context.deviceBottomPadding,
               ),
               itemCount: sortedKeys.length,
               itemBuilder: (context, index) {

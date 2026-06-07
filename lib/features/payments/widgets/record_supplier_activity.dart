@@ -40,7 +40,7 @@ void showSupplierActivityChooser(
           ctx.getRSize(20),
           ctx.getRSize(12),
           ctx.getRSize(20),
-          ctx.deviceBottomInset + ctx.getRSize(24),
+          ctx.deviceBottomPadding + ctx.getRSize(24),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -285,9 +285,9 @@ class _RecordInvoiceSheetState extends ConsumerState<RecordInvoiceSheet>
       return;
     }
     final amountKobo = (parseCurrency(_amountCtrl.text) * 100).round();
-    if (amountKobo <= 0) return;
+    if (amountKobo <= 0) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter an amount greater than 0'))); return; }
     final staffId = ref.read(authProvider).currentUser?.id;
-    if (staffId == null) return;
+    if (staffId == null) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cannot record: account not fully loaded yet. Try again in a moment.'))); return; }
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _saving = true);
     try {
@@ -406,7 +406,7 @@ class _RecordInvoiceSheetState extends ConsumerState<RecordInvoiceSheet>
                         context.getRSize(20),
                         context.getRSize(16),
                         context.getRSize(20),
-                        context.deviceBottomInset + context.getRSize(16),
+                        context.deviceBottomPadding + context.getRSize(16),
                       ),
                       child: AppButton(
                         text: 'Record Invoice',
@@ -507,7 +507,7 @@ class _RecordPaymentSheetState extends ConsumerState<RecordPaymentSheet>
       return;
     }
     final amountKobo = (parseCurrency(_amountCtrl.text) * 100).round();
-    if (amountKobo <= 0) return;
+    if (amountKobo <= 0) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter an amount greater than 0'))); return; }
     final staffId = ref.read(authProvider).currentUser?.id;
     if (staffId == null) return;
     setState(() => _saving = true);
@@ -661,7 +661,7 @@ class _RecordPaymentSheetState extends ConsumerState<RecordPaymentSheet>
                         context.getRSize(20),
                         context.getRSize(16),
                         context.getRSize(20),
-                        context.deviceBottomInset + context.getRSize(16),
+                        context.deviceBottomPadding + context.getRSize(16),
                       ),
                       child: AppButton(
                         text: 'Record Payment',

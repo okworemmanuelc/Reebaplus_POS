@@ -50,10 +50,12 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
           .map((b) => b.type)
           .firstOrNull,
     );
-    // §16.6.1 — count of stock-keeper adjustments awaiting this viewer's
-    // approval (a CEO sees all stores; a Manager only their assigned store(s)).
+    // §16.6.1 + §12.3.1 — count of stock-keeper adjustments AND cashier Quick
+    // Sale requests awaiting this viewer's approval (a CEO sees all stores; a
+    // Manager only their assigned store(s)).
     final pendingApprovals =
-        ref.watch(viewerScopedPendingStockRequestsProvider).length;
+        ref.watch(viewerScopedPendingStockRequestsProvider).length +
+            ref.watch(viewerScopedPendingQuickSaleRequestsProvider).length;
     return SharedScaffold(
       activeRoute: 'dashboard',
       appBar: AppBar(
@@ -83,19 +85,20 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
         child: GridView.count(
           crossAxisCount: 2,
           padding: EdgeInsets.all(context.spacingM).copyWith(
-            bottom: context.spacingM + context.deviceBottomInset,
+            bottom: context.spacingM + context.deviceBottomPadding,
           ),
           mainAxisSpacing: context.spacingM,
           crossAxisSpacing: context.spacingM,
           children: [
-            // Pending Stock Approvals (§16.6.1) — stock-keeper Add/Remove
-            // requests await the affected store's Manager / the CEO here. Shown
-            // first as an action item; the badge counts what's outstanding.
+            // Pending Approvals (§16.6.1 + §12.3.1) — stock-keeper Add/Remove
+            // requests AND cashier Quick Sale requests await the affected
+            // store's Manager / the CEO here. Shown first as an action item; the
+            // badge counts the combined outstanding total.
             if (isMgrUp)
               _buildReportCard(
                 context,
-                title: 'Stock Approvals',
-                subtitle: 'Approve Stock Changes',
+                title: 'Approvals',
+                subtitle: 'Stock & quick sales',
                 icon: FontAwesomeIcons.clipboardList,
                 color: Colors.orange,
                 locked: false,

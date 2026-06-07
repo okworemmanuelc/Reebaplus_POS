@@ -380,7 +380,7 @@ Where the CEO tunes everything about the business. Menu screen with tappable sec
 ### 10.2 Roles & Permissions sub-page (per role)
 
 - All permissions shown as toggles, grouped by category (Sales, Products, Stock, Reports, Customers, etc.). Exception: `sales.discount.give` has no toggle — whether a role can discount is governed entirely by the **Max discount %** limit shown under the Sales section (0% = no discount), so a separate on/off toggle would be redundant. The key remains in the catalogue, unenforced.
-- **Stores** section sits first, at the very top. It groups the Manager-only **Allow viewing other stores** toggle (Default OFF; when ON, the Manager's Home store picker is unlocked — see §11.2 — so they can view other stores and request restock; stored per role in `role_settings` key `manager_view_all_stores`) together with the **Add, edit, and remove stores** permission toggle directly below it. The `Stores`-category permission group always renders here at the top, never at the bottom of the list. The "Add, edit, and remove stores" toggle is backed by the **`stores.manage`** permission key (category `Stores`, **CEO-only by default**, built 2026-06-05); it gates the sidebar Stores screen (add / edit / delete / stock transfer) and the Settings → Stores name/address editor — all of which previously rode on the generic `settings.manage`. Catalogue + CEO backfill: client schema v38 (`INSERT OR IGNORE`) and cloud `0095_add_stores_manage_permission.sql`.
+- **Stores** section sits first, at the very top. It groups the Manager-only **Allow viewing other stores** toggle (Default OFF; when ON, the Manager's Home store picker is unlocked — see §11.2 — so they can view other stores and request restock; stored per role in `role_settings` key `manager_view_all_stores`) together with the **Add, edit, and remove stores** permission toggle directly below it. The `Stores`-category permission group always renders here at the top, never at the bottom of the list. The "Add, edit, and remove stores" toggle is backed by the **`stores.manage`** permission key (category `Stores`, **CEO-only by default**, built 2026-06-05); it gates the sidebar Stores screen (add / edit / delete / stock transfer — create and cancel) and the Settings → Stores name/address editor — all of which previously rode on the generic `settings.manage`. Catalogue + CEO backfill: client schema v38 (`INSERT OR IGNORE`) and cloud `0095_add_stores_manage_permission.sql`. A second Stores permission — **`stores.receive_transfer`** (CEO-only by default, grantable to Manager/Stock keeper per role and per-store via §10.2.1) — gates confirming receipt of an incoming transfer; create/cancel remains `stores.manage`. Catalogue + CEO backfill: client schema v44 and cloud `0103_add_stores_receive_transfer_permission.sql`.
 - The **Max discount %** limit (per role) sits directly under the Sales section near the top (Default: Manager 10%, Cashier 0%) — it is the discount control.
 - The **Max expense approval** amount (per role) sits directly under the Expenses section (Default: Manager amount set by CEO).
 - CEO role: all toggles locked ON (greyed out) so CEO's access can never be accidentally removed.
@@ -397,7 +397,7 @@ Permission settings are layered by scope, most-specific wins: **User > Store > B
 
 **All three scopes ship.** Business and User shipped in Phase 1; the **Store** scope shipped 2026-06-06 as an authorized Phase 2 multi-store slice. On the role page, selecting **Store** reveals a store picker and the role's permission toggles for the chosen store: each toggle shows the **effective** value for that store (the business default, unless the store overrides it), flipping it away from the business default stores a per-store override, flipping it back clears it (inherit). A **Restore store defaults** action clears every override for that store+role at once. The CEO is never overridable (always all-on).
 
-**Storage & resolution.** Per-user overrides live in the synced tenant table `user_permission_overrides` (`business_id`, `user_id`, `permission_key`, `is_granted`); presence of a row = an override, `is_granted` true/false = force-grant/force-revoke, absence = inherit the role default. It follows the §5 sync contract (in `_syncedTenantTables`, written through a DAO that enqueues, stream provider added). The **Store** layer is the synced tenant table `store_role_permissions` (`business_id`, `store_id`, `role_id`, `permission_key`, `is_granted`) — the same override shape as `user_permission_overrides` but keyed by store+role: a row forces a permission on/off for everyone working in that store, absence = inherit the business (role) default. It follows the same §5 contract (synced, DAO-enqueued, hard-delete junction like `role_permissions`, REPLICA IDENTITY FULL for live realtime deletes, stream provider). The runtime resolver (`currentUserPermissionsProvider`) merges the layers most-specific-wins, **User > Store > Business**: it starts from the role's business grants, applies the **active store's** overrides, then the user's overrides. The *active store* is the store the person is working at — the selected/locked store (the §12.1 pick-your-store gate), falling back to their sole assigned store; when neither resolves (e.g. a multi-store user who hasn't picked a store yet), no store layer applies and effective = business ± user. The CEO skips both the store and user override layers (always all-on).
+**Storage & resolution.** Per-user overrides live in the synced tenant table `user_permission_overrides` (`business_id`, `user_id`, `permission_key`, `is_granted`); presence of a row = an override, `is_granted` true/false = force-grant/force-revoke, absence = inherit the role default. It follows the §5 sync contract (in `_syncedTenantTables`, written through a DAO that enqueues, stream provider added). The **Store** layer is the synced tenant table `store_role_permissions` (`business_id`, `store_id`, `role_id`, `permission_key`, `is_granted`) — the same override shape as `user_permission_overrides` but keyed by store+role: a row forces a permission on/off for everyone working in that store, absence = inherit the business (role) default. It follows the same §5 contract (synced, DAO-enqueued, hard-delete junction like `role_permissions`, REPLICA IDENTITY FULL for live realtime deletes, stream provider). The runtime resolver (`currentUserPermissionsProvider`) merges the layers most-specific-wins, **User > Store > Business**: it starts from the role's business grants, applies the **active store's** overrides, then the user's overrides. The *active store* is the store the person is working at — the store chosen in the §12.1 navigation-drawer store picker, falling back to their sole assigned store; when neither resolves (e.g. a multi-store all-stores viewer who has "All Stores" selected), no store layer applies and effective = business ± user. The CEO skips both the store and user override layers (always all-on).
 
 ### 10.3 Delete Business & Account (Danger Zone)
 
@@ -493,8 +493,8 @@ The screen where sales actually happen. POS and Cart are gated on `sales.make`: 
 
 ### 12.1 Header
 
-- Hamburger menu, app logo, business name with current store as subtitle (e.g., "Keffi"), search icon, store selector icon, notification bell.
-- **Store selector (2026-06-05).** Shows whenever the user has **more than one store they may sell from** — every active store for a CEO / all-stores Manager, otherwise their **assigned** store(s) (§11.2/§28 confinement). Single-store users see no selector. On entering POS, a confined staff member assigned to more than one store is prompted once to pick which store they're working from (the §28 "pick your store" gate, in-app rather than a separate login screen, by design); the choice sticks for the session. The selected store drives the product grid, the price tier, and the order's `store_id` at checkout. (Was CEO-only until staff multi-store assignment shipped, §9.5.)
+- Hamburger menu, app logo, business name with current store as subtitle (e.g., "Keffi"), search icon, notification bell.
+- **Store selector (2026-06-05; moved to the navigation drawer 2026-06-06).** A single store picker lives in the **navigation drawer, just above "Home"** — not on the POS header. It is the **one app-wide active-store control**: the store chosen there drives the view filter on Home, Inventory, POS, the Customers list, and the Activity Log all at once (it replaced the per-screen store dropdowns those screens used to carry). It shows whenever the user has **more than one store they may select** — every active store for a CEO / all-stores Manager, otherwise their **assigned** store(s) (§11.2/§28 confinement). Single-store users (and confined staff assigned to just one store) see no selector. **"All Stores"** is offered only to all-stores viewers (CEO / all-stores Manager); picking it shows combined data on the overview screens — and on POS, which always needs a concrete selling store, the sale falls back to the user's **first selectable store** (shown in the POS header subtitle). The selected store drives the product grid, the price tier, and the order's `store_id` at checkout. There is no longer a one-time "pick your store" modal on POS entry (the old §28 gate); a confined multi-store staff member is auto-defaulted to their first assigned store and switches via the drawer picker. (Was CEO-only until staff multi-store assignment shipped, §9.5; was a POS-header icon until 2026-06-06.)
 
 ### 12.2 Filters row
 
@@ -508,10 +508,36 @@ The screen where sales actually happen. POS and Cart are gated on `sales.make`: 
 
 ### 12.3 Quick Sale
 
-- Tapping the lightning bolt prompts for CEO or Manager PIN if user is Cashier.
-- On unlock, modal opens to enter: product name, unit price, quantity.
-- Item is added to cart and calculated normally.
+- Tapping the lightning bolt opens the modal to enter: product name, unit price, quantity.
+- **CEO / Manager:** the item is added to the cart and calculated normally — no approval.
+- **Cashier / any role below Manager:** the item is **not** added straight to the cart.
+  "Send for Approval" records a **pending Quick Sale request** (§12.3.1) and the
+  modal shows a "Waiting for approval…" state. The cashier cannot proceed until a
+  Manager/CEO decides.
 - All Quick Sales are tracked in Activity Logs.
+
+#### 12.3.1 Cashier Quick Sale approval (added 2026-06-06, user)
+
+The old CEO/Manager **PIN gate** for a Cashier Quick Sale is **replaced** by an
+approval request — the same async, cross-device approval pattern as stock-keeper
+adjustments (§16.6.1), surfaced in the renamed Reports → **Approvals** card (§25.2).
+
+- A role below Manager fills the modal and taps **Send for Approval**. This writes
+  a **pending request** (item name, quantity, unit price, the active selling
+  store) and notifies the **CEO and the Manager(s) of that store** (if no Manager
+  is tied to the store, only the CEO). The modal stays open showing
+  "Waiting for approval…", with a **Cancel** to withdraw the request.
+- The approver opens the **Approvals** card on the Reports hub — CEO sees every
+  store's requests, a Manager only their assigned store(s). Each request is a
+  tappable card with **Approve / Reject**.
+- **Approve** notifies the cashier; their device then **drops the item into the
+  cart**. Because a Quick Sale bypasses inventory (§26.4), approval moves **no
+  stock** — it only releases the one item into the cart, after which Quick Sale is
+  locked again (every Quick Sale needs its own approval).
+- **Reject** (with an optional reason) notifies the cashier; their modal **closes**
+  and a "Quick sale was rejected" message shows. They cannot proceed.
+- Either decision is written to the activity log. **Manager/CEO** Quick Sales add
+  directly and never enter this queue.
 
 > Recorded as a real order line (2026-06-04, user). A Quick Sale checks out like
 > any sale: it becomes a normal order line with **no product** (`order_items.
@@ -732,7 +758,7 @@ Shown after Confirm Payment, and accessible from Orders > Completed tab.
   city/state only). The old `Branch: <store name>` line is **removed** — the
   address replaces it. (2026-06-05, user.)
 - Customer details (name, address, phone for registered customers).
-- Order number (short format: ORD-000002) + date + time.
+- Order number (short format: ORD-000002-XXXXXX — the per-device tag suffix per §30.8.1) + date + time.
 - Line items with quantities and prices.
 - Discounts shown per line and in totals section: Subtotal, Discount, Total.
 - Payment Method + Amount Paid.
@@ -899,10 +925,30 @@ Permissions (defaults shown above):
 
 ### 16.8 History tab
 
-- Tracks sales-driven stock movements, stock added, transfers between stores (Phase 2), and damages recorded.
+- Tracks sales-driven stock movements, stock added, transfers between stores, and damages recorded.
 - Product deletions also appear here: deleting a product removes its remaining stock via adjustment rows, which show in History (with the units removed, who deleted it, and when). (Amended 2026-05-30, pivot step 15.)
 - Time filters: Today, 7 Days, 30 Days, All.
 - CEO: full history across all stores. Manager: own store. Stock keeper: own store. Cashier: hidden.
+
+#### §16.8.1 Stock transfer between stores (shipped 2026-06-06)
+
+**State machine (send → receive):** A transfer moves through `in_transit → received` (or `in_transit → cancelled`). Single-product per transfer row (multi-product = queue multiple transfers).
+
+- **Create / in_transit:** CEO (or anyone with `stores.manage`) dispatches from the Stores screen → Transfer screen. Source inventory is **decremented immediately** (via `pos_inventory_delta_v2` `transfer_out` leg); stock is un-sellable until receipt. The `StockTransfers` header row is written `in_transit` in the same local transaction as the inventory envelope (atomicity, mirror of approval pattern).
+- **Received:** Destination user with `stores.receive_transfer` confirms on the Incoming Transfers screen. Destination inventory is incremented (`transfer_in` leg). `receivedBy` / `receivedAt` stamped.
+- **Cancelled:** CEO cancels an in-flight transfer. A compensating `transfer_in` at the source restores inventory. The header flips to `cancelled`.
+
+**Permissions:** `stores.manage` → create + cancel (CEO only by default). `stores.receive_transfer` → confirm receipt (CEO only by default; grantable to Manager/Stock keeper per role and per-store via §10.2.1).
+
+**Insufficient-stock guard:** `pos_inventory_delta_v2` rejects the `transfer_out` leg server-side (`insufficient_stock` P0001); the transfer is not created.
+
+**Ledger / History:** `transfer_out` and `transfer_in` `stock_transactions` rows are minted by the server, feed §16.8 Inventory History automatically.
+
+**Per-store empty-crate tracking (`store_crate_balances` — shipped Phase 2):**
+
+- Today empty crates were tracked business-wide on `manufacturers.empty_crate_stock`. Phase 2 re-architects this: a new **`store_crate_balances (business_id, store_id, manufacturer_id, balance)`** cache table holds per-store empty-crate counts; `crate_ledger` gains a nullable `store_id` column (set only on business-held movements; customer rows stay null). `customer_crate_balances` is unchanged (customer owes the *business*, not a store).
+- **Backfill rule:** on schema v44 upgrade, existing `manufacturers.empty_crate_stock` is folded into the **primary store = MIN(created_at) non-deleted Stores row** (deterministic; CEO can re-transfer crates after migration to the physical location).
+- **Crate leg on transfers (Phase 3):** a `pos_transfer_crates` RPC will move `store_crate_balances` between stores atomically; the transfer create screen gains an optional crate component for Bar/Beer Distributor businesses.
 
 ### 16.9 Suppliers tab
 
@@ -1055,7 +1101,7 @@ Stock keeper, Manager, CEO. Cashier blocked.
 
 ### 19.4 Order card
 
-Uses short Order ID (e.g., ORD-000001), not the long UUID. Shows customer name, address, status badge, payment method, timestamp, **who created the order**, line items, total, paid amount.
+Uses short Order ID (e.g., ORD-000001-XXXXXX — the per-device tag suffix per §30.8.1), not the long UUID. Shows customer name, address, status badge, payment method, timestamp, **who created the order**, line items, total, paid amount.
 
 > Created by (2026-06-04, user). "Who created the order" is the staff member who
 > rang up the sale (`orders.staff_id`). Shown on **every** tab (Pending /
@@ -1427,9 +1473,9 @@ CSV/PDF export with selectable time frame. Deferred to Phase 3.
 > Report** (unknown cost — treated like any uncosted line). It carries no
 > product, so it is omitted from the per-product "top item" / SKU breakdowns.
 
-- Stock Approvals — CEO + Manager. Stock-keeper Add/Remove requests awaiting approval (§16.6.1). A tappable card per request expands to the detail with Approve / Reject; a count badge shows what's outstanding. (Added 2026-06-04, user.)
+- Approvals — CEO + Manager. Both stock-keeper Add/Remove requests (§16.6.1) **and** cashier Quick Sale requests (§12.3.1) awaiting approval. A tappable card per request with Approve / Reject; a count badge shows the combined outstanding total. (Renamed from "Stock Approvals" 2026-06-06 when Quick Sale approvals were folded in; originally added 2026-06-04, user.)
 
-Note: **expense** pending approvals are not on Reports — they live on the Expenses screen and notification bell (§20.4). The Stock Approvals card above is the one exception, added 2026-06-04 on user request to surface stock-keeper adjustment approvals (§16.6.1) in the Reports tab.
+Note: **expense** pending approvals are not on Reports — they live on the Expenses screen and notification bell (§20.4). The Approvals card above is the one exception, added 2026-06-04 on user request to surface stock-keeper adjustment approvals (§16.6.1) — and, from 2026-06-06, cashier Quick Sale approvals (§12.3.1) — in the Reports tab.
 
 > Removed 2026-06-02 (user) — the standalone **Stock Audit report** (hub card +
 > screen) was dropped from Phase 1. Stock health stays visible in Inventory, and
@@ -1531,6 +1577,8 @@ Opens the relevant screen (Inventory for low stock, Expense for pending approval
 - Damage recorded (fires to Manager, CEO).
 - Stock keeper requested a stock change → **approval needed** (fires to the CEO and the Manager(s) of the **affected store** — info for an add, warning for a removal, with the reason). Only fires when the actor is a stock keeper. CEOs always receive it (they aren't store-assigned); Managers are narrowed to those assigned to the store where the stock moved. If no Manager is tied to that store, only the CEO is notified. The approver acts on it via the Stock Approvals card (§16.6.1 / §25.2). (Amended 2026-06-04, user: stock-keeper changes are now approval-gated — the old post-hoc "added/removed stock" notice became this approval request. The audience rule is unchanged; no all-Managers fallback.)
 - Stock change approved / rejected (fires to the stock keeper who submitted; §16.6.1).
+- Cashier requested a Quick Sale → **approval needed** (fires to the CEO and the Manager(s) of the **active selling store**; only fires when the actor is below Manager). The approver acts on it via the Approvals card (§12.3.1 / §25.2). (Added 2026-06-06, user — types `quick_sale_approval.requested`.)
+- Quick Sale approved / rejected (fires to the cashier who submitted; §12.3.1). Approval releases the item into the cashier's cart; rejection closes their modal with a "Quick sale was rejected" message. (Added 2026-06-06, user — types `quick_sale_approval.approved` / `quick_sale_approval.rejected`.)
 
 **Staff**
 
@@ -1676,7 +1724,7 @@ Hardcoded for now. Custom notification settings = Phase 2.
 
 These are flagged for the second release. The architecture supports them — only the UI is held back for now.
 
-- Multi-store UI: store picker on login (if staff assigned to multiple stores), stock transfer screens, per-store filters in reports, ability for CEO to add/remove stores. *(Partly shipped: stores list/management screen + `stores.manage`; receipt store-address; **staff multi-store assignment** — the CEO add/remove of a staff member's `user_stores` set from the staff profile, `staff.assign_stores`, §9.5, 2026-06-05; **multi-store active-store selection** — a confined staff member assigned to >1 store picks which store they sell from, in-app on POS entry (not a separate login screen, by design) and confined to their assigned stores, §12.1, 2026-06-05. Still deferred: stock transfer UI, per-store report filters.)*
+- Multi-store UI: store picker on login (if staff assigned to multiple stores), stock transfer screens, per-store filters in reports, ability for CEO to add/remove stores. *(Partly shipped: stores list/management screen + `stores.manage`; receipt store-address; **staff multi-store assignment** — the CEO add/remove of a staff member's `user_stores` set from the staff profile, `staff.assign_stores`, §9.5, 2026-06-05; **multi-store active-store selection** — a single store picker in the navigation drawer (above "Home") sets the one app-wide active store driving Home/Inventory/POS/Customers/Activity Log, confined to the user's assigned stores, §12.1, 2026-06-05 (moved from a POS-header icon to the drawer 2026-06-06). **Shipped 2026-06-06: stock transfer UI** — send → receive confirm workflow, `stores.manage` (create/cancel, CEO) + `stores.receive_transfer` (confirm, CEO default / grantable to Manager/Stock keeper); single-product per transfer; in-transit stock un-sellable; cancel restores source; per-store empty-crate tracking (`store_crate_balances`, §16.8.1). Still deferred: per-store report filters.)*
 - CEO can create custom roles beyond the four defaults.
 - Custom permission groups.
 - Per-card Home visibility toggles per role.
@@ -1739,6 +1787,37 @@ Rotating loading spinners replaced everywhere with subtle fade-in transitions. S
 ### 30.8 IDs
 
 Internal UUIDs are never shown to users. Short, human-readable codes are used instead (e.g., ORD-000001, INV-K7M2QX, REC-0912).
+
+#### 30.8.1 Order numbers — collision-proof across offline devices (2026-06-07, user)
+
+> **Why this exists.** The app is offline-first and runs on multiple tills per
+> business. The original order number was a *per-device running count*
+> (`ORD-` + count+1). Two tills that are both offline each hand the **same**
+> next number to **different** sales; when they later sync, the two orders share
+> `(business_id, order_number)` with different ids and trip the
+> `UNIQUE(business_id, order_number)` constraint. That used to crash a live
+> sale (`SqliteException 2067`). See BUILD_LOG Session 122.
+
+The order number is now **`ORD-NNNNNN-XXXXXX`**:
+
+- **`NNNNNN`** — the per-device running count, zero-padded to 6 digits. This is
+  the familiar sequential part a cashier reads aloud ("order one-two-three").
+  It stays monotonic on a given device, so that device never repeats it.
+- **`XXXXXX`** — a short, **stable per-device tag**: a deterministic Crockford
+  base32 code derived once from the device's opaque, persisted device id (the
+  same id used for single-active-device sessions). Same device → always the same
+  tag; different devices → different tag. No server round-trip, so it works
+  fully offline.
+
+Because the tag differs per device, two offline tills can no longer mint the
+same full code even when their counts coincide. The `UNIQUE(business_id,
+order_number)` constraint and the sync restore's graceful **skip-the-duplicate**
+behaviour (BUILD_LOG Session 122) remain as the backstop for the astronomically
+unlikely tag collision — a clash degrades quietly, it never crashes a sale.
+
+**Backward compatibility:** orders created before this change keep their
+suffix-less `ORD-NNNNNN`. A legacy `ORD-000123` and a new `ORD-000123-XXXXXX`
+are different strings, so they never collide. No history is rewritten.
 
 ### 30.9 Soft deletes
 
@@ -1871,6 +1950,89 @@ with Paystack's API** and sets `subscription_status='active'` +
 the app. When this lands, the "no in-app payment" note in §32 above is replaced
 by this flow. Until then, the "Subscribe / Renew" button shows a "renew from the
 console" placeholder.
+
+---
+
+## 33. Reliability and Crash Handling
+
+*(Added 2026-06-06, user-authorized.)*
+
+The till is a shared device a cashier uses all day, often mid-sale, often offline.
+A crash that drops them to a blank or red Flutter error screen — especially during
+a sale — is unacceptable. This section adds a safety net so an unexpected error is
+**caught, recorded, and shown as a friendly message**, and the till keeps working.
+
+This is a cross-cutting reliability layer, not a new user feature: there is **no new
+sidebar item, tab, or button** for it. It works silently in the background.
+
+### 33.1 What this is NOT
+
+- **No third-party crash service.** We deliberately do **not** use Sentry,
+  Crashlytics, or any external reporting cloud. Crash data stays inside the
+  business's own infrastructure (see §33.3). No new network dependency is added.
+- **No blocking.** A caught error never stops the till. Offline-first already
+  means a failed cloud write is saved locally and retried by the sync queue
+  (§2.6) — §33 does not change that and does not block a sale because a write or a
+  sync failed.
+- **No detailed personal-data capture.** Crash records store the error type, a
+  short message, the stack trace, the screen/context, the active user's role, and
+  the app version — **not** customer names, phone numbers, or money amounts. We do
+  not deliberately log user-entered field values.
+
+### 33.2 Global crash safety net
+
+- A **global error handler** catches every otherwise-uncaught error — Flutter
+  framework errors (`FlutterError.onError`), uncaught async/platform errors
+  (`PlatformDispatcher.onError`), and zone errors (the app runs inside a guarded
+  zone). Each caught error is recorded (§33.3) and, in debug builds, still printed
+  to the console.
+- A **friendly fallback widget** replaces Flutter's default red/grey error box
+  (`ErrorWidget.builder`), so a build error in one widget shows a small, calm
+  "Something went wrong here" card instead of a red screen — matching the tone of
+  the existing schema-error fallback screen.
+- These sit alongside the existing boot-time fallbacks (the schema self-heal
+  → schema-error screen, and the session-expired → re-verify screen in §7), which
+  are unchanged.
+
+### 33.3 The crash log (a new synced table)
+
+Caught errors are written to a new **`error_logs`** table. It is a normal
+**synced tenant table** and follows the §2.4 / sync contract in full: business-
+scoped, append-only, registered for cloud sync, written only through a DAO that
+enqueues. Because it syncs to the **business's own cloud (Supabase)**, the CEO/
+operator can review crashes across every till in one place — the practical benefit
+of a crash service, but in our own data store, RLS-scoped to the business.
+
+- **Stored per row:** error type, short message, stack trace, screen/context tag,
+  the active user's id + role (no name), whether it was fatal (uncaught) vs caught
+  by a boundary, app version, platform, and timestamp.
+- **Append-only.** Rows are never edited or user-deleted. (A future retention
+  sweep may prune old rows — deferred.)
+- **Pre-login crashes stay local-only.** A crash before a business is bound has no
+  tenant to scope to, so that row is kept on the device and not pushed (it cannot
+  be RLS-scoped cloud-side). This is a deliberate, documented exception in the
+  crash-logging DAO.
+- **Writing a crash record never crashes.** The crash logger is fully defensive: if
+  recording the error itself fails (database down, no session), it is swallowed —
+  the safety net can never become the thing that breaks.
+- **Viewing.** Phase 1 has **no in-app crash-log screen** — crashes are reviewed in
+  the Supabase console. An in-app CEO-only viewer is a possible later addition and
+  would be gated like any other screen.
+
+### 33.4 Protection by role (priority order)
+
+The safety net is applied with a reusable guarded-execution helper and per-screen
+error states, prioritized by how costly a crash is:
+
+1. **Cashier sale flow first** — POS, Cart, Checkout, Receipt. A failure here shows
+   a clear, recoverable message ("Couldn't complete that — try again"), never a
+   blank screen, and never silently loses the cart.
+2. **Stock keeper** — shipment receiving and inventory/stock writes.
+3. **Manager / CEO** — reports and the sync/diagnostics surfaces.
+
+Guards wrap **screen and action logic**, not the DAO enqueue path: the sync
+invariants (CLAUDE.md §5) and their enqueue guard must still fail loudly, so the
+crash net deliberately does not swallow sync-registration errors.
 
 ---
 

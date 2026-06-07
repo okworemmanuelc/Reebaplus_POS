@@ -194,33 +194,46 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
     await Future.delayed(const Duration(milliseconds: 800));
     if (!mounted) return;
 
-    // Mark this session as email-authenticated (triggers second OTP after PIN).
-    await auth.saveAuthMethod('email');
+    try {
+      // Mark this session as email-authenticated (triggers second OTP after PIN).
+      await auth.saveAuthMethod('email');
 
-    // Resolve where to go now the email is verified. Shared with the Google
-    // sign-in handler (auth_post_verify_route.dart) so the §7.2a account-scoping
-    // and shared-till PIN rules live in one place and can't drift between the
-    // two entry points. LoginRoute passes the OTP-authenticated user as
-    // presetUser so the PIN screen binds THIS identity, not the last device
-    // user (the wrong-user-PIN bug on a shared till).
-    final route = await resolvePostVerifyRoute(
-      auth,
-      widget.email,
-      isPinReset: widget.isPinReset,
-    );
-    if (!mounted) return;
+      // Resolve where to go now the email is verified. Shared with the Google
+      // sign-in handler (auth_post_verify_route.dart) so the §7.2a account-scoping
+      // and shared-till PIN rules live in one place and can't drift between the
+      // two entry points. LoginRoute passes the OTP-authenticated user as
+      // presetUser so the PIN screen binds THIS identity, not the last device
+      // user (the wrong-user-PIN bug on a shared till).
+      final route = await resolvePostVerifyRoute(
+        auth,
+        widget.email,
+        isPinReset: widget.isPinReset,
+      );
+      if (!mounted) return;
 
-    Navigator.of(context).pushReplacement(
-      SmoothRoute(
-        page: switch (route) {
-          ExistingAccountRoute(:final account) =>
-            ExistingAccountScreen(email: widget.email, account: account),
-          NoAccountFoundRoute() => NoAccountFoundScreen(email: widget.email),
-          LoginRoute(:final user) => LoginScreen(presetUser: user),
-          CreatePinRoute(:final user) => CreatePinScreen(user: user),
-        },
-      ),
-    );
+      Navigator.of(context).pushReplacement(
+        SmoothRoute(
+          page: switch (route) {
+            ExistingAccountRoute(:final account) =>
+              ExistingAccountScreen(email: widget.email, account: account),
+            NoAccountFoundRoute() => NoAccountFoundScreen(email: widget.email),
+            LoginRoute(:final user) => LoginScreen(presetUser: user),
+            CreatePinRoute(:final user) => CreatePinScreen(user: user),
+          },
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _verified = false;
+        _otpController.clear();
+      });
+      AppNotification.showError(
+        context,
+        'Verified, but we could not load your account. Check your connection and try again.',
+      );
+    }
   }
 
   Future<void> _resend() async {

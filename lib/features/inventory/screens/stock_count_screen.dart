@@ -14,6 +14,7 @@ import 'package:reebaplus_pos/core/widgets/app_fab.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 
 /// Damage reasons (§17.2). Key (stored on the stock_adjustment reason as
@@ -279,7 +280,8 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
       );
 
       Navigator.pop(context);
-    } catch (e) {
+    } catch (e, st) {
+      CrashReporter.record(e, st, context: 'inventory.stock_count.submit');
       // A concurrent sale on another shared-till device can drive system stock
       // below a negative diff, so adjustStock throws InsufficientStockException
       // mid-loop. Earlier lines may already be committed; refresh the displayed
@@ -384,30 +386,42 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                 return;
               }
 
-              // §17.2: logs to History.
-              await logService.logAction(
-                'stock_damage',
-                'Damage recorded: $qty × ${p.product.name} ($reasonLabel)',
-                productId: p.product.id,
-                storeId: p.storeId,
-              );
-              // §26.4: damage recorded → Manager, CEO.
-              await _notifyManagersAndCeo(
-                db,
-                type: 'stock_damage',
-                message:
-                    'Damage recorded: $qty × ${p.product.name} ($reasonLabel).',
-                severity: 'warning',
-              );
+              try {
+                // §17.2: logs to History.
+                await logService.logAction(
+                  'stock_damage',
+                  'Damage recorded: $qty × ${p.product.name} ($reasonLabel)',
+                  productId: p.product.id,
+                  storeId: p.storeId,
+                );
+                // §26.4: damage recorded → Manager, CEO.
+                await _notifyManagersAndCeo(
+                  db,
+                  type: 'stock_damage',
+                  message:
+                      'Damage recorded: $qty × ${p.product.name} ($reasonLabel).',
+                  severity: 'warning',
+                );
 
-              if (!sheetCtx.mounted) return;
-              Navigator.pop(sheetCtx);
-              await _loadProducts(); // refresh system stock + diffs
-              if (!context.mounted) return;
-              AppNotification.showSuccess(
-                context,
-                'Damage recorded — stock reduced by $qty.',
-              );
+                if (!sheetCtx.mounted) return;
+                Navigator.pop(sheetCtx);
+                await _loadProducts(); // refresh system stock + diffs
+                if (!context.mounted) return;
+                AppNotification.showSuccess(
+                  context,
+                  'Damage recorded — stock reduced by $qty.',
+                );
+              } catch (_) {
+                if (!sheetCtx.mounted) return;
+                setSheet(() => submitting = false);
+                Navigator.pop(sheetCtx);
+                await _loadProducts();
+                if (!context.mounted) return;
+                AppNotification.showError(
+                  context,
+                  'Stock reduced by $qty, but logging the activity failed.',
+                );
+              }
             }
 
             return Padding(
@@ -415,7 +429,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                 left: context.getRSize(20),
                 right: context.getRSize(20),
                 top: context.getRSize(20),
-                bottom: context.deviceBottomInset + context.getRSize(20),
+                bottom: context.deviceBottomPadding + context.getRSize(20),
               ),
               child: Container(
                 padding: EdgeInsets.all(context.getRSize(20)),
@@ -628,7 +642,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                       0,
                       context.getRSize(8),
                       0,
-                      context.getRSize(8) + context.deviceBottomInset,
+                      context.getRSize(8) + context.deviceBottomPadding,
                     ),
                     itemCount: dates.length,
                     separatorBuilder: (_, __) => Divider(
@@ -791,7 +805,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                     context.getRSize(16),
                     context.getRSize(12),
                     context.getRSize(16),
-                    context.getRSize(12) + context.deviceBottomInset,
+                    context.getRSize(12) + context.deviceBottomPadding,
                   ),
                   itemCount: counts.length,
                   separatorBuilder: (_, __) =>
@@ -1166,7 +1180,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
         Expanded(
           child: ListView.builder(
             padding: EdgeInsets.only(
-              bottom: context.getRSize(24) + context.deviceBottomInset,
+              bottom: context.getRSize(24) + context.deviceBottomPadding,
             ),
             itemCount: _items.length,
             itemBuilder: (_, i) => _buildRow(context, i),

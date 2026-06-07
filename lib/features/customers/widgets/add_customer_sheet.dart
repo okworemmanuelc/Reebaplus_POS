@@ -5,6 +5,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
@@ -249,7 +250,7 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
                           context.getRSize(20),
                           context.getRSize(16),
                           context.getRSize(20),
-                          context.deviceBottomInset + context.getRSize(16),
+                          context.deviceBottomPadding + context.getRSize(16),
                         ),
                       child: AppButton(
                         text: 'Save Customer',
@@ -297,14 +298,25 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
                               isWalkIn: false,
                               storeId: storeId,
                             );
-                            final saved = await ref.read(customerServiceProvider).addCustomer(
-                              newCustomer,
-                              businessId: businessId,
-                            );
-                            if (!context.mounted) return;
-                            Navigator.pop(context);
-                            if (saved != null) {
+                            try {
+                              final saved = await ref.read(customerServiceProvider).addCustomer(
+                                newCustomer,
+                                businessId: businessId,
+                              );
+                              if (!context.mounted) return;
+                              Navigator.pop(context);
+                              if (saved == null) {
+                                if (context.mounted) {
+                                  AppNotification.showError(context,
+                                      'Customer saved but could not be loaded. Pull to refresh.');
+                                }
+                                return;
+                              }
                               widget.onCustomerAdded?.call(saved);
+                            } catch (e) {
+                              if (!context.mounted) return;
+                              AppNotification.showError(context,
+                                  'Could not save customer. Please try again.');
                             }
                           }
                         },

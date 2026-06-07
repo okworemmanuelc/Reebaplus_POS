@@ -406,7 +406,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
 
     return ListView.builder(
       padding: EdgeInsets.all(context.getRSize(16))
-          .copyWith(bottom: context.getRSize(100) + context.deviceBottomInset),
+          .copyWith(bottom: context.getRSize(100) + context.deviceBottomPadding),
       itemCount: list.length,
       itemBuilder: (context, index) {
         final e = list[index];
@@ -448,7 +448,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
                     context.getRSize(16),
                     0,
                     context.getRSize(16),
-                    context.getRSize(120) + context.deviceBottomInset,
+                    context.getRSize(120) + context.deviceBottomPadding,
                   ),
                   itemCount: suppliers.length,
                   itemBuilder: (_, i) {

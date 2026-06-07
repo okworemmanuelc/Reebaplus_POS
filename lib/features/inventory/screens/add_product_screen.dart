@@ -9,6 +9,7 @@ import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -298,30 +299,50 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     final db = ref.read(databaseProvider);
     final businessId = ref.read(authProvider).currentUser?.businessId;
     if (businessId == null) return;
-    final id = await db.inventoryDao.insertManufacturer(
-      ManufacturersCompanion.insert(name: name, businessId: businessId),
-    );
-    final manufacturers = await db.inventoryDao.getAllManufacturers();
-    final newM = manufacturers.firstWhere((m) => m.id == id);
-    setState(() {
-      _allManufacturers = manufacturers;
-      _selectManufacturer(newM);
-    });
+    try {
+      final id = await db.inventoryDao.insertManufacturer(
+        ManufacturersCompanion.insert(name: name, businessId: businessId),
+      );
+      final manufacturers = await db.inventoryDao.getAllManufacturers();
+      final newM = manufacturers.firstWhere((m) => m.id == id);
+      if (!mounted) return;
+      setState(() {
+        _allManufacturers = manufacturers;
+        _selectManufacturer(newM);
+      });
+    } catch (_) {
+      if (mounted) {
+        AppNotification.showError(
+          context,
+          'Could not create manufacturer. Please try again.',
+        );
+      }
+    }
   }
 
   Future<void> _createNewSupplier(String name) async {
     final db = ref.read(databaseProvider);
     final businessId = ref.read(authProvider).currentUser?.businessId;
     if (businessId == null) return;
-    final id = await db.catalogDao.insertSupplier(
-      SuppliersCompanion.insert(name: name, businessId: businessId),
-    );
-    final suppliers = await db.catalogDao.getAllSuppliers();
-    final newS = suppliers.firstWhere((s) => s.id == id);
-    setState(() {
-      _allSuppliers = suppliers;
-      _selectSupplier(newS);
-    });
+    try {
+      final id = await db.catalogDao.insertSupplier(
+        SuppliersCompanion.insert(name: name, businessId: businessId),
+      );
+      final suppliers = await db.catalogDao.getAllSuppliers();
+      final newS = suppliers.firstWhere((s) => s.id == id);
+      if (!mounted) return;
+      setState(() {
+        _allSuppliers = suppliers;
+        _selectSupplier(newS);
+      });
+    } catch (_) {
+      if (mounted) {
+        AppNotification.showError(
+          context,
+          'Could not create supplier. Please try again.',
+        );
+      }
+    }
   }
 
   Future<ManufacturerData?> _getOrCreateManufacturer(String name) async {
@@ -517,7 +538,8 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
             );
         if (mounted) Navigator.pop(context);
         widget.onProductAdded?.call();
-      } catch (e) {
+      } catch (e, st) {
+        CrashReporter.record(e, st, context: 'inventory.add_product');
         debugPrint('AddProductScreen._save (existing) error: $e');
         if (mounted) {
           AppNotification.showError(context, 'Could not update product: $e');
@@ -674,7 +696,8 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
 
       if (mounted) Navigator.pop(context);
       widget.onProductAdded?.call();
-    } catch (e) {
+    } catch (e, st) {
+      CrashReporter.record(e, st, context: 'inventory.add_product');
       debugPrint('AddProductScreen._save error: $e');
       if (mounted) {
         AppNotification.showError(context, 'Could not save product: $e');
@@ -696,9 +719,10 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     final canEditBuying = hasPermission(ref, 'products.edit_buying_price');
 
     return Scaffold(
-      // Single keyboard lift via the bottomNavigationBar's deviceBottomInset
-      // padding below; disabling Scaffold resize avoids double-counting the
-      // keyboard (root-nav screen sees the real inset). Same as add_expense.
+      // Save-button padding is nav-only (deviceBottomPadding): this screen is
+      // under MainLayout, whose Scaffold already resizes the body for the
+      // keyboard, so the inset must not re-add it. resizeToAvoidBottomInset:false
+      // is a harmless no-op here (the screen sees viewInsets 0 under MainLayout).
       resizeToAvoidBottomInset: false,
       appBar: AppBar(
         leading: const BackButton(),
@@ -1175,7 +1199,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         ),
       ),
       bottomNavigationBar: Padding(
-        padding: EdgeInsets.fromLTRB(20, 8, 20, 12 + context.deviceBottomInset),
+        padding: EdgeInsets.fromLTRB(20, 8, 20, 12 + context.deviceBottomPadding),
         child: AppButton(
           text: isExisting ? 'Add Stock' : 'Add Product',
           variant: AppButtonVariant.primary,

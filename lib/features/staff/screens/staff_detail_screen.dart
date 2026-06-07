@@ -137,41 +137,49 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
             'A staff member';
     final actorName = currentUser?.name ?? 'A manager';
     final actorIsCeo = ref.read(currentUserRoleProvider)?.slug == 'ceo';
-    await db.userBusinessesDao.setRole(membership.id, picked.id);
-    await db.activityLogDao.log(
-      action: 'staff.change_role',
-      description:
-          'Changed role from ${currentRole?.name ?? 'Unknown'} to ${picked.name}',
-      staffId: currentUser?.id,
-    );
-    // §26.4 Staff — "Role changed (fires to CEO + affected staff)". The CEO is
-    // notified only when a non-CEO (a Manager) made the change (actor never
-    // self-notified); the affected staff member is always notified of their own
-    // role change. fireNotification routes through enqueueUpsert (synced), so it
-    // reaches the recipient's device live.
-    final fromTo = 'from ${currentRole?.name ?? 'Unknown'} to ${picked.name}';
-    if (!actorIsCeo) {
-      final ceoIds = await db.userBusinessesDao.getUserIdsForRoleSlugs(['ceo']);
-      for (final ceoId in ceoIds) {
-        if (ceoId == currentUser?.id) continue;
+    try {
+      await db.userBusinessesDao.setRole(membership.id, picked.id);
+      await db.activityLogDao.log(
+        action: 'staff.change_role',
+        description:
+            'Changed role from ${currentRole?.name ?? 'Unknown'} to ${picked.name}',
+        staffId: currentUser?.id,
+      );
+      // §26.4 Staff — "Role changed (fires to CEO + affected staff)". The CEO is
+      // notified only when a non-CEO (a Manager) made the change (actor never
+      // self-notified); the affected staff member is always notified of their own
+      // role change. fireNotification routes through enqueueUpsert (synced), so it
+      // reaches the recipient's device live.
+      final fromTo = 'from ${currentRole?.name ?? 'Unknown'} to ${picked.name}';
+      if (!actorIsCeo) {
+        final ceoIds =
+            await db.userBusinessesDao.getUserIdsForRoleSlugs(['ceo']);
+        for (final ceoId in ceoIds) {
+          if (ceoId == currentUser?.id) continue;
+          await db.notificationsDao.fireNotification(
+            type: 'staff.role_changed',
+            message: '$actorName changed $affectedName\'s role $fromTo',
+            linkedRecordId: membership.userId,
+            recipientUserId: ceoId,
+          );
+        }
+      }
+      if (membership.userId != currentUser?.id) {
         await db.notificationsDao.fireNotification(
           type: 'staff.role_changed',
-          message: '$actorName changed $affectedName\'s role $fromTo',
+          message: 'Your role was changed $fromTo by $actorName',
           linkedRecordId: membership.userId,
-          recipientUserId: ceoId,
+          recipientUserId: membership.userId,
         );
       }
+      if (!mounted) return;
+      AppNotification.showSuccess(context, 'Role updated.');
+    } catch (_) {
+      if (mounted) {
+        AppNotification.showError(
+            context, 'Could not change role. Please try again.');
+      }
     }
-    if (membership.userId != currentUser?.id) {
-      await db.notificationsDao.fireNotification(
-        type: 'staff.role_changed',
-        message: 'Your role was changed $fromTo by $actorName',
-        linkedRecordId: membership.userId,
-        recipientUserId: membership.userId,
-      );
-    }
-    if (!mounted) return;
-    AppNotification.showSuccess(context, 'Role updated.');
   }
 
   Future<void> _toggleSuspend(UserBusinessData membership) async {
@@ -217,32 +225,44 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
     final actorName = currentUser?.name ?? 'A manager';
     final actorIsCeo = ref.read(currentUserRoleProvider)?.slug == 'ceo';
     final newStatus = suspending ? 'suspended' : 'active';
-    await db.userBusinessesDao.setStatus(membership.id, newStatus);
-    await db.activityLogDao.log(
-      action: 'staff.suspend',
-      description: suspending ? 'Suspended staff member' : 'Reactivated staff member',
-      staffId: currentUser?.id,
-    );
-    // §26.4 Staff — "Staff suspended/reactivated (fires to CEO)". Fires only when
-    // a non-CEO (a Manager) made the change; the CEO is never self-notified.
-    if (!actorIsCeo) {
-      final ceoIds = await db.userBusinessesDao.getUserIdsForRoleSlugs(['ceo']);
-      for (final ceoId in ceoIds) {
-        if (ceoId == currentUser?.id) continue;
-        await db.notificationsDao.fireNotification(
-          type: suspending ? 'staff.suspended' : 'staff.reactivated',
-          message: suspending
-              ? '$actorName suspended $affectedName'
-              : '$actorName reactivated $affectedName',
-          severity: suspending ? 'warning' : 'info',
-          linkedRecordId: membership.userId,
-          recipientUserId: ceoId,
-        );
+    try {
+      await db.userBusinessesDao.setStatus(membership.id, newStatus);
+      await db.activityLogDao.log(
+        action: 'staff.suspend',
+        description:
+            suspending ? 'Suspended staff member' : 'Reactivated staff member',
+        staffId: currentUser?.id,
+      );
+      // §26.4 Staff — "Staff suspended/reactivated (fires to CEO)". Fires only when
+      // a non-CEO (a Manager) made the change; the CEO is never self-notified.
+      if (!actorIsCeo) {
+        final ceoIds =
+            await db.userBusinessesDao.getUserIdsForRoleSlugs(['ceo']);
+        for (final ceoId in ceoIds) {
+          if (ceoId == currentUser?.id) continue;
+          await db.notificationsDao.fireNotification(
+            type: suspending ? 'staff.suspended' : 'staff.reactivated',
+            message: suspending
+                ? '$actorName suspended $affectedName'
+                : '$actorName reactivated $affectedName',
+            severity: suspending ? 'warning' : 'info',
+            linkedRecordId: membership.userId,
+            recipientUserId: ceoId,
+          );
+        }
+      }
+      if (!mounted) return;
+      AppNotification.showSuccess(
+          context, suspending ? 'Staff suspended.' : 'Staff reactivated.');
+    } catch (_) {
+      if (mounted) {
+        AppNotification.showError(
+            context,
+            suspending
+                ? 'Could not suspend staff. Please try again.'
+                : 'Could not reactivate staff. Please try again.');
       }
     }
-    if (!mounted) return;
-    AppNotification.showSuccess(
-        context, suspending ? 'Staff suspended.' : 'Staff reactivated.');
   }
 
   /// One-line summary of the staff member's assigned stores for the header pill.
@@ -292,7 +312,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                 context.getRSize(20),
                 context.getRSize(16),
                 context.getRSize(20),
-                context.getRSize(16) + context.deviceBottomInset,
+                context.getRSize(16) + context.deviceBottomPadding,
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -357,19 +377,26 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
     if (toAdd.isEmpty && toRemove.isEmpty) return;
 
     final db = ref.read(databaseProvider);
-    for (final storeId in toAdd) {
-      await db.userStoresDao.assign(user.id, storeId);
+    try {
+      for (final storeId in toAdd) {
+        await db.userStoresDao.assign(user.id, storeId);
+      }
+      for (final storeId in toRemove) {
+        await db.userStoresDao.unassign(user.id, storeId);
+      }
+      await db.activityLogDao.log(
+        action: 'staff.assign_stores',
+        description: 'Updated store assignments',
+        staffId: db.currentUserId,
+      );
+      if (!mounted) return;
+      AppNotification.showSuccess(context, 'Store assignments updated.');
+    } catch (_) {
+      if (mounted) {
+        AppNotification.showError(
+            context, 'Could not update store assignments. Please try again.');
+      }
     }
-    for (final storeId in toRemove) {
-      await db.userStoresDao.unassign(user.id, storeId);
-    }
-    await db.activityLogDao.log(
-      action: 'staff.assign_stores',
-      description: 'Updated store assignments',
-      staffId: db.currentUserId,
-    );
-    if (!mounted) return;
-    AppNotification.showSuccess(context, 'Store assignments updated.');
   }
 
   @override
@@ -438,7 +465,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
           ? const Center(child: Text('Loading…'))
           : ListView(
               padding: EdgeInsets.all(context.getRSize(20)).copyWith(
-                bottom: context.getRSize(20) + context.deviceBottomInset,
+                bottom: context.getRSize(20) + context.deviceBottomPadding,
               ),
               children: [
                 ProfileHeaderCard(

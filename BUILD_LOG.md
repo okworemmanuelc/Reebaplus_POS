@@ -106,6 +106,387 @@ Mark each item with `[x]` as it's completed. Add notes under any item if needed.
 
 ---
 
+## Session 123 — 2026-06-07 — Modal keyboard double-inset: finish the sweep (deviceBottomInset → deviceBottomPadding everywhere) + invert the rule; the modal "glitch" was debug-only
+
+**Built today:**
+- Follow-up to Session 119. The user reported the **checkout crate-deposit sheet** still leapt up "like an extra keyboard" when the amount field was tapped (physical device only). Session 119 fixed pushed *screens* but deliberately left *modals/sheets* on `deviceBottomInset` — its rule was "only modals/sheets use deviceBottomInset." That rule was wrong.
+- **Root cause (corrected):** EVERY in-app screen lives under `MainLayout`, whose Scaffold has `resizeToAvoidBottomInset` defaulting **true** — so it ALREADY resizes the whole tab area up by the keyboard, for screens AND modals alike. (Drawer items are MainLayout tabs via `setIndex`, not root-nav pushes; there is no `useRootNavigator: true` anywhere in the app.) So adding the keyboard again via `deviceBottomInset` (nav + keyboard) **double-counts** it. It only *looks* fine inside scrollables — the extra is absorbed as scroll extent — and visibly jumps in fixed `Column`s / footer slots (the deposit sheet).
+- **Confirmed the fix on the device first** (deposit sheet now rises once, smoothly — user: "works fine now"), then swept: replaced ALL **74** remaining `deviceBottomInset` call sites with `deviceBottomPadding` (nav-only). The keyboard is handled by MainLayout's resize; bottom-anchored content adds only the nav inset.
+- **Rewrote the docs to match:** the two getter docstrings in `responsive.dart` (`deviceBottomInset` now carries a "almost always wrong in this app" warning; `deviceBottomPadding` is the standard), 10 stale inline comments, and the **CLAUDE.md safe-area section** (new rule: under MainLayout use `deviceBottomPadding`, NEVER `deviceBottomInset`). Leftover `resizeToAvoidBottomInset: false` flags are harmless no-ops (the screen sees `viewInsets 0` under MainLayout) — left in place, misleading comments corrected.
+- **Separate report — modals "glitch / not smooth on open, worse with keyboard."** Tried a fade-in (`ModalFadeIn`) — didn't help, because the *motion itself* was stuttering. Built a **release** build on the Samsung A56 to check: it's **very smooth in release**. So the "glitch" was **debug-mode rendering jank** (debug stutters all animations; first open also pays a one-time shader warmup), NOT a real bug. No sheet changes needed; reverted the fade-in pilot. Lesson logged: judge animation smoothness in profile/release only.
+
+**Files touched:**
+- lib/core/utils/responsive.dart (both getter docstrings rewritten)
+- CLAUDE.md (safe-area section rewritten — the inset rule was inverted)
+- 52 files: mechanical `deviceBottomInset` → `deviceBottomPadding` call-site swap. Comment corrections in: stores_settings_screen, role_permissions_detail_screen, sync_issues_screen, add_product_screen, add_expense_screen, customer_detail_screen, edit_item_modal, invite_staff_sheet, crate_return_modal, checkout_page.
+- (reverted, no net change) record_supplier_activity.dart + deleted lib/shared/widgets/modal_fade_in.dart — the fade-in pilot.
+
+**Database changes:**
+- None.
+
+**Master plan sections covered:**
+- None new. Corrects CLAUDE.md coding rule #8 / the safe-area convention from Session 119.
+
+**Plan updates made during session:**
+- CLAUDE.md safe-area section + `responsive.dart` docstrings rewritten: under MainLayout the Scaffold resize handles the keyboard, so bottom-anchored content uses `deviceBottomPadding` (nav-only), never `deviceBottomInset`. No `reebaplus_master_plan.md` change (build-guardrail only).
+
+**Tested:**
+- `flutter analyze` clean (0 errors / 0 warnings; only pre-existing `avoid_print` infos in a test report helper).
+- Physical device (Samsung A56): checkout crate-deposit keyboard fix confirmed by the user. Release build confirmed modal open animations are smooth — debug-mode jank ruled in as the cause of the reported "glitch."
+
+**Known issues / left open:**
+- The other ~73 swapped call sites weren't each re-verified on-device, but the swap is uniform and the representative case (checkout deposit) is confirmed; the corrected rule is documented so new code follows it.
+- Debug-mode animation jank is expected (not a bug) — only judge animation smoothness in profile/release.
+
+**Next session should:**
+- Nothing required. Optional: spot-check a couple of swept modals on-device.
+
+---
+
+## Session 122 — 2026-06-07 — Bug fix: offline-first sync must not crash (two "Exception has occurred" overlays)
+
+**Built today:**
+- The user went offline from app launch through the middle of a sale and got two red "Exception has occurred" crash overlays. For an offline-first app that's wrong — going offline must degrade quietly, never crash. Fixed both.
+- **Crash 1 — "PartialPullException: 45 tables failed".** When the phone is offline, the cloud "give me everything new" call fails for every table at once, and the sync code raises that as an error. The error was raised from a background catch-up pull that nobody was waiting on, so it leaked all the way up and the debugger surfaced it as a crash. Fix: the two background pulls (the one kicked off right after sign-in, and the one the app auto-retries when the connection comes back) now quietly swallow that failure. The "catching up" banner already shows the offline state, and the app still auto-retries the moment connectivity returns. The screens that genuinely want to show "check your connection" (first-time login sync, sign-up) are untouched — they still surface it on purpose.
+- **Crash 2 — "SqliteException(2067): UNIQUE constraint failed: orders.business_id, orders.order_number".** Order numbers (ORD-000123) are generated by counting existing orders on the device. Two tills that are both offline will each hand out the SAME next number to two different sales. When they later sync, each device receives the other's order — same number, different underlying id — and the local database refuses the duplicate number. That refusal was crashing the live sale. Fix: the sync "apply a cloud row" step now recognises this specific duplicate-number clash and skips that one incoming order instead of crashing (it's logged). Also wrapped the realtime "a row just changed in the cloud" handler in a catch-all so no single bad/duplicate cloud update can ever crash a sale in progress.
+- Ruled out a false suspect: yesterday's cloud migration (0108) that re-defined the snapshot function is fine — a broken function would fail even while online, but online sync was clearly working (that's how the duplicate order arrived). The all-45 failure is purely the offline case.
+- **Then, same session, fixed the ROOT CAUSE of crash 2 (user approved a plan change).** Order numbers are now collision-proof across offline tills. Old format `ORD-000123` → new format **`ORD-000123-XXXXXX`**: the familiar per-device running number, plus a short, stable per-device tag (6 Crockford base32 chars derived once from the device's own id). Two tills that are both offline now produce different full codes even when their counts coincide, so they can never trip the duplicate-number error in the first place. The graceful skip from earlier in the session stays as a backstop. Old orders keep their suffix-less number (different string → no clash); nothing is rewritten.
+- **Then swept the WHOLE app for the same bug class** (every synced table with a second uniqueness rule, e.g. "one inventory row per product+store", "one wallet per customer"). Found and fixed **one more real bug — inventory.** When a product is created, the till makes a local stock row with its own id, but the cloud makes the same stock row with a *different* id. The "apply a cloud row" step was matching on id, so it could never line the two up — meaning a till that created a product would **silently stop receiving stock updates for it** from other tills (its stock count quietly drifts; before this session's first fix it would have outright failed the sync). Fix: stock rows now reconcile on "same product + same store" (and adopt the cloud's id), exactly like the crate-balance caches already did. Everything else came back clean — see the audit note below.
+- **Audit result (the rest of the sweep):** customer wallets are safe (one wallet is created once, by one till, with an id that's reused everywhere). Crate balances were already fixed (Session 120). Expenses, customers, suppliers, products, etc. have no second uniqueness rule, so they can't hit this at all. Staff membership / roles tables are safe because staff sign-up **pulls first** and then reuses the cloud's ids (which is also why onboarding isn't broken today). So inventory was the only outstanding instance.
+
+**Files touched:**
+- lib/shared/services/auth_service.dart (background post-login pull now swallows offline failure)
+- lib/core/services/supabase_sync_service.dart (connectivity-retry pull swallows failure; realtime apply wrapped in catch-all `_applyRealtimeEvent`; `_insertResilient` + new `_isUniqueConstraintViolation` skip the duplicate-number clash)
+- lib/core/utils/order_number.dart (NEW — `deviceOrderTag` deterministic per-device tag + `formatOrderNumber`)
+- lib/core/database/daos.dart (`generateOrderNumber(deviceTag)` → `ORD-NNNNNN-XXXXXX`)
+- lib/shared/services/order_service.dart (injects `SecureStorageService`; computes the device tag in `addOrder`)
+- lib/core/providers/app_providers.dart (wires `secureStorageProvider` into `orderServiceProvider`)
+- test/utils/order_number_test.dart (NEW — determinism, distinctness, format, no-legacy-collision)
+- lib/core/services/supabase_sync_service.dart (inventory restore now reconciles on the natural key `(business_id, product_id, store_id)` + aligns the local id — same `DoUpdate` pattern as store_crate_balances/settings)
+- test/sync/restore_fk_resilience_test.dart (NEW test — a divergent-id inventory cloud row reconciles to one row, adopts the cloud id + quantity, no 2067)
+
+**Database changes:**
+- None. (Order numbers are just longer strings; the existing `UNIQUE(business_id, order_number)` constraint is unchanged and there is no format CHECK on either side. The inventory fix is restore-apply logic only — no schema change.)
+
+**Master plan sections covered:**
+- §33 — Reliability and Crash Handling (offline-first graceful degradation — Phase 2 "on sync failure, save locally / move on").
+- §30.8.1 (NEW) — collision-proof order numbers across offline devices.
+
+**Plan updates made during session:**
+- Added **§30.8.1 — Order numbers, collision-proof across offline devices** (user-authorized; the plan was updated before the numbering code was written). Also updated the two example mentions (receipt §ref + order card §19.4) to the new `ORD-NNNNNN-XXXXXX` format.
+
+**Tested:**
+- `flutter analyze` clean (0 errors / 0 warnings; only pre-existing `avoid_print` infos in a test report helper). Sync invariant tests 104/104. New `test/utils/order_number_test.dart` 6/6. New inventory natural-key reconcile test in `restore_fk_resilience_test.dart` (4/4). sync + inventory + wallet + orders + pos + checkout suites all green.
+
+**Known issues / left open:**
+- Residual: if two devices ever derived the SAME 6-char tag (≈1-in-a-billion) AND both minted the same count while offline, the graceful skip still applies — no crash, the "loser" cloud order just isn't mirrored on the other device. Acceptable backstop, not worth more machinery.
+- On-device verification of the new number format pending (per the emulator workflow).
+
+**Next session should:**
+- Optional §33 leftover: in-app CEO-only Crash Log viewer.
+
+---
+
+## Session 121 — 2026-06-06 — Crash handling Phase 1: global safety net + synced crash log (§33)
+
+**Built today:**
+- Added a new master plan section **§33 — Reliability and Crash Handling** (user-authorized; it wasn't in the plan, so the plan was updated first before any code).
+- The app now has a **global crash safety net** so an unexpected error no longer drops to a blank or red screen — important for a cashier mid-sale:
+  - A guarded zone wraps the whole app, plus the two global error handlers (Flutter framework errors and uncaught async/platform errors). Every caught error is recorded and, in debug, still printed to the console.
+  - Flutter's red error box is replaced by a small, calm **"Something went wrong here"** card (a new reusable `ErrorFallback` widget).
+- Errors are written to a **new crash log** that **syncs to the business's own Supabase** — so the CEO/operator can see crashes across every till in one place. **No third-party crash service** (no Sentry/Crashlytics); the data stays in the business's own cloud.
+  - The log is PII-minimal by design: it stores the error type, a short message, the stack trace, the screen/context, the active user's role (not name), and the app version — not customer names/phones/amounts.
+  - Crashes before login (no business yet) are kept on the device only — they have no business to attach to in the cloud.
+  - Writing a crash record can never itself crash (fully defensive — it's the safety net).
+- Added a reusable **`guardedRun`** helper for wrapping screen/button actions in an error boundary (the foundation for the role-by-role rollout in §33.4).
+- **Pushed cloud migration 0108** to remote Supabase (`error_logs` table is now live cloud-side).
+- **Completed the §33.4 rollout across all role priorities (items 10–12).** The app's write/action handlers already had thorough try/catch + recoverable messages, so the surgical change was to **record those caught errors to the crash log** (capturing the stack trace) — each qualifying `catch (e)` became `catch (e, st)` with a `CrashReporter.record(e, st, context: '<area>.<action>')` as its first line. UX byte-for-byte unchanged; the operator now gets cross-device visibility of failures. ~24 sites:
+  - **Cashier:** Checkout confirm (`pos.checkout.verify_prices`, `pos.checkout.confirm`), Cart save/delete/load (`pos.cart.*`), Quick Sale request (`pos.quick_sale.request`).
+  - **Stock keeper:** receive delivery (`deliveries.receive`), stock count submit, add/update product, product-detail stock-adjust/save/delete (`inventory.*`).
+  - **Manager/CEO:** stock-adjustment + quick-sale approvals, crate-return approve/reject, expense add/edit (`inventory.stock_approval.*`, `orders.*`, `expenses.*`).
+  - Deliberately left untouched: anonymous `catch (_)` control-flow swallows (e.g. image-pick) and read-only screens — the global net already covers any uncaught error there.
+
+**Already in place (so not rebuilt):**
+- **Auth session expiry → re-verify screen** (the 4-phase request's Phase 2 item 7) already exists in `main.dart` (`_SessionExpiredScreen`: the no-JWT gate sends a fresh OTP / offers sign out). Left as-is.
+- **Sync failure → save locally, mark pending, move on** (Phase 2 item 6) is how the offline-first sync queue already works. The new net doesn't change it.
+
+**Files touched:**
+- `reebaplus_master_plan.md` (new §33)
+- `lib/main.dart` (guarded zone + install handlers + `ErrorWidget.builder`)
+- `lib/core/services/crash_reporter.dart` (new), `lib/core/utils/guarded.dart` (new), `lib/shared/widgets/error_fallback.dart` (new)
+- `lib/core/database/app_database.dart` (`ErrorLogs` table, schema v46 + onUpgrade, registrations)
+- `lib/core/database/daos.dart` (`ErrorLogDao.logError`)
+- `lib/core/database/supabase_sync_service.dart` (pull order, restore, backfill, deferrable registrations)
+- §33.4 recording rollout (record-only, behavior unchanged): `lib/features/pos/screens/checkout_page.dart`, `lib/features/pos/screens/cart_screen.dart`, `lib/features/pos/widgets/quick_sale_modal.dart`, `lib/features/deliveries/widgets/receive_delivery_sheet.dart`, `lib/features/inventory/screens/stock_count_screen.dart`, `lib/features/inventory/screens/add_product_screen.dart`, `lib/features/inventory/widgets/update_product_sheet.dart`, `lib/features/inventory/screens/product_detail_screen.dart`, `lib/features/dashboard/screens/stock_approvals_screen.dart`, `lib/features/orders/screens/crate_return_approval_screen.dart`, `lib/features/expenses/screens/add_expense_screen.dart`
+- `lib/core/database/app_database.g.dart` / `daos.g.dart` (regenerated)
+- `supabase/migrations/0108_error_logs.sql` (new — **pushed to remote**)
+
+**Database changes:**
+- New synced table **`error_logs`** (local schema **v46**, cloud migration **0108**). Business-scoped, append-only, RLS via `current_user_business_ids()`, realtime, added to `pos_pull_snapshot`. Wired through `ErrorLogDao` (enqueues) + all sync apply sites.
+
+**Master plan sections covered:**
+- §33 (new) — Reliability and Crash Handling.
+
+**Plan updates made during session:**
+- Added §33 (Reliability and Crash Handling), 2026-06-06, with the user's explicit choices baked in: local-crash-log-synced-to-Supabase (no third party) + centralized error boundaries (not literal wrap-everything).
+
+**Tested:**
+- `flutter test test/sync/` — **all 104 pass**, including Layer B (registration completeness — confirms `error_logs` is correctly registered) and Layer C (raw-write leak scanner — confirms `logError` enqueues).
+- `flutter analyze` on all touched/new files — **no issues**.
+- Drift codegen regenerated cleanly.
+
+**Known issues / left open:**
+- **§5 exception:** `ErrorLogDao.logError` keeps pre-login crashes local-only (carries a `sync-exempt`-style doc comment + a conditional enqueue so Layer C stays green). Consider adding it to the CLAUDE.md §5 exception list if it should be formally catalogued.
+- **Phase 3/4 rollout complete** across Cashier → Stock Keeper → Manager/CEO write/action handlers (~24 recording sites; analyze clean). Deliberately NOT touched: anonymous `catch (_)` swallows and read-only screens (global net covers them).
+- No in-app crash-log viewer (review via Supabase console for now, per §33.3). Optional future CEO-only screen (§33.3).
+- `flutter analyze lib/` is fully clean; the only analyzer output is 19 pre-existing `info` lints in `test/` files (avoid_print / prefer_const), unrelated to this work.
+
+**Next session should:**
+- (Optional) Build the in-app CEO-only Crash Log viewer (§33.3), or add inline "try again" affordances to specific read screens that currently show a bare error. Otherwise §33 is functionally done.
+
+---
+
+## Session 120 — 2026-06-06 — Bug fix: crate-transfer crash (UNIQUE constraint failed on store_crate_balances)
+
+**Built today:**
+- Fixed a crash the user hit right after doing a crate transfer: `SqliteException(2067) — UNIQUE constraint failed: store_crate_balances.business_id, store_crate_balances.store_id, store_crate_balances.manufacturer_id`.
+- Root cause: the empty-crate balance caches have two places that mint the row's hidden id — this phone (one style of id) and the cloud (a different style). For the *same* store + manufacturer the two ids never match. When the cloud's copy of the row came back to the phone, the old code tried to match it up by that hidden id, didn't find it, tried to add it as a brand-new row, and hit the "one row per store+manufacturer" rule — crash.
+- Fix: when the phone receives a crate-balance row from the cloud, it now matches by the real identity (business + store + manufacturer) instead of the hidden id, updates the existing row in place, and adopts the cloud's id so the two sides line up from then on. This is the same approach already used for Settings and Role Permissions rows.
+- Applied the same fix to the two sibling caches (per-manufacturer and per-customer crate balances) — they had the identical latent crash waiting to happen (manufacturer crate returns are common in bars).
+- Also closed a related quieter problem: when this phone sends its own crate-balance change up to the cloud, it now merges by the real identity too, so it can't create a duplicate that the cloud would reject (which would have silently stuck in the sync queue).
+
+**Files touched:**
+- lib/core/services/supabase_sync_service.dart (restore path for the 3 crate-balance caches; cloud-push conflict target for store_crate_balances)
+- test/sync/store_crate_balances_id_divergence_test.dart (new — regression test reproducing the crash)
+
+**Database changes:**
+- None. (No schema or migration changes — purely a sync-reconciliation fix in app code.)
+
+**Master plan sections covered:**
+- §16.8.1 / §16.9 — per-store empty crates + stock transfers (the feature whose write path triggered the crash).
+
+**Plan updates made during session:**
+- None.
+
+**Tested:**
+- New regression test `store_crate_balances_id_divergence_test.dart` (3 cases: divergent cloud id converges instead of crashing; fresh row created when absent; same-id idempotent) — all pass.
+- `flutter test test/sync/` — 104 pass. Crate suite (`test/crates/`) + crate dispatch tests — 42 pass.
+- `flutter analyze` — clean (only pre-existing info-level lints in unrelated test files).
+
+**Known issues / left open:**
+- On-device confirmation: redo the crate transfer that originally crashed and confirm it now completes and the balances move between stores.
+
+**Next session should:**
+- Resume the Session 118 open item (on-device smoke test of the full transfer + per-store crate flow).
+
+---
+
+## Session 119 — 2026-06-06 — Keyboard inset audit: fix double-keyboard-inset bug across 11 screens
+
+**Built today:**
+- Found and fixed the root cause of "content pushed too high when keyboard opens": screens that use `resizeToAvoidBottomInset: false` + sticky button were using `deviceBottomInset` (nav + keyboard) when they should use `deviceBottomPadding` (nav only). The keyboard is already accounted for by scroll-to-focus; adding it again in the button padding double-counts it.
+- Ran a 3-phase, 72-agent workflow audit across 70 files. Found 11 files with bugs, 2 coverage gaps.
+- Fixed all 11 files: stock_transfer_screen (the original report), business_info_screen, settings_screen, customer_ledger_screen, add_expense_screen, add_product_screen, inventory_screen (4 dialogs had `viewInsets.bottom` outer wrapper + `deviceBottomInset` inner = double-count), product_detail_screen (body + _UpdateStockSheetState), stock_count_screen (main table ListView), crate_return_approval_screen, checkout_page, staff_management_screen (AppFAB had outer `deviceBottomInset` padding on top of AppFAB's own internal padding).
+- Added CLAUDE.md rule: "Never double-count the keyboard on sticky bottom buttons of pushed screens — use `deviceBottomPadding` (nav only) + `resizeToAvoidBottomInset: false`; only modals/sheets use `deviceBottomInset`."
+
+**Files touched:**
+- lib/features/stores/screens/stock_transfer_screen.dart
+- lib/core/settings/business_info_screen.dart
+- lib/core/settings/settings_screen.dart
+- lib/features/dashboard/screens/customer_ledger_screen.dart
+- lib/features/expenses/screens/add_expense_screen.dart
+- lib/features/inventory/screens/add_product_screen.dart
+- lib/features/inventory/screens/inventory_screen.dart
+- lib/features/inventory/screens/product_detail_screen.dart
+- lib/features/inventory/screens/stock_count_screen.dart
+- lib/features/orders/screens/crate_return_approval_screen.dart
+- lib/features/pos/screens/checkout_page.dart
+- lib/features/staff/screens/staff_management_screen.dart
+- CLAUDE.md
+
+**Still open:**
+- Two minor coverage gaps noted by the audit (both low-severity): _recordDamages modal in stock_count_screen (Column not scrollable when keyboard + content is tall) and cart_screen customer picker SizedBox height doesn't adjust for keyboard. Neither causes visible bugs in practice today.
+
+---
+
+## Session 118 — 2026-06-06 — Stock transfers between stores + per-store empty crate re-architecture (§16.9, §16.8.1)
+
+**Built today:**
+- Stock transfer full end-to-end: sender dispatches a product A→B (stock removed from source immediately); a destination staff with `stores.receive_transfer` permission confirms receipt (stock added to dest). Cancel restores source via a compensating ledger leg.
+- New permission `stores.receive_transfer`: CEO by default, grantable per-store via the existing Roles & Permissions screen. Cloud migration 0103 + local `_defaultPermissionRows` seed.
+- `StockTransferDao` fully implemented: `createTransfer`, `receiveTransfer`, `cancelTransfer`, `transferCrates`, and all watch streams (incoming, outgoing, history, viewer-scoped).
+- Rewrote `stock_transfer_screen.dart` against the real DAO: live store dropdown, product autocomplete showing only stock > 0, integer qty only, 3-layer permission gate, optional empty-crate component for Bar/Beer Distributor businesses.
+- New `IncomingTransfersScreen` (Incoming / Outgoing / History tabs) with Confirm Receipt and Cancel actions, launched from a "Transfer Queue" button on the Stores screen.
+- Per-store empty crate re-architecture: new `store_crate_balances` table (schema v44, migration 0104). Crates are now tracked per store. Business total (`manufacturers.empty_crate_stock`) stays as the sum across all stores.
+- All crate write paths updated: `addEmptyCrates`, `updateManufacturerStock`, `recordCrateReturnByManufacturer` — all accept a `storeId` and upsert `store_crate_balances`. Callers in `crate_return_modal`, `customer_detail_screen`, `receive_delivery_sheet`, `inventory_screen` updated.
+- Empty Crates tab in Inventory now shows per-store balances when a store is locked; falls back to business total when the CEO is viewing all stores.
+- New stream providers: `storeCrateBalancesProvider`, `allInTransitTransfersProvider`, `viewerScopedIncomingTransfersProvider`, `viewerScopedOutgoingTransfersProvider`, `stockTransferHistoryProvider`.
+- Phase 3 crate transfer: new cloud RPC `pos_transfer_crates` (migration 0107) writes two store-stamped `crate_ledger` rows and UPSERTs both `store_crate_balances` atomically. `StockTransferDao.transferCrates` calls it at dispatch time.
+- `_applyDomainResponse` in `supabase_sync_service.dart` handles `pos_transfer_crates` response keys (`out_ledger_row`, `in_ledger_row`, `src_store_balance`, `dst_store_balance`).
+- Migration 0106 reconciles the 0104/0105 pull-snapshot race: adds `store_crate_balances` to `pos_pull_snapshot`'s tenant array.
+- 10 unit tests for `StockTransferDao` (create/receive/cancel round-trips, insufficient-stock guard, sync enqueue). All 111 sync+transfer tests pass.
+
+**Files touched:**
+- `supabase/migrations/0103_add_stores_receive_transfer_permission.sql` (new)
+- `supabase/migrations/0104_store_crate_balances.sql` (new)
+- `supabase/migrations/0106_reconcile_pull_snapshot.sql` (new)
+- `supabase/migrations/0107_pos_transfer_crates.sql` (new)
+- `lib/core/database/app_database.dart` — schema v44, `StoreCrateBalances` table, `crate_ledger.storeId`, onUpgrade backfill, `kSyncCacheTables` registration
+- `lib/core/database/daos.dart` — `StockTransferDao` (create/receive/cancel/transferCrates/watch), `StoreCrateBalancesDao` (applyDelta/setBalance/getBalance/watchForStore), `InventoryDao` (addEmptyCrates+storeId, updateManufacturerStock+storeId, CrateLedger in @DriftAccessor), `CrateLedgerDao` (recordCrateReturnByManufacturer+storeId)
+- `lib/core/services/supabase_sync_service.dart` — _pullOrder, _tablePushPriority, _restoreTableData for store_crate_balances; _applyDomainResponse for pos_transfer_crates
+- `lib/core/providers/stream_providers.dart` — 5 new providers
+- `lib/features/stores/screens/stock_transfer_screen.dart` (rewritten)
+- `lib/features/stores/screens/incoming_transfers_screen.dart` (new)
+- `lib/features/stores/screens/stores_screen.dart` — Transfer Queue button
+- `lib/shared/widgets/app_drawer.dart` — Stores drawer gate includes stores.receive_transfer
+- `lib/features/inventory/screens/inventory_screen.dart` — per-store Empty Crates tab
+- `lib/features/orders/widgets/crate_return_modal.dart` — storeId on addEmptyCrates
+- `lib/features/customers/screens/customer_detail_screen.dart` — storeId on addEmptyCrates
+- `lib/features/deliveries/widgets/receive_delivery_sheet.dart` — storeId on addEmptyCrates
+- `test/transfer/stock_transfer_dao_test.dart` (new)
+
+**Database changes:**
+- Schema v44: new `StoreCrateBalances` table, nullable `crate_ledger.store_id` column. Backfill: existing `manufacturers.empty_crate_stock` → primary store balance.
+- Cloud migrations 0103–0107 pushed.
+
+**Tests:**
+- 111 tests pass (`flutter test test/sync/ test/transfer/`). `flutter analyze` clean (info only).
+
+**Open / next session:**
+- On-device smoke test: CEO dispatches A→B (source decremented, B shows in Incoming); destination Manager confirms (B incremented, history shows pair); cancel restores source; same-store and over-qty blocked. For Bar: per-store crate counts display; crate transfer moves balances.
+- `verifyCrateReconciliation` now includes a per-store section — can be exercised from the CEO reconciliation screen.
+
+---
+
+## Session 117 — 2026-06-06 — Cashier Quick Sale: approval flow replaces the PIN gate (§12.3.1)
+
+**Built today:**
+- A cashier (or any role below Manager) no longer types a Manager/CEO PIN to do a Quick Sale. The Quick Sale modal opens normally; tapping **Send for Approval** now records a pending request instead of dropping the item into the cart, and the modal switches to a **"Waiting for approval…"** screen.
+- The request shows up in **Reports → Approvals** (the old "Stock Approvals" card, **renamed to "Approvals"**) for the CEO and the Manager(s) of that cashier's store. They get a notification and can **Approve** or **Reject**.
+- **Approve** → the cashier is notified and the item drops into their cart automatically; the modal closes. (A Quick Sale doesn't touch stock, so approval just releases the one item — every Quick Sale still needs its own approval.)
+- **Reject** (with an optional reason) → the cashier's modal closes and a **"Quick sale was rejected"** message shows; they can't proceed.
+- The cashier can **Cancel** while waiting, which quietly withdraws the request.
+- CEO and Manager Quick Sales are unchanged — they still add straight to the cart, no approval.
+- The Approvals card now shows **both** Quick Sale requests and stock-keeper stock-change requests, and its badge counts both.
+
+**Files touched:**
+- lib/core/database/app_database.dart (new table, registration, schema v45, migration, synced list)
+- lib/core/database/daos.dart (new QuickSaleRequestsDao)
+- lib/core/services/supabase_sync_service.dart (pull order + restore case)
+- lib/core/providers/stream_providers.dart (two new providers)
+- lib/features/pos/widgets/quick_sale_modal.dart (approval mode + waiting state)
+- lib/features/pos/screens/pos_home_screen.dart (removed PIN gate)
+- lib/features/dashboard/screens/stock_approvals_screen.dart (shows Quick Sale cards; title "Approvals")
+- lib/features/dashboard/screens/reports_hub_screen.dart (card renamed; combined badge)
+- supabase/migrations/0105_quick_sale_requests.sql (new cloud table)
+- reebaplus_master_plan.md, BUILD_LOG.md
+- (generated) lib/core/database/app_database.g.dart, daos.g.dart
+
+**Database changes:**
+- New synced table **quick_sale_requests** (local schema v45, cloud migration 0105): item name, quantity, unit price, the selling store, who requested it, and a status of pending / approved / rejected / cancelled. Same shape and sync wiring as the existing stock-approval queue.
+
+**Master plan sections covered:**
+- §12.3 / new §12.3.1 — cashier Quick Sale approval (replaces the PIN gate)
+- §25.2 — "Stock Approvals" card renamed to "Approvals" (now both kinds)
+- §26.4 — new approval notifications (requested / approved / rejected)
+
+**Plan updates made during session:**
+- Rewrote §12.3 and added §12.3.1 to describe the approval flow; renamed the Reports "Stock Approvals" card to "Approvals" in §25.2; added the Quick Sale approval notifications in §26.4. Done before coding, per the guardrails.
+
+**Tested:**
+- `flutter analyze` on all 8 touched source files — no issues.
+- `flutter test test/sync/` — all 101 pass (the new synced table is registered and every write enqueues — the §5 guardrails are green).
+- build_runner regenerated the Drift code cleanly.
+- Not yet exercised on a running device (cross-device approve/reject behaviour).
+
+**Known issues / left open:**
+- **Cloud not deployed.** 0105 must be `supabase db push`ed before a v45 app reaches a device. **Coordinate the snapshot merge with the parallel stock-transfer work:** that feature reserves migration 0104 (store_crate_balances) which also redefines `pos_pull_snapshot`. Whichever migration applies last must list BOTH new tables — I left a CROSS-FEATURE NOTE at the top of 0105 spelling this out.
+- This was built alongside heavy in-progress parallel work (schema was already at v44 / migration 0103 taken when I started — I took v45 / 0105). If those land out of order, re-check the schema version and migration numbers.
+- If a cashier force-quits the app while a request is pending (instead of using Cancel), a later approval can't reach the cart — they'd just re-do the Quick Sale. Acceptable edge; no global listener was added to keep it simple.
+
+**Next session should:**
+- Push 0105 (and reconcile the pos_pull_snapshot table list with 0104), then verify the end-to-end approve/reject/cancel flow on two devices.
+
+---
+
+## Session 116 — 2026-06-06 — One store picker in the nav drawer (replaces per-screen dropdowns) (§12.1)
+
+**Built today:**
+- Replaced the scattered per-screen "select store" dropdowns with **one store picker in the navigation drawer, just above "Home."** Picking a store there now drives the view on **Home, Inventory, POS, the Customers list, and the Activity Log** all at once — instead of each screen carrying its own store dropdown.
+- **Removed** the store dropdown from the **Inventory** screen and the store-switch icon/modal from the **POS** screen (and the old one-time "pick your store" pop-up on POS entry).
+- The picker only appears for users who can choose **more than one store**. A business with a single store — or a staff member assigned to just one store — sees no picker.
+- **"All Stores"** stays available to owners/all-stores managers (combined view across stores). On POS, which must sell from one real store, an "All Stores" selection falls back to the user's first store (shown in the POS header).
+- The picker is styled to match the current theme (all 5 colour schemes + light/dark) and the drawer's existing menu rows.
+
+**Files touched:**
+- reebaplus_master_plan.md (§12.1, §11.2 active-store note, §1679 roadmap line)
+- lib/core/providers/stream_providers.dart (new `canViewAllStoresProvider`, `selectableStoresProvider`; moved the shared `selectableStoresFor` here)
+- lib/shared/widgets/app_drawer.dart (the new themed store picker + its bottom-sheet menu, above Home)
+- lib/shared/widgets/main_layout.dart (pins confined users to a concrete active store)
+- lib/features/pos/screens/pos_home_screen.dart (removed the header store icon + modal + §28 prompt; syncs the controller's All-Stores fallback)
+- lib/features/pos/controllers/pos_controller.dart (added `fallbackStoreId` / `setFallbackStore`)
+- lib/features/pos/screens/checkout_page.dart (All-Stores → first selectable store fallback, ×2 sites)
+- lib/features/inventory/screens/inventory_screen.dart (removed store dropdown/locked-chip/`_storeLock`; follows the picker)
+- lib/features/dashboard/screens/home_screen.dart (removed store dropdown/chip/pin; follows the picker)
+- lib/features/customers/screens/customers_screen.dart (removed store dropdown; filters by the picker)
+- lib/shared/widgets/activity_log_screen.dart (removed store dropdown; filters by the picker)
+- lib/features/stores/screens/store_details_screen.dart (Customers/Inventory deep-links now set the global active store)
+- lib/shared/services/navigation_service.dart (retired the now-dead `selectedStoreId` + `customersInitialStoreId` notifiers)
+- test/pos/selectable_stores_test.dart (import points at the new home of `selectableStoresFor`)
+
+**Database changes:**
+- None. Pure UI + in-app state routing. No schema, no migration, no cloud, no new synced table, no new permission key.
+
+**Master plan sections covered:**
+- §12.1 — store selector moved from the POS header to the navigation drawer; now the one app-wide active-store control.
+
+**Plan updates made during session:**
+- §12.1 — rewrote the Store selector entry: it lives in the nav drawer above Home, is the single app-wide active-store control (drives Home/Inventory/POS/Customers/Activity Log), keeps "All Stores" for all-stores viewers (POS falls back to first store), and removes the one-time §28 POS "pick your store" modal. Updated the §11.2 active-store cross-ref and the §1679 multi-store roadmap line to match.
+
+**Tested:**
+- `flutter analyze` → 0 errors, 0 warnings (only pre-existing `info` lints in test files).
+- `flutter test` on test/sync/, test/pos/, test/permissions/, test/checkout_page_test.dart, test/inventory/, test/customers/, test/activity_logs/ → all pass (incl. the relocated `selectable_stores_test`).
+
+**Known issues / left open:**
+- Not yet smoke-tested on the emulator. The reactive store-sync in each view screen is driven from build via a post-frame `setState` + re-subscribe — correct but worth eyeballing live for any flicker on first paint.
+
+**Next session should:**
+- Run the app on the emulator and walk the four scenarios: single-store business (no picker), multi-store CEO (picker with "All Stores" + stores; switching live-updates Home/Inventory/POS/Customers/Activity Log; POS sells from the first store under "All Stores"), confined multi-store staff (assigned stores only, no "All Stores"), confined single-store staff (no picker, pinned to their store). Also toggle a couple of themes + light/dark to confirm the picker restyles.
+
+---
+
+## Session 115 — 2026-06-06 — App-wide: no more silent failures (error toasts on every failing user action)
+
+**Built today:**
+- Audited the whole app for **user actions that fail silently** (a button/tap/save that throws or no-ops with no message), and made every one of them show an error. The trigger was credit/other sales appearing to "go silent" on failure.
+- Important finding: the **main checkout / credit-sale screen was already correct** — it shows "Checkout failed: …" on error. The real silent failures were on **sibling money/data paths**: confirming an order (Mark as Delivered), issuing a refund, recording crate returns, recording/approving/rejecting/deleting an expense, deleting a customer/product/supplier/store, saving a customer/store/manufacturer, changing a staff role / suspending staff / store assignments, toggling permissions, the PIN dialog (could deadlock), the Google/OTP post-login step, saving/loading/deleting saved carts, receiving a delivery, and the Sync Issues retry/discard buttons.
+- Each now surfaces a clear message using the screen's existing convention: most use the red top toast (`AppNotification.showError`); the supplier-activity and Sync-Issues screens keep their existing SnackBars; the product/PIN sheets keep their inline banner. Failure paths no longer close the form (so the user can retry), stuck "Saving…" buttons re-enable, optimistic toggles roll back, and the PIN dialog recovers instead of freezing.
+- Method: two multi-agent passes — one to find & adversarially verify the silent sites (61 raw findings → ~50 unique across 27 files, 1 rejected), one to apply the mapped fix per file.
+
+**Files touched:**
+- 27 files across lib/features/** (orders, expenses, customers, inventory, deliveries, pos, payments, stores, staff, auth, sync), lib/core/settings/role_permissions_detail_screen.dart, and lib/shared/widgets/pin_dialog.dart. One service change: lib/features/customers/data/services/customer_service.dart (`updateWalletLimit` now throws on missing customer instead of returning silently, so its caller can surface it).
+
+**Database changes:**
+- None.
+
+**Master plan sections covered:**
+- None (cross-cutting UX/error-handling hardening; no plan features added or changed).
+
+**Plan updates made during session:**
+- None.
+
+**Tested:**
+- `flutter analyze` clean (back to the 19 pre-existing lint infos, 0 errors; one new lint introduced by an agent was fixed). `flutter test test/sync/` green (101 passing — §5 safeguards). Manually read the diffs of the 13 highest-risk files (sale/money/auth/permissions) — success paths stay inside the try, no navigation on failure, mounted guards correct.
+
+**Known issues / left open:**
+- Not committed yet — changes sit in the working tree on `feat/remove-funds-register`. On-device pass still pending (per house emulator workflow).
+- Deliberately left as best-effort (no toast): background sync engine, fire-and-forget audit/notify after a committed write, and a couple of theoretically-unreachable defensive guards.
+
+**Next session should:**
+- Optionally commit/push these fixes; then on-device spot-check a few error paths (e.g. force an offline refund) to confirm the toasts appear.
+
+---
+
 ## Session 114 — 2026-06-06 — Crates tab: top "+" card to record crate returns (§13.4)
 
 **Built today:**

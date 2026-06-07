@@ -106,7 +106,7 @@ class _StoreDetailsScreenState
           final isWide = constraints.maxWidth > 600;
           return ListView(
             padding: EdgeInsets.all(rSize(context, 16)).copyWith(
-              bottom: rSize(context, 16) + context.deviceBottomInset,
+              bottom: rSize(context, 16) + context.deviceBottomPadding,
             ),
             children: [
               _buildMetricOverview(totalStock, totalValue),
@@ -239,8 +239,10 @@ class _StoreDetailsScreenState
         GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () {
+            // §12.1: focus the app-wide active store on this store, then open
+            // the Customers tab (which now follows the nav-drawer picker).
             final nav = ref.read(navigationProvider);
-            nav.customersInitialStoreId.value = widget.store.id;
+            nav.setLockedStore(widget.store.id);
             Navigator.of(context).pop();
             nav.setIndex(4);
           },
@@ -456,8 +458,10 @@ class _StoreDetailsScreenState
           FontAwesomeIcons.boxesStacked,
           Theme.of(context).colorScheme.primary,
           () {
+            // §12.1: focus the app-wide active store on this store, then open
+            // the Inventory tab (which now follows the nav-drawer picker).
             final nav = ref.read(navigationProvider);
-            nav.selectedStoreId.value = widget.store.id.toString();
+            nav.setLockedStore(widget.store.id);
             nav.setIndex(2);
           },
         ),

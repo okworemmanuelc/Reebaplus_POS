@@ -101,7 +101,7 @@ class CrateDepositsReportScreen extends ConsumerWidget {
         error: (e, _) => Center(child: Text('Could not load: $e')),
         data: (s) => ListView(
           padding: EdgeInsets.all(context.spacingM).copyWith(
-            bottom: context.spacingM + context.deviceBottomInset,
+            bottom: context.spacingM + context.deviceBottomPadding,
           ),
           children: [
             _heldCard(context, s),

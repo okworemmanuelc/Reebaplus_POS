@@ -112,7 +112,7 @@ class _CustomerLedgerScreenState extends ConsumerState<CustomerLedgerScreen> {
           ? _emptyState(theme)
           : ListView(
               padding: EdgeInsets.all(context.spacingM).copyWith(
-                bottom: context.spacingM + context.deviceBottomInset,
+                bottom: context.spacingM + context.deviceBottomPadding,
               ),
               children: [
                 _headline(theme, data),

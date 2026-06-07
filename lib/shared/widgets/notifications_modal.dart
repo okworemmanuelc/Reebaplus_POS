@@ -147,7 +147,7 @@ class NotificationsModal extends ConsumerWidget {
                         return ListView.separated(
                           controller: scrollController,
                           padding: EdgeInsets.all(context.getRSize(16)).add(
-                            EdgeInsets.only(bottom: context.deviceBottomInset),
+                            EdgeInsets.only(bottom: context.deviceBottomPadding),
                           ),
                           itemCount: notifications.length,
                           separatorBuilder: (context, index) =>

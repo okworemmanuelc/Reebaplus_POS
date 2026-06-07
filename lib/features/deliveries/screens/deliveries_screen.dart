@@ -226,7 +226,7 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen> {
         context.getRSize(16),
         0,
         context.getRSize(16),
-        context.getRSize(100) + context.deviceBottomInset,
+        context.getRSize(100) + context.deviceBottomPadding,
       ),
       itemCount: listItems.length,
       itemBuilder: (context, index) {

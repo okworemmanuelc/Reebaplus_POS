@@ -108,39 +108,48 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
       return;
     }
 
-    // Save auth method as google
-    await auth.saveAuthMethod('google');
+    try {
+      // Save auth method as google
+      await auth.saveAuthMethod('google');
 
-    // Resolve where to go now Google has verified the email. Shared with the
-    // email/OTP path (auth_post_verify_route.dart) so the §7.2a account-scoping
-    // and shared-till PIN rules stay in one place. Google sign-in is never a
-    // PIN reset, so isPinReset stays false. setCurrentUser persists the device
-    // user / last-email at real login, so we don't write them here.
-    final route = await resolvePostVerifyRoute(auth, email);
-    if (!mounted) return;
-    setState(() => _loading = false);
+      // Resolve where to go now Google has verified the email. Shared with the
+      // email/OTP path (auth_post_verify_route.dart) so the §7.2a account-scoping
+      // and shared-till PIN rules stay in one place. Google sign-in is never a
+      // PIN reset, so isPinReset stays false. setCurrentUser persists the device
+      // user / last-email at real login, so we don't write them here.
+      final route = await resolvePostVerifyRoute(auth, email);
+      if (!mounted) return;
+      setState(() => _loading = false);
 
-    final Widget page = switch (route) {
-      ExistingAccountRoute(:final account) =>
-        ExistingAccountScreen(email: email, account: account),
-      NoAccountFoundRoute() => NoAccountFoundScreen(email: email),
-      LoginRoute(:final user) => LoginScreen(presetUser: user),
-      CreatePinRoute(:final user) => CreatePinScreen(user: user),
-    };
+      final Widget page = switch (route) {
+        ExistingAccountRoute(:final account) =>
+          ExistingAccountScreen(email: email, account: account),
+        NoAccountFoundRoute() => NoAccountFoundScreen(email: email),
+        LoginRoute(:final user) => LoginScreen(presetUser: user),
+        CreatePinRoute(:final user) => CreatePinScreen(user: user),
+      };
 
-    Navigator.of(context).pushReplacement(
-      PageRouteBuilder(
-        pageBuilder: (_, __, ___) => page,
-        transitionsBuilder: (_, animation, __, child) {
-          final curve = CurvedAnimation(
-            parent: animation,
-            curve: Curves.easeInOutCubic,
-          );
-          return FadeTransition(opacity: curve, child: child);
-        },
-        transitionDuration: const Duration(milliseconds: 500),
-      ),
-    );
+      Navigator.of(context).pushReplacement(
+        PageRouteBuilder(
+          pageBuilder: (_, __, ___) => page,
+          transitionsBuilder: (_, animation, __, child) {
+            final curve = CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeInOutCubic,
+            );
+            return FadeTransition(opacity: curve, child: child);
+          },
+          transitionDuration: const Duration(milliseconds: 500),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      AppNotification.showError(
+        context,
+        'Signed in, but we could not load your account. Check your connection and try again.',
+      );
+    }
   }
 
   Future<void> _submit() async {

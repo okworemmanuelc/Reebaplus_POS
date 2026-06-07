@@ -150,7 +150,7 @@ class _DailyReconciliationListScreenState
           ? _emptyState(theme)
           : ListView.separated(
               padding: EdgeInsets.all(context.spacingM).copyWith(
-                bottom: context.spacingM + context.deviceBottomInset,
+                bottom: context.spacingM + context.deviceBottomPadding,
               ),
               itemCount: days.length,
               separatorBuilder: (_, __) => SizedBox(height: context.spacingS),

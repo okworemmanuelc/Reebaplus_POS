@@ -257,9 +257,10 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
     final businessId = ref.read(authProvider).currentUser?.businessId;
 
     return Scaffold(
-      // Single keyboard lift via the ListView's deviceBottomInset bottom padding
-      // below; disabling Scaffold resize avoids double-counting the keyboard
-      // (root-nav screen sees the real inset). Same as add_expense.
+      // Body padding is nav-only (deviceBottomPadding): this screen is under
+      // MainLayout, whose Scaffold already resizes the body for the keyboard, so
+      // the inset must not re-add it. resizeToAvoidBottomInset:false is a harmless
+      // no-op here (the screen sees viewInsets 0 under MainLayout).
       resizeToAvoidBottomInset: false,
       backgroundColor: t.scaffoldBackgroundColor,
       appBar: AppBar(
@@ -272,7 +273,7 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
         centerTitle: true,
       ),
       body: ListView(
-        padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + context.deviceBottomInset),
+        padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + context.deviceBottomPadding),
         children: [
           _sectionHeader(t, 'Health'),
           const SizedBox(height: 12),
@@ -732,10 +733,17 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
               ),
               TextButton(
                 onPressed: () async {
-                  await ref
-                      .read(databaseProvider)
-                      .syncDao
-                      .discardOrphan(item.id);
+                  try {
+                    await ref
+                        .read(databaseProvider)
+                        .syncDao
+                        .discardOrphan(item.id);
+                  } catch (e) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Could not discard orphan: $e')),
+                    );
+                  }
                 },
                 style:
                     TextButton.styleFrom(foregroundColor: t.colorScheme.error),
@@ -848,17 +856,31 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
               const Spacer(),
               TextButton(
                 onPressed: () async {
-                  await _db.syncDao.clearFailureBackoffById(item.id);
-                  unawaited(_sync.pushPending());
+                  try {
+                    await _db.syncDao.clearFailureBackoffById(item.id);
+                    unawaited(_sync.pushPending());
+                  } catch (e) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Could not retry item: $e')),
+                    );
+                  }
                 },
                 child: const Text('Retry now'),
               ),
               TextButton(
                 onPressed: () async {
-                  await ref
-                      .read(databaseProvider)
-                      .syncDao
-                      .discardQueueItem(item.id);
+                  try {
+                    await ref
+                        .read(databaseProvider)
+                        .syncDao
+                        .discardQueueItem(item.id);
+                  } catch (e) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Could not discard item: $e')),
+                    );
+                  }
                 },
                 style:
                     TextButton.styleFrom(foregroundColor: t.colorScheme.error),
@@ -967,17 +989,31 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
                 const Spacer(),
               TextButton(
                 onPressed: () async {
-                  await _db.syncDao.clearFailureBackoffById(item.id);
-                  unawaited(_sync.pushPending());
+                  try {
+                    await _db.syncDao.clearFailureBackoffById(item.id);
+                    unawaited(_sync.pushPending());
+                  } catch (e) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Could not retry item: $e')),
+                    );
+                  }
                 },
                 child: const Text('Retry now'),
               ),
               TextButton(
                 onPressed: () async {
-                  await ref
-                      .read(databaseProvider)
-                      .syncDao
-                      .discardQueueItem(item.id);
+                  try {
+                    await ref
+                        .read(databaseProvider)
+                        .syncDao
+                        .discardQueueItem(item.id);
+                  } catch (e) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Could not discard item: $e')),
+                    );
+                  }
                 },
                 style: TextButton.styleFrom(foregroundColor: t.colorScheme.error),
                 child: const Text('Discard'),

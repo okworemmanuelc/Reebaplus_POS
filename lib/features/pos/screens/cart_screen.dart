@@ -9,6 +9,7 @@ import 'package:reebaplus_pos/core/theme/colors.dart';
 
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/customers/widgets/add_customer_sheet.dart';
 import 'package:reebaplus_pos/core/utils/stock_calculator.dart';
@@ -159,23 +160,28 @@ class _CartScreenState extends ConsumerState<CartScreen>
 
     if (name != null && name.isNotEmpty) {
       final cartJson = jsonEncode(cart.value);
-      await ref
-          .read(databaseProvider)
-          .ordersDao
-          .saveCart(
-            SavedCartsCompanion.insert(
-              name: name,
-              customerId: drift.Value(_activeCustomer?.id),
-              cartData: cartJson,
-              cashierId: drift.Value(ref.read(authProvider).currentUser?.id),
-              createdAt: drift.Value(DateTime.now()),
-              businessId: ref.read(authProvider).currentUser?.businessId ?? '',
-            ),
-          );
-
-      if (mounted) {
+      try {
+        await ref
+            .read(databaseProvider)
+            .ordersDao
+            .saveCart(
+              SavedCartsCompanion.insert(
+                name: name,
+                customerId: drift.Value(_activeCustomer?.id),
+                cartData: cartJson,
+                cashierId: drift.Value(ref.read(authProvider).currentUser?.id),
+                createdAt: drift.Value(DateTime.now()),
+                businessId:
+                    ref.read(authProvider).currentUser?.businessId ?? '',
+              ),
+            );
         if (mounted) {
           AppNotification.showSuccess(context, 'Cart saved successfully');
+        }
+      } catch (e, st) {
+        CrashReporter.record(e, st, context: 'pos.cart.save');
+        if (mounted) {
+          AppNotification.showError(context, 'Could not save cart: $e');
         }
       }
     }
@@ -239,7 +245,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                     }
                     return ListView.builder(
                       padding: EdgeInsets.only(
-                        bottom: modalCtx.deviceBottomInset,
+                        bottom: modalCtx.deviceBottomPadding,
                       ),
                       itemCount: carts.length,
                       itemBuilder: (context, index) {
@@ -259,19 +265,40 @@ class _CartScreenState extends ConsumerState<CartScreen>
                               color: Colors.red,
                             ),
                             onPressed: () async {
-                              await db.ordersDao.deleteSavedCart(cart.id);
+                              try {
+                                await db.ordersDao.deleteSavedCart(cart.id);
+                              } catch (e, st) {
+                                CrashReporter.record(e, st,
+                                    context: 'pos.cart.delete_saved');
+                                if (!mounted) return;
+                                AppNotification.showError(
+                                  this.context,
+                                  'Could not delete saved cart: $e',
+                                );
+                              }
                             },
                           ),
                           onTap: () async {
-                            final items = (jsonDecode(cart.cartData) as List)
-                                .cast<Map<String, dynamic>>();
-                            Customer? customer;
-                            if (cart.customerId != null) {
-                              customer = custSvc.getById(cart.customerId!);
+                            try {
+                              final items = (jsonDecode(cart.cartData) as List)
+                                  .cast<Map<String, dynamic>>();
+                              Customer? customer;
+                              if (cart.customerId != null) {
+                                customer = custSvc.getById(cart.customerId!);
+                              }
+                              cartSvc.loadCart(items, customer);
+                              Navigator.pop(modalCtx);
+                              AppNotification.showSuccess(context, 'Cart loaded');
+                            } catch (e, st) {
+                              CrashReporter.record(e, st,
+                                  context: 'pos.cart.load_saved');
+                              if (!mounted) return;
+                              Navigator.pop(modalCtx);
+                              AppNotification.showError(
+                                this.context,
+                                'Could not load this saved cart.',
+                              );
                             }
-                            cartSvc.loadCart(items, customer);
-                            Navigator.pop(modalCtx);
-                            AppNotification.showSuccess(context, 'Cart loaded');
                           },
                         );
                       },
@@ -511,7 +538,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                     modalCtx.getRSize(20),
                                     0,
                                     modalCtx.getRSize(20),
-                                    modalCtx.deviceBottomInset + 20,
+                                    modalCtx.deviceBottomPadding + 20,
                                   ),
                                   children: [
                                     _buildCustomerTile(null, modalCtx),

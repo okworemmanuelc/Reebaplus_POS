@@ -1,11 +1,9 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/widgets/app_fab.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:reebaplus_pos/core/theme/colors.dart';
 
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
@@ -19,25 +17,9 @@ import 'package:reebaplus_pos/features/pos/controllers/pos_controller.dart';
 import 'package:reebaplus_pos/features/pos/widgets/product_grid.dart';
 import 'package:reebaplus_pos/features/pos/widgets/category_filter_bar.dart';
 import 'package:reebaplus_pos/features/pos/widgets/quick_sale_modal.dart';
-import 'package:reebaplus_pos/shared/widgets/pin_dialog.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
-
-/// Pure store-confinement filter (§11.2 / §28 multi-store). Given all active
-/// [stores] and the set of store ids the user is [assigned] to, returns the
-/// stores they may sell from. `assigned == null` means "may view every store"
-/// (CEO, or a Manager the CEO granted all-stores) → all stores. A confined user
-/// with no assignment falls back to all stores so POS never dead-ends on "no
-/// store" (the §9.5 staff-assignment editor normally guarantees at least one).
-List<StoreData> selectableStoresFor(
-  List<StoreData> stores,
-  Set<String>? assigned,
-) {
-  if (assigned == null) return stores;
-  final mine = stores.where((s) => assigned.contains(s.id)).toList();
-  return mine.isEmpty ? stores : mine;
-}
 
 class PosHomeScreen extends ConsumerStatefulWidget {
   const PosHomeScreen({super.key});
@@ -62,59 +44,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
           cartService: ref.read(cartProvider),
         );
       });
-      _initStore();
     });
-  }
-
-  /// The stores the current user may sell from (§11.2 confinement / §28
-  /// multi-store): every active store for a CEO / all-stores Manager, otherwise
-  /// only their assigned store(s). Reads the live stores stream first so it works
-  /// on a cold start (the table fills after a fresh-login pull).
-  Future<List<StoreData>> _confineToSelectable() async {
-    final db = ref.read(databaseProvider);
-    final all = await db.storesDao.watchActiveStores().first;
-    final slug = ref.read(currentUserRoleProvider)?.slug;
-    final canViewAllStores = slug == 'ceo' ||
-        (slug == 'manager' && ref.read(managerCanViewAllStoresProvider));
-    final userId = ref.read(authProvider).currentUser?.id;
-    if (canViewAllStores || userId == null) return all;
-    final assigned =
-        (await db.userStoresDao.getForUser(userId)).map((s) => s.storeId).toSet();
-    return selectableStoresFor(all, assigned);
-  }
-
-  Future<void> _initStore() async {
-    final nav = ref.read(navigationProvider);
-    final selectable = await _confineToSelectable();
-    if (selectable.isEmpty || !mounted) return;
-
-    // Keep an already-valid selection (sticky across POS re-entry within the
-    // session). Only (re)default when the locked store is unset or isn't one the
-    // user may sell from — e.g. a confined staff member whose lock still points
-    // at the global first store, or a store they're no longer assigned to.
-    final current = nav.lockedStoreId.value;
-    if (current != null && selectable.any((s) => s.id == current)) return;
-
-    // Default to the first selectable store so POS is immediately usable.
-    // build() reads lockedStoreId via .read (a ValueNotifier, not watched), so
-    // force one rebuild after locking it post-first-paint.
-    nav.setLockedStore(selectable.first.id);
-    setState(() {});
-
-    // §28 "pick your store" gate: a confined staff member assigned to MORE THAN
-    // one store confirms which one they're working from. One-time per session —
-    // once a valid store is locked, the early-return above skips re-prompting.
-    final slug = ref.read(currentUserRoleProvider)?.slug;
-    final canViewAllStores = slug == 'ceo' ||
-        (slug == 'manager' && ref.read(managerCanViewAllStoresProvider));
-    if (!canViewAllStores && selectable.length > 1) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        final subtext = Theme.of(context).textTheme.bodySmall?.color ??
-            Theme.of(context).iconTheme.color!;
-        _showStorePicker(context, subtext);
-      });
-    }
   }
 
   @override
@@ -157,6 +87,19 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
           child: SizedBox.shrink(),
         ),
       );
+    }
+
+    // §12.1: POS always sells from one concrete store. Keep the controller's
+    // "All Stores" fallback in sync with the user's first selectable store so the
+    // grid + checkout have a real store even when the global active store is
+    // "All Stores" (an all-stores viewer's null). Deferred to post-frame because
+    // setFallbackStore can re-subscribe + notify.
+    final selectable = ref.watch(selectableStoresProvider);
+    final fallback = selectable.isNotEmpty ? selectable.first.id : null;
+    if (_controller!.fallbackStoreId != fallback) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _controller?.setFallbackStore(fallback);
+      });
     }
 
     return ListenableBuilder(
@@ -264,26 +207,12 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
     Color textCol,
     Color subtextCol,
   ) {
-    // §12.1 / §28: the store selector shows whenever the user has more than one
-    // store they may sell from — every active store for a CEO / all-stores
-    // Manager, otherwise their assigned store(s). Single-store users see no
-    // switcher (nothing to switch).
-    final slug = ref.watch(currentUserRoleProvider)?.slug;
-    final canViewAllStores = slug == 'ceo' ||
-        (slug == 'manager' && ref.watch(managerCanViewAllStoresProvider));
-    final userId = ref.watch(authProvider).currentUser?.id;
-    final allStores =
-        ref.watch(allStoresProvider).valueOrNull ?? const <StoreData>[];
-    final Set<String>? assignedIds = (canViewAllStores || userId == null)
-        ? null
-        : (ref.watch(myUserStoresProvider(userId)).valueOrNull ??
-                const <UserStoreData>[])
-            .map((s) => s.storeId)
-            .toSet();
-    final showStoreSwitcher =
-        selectableStoresFor(allStores, assignedIds).length > 1;
-    // §12.1: POS header shows the business name (live, so a Business Info
-    // rename reflects here) with the current store as the subtitle.
+    // §12.1: the store selector now lives in the navigation drawer (above Home),
+    // not on the POS header. POS just reflects the active store: the header
+    // subtitle shows the store it's selling from (the controller's current store
+    // name, which already resolves the "All Stores" fallback). POS header shows
+    // the business name (live, so a Business Info rename reflects here) with the
+    // current store as the subtitle.
     final bizName = ref.watch(currentBusinessNameProvider);
     return AppBar(
       backgroundColor: surfaceCol,
@@ -308,18 +237,6 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
             if (!_controller!.isSearching) _searchController.clear();
           },
         ),
-        if (showStoreSwitcher)
-          IconButton(
-            icon: Icon(
-              FontAwesomeIcons.store,
-              size: 16,
-              color: ref.read(navigationProvider).lockedStoreId.value == null
-                  ? subtextCol
-                  : Theme.of(context).colorScheme.primary,
-            ),
-            tooltip: 'Select Store',
-            onPressed: () => _showStorePicker(context, subtextCol),
-          ),
         const NotificationBell(),
         SizedBox(width: context.getRSize(16)),
       ],
@@ -513,42 +430,18 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
   }
 
   Future<void> _showQuickSaleModal(BuildContext context) async {
-    // §12.3: Quick Sale needs CEO/Manager authority. CEO and Manager proceed
-    // directly; a Cashier must enter a CEO or Manager PIN (their own PIN is
-    // rejected).
+    // §12.3 / §12.3.1: CEO and Manager add a Quick Sale straight to the cart.
+    // A role below Manager no longer enters a PIN — the modal records an
+    // approval request and waits for a Manager/CEO to approve it (the item then
+    // drops into the cart) or reject it (the modal closes).
     final slug = ref.read(currentUserRoleProvider)?.slug;
-    if (slug != 'ceo' && slug != 'manager') {
-      final approver = await PinDialog.show(context, title: 'Quick Sale');
-      if (approver == null) return; // cancelled or wrong PIN
-      // Resolve the approver's role straight from the DB. We can't use
-      // `ref.read(userRoleProvider(approver.id))` here: that provider is backed
-      // by stream providers, and for an id nothing on screen is watching, a cold
-      // read returns null before the streams emit — which wrongly rejected a
-      // valid CEO/Manager PIN. Awaiting the DAOs mirrors userRoleProvider's
-      // membership → role resolution synchronously.
-      final db = ref.read(databaseProvider);
-      final memberships = await db.userBusinessesDao.getForUser(approver.id);
-      String? approverSlug;
-      if (memberships.isNotEmpty) {
-        final roleId = memberships.first.roleId;
-        final roles = await db.rolesDao.getAll();
-        for (final r in roles) {
-          if (r.id == roleId) {
-            approverSlug = r.slug;
-            break;
-          }
-        }
-      }
-      if (approverSlug != 'ceo' && approverSlug != 'manager') {
-        if (!context.mounted) return;
-        AppNotification.showError(context, 'Manager or CEO PIN required.');
-        return;
-      }
-    }
+    final requireApproval = slug != 'ceo' && slug != 'manager';
 
-    if (!context.mounted) return;
     showDialog(
       context: context,
+      // While waiting for approval the modal must not be dismissable by tapping
+      // outside — the pending request is withdrawn explicitly via Cancel/back.
+      barrierDismissible: !requireApproval,
       builder: (ctx) => QuickSaleModal(
         surfaceCol: Theme.of(context).colorScheme.surface,
         textCol: Theme.of(context).colorScheme.onSurface,
@@ -557,204 +450,9 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
             Theme.of(context).iconTheme.color!),
         cardCol: Theme.of(context).cardColor,
         isDark: Theme.of(context).brightness == Brightness.dark,
+        requireApproval: requireApproval,
       ),
     );
   }
 
-  Future<void> _showStorePicker(
-    BuildContext context,
-    Color subtextCol,
-  ) async {
-    // Confined to the stores the user may sell from (§11.2): a non-CEO sees only
-    // their assigned store(s), never the whole business's stores.
-    final stores = await _confineToSelectable();
-    if (!context.mounted) return;
-    final surface = Theme.of(context).colorScheme.surface;
-    final text = Theme.of(context).colorScheme.onSurface;
-    final border = Theme.of(context).dividerColor;
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      enableDrag: true,
-      builder: (ctx) => BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: Container(
-          padding: EdgeInsets.only(
-            bottom: ctx.deviceBottomInset + 20,
-            top: 10,
-            left: 20,
-            right: 20,
-          ),
-          decoration: BoxDecoration(
-            color: surface.withValues(alpha: 0.85),
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-            border: Border.all(color: border.withValues(alpha: 0.5), width: 1),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.2),
-                blurRadius: 20,
-                offset: const Offset(0, -5),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Stylish Handle
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: subtextCol.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.primary.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(
-                      FontAwesomeIcons.store,
-                      size: 18,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Text(
-                    'Switch Store',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      color: text,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              Flexible(
-                child: GridView.builder(
-                  shrinkWrap: true,
-                  // Scrolls within the sheet when there are more stores than
-                  // fit — otherwise the fixed grid overflows the bottom.
-                  physics: const ClampingScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
-                    childAspectRatio: 1.3,
-                  ),
-                  itemCount: stores.length,
-                  itemBuilder: (ctx, i) {
-                    final w = stores[i];
-                    final isSelected =
-                        ref.read(navigationProvider).lockedStoreId.value == w.id;
-                    return InkWell(
-                      onTap: () {
-                        ref.read(navigationProvider).setLockedStore(w.id);
-                        Navigator.pop(ctx);
-                        setState(() {});
-                      },
-                      borderRadius: BorderRadius.circular(20),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 250),
-                        curve: Curves.easeOut,
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? Theme.of(
-                                  context,
-                                ).colorScheme.primary.withValues(alpha: 0.08)
-                              : (Theme.of(context).dividerColor),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: isSelected
-                                ? blueMain
-                                : border.withValues(alpha: 0.3),
-                            width: isSelected ? 2 : 1,
-                          ),
-                          boxShadow: isSelected
-                              ? [
-                                  BoxShadow(
-                                    color: Theme.of(context).colorScheme.primary
-                                        .withValues(alpha: 0.15),
-                                    blurRadius: 12,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ]
-                              : [],
-                        ),
-                        child: Stack(
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.all(16.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Icon(
-                                    FontAwesomeIcons.buildingCircleCheck,
-                                    size: 22,
-                                    color: isSelected
-                                        ? blueMain
-                                        : subtextCol.withValues(alpha: 0.5),
-                                  ),
-                                  Text(
-                                    w.name,
-                                    style: TextStyle(
-                                      color: text,
-                                      fontSize: 14,
-                                      fontWeight: isSelected
-                                          ? FontWeight.w800
-                                          : FontWeight.w600,
-                                      letterSpacing: -0.2,
-                                    ),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            if (isSelected)
-                              Positioned(
-                                top: 12,
-                                right: 12,
-                                child: Container(
-                                  padding: const EdgeInsets.all(4),
-                                  decoration: BoxDecoration(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.primary,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.check,
-                                    size: 12,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 10),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }

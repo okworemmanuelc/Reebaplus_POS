@@ -5,14 +5,27 @@ import 'package:flutter/foundation.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
+import 'package:reebaplus_pos/core/utils/order_number.dart';
 import 'package:reebaplus_pos/shared/models/order.dart' as domain;
+import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
 
 class OrderService {
   final AppDatabase _db;
   final SupabaseSyncService? _syncService;
+  final SecureStorageService? _secureStorage;
   late final OrdersDao _ordersDao = _db.ordersDao;
 
-  OrderService(this._db, [this._syncService]);
+  OrderService(this._db, [this._syncService, this._secureStorage]);
+
+  /// Resolves this device's opaque id for the order-number tag (§30.8.1).
+  /// `_secureStorage` is always injected in production (see
+  /// `orderServiceProvider`); the constant fallback only ever applies to tests
+  /// that construct `OrderService(db)` without it.
+  Future<String> _orderDeviceTag() async {
+    final deviceId =
+        await _secureStorage?.getOrCreateDeviceId() ?? 'unconfigured-device';
+    return deviceOrderTag(deviceId);
+  }
 
   /// Build an order from a UI cart and persist it atomically.
   ///
@@ -44,7 +57,8 @@ class OrderService {
       throw ArgumentError('cart is empty');
     }
     final orderId = UuidV7.generate();
-    final orderNumber = await _ordersDao.generateOrderNumber();
+    final orderNumber =
+        await _ordersDao.generateOrderNumber(await _orderDeviceTag());
 
     final dbPaymentType = _resolvePaymentType(
       paymentSubType: paymentSubType,

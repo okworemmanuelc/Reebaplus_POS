@@ -114,6 +114,90 @@ final viewerScopedPendingStockRequestsProvider =
   return all.where((r) => assignedStoreIds.contains(r.storeId)).toList();
 });
 
+// ── Quick Sale approvals (§12.3.1) ───────────────────────────────────────────
+/// All still-pending cashier Quick Sale requests for the business, newest first.
+/// Approver-side store scoping is applied by
+/// [viewerScopedPendingQuickSaleRequestsProvider].
+final pendingQuickSaleRequestsProvider =
+    StreamProvider<List<QuickSaleRequestData>>((ref) {
+  return ref.watch(databaseProvider).quickSaleRequestsDao.watchPending();
+});
+
+/// Pending Quick Sale requests the current viewer may approve (§12.3.1): a CEO
+/// sees every store; a Manager sees only requests for the store(s) they're
+/// assigned to (mirrors [viewerScopedPendingStockRequestsProvider] — confinement
+/// is computed locally, never via the dead nav-service flags).
+final viewerScopedPendingQuickSaleRequestsProvider =
+    Provider<List<QuickSaleRequestData>>((ref) {
+  final all =
+      ref.watch(pendingQuickSaleRequestsProvider).valueOrNull ?? const [];
+  final role = ref.watch(currentUserRoleProvider);
+  if (role?.slug == 'ceo') return all;
+  final userId = ref.watch(authProvider).currentUser?.id;
+  if (userId == null) return const [];
+  final assignedStoreIds =
+      (ref.watch(myUserStoresProvider(userId)).valueOrNull ??
+              const <UserStoreData>[])
+          .map((s) => s.storeId)
+          .toSet();
+  return all.where((r) => assignedStoreIds.contains(r.storeId)).toList();
+});
+
+// ── Stock Transfers (§16.8.1) ────────────────────────────────────────────────
+/// All in_transit transfers for the business — the raw feed from which the
+/// viewer-scoped providers derive their lists in memory.
+final allInTransitTransfersProvider =
+    StreamProvider<List<StockTransferData>>((ref) {
+  return ref.watch(databaseProvider).stockTransferDao.watchAllInTransit();
+});
+
+/// In-transit transfers where the current viewer's stores are the DESTINATION
+/// (the confirm queue). CEO sees all stores; store users see only their
+/// assigned stores (mirrors [viewerScopedPendingStockRequestsProvider]).
+final viewerScopedIncomingTransfersProvider =
+    Provider<List<StockTransferData>>((ref) {
+  final all =
+      ref.watch(allInTransitTransfersProvider).valueOrNull ?? const [];
+  final role = ref.watch(currentUserRoleProvider);
+  if (role?.slug == 'ceo') return all;
+  final userId = ref.watch(authProvider).currentUser?.id;
+  if (userId == null) return const [];
+  final assignedStoreIds =
+      (ref.watch(myUserStoresProvider(userId)).valueOrNull ??
+              const <UserStoreData>[])
+          .map((s) => s.storeId)
+          .toSet();
+  return all.where((r) => assignedStoreIds.contains(r.toLocationId)).toList();
+});
+
+/// In-transit transfers where the current viewer's stores are the SOURCE
+/// (dispatched shipments eligible for cancellation). CEO sees all; store users
+/// see only their assigned stores.
+final viewerScopedOutgoingTransfersProvider =
+    Provider<List<StockTransferData>>((ref) {
+  final all =
+      ref.watch(allInTransitTransfersProvider).valueOrNull ?? const [];
+  final role = ref.watch(currentUserRoleProvider);
+  if (role?.slug == 'ceo') return all;
+  final userId = ref.watch(authProvider).currentUser?.id;
+  if (userId == null) return const [];
+  final assignedStoreIds =
+      (ref.watch(myUserStoresProvider(userId)).valueOrNull ??
+              const <UserStoreData>[])
+          .map((s) => s.storeId)
+          .toSet();
+  return all
+      .where((r) => assignedStoreIds.contains(r.fromLocationId))
+      .toList();
+});
+
+/// Completed stock transfers (received + cancelled), business-wide, newest
+/// first. Used by the history tab on the Incoming Transfers screen.
+final stockTransferHistoryProvider =
+    StreamProvider<List<StockTransferData>>((ref) {
+  return ref.watch(databaseProvider).stockTransferDao.watchHistory();
+});
+
 // ── Products by store ───────────────────────────────────────────────────────
 final productsByStoreProvider =
     StreamProvider.family<List<ProductDataWithStock>, String>((ref, storeId) {
@@ -639,6 +723,45 @@ final managerCanViewAllStoresProvider = Provider<bool>((ref) {
   return false;
 });
 
+/// True when the current user may view/select EVERY active store — a CEO, or a
+/// Manager the CEO granted all-stores access (§11.2/§28). Confined roles (and
+/// not-yet-resolved sessions) get false. Drives the "All Stores" option and the
+/// confined-user default for the §12.1 nav-drawer store picker.
+final canViewAllStoresProvider = Provider<bool>((ref) {
+  final slug = ref.watch(currentUserRoleProvider)?.slug;
+  if (slug == 'ceo') return true;
+  return ref.watch(managerCanViewAllStoresProvider);
+});
+
+/// Narrows a store list to the ones a user may sell from. `assigned == null`
+/// means "no confinement" → all stores. A confined user with no assignment
+/// falls back to all stores so nothing dead-ends on "no store" (the §9.5
+/// staff-assignment editor normally guarantees at least one).
+List<StoreData> selectableStoresFor(
+  List<StoreData> stores,
+  Set<String>? assigned,
+) {
+  if (assigned == null) return stores;
+  final mine = stores.where((s) => assigned.contains(s.id)).toList();
+  return mine.isEmpty ? stores : mine;
+}
+
+/// The stores the current user may select as their active store (§12.1): every
+/// active store for an all-stores viewer (CEO / all-stores Manager), otherwise
+/// only their assigned store(s). The single source the nav-drawer store picker,
+/// POS confinement, and the MainLayout confined-user default all read, so they
+/// never disagree. Returns all stores while assignments are still loading (don't
+/// confine prematurely on a cold start).
+final selectableStoresProvider = Provider<List<StoreData>>((ref) {
+  final all = ref.watch(allStoresProvider).valueOrNull ?? const <StoreData>[];
+  if (ref.watch(canViewAllStoresProvider)) return all;
+  final userId = ref.watch(authProvider).currentUser?.id;
+  if (userId == null) return all;
+  final assigned = ref.watch(myUserStoresProvider(userId)).valueOrNull;
+  if (assigned == null) return all;
+  return selectableStoresFor(all, assigned.map((s) => s.storeId).toSet());
+});
+
 // ── Business-day & reconciliation helpers ────────────────────────────────────
 
 /// Today's business-day calendar date (`YYYY-MM-DD`) in the business timezone.
@@ -678,6 +801,18 @@ final businessTimezoneProvider = FutureProvider<String>((ref) async {
 /// empty-crates section. Point-in-time pool balance, not a day-scoped movement.
 final emptyCratesByManufacturerProvider = StreamProvider<Map<String, int>>((ref) {
   return ref.watch(databaseProvider).inventoryDao.watchEmptyCratesByManufacturer();
+});
+
+/// Per-store empty-crate balances for the currently locked store (§16.8.1 Phase 2).
+/// Returns an empty list when no store is locked. Crate businesses only.
+final storeCrateBalancesProvider =
+    StreamProvider<List<StoreCrateBalanceData>>((ref) {
+  final storeId = ref.watch(lockedStoreProvider).value;
+  if (storeId == null) return Stream.value(const []);
+  return ref
+      .watch(databaseProvider)
+      .storeCrateBalancesDao
+      .watchForStore(storeId);
 });
 
 // ── Daily Stock Count (master plan §17) ──────────────────────────────────────

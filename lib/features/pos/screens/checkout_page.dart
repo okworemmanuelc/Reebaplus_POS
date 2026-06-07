@@ -15,6 +15,7 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/receipt_widget.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/logger.dart';
+import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_builder.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
@@ -163,8 +164,12 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     final nav = ref.read(navigationProvider);
     final auth = ref.read(authProvider);
 
-    final storeId =
-        nav.lockedStoreId.value ?? auth.currentUser?.storeId;
+    // §12.1: when "All Stores" is active (lockedStoreId null, an all-stores
+    // viewer), sell from / resolve the user's first selectable store — matching
+    // the POS grid's fallback — before the legacy currentUser.storeId fallback.
+    final selectable = ref.read(selectableStoresProvider);
+    final storeId = nav.lockedStoreId.value ??
+        (selectable.isNotEmpty ? selectable.first.id : auth.currentUser?.storeId);
 
     // Stream-driven so a remote rename of the active store or a new
     // manufacturer arriving via realtime updates the receipt header / map
@@ -340,14 +345,16 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          _paymentConfirmed ? 'Receipt' : 'Checkout',
+          _paymentConfirmed
+              ? 'Receipt'
+              : 'Checkout – ${formatCurrency(_totalKobo / 100)}',
           style: TextStyle(
             fontSize: context.getRFontSize(18),
             fontWeight: FontWeight.w800,
             color: _text,
           ),
         ),
-        centerTitle: true,
+        centerTitle: false,
       ),
       body: SafeArea(
         top: false,
@@ -365,7 +372,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         context.getRSize(20),
         context.getRSize(20),
         context.getRSize(20),
-        context.getRSize(40) + context.deviceBottomInset,
+        context.getRSize(40) + context.deviceBottomPadding,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -669,11 +676,19 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       ),
       builder: (sheetCtx) {
         return Padding(
+          // nav-only inset (NOT deviceBottomInset). This sheet is shown from
+          // Checkout, which is pushed on the TAB navigator under MainLayout —
+          // whose Scaffold (resizeToAvoidBottomInset defaults true) already
+          // resizes the tab body up by the keyboard, lifting this sheet above
+          // it. Adding the keyboard again via deviceBottomInset double-counts it
+          // and the sheet leaps up "like an extra keyboard". deviceBottomPadding
+          // clears the system nav bar when the keyboard is down and collapses to
+          // 0 when it's up (the resize covers that case).
           padding: EdgeInsets.fromLTRB(
             context.getRSize(24),
             context.getRSize(16),
             context.getRSize(24),
-            context.deviceBottomInset + context.getRSize(24),
+            context.deviceBottomPadding + context.getRSize(24),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -841,7 +856,10 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     final List<CartStaleItem> stale;
     try {
       stale = await _detectCartStaleness();
-    } catch (e) {
+    } catch (e, st) {
+      // §33.4: record the crash so it's visible across devices, then keep the
+      // existing recoverable message — the sale flow must never blank-crash.
+      CrashReporter.record(e, st, context: 'pos.checkout.verify_prices');
       if (mounted) {
         AppNotification.showError(context, 'Could not verify cart prices: $e');
       }
@@ -966,8 +984,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       // ── Call atomic transaction ──────────────────────────────────────
       final auth = ref.read(authProvider);
       final nav = ref.read(navigationProvider);
-      final storeId =
-          nav.lockedStoreId.value ?? auth.currentUser?.storeId;
+      // §12.1 "All Stores" fallback → first selectable store (matches the POS
+      // grid), then the legacy currentUser.storeId fallback.
+      final selectable = ref.read(selectableStoresProvider);
+      final storeId = nav.lockedStoreId.value ??
+          (selectable.isNotEmpty ? selectable.first.id : auth.currentUser?.storeId);
 
       // Ensure store address is resolved before proceeding to receipt
       if (_storeAddress == null && storeId != null) {
@@ -1060,7 +1081,12 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         // widget.cart is a snapshot, so it survives the cart.clear() above.
         unawaited(_printReceipt());
       }
-    } catch (e) {
+    } catch (e, st) {
+      // §33.4: the most critical action in the app — record the crash for
+      // cross-device review, then keep the existing recoverable message.
+      // (The cloud RPC rolls back its own transaction on rejection; see
+      // _compensateRejectedSale — nothing to undo locally here.)
+      CrashReporter.record(e, st, context: 'pos.checkout.confirm');
       if (mounted) {
         AppNotification.showError(context, 'Checkout failed: ${e.toString()}');
       }
@@ -1159,7 +1185,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         context.getRSize(20),
         context.getRSize(16),
         context.getRSize(20),
-        context.getRSize(32) + context.deviceBottomInset,
+        context.getRSize(32) + context.deviceBottomPadding,
       ),
       decoration: BoxDecoration(
         color: _surface,

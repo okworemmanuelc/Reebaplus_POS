@@ -658,12 +658,19 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
 
     if (naira == null) return;
     final db = ref.read(databaseProvider);
-    await db.expenseBudgetsDao.setBudget(
-      storeId: scopeStoreId,
-      amountKobo: (naira * 100).round(),
-    );
-    if (!mounted) return;
-    AppNotification.showSuccess(context, 'Monthly budget updated.');
+    try {
+      await db.expenseBudgetsDao.setBudget(
+        storeId: scopeStoreId,
+        amountKobo: (naira * 100).round(),
+      );
+      if (!mounted) return;
+      AppNotification.showSuccess(context, 'Monthly budget updated.');
+    } catch (_) {
+      if (mounted) {
+        AppNotification.showError(
+            context, 'Could not update budget. Please try again.');
+      }
+    }
   }
 
   // ─────────────────────────── EXPENSES TAB ───────────────────────────────────
@@ -701,7 +708,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     return AppRefreshWrapper(
       child: ListView(
         padding: EdgeInsets.only(
-          bottom: context.getRSize(100) + context.deviceBottomInset,
+          bottom: context.getRSize(100) + context.deviceBottomPadding,
         ),
         children: [
           if (pending.isNotEmpty)
@@ -919,12 +926,19 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     if (currentUser == null) return;
     final db = ref.read(databaseProvider);
 
-    await db.expensesDao.approveExpense(
-      expenseId: exp.id,
-      approverId: currentUser.id,
-    );
-    if (!mounted) return;
-    AppNotification.showSuccess(context, 'Expense approved.');
+    try {
+      await db.expensesDao.approveExpense(
+        expenseId: exp.id,
+        approverId: currentUser.id,
+      );
+      if (!mounted) return;
+      AppNotification.showSuccess(context, 'Expense approved.');
+    } catch (_) {
+      if (mounted) {
+        AppNotification.showError(
+            context, 'Could not approve expense. Please try again.');
+      }
+    }
   }
 
   Future<void> _rejectExpense(ExpenseData exp) async {
@@ -999,13 +1013,20 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
 
     if (reason == null || reason.isEmpty) return;
     final db = ref.read(databaseProvider);
-    await db.expensesDao.rejectExpense(
-      expenseId: exp.id,
-      approverId: currentUser.id,
-      reason: reason,
-    );
-    if (!mounted) return;
-    AppNotification.showSuccess(context, 'Expense rejected.');
+    try {
+      await db.expensesDao.rejectExpense(
+        expenseId: exp.id,
+        approverId: currentUser.id,
+        reason: reason,
+      );
+      if (!mounted) return;
+      AppNotification.showSuccess(context, 'Expense rejected.');
+    } catch (_) {
+      if (mounted) {
+        AppNotification.showError(
+            context, 'Could not reject expense. Please try again.');
+      }
+    }
   }
 
   // ─────────────────────────── EDIT / DELETE (§20.3) ──────────────────────────
@@ -1062,12 +1083,19 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     if (currentUser == null) return;
     final db = ref.read(databaseProvider);
 
-    await db.expensesDao.softDeleteExpense(
-      expenseId: exp.id,
-      performedBy: currentUser.id,
-    );
-    if (!mounted) return;
-    AppNotification.showSuccess(context, 'Expense deleted.');
+    try {
+      await db.expensesDao.softDeleteExpense(
+        expenseId: exp.id,
+        performedBy: currentUser.id,
+      );
+      if (!mounted) return;
+      AppNotification.showSuccess(context, 'Expense deleted.');
+    } catch (_) {
+      if (mounted) {
+        AppNotification.showError(
+            context, 'Could not delete expense. Please try again.');
+      }
+    }
   }
 
   Widget? _buildCardMenu(ExpenseData exp) {
@@ -1171,7 +1199,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     return AppRefreshWrapper(
       child: ListView(
         padding: EdgeInsets.all(context.getRSize(16)).copyWith(
-          bottom: context.getRSize(100) + context.deviceBottomInset,
+          bottom: context.getRSize(100) + context.deviceBottomPadding,
         ),
         children: [
           _buildAnnualProjectionCard(context),

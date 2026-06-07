@@ -7,6 +7,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
+import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/date_period.dart';
@@ -119,7 +120,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
 
     return ListView(
       padding: EdgeInsets.all(context.getRSize(20)).copyWith(
-        bottom: context.getRSize(20) + context.deviceBottomInset,
+        bottom: context.getRSize(20) + context.deviceBottomPadding,
       ),
       children: [
         _buildHeader(context, supplier),
@@ -473,14 +474,20 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
       return;
     }
     final db = ref.read(databaseProvider);
-    await db.catalogDao.softDeleteSupplier(supplier.id);
-    await db.activityLogDao.logActivity(
-      action: 'supplier.delete',
-      description: 'Deleted supplier ${supplier.name}',
-      staffId: ref.read(authProvider).currentUser?.id,
-      entityType: 'supplier',
-      entityId: supplier.id,
-    );
-    if (mounted) Navigator.pop(context);
+    try {
+      await db.catalogDao.softDeleteSupplier(supplier.id);
+      await db.activityLogDao.logActivity(
+        action: 'supplier.delete',
+        description: 'Deleted supplier ${supplier.name}',
+        staffId: ref.read(authProvider).currentUser?.id,
+        entityType: 'supplier',
+        entityId: supplier.id,
+      );
+      if (mounted) Navigator.pop(context);
+    } catch (_) {
+      if (!mounted) return;
+      AppNotification.showError(
+          context, 'Could not delete supplier. Please try again.');
+    }
   }
 }

@@ -158,6 +158,25 @@ class _MainLayoutState extends ConsumerState<MainLayout>
     final t = Theme.of(context);
     final nav = ref.read(navigationProvider);
 
+    // §12.1 confined-user default. A user who cannot view all stores must always
+    // have a concrete active store so every view filters correctly and the
+    // permission resolver scopes to their store — including single-store staff
+    // who see no picker. All-stores viewers (CEO / all-stores Manager) keep
+    // `null` (= "All Stores"). The mutation is deferred to post-frame so it never
+    // runs during build (lockedStoreId has listeners that rebuild).
+    final selectableStores = ref.watch(selectableStoresProvider);
+    if (!ref.watch(canViewAllStoresProvider) && selectableStores.isNotEmpty) {
+      final active = nav.lockedStoreId.value;
+      if (active == null || !selectableStores.any((s) => s.id == active)) {
+        final target = selectableStores.first.id;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          if (nav.lockedStoreId.value == target) return;
+          nav.setLockedStore(target);
+        });
+      }
+    }
+
     return ValueListenableBuilder<int>(
       valueListenable: nav.currentIndex,
       builder: (context, currentIndex, _) {

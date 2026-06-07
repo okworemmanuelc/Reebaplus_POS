@@ -147,7 +147,7 @@ class _SecuritySettingsScreenState
           : SettingsFadeIn(
               child: ListView(
                 padding: EdgeInsets.fromLTRB(
-                    24, 24, 24, 24 + context.deviceBottomInset),
+                    24, 24, 24, 24 + context.deviceBottomPadding),
                 children: [
                   _autoLockCard(context),
                   const SizedBox(height: 16),

@@ -11,7 +11,6 @@ import 'package:reebaplus_pos/features/inventory/data/inventory_data.dart';
 import 'package:reebaplus_pos/features/stores/data/models/store.dart';
 import 'package:reebaplus_pos/shared/widgets/app_drawer.dart';
 import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
-import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 
 class ActivityLogScreen extends ConsumerStatefulWidget {
@@ -58,6 +57,18 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
             Theme.of(context).iconTheme.color!;
         final borderCol = Theme.of(context).dividerColor;
         final cardCol = Theme.of(context).cardColor;
+
+        // §12.1: the store filter follows the nav-drawer store picker (null =
+        // "All Stores"); no per-screen store dropdown. Mirror it into the local
+        // filter so `_filterLogs` keeps working.
+        final desiredStoreId = ref.watch(lockedStoreProvider).value;
+        if (_selectedStoreId != desiredStoreId) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _selectedStoreId != desiredStoreId) {
+              setState(() => _selectedStoreId = desiredStoreId);
+            }
+          });
+        }
 
         return Scaffold(
           backgroundColor: bgCol,
@@ -166,13 +177,6 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
           drawer: const AppDrawer(activeRoute: 'activity_logs'),
           body: Column(
             children: [
-              _buildStoreFilter(
-                context,
-                surfaceCol,
-                textCol,
-                subtextCol,
-                borderCol,
-              ),
               Expanded(
                 child: Builder(
                   builder: (context) {
@@ -192,7 +196,7 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
                           .rPadding(16)
                           .add(
                             EdgeInsets.only(
-                              bottom: context.deviceBottomInset,
+                              bottom: context.deviceBottomPadding,
                             ),
                           ),
                       itemCount: filteredLogs.length,
@@ -215,42 +219,6 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
               ),
             ],
           ),
-    );
-  }
-
-  Widget _buildStoreFilter(
-    BuildContext context,
-    Color surfaceCol,
-    Color textCol,
-    Color subtextCol,
-    Color borderCol,
-  ) {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.fromLTRB(
-        context.getRSize(16),
-        context.getRSize(8),
-        context.getRSize(16),
-        context.getRSize(16),
-      ),
-      decoration: BoxDecoration(
-        color: surfaceCol,
-        border: Border(bottom: BorderSide(color: borderCol)),
-      ),
-      child: AppDropdown<String?>(
-        labelText: 'Filter by Store',
-        value: _selectedStoreId,
-        items: [
-          const DropdownMenuItem<String?>(
-            value: null,
-            child: Text('All Stores'),
-          ),
-          ...kStores.map((w) {
-            return DropdownMenuItem<String?>(value: w.id, child: Text(w.name));
-          }),
-        ],
-        onChanged: (val) => setState(() => _selectedStoreId = val),
-      ),
     );
   }
 

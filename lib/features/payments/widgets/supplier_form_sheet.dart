@@ -256,7 +256,7 @@ class _SupplierFormSheetState extends ConsumerState<SupplierFormSheet> {
                         context.getRSize(20),
                         context.getRSize(16),
                         context.getRSize(20),
-                        context.deviceBottomInset + context.getRSize(16),
+                        context.deviceBottomPadding + context.getRSize(16),
                       ),
                       child: AppButton(
                         text: _isEdit ? 'Save Changes' : 'Add Supplier',

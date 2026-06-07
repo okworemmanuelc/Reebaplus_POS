@@ -127,14 +127,11 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen>
       // tree) so the lift still works if MediaQuery padding resolves to 0 here.
       floatingActionButton: Builder(
         builder: (context) {
-          return Padding(
-            padding: EdgeInsets.only(bottom: context.deviceBottomInset),
-            child: AppFAB(
-              heroTag: 'staff_fab',
-              onPressed: () => InviteStaffSheet.show(context),
-              icon: FontAwesomeIcons.userPlus,
-              label: 'Invite new staff',
-            ),
+          return AppFAB(
+            heroTag: 'staff_fab',
+            onPressed: () => InviteStaffSheet.show(context),
+            icon: FontAwesomeIcons.userPlus,
+            label: 'Invite new staff',
           );
         },
       ),
@@ -287,7 +284,7 @@ class _StaffTabState extends ConsumerState<_StaffTab> {
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
               padding: EdgeInsets.only(
-                bottom: context.getRSize(100) + context.deviceBottomInset,
+                bottom: context.getRSize(100) + context.deviceBottomPadding,
               ),
               children: rows.isEmpty
                   ? [
@@ -565,15 +562,20 @@ class _InvitesTabState extends ConsumerState<_InvitesTab> {
 
     final db = ref.read(databaseProvider);
     final currentUser = ref.read(authProvider).currentUser;
-    await db.inviteCodesDao.revoke(invite.id);
-    await db.activityLogDao.log(
-      action: 'staff.invite',
-      description: 'Revoked invite code for ${invite.email}',
-      staffId: currentUser?.id,
-      storeId: invite.storeId,
-    );
-    if (!mounted) return;
-    AppNotification.showSuccess(context, 'Invite revoked.');
+    try {
+      await db.inviteCodesDao.revoke(invite.id);
+      await db.activityLogDao.log(
+        action: 'staff.invite',
+        description: 'Revoked invite code for ${invite.email}',
+        staffId: currentUser?.id,
+        storeId: invite.storeId,
+      );
+      if (!mounted) return;
+      AppNotification.showSuccess(context, 'Invite revoked.');
+    } catch (e) {
+      if (!mounted) return;
+      AppNotification.showError(context, 'Could not revoke invite. Please try again.');
+    }
   }
 
   @override
@@ -618,7 +620,7 @@ class _InvitesTabState extends ConsumerState<_InvitesTab> {
                 : ListView.builder(
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: EdgeInsets.only(
-                      bottom: context.getRSize(100) + context.deviceBottomInset,
+                      bottom: context.getRSize(100) + context.deviceBottomPadding,
                     ),
                     itemCount: filtered.length,
                     itemBuilder: (context, i) {

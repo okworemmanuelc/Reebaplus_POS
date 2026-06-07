@@ -190,7 +190,7 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
           ? _emptyState(theme)
           : ListView(
               padding: EdgeInsets.all(context.spacingM).copyWith(
-                bottom: context.spacingM + context.deviceBottomInset,
+                bottom: context.spacingM + context.deviceBottomPadding,
               ),
               children: [
                 if (hasCostedData) _headline(theme, data, canSeeCost),

@@ -543,7 +543,18 @@ class AuthService extends ValueNotifier<UserData?> {
       // MainLayout is already rendering. Re-entrancy guarded inside
       // pullChanges so this can't race the connectivity-recovery
       // listener or a manual banner retry.
-      unawaited(_sync.pullChanges(user.businessId));
+      //
+      // Offline-first: this is fire-and-forget, so a pull that fails (e.g.
+      // launched offline) must NOT escape to the top-level zone as an
+      // unhandled error and surface a crash. pullChanges already flipped
+      // pullStatus to `failed` (the MainLayout catch-up banner reflects it) and
+      // the connectivity-recovery listener retries on reconnect. Swallow here —
+      // being offline is expected, not a crash.
+      unawaited(
+        _sync.pullChanges(user.businessId).catchError((Object e) {
+          debugPrint('[AuthService] background pull failed (offline?): $e');
+        }),
+      );
 
       // Stamp the login time on this membership so Staff Management shows it.
       // Fire-and-forget — value is set above, so the business resolver is bound.

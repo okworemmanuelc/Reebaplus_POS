@@ -85,32 +85,39 @@ class _StaffPermissionsScreenState
     if (!_guard()) return;
     bool roleDefaultOf(String k) => roleDefaults.contains(k);
 
-    if (enable) {
-      await _setEffective(key, true, roleDefaultOf(key));
+    try {
+      if (enable) {
+        await _setEffective(key, true, roleDefaultOf(key));
+        await _db.activityLogDao.log(
+          action: 'settings.user_permission.override',
+          description: 'Granted "$key" for ${user.name} (override)',
+          staffId: _db.currentUserId,
+        );
+        return;
+      }
+
+      // Turning a permission off also forces off any effectively-granted
+      // permission that depends on it (§10.2.1 dependency gating) — a child can't
+      // stay on once its parent is off. Mirrors the per-role cascade.
+      final cascaded =
+          descendantsOf(key).where(effective.contains).toList()..sort();
+      await _setEffective(key, false, roleDefaultOf(key));
+      for (final dep in cascaded) {
+        await _setEffective(dep, false, roleDefaultOf(dep));
+      }
+      final suffix =
+          cascaded.isEmpty ? '' : ' (also revoked: ${cascaded.join(', ')})';
       await _db.activityLogDao.log(
         action: 'settings.user_permission.override',
-        description: 'Granted "$key" for ${user.name} (override)',
+        description: 'Revoked "$key" for ${user.name} (override)$suffix',
         staffId: _db.currentUserId,
       );
-      return;
+    } catch (e) {
+      if (mounted) {
+        AppNotification.showError(
+            context, 'Could not update permission. Please try again.');
+      }
     }
-
-    // Turning a permission off also forces off any effectively-granted
-    // permission that depends on it (§10.2.1 dependency gating) — a child can't
-    // stay on once its parent is off. Mirrors the per-role cascade.
-    final cascaded =
-        descendantsOf(key).where(effective.contains).toList()..sort();
-    await _setEffective(key, false, roleDefaultOf(key));
-    for (final dep in cascaded) {
-      await _setEffective(dep, false, roleDefaultOf(dep));
-    }
-    final suffix =
-        cascaded.isEmpty ? '' : ' (also revoked: ${cascaded.join(', ')})';
-    await _db.activityLogDao.log(
-      action: 'settings.user_permission.override',
-      description: 'Revoked "$key" for ${user.name} (override)$suffix',
-      staffId: _db.currentUserId,
-    );
   }
 
   /// Restore defaults — clear every override for this staff member so all
@@ -145,17 +152,24 @@ class _StaffPermissionsScreenState
     if (confirmed != true) return;
     if (!_guard()) return; // re-check after the await (permission may have changed)
 
-    final cleared =
-        await _db.userPermissionOverridesDao.clearAllForUser(user.id);
-    await _db.activityLogDao.log(
-      action: 'settings.user_permission.restore_defaults',
-      description: 'Restored ${role.name} defaults for ${user.name} '
-          '(cleared $cleared override${cleared == 1 ? '' : 's'})',
-      staffId: _db.currentUserId,
-    );
-    if (mounted) {
-      AppNotification.showSuccess(
-          context, 'Restored ${role.name} defaults for ${user.name}.');
+    try {
+      final cleared =
+          await _db.userPermissionOverridesDao.clearAllForUser(user.id);
+      await _db.activityLogDao.log(
+        action: 'settings.user_permission.restore_defaults',
+        description: 'Restored ${role.name} defaults for ${user.name} '
+            '(cleared $cleared override${cleared == 1 ? '' : 's'})',
+        staffId: _db.currentUserId,
+      );
+      if (mounted) {
+        AppNotification.showSuccess(
+            context, 'Restored ${role.name} defaults for ${user.name}.');
+      }
+    } catch (e) {
+      if (mounted) {
+        AppNotification.showError(
+            context, 'Could not restore defaults. Please try again.');
+      }
     }
   }
 
@@ -237,7 +251,7 @@ class _StaffPermissionsScreenState
     return SettingsFadeIn(
       child: ListView(
         padding:
-            EdgeInsets.fromLTRB(24, 24, 24, 24 + context.deviceBottomInset),
+            EdgeInsets.fromLTRB(24, 24, 24, 24 + context.deviceBottomPadding),
         children: [
           Text(
             _isCeo

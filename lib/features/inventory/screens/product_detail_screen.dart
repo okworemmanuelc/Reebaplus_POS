@@ -19,6 +19,7 @@ import 'package:reebaplus_pos/core/utils/stock_calculator.dart';
 import 'package:reebaplus_pos/features/inventory/data/models/inventory_item.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
@@ -411,7 +412,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         });
         AppNotification.showSuccess(context, 'Product updated');
       }
-    } catch (e) {
+    } catch (e, st) {
+      CrashReporter.record(e, st, context: 'inventory.product_detail.save');
       debugPrint('ProductDetail._saveChanges error: $e');
       if (mounted) {
         AppNotification.showError(context, 'Could not update product: $e');
@@ -529,6 +531,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
 
     return Scaffold(
       backgroundColor: _bg,
+      resizeToAvoidBottomInset: false,
       body: CustomScrollView(
         slivers: [
           _buildSliverAppBar(context),
@@ -774,7 +777,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         context.getRSize(20),
         context.getRSize(16),
         context.getRSize(20),
-        context.getRSize(16) + context.deviceBottomInset,
+        context.getRSize(16) + context.deviceBottomPadding,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1638,7 +1641,9 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
           widget.onUpdateStock(); // Refresh parent view
         }
       }
-    } catch (e) {
+    } catch (e, st) {
+      CrashReporter.record(e, st,
+          context: 'inventory.product_detail.update_image');
       if (mounted) {
         AppNotification.showError(context, 'Failed to pick image: $e');
       }
@@ -1781,7 +1786,9 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             // Reflect the change on this screen immediately (#1).
             await _refreshLiveStock();
             return null;
-          } catch (e) {
+          } catch (e, st) {
+            CrashReporter.record(e, st,
+                context: 'inventory.product_detail.stock_adjust');
             debugPrint('UpdateStock modal save error: $e');
             return isStockKeeper
                 ? 'Could not send for approval: $e'
@@ -1959,22 +1966,32 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                     );
                   }
                 }
-              } catch (e) {
+              } catch (e, st) {
+                CrashReporter.record(e, st,
+                    context: 'inventory.product_detail.delete_stock_zero');
                 debugPrint('Delete stock-zeroing error: $e');
               }
-              await db.catalogDao.softDeleteProduct(productId);
-              await ref
-                  .read(activityLogProvider)
-                  .logAction(
-                    'delete_product',
-                    '${ref.read(authProvider).currentUser?.name ?? 'Unknown'} deleted product: $productName',
-                    productId: productId,
-                  );
-              ref.read(cartProvider).removeItem(productName);
-              if (!context.mounted) return;
-              Navigator.pop(ctx);
-              Navigator.pop(context);
-              AppNotification.showSuccess(context, '$productName deleted');
+              try {
+                await db.catalogDao.softDeleteProduct(productId);
+                await ref
+                    .read(activityLogProvider)
+                    .logAction(
+                      'delete_product',
+                      '${ref.read(authProvider).currentUser?.name ?? 'Unknown'} deleted product: $productName',
+                      productId: productId,
+                    );
+                ref.read(cartProvider).removeItem(productName);
+                if (!context.mounted) return;
+                Navigator.pop(ctx);
+                Navigator.pop(context);
+                AppNotification.showSuccess(context, '$productName deleted');
+              } catch (e, st) {
+                CrashReporter.record(e, st,
+                    context: 'inventory.product_detail.delete');
+                if (!context.mounted) return;
+                AppNotification.showError(
+                    context, 'Could not delete product. Please try again.');
+              }
             },
           ),
         ],
@@ -2144,22 +2161,18 @@ class _UpdateStockSheetState extends ConsumerState<_UpdateStockSheet> {
   Widget build(BuildContext context) {
     final product = widget.product;
     final stores = widget.stores;
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
+    return Container(
+      decoration: BoxDecoration(
+        color: _bg,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       ),
-      child: Container(
-        decoration: BoxDecoration(
-          color: _bg,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          16,
+          20,
+          20 + context.deviceBottomPadding,
         ),
-        child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(
-            20,
-            16,
-            20,
-            20 + context.deviceBottomInset,
-          ),
           child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -2269,7 +2282,6 @@ class _UpdateStockSheetState extends ConsumerState<_UpdateStockSheet> {
               onPressed: _doSave,
             ),
           ],
-        ),
         ),
       ),
     );

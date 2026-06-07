@@ -52,7 +52,7 @@ class _PrinterPickerState extends ConsumerState<PrinterPicker> {
     final border = Theme.of(context).dividerColor;
 
     return Padding(
-      padding: EdgeInsets.only(bottom: context.deviceBottomInset),
+      padding: EdgeInsets.only(bottom: context.deviceBottomPadding),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [

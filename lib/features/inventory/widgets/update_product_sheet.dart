@@ -13,6 +13,7 @@ import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -514,7 +515,8 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
         Navigator.pop(context);
         widget.onProductUpdated?.call();
       }
-    } catch (e) {
+    } catch (e, st) {
+      CrashReporter.record(e, st, context: 'inventory.update_product');
       debugPrint('UpdateProductSheet._save error: $e');
       setState(() => _errorMessage = 'Could not update product: $e');
     } finally {
@@ -533,7 +535,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
     final border = Theme.of(context).dividerColor;
 
     return Padding(
-      padding: EdgeInsets.only(bottom: context.deviceBottomInset),
+      padding: EdgeInsets.only(bottom: context.deviceBottomPadding),
       child: Container(
         constraints: BoxConstraints(
           maxHeight: MediaQuery.of(context).size.height * 0.92,
@@ -928,10 +930,22 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                               card: card,
                               border: border,
                               onTap: () async {
-                                final m = await _getOrCreateManufacturer(
-                                  _manufacturerCtrl.text.trim(),
-                                );
-                                if (m != null) _selectManufacturer(m);
+                                try {
+                                  final m = await _getOrCreateManufacturer(
+                                    _manufacturerCtrl.text.trim(),
+                                  );
+                                  if (m != null) _selectManufacturer(m);
+                                } catch (e, st) {
+                                  CrashReporter.record(e, st,
+                                      context:
+                                          'inventory.update_product.create_manufacturer');
+                                  if (mounted) {
+                                    setState(
+                                      () => _errorMessage =
+                                          'Could not create manufacturer. Please try again.',
+                                    );
+                                  }
+                                }
                               },
                             ),
                         ],
@@ -1018,10 +1032,22 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                               card: card,
                               border: border,
                               onTap: () async {
-                                final s = await _getOrCreateSupplier(
-                                  _supplierCtrl.text.trim(),
-                                );
-                                if (s != null) _selectSupplier(s);
+                                try {
+                                  final s = await _getOrCreateSupplier(
+                                    _supplierCtrl.text.trim(),
+                                  );
+                                  if (!mounted) return;
+                                  if (s != null) _selectSupplier(s);
+                                } catch (e, st) {
+                                  CrashReporter.record(e, st,
+                                      context:
+                                          'inventory.update_product.create_supplier');
+                                  if (!mounted) return;
+                                  setState(
+                                    () => _errorMessage =
+                                        'Could not create supplier. Please try again.',
+                                  );
+                                }
                               },
                             ),
                         ],

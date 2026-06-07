@@ -235,14 +235,15 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
         ],
       ),
       // Scrolls so the fixed-height content never overflows when the keyboard
-      // shrinks the sheet. Bottom padding (incl. keyboard via deviceBottomInset)
-      // lives on the scroll view so the last field can clear the keyboard.
+      // shrinks the sheet. Bottom padding is nav-only (deviceBottomPadding) —
+      // MainLayout's Scaffold resize lifts the sheet above the keyboard, and the
+      // scroll view lets the last field clear it.
       child: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(
           context.getRSize(24),
           context.getRSize(16),
           context.getRSize(24),
-          context.deviceBottomInset + context.getRSize(24),
+          context.deviceBottomPadding + context.getRSize(24),
         ),
         child: Column(
         mainAxisSize: MainAxisSize.min,

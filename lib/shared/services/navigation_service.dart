@@ -59,19 +59,12 @@ class NavigationService {
   }
 
   final ValueNotifier<bool> storeLocked = ValueNotifier<bool>(false);
+
+  /// The one app-wide active store (§12.1). Set by the nav-drawer store picker
+  /// (and store-details deep-links); read by POS, the permission resolver, and
+  /// every view screen's store filter. `null` = "All Stores" for an all-stores
+  /// viewer; confined users are always pinned to a concrete store by MainLayout.
   final ValueNotifier<String?> lockedStoreId = ValueNotifier<String?>(null);
-
-  /// Used by InventoryScreen to react to store changes from other screens.
-  final ValueNotifier<String?> selectedStoreId = ValueNotifier<String?>(
-    null,
-  );
-
-  /// One-shot store pre-filter for CustomersScreen. Set by the store
-  /// details "Customers" card before switching to the customers tab. The
-  /// customers screen reads this once on init and clears it.
-  final ValueNotifier<String?> customersInitialStoreId = ValueNotifier<String?>(
-    null,
-  );
 
   static final Map<int, String> indexToRoute = {
     0: 'dashboard',

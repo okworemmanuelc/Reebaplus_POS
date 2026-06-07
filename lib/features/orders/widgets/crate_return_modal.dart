@@ -6,6 +6,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
@@ -216,66 +217,79 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
     final db = ref.read(databaseProvider);
     final auth = ref.read(authProvider);
 
-    // Walk-in customer: just record physical stock returns; lone owner has full
-    // authority so no PIN override is needed.
-    if (customer == null) {
-      for (final row in _rows) {
-        final returned = int.tryParse(row.controller.text) ?? row.expectedQty;
-        if (row.manufacturerId.isNotEmpty) {
-          await db.inventoryDao.addEmptyCrates(
-            row.manufacturerId,
-            returned,
-          );
+    try {
+      // Walk-in customer: just record physical stock returns; lone owner has full
+      // authority so no PIN override is needed.
+      if (customer == null) {
+        for (final row in _rows) {
+          final returned = int.tryParse(row.controller.text) ?? row.expectedQty;
+          if (row.manufacturerId.isNotEmpty) {
+            await db.inventoryDao.addEmptyCrates(
+              row.manufacturerId,
+              returned,
+              storeId: order.storeId,
+            );
+          }
         }
+        if (mounted) Navigator.pop(context, true);
+        return;
       }
+
+      // Save directly to ledger — lone owner is always authorised.
+      final performedBy = auth.currentUser?.id ?? '';
+      await db.transaction(() async {
+        for (final row in _rows) {
+          final returned = int.tryParse(row.controller.text) ?? row.expectedQty;
+          if (row.manufacturerId.isEmpty) continue;
+
+          // 1. Physical crate stock comes back regardless of how it's settled.
+          if (returned > 0) {
+            await db.inventoryDao.addEmptyCrates(
+              row.manufacturerId,
+              returned,
+              storeId: order.storeId,
+            );
+          }
+
+          if (row.isMoneyTrack) {
+            // §13.4 Ring 5 money-track: the obligation lived in the wallet as a
+            // held deposit — settle it in money (refund / forfeit / shortfall).
+            // No crate balance was issued for this brand, so DON'T touch the
+            // crate ledger (that would create a phantom credit).
+            await db.ordersDao.settleCrateDepositReturn(
+              customerId: customer.id,
+              manufacturerId: row.manufacturerId,
+              orderId: order.id,
+              takenCrates: row.expectedQty,
+              returnedCrates: returned,
+              rateKobo: row.rateKobo,
+              paidKobo: row.paidKobo,
+              refundAsCash: _refundAsCash,
+              performedBy: performedBy,
+            );
+          } else if (returned > 0) {
+            // crate-track (no deposit): net the issued balance. Leftover (taken −
+            // returned) stays as crate debt on the crates tab. This is the bug-fix
+            // path (an 'issued' row was written at the sale).
+            await db.crateLedgerDao.recordCrateReturnByCustomer(
+              customerId: customer.id,
+              manufacturerId: row.manufacturerId,
+              quantity: returned,
+              performedBy: performedBy,
+              orderId: order.id,
+            );
+          }
+        }
+      });
+
       if (mounted) Navigator.pop(context, true);
-      return;
-    }
-
-    // Save directly to ledger — lone owner is always authorised.
-    final performedBy = auth.currentUser?.id ?? '';
-    await db.transaction(() async {
-      for (final row in _rows) {
-        final returned = int.tryParse(row.controller.text) ?? row.expectedQty;
-        if (row.manufacturerId.isEmpty) continue;
-
-        // 1. Physical crate stock comes back regardless of how it's settled.
-        if (returned > 0) {
-          await db.inventoryDao.addEmptyCrates(row.manufacturerId, returned);
-        }
-
-        if (row.isMoneyTrack) {
-          // §13.4 Ring 5 money-track: the obligation lived in the wallet as a
-          // held deposit — settle it in money (refund / forfeit / shortfall).
-          // No crate balance was issued for this brand, so DON'T touch the
-          // crate ledger (that would create a phantom credit).
-          await db.ordersDao.settleCrateDepositReturn(
-            customerId: customer.id,
-            manufacturerId: row.manufacturerId,
-            orderId: order.id,
-            takenCrates: row.expectedQty,
-            returnedCrates: returned,
-            rateKobo: row.rateKobo,
-            paidKobo: row.paidKobo,
-            refundAsCash: _refundAsCash,
-            performedBy: performedBy,
-          );
-        } else if (returned > 0) {
-          // crate-track (no deposit): net the issued balance. Leftover (taken −
-          // returned) stays as crate debt on the crates tab. This is the bug-fix
-          // path (an 'issued' row was written at the sale).
-          await db.crateLedgerDao.recordCrateReturnByCustomer(
-            customerId: customer.id,
-            manufacturerId: row.manufacturerId,
-            quantity: returned,
-            performedBy: performedBy,
-            orderId: order.id,
-          );
-        }
+    } catch (e) {
+      if (mounted) {
+        AppNotification.showError(context, 'Could not record crate returns: $e');
       }
-    });
-
-    if (mounted) Navigator.pop(context, true);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   /// §13.4 Ring 5 — choose where a money-track deposit refund goes: back to the
@@ -364,9 +378,10 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
     // That expand made the whole form lurch upward "like a second keyboard
     // opened" (only on a physical device, where the soft keyboard actually
     // shows; the emulator's hardware keyboard never triggers it). A min-size
-    // Column capped at the old 0.9 max removes the expand entirely — the footer's
-    // deviceBottomInset then does the single, smooth lift above the keyboard.
-    // Same fix the cart's change-customer sheet uses.
+    // Column capped at the old 0.9 max removes the expand entirely — and the
+    // footer's nav-only deviceBottomPadding clears the system nav (MainLayout's
+    // resize lifts the sheet above the keyboard). Same fix the cart's
+    // change-customer sheet uses.
     return Container(
       constraints: BoxConstraints(
         maxHeight: MediaQuery.of(context).size.height * 0.9,
@@ -459,7 +474,7 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
               context.getRSize(20),
               context.getRSize(12),
               context.getRSize(20),
-              context.getRSize(20) + context.deviceBottomInset,
+              context.getRSize(20) + context.deviceBottomPadding,
             ),
             child: Row(
               children: [

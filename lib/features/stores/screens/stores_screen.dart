@@ -20,6 +20,7 @@ import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/features/stores/screens/store_details_screen.dart';
 import 'package:reebaplus_pos/features/stores/screens/stock_transfer_screen.dart';
+import 'package:reebaplus_pos/features/stores/screens/incoming_transfers_screen.dart';
 
 class StoresScreen extends ConsumerStatefulWidget {
   const StoresScreen({super.key});
@@ -69,7 +70,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
       backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheet) => Padding(
-          padding: EdgeInsets.only(bottom: ctx.deviceBottomInset),
+          padding: EdgeInsets.only(bottom: ctx.deviceBottomPadding),
           child: Container(
             decoration: BoxDecoration(
               color: _surface,
@@ -261,7 +262,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
       backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheet) => Padding(
-          padding: EdgeInsets.only(bottom: ctx.deviceBottomInset),
+          padding: EdgeInsets.only(bottom: ctx.deviceBottomPadding),
           child: Container(
             decoration: BoxDecoration(
               color: _surface,
@@ -390,13 +391,21 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                                 location: Value(combinedLocation),
                                 lastUpdatedAt: Value(DateTime.now()),
                               );
-                              await (db.update(
-                                db.stores,
-                              )..where((t) => t.id.equals(store.id)))
-                                  .write(whComp);
-                              await db.syncDao
-                                  .enqueueUpsert('stores', whComp);
-                              if (ctx.mounted) Navigator.pop(ctx);
+                              try {
+                                await (db.update(
+                                  db.stores,
+                                )..where((t) => t.id.equals(store.id)))
+                                    .write(whComp);
+                                await db.syncDao
+                                    .enqueueUpsert('stores', whComp);
+                                if (ctx.mounted) Navigator.pop(ctx);
+                              } catch (e) {
+                                setSheet(() => saving = false);
+                                if (ctx.mounted) {
+                                  AppNotification.showError(ctx,
+                                      'Could not save store. Please try again.');
+                                }
+                              }
                             },
                     ),
                   ],
@@ -511,17 +520,24 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                 isDeleted: const Value(true),
                 lastUpdatedAt: Value(DateTime.now()),
               );
-              await (db.update(db.stores)
-                    ..where((t) => t.id.equals(store.id)))
-                  .write(whComp);
-              // Full-row enqueue: a partial stores upsert omits the NOT NULL name.
-              await db.syncDao.enqueueUpsert(
-                'stores',
-                store.toCompanion(true).copyWith(
-                      isDeleted: const Value(true),
-                      lastUpdatedAt: whComp.lastUpdatedAt,
-                    ),
-              );
+              try {
+                await (db.update(db.stores)
+                      ..where((t) => t.id.equals(store.id)))
+                    .write(whComp);
+                // Full-row enqueue: a partial stores upsert omits the NOT NULL name.
+                await db.syncDao.enqueueUpsert(
+                  'stores',
+                  store.toCompanion(true).copyWith(
+                        isDeleted: const Value(true),
+                        lastUpdatedAt: whComp.lastUpdatedAt,
+                      ),
+                );
+              } catch (e) {
+                if (context.mounted) {
+                  AppNotification.showError(context,
+                      'Could not delete store. Please try again.');
+                }
+              }
             },
           ),
         ],
@@ -559,6 +575,17 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                 context,
                 MaterialPageRoute(
                   builder: (_) => const StockTransferScreen(),
+                ),
+              ),
+            ),
+          if (canManage || hasPermission(ref, 'stores.receive_transfer'))
+            IconButton(
+              tooltip: 'Transfer Queue',
+              icon: const Icon(Icons.move_to_inbox_rounded),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const IncomingTransfersScreen(),
                 ),
               ),
             ),
@@ -600,7 +627,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                     rSize(context, 16),
                     rSize(context, 16),
                     rSize(context, 16),
-                    rSize(context, 100) + context.deviceBottomInset,
+                    rSize(context, 100) + context.deviceBottomPadding,
                   ),
                   itemCount: stores.length,
                   itemBuilder: (context, index) =>

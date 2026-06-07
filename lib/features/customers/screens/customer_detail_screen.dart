@@ -394,7 +394,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                             },
                     ),
                     SizedBox(
-                      height: ctx.deviceBottomInset + ctx.getRSize(16),
+                      height: ctx.deviceBottomPadding + ctx.getRSize(16),
                     ),
                   ],
                 ),
@@ -691,7 +691,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                       },
                     ),
                     SizedBox(
-                      height: ctx.deviceBottomInset + ctx.getRSize(16),
+                      height: ctx.deviceBottomPadding + ctx.getRSize(16),
                     ),
                   ],
                 ),
@@ -796,21 +796,29 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                   if (id == null) return;
                   final messenger = ScaffoldMessenger.of(context);
                   Navigator.pop(ctx);
-                  await ref
-                      .read(customerServiceProvider)
-                      .updateWalletLimit(id, amount);
-                  messenger.showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        'Debt limit set to ${formatCurrency(amount)}',
+                  try {
+                    await ref
+                        .read(customerServiceProvider)
+                        .updateWalletLimit(id, amount);
+                    messenger.showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Debt limit set to ${formatCurrency(amount)}',
+                        ),
+                        backgroundColor: success,
                       ),
-                      backgroundColor: success,
-                    ),
-                  );
+                    );
+                  } catch (_) {
+                    if (!mounted) return;
+                    AppNotification.showError(
+                      context,
+                      'Could not update the debt limit. Please try again.',
+                    );
+                  }
                 },
               ),
               SizedBox(
-                height: ctx.deviceBottomInset + ctx.getRSize(16),
+                height: ctx.deviceBottomPadding + ctx.getRSize(16),
               ),
             ],
           ),
@@ -849,12 +857,20 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     if (confirmed != true || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     final name = _name;
-    await ref.read(customerServiceProvider).softDeleteCustomer(id);
-    if (!mounted) return;
-    Navigator.pop(context); // back to the customers list
-    messenger.showSnackBar(
-      SnackBar(content: Text('$name deleted'), backgroundColor: success),
-    );
+    try {
+      await ref.read(customerServiceProvider).softDeleteCustomer(id);
+      if (!mounted) return;
+      Navigator.pop(context); // back to the customers list
+      messenger.showSnackBar(
+        SnackBar(content: Text('$name deleted'), backgroundColor: success),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      AppNotification.showError(
+        context,
+        'Could not delete customer. Please try again.',
+      );
+    }
   }
 
   /// §18 — open the prefilled Edit Customer Details sheet (CEO/Manager only,
@@ -982,11 +998,12 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                   // useSafeArea: true wraps the sheet in SafeArea(bottom: false)
                   // (no bottom inset), and MainLayout's Scaffold zeroes
                   // padding.bottom for everything under it — so ctx.bottomInset
-                  // reads 0 here. deviceBottomInset reads the real nav inset from
-                  // the raw view so the button bar clears the system nav.
+                  // reads 0 here. deviceBottomPadding reads the real nav inset
+                  // from the raw view so the bar clears the system nav (MainLayout's
+                  // resize handles the keyboard).
                   Padding(
                     padding: EdgeInsets.all(ctx.getRSize(16)).add(
-                      EdgeInsets.only(bottom: ctx.deviceBottomInset),
+                      EdgeInsets.only(bottom: ctx.deviceBottomPadding),
                     ),
                     child: Row(
                       children: [
@@ -1777,7 +1794,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                     context.getRSize(20),
                     context.getRSize(12),
                     context.getRSize(20),
-                    context.getRSize(20) + context.deviceBottomInset,
+                    context.getRSize(20) + context.deviceBottomPadding,
                   ),
                   itemCount: filtered.length,
                   itemBuilder: (ctx, i) {
@@ -1867,7 +1884,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
         context.getRSize(20),
         context.getRSize(12),
         context.getRSize(20),
-        context.getRSize(20) + context.deviceBottomInset,
+        context.getRSize(20) + context.deviceBottomPadding,
       ),
       itemCount: _orders.length,
       itemBuilder: (ctx, i) {
@@ -1963,7 +1980,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
         context.getRSize(20),
         context.getRSize(12),
         context.getRSize(20),
-        context.getRSize(20) + context.deviceBottomInset,
+        context.getRSize(20) + context.deviceBottomPadding,
       ),
       children: [
         if (canRecord) ...[
@@ -2230,7 +2247,11 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                     }
                     Navigator.pop(ctx);
                     try {
-                      await db.inventoryDao.addEmptyCrates(mfrId, qty);
+                      await db.inventoryDao.addEmptyCrates(
+                        mfrId,
+                        qty,
+                        storeId: ref.read(lockedStoreProvider).value,
+                      );
                       await db.crateLedgerDao.recordCrateReturnByCustomer(
                         customerId: id,
                         manufacturerId: mfrId,
@@ -2255,7 +2276,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                     }
                   },
                 ),
-                SizedBox(height: ctx.deviceBottomInset + ctx.getRSize(16)),
+                SizedBox(height: ctx.deviceBottomPadding + ctx.getRSize(16)),
               ],
             ),
           ),

@@ -12,6 +12,7 @@ import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/constants.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:reebaplus_pos/shared/widgets/auto_lock_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
@@ -163,18 +164,24 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     final auth = ref.read(authProvider);
     final currentUser = auth.currentUser;
     if (currentUser == null) return;
-    await db.expensesDao.updateExpense(
-      expenseId: widget.editing!.id,
-      performedBy: currentUser.id,
-      categoryName: _categoryCtrl.text.trim(),
-      description: _descCtrl.text.trim(),
-      reference: _refCtrl.text.trim().isEmpty ? null : _refCtrl.text.trim(),
-      expenseDate: _selectedDate,
-      receiptPath: _receiptFile?.path ?? _existingReceiptPath,
-    );
-    if (mounted) {
-      Navigator.pop(context);
-      AppNotification.showSuccess(context, 'Expense updated.');
+    try {
+      await db.expensesDao.updateExpense(
+        expenseId: widget.editing!.id,
+        performedBy: currentUser.id,
+        categoryName: _categoryCtrl.text.trim(),
+        description: _descCtrl.text.trim(),
+        reference: _refCtrl.text.trim().isEmpty ? null : _refCtrl.text.trim(),
+        expenseDate: _selectedDate,
+        receiptPath: _receiptFile?.path ?? _existingReceiptPath,
+      );
+      if (mounted) {
+        Navigator.pop(context);
+        AppNotification.showSuccess(context, 'Expense updated.');
+      }
+    } catch (e, st) {
+      CrashReporter.record(e, st, context: 'expenses.update');
+      if (!mounted) return;
+      AppNotification.showError(context, 'Could not update expense. Please try again.');
     }
   }
 
@@ -223,27 +230,32 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     final limit = ref.read(currentUserMaxExpenseApprovalKoboProvider);
     final status = (limit != null && amtKobo > limit) ? 'pending' : 'approved';
 
-    await db.expensesDao.addExpense(
-      categoryName: category,
-      amountKobo: amtKobo,
-      description: desc,
-      paymentMethod: method,
-      reference: _refCtrl.text.trim().isEmpty ? null : _refCtrl.text.trim(),
-      storeId: storeId,
-      recordedBy: currentUser.id,
-      expenseDate: _selectedDate,
-      receiptPath: _receiptFile?.path,
-      status: status,
-    );
-
-    if (mounted) {
-      Navigator.pop(context);
-      AppNotification.showSuccess(
-        context,
-        status == 'pending'
-            ? 'Expense sent for CEO approval.'
-            : 'Expense recorded.',
+    try {
+      await db.expensesDao.addExpense(
+        categoryName: category,
+        amountKobo: amtKobo,
+        description: desc,
+        paymentMethod: method,
+        reference: _refCtrl.text.trim().isEmpty ? null : _refCtrl.text.trim(),
+        storeId: storeId,
+        recordedBy: currentUser.id,
+        expenseDate: _selectedDate,
+        receiptPath: _receiptFile?.path,
+        status: status,
       );
+
+      if (mounted) {
+        Navigator.pop(context);
+        AppNotification.showSuccess(
+          context,
+          status == 'pending'
+              ? 'Expense sent for CEO approval.'
+              : 'Expense recorded.',
+        );
+      }
+    } catch (e, st) {
+      CrashReporter.record(e, st, context: 'expenses.add');
+      if (mounted) AppNotification.showError(context, 'Could not record expense. Please try again.');
     }
   }
 
@@ -283,10 +295,10 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
 
     return Scaffold(
       backgroundColor: _surface,
-      // The footer button's padding uses context.deviceBottomInset, which
-      // already includes the keyboard inset — let it be the sole handler so the
-      // Scaffold doesn't ALSO resize for the keyboard (that double-counts and
-      // throws the Save button toward the top when a field is focused).
+      // Footer-button padding is nav-only (deviceBottomPadding): this screen is
+      // under MainLayout, whose Scaffold already resizes the body for the
+      // keyboard, so the inset must not re-add it. resizeToAvoidBottomInset:false
+      // is a harmless no-op here (the screen sees viewInsets 0 under MainLayout).
       resizeToAvoidBottomInset: false,
       appBar: AppBar(
         backgroundColor: _surface,
@@ -590,7 +602,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                 context.getRSize(20),
                 context.getRSize(16),
                 context.getRSize(20),
-                context.deviceBottomInset + context.getRSize(16),
+                context.deviceBottomPadding + context.getRSize(16),
               ),
               child: AppButton(
                 text: _isEditing ? 'Save Changes' : 'Save Expense',

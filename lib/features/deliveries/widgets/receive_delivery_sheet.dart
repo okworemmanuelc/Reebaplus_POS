@@ -10,6 +10,7 @@ import 'package:reebaplus_pos/features/inventory/data/models/supplier.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/features/deliveries/data/models/delivery.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
@@ -189,73 +190,83 @@ class _ReceiveDeliverySheetState extends ConsumerState<ReceiveDeliverySheet> {
 
     final db = ref.read(databaseProvider);
 
-    for (var l in _lines) {
-      final qty = (double.tryParse(l.qtyCtrl.text) ?? 0).toInt();
-      totalQty += qty;
+    try {
+      for (var l in _lines) {
+        final qty = (double.tryParse(l.qtyCtrl.text) ?? 0).toInt();
+        totalQty += qty;
 
-      // Update stock in the database
-      await db.inventoryDao.adjustStock(
-        l.selectedProduct!.id,
-        _selectedStore!.id,
-        qty,
-        'Delivery received',
-        null,
+        // Update stock in the database
+        await db.inventoryDao.adjustStock(
+          l.selectedProduct!.id,
+          _selectedStore!.id,
+          qty,
+          'Delivery received',
+          null,
+        );
+
+        // Persist the trackEmpties setting if it differs from the product's saved value.
+        if (l.selectedProduct!.trackEmpties != l.trackEmpties) {
+          await db.catalogDao.updateTrackEmpties(
+            l.selectedProduct!.id,
+            l.trackEmpties,
+          );
+        }
+
+        // When trackEmpties is on, received bottle crates enter the empty-crate pool
+        // so the manufacturer's stock count reflects crates now in circulation.
+        if (l.trackEmpties && l.selectedProduct!.manufacturerId != null) {
+          await db.inventoryDao.addEmptyCrates(
+            l.selectedProduct!.manufacturerId!,
+            qty,
+            storeId: _selectedStore?.id,
+          );
+        }
+
+        deliveryItems.add(
+          DeliveryItem(
+            productId: l.selectedProduct!.id.toString(),
+            productName: l.selectedProduct!.name,
+            supplierName: l.selectedSupplier!.name,
+            crateGroupLabel: l.selectedCrateGroup?.name,
+            unitPrice: 0,
+            quantity: qty.toDouble(),
+          ),
+        );
+      }
+
+      final delivery = Delivery(
+        id: deliveryId,
+        supplierName: mainSupplierName,
+        deliveredAt: DateTime.now(),
+        items: deliveryItems,
+        totalValue: 0,
+        status: 'confirmed',
       );
 
-      // Persist the trackEmpties setting if it differs from the product's saved value.
-      if (l.selectedProduct!.trackEmpties != l.trackEmpties) {
-        await db.catalogDao.updateTrackEmpties(
-          l.selectedProduct!.id,
-          l.trackEmpties,
-        );
-      }
+      ref.read(deliveryServiceProvider).addDelivery(delivery);
 
-      // When trackEmpties is on, received bottle crates enter the empty-crate pool
-      // so the manufacturer's stock count reflects crates now in circulation.
-      if (l.trackEmpties && l.selectedProduct!.manufacturerId != null) {
-        await db.inventoryDao.addEmptyCrates(
-          l.selectedProduct!.manufacturerId!,
-          qty,
-        );
-      }
+      await ref
+          .read(activityLogProvider)
+          .logAction(
+            "Delivery Received",
+            "Delivery from $mainSupplierName to ${_selectedStore!.name} — ${deliveryItems.length} item(s), ${totalQty.toInt()} units added to stock",
+          );
 
-      deliveryItems.add(
-        DeliveryItem(
-          productId: l.selectedProduct!.id.toString(),
-          productName: l.selectedProduct!.name,
-          supplierName: l.selectedSupplier!.name,
-          crateGroupLabel: l.selectedCrateGroup?.name,
-          unitPrice: 0,
-          quantity: qty.toDouble(),
-        ),
+      if (!mounted) return;
+
+      Navigator.pop(context);
+      AppNotification.showSuccess(
+        context,
+        '${totalQty.toInt()} units added to ${_selectedStore!.name}.',
+      );
+    } catch (e, st) {
+      CrashReporter.record(e, st, context: 'deliveries.receive');
+      if (!mounted) return;
+      AppNotification.showError(
+        context,
+        'Could not save delivery. Please try again.',
       );
     }
-
-    final delivery = Delivery(
-      id: deliveryId,
-      supplierName: mainSupplierName,
-      deliveredAt: DateTime.now(),
-      items: deliveryItems,
-      totalValue: 0,
-      status: 'confirmed',
-    );
-
-    ref.read(deliveryServiceProvider).addDelivery(delivery);
-
-    await ref
-        .read(activityLogProvider)
-        .logAction(
-          "Delivery Received",
-          "Delivery from $mainSupplierName to ${_selectedStore!.name} — ${deliveryItems.length} item(s), ${totalQty.toInt()} units added to stock",
-        );
-
-    if (!mounted) return;
-
-    Navigator.pop(context);
-    AppNotification.showSuccess(
-      context,
-      '${totalQty.toInt()} units added to ${_selectedStore!.name}.',
-    );
   }
 
   Widget _inputField(
@@ -611,7 +622,7 @@ class _ReceiveDeliverySheetState extends ConsumerState<ReceiveDeliverySheet> {
         context.getRSize(16),
         context.getRSize(12),
         context.getRSize(16),
-        context.deviceBottomInset + context.getRSize(16),
+        context.deviceBottomPadding + context.getRSize(16),
       ),
       decoration: BoxDecoration(
         color: _surface,

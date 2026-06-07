@@ -71,26 +71,35 @@ class _PinDialogState extends ConsumerState<PinDialog> {
   Future<void> _submit() async {
     setState(() => _checking = true);
 
-    final auth = ref.read(authProvider);
-    final authorised = await auth.verifyPinForTier(_pin, widget.minimumTier);
+    try {
+      final auth = ref.read(authProvider);
+      final authorised = await auth.verifyPinForTier(_pin, widget.minimumTier);
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    if (!authorised) {
+      if (!authorised) {
+        setState(() {
+          _pin = '';
+          _errorMessage = 'Wrong PIN or insufficient access.';
+          _checking = false;
+        });
+        return;
+      }
+
+      // PIN matched — return the first matching user (lone owner setup).
+      final matches = await auth.getUsersByPin(_pin);
+      if (!mounted) return;
+
+      final approved = matches.first;
+      Navigator.pop(context, approved);
+    } catch (_) {
+      if (!mounted) return;
       setState(() {
         _pin = '';
-        _errorMessage = 'Wrong PIN or insufficient access.';
+        _errorMessage = 'Something went wrong. Try again.';
         _checking = false;
       });
-      return;
     }
-
-    // PIN matched — return the first matching user (lone owner setup).
-    final matches = await auth.getUsersByPin(_pin);
-    if (!mounted) return;
-
-    final approved = matches.first;
-    Navigator.pop(context, approved);
   }
 
   @override

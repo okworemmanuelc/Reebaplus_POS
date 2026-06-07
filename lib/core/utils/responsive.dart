@@ -91,22 +91,23 @@ extension ResponsiveHelper on BuildContext {
       (MediaQuery.maybeOf(this)?.padding.bottom ?? 0) +
       (MediaQuery.maybeOf(this)?.viewInsets.bottom ?? 0);
 
-  /// The true bottom inset (system nav + keyboard), read from the raw OS view so
-  /// an ancestor Scaffold cannot zero it out.
+  /// The true bottom inset INCLUDING the keyboard (system nav + keyboard), read
+  /// from the raw OS view so an ancestor Scaffold cannot zero it out.
   ///
-  /// A Scaffold strips `padding.bottom` from its WHOLE body whenever it has a
-  /// `bottomNavigationBar` — even a zero-height one (Flutter scaffold.dart:
-  /// `removeBottomPadding: widget.bottomNavigationBar != null`). `MainLayout`'s
-  /// app nav bar is never null (it renders `SizedBox.shrink()` when hidden), so
-  /// every screen and modal under MainLayout sees `MediaQuery.padding.bottom == 0`
-  /// and [bottomInset] reads 0 even though the system nav physically overlaps —
-  /// which is why bottom-anchored content paints under the nav bar. Recomputing
-  /// from the raw FlutterView bypasses that consumption.
+  /// ⚠️ Almost always the WRONG choice in this app — use [deviceBottomPadding].
+  /// Every in-app screen lives under `MainLayout`, whose Scaffold
+  /// (`resizeToAvoidBottomInset` defaults true, and its nav bar is never null —
+  /// it renders `SizedBox.shrink()` when hidden) ALREADY resizes the tab body UP
+  /// by the keyboard. Adding the keyboard again via this getter double-counts it,
+  /// so bottom-anchored content leaps up "like a second keyboard" when a field is
+  /// focused — visible in fixed `Column`s / footer slots, merely wasteful
+  /// scroll-extent inside scrollables. Confirmed on-device 2026-06-07 (checkout
+  /// crate-deposit sheet). Use [deviceBottomPadding] (nav only) instead.
   ///
-  /// Use this for bottom-anchored content that reaches the PHYSICAL screen
-  /// bottom: modals, bottom-sheet footers, and pushed-screen footers. Do NOT use
-  /// it for tab-root content that sits ABOVE the visible bottom nav bar — the bar
-  /// already insets those; this would add a spurious gap.
+  /// Only correct for content that is NOT under MainLayout's resize (a route
+  /// shown with `useRootNavigator: true`, or pre-login auth screens) and must
+  /// therefore lift itself above the keyboard. The app has no such call sites
+  /// today, which is why every former call site now uses [deviceBottomPadding].
   double get deviceBottomInset {
     final view = View.maybeOf(this);
     if (view == null) return bottomInset;
@@ -114,13 +115,17 @@ extension ResponsiveHelper on BuildContext {
     return raw.padding.bottom + raw.viewInsets.bottom;
   }
 
-  /// The system-navigation inset ONLY (no keyboard), read from the raw OS view
-  /// so an ancestor Scaffold can't zero it out. Same source as
-  /// [deviceBottomInset] but EXCLUDES the keyboard — use it for bottom-anchored
-  /// chrome that the Scaffold already lifts above the keyboard but NOT above the
-  /// system nav bar on edge-to-edge (a floating action button is the case this
-  /// exists for). Using [deviceBottomInset] there would double-count the
-  /// keyboard and jump the button too high when typing.
+  /// The system-navigation inset ONLY (no keyboard), read from the raw OS view so
+  /// an ancestor Scaffold can't zero it out. THE standard inset for ALL
+  /// bottom-anchored content in this app: modals, bottom-sheet footers,
+  /// pushed-screen footers, and FABs.
+  ///
+  /// Why nav-only and not [deviceBottomInset]: every in-app screen is under
+  /// `MainLayout`, whose Scaffold already resizes the tab body up by the keyboard,
+  /// so the keyboard is handled and content must add ONLY the system-nav inset.
+  /// Keyboard down → this clears the nav bar; keyboard up → it collapses to 0 (the
+  /// resize covers that). Adding the keyboard here too (via [deviceBottomInset])
+  /// double-counts it and jumps content too high.
   double get deviceBottomPadding {
     final view = View.maybeOf(this);
     if (view == null) return MediaQuery.maybeOf(this)?.padding.bottom ?? 0;

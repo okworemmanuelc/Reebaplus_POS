@@ -129,7 +129,7 @@ class _EditProfileSheetState extends State<EditProfileSheet> {
         24,
         16,
         24,
-        24 + context.deviceBottomInset,
+        24 + context.deviceBottomPadding,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,

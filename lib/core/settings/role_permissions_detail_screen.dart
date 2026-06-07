@@ -146,61 +146,82 @@ class _RolePermissionsDetailScreenState
 
   Future<void> _togglePermission(String key, bool enable) async {
     if (!_guard()) return;
-    if (enable) {
-      await _db.rolePermissionsDao.grant(role.id, key);
+    try {
+      if (enable) {
+        await _db.rolePermissionsDao.grant(role.id, key);
+        await _db.activityLogDao.log(
+          action: 'settings.role_permission.toggle',
+          description: 'Granted "$key" for ${role.name}',
+          staffId: _db.currentUserId,
+        );
+        return;
+      }
+      // Revoking a parent cascades to any granted permission that depends on it
+      // (§10.2 dependency gating) — a child can't stay on once its parent is off.
+      // revoke() is idempotent, but we intersect with the granted set so the
+      // activity log records only what actually changed.
+      final granted = (ref.read(rolePermissionsProvider(role.id)).valueOrNull ??
+              const <RolePermissionData>[])
+          .map((g) => g.permissionKey)
+          .toSet();
+      final cascaded =
+          descendantsOf(key).where(granted.contains).toList()..sort();
+      await _db.rolePermissionsDao.revoke(role.id, key);
+      for (final dep in cascaded) {
+        await _db.rolePermissionsDao.revoke(role.id, dep);
+      }
+      final suffix =
+          cascaded.isEmpty ? '' : ' (also revoked: ${cascaded.join(', ')})';
       await _db.activityLogDao.log(
         action: 'settings.role_permission.toggle',
-        description: 'Granted "$key" for ${role.name}',
+        description: 'Revoked "$key" for ${role.name}$suffix',
         staffId: _db.currentUserId,
       );
-      return;
+    } catch (_) {
+      if (mounted) AppNotification.showError(context, "Couldn't update permission.");
     }
-    // Revoking a parent cascades to any granted permission that depends on it
-    // (§10.2 dependency gating) — a child can't stay on once its parent is off.
-    // revoke() is idempotent, but we intersect with the granted set so the
-    // activity log records only what actually changed.
-    final granted = (ref.read(rolePermissionsProvider(role.id)).valueOrNull ??
-            const <RolePermissionData>[])
-        .map((g) => g.permissionKey)
-        .toSet();
-    final cascaded = descendantsOf(key).where(granted.contains).toList()..sort();
-    await _db.rolePermissionsDao.revoke(role.id, key);
-    for (final dep in cascaded) {
-      await _db.rolePermissionsDao.revoke(role.id, dep);
-    }
-    final suffix =
-        cascaded.isEmpty ? '' : ' (also revoked: ${cascaded.join(', ')})';
-    await _db.activityLogDao.log(
-      action: 'settings.role_permission.toggle',
-      description: 'Revoked "$key" for ${role.name}$suffix',
-      staffId: _db.currentUserId,
-    );
   }
 
   Future<void> _commitDiscount(int value) async {
     if (_isCeo || value == _lastSavedDiscount) return;
     if (!_guard()) return;
+    final prev = _lastSavedDiscount;
     _lastSavedDiscount = value;
-    await _db.roleSettingsDao.set(role.id, _kMaxDiscount, value.toString());
-    await _db.activityLogDao.log(
-      action: 'settings.role_setting.discount',
-      description: 'Set max discount to $value% for ${role.name}',
-      staffId: _db.currentUserId,
-    );
+    try {
+      await _db.roleSettingsDao.set(role.id, _kMaxDiscount, value.toString());
+      await _db.activityLogDao.log(
+        action: 'settings.role_setting.discount',
+        description: 'Set max discount to $value% for ${role.name}',
+        staffId: _db.currentUserId,
+      );
+    } catch (_) {
+      _lastSavedDiscount = prev;
+      if (mounted) {
+        AppNotification.showError(context, "Couldn't save discount limit.");
+      }
+    }
   }
 
   /// Manager-only: unlock/lock the Home store picker for Managers (§11.2).
   Future<void> _commitViewAllStores(bool enable) async {
     if (!_guard()) return;
     setState(() => _viewAllStores = enable);
-    await _db.roleSettingsDao
-        .set(role.id, kManagerViewAllStoresKey, enable.toString());
-    await _db.activityLogDao.log(
-      action: 'settings.role_setting.view_all_stores',
-      description:
-          '${enable ? 'Allowed' : 'Disallowed'} viewing other stores for ${role.name}',
-      staffId: _db.currentUserId,
-    );
+    try {
+      await _db.roleSettingsDao
+          .set(role.id, kManagerViewAllStoresKey, enable.toString());
+      await _db.activityLogDao.log(
+        action: 'settings.role_setting.view_all_stores',
+        description:
+            '${enable ? 'Allowed' : 'Disallowed'} viewing other stores for ${role.name}',
+        staffId: _db.currentUserId,
+      );
+    } catch (_) {
+      if (mounted) {
+        setState(() => _viewAllStores = !enable);
+        AppNotification.showError(
+            context, "Couldn't update store visibility.");
+      }
+    }
   }
 
   /// Commit the expense limit. Called from focus-loss, submit, and dispose, so
@@ -211,13 +232,20 @@ class _RolePermissionsDetailScreenState
     final kobo = (parseCurrency(_expenseCtrl.text) * 100).toInt();
     if (kobo == _lastSavedExpenseKobo) return;
     _lastSavedExpenseKobo = kobo;
-    await _db.roleSettingsDao.set(role.id, _kMaxExpenseKobo, kobo.toString());
-    await _db.activityLogDao.log(
-      action: 'settings.role_setting.expense_approval',
-      description:
-          'Set max expense approval to ${formatCurrency(kobo / 100)} for ${role.name}',
-      staffId: _db.currentUserId,
-    );
+    try {
+      await _db.roleSettingsDao.set(role.id, _kMaxExpenseKobo, kobo.toString());
+      await _db.activityLogDao.log(
+        action: 'settings.role_setting.expense_approval',
+        description:
+            'Set max expense approval to ${formatCurrency(kobo / 100)} for ${role.name}',
+        staffId: _db.currentUserId,
+      );
+    } catch (_) {
+      if (mounted) {
+        AppNotification.showError(
+            context, "Couldn't save expense approval limit.");
+      }
+    }
   }
 
   @override
@@ -226,9 +254,10 @@ class _RolePermissionsDetailScreenState
     final canManage = hasPermission(ref, 'settings.manage');
 
     return Scaffold(
-      // Single keyboard lift via the ListView's deviceBottomInset bottom padding
-      // below; disabling Scaffold resize avoids double-counting the keyboard
-      // (root-nav screen sees the real inset). Same as add_expense.
+      // Body padding is nav-only (deviceBottomPadding): this screen is under
+      // MainLayout, whose Scaffold already resizes the body for the keyboard, so
+      // the inset must not re-add it. resizeToAvoidBottomInset:false is a harmless
+      // no-op here (the screen sees viewInsets 0 under MainLayout).
       resizeToAvoidBottomInset: false,
       backgroundColor: t.scaffoldBackgroundColor,
       appBar: AppBar(
@@ -292,7 +321,7 @@ class _RolePermissionsDetailScreenState
     return SettingsFadeIn(
       child: ListView(
         padding: EdgeInsets.fromLTRB(
-            24, 24, 24, 24 + context.deviceBottomInset),
+            24, 24, 24, 24 + context.deviceBottomPadding),
         children: [
           // Permission scope selector (§10.2.1): Business (real, default) vs
           // Store (Phase-1 placeholder). User-scope overrides live on the staff
@@ -618,33 +647,41 @@ class _RolePermissionsDetailScreenState
     if (!_guard()) return;
     bool defaultOf(String k) => businessDefaults.contains(k);
 
-    if (enable) {
-      await _setStoreEffective(storeId, key, true, defaultOf(key));
+    try {
+      if (enable) {
+        await _setStoreEffective(storeId, key, true, defaultOf(key));
+        await _db.activityLogDao.log(
+          action: 'settings.store_permission.override',
+          description:
+              'Granted "$key" for ${role.name} at this store (override)',
+          staffId: _db.currentUserId,
+        );
+        return;
+      }
+
+      // Turning a permission off also forces off any effectively-granted
+      // permission that depends on it (§10.2 dependency gating) — a child can't
+      // stay on once its parent is off. Mirrors the per-role / per-user cascade.
+      final cascaded =
+          descendantsOf(key).where(effective.contains).toList()..sort();
+      await _setStoreEffective(storeId, key, false, defaultOf(key));
+      for (final dep in cascaded) {
+        await _setStoreEffective(storeId, dep, false, defaultOf(dep));
+      }
+      final suffix =
+          cascaded.isEmpty ? '' : ' (also revoked: ${cascaded.join(', ')})';
       await _db.activityLogDao.log(
         action: 'settings.store_permission.override',
-        description: 'Granted "$key" for ${role.name} at this store (override)',
+        description:
+            'Revoked "$key" for ${role.name} at this store (override)$suffix',
         staffId: _db.currentUserId,
       );
-      return;
+    } catch (_) {
+      if (mounted) {
+        AppNotification.showError(
+            context, "Couldn't update this store's permission.");
+      }
     }
-
-    // Turning a permission off also forces off any effectively-granted
-    // permission that depends on it (§10.2 dependency gating) — a child can't
-    // stay on once its parent is off. Mirrors the per-role / per-user cascade.
-    final cascaded =
-        descendantsOf(key).where(effective.contains).toList()..sort();
-    await _setStoreEffective(storeId, key, false, defaultOf(key));
-    for (final dep in cascaded) {
-      await _setStoreEffective(storeId, dep, false, defaultOf(dep));
-    }
-    final suffix =
-        cascaded.isEmpty ? '' : ' (also revoked: ${cascaded.join(', ')})';
-    await _db.activityLogDao.log(
-      action: 'settings.store_permission.override',
-      description:
-          'Revoked "$key" for ${role.name} at this store (override)$suffix',
-      staffId: _db.currentUserId,
-    );
   }
 
   /// Restore store defaults — clear every override for [storeId]+this role so
@@ -679,17 +716,24 @@ class _RolePermissionsDetailScreenState
     if (confirmed != true) return;
     if (!_guard()) return; // re-check after the await (permission may have changed)
 
-    final cleared = await _db.storeRolePermissionsDao
-        .clearAllForStoreRole(storeId, role.id);
-    await _db.activityLogDao.log(
-      action: 'settings.store_permission.restore_defaults',
-      description: 'Restored ${role.name} business defaults at a store '
-          '(cleared $cleared override${cleared == 1 ? '' : 's'})',
-      staffId: _db.currentUserId,
-    );
-    if (mounted) {
-      AppNotification.showSuccess(
-          context, 'Restored ${role.name} defaults for this store.');
+    try {
+      final cleared = await _db.storeRolePermissionsDao
+          .clearAllForStoreRole(storeId, role.id);
+      await _db.activityLogDao.log(
+        action: 'settings.store_permission.restore_defaults',
+        description: 'Restored ${role.name} business defaults at a store '
+            '(cleared $cleared override${cleared == 1 ? '' : 's'})',
+        staffId: _db.currentUserId,
+      );
+      if (mounted) {
+        AppNotification.showSuccess(
+            context, 'Restored ${role.name} defaults for this store.');
+      }
+    } catch (_) {
+      if (mounted) {
+        AppNotification.showError(
+            context, "Couldn't restore store defaults.");
+      }
     }
   }
 

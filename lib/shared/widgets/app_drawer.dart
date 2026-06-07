@@ -4,6 +4,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/theme/theme_settings_screen.dart';
 import 'package:reebaplus_pos/core/settings/settings_screen.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -314,6 +315,9 @@ class AppDrawer extends ConsumerWidget {
         vertical: context.getRSize(16),
       ),
       children: [
+        // §12.1 store picker — the one app-wide active-store control. Sits above
+        // Home; only shows when the user can choose more than one store.
+        _buildStorePicker(context, ref),
         _navItem(
           context,
           FontAwesomeIcons.chartLine,
@@ -382,7 +386,10 @@ class AppDrawer extends ConsumerWidget {
             onTap: () => _navigateTo(context, ref, 'expenses'),
           ),
         // Stores — gated by stores.manage (§10.2), CEO-only by default.
-        if (hasPermission(ref, 'stores.manage'))
+        // Also visible to users with stores.receive_transfer so they can reach
+        // the Transfer Queue button on the Stores screen (§16.8.1).
+        if (hasPermission(ref, 'stores.manage') ||
+            hasPermission(ref, 'stores.receive_transfer'))
           _navItem(
             context,
             FontAwesomeIcons.store,
@@ -529,7 +536,7 @@ class AppDrawer extends ConsumerWidget {
         if (!isBelowCeo) _buildAppearanceTile(context),
         // Extra space for system navigation bar
         SizedBox(
-          height: context.deviceBottomInset + context.getRSize(20),
+          height: context.deviceBottomPadding + context.getRSize(20),
         ),
       ],
     );
@@ -646,6 +653,215 @@ class AppDrawer extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+
+  /// §12.1 store picker — the single app-wide active-store control. Drives the
+  /// view on Home/Inventory/POS/Customers/Activity Log via `lockedStoreId`
+  /// (null = "All Stores"). Hidden unless the user can choose >1 store. Styled to
+  /// match `_navItem` so it reads as part of the nav and follows the active theme.
+  Widget _buildStorePicker(BuildContext context, WidgetRef ref) {
+    final selectable = ref.watch(selectableStoresProvider);
+    if (selectable.length < 2) return const SizedBox.shrink();
+
+    final canViewAll = ref.watch(canViewAllStoresProvider);
+    final activeId = ref.watch(lockedStoreProvider).value;
+
+    final t = Theme.of(context);
+    final primary = t.colorScheme.primary;
+    final subtextColor = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
+    final textColor = t.colorScheme.onSurface;
+
+    StoreData? activeStore;
+    for (final s in selectable) {
+      if (s.id == activeId) {
+        activeStore = s;
+        break;
+      }
+    }
+    final label = activeStore?.name ?? (canViewAll ? 'All Stores' : selectable.first.name);
+
+    return Container(
+      margin: EdgeInsets.only(bottom: context.getRSize(6)),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () => _showStorePickerSheet(
+            context, ref, selectable, canViewAll, activeId),
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: context.getRSize(16),
+              vertical: context.getRSize(10),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: context.getRSize(36),
+                  height: context.getRSize(36),
+                  decoration: BoxDecoration(
+                    color: primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    FontAwesomeIcons.store,
+                    size: context.getRSize(15),
+                    color: primary,
+                  ),
+                ),
+                SizedBox(width: context.getRSize(14)),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Store',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: context.getRFontSize(11),
+                          color: subtextColor,
+                        ),
+                      ),
+                      Text(
+                        label,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: context.getRFontSize(14.5),
+                          color: textColor,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(width: context.getRSize(8)),
+                Icon(
+                  FontAwesomeIcons.chevronDown,
+                  size: context.getRSize(13),
+                  color: subtextColor,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Themed bottom sheet listing the user's selectable stores (plus "All Stores"
+  /// for all-stores viewers). Selecting one sets the global active store and
+  /// closes the drawer.
+  void _showStorePickerSheet(
+    BuildContext context,
+    WidgetRef ref,
+    List<StoreData> selectable,
+    bool canViewAll,
+    String? activeId,
+  ) {
+    final t = Theme.of(context);
+    final primary = t.colorScheme.primary;
+    final textColor = t.colorScheme.onSurface;
+    final subtextColor = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
+
+    final options = <({String? id, String name})>[
+      if (canViewAll) (id: null, name: 'All Stores'),
+      ...selectable.map((s) => (id: s.id, name: s.name)),
+    ];
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: t.colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            top: context.getRSize(8),
+            bottom: context.deviceBottomPadding + context.getRSize(8),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: context.getRSize(40),
+                height: context.getRSize(4),
+                margin: EdgeInsets.only(bottom: context.getRSize(12)),
+                decoration: BoxDecoration(
+                  color: subtextColor.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: context.getRSize(20)),
+                child: Row(
+                  children: [
+                    Text(
+                      'Select Store',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: context.getRFontSize(16),
+                        color: textColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(height: context.getRSize(8)),
+              ...options.map((o) {
+                final selected = o.id == activeId;
+                return InkWell(
+                  onTap: () {
+                    ref.read(navigationProvider).setLockedStore(o.id);
+                    Navigator.of(sheetCtx).pop();
+                    ref.read(navigationProvider).closeDrawer();
+                  },
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: context.getRSize(20),
+                      vertical: context.getRSize(14),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          o.id == null
+                              ? FontAwesomeIcons.layerGroup
+                              : FontAwesomeIcons.store,
+                          size: context.getRSize(15),
+                          color: selected ? primary : subtextColor,
+                        ),
+                        SizedBox(width: context.getRSize(14)),
+                        Expanded(
+                          child: Text(
+                            o.name,
+                            style: TextStyle(
+                              fontWeight:
+                                  selected ? FontWeight.bold : FontWeight.w600,
+                              fontSize: context.getRFontSize(14.5),
+                              color: selected ? primary : textColor,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (selected)
+                          Icon(
+                            FontAwesomeIcons.check,
+                            size: context.getRSize(14),
+                            color: primary,
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+            ],
+          ),
+        );
+      },
     );
   }
 

@@ -215,9 +215,9 @@ class _InviteStaffSheetState extends ConsumerState<InviteStaffSheet> {
     final surface = t.colorScheme.surface;
     final text = t.colorScheme.onSurface;
 
-    // deviceBottomInset already includes the keyboard inset (and works under
-    // MainLayout, unlike MediaQuery.viewInsets.bottom which reads 0 here), so a
-    // single SingleChildScrollView handles both keyboard avoidance and overflow.
+    // Bottom padding is nav-only (deviceBottomPadding); MainLayout's Scaffold
+    // resize handles keyboard avoidance, and a single SingleChildScrollView
+    // handles overflow.
     return Container(
       decoration: BoxDecoration(
         color: surface,
@@ -228,7 +228,7 @@ class _InviteStaffSheetState extends ConsumerState<InviteStaffSheet> {
           context.getRSize(20),
           context.getRSize(16),
           context.getRSize(20),
-          context.getRSize(20) + context.deviceBottomInset,
+          context.getRSize(20) + context.deviceBottomPadding,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,

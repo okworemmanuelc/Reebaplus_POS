@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/widgets/app_fab.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
-import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
@@ -14,7 +13,6 @@ import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/customers/widgets/add_customer_sheet.dart';
 import 'package:reebaplus_pos/features/customers/screens/customer_detail_screen.dart';
-import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 
@@ -27,41 +25,16 @@ class CustomersScreen extends ConsumerStatefulWidget {
 
 class _CustomersScreenState extends ConsumerState<CustomersScreen> {
   bool _isFirstLoad = true;
-  List<StoreData> _stores = [];
-  // null = "All Stores"
-  String? _selectedStoreId;
 
   @override
   void initState() {
     super.initState();
-    _loadStores();
-  }
-
-  Future<void> _loadStores() async {
-    final db = ref.read(databaseProvider);
-    final ws = await db.storesDao.getActiveStores();
-
-    final nav = ref.read(navigationProvider);
-    final oneShot = nav.customersInitialStoreId.value;
-
-    String? defaultId;
-    if (oneShot != null) {
-      // One-shot pre-filter set by another screen (e.g. store details
-      // "Customers" card). Consume immediately so it only applies once.
-      defaultId = oneShot;
-      nav.customersInitialStoreId.value = null;
-    } else {
-      // Lone owner: default to the store currently selected on the POS screen
-      defaultId = nav.lockedStoreId.value;
-    }
-
-    if (mounted) {
-      setState(() {
-        _stores = ws;
-        _selectedStoreId = defaultId;
-        _isFirstLoad = false;
-      });
-    }
+    // §12.1: the store filter follows the nav-drawer store picker (read live in
+    // build via lockedStoreProvider). The customers stream loads via its
+    // provider; flip the first-load gate once mounted so the list can render.
+    Future.microtask(() {
+      if (mounted) setState(() => _isFirstLoad = false);
+    });
   }
 
   @override
@@ -75,6 +48,9 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
             Theme.of(context).iconTheme.color!;
         final borderCol = Theme.of(context).dividerColor;
         final cardCol = Theme.of(context).cardColor;
+        // §12.1: the store filter comes from the nav-drawer store picker
+        // (null = "All Stores"); no per-screen store dropdown.
+        final storeFilter = ref.watch(lockedStoreProvider).value;
 
         return Scaffold(
           backgroundColor: bgCol,
@@ -82,14 +58,6 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
           drawer: const AppDrawer(activeRoute: 'customers'),
           body: Column(
             children: [
-              _buildStoreFilter(
-                context,
-                surfaceCol,
-                textCol,
-                subtextCol,
-                borderCol,
-              ),
-
               Expanded(
                 child: Builder(
                   builder: (context) {
@@ -104,13 +72,13 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
 
                     List<Customer> filtered;
 
-                    if (_selectedStoreId == null) {
-                      // "All" selected
+                    if (storeFilter == null) {
+                      // "All Stores" selected
                       filtered = customers;
                     } else {
                       // A specific store selected
                       filtered = customers
-                          .where((c) => c.storeId == _selectedStoreId)
+                          .where((c) => c.storeId == storeFilter)
                           .toList();
                     }
 
@@ -130,7 +98,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                       child: ListView.separated(
                         padding: context.rPadding(16).copyWith(
                               bottom: context.getRSize(100) +
-                                  context.deviceBottomInset,
+                                  context.deviceBottomPadding,
                             ),
                         itemCount: filtered.length,
                         separatorBuilder: (context, index) =>
@@ -164,63 +132,6 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                 )
               : null,
         );
-  }
-
-  Widget _buildStoreFilter(
-    BuildContext context,
-    Color surfaceCol,
-    Color textCol,
-    Color subtextCol,
-    Color borderCol,
-  ) {
-    return Container(
-      color: surfaceCol,
-      padding: EdgeInsets.fromLTRB(
-        context.getRSize(16),
-        context.getRSize(8),
-        context.getRSize(16),
-        context.getRSize(8),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            FontAwesomeIcons.store,
-            size: context.getRSize(13),
-            color: subtextCol,
-          ),
-          SizedBox(width: context.getRSize(8)),
-          Text(
-            'Showing:',
-            style: TextStyle(
-              fontSize: context.getRFontSize(13),
-              color: subtextCol,
-            ),
-          ),
-          SizedBox(width: context.getRSize(8)),
-          Expanded(
-            child: AppDropdown<String?>(
-              value: _selectedStoreId,
-              items: [
-                const DropdownMenuItem<String?>(
-                  value: null,
-                  child: Text(
-                    'All Stores',
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                ..._stores.map(
-                  (w) => DropdownMenuItem<String?>(
-                    value: w.id,
-                    child: Text(w.name, overflow: TextOverflow.ellipsis),
-                  ),
-                ),
-              ],
-              onChanged: (id) => setState(() => _selectedStoreId = id),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   PreferredSizeWidget _buildAppBar(

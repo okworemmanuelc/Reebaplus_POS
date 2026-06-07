@@ -12,6 +12,8 @@ import 'package:reebaplus_pos/core/theme/theme_notifier.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/db_wipe.dart';
+import 'package:reebaplus_pos/core/services/crash_reporter.dart';
+import 'package:reebaplus_pos/shared/widgets/error_fallback.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
@@ -41,8 +43,24 @@ import 'package:timezone/data/latest.dart' as tz;
 /// Shared future — completes when Supabase client is ready for OTP calls.
 late final Future<void> supabaseReady;
 
-void main() async {
+void main() {
+  // Master plan §33 (Reliability and Crash Handling): run the whole app inside
+  // a guarded zone so an uncaught async/zone error is recorded to the crash log
+  // instead of tearing down to a blank screen.
+  runZonedGuarded(_bootstrap, (error, stack) {
+    CrashReporter.record(error, stack, isFatal: true);
+  });
+}
+
+Future<void> _bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // §33.2: install the global Flutter/platform error handlers and the friendly
+  // fallback widget (replaces Flutter's red error box) before anything else can
+  // throw.
+  CrashReporter.install();
+  ErrorWidget.builder = (details) => const ErrorFallback(compact: true);
+
   tz.initializeTimeZones();
 
   // DM Sans is bundled in assets/google_fonts/. Disable the network fallback

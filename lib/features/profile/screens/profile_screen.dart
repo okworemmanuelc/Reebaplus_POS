@@ -126,7 +126,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       appBar: appBar,
       body: ListView(
         padding: EdgeInsets.all(context.getRSize(20)).copyWith(
-          bottom: context.getRSize(20) + context.deviceBottomInset,
+          bottom: context.getRSize(20) + context.deviceBottomPadding,
         ),
         children: [
           ProfileHeaderCard(

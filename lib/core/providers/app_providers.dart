@@ -110,6 +110,9 @@ final orderServiceProvider = Provider<OrderService>((ref) {
   return OrderService(
     ref.read(databaseProvider),
     ref.read(supabaseSyncServiceProvider),
+    // Device id → per-device order-number tag (§30.8.1, collision-proof
+    // numbering across offline tills).
+    ref.read(secureStorageProvider),
   );
 });
 

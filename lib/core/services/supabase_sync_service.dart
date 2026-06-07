@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // sync-exempt-file: this is the sync engine — `_restoreTableData`,
@@ -190,7 +191,15 @@ class SupabaseSyncService {
         '[SyncService] Connectivity recovered while pull was failed — '
         'auto-retrying pullChanges($_currentBusinessId)',
       );
-      unawaited(pullChanges(_currentBusinessId!));
+      // Fire-and-forget retry. If we're still offline / the link is flaky this
+      // throws again; swallow it so it can't escape to the top-level zone as an
+      // unhandled error. pullStatus stays `failed` and the next connectivity
+      // flip retries (offline-first — a failed background pull is not a crash).
+      unawaited(
+        pullChanges(_currentBusinessId!).catchError((Object e) {
+          debugPrint('[SyncService] connectivity-retry pull failed: $e');
+        }),
+      );
     }
     _wasOnline = nowOnline;
   }
@@ -311,6 +320,7 @@ class SupabaseSyncService {
     'wallet_transactions': 32,
     'crate_ledger': 33,
     'manufacturer_crate_balances': 34,
+    'store_crate_balances': 35,
     'system_config': 50,
   };
 
@@ -318,6 +328,20 @@ class SupabaseSyncService {
     final table = actionType.split(':').first;
     return _tablePushPriority[table] ?? 100;
   }
+
+  /// Cloud upsert conflict targets for caches identified by a NATURAL key
+  /// rather than their surrogate `id`. `store_crate_balances` has two id-minting
+  /// authorities for the same (business, store, manufacturer): the client
+  /// (UuidV7, via addEmptyCrates / updateManufacturerStock plain-enqueues) and
+  /// the cloud domain RPC pos_transfer_crates (gen_random_uuid). A PK-keyed
+  /// cloud upsert of a client-minted id would INSERT a duplicate and trip the
+  /// cloud UNIQUE(business_id, store_id, manufacturer_id); keying the push on
+  /// the natural key merges into the existing row instead. (manufacturer/customer
+  /// crate caches don't mix authorities — in domain-RPC mode they're never
+  /// plain-enqueued — so they don't need an entry.)
+  static const Map<String, String> _naturalKeyPushConflictTargets = {
+    'store_crate_balances': 'business_id,store_id,manufacturer_id',
+  };
 
   /// Per-table whitelist of cloud-pushable columns. Any payload key NOT
   /// in the table's whitelist is dropped before push. Fail-closed: a new
@@ -713,10 +737,16 @@ class SupabaseSyncService {
         if (group.action == 'insert' ||
             group.action == 'update' ||
             group.action == 'upsert') {
-          if (group.conflictTarget != null) {
+          // An explicit per-row conflict target (action_type's 3rd segment)
+          // wins; otherwise fall back to a per-table natural-key target for
+          // caches whose id can diverge from the cloud's (see
+          // _naturalKeyPushConflictTargets). Null → PostgREST defaults to PK.
+          final conflictTarget = group.conflictTarget ??
+              _naturalKeyPushConflictTargets[group.table];
+          if (conflictTarget != null) {
             await _supabase
                 .from(group.table)
-                .upsert(validPayloads, onConflict: group.conflictTarget!);
+                .upsert(validPayloads, onConflict: conflictTarget);
           } else {
             await _supabase.from(group.table).upsert(validPayloads);
           }
@@ -1172,6 +1202,50 @@ class SupabaseSyncService {
           }
         }
       }
+
+      // pos_transfer_crates (§16.9 Phase 3): server returns two crate_ledger
+      // rows (out_ledger_row / in_ledger_row) and two store_crate_balances
+      // rows (src_store_balance / dst_store_balance). Apply server-authoritative
+      // values locally so the next incremental pull cursor skips them.
+      for (final ledgerKey in const ['out_ledger_row', 'in_ledger_row']) {
+        final ledgerRow = map[ledgerKey];
+        if (ledgerRow is Map) {
+          final id = ledgerRow['id'] as String?;
+          final lua = ledgerRow['last_updated_at'] as String?;
+          if (id != null && lua != null) {
+            final parsed = DateTime.tryParse(lua);
+            if (parsed != null) {
+              await (_db.update(_db.crateLedger)
+                    ..where((t) => t.id.equals(id)))
+                  .write(CrateLedgerCompanion(lastUpdatedAt: Value(parsed)));
+            }
+          }
+        }
+      }
+      for (final balKey in const ['src_store_balance', 'dst_store_balance']) {
+        final storeBalRow = map[balKey];
+        if (storeBalRow is Map) {
+          final bizId = storeBalRow['business_id'] as String?;
+          final storeId = storeBalRow['store_id'] as String?;
+          final mfrId = storeBalRow['manufacturer_id'] as String?;
+          final bal = storeBalRow['balance'];
+          final lua = storeBalRow['last_updated_at'] as String?;
+          if (bizId != null && storeId != null && mfrId != null && bal is int && lua != null) {
+            final parsed = DateTime.tryParse(lua);
+            if (parsed != null) {
+              await (_db.update(_db.storeCrateBalances)
+                    ..where((t) =>
+                        t.businessId.equals(bizId) &
+                        t.storeId.equals(storeId) &
+                        t.manufacturerId.equals(mfrId)))
+                  .write(StoreCrateBalancesCompanion(
+                balance: Value(bal),
+                lastUpdatedAt: Value(parsed),
+              ));
+            }
+          }
+        }
+      }
     });
   }
 
@@ -1496,7 +1570,16 @@ class SupabaseSyncService {
     'stock_adjustments',
     // v34 (§16.6.1) — references products/stores/users, all pulled above.
     'stock_adjustment_requests',
+    // v45 (§12.3.1) — cashier Quick Sale approval queue. References stores +
+    // users (both pulled above), so FK-safe here. Without this entry the
+    // pull/restore/realtime loops never ingest it and an approve/reject flip on
+    // the approver's device never reaches the cashier's till.
+    'quick_sale_requests',
     'activity_logs',
+    // v46 (§33) — crash/error log. References businesses + users (both pulled
+    // above), so FK-safe here. A leaf table (nothing FK-references it), so it
+    // is also in _deferrableTables below.
+    'error_logs',
     'notifications',
     'stock_transactions',
     'customer_wallets',
@@ -1509,6 +1592,7 @@ class SupabaseSyncService {
     'saved_carts',
     'pending_crate_returns',
     'manufacturer_crate_balances',
+    'store_crate_balances',
     'crate_ledger',
     'system_config',
     'price_lists',
@@ -1540,6 +1624,9 @@ class SupabaseSyncService {
     'stock_transactions',
     'sessions',
     'activity_logs',
+    // v46 (§33) — crash/error log. Leaf table (no inbound FKs), so deferring a
+    // missing slice can't trip restore-time FK violations elsewhere.
+    'error_logs',
     'notifications',
     'payment_transactions',
     'crate_ledger',
@@ -2018,46 +2105,7 @@ class SupabaseSyncService {
                     column: 'business_id',
                     value: businessId,
                   ),
-                  callback: (payload) async {
-                    debugPrint(
-                      '[SyncService] Realtime Event: ${payload.eventType} on ${payload.table}',
-                    );
-
-                    final eventTable = payload.table;
-
-                    // DELETE: the cloud removed a hard-deleted row
-                    // (role_permissions / saved_carts / notifications — the
-                    // only `enqueueDelete` tables). Apply the removal locally,
-                    // else the row lingers and a stale INSERT/UPDATE echo can
-                    // resurrect it permanently (e.g. revoking a role permission
-                    // that then re-appears). DELETE payloads carry the row in
-                    // `oldRecord`, not `newRecord`, so the upsert path below
-                    // never saw them. Incoming cloud event: delete locally
-                    // only, never re-enqueue (§5 exception #1, same contract as
-                    // _restoreTableData — re-pushing would loop).
-                    if (payload.eventType == PostgresChangeEvent.delete) {
-                      final id = payload.oldRecord['id'] as String?;
-                      if (id != null) {
-                        await _deleteLocalRowById(eventTable, id);
-                      }
-                      return;
-                    }
-
-                    final newRecord = payload.newRecord;
-
-                    if (newRecord.isNotEmpty) {
-                      await _restoreTableData(eventTable, [newRecord]);
-                      // Single-active-device sign-in: when our own session row
-                      // gets revoked by another device's fresh sign-in, ask
-                      // AuthService to fullLogout this device.
-                      if (eventTable == 'sessions' &&
-                          newRecord['revoked_at'] != null &&
-                          newRecord['id'] ==
-                              currentSessionIdResolver?.call()) {
-                        onCurrentSessionRevoked?.call();
-                      }
-                    }
-                  },
+                  callback: (payload) => _applyRealtimeEvent(payload),
                 )
               ..subscribe((status, error) {
                 if (status == RealtimeSubscribeStatus.channelError ||
@@ -2103,6 +2151,61 @@ class SupabaseSyncService {
             ..subscribe();
     } catch (e) {
       debugPrint('[SyncService] Businesses realtime subscribe failed: $e');
+    }
+  }
+
+  /// Applies one realtime postgres change to the local DB.
+  ///
+  /// Wrapped in a catch-all so a single malformed or natural-key-colliding
+  /// cloud echo can NEVER escape this stream callback to the top-level zone and
+  /// crash a sale in progress (offline-first, master plan §33). The orders /
+  /// FK-resilient restore branches already absorb the expected collisions; this
+  /// is the belt-and-suspenders boundary for anything else. On failure: log +
+  /// record non-fatal and move on — the next full pull reconciles.
+  Future<void> _applyRealtimeEvent(PostgresChangePayload payload) async {
+    try {
+      debugPrint(
+        '[SyncService] Realtime Event: ${payload.eventType} on ${payload.table}',
+      );
+
+      final eventTable = payload.table;
+
+      // DELETE: the cloud removed a hard-deleted row
+      // (role_permissions / saved_carts / notifications — the
+      // only `enqueueDelete` tables). Apply the removal locally,
+      // else the row lingers and a stale INSERT/UPDATE echo can
+      // resurrect it permanently (e.g. revoking a role permission
+      // that then re-appears). DELETE payloads carry the row in
+      // `oldRecord`, not `newRecord`, so the upsert path below
+      // never saw them. Incoming cloud event: delete locally
+      // only, never re-enqueue (§5 exception #1, same contract as
+      // _restoreTableData — re-pushing would loop).
+      if (payload.eventType == PostgresChangeEvent.delete) {
+        final id = payload.oldRecord['id'] as String?;
+        if (id != null) {
+          await _deleteLocalRowById(eventTable, id);
+        }
+        return;
+      }
+
+      final newRecord = payload.newRecord;
+
+      if (newRecord.isNotEmpty) {
+        await _restoreTableData(eventTable, [newRecord]);
+        // Single-active-device sign-in: when our own session row
+        // gets revoked by another device's fresh sign-in, ask
+        // AuthService to fullLogout this device.
+        if (eventTable == 'sessions' &&
+            newRecord['revoked_at'] != null &&
+            newRecord['id'] == currentSessionIdResolver?.call()) {
+          onCurrentSessionRevoked?.call();
+        }
+      }
+    } catch (e, st) {
+      debugPrint(
+        '[SyncService] Realtime apply failed for ${payload.table}: $e',
+      );
+      CrashReporter.record(e, st, context: 'sync.realtime.${payload.table}');
     }
   }
 
@@ -2494,6 +2597,10 @@ class SupabaseSyncService {
       await _backfillTable(_db.orders, 'orders', (row) => row.id);
       await _backfillTable(_db.orderItems, 'order_items', (row) => row.id);
       await _backfillTable(_db.expenses, 'expenses', (row) => row.id);
+      // v46 (§33) — crash/error log. Only rows with a business_id are
+      // enqueueable; local-only pre-login rows (null business_id) are skipped
+      // by _backfillTable's own tenant guard, matching ErrorLogDao.logError.
+      await _backfillTable(_db.errorLogs, 'error_logs', (row) => row.id);
       await _backfillTable(
         _db.expenseCategories,
         'expense_categories',
@@ -2647,6 +2754,24 @@ class SupabaseSyncService {
         s.contains('(787)');
   }
 
+  /// True if [e] is a SQLite UNIQUE constraint violation (extended result code
+  /// 2067 / SQLITE_CONSTRAINT_UNIQUE). Matched by message so we don't depend on
+  /// the concrete `SqliteException` type.
+  ///
+  /// This is the cross-device natural-key collision: two devices that were both
+  /// offline minted the SAME business-scoped sequence value (e.g. `ORD-000123`
+  /// order_number — `generateOrderNumber` is a local count), so the rows share
+  /// a UNIQUE key but carry different `id`s. `insertOnConflictUpdate` keys on
+  /// `id`, misses the existing local row, and trips the secondary UNIQUE. It is
+  /// permanent data (a re-pull can't reconcile it), so the restore skips the
+  /// incoming cloud row rather than crashing the pull / realtime apply.
+  static bool _isUniqueConstraintViolation(Object e) {
+    final s = e.toString().toLowerCase();
+    return s.contains('unique constraint failed') ||
+        s.contains('sqlite_constraint_unique') ||
+        s.contains('(2067)');
+  }
+
   /// Inserts one restore row, isolating FOREIGN KEY violations so a single
   /// orphaned child can't abort the whole restore transaction and crash the
   /// pull. An FK violation here means the referenced parent slice is
@@ -2668,6 +2793,22 @@ class SupabaseSyncService {
     try {
       await doInsert();
     } catch (e) {
+      // Cross-device natural-key collision (e.g. two offline tills both minted
+      // ORD-000123). UNIQUE-skip BEFORE the FK check: this is permanent data, a
+      // re-pull can't reconcile it, so — unlike the FK case — we DON'T defer
+      // (no `fkSkipped` add, no forced full re-pull). We skip-and-log this one
+      // cloud row so the rest of the pull / realtime echo lands and a sale in
+      // progress isn't crashed. The row stays visible on its originating device
+      // and in the cloud. Root cause is client-side count-based numbering
+      // (`generateOrderNumber`) — fixing that is a master-plan change.
+      if (_isUniqueConstraintViolation(e)) {
+        debugPrint(
+          '[SyncService] Skipped $table row ${r['id']} during restore — '
+          'natural-key UNIQUE collision (another device minted the same '
+          'business-scoped number). Cloud row not mirrored here. $e',
+        );
+        return;
+      }
       if (!_isForeignKeyViolation(e)) rethrow;
       fkSkipped?.add(table);
       // Surface the row's FK references (every camelCase key ending in `Id`,
@@ -3028,13 +3169,44 @@ class SupabaseSyncService {
           break;
         case 'inventory':
           for (var r in rows) {
+            // Inventory cache keyed by its NATURAL key (business_id, product_id,
+            // store_id), not its surrogate `id` — same dual-authority hazard as
+            // store_crate_balances. Two id-minting authorities exist for the
+            // same (business, product, store): the client (UuidV7, addProduct's
+            // initial-stock INSERT) and the cloud RPCs pos_create_product_v2 /
+            // pos_record_sale / pos_inventory_delta (gen_random_uuid). The two
+            // ids never match, and `_applyDomainResponse` only ever UPDATEs the
+            // local row by (product_id, store_id) — it never aligns the id. So a
+            // PK-keyed insertOnConflictUpdate misses the existing local row and
+            // trips UNIQUE(business_id, product_id, store_id) (2067). The result
+            // would be silent: a device that created a product never receives
+            // cloud stock updates for it (every echo collides and is skipped),
+            // so its stock drifts from reality. Upsert on the natural key and
+            // align the local `id` to the cloud's so pushes/pulls converge on
+            // one canonical row — same approach as store_crate_balances /
+            // settings. FK-resilient: references products + stores.
             await _insertResilient(
               'inventory',
               r,
               fkSkipped,
-              () => _db
-                  .into(_db.inventory)
-                  .insertOnConflictUpdate(InventoryData.fromJson(r)),
+              () {
+                final parsed = InventoryData.fromJson(r);
+                return _db.into(_db.inventory).insert(
+                      parsed,
+                      onConflict: DoUpdate(
+                        (_) => InventoryCompanion(
+                          id: Value(parsed.id),
+                          quantity: Value(parsed.quantity),
+                          lastUpdatedAt: Value(parsed.lastUpdatedAt),
+                        ),
+                        target: [
+                          _db.inventory.businessId,
+                          _db.inventory.productId,
+                          _db.inventory.storeId,
+                        ],
+                      ),
+                    );
+              },
             );
           }
           break;
@@ -3124,6 +3296,20 @@ class SupabaseSyncService {
             );
           }
           break;
+        case 'error_logs':
+          // v46 (§33) — crash/error log. FK-resilient: references businesses +
+          // users (both nullable); skip-on-FK if a parent row isn't here yet.
+          for (var r in rows) {
+            await _insertResilient(
+              'error_logs',
+              r,
+              fkSkipped,
+              () => _db
+                  .into(_db.errorLogs)
+                  .insertOnConflictUpdate(ErrorLogData.fromJson(r)),
+            );
+          }
+          break;
         case 'expense_categories':
           for (var r in rows) {
             await _db
@@ -3159,14 +3345,71 @@ class SupabaseSyncService {
           break;
         case 'manufacturer_crate_balances':
           for (var r in rows) {
-            // FK-resilient: references manufacturers / crate_size_groups.
+            // Natural-key cache (same rationale as store_crate_balances above):
+            // cloud RPC mints gen_random_uuid() while the client mints UuidV7,
+            // so reconcile on UNIQUE(business_id, manufacturer_id) to avoid a
+            // 2067 collision when the two ids diverge. FK-resilient: references
+            // manufacturers / crate_size_groups.
             await _insertResilient(
               'manufacturer_crate_balances',
               r,
               fkSkipped,
-              () => _db
-                  .into(_db.manufacturerCrateBalances)
-                  .insertOnConflictUpdate(ManufacturerCrateBalance.fromJson(r)),
+              () {
+                final parsed = ManufacturerCrateBalance.fromJson(r);
+                return _db.into(_db.manufacturerCrateBalances).insert(
+                      parsed,
+                      onConflict: DoUpdate(
+                        (_) => ManufacturerCrateBalancesCompanion(
+                          id: Value(parsed.id),
+                          balance: Value(parsed.balance),
+                          lastUpdatedAt: Value(parsed.lastUpdatedAt),
+                        ),
+                        target: [
+                          _db.manufacturerCrateBalances.businessId,
+                          _db.manufacturerCrateBalances.manufacturerId,
+                        ],
+                      ),
+                    );
+              },
+            );
+          }
+          break;
+        case 'store_crate_balances':
+          for (var r in rows) {
+            // Crate-balance cache keyed by its NATURAL key, not its surrogate
+            // `id`. Two id-minting authorities exist for the same
+            // (business, store, manufacturer): the client (UuidV7, via
+            // addEmptyCrates / updateManufacturerStock) and the cloud domain RPC
+            // pos_transfer_crates (gen_random_uuid). The two ids never match (see
+            // the note in _applyDomainResponse), so a PK-keyed
+            // insertOnConflictUpdate misses the existing local row and trips
+            // UNIQUE(business_id, store_id, manufacturer_id) (SqliteException
+            // 2067). Upsert on the natural key and align the local `id` to the
+            // cloud's so pushes/pulls converge on one canonical row — same
+            // approach as the `settings` case below. FK-resilient: references
+            // stores + manufacturers.
+            await _insertResilient(
+              'store_crate_balances',
+              r,
+              fkSkipped,
+              () {
+                final parsed = StoreCrateBalanceData.fromJson(r);
+                return _db.into(_db.storeCrateBalances).insert(
+                      parsed,
+                      onConflict: DoUpdate(
+                        (_) => StoreCrateBalancesCompanion(
+                          id: Value(parsed.id),
+                          balance: Value(parsed.balance),
+                          lastUpdatedAt: Value(parsed.lastUpdatedAt),
+                        ),
+                        target: [
+                          _db.storeCrateBalances.businessId,
+                          _db.storeCrateBalances.storeId,
+                          _db.storeCrateBalances.manufacturerId,
+                        ],
+                      ),
+                    );
+              },
             );
           }
           break;
@@ -3217,14 +3460,33 @@ class SupabaseSyncService {
           break;
         case 'customer_crate_balances':
           for (var r in rows) {
-            // FK-resilient: references customers / crate_size_groups.
+            // Natural-key cache (same rationale as store_crate_balances above):
+            // cloud RPC mints gen_random_uuid() while the client mints UuidV7,
+            // so reconcile on UNIQUE(business_id, customer_id, manufacturer_id)
+            // to avoid a 2067 collision when the two ids diverge. FK-resilient:
+            // references customers / crate_size_groups.
             await _insertResilient(
               'customer_crate_balances',
               r,
               fkSkipped,
-              () => _db
-                  .into(_db.customerCrateBalances)
-                  .insertOnConflictUpdate(CustomerCrateBalance.fromJson(r)),
+              () {
+                final parsed = CustomerCrateBalance.fromJson(r);
+                return _db.into(_db.customerCrateBalances).insert(
+                      parsed,
+                      onConflict: DoUpdate(
+                        (_) => CustomerCrateBalancesCompanion(
+                          id: Value(parsed.id),
+                          balance: Value(parsed.balance),
+                          lastUpdatedAt: Value(parsed.lastUpdatedAt),
+                        ),
+                        target: [
+                          _db.customerCrateBalances.businessId,
+                          _db.customerCrateBalances.customerId,
+                          _db.customerCrateBalances.manufacturerId,
+                        ],
+                      ),
+                    );
+              },
             );
           }
           break;
@@ -3308,6 +3570,22 @@ class SupabaseSyncService {
               fkSkipped,
               () => _db.into(_db.stockAdjustmentRequests).insertOnConflictUpdate(
                   StockAdjustmentRequestData.fromJson(r)),
+            );
+          }
+          break;
+        case 'quick_sale_requests':
+          // §12.3.1 Quick Sale approval queue. FK-resilient: references stores /
+          // users. Plain id-keyed upsert (the client-minted id is preserved
+          // cloud-side), so an approve/reject status flip from the approver's
+          // device overwrites the pending row on the cashier's till — which is
+          // exactly what releases the item into (or rejects it from) the cart.
+          for (var r in rows) {
+            await _insertResilient(
+              'quick_sale_requests',
+              r,
+              fkSkipped,
+              () => _db.into(_db.quickSaleRequests).insertOnConflictUpdate(
+                  QuickSaleRequestData.fromJson(r)),
             );
           }
           break;

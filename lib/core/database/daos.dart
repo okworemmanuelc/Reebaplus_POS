@@ -8,6 +8,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/business_scoped_dao.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/database/sync_helpers.dart';
+import 'package:reebaplus_pos/core/utils/order_number.dart';
 
 part 'daos.g.dart';
 
@@ -506,6 +507,7 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
     Categories,
     StockAdjustments,
     StockTransactions,
+    CrateLedger,
   ],
 )
 class InventoryDao extends DatabaseAccessor<AppDatabase>
@@ -549,16 +551,52 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
     }
   }
 
-  Future<void> updateManufacturerStock(String id, int newStock) async {
+  Future<void> updateManufacturerStock(
+    String id,
+    int newStock, {
+    String? storeId,
+  }) async {
     final now = DateTime.now();
-    final comp = ManufacturersCompanion(
-      id: Value(id),
-      emptyCrateStock: Value(newStock),
-      lastUpdatedAt: Value(now),
-    );
-    await (update(
-      manufacturers,
-    )..where((t) => t.id.equals(id) & whereBusiness(t))).write(comp);
+
+    if (storeId != null) {
+      // Per-store path (§16.8.1): set this store's balance and bump the
+      // business total by the delta so manufacturers.empty_crate_stock stays
+      // equal to the sum of all store balances.
+      final currentBalance = await db.storeCrateBalancesDao.getBalance(
+        storeId: storeId,
+        manufacturerId: id,
+      );
+      final delta = newStock - currentBalance;
+
+      await db.storeCrateBalancesDao.setBalance(
+        storeId: storeId,
+        manufacturerId: id,
+        newBalance: newStock,
+      );
+
+      // Bump business total by the same delta.
+      final mfr = await (select(manufacturers)
+            ..where((t) => t.id.equals(id) & whereBusiness(t)))
+          .getSingle();
+      final comp = ManufacturersCompanion(
+        id: Value(id),
+        emptyCrateStock: Value(mfr.emptyCrateStock + delta),
+        lastUpdatedAt: Value(now),
+      );
+      await (update(manufacturers)
+            ..where((t) => t.id.equals(id) & whereBusiness(t)))
+          .write(comp);
+    } else {
+      // Legacy path (no store dimension): absolute set on business total.
+      final comp = ManufacturersCompanion(
+        id: Value(id),
+        emptyCrateStock: Value(newStock),
+        lastUpdatedAt: Value(now),
+      );
+      await (update(manufacturers)
+            ..where((t) => t.id.equals(id) & whereBusiness(t)))
+          .write(comp);
+    }
     await _enqueueFullManufacturer(id);
   }
 
@@ -672,13 +710,20 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
   /// Append-only: writes a `stock_adjustments` row + a `stock_transactions`
   /// ledger row referencing it, then UPSERTs the inventory cache. Negative
   /// delta is guarded against quantity going negative.
+  ///
+  /// [movementType] defaults to 'adjustment'. Pass 'transfer_out' or
+  /// 'transfer_in' for stock transfer legs (§16.8.1), along with [refId]
+  /// = the StockTransfers.id (maps to stock_transactions.transfer_id in the
+  /// v2 RPC via ref_type='transfer').
   Future<void> adjustStock(
     String productId,
     String storeId,
     int delta,
     String note,
-    String? staffId,
-  ) async {
+    String? staffId, {
+    String movementType = 'adjustment',
+    String? refId,
+  }) async {
     if (delta == 0) return;
     await transaction(() async {
       // v2 path: emit a single `domain:pos_inventory_delta_v2` envelope.
@@ -739,19 +784,22 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
         // Pre-allocate movement_id for idempotency: server's replay check
         // matches this id against existing stock_transactions.id.
         final movementId = UuidV7.generate();
+        final movement = <String, dynamic>{
+          'movement_id': movementId,
+          'product_id': productId,
+          'store_id': storeId,
+          'quantity_delta': delta,
+          'movement_type': movementType,
+          'reason': note,
+        };
+        if (refId != null) {
+          movement['ref_type'] = 'transfer';
+          movement['ref_id'] = refId;
+        }
         final bundle = <String, dynamic>{
           'p_business_id': requireBusinessId(),
           'p_actor_id': staffId,
-          'p_movements': [
-            {
-              'movement_id': movementId,
-              'product_id': productId,
-              'store_id': storeId,
-              'quantity_delta': delta,
-              'movement_type': 'adjustment',
-              'reason': note,
-            },
-          ],
+          'p_movements': [movement],
         };
         await db.syncDao
             .enqueue('domain:pos_inventory_delta_v2', jsonEncode(bundle));
@@ -759,32 +807,51 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
       }
 
       // v1 (flag-OFF) path: full local mirror + per-table upserts.
-      final adjustmentId = UuidV7.generate();
-      final adjComp = StockAdjustmentsCompanion.insert(
-        id: Value(adjustmentId),
-        businessId: requireBusinessId(),
-        productId: productId,
-        storeId: storeId,
-        quantityDiff: delta,
-        reason: note,
-        performedBy: Value(staffId),
-        lastUpdatedAt: Value(DateTime.now()),
-      );
-      await into(stockAdjustments).insert(adjComp);
-      await db.syncDao.enqueueUpsert('stock_adjustments', adjComp);
-
+      // Transfer legs: write a stock_transactions row referencing the
+      // transfer (no stock_adjustments row — transfers are not adjustments).
       final txId = UuidV7.generate();
-      final txComp = StockTransactionsCompanion.insert(
-        id: Value(txId),
-        businessId: requireBusinessId(),
-        productId: productId,
-        locationId: storeId,
-        quantityDelta: delta,
-        movementType: 'adjustment',
-        adjustmentId: Value(adjustmentId),
-        performedBy: Value(staffId),
-        lastUpdatedAt: Value(DateTime.now()),
-      );
+      final isTransfer = movementType == 'transfer_out' ||
+          movementType == 'transfer_in';
+      StockTransactionsCompanion txComp;
+      if (isTransfer && refId != null) {
+        txComp = StockTransactionsCompanion.insert(
+          id: Value(txId),
+          businessId: requireBusinessId(),
+          productId: productId,
+          locationId: storeId,
+          quantityDelta: delta,
+          movementType: movementType,
+          transferId: Value(refId),
+          performedBy: Value(staffId),
+          lastUpdatedAt: Value(DateTime.now()),
+        );
+      } else {
+        final adjustmentId = UuidV7.generate();
+        final adjComp = StockAdjustmentsCompanion.insert(
+          id: Value(adjustmentId),
+          businessId: requireBusinessId(),
+          productId: productId,
+          storeId: storeId,
+          quantityDiff: delta,
+          reason: note,
+          performedBy: Value(staffId),
+          lastUpdatedAt: Value(DateTime.now()),
+        );
+        await into(stockAdjustments).insert(adjComp);
+        await db.syncDao.enqueueUpsert('stock_adjustments', adjComp);
+
+        txComp = StockTransactionsCompanion.insert(
+          id: Value(txId),
+          businessId: requireBusinessId(),
+          productId: productId,
+          locationId: storeId,
+          quantityDelta: delta,
+          movementType: movementType,
+          adjustmentId: Value(adjustmentId),
+          performedBy: Value(staffId),
+          lastUpdatedAt: Value(DateTime.now()),
+        );
+      }
       await into(stockTransactions).insert(txComp);
       await db.syncDao.enqueueUpsert('stock_transactions', txComp);
 
@@ -854,7 +921,11 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
   /// Increment a manufacturer's empty-crate stock counter. Used by the
   /// receive-delivery and crate-return flows to credit the physical pool of
   /// returnable crates held against a manufacturer.
-  Future<void> addEmptyCrates(String manufacturerId, int quantity) async {
+  Future<void> addEmptyCrates(
+    String manufacturerId,
+    int quantity, {
+    String? storeId,
+  }) async {
     if (quantity == 0) return;
     await customUpdate(
       'UPDATE manufacturers SET empty_crate_stock = empty_crate_stock + ?, '
@@ -872,6 +943,27 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
               ..where((t) => t.id.equals(manufacturerId) & whereBusiness(t)))
             .getSingle();
     await db.syncDao.enqueueUpsert('manufacturers', mfrRow);
+
+    // Per-store tracking (§16.8.1): if a store is provided, stamp the balance
+    // and write a store-scoped crate_ledger row.
+    if (storeId != null) {
+      await db.storeCrateBalancesDao.applyDelta(
+        storeId: storeId,
+        manufacturerId: manufacturerId,
+        delta: quantity,
+      );
+      final ledgerComp = CrateLedgerCompanion.insert(
+        id: Value(UuidV7.generate()),
+        businessId: requireBusinessId(),
+        manufacturerId: Value(manufacturerId),
+        storeId: Value(storeId),
+        quantityDelta: quantity,
+        movementType: 'adjusted',
+        lastUpdatedAt: Value(DateTime.now()),
+      );
+      await into(crateLedger).insert(ledgerComp);
+      await db.syncDao.enqueueUpsert('crate_ledger', ledgerComp);
+    }
   }
 
   /// Stream the per-manufacturer count of full bottles in stock, derived
@@ -1829,14 +1921,21 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
-  Future<String> generateOrderNumber() async {
+  /// Builds the next order number for this business+device.
+  ///
+  /// `ORD-NNNNNN-XXXXXX` (master plan §30.8.1): `NNNNNN` is this device's
+  /// running order count, `XXXXXX` is the stable per-device [deviceTag]. The
+  /// tag is what makes the code unique across offline tills — the count alone
+  /// collides because two offline devices both count locally. See BUILD_LOG
+  /// Session 122.
+  Future<String> generateOrderNumber(String deviceTag) async {
     final count =
         await (selectOnly(orders)
               ..where(whereBusiness(orders))
               ..addColumns([orders.id.count()]))
             .map((row) => row.read(orders.id.count()) ?? 0)
             .getSingle();
-    return 'ORD-${(count + 1).toString().padLeft(6, '0')}';
+    return formatOrderNumber(count, deviceTag);
   }
 
   // ── Timezone-aware analytics ───────────────────────────────────────────────
@@ -3561,6 +3660,66 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
   }
 }
 
+@DriftAccessor(tables: [ErrorLogs])
+class ErrorLogDao extends DatabaseAccessor<AppDatabase>
+    with _$ErrorLogDaoMixin, BusinessScopedDao<AppDatabase> {
+  ErrorLogDao(super.db);
+
+  static const int _maxMessage = 500;
+  static const int _maxStack = 4000;
+
+  /// Records a caught/uncaught error to the append-only `error_logs` table
+  /// (master plan §33 — Reliability and Crash Handling). This is the crash
+  /// safety net, so it is fully defensive: it must NEVER throw — any failure
+  /// to record is swallowed (the net can't become the thing that breaks).
+  ///
+  /// Routes through [SyncDao.enqueueUpsert] ONLY when a business is bound. A
+  /// pre-login crash has no tenant to scope to, so that row is kept local-only
+  /// — it can't be RLS-scoped cloud-side (§33.3). The enqueue call below keeps
+  /// the Layer C raw-write scanner green for this method.
+  Future<void> logError({
+    required String errorType,
+    required String message,
+    String? stackTrace,
+    String? context,
+    String? role,
+    bool isFatal = false,
+    String? appVersion,
+    String? platform,
+  }) async {
+    try {
+      // Nullable — null before a business is bound (pre-login crash).
+      final bid = currentBusinessId;
+      final row = ErrorLogsCompanion.insert(
+        id: Value(UuidV7.generate()),
+        businessId: Value(bid),
+        userId: Value(currentUserId),
+        role: Value(role),
+        context: Value(context),
+        errorType: errorType,
+        message: _truncate(message, _maxMessage),
+        stackTrace:
+            Value(stackTrace == null ? null : _truncate(stackTrace, _maxStack)),
+        isFatal: Value(isFatal),
+        appVersion: Value(appVersion),
+        platform: Value(platform),
+        lastUpdatedAt: Value(DateTime.now()),
+      );
+      await into(errorLogs).insert(row);
+      // sync-exempt: pre-login crashes (bid == null) have no tenant to scope to,
+      // so they stay local-only; only tenant-scoped rows are pushed (§33.3).
+      if (bid != null) {
+        await db.syncDao.enqueueUpsert('error_logs', row);
+      }
+    } catch (_) {
+      // The crash safety net must never itself crash. Swallow deliberately.
+    }
+  }
+
+  static String _truncate(String s, int max) =>
+      s.length <= max ? s : '${s.substring(0, max)}…';
+}
+
 @DriftAccessor(tables: [ActivityLogs])
 class ActivityLogDao extends DatabaseAccessor<AppDatabase>
     with _$ActivityLogDaoMixin, BusinessScopedDao<AppDatabase> {
@@ -4457,9 +4616,454 @@ class PeriodReconciliation {
 class StockTransferDao extends DatabaseAccessor<AppDatabase>
     with _$StockTransferDaoMixin, BusinessScopedDao<AppDatabase> {
   StockTransferDao(super.db);
-  // Transfer flows have no UI callers today; methods will land alongside the
-  // transfer screens. Keeping the shell preserves the AppDatabase accessor
-  // registration so adding methods later doesn't require schema regen.
+
+  // ── Create ──────────────────────────────────────────────────────────────
+
+  /// Dispatch a product from [fromStoreId] to [toStoreId] (§16.8.1).
+  ///
+  /// Returns the new transfer id.
+  ///
+  /// Contract:
+  /// - Both stores must belong to this business and differ.
+  /// - [quantity] must be a positive integer.
+  /// - The source inventory is decremented immediately at dispatch. If the
+  ///   source has insufficient stock the server rejects the `transfer_out`
+  ///   movement and this method throws [InsufficientStockException].
+  /// - The header + inventory envelope are enqueued inside one local
+  ///   transaction so they reach the queue together.
+  /// - In-transit stock is un-sellable by construction: it is removed from
+  ///   the source's inventory row but not added to the destination until
+  ///   [receiveTransfer] is called.
+  Future<String> createTransfer({
+    required String fromStoreId,
+    required String toStoreId,
+    required String productId,
+    required int quantity,
+    required String initiatedBy,
+  }) async {
+    if (fromStoreId == toStoreId) {
+      throw ArgumentError('Source and destination stores must differ.');
+    }
+    if (quantity <= 0) {
+      throw ArgumentError('Quantity must be positive.');
+    }
+
+    final transferId = UuidV7.generate();
+    final now = DateTime.now();
+
+    await transaction(() async {
+      // 1. Write the header row (in_transit).
+      final header = StockTransfersCompanion.insert(
+        id: Value(transferId),
+        businessId: requireBusinessId(),
+        fromLocationId: fromStoreId,
+        toLocationId: toStoreId,
+        productId: productId,
+        quantity: quantity,
+        status: const Value('in_transit'),
+        initiatedBy: initiatedBy,
+        initiatedAt: Value(now),
+        lastUpdatedAt: Value(now),
+      );
+      await into(stockTransfers).insert(header);
+      await db.syncDao.enqueueUpsert('stock_transfers', header);
+
+      // 2. Decrement source inventory (transfer_out). The adjustStock helper
+      //    handles both the v2 domain-RPC path and the legacy flag-off path,
+      //    and guards negative stock (throws InsufficientStockException).
+      await db.inventoryDao.adjustStock(
+        productId,
+        fromStoreId,
+        -quantity,
+        'Transfer out to ${toStoreId.substring(0, 8)}…',
+        initiatedBy,
+        movementType: 'transfer_out',
+        refId: transferId,
+      );
+    });
+
+    // 3. Activity log.
+    await db.activityLogDao.log(
+      action: 'stock_transfer_dispatched',
+      description:
+          'Dispatched $quantity unit(s) of $productId '
+          'from $fromStoreId → $toStoreId',
+      staffId: initiatedBy,
+      storeId: fromStoreId,
+      productId: productId,
+    );
+
+    // 4. Notify destination (CEO + all users assigned to the dest store).
+    final ceoIds =
+        await db.userBusinessesDao.getUserIdsForRoleSlugs(['ceo']);
+    final destUserIds =
+        (await db.userStoresDao.getUserIdsForStore(toStoreId)).toSet();
+    for (final uid in <String>{...ceoIds, ...destUserIds}..remove(initiatedBy)) {
+      await db.notificationsDao.fireNotification(
+        type: 'stock_transfer.dispatched',
+        message: 'Incoming transfer: $quantity unit(s) arriving at your store.',
+        severity: 'info',
+        linkedRecordId: transferId,
+        recipientUserId: uid,
+      );
+    }
+
+    return transferId;
+  }
+
+  // ── Receive ─────────────────────────────────────────────────────────────
+
+  /// Confirm receipt of transfer [transferId] at the destination store.
+  ///
+  /// Increments destination inventory and stamps [receivedBy]/receivedAt.
+  /// Throws [StateError] if the transfer is not in_transit.
+  Future<void> receiveTransfer({
+    required String transferId,
+    required String receivedBy,
+  }) async {
+    String? fromStoreId;
+    String? toStoreId;
+    String? productId;
+    int? quantity;
+
+    await transaction(() async {
+      final transfer =
+          await (select(stockTransfers)..where(
+                (t) =>
+                    t.id.equals(transferId) &
+                    whereBusiness(t),
+              ))
+              .getSingleOrNull();
+
+      if (transfer == null) {
+        throw StateError('Transfer $transferId not found.');
+      }
+      if (transfer.status != 'in_transit') {
+        throw StateError(
+          'Transfer $transferId is ${transfer.status}, not in_transit.',
+        );
+      }
+
+      fromStoreId = transfer.fromLocationId;
+      toStoreId = transfer.toLocationId;
+      productId = transfer.productId;
+      quantity = transfer.quantity;
+
+      final now = DateTime.now();
+
+      // 1. Increment destination inventory (transfer_in).
+      await db.inventoryDao.adjustStock(
+        transfer.productId,
+        transfer.toLocationId,
+        transfer.quantity,
+        'Transfer in from ${transfer.fromLocationId.substring(0, 8)}…',
+        receivedBy,
+        movementType: 'transfer_in',
+        refId: transferId,
+      );
+
+      // 2. Flip header → received.
+      final updated = transfer.toCompanion(true).copyWith(
+        status: const Value('received'),
+        receivedBy: Value(receivedBy),
+        receivedAt: Value(now),
+        lastUpdatedAt: Value(now),
+      );
+      await (update(stockTransfers)..where(
+            (t) => t.id.equals(transferId) & whereBusiness(t),
+          ))
+          .write(updated);
+      final row =
+          await (select(stockTransfers)..where(
+                (t) => t.id.equals(transferId) & whereBusiness(t),
+              ))
+              .getSingle();
+      await db.syncDao.enqueueUpsert('stock_transfers', row.toCompanion(true));
+    });
+
+    // 3. Activity log.
+    await db.activityLogDao.log(
+      action: 'stock_transfer_received',
+      description:
+          'Received $quantity unit(s) of $productId '
+          'at $toStoreId from $fromStoreId',
+      staffId: receivedBy,
+      storeId: toStoreId,
+      productId: productId,
+    );
+
+    // 4. Notify sender.
+    final transfer =
+        await (select(stockTransfers)..where(
+              (t) => t.id.equals(transferId) & whereBusiness(t),
+            ))
+            .getSingleOrNull();
+    if (transfer != null) {
+      await db.notificationsDao.fireNotification(
+        type: 'stock_transfer.received',
+        message:
+            'Your transfer of $quantity unit(s) was confirmed received.',
+        severity: 'info',
+        linkedRecordId: transferId,
+        recipientUserId: transfer.initiatedBy,
+      );
+    }
+  }
+
+  // ── Cancel ──────────────────────────────────────────────────────────────
+
+  /// Cancel an in-transit transfer and restore the source inventory.
+  ///
+  /// Throws [StateError] if the transfer is not in_transit.
+  Future<void> cancelTransfer({
+    required String transferId,
+    required String cancelledBy,
+  }) async {
+    await transaction(() async {
+      final transfer =
+          await (select(stockTransfers)..where(
+                (t) =>
+                    t.id.equals(transferId) &
+                    whereBusiness(t),
+              ))
+              .getSingleOrNull();
+
+      if (transfer == null) {
+        throw StateError('Transfer $transferId not found.');
+      }
+      if (transfer.status != 'in_transit') {
+        throw StateError(
+          'Transfer $transferId is ${transfer.status}, not in_transit.',
+        );
+      }
+
+      // 1. Restore source inventory via a compensating transfer_in leg.
+      //    (The ledger CHECK allows 'transfer_in'; no 'transfer_cancelled' type.)
+      await db.inventoryDao.adjustStock(
+        transfer.productId,
+        transfer.fromLocationId,
+        transfer.quantity,
+        'Transfer cancelled — restoring source stock',
+        cancelledBy,
+        movementType: 'transfer_in',
+        refId: transferId,
+      );
+
+      // 2. Flip header → cancelled.
+      final now = DateTime.now();
+      final updated = transfer.toCompanion(true).copyWith(
+        status: const Value('cancelled'),
+        lastUpdatedAt: Value(now),
+      );
+      await (update(stockTransfers)..where(
+            (t) => t.id.equals(transferId) & whereBusiness(t),
+          ))
+          .write(updated);
+      final row =
+          await (select(stockTransfers)..where(
+                (t) => t.id.equals(transferId) & whereBusiness(t),
+              ))
+              .getSingle();
+      await db.syncDao.enqueueUpsert('stock_transfers', row.toCompanion(true));
+    });
+
+    // 3. Activity log.
+    await db.activityLogDao.log(
+      action: 'stock_transfer_cancelled',
+      description: 'Cancelled transfer $transferId; source stock restored.',
+      staffId: cancelledBy,
+    );
+  }
+
+  /// Moves [quantity] empty crates of [manufacturerId] from [fromStoreId] to
+  /// [toStoreId] atomically (Phase 3, §16.9). Executed at dispatch time — no
+  /// separate confirm step for crates (they travel with the product shipment).
+  ///
+  /// Local: writes two store-stamped crate_ledger rows and updates
+  /// store_crate_balances for immediate UI feedback. Cloud: a single atomic
+  /// `domain:pos_transfer_crates` envelope (idempotent via ledger IDs).
+  /// store_crate_balances is NOT separately enqueued — the domain RPC is the
+  /// sole cloud writer (prevents double-count).
+  Future<void> transferCrates({
+    required String transferId,
+    required String fromStoreId,
+    required String toStoreId,
+    required String manufacturerId,
+    required int quantity,
+    required String performedBy,
+  }) async {
+    final bizId = requireBusinessId();
+    final outLedgerId = UuidV7.generate();
+    final inLedgerId = UuidV7.generate();
+    final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
+    await transaction(() async {
+      // 1. Local crate_ledger rows (append-only; store-stamped §v44).
+      await customStatement(
+        'INSERT INTO crate_ledger '
+        '  (id, business_id, manufacturer_id, store_id, '
+        '   quantity_delta, movement_type, performed_by, created_at, last_updated_at) '
+        'VALUES (?,?,?,?,?,?,?,?,?)',
+        [
+          outLedgerId, bizId, manufacturerId, fromStoreId,
+          -quantity, 'transferred_out', performedBy, nowSec, nowSec,
+        ],
+      );
+      await customStatement(
+        'INSERT INTO crate_ledger '
+        '  (id, business_id, manufacturer_id, store_id, '
+        '   quantity_delta, movement_type, performed_by, created_at, last_updated_at) '
+        'VALUES (?,?,?,?,?,?,?,?,?)',
+        [
+          inLedgerId, bizId, manufacturerId, toStoreId,
+          quantity, 'transferred_in', performedBy, nowSec, nowSec,
+        ],
+      );
+
+      // 2. Local store_crate_balances — immediate UI feedback only.
+      //    NOT enqueued directly; the domain RPC is the sole cloud writer.
+      await customStatement(
+        'INSERT INTO store_crate_balances '
+        '  (id, business_id, store_id, manufacturer_id, balance, last_updated_at) '
+        'VALUES (?,?,?,?,?,?) '
+        'ON CONFLICT(business_id, store_id, manufacturer_id) DO UPDATE SET '
+        '  balance = balance + excluded.balance, '
+        '  last_updated_at = excluded.last_updated_at',
+        [UuidV7.generate(), bizId, fromStoreId, manufacturerId, -quantity, nowSec],
+      );
+      await customStatement(
+        'INSERT INTO store_crate_balances '
+        '  (id, business_id, store_id, manufacturer_id, balance, last_updated_at) '
+        'VALUES (?,?,?,?,?,?) '
+        'ON CONFLICT(business_id, store_id, manufacturer_id) DO UPDATE SET '
+        '  balance = balance + excluded.balance, '
+        '  last_updated_at = excluded.last_updated_at',
+        [UuidV7.generate(), bizId, toStoreId, manufacturerId, quantity, nowSec],
+      );
+
+      // 3. Enqueue the domain RPC (handles cloud crate_ledger + store_crate_balances atomically).
+      final payload = <String, dynamic>{
+        'p_business_id': bizId,
+        'p_actor_id': performedBy,
+        'p_transfer_id': transferId,
+        'p_from_store_id': fromStoreId,
+        'p_to_store_id': toStoreId,
+        'p_manufacturer_id': manufacturerId,
+        'p_quantity': quantity,
+        'p_out_ledger_id': outLedgerId,
+        'p_in_ledger_id': inLedgerId,
+      };
+      await db.syncDao.enqueue(
+        'domain:pos_transfer_crates',
+        jsonEncode(payload),
+      );
+    });
+  }
+
+  // ── Watch ────────────────────────────────────────────────────────────────
+
+  /// Transfers currently in_transit FROM [fromStoreId] (the outgoing queue).
+  Stream<List<StockTransferData>> watchOutgoing(String fromStoreId) {
+    return (select(stockTransfers)
+          ..where(
+            (t) =>
+                whereBusiness(t) &
+                t.fromLocationId.equals(fromStoreId) &
+                t.status.equals('in_transit'),
+          )
+          ..orderBy([
+            (t) =>
+                OrderingTerm(expression: t.initiatedAt, mode: OrderingMode.desc),
+          ]))
+        .watch();
+  }
+
+  /// Transfers currently in_transit TO [toStoreId] (the incoming confirm queue).
+  Stream<List<StockTransferData>> watchIncoming(String toStoreId) {
+    return (select(stockTransfers)
+          ..where(
+            (t) =>
+                whereBusiness(t) &
+                t.toLocationId.equals(toStoreId) &
+                t.status.equals('in_transit'),
+          )
+          ..orderBy([
+            (t) =>
+                OrderingTerm(expression: t.initiatedAt, mode: OrderingMode.desc),
+          ]))
+        .watch();
+  }
+
+  /// Business-wide received + cancelled transfers, newest first.
+  Stream<List<StockTransferData>> watchHistory() {
+    return (select(stockTransfers)
+          ..where(
+            (t) =>
+                whereBusiness(t) &
+                t.status.isIn(['received', 'cancelled']),
+          )
+          ..orderBy([
+            (t) => OrderingTerm(
+              expression: t.initiatedAt,
+              mode: OrderingMode.desc,
+            ),
+          ]))
+        .watch();
+  }
+
+  /// All in_transit transfers for a set of store ids — used by the viewer-
+  /// scoped provider (CEO sees all; a store-assigned user sees their stores).
+  Stream<List<StockTransferData>> watchIncomingForStores(
+    List<String> storeIds,
+  ) {
+    if (storeIds.isEmpty) return const Stream.empty();
+    return (select(stockTransfers)
+          ..where(
+            (t) =>
+                whereBusiness(t) &
+                t.toLocationId.isIn(storeIds) &
+                t.status.equals('in_transit'),
+          )
+          ..orderBy([
+            (t) =>
+                OrderingTerm(expression: t.initiatedAt, mode: OrderingMode.desc),
+          ]))
+        .watch();
+  }
+
+  /// All in_transit outgoing transfers for a set of store ids.
+  Stream<List<StockTransferData>> watchOutgoingForStores(
+    List<String> storeIds,
+  ) {
+    if (storeIds.isEmpty) return const Stream.empty();
+    return (select(stockTransfers)
+          ..where(
+            (t) =>
+                whereBusiness(t) &
+                t.fromLocationId.isIn(storeIds) &
+                t.status.equals('in_transit'),
+          )
+          ..orderBy([
+            (t) =>
+                OrderingTerm(expression: t.initiatedAt, mode: OrderingMode.desc),
+          ]))
+        .watch();
+  }
+
+  /// Business-wide all in_transit transfers (incoming + outgoing), newest
+  /// first. The viewer-scoped providers in stream_providers.dart filter this
+  /// in memory so CEO vs store-user scoping never requires re-querying.
+  Stream<List<StockTransferData>> watchAllInTransit() {
+    return (select(stockTransfers)
+          ..where(
+            (t) => whereBusiness(t) & t.status.equals('in_transit'),
+          )
+          ..orderBy([
+            (t) =>
+                OrderingTerm(expression: t.initiatedAt, mode: OrderingMode.desc),
+          ]))
+        .watch();
+  }
 }
 
 @DriftAccessor(tables: [OrderCrateLines])
@@ -4705,6 +5309,246 @@ class StockAdjustmentRequestsDao extends DatabaseAccessor<AppDatabase>
         recipientUserId: requestedBy,
       );
     }
+  }
+}
+
+@DriftAccessor(tables: [QuickSaleRequests])
+class QuickSaleRequestsDao extends DatabaseAccessor<AppDatabase>
+    with _$QuickSaleRequestsDaoMixin, BusinessScopedDao<AppDatabase> {
+  QuickSaleRequestsDao(super.db);
+
+  /// All still-pending Quick Sale requests for the business, newest first.
+  /// Approver-side store scoping (a Manager only sees their store's requests) is
+  /// applied in the UI, mirroring the stock-approvals pattern (§16.6.1).
+  Stream<List<QuickSaleRequestData>> watchPending() {
+    return (select(quickSaleRequests)
+          ..where((t) => whereBusiness(t) & t.status.equals('pending'))
+          ..orderBy([
+            (t) =>
+                OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc),
+          ]))
+        .watch();
+  }
+
+  /// Watch a single request by id — the cashier's modal observes this to react
+  /// when a Manager/CEO approves or rejects (the status flip arrives via the
+  /// realtime/pull sync path on the cashier's device). Emits null if the row
+  /// doesn't exist locally yet.
+  Stream<QuickSaleRequestData?> watchRequest(String id) {
+    return (select(quickSaleRequests)
+          ..where((t) => t.id.equals(id) & whereBusiness(t)))
+        .watchSingleOrNull();
+  }
+
+  /// §12.3.1 — a cashier (role below Manager) submits a Quick Sale for approval.
+  /// Writes a `pending` row only (nothing reaches the cart yet) and fires an
+  /// approval-request notification to the CEO and the Manager(s) of the active
+  /// selling store. If no Manager is tied to that store, only the CEO is
+  /// notified (same audience rule as stock approvals, §16.6.1). Returns the new
+  /// request id so the caller can watch it.
+  Future<String> requestQuickSale({
+    required String storeId,
+    required String itemName,
+    required double quantity,
+    required int unitPriceKobo,
+    required String summary,
+    required String? requestedBy,
+  }) async {
+    final row = QuickSaleRequestsCompanion.insert(
+      id: Value(UuidV7.generate()),
+      businessId: requireBusinessId(),
+      storeId: storeId,
+      itemName: itemName,
+      quantity: quantity,
+      unitPriceKobo: unitPriceKobo,
+      summary: summary,
+      requestedBy: Value(requestedBy),
+      lastUpdatedAt: Value(DateTime.now()),
+    );
+    await into(quickSaleRequests).insert(row);
+    await db.syncDao.enqueueUpsert('quick_sale_requests', row);
+
+    await db.activityLogDao.log(
+      action: 'quick_sale_requested',
+      description: 'Requested Quick Sale approval: $summary',
+      staffId: requestedBy,
+      storeId: storeId,
+    );
+
+    // Approval audience: CEO (never store-assigned) + Manager(s) of this store.
+    final ceoIds = await db.userBusinessesDao.getUserIdsForRoleSlugs(['ceo']);
+    final managerIds =
+        await db.userBusinessesDao.getUserIdsForRoleSlugs(['manager']);
+    final storeUserIds =
+        (await db.userStoresDao.getUserIdsForStore(storeId)).toSet();
+    final storeManagerIds = managerIds.where(storeUserIds.contains);
+    for (final uid in <String>{...ceoIds, ...storeManagerIds}) {
+      await db.notificationsDao.fireNotification(
+        type: 'quick_sale_approval.requested',
+        message: 'Quick Sale approval needed: $summary',
+        severity: 'info',
+        linkedRecordId: row.id.value,
+        recipientUserId: uid,
+      );
+    }
+    return row.id.value;
+  }
+
+  /// Approve a pending Quick Sale request: flip the row to `approved` and notify
+  /// the cashier. A Quick Sale bypasses inventory (§26.4), so approval moves NO
+  /// stock — the cashier's device drops the item into the cart when it sees the
+  /// status flip via [watchRequest].
+  Future<void> approveRequest({
+    required String requestId,
+    required String approverId,
+  }) async {
+    String? requestedBy;
+    String? summary;
+    var didApprove = false;
+
+    await transaction(() async {
+      final req = await (select(quickSaleRequests)
+            ..where((t) => t.id.equals(requestId) & whereBusiness(t)))
+          .getSingleOrNull();
+      if (req == null || req.status != 'pending') return;
+
+      final now = DateTime.now();
+      final affected = await (update(quickSaleRequests)
+            ..where((t) =>
+                t.id.equals(requestId) &
+                whereBusiness(t) &
+                t.status.equals('pending')))
+          .write(QuickSaleRequestsCompanion(
+        status: const Value('approved'),
+        approvedBy: Value(approverId),
+        approvedAt: Value(now),
+        lastUpdatedAt: Value(now),
+      ));
+      if (affected == 0) return; // lost the race
+      didApprove = true;
+      requestedBy = req.requestedBy;
+      summary = req.summary;
+
+      final updated = await (select(quickSaleRequests)
+            ..where((t) => t.id.equals(requestId) & whereBusiness(t)))
+          .getSingle();
+      await db.syncDao
+          .enqueueUpsert('quick_sale_requests', updated.toCompanion(true));
+
+      await db.activityLogDao.log(
+        action: 'quick_sale_request_approved',
+        description: 'Approved Quick Sale: ${req.summary}',
+        staffId: approverId,
+        storeId: req.storeId,
+      );
+    });
+
+    if (didApprove && requestedBy != null) {
+      await db.notificationsDao.fireNotification(
+        type: 'quick_sale_approval.approved',
+        message: 'Your Quick Sale was approved — $summary',
+        severity: 'info',
+        linkedRecordId: requestId,
+        recipientUserId: requestedBy,
+      );
+    }
+  }
+
+  /// Reject a pending request — nothing reaches the cart. The optional [reason]
+  /// is shown to the cashier in the rejection notification and recorded in the
+  /// activity log. Notifies the cashier (their modal closes on the flip).
+  Future<void> rejectRequest({
+    required String requestId,
+    required String approverId,
+    String? reason,
+  }) async {
+    final trimmedReason = reason?.trim();
+    final hasReason = trimmedReason != null && trimmedReason.isNotEmpty;
+    String? requestedBy;
+    var didReject = false;
+
+    await transaction(() async {
+      final req = await (select(quickSaleRequests)
+            ..where((t) => t.id.equals(requestId) & whereBusiness(t)))
+          .getSingleOrNull();
+      if (req == null || req.status != 'pending') return;
+      final now = DateTime.now();
+      final affected = await (update(quickSaleRequests)
+            ..where((t) =>
+                t.id.equals(requestId) &
+                whereBusiness(t) &
+                t.status.equals('pending')))
+          .write(QuickSaleRequestsCompanion(
+        status: const Value('rejected'),
+        approvedBy: Value(approverId),
+        approvedAt: Value(now),
+        lastUpdatedAt: Value(now),
+      ));
+      if (affected == 0) return;
+      didReject = true;
+      requestedBy = req.requestedBy;
+
+      final updated = await (select(quickSaleRequests)
+            ..where((t) => t.id.equals(requestId) & whereBusiness(t)))
+          .getSingle();
+      await db.syncDao
+          .enqueueUpsert('quick_sale_requests', updated.toCompanion(true));
+
+      await db.activityLogDao.log(
+        action: 'quick_sale_request_rejected',
+        description: 'Rejected Quick Sale: ${req.summary}'
+            '${hasReason ? ' — Reason: $trimmedReason' : ''}',
+        staffId: approverId,
+        storeId: req.storeId,
+      );
+    });
+
+    if (didReject && requestedBy != null) {
+      await db.notificationsDao.fireNotification(
+        type: 'quick_sale_approval.rejected',
+        message: 'Your Quick Sale was rejected'
+            '${hasReason ? ' — $trimmedReason' : '.'}',
+        severity: 'warning',
+        linkedRecordId: requestId,
+        recipientUserId: requestedBy,
+      );
+    }
+  }
+
+  /// Withdraw a still-pending request (the cashier closed the waiting modal).
+  /// Flips to `cancelled` so it leaves the approvers' pending list and can no
+  /// longer be approved into the cart. No notification — the cashier acted.
+  Future<void> cancelRequest({required String requestId}) async {
+    await transaction(() async {
+      final req = await (select(quickSaleRequests)
+            ..where((t) => t.id.equals(requestId) & whereBusiness(t)))
+          .getSingleOrNull();
+      if (req == null || req.status != 'pending') return;
+      final now = DateTime.now();
+      final affected = await (update(quickSaleRequests)
+            ..where((t) =>
+                t.id.equals(requestId) &
+                whereBusiness(t) &
+                t.status.equals('pending')))
+          .write(QuickSaleRequestsCompanion(
+        status: const Value('cancelled'),
+        lastUpdatedAt: Value(now),
+      ));
+      if (affected == 0) return;
+
+      final updated = await (select(quickSaleRequests)
+            ..where((t) => t.id.equals(requestId) & whereBusiness(t)))
+          .getSingle();
+      await db.syncDao
+          .enqueueUpsert('quick_sale_requests', updated.toCompanion(true));
+
+      await db.activityLogDao.log(
+        action: 'quick_sale_request_cancelled',
+        description: 'Withdrew Quick Sale request: ${req.summary}',
+        staffId: req.requestedBy,
+        storeId: req.storeId,
+      );
+    });
   }
 }
 
@@ -5480,6 +6324,115 @@ class ManufacturerCrateBalancesDao extends DatabaseAccessor<AppDatabase>
   }
 }
 
+@DriftAccessor(tables: [StoreCrateBalances])
+class StoreCrateBalancesDao extends DatabaseAccessor<AppDatabase>
+    with _$StoreCrateBalancesDaoMixin, BusinessScopedDao<AppDatabase> {
+  StoreCrateBalancesDao(super.db);
+
+  /// Current balance for one (store, manufacturer) pair. Returns 0 if absent.
+  Future<int> getBalance({
+    required String storeId,
+    required String manufacturerId,
+  }) async {
+    final row = await (select(storeCrateBalances)
+          ..where(
+            (t) =>
+                whereBusiness(t) &
+                t.storeId.equals(storeId) &
+                t.manufacturerId.equals(manufacturerId),
+          ))
+        .getSingleOrNull();
+    return row?.balance ?? 0;
+  }
+
+  /// Per-store crate balance for a manufacturer (§16.8.1).
+  Stream<List<StoreCrateBalanceData>> watchForStore(String storeId) {
+    return (select(storeCrateBalances)
+          ..where(
+            (t) => whereBusiness(t) & t.storeId.equals(storeId),
+          ))
+        .watch();
+  }
+
+  /// UPSERT a store's crate balance for [manufacturerId] by [delta].
+  ///
+  /// Positive delta = crates arriving; negative = crates leaving.
+  /// The caller is responsible for ensuring source balance doesn't go negative.
+  Future<void> applyDelta({
+    required String storeId,
+    required String manufacturerId,
+    required int delta,
+  }) async {
+    await customStatement(
+      'INSERT INTO store_crate_balances '
+      '  (id, business_id, store_id, manufacturer_id, balance) '
+      'VALUES (?, ?, ?, ?, ?) '
+      'ON CONFLICT(business_id, store_id, manufacturer_id) DO UPDATE SET '
+      '  balance = balance + excluded.balance, '
+      "  last_updated_at = CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)",
+      [
+        UuidV7.generate(),
+        requireBusinessId(),
+        storeId,
+        manufacturerId,
+        delta,
+      ],
+    );
+    // Enqueue the updated cache row for cloud push.
+    final row = await (select(storeCrateBalances)
+          ..where(
+            (t) =>
+                whereBusiness(t) &
+                t.storeId.equals(storeId) &
+                t.manufacturerId.equals(manufacturerId),
+          ))
+        .getSingleOrNull();
+    if (row != null) {
+      await db.syncDao.enqueueUpsert(
+        'store_crate_balances',
+        row.toCompanion(true),
+      );
+    }
+  }
+
+  /// Absolute set — used by the per-store management dialog.
+  Future<void> setBalance({
+    required String storeId,
+    required String manufacturerId,
+    required int newBalance,
+  }) async {
+    await customStatement(
+      'INSERT INTO store_crate_balances '
+      '  (id, business_id, store_id, manufacturer_id, balance) '
+      'VALUES (?, ?, ?, ?, ?) '
+      'ON CONFLICT(business_id, store_id, manufacturer_id) DO UPDATE SET '
+      '  balance = excluded.balance, '
+      "  last_updated_at = CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)",
+      [
+        UuidV7.generate(),
+        requireBusinessId(),
+        storeId,
+        manufacturerId,
+        newBalance,
+      ],
+    );
+    final row = await (select(storeCrateBalances)
+          ..where(
+            (t) =>
+                whereBusiness(t) &
+                t.storeId.equals(storeId) &
+                t.manufacturerId.equals(manufacturerId),
+          ))
+        .getSingleOrNull();
+    if (row != null) {
+      await db.syncDao.enqueueUpsert(
+        'store_crate_balances',
+        row.toCompanion(true),
+      );
+    }
+  }
+}
+
 @DriftAccessor(
   tables: [CrateLedger, CustomerCrateBalances, ManufacturerCrateBalances],
 )
@@ -5491,6 +6444,7 @@ class CrateLedgerDao extends DatabaseAccessor<AppDatabase>
     required String manufacturerId,
     required int quantity,
     required String performedBy,
+    String? storeId,
   }) async {
     final delta = -quantity; // returning empties reduces our balance
 
@@ -5501,11 +6455,13 @@ class CrateLedgerDao extends DatabaseAccessor<AppDatabase>
     await transaction(() async {
       // 1. Append crate_ledger entry. v29: keyed by manufacturer (owner =
       // manufacturer here, so customer_id is null); crate_size_group_id null.
+      // v44 (§16.8.1): stamp store_id for per-store tracking.
       final ledgerId = UuidV7.generate();
       final ledgerComp = CrateLedgerCompanion.insert(
         id: Value(ledgerId),
         businessId: requireBusinessId(),
         manufacturerId: Value(manufacturerId),
+        storeId: Value(storeId),
         quantityDelta: delta,
         movementType: 'returned',
         performedBy: Value(performedBy),
@@ -5527,6 +6483,15 @@ class CrateLedgerDao extends DatabaseAccessor<AppDatabase>
           delta,
         ],
       );
+
+      // 2b. Update per-store cache if a storeId is provided (§16.8.1).
+      if (storeId != null) {
+        await db.storeCrateBalancesDao.applyDelta(
+          storeId: storeId,
+          manufacturerId: manufacturerId,
+          delta: delta,
+        );
+      }
 
       if (useDomainRpc) {
         final payload = <String, dynamic>{
@@ -5782,6 +6747,34 @@ class CrateLedgerDao extends DatabaseAccessor<AppDatabase>
         // ignore: avoid_print
         print(
           'CRATE MISMATCH [Manufacturer]: $mfrId, Ledger: $sum, Cache: ${cache?.balance}',
+        );
+      }
+    }
+
+    // 3. Reconcile per-store balances (§16.8.1) — store-stamped business-side
+    // ledger rows (store_id NOT NULL, customer_id NULL) vs store_crate_balances.
+    final storeLedgerSums = await customSelect(
+      'SELECT store_id, manufacturer_id, SUM(quantity_delta) AS ledger_sum '
+      'FROM crate_ledger '
+      'WHERE business_id = ? '
+      '  AND store_id IS NOT NULL '
+      '  AND customer_id IS NULL '
+      'GROUP BY store_id, manufacturer_id',
+      variables: [Variable(requireBusinessId())],
+    ).get();
+
+    for (final row in storeLedgerSums) {
+      final sid = row.read<String>('store_id');
+      final mfrId = row.read<String>('manufacturer_id');
+      final sum = row.read<int>('ledger_sum');
+      final cacheBalance = await db.storeCrateBalancesDao.getBalance(
+        storeId: sid,
+        manufacturerId: mfrId,
+      );
+      if (cacheBalance != sum) {
+        // ignore: avoid_print
+        print(
+          'CRATE MISMATCH [Store]: store=$sid, mfr=$mfrId, Ledger: $sum, Cache: $cacheBalance',
         );
       }
     }

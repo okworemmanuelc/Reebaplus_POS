@@ -690,28 +690,33 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
 
     if (!mounted) return;
 
-    await ref
-        .read(orderServiceProvider)
-        .markAsCompleted(order.id, ref.read(authProvider).currentUser?.id ?? '');
+    try {
+      await ref
+          .read(orderServiceProvider)
+          .markAsCompleted(order.id, ref.read(authProvider).currentUser?.id ?? '');
 
-    final receipt = model.DeliveryReceipt(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      orderId: order.id.toString(),
-      referenceNumber: ref
-          .read(deliveryReceiptServiceProvider)
-          .generateReference(),
-      riderName: order.riderName,
-      outstandingAmount: (order.netAmountKobo - order.amountPaidKobo) / 100.0,
-      paidAmount: order.amountPaidKobo / 100.0,
-      createdAt: DateTime.now(),
-    );
-    ref.read(deliveryReceiptServiceProvider).addReceipt(receipt);
-
-    if (mounted) {
-      AppNotification.showSuccess(
-        context,
-        'Order #${order.id} marked as completed.',
+      final receipt = model.DeliveryReceipt(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        orderId: order.id.toString(),
+        referenceNumber: ref
+            .read(deliveryReceiptServiceProvider)
+            .generateReference(),
+        riderName: order.riderName,
+        outstandingAmount: (order.netAmountKobo - order.amountPaidKobo) / 100.0,
+        paidAmount: order.amountPaidKobo / 100.0,
+        createdAt: DateTime.now(),
       );
+      ref.read(deliveryReceiptServiceProvider).addReceipt(receipt);
+
+      if (mounted) {
+        AppNotification.showSuccess(
+          context,
+          'Order #${order.id} marked as completed.',
+        );
+      }
+    } catch (e) {
+      if (mounted) AppNotification.showError(context, 'Could not complete order: $e');
+      return;
     }
   }
 
@@ -802,22 +807,35 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     String reason,
   ) async {
     final staffId = ref.read(authProvider).currentUser?.id ?? '';
-    await ref.read(orderServiceProvider).markAsCancelled(
-          order.id,
-          reason,
-          staffId,
+    try {
+      await ref.read(orderServiceProvider).markAsCancelled(
+            order.id,
+            reason,
+            staffId,
+          );
+      if (mounted) {
+        AppNotification.showSuccess(
+          context,
+          'Refund issued for ${order.orderNumber}.',
         );
-    if (mounted) {
-      AppNotification.showSuccess(
-        context,
-        'Refund issued for ${order.orderNumber}.',
-      );
+      }
+    } catch (e) {
+      if (mounted) AppNotification.showError(context, 'Could not issue refund: $e');
     }
   }
 
-  void _showRiderSelection(BuildContext context, String orderId) {
+  void _showRiderSelection(BuildContext context, String orderId) async {
     // Staff/riders are no longer tracked. Mark the order as pick-up by default.
-    ref.read(orderServiceProvider).assignRider(orderId, 'Pick-up Order');
+    try {
+      await ref.read(orderServiceProvider).assignRider(orderId, 'Pick-up Order');
+    } catch (e) {
+      if (context.mounted) {
+        AppNotification.showError(
+          context,
+          'Could not update this order. Please try again.',
+        );
+      }
+    }
   }
 
   void _viewReceipt(BuildContext context, OrderWithItems richOrder) async {
@@ -905,7 +923,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                   ),
                   Padding(
                     padding: EdgeInsets.all(context.getRSize(16)).add(
-                      EdgeInsets.only(bottom: context.deviceBottomInset),
+                      EdgeInsets.only(bottom: context.deviceBottomPadding),
                     ),
                     child: Row(
                       children: [

@@ -502,6 +502,32 @@ class ManufacturerCrateBalances extends Table {
   ];
 }
 
+/// v44 (§16.8.1): per-store business-held empty-crate balance cache.
+/// Mirrors manufacturer_crate_balances but adds the store dimension so crates
+/// can be transferred between stores. Customer crate debt stays in
+/// customer_crate_balances (customer owes the business, not a store).
+/// Registered in kSyncCacheTables (source of truth = crate_ledger rows with
+/// store_id set); NOT in _syncedTenantTables (same class as mfr_crate_balances).
+@DataClassName('StoreCrateBalanceData')
+class StoreCrateBalances extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get storeId => text().references(Stores, #id)();
+  TextColumn get manufacturerId => text().references(Manufacturers, #id)();
+  IntColumn get balance => integer().withDefault(const Constant(0))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => [
+    'UNIQUE (business_id, store_id, manufacturer_id)',
+  ];
+}
+
 // Append-only ledger of crate movements.
 class CrateLedger extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
@@ -524,6 +550,10 @@ class CrateLedger extends Table {
       text().nullable().references(Orders, #id)();
   TextColumn get referenceReturnId =>
       text().nullable().references(PendingCrateReturns, #id)();
+  // v44 (§16.8.1): which store a business-held crate movement belongs to.
+  // Null for all pre-v44 rows and for customer crate movements (those are
+  // customer-scoped, not store-scoped).
+  TextColumn get storeId => text().nullable().references(Stores, #id)();
   TextColumn get performedBy => text().nullable().references(Users, #id)();
   DateTimeColumn get voidedAt => dateTime().nullable()();
   TextColumn get voidedBy => text().nullable().references(Users, #id)();
@@ -688,6 +718,47 @@ class StockAdjustmentRequests extends Table {
   @override
   List<String> get customConstraints => [
     "CHECK (status IN ('pending','approved','rejected'))",
+  ];
+}
+
+// Approval queue for cashier Quick Sales (master plan §12.3.1). A role below
+// Manager (Cashier) can no longer drop a Quick Sale straight into the cart — it
+// lands here as a `pending` request that the active selling store's Manager(s)
+// and the CEO approve in the Reports → Approvals card (§25.2). On approval the
+// cashier's device drops the item into the cart. A Quick Sale bypasses inventory
+// (§26.4), so approval moves NO stock — flipping the status is the whole action;
+// the cart-add happens client-side when the cashier's device sees the approval.
+// `cancelled` = the cashier withdrew the request before a decision. `summary` is
+// a denormalised human headline (like notifications.message) so the approval
+// card renders without cross-table joins. CEO/Manager Quick Sales add directly
+// and never pass through here.
+@DataClassName('QuickSaleRequestData')
+class QuickSaleRequests extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  // The active selling store, for approver scoping (a Manager only sees their
+  // store's requests — same rule as stock approvals, §16.6.1).
+  TextColumn get storeId => text().references(Stores, #id)();
+  TextColumn get itemName => text()();
+  // Fractional quantity allowed (mirrors the Quick Sale qty field).
+  RealColumn get quantity => real()();
+  IntColumn get unitPriceKobo => integer()();
+  // Denormalised headline ("3 × Bottled Water @ ₦500 = ₦1,500").
+  TextColumn get summary => text()();
+  TextColumn get requestedBy => text().nullable().references(Users, #id)();
+  TextColumn get status => text().withDefault(const Constant('pending'))();
+  TextColumn get approvedBy => text().nullable().references(Users, #id)();
+  DateTimeColumn get approvedAt => dateTime().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => [
+    "CHECK (status IN ('pending','approved','rejected','cancelled'))",
   ];
 }
 
@@ -1061,6 +1132,42 @@ class ActivityLogs extends Table {
   DateTimeColumn get voidedAt => dateTime().nullable()();
   TextColumn get voidedBy => text().nullable().references(Users, #id)();
   TextColumn get voidReason => text().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+// v46 (master plan §33 — Reliability and Crash Handling). Append-only
+// diagnostic log of caught/uncaught errors. A normal synced tenant table
+// (business-scoped, enqueued through ErrorLogDao) so the CEO/operator can
+// review crashes across every till in the business's own Supabase — no
+// third-party crash service. PII-minimal by design (§33.1): no customer
+// names/phones/amounts. `businessId` is nullable: a crash before a business
+// is bound (pre-login) has no tenant to scope to, so that row stays
+// local-only and is never enqueued (§33.3). Not soft-deletable and not a
+// financial ledger — no is_deleted column, no no-delete trigger.
+@DataClassName('ErrorLogData')
+class ErrorLogs extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().nullable().references(Businesses, #id)();
+  TextColumn get userId => text().nullable().references(Users, #id)();
+  // Active user's role at crash time (CEO / Manager / Cashier / Stock keeper).
+  // Role, not name — triage without identifying anyone.
+  TextColumn get role => text().nullable()();
+  // Where it happened: a route/screen name or logical tag ("pos.checkout").
+  TextColumn get context => text().nullable()();
+  // Exception runtimeType (e.g. "StateError").
+  TextColumn get errorType => text()();
+  // Short, truncated error message (§33.1 — not user field values).
+  TextColumn get message => text()();
+  TextColumn get stackTrace => text().nullable()();
+  // true = uncaught (global handler) | false = caught by a guarded boundary.
+  BoolColumn get isFatal => boolean().withDefault(const Constant(false))();
+  TextColumn get appVersion => text().nullable()();
+  TextColumn get platform => text().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
       dateTime().withDefault(currentDateAndTime)();
@@ -1450,12 +1557,14 @@ class MigrationEvents extends Table {
     WalletTransactions,
     CustomerCrateBalances,
     ManufacturerCrateBalances,
+    StoreCrateBalances,
     CrateLedger,
     Inventory,
     StockTransfers,
     StockAdjustments,
     StockTransactions,
     StockAdjustmentRequests,
+    QuickSaleRequests,
     Orders,
     OrderItems,
     OrderCrateLines,
@@ -1471,6 +1580,7 @@ class MigrationEvents extends Table {
     PaymentTransactions,
     StockCounts,
     ActivityLogs,
+    ErrorLogs,
     Notifications,
     Settings,
     Sessions,
@@ -1498,11 +1608,13 @@ class MigrationEvents extends Table {
     ExpenseBudgetsDao,
     SyncDao,
     ActivityLogDao,
+    ErrorLogDao,
     NotificationsDao,
     StoresDao,
     StockLedgerDao,
     StockTransferDao,
     StockAdjustmentRequestsDao,
+    QuickSaleRequestsDao,
     PendingCrateReturnsDao,
     SessionsDao,
     WalletTransactionsDao,
@@ -1512,6 +1624,7 @@ class MigrationEvents extends Table {
     CrateSizeGroupsDao,
     CustomerCrateBalancesDao,
     ManufacturerCrateBalancesDao,
+    StoreCrateBalancesDao,
     OrderCrateLinesDao,
     CrateLedgerDao,
     SettingsDao,
@@ -1560,7 +1673,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 43;
+  int get schemaVersion => 46;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3149,6 +3262,143 @@ class AppDatabase extends _$AppDatabase {
           }
         }
       }
+      if (from < 44) {
+        // v44 (master plan §16.8.1): stock transfer between stores + per-store
+        // empty-crate tracking.
+        //
+        // 1. New `stores.receive_transfer` permission — "Confirm receipt of
+        //    incoming stock transfers". CEO-only by default; the grants arrive
+        //    from the cloud via pull (CEO backfill in
+        //    supabase/migrations/0103_add_stores_receive_transfer_permission.sql).
+        //    Idempotent — key is the PK.
+        await customStatement(
+          "INSERT OR IGNORE INTO permissions (key, description, category) "
+          "VALUES ('stores.receive_transfer', "
+          "'Confirm receipt of incoming stock transfers', 'Stores')",
+        );
+
+        // 2. `StoreCrateBalances` — per-store business-held empty-crate balance
+        //    cache (mirrors manufacturer_crate_balances, but keyed per store).
+        //    Registered in kSyncCacheTables; its source of truth is crate_ledger.
+        //    Mirrors supabase/migrations/0104_store_crate_balances.sql.
+        final scbExists = await customSelect(
+          "SELECT 1 FROM sqlite_master WHERE type='table' "
+          "AND name='store_crate_balances'",
+        ).get();
+        if (scbExists.isEmpty) {
+          await m.createTable(storeCrateBalances);
+          await customStatement(
+            'CREATE INDEX idx_store_crate_balances_business_lua '
+            'ON store_crate_balances (business_id, last_updated_at)',
+          );
+          await customStatement(
+            'CREATE TRIGGER bump_store_crate_balances_last_updated_at '
+            'AFTER UPDATE ON store_crate_balances '
+            'FOR EACH ROW '
+            'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+            'BEGIN '
+            "UPDATE store_crate_balances SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+            'END',
+          );
+
+          // Backfill: fold each manufacturer's business-wide empty_crate_stock
+          // into the primary store (= oldest non-deleted store by created_at).
+          // Idempotent: only runs when the table was just created.
+          await customStatement(
+            "INSERT INTO store_crate_balances "
+            "  (id, business_id, store_id, manufacturer_id, balance, "
+            "   created_at, last_updated_at) "
+            "SELECT "
+            "  hex(randomblob(16)), "
+            "  m.business_id, "
+            "  (SELECT s.id FROM stores s "
+            "   WHERE s.business_id = m.business_id "
+            "     AND (s.is_deleted = 0 OR s.is_deleted IS NULL) "
+            "   ORDER BY s.created_at ASC LIMIT 1), "
+            "  m.id, "
+            "  m.empty_crate_stock, "
+            "  strftime('%s', 'now'), "
+            "  strftime('%s', 'now') "
+            "FROM manufacturers m "
+            "WHERE m.empty_crate_stock > 0 "
+            "  AND (m.is_deleted = 0 OR m.is_deleted IS NULL) "
+            "  AND EXISTS ( "
+            "    SELECT 1 FROM stores s "
+            "    WHERE s.business_id = m.business_id "
+            "      AND (s.is_deleted = 0 OR s.is_deleted IS NULL) "
+            "  )",
+          );
+        }
+
+        // 3. Add nullable store_id column to crate_ledger for business-held
+        //    movements (customer rows stay null). Guard: a DB stepped back may
+        //    already carry it.
+        final clStoreId = await customSelect(
+          "SELECT 1 FROM pragma_table_info('crate_ledger') WHERE name='store_id'",
+        ).get();
+        if (clStoreId.isEmpty) {
+          await customStatement(
+            'ALTER TABLE crate_ledger ADD COLUMN store_id TEXT REFERENCES stores(id)',
+          );
+        }
+      }
+      if (from < 45) {
+        // v45 (master plan §12.3.1): cashier Quick Sale approval queue. One new
+        // synced tenant table. Mirrors
+        // supabase/migrations/0105_quick_sale_requests.sql. The
+        // (business_id, last_updated_at) sync index and the bump trigger match
+        // the generic `_postCreateStatements` loops so a fresh install
+        // (onCreate) and an upgrade end up identical. Idempotency guard (like
+        // v44) for a DB stepped back to < 45 by the revert-then-re-upgrade tests.
+        final qsrExists = await customSelect(
+          "SELECT 1 FROM sqlite_master WHERE type='table' "
+          "AND name='quick_sale_requests'",
+        ).get();
+        if (qsrExists.isEmpty) {
+          await m.createTable(quickSaleRequests);
+          await customStatement(
+            'CREATE INDEX idx_quick_sale_requests_business_lua '
+            'ON quick_sale_requests (business_id, last_updated_at)',
+          );
+          await customStatement(
+            'CREATE TRIGGER bump_quick_sale_requests_last_updated_at '
+            'AFTER UPDATE ON quick_sale_requests '
+            'FOR EACH ROW '
+            'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+            'BEGIN '
+            "UPDATE quick_sale_requests SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+            'END',
+          );
+        }
+      }
+      if (from < 46) {
+        // v46 (master plan §33): the crash/error diagnostic log. One new
+        // synced tenant table. Mirrors supabase/migrations/0108_error_logs.sql.
+        // The (business_id, last_updated_at) sync index and the bump trigger
+        // match the generic `_postCreateStatements` loops so a fresh install
+        // (onCreate) and an upgrade end up identical. Idempotency guard (like
+        // v45) for a DB stepped back to < 46 by the revert-then-re-upgrade tests.
+        final errExists = await customSelect(
+          "SELECT 1 FROM sqlite_master WHERE type='table' "
+          "AND name='error_logs'",
+        ).get();
+        if (errExists.isEmpty) {
+          await m.createTable(errorLogs);
+          await customStatement(
+            'CREATE INDEX idx_error_logs_business_lua '
+            'ON error_logs (business_id, last_updated_at)',
+          );
+          await customStatement(
+            'CREATE TRIGGER bump_error_logs_last_updated_at '
+            'AFTER UPDATE ON error_logs '
+            'FOR EACH ROW '
+            'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+            'BEGIN '
+            "UPDATE error_logs SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+            'END',
+          );
+        }
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -3292,6 +3542,8 @@ const List<String> _syncedTenantTables = [
   'stock_transactions',
   // v34 (master plan §16.6.1) — stock-keeper adjustment approval queue.
   'stock_adjustment_requests',
+  // v45 (master plan §12.3.1) — cashier Quick Sale approval queue.
+  'quick_sale_requests',
   'orders',
   'order_items',
   // §13.4 crate deposits — per-order, per-brand crate count + deposit snapshot.
@@ -3310,6 +3562,8 @@ const List<String> _syncedTenantTables = [
   // v31 (master plan §20.1/§20.3) — monthly budget goal, per business / store.
   'expense_budgets',
   'activity_logs',
+  // v46 (master plan §33) — append-only crash/error diagnostic log.
+  'error_logs',
   'notifications',
   'settings',
   // v13 (master plan §2.4). `permissions` is intentionally absent —
@@ -3346,6 +3600,7 @@ const List<String> kSyncCacheTables = [
   'inventory',
   'customer_crate_balances',
   'manufacturer_crate_balances',
+  'store_crate_balances',
 ];
 
 /// Every table name a DAO may legitimately enqueue. `businesses` syncs via
@@ -3392,6 +3647,7 @@ const List<String> _v13HotPathIndexStatements = [
 const List<List<String>> _defaultPermissionRows = [
   // Stores — rendered first on the role page (§10.2). CEO-only by default.
   ['stores.manage', 'Add, edit, and remove stores', 'Stores'],
+  ['stores.receive_transfer', 'Confirm receipt of incoming stock transfers', 'Stores'],
   // Sales
   ['sales.make', 'Make a sale', 'Sales'],
   ['sales.cancel', 'Cancel a sale', 'Sales'],

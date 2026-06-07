@@ -197,4 +197,65 @@ void main() {
     expect(await db.select(db.products).get(), hasLength(1));
     expect(fkSkipped, isEmpty);
   });
+
+  // Natural-key reconcile (BUILD_LOG Session 122 sweep). Inventory has two
+  // id-minting authorities for the same (business, product, store): the client
+  // (UuidV7, addProduct's initial-stock INSERT) and the cloud RPCs
+  // (gen_random_uuid). `_applyDomainResponse` updates the local row by natural
+  // key and never aligns the id, so the ids diverge. A PK-keyed restore would
+  // trip UNIQUE(business_id, product_id, store_id) (2067) and that device would
+  // silently stop receiving cloud stock updates. The restore must reconcile on
+  // the natural key: update the existing row, align its id to the cloud's, and
+  // keep exactly one row.
+  test(
+      'inventory restore with a DIVERGENT id reconciles on the natural key '
+      '(no 2067, one row, id + quantity adopt the cloud value)', () async {
+    final productId = UuidV7.generate();
+    final localInvId = UuidV7.generate();
+    final cloudInvId = UuidV7.generate(); // different surrogate, same natural key
+    final fkSkipped = <String>{};
+
+    // Product present locally.
+    await sync.restoreTableDataForTesting(
+      'products',
+      [productRow(productId, manufacturerId: manufacturerId)],
+      fkSkipped: fkSkipped,
+    );
+
+    // Local inventory row as addProduct would have written it (client id).
+    await db.into(db.inventory).insert(
+          InventoryCompanion.insert(
+            id: Value(localInvId),
+            businessId: businessId,
+            productId: productId,
+            storeId: storeId,
+            quantity: const Value(10),
+            lastUpdatedAt: Value(DateTime.utc(2026, 5, 28, 11)),
+          ),
+        );
+
+    // Cloud sends the authoritative row for the SAME (business, product, store)
+    // under a DIFFERENT id and a newer quantity. Must not throw.
+    await sync.restoreTableDataForTesting(
+      'inventory',
+      [
+        {
+          'id': cloudInvId,
+          'business_id': businessId,
+          'product_id': productId,
+          'store_id': storeId,
+          'quantity': 3,
+          'created_at': ts,
+          'last_updated_at': ts,
+        },
+      ],
+      fkSkipped: fkSkipped,
+    );
+
+    final rows = await db.select(db.inventory).get();
+    expect(rows, hasLength(1), reason: 'reconciled — exactly one inventory row');
+    expect(rows.single.id, cloudInvId, reason: 'local id aligns to the cloud id');
+    expect(rows.single.quantity, 3, reason: 'cloud quantity is authoritative');
+    expect(fkSkipped, isEmpty, reason: 'a natural-key reconcile is not an FK skip');
+  });
 }

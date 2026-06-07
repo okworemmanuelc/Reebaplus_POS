@@ -3,35 +3,34 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
-import 'package:reebaplus_pos/core/utils/responsive.dart';
-import 'package:reebaplus_pos/core/utils/number_format.dart';
+import 'package:reebaplus_pos/core/data/business_types.dart';
+import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
-import 'package:reebaplus_pos/features/inventory/data/inventory_data.dart';
-import 'package:reebaplus_pos/features/inventory/data/models/inventory_item.dart';
-import 'package:reebaplus_pos/features/inventory/data/models/inventory_log.dart';
-import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
-import 'package:reebaplus_pos/features/stores/data/models/store.dart';
-import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
-import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
+import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 
 class StockTransferScreen extends ConsumerStatefulWidget {
   const StockTransferScreen({super.key});
 
   @override
-  ConsumerState<StockTransferScreen> createState() => _StockTransferScreenState();
+  ConsumerState<StockTransferScreen> createState() =>
+      _StockTransferScreenState();
 }
 
 class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
-  Store? _sourceStore;
-  Store? _destinationStore;
-  InventoryItem? _selectedProduct;
+  StoreData? _sourceStore;
+  StoreData? _destinationStore;
+  ProductDataWithStock? _selectedProduct;
 
   final TextEditingController _productCtrl = TextEditingController();
-  final TextEditingController _priceCtrl = TextEditingController();
   final TextEditingController _qtyCtrl = TextEditingController();
+  final TextEditingController _crateCtrl = TextEditingController();
+  bool _submitting = false;
+
   Color get _bg => Theme.of(context).scaffoldBackgroundColor;
   Color get _surface => Theme.of(context).colorScheme.surface;
   Color get _text => Theme.of(context).colorScheme.onSurface;
@@ -43,129 +42,170 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
   @override
   void initState() {
     super.initState();
-    if (kStores.isNotEmpty) {
-      _sourceStore = kStores.first;
-      if (kStores.length > 1) {
-        _destinationStore = kStores[1];
-      }
-    }
+    // Default source = active locked store (if any).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final lockedId = ref.read(lockedStoreProvider).value;
+      if (lockedId == null) return;
+      final stores =
+          ref.read(allStoresProvider).valueOrNull ?? const <StoreData>[];
+      final match = stores.where((s) => s.id == lockedId).firstOrNull;
+      if (match != null) setState(() => _sourceStore = match);
+    });
   }
 
   @override
   void dispose() {
     _productCtrl.dispose();
-    _priceCtrl.dispose();
     _qtyCtrl.dispose();
+    _crateCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
-    // Re-check at the write boundary (hard rule #6): stock transfer is reached
-    // from the CEO-only Stores tab, so it needs `stores.manage`.
+    // Write-boundary re-check (layer 3 of 3, hard rule #6).
     if (!ref.read(currentUserPermissionsProvider).contains('stores.manage')) {
       return;
     }
-    final qty = double.tryParse(_qtyCtrl.text) ?? 0;
 
-    if (_sourceStore == null || _destinationStore == null) {
-      _showError('Please select both source and destination stores.');
+    final src = _sourceStore;
+    final dst = _destinationStore;
+    final product = _selectedProduct;
+    final qty = int.tryParse(_qtyCtrl.text.trim()) ?? 0;
+    final crateQty = int.tryParse(_crateCtrl.text.trim()) ?? 0;
+
+    if (src == null || dst == null) {
+      AppNotification.showError(
+        context,
+        'Please select both source and destination stores.',
+      );
       return;
     }
-
-    if (_sourceStore!.id == _destinationStore!.id) {
-      _showError('Source and destination stores cannot be the same.');
+    if (src.id == dst.id) {
+      AppNotification.showError(
+        context,
+        'Source and destination stores cannot be the same.',
+      );
       return;
     }
-
-    if (_selectedProduct == null) {
-      _showError('Please select a product.');
+    if (product == null) {
+      AppNotification.showError(context, 'Please select a product.');
       return;
     }
-
     if (qty <= 0) {
-      _showError('Please enter a quantity greater than 0.');
-      return;
-    }
-
-    final available = _selectedProduct!.getStockForStore(
-      _sourceStore!.id,
-    );
-    if (qty > available) {
-      _showError(
-        'Insufficient stock in ${_sourceStore!.name}. Available: ${available.toInt()}',
+      AppNotification.showError(
+        context,
+        'Please enter a quantity greater than 0.',
       );
       return;
     }
 
-    // Perform Transfer
-    setState(() {
-      final newStockMap = Map<String, double>.from(
-        _selectedProduct!.storeStock,
+    final currentUser = ref.read(authProvider).currentUser;
+    if (currentUser == null) return;
+
+    setState(() => _submitting = true);
+    try {
+      final db = ref.read(databaseProvider);
+      final transferId = await db.stockTransferDao.createTransfer(
+        fromStoreId: src.id,
+        toStoreId: dst.id,
+        productId: product.product.id,
+        quantity: qty,
+        initiatedBy: currentUser.id,
       );
 
-      // Deduct from source
-      newStockMap[_sourceStore!.id] = available - qty;
+      // Phase 3: optionally transfer empty crates alongside the product.
+      final mfrId = product.product.manufacturerId;
+      if (crateQty > 0 && mfrId != null) {
+        await db.stockTransferDao.transferCrates(
+          transferId: transferId,
+          fromStoreId: src.id,
+          toStoreId: dst.id,
+          manufacturerId: mfrId,
+          quantity: crateQty,
+          performedBy: currentUser.id,
+        );
+      }
 
-      // Add to destination
-      final destCurrent = _selectedProduct!.getStockForStore(
-        _destinationStore!.id,
+      if (!mounted) return;
+      AppNotification.showSuccess(
+        context,
+        'Dispatched to ${dst.name} — awaiting confirmation.',
       );
-      newStockMap[_destinationStore!.id] = destCurrent + qty;
-
-      _selectedProduct!.storeStock = newStockMap;
-
-      // Log Inventory Movement
-      kInventoryLogs.add(
-        InventoryLog(
-          timestamp: DateTime.now(),
-          user: 'System (Transfer)',
-          itemId: _selectedProduct!.id,
-          itemName: _selectedProduct!.productName,
-          action: 'transfer',
-          previousValue: available, // Show source stock before
-          newValue: available - qty, // Show source stock after
-          note:
-              'Stock Transfer: ${_sourceStore!.name} -> ${_destinationStore!.name}',
-        ),
-      );
-    });
-
-    // Log Activity (Source)
-    await ref.read(activityLogProvider).logAction(
-      "Stock Transfer (Out)",
-      "Transferred ${qty.toInt()} ${_selectedProduct!.productName} OUT to ${_destinationStore!.name}",
-      productId: _selectedProduct!.id,
-      storeId: _sourceStore!.id,
-    );
-
-    // Log Activity (Destination)
-    await ref.read(activityLogProvider).logAction(
-      "Stock Transfer (In)",
-      "Transferred ${qty.toInt()} ${_selectedProduct!.productName} IN from ${_sourceStore!.name}",
-      productId: _selectedProduct!.id,
-      storeId: _destinationStore!.id,
-    );
-
-    if (!mounted) return;
-
-    AppNotification.showSuccess(
-      context,
-      'Successfully transferred ${qty.toInt()} items.',
-    );
-
-    Navigator.pop(context);
-  }
-
-  void _showError(String msg) {
-    AppNotification.showError(context, msg);
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+      final msg = e.toString();
+      if (msg.contains('insufficient_stock') ||
+          msg.contains('InsufficientStock')) {
+        AppNotification.showError(
+          context,
+          'Insufficient stock in ${src.name} for that quantity.',
+        );
+      } else if (msg.contains('insufficient_crates')) {
+        AppNotification.showError(
+          context,
+          'Not enough empty crates in ${src.name} for that count.',
+        );
+      } else {
+        AppNotification.showError(context, 'Transfer failed. Please retry.');
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    // Layer 1 (render gate): only users with stores.manage see this screen.
+    final canManage = hasPermission(ref, 'stores.manage');
+
+    // Layer 2 (body-guard): replace body if permission was revoked mid-session.
+    if (!canManage) {
+      return Scaffold(
+        backgroundColor: _bg,
+        appBar: AppBar(
+          backgroundColor: _surface,
+          elevation: 0,
+          iconTheme: IconThemeData(color: _text),
+          title: Text(
+            'Stock Transfer',
+            style: TextStyle(
+              color: _text,
+              fontSize: rFontSize(context, 18),
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          centerTitle: true,
+        ),
+        body: Center(
+          child: Text(
+            'You do not have permission to transfer stock.',
+            style: TextStyle(color: _subtext),
+          ),
+        ),
+      );
+    }
+
+    final stores =
+        ref.watch(allStoresProvider).valueOrNull ?? const <StoreData>[];
+    final sourceId = _sourceStore?.id;
+    final products = sourceId != null
+        ? (ref.watch(productsByStoreProvider(sourceId)).valueOrNull ??
+              const <ProductDataWithStock>[])
+              .where((p) => p.totalStock > 0)
+              .toList()
+        : const <ProductDataWithStock>[];
+
+    final businessId = ref.read(authProvider).currentUser?.businessId;
+    final businessType = ref.watch(localBusinessesProvider).valueOrNull
+        ?.where((b) => b.id == businessId)
+        .map((b) => b.type)
+        .firstOrNull;
+    final showCrates =
+        isCrateBusiness(businessType) && _selectedProduct?.product.manufacturerId != null;
+
     return Scaffold(
-      // Single keyboard lift via the footer's deviceBottomInset padding below;
-      // disabling Scaffold resize avoids double-counting the keyboard (root-nav
-      // screen sees the real inset). Same as add_expense.
       resizeToAvoidBottomInset: false,
       backgroundColor: _bg,
       appBar: AppBar(
@@ -190,19 +230,28 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildStoreSection(context),
+                  _buildStoreSection(context, stores),
                   SizedBox(height: context.getRSize(24)),
-                  _buildProductSection(context),
+                  _buildProductSection(context, products),
+                  if (showCrates) ...[
+                    SizedBox(height: context.getRSize(24)),
+                    _buildCrateSection(context),
+                  ],
                 ],
               ),
             ),
           ),
           Padding(
-            padding: EdgeInsets.only(bottom: context.deviceBottomInset),
+            padding: EdgeInsets.only(
+              bottom: context.deviceBottomPadding,
+              left: context.getRSize(16),
+              right: context.getRSize(16),
+              top: context.getRSize(8),
+            ),
             child: AppButton(
-              text: 'Confirm Transfer',
+              text: _submitting ? 'Dispatching…' : 'Dispatch Transfer',
               icon: FontAwesomeIcons.rightLeft,
-              onPressed: _submit,
+              onPressed: _submitting ? null : _submit,
             ),
           ),
         ],
@@ -210,7 +259,47 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
     );
   }
 
-  Widget _buildStoreSection(BuildContext context) {
+  Widget _buildCrateSection(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.all(context.getRSize(16)),
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Empty Crates (optional)',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.primary,
+              fontWeight: FontWeight.bold,
+              fontSize: context.getRFontSize(14),
+            ),
+          ),
+          SizedBox(height: context.getRSize(8)),
+          Text(
+            'Transfer empty crates alongside this product. Enter 0 to skip.',
+            style: TextStyle(
+              color: _subtext,
+              fontSize: context.getRFontSize(12),
+            ),
+          ),
+          SizedBox(height: context.getRSize(16)),
+          AppInput(
+            labelText: 'Crate Quantity',
+            controller: _crateCtrl,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            hintText: '0',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStoreSection(BuildContext context, List<StoreData> stores) {
     return Container(
       padding: EdgeInsets.all(context.getRSize(16)),
       decoration: BoxDecoration(
@@ -230,33 +319,30 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
             ),
           ),
           SizedBox(height: context.getRSize(16)),
-          AppDropdown<Store>(
+          AppDropdown<StoreData>(
             labelText: 'Source Store',
             value: _sourceStore,
-            items: kStores.map((w) {
-              return DropdownMenuItem(value: w, child: Text(w.name));
+            items: stores.map((s) {
+              return DropdownMenuItem(value: s, child: Text(s.name));
             }).toList(),
             onChanged: (val) {
               setState(() {
                 _sourceStore = val;
-                if (_selectedProduct != null && val != null) {
-                  final avail = _selectedProduct!.getStockForStore(val.id);
-                  if (avail <= 0) {
-                    _selectedProduct = null;
-                    _productCtrl.clear();
-                    _qtyCtrl.clear();
-                  }
-                }
+                // Reset product if it no longer has stock in the new source.
+                _selectedProduct = null;
+                _productCtrl.clear();
+                _qtyCtrl.clear();
               });
             },
           ),
           SizedBox(height: context.getRSize(16)),
-          AppDropdown<Store>(
+          AppDropdown<StoreData>(
             labelText: 'Destination Store',
             value: _destinationStore,
-            items: kStores.map((w) {
-              return DropdownMenuItem(value: w, child: Text(w.name));
-            }).toList(),
+            items: stores
+                .where((s) => s.id != _sourceStore?.id)
+                .map((s) => DropdownMenuItem(value: s, child: Text(s.name)))
+                .toList(),
             onChanged: (val) => setState(() => _destinationStore = val),
           ),
         ],
@@ -264,7 +350,10 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
     );
   }
 
-  Widget _buildProductSection(BuildContext context) {
+  Widget _buildProductSection(
+    BuildContext context,
+    List<ProductDataWithStock> products,
+  ) {
     return Container(
       padding: EdgeInsets.all(context.getRSize(16)),
       decoration: BoxDecoration(
@@ -284,56 +373,41 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
             ),
           ),
           SizedBox(height: context.getRSize(16)),
-          Autocomplete<InventoryItem>(
-            displayStringForOption: (item) => item.productName,
-            optionsBuilder: (TextEditingValue textEditingValue) {
-              if (textEditingValue.text.isEmpty) {
-                return const Iterable<InventoryItem>.empty();
-              }
-              return kInventoryItems.where((InventoryItem item) {
-                // 1. Match search text
-                final matchesText = item.productName.toLowerCase().contains(
-                  textEditingValue.text.toLowerCase(),
-                );
-                if (!matchesText) return false;
-
-                // 2. Must have stock in selected source store
-                if (_sourceStore == null) return false;
-                final stock = item.getStockForStore(_sourceStore!.id);
-                return stock > 0;
-              });
+          Autocomplete<ProductDataWithStock>(
+            displayStringForOption: (p) => p.product.name,
+            optionsBuilder: (TextEditingValue v) {
+              if (v.text.isEmpty) return const [];
+              final q = v.text.toLowerCase();
+              return products.where(
+                (p) => p.product.name.toLowerCase().contains(q),
+              );
             },
-            optionsViewBuilder: (context, onSelected, options) {
+            optionsViewBuilder: (ctx, onSelected, options) {
               return Align(
                 alignment: Alignment.topLeft,
                 child: Material(
-                  elevation: 4.0,
+                  elevation: 4,
                   borderRadius: BorderRadius.circular(14),
                   color: _surface,
                   child: Container(
-                    width:
-                        MediaQuery.of(context).size.width -
-                        64, // approximate width
+                    width: MediaQuery.of(ctx).size.width - 64,
                     constraints: const BoxConstraints(maxHeight: 200),
                     child: ListView.builder(
                       padding: EdgeInsets.zero,
                       shrinkWrap: true,
                       itemCount: options.length,
-                      itemBuilder: (BuildContext context, int index) {
-                        final InventoryItem option = options.elementAt(index);
-                        final stock = option.getStockForStore(
-                          _sourceStore?.id ?? "",
-                        );
+                      itemBuilder: (_, i) {
+                        final p = options.elementAt(i);
                         return InkWell(
-                          onTap: () => onSelected(option),
+                          onTap: () => onSelected(p),
                           child: Padding(
-                            padding: const EdgeInsets.all(16.0),
+                            padding: const EdgeInsets.all(16),
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Expanded(
                                   child: Text(
-                                    option.productName,
+                                    p.product.name,
                                     style: TextStyle(
                                       color: _text,
                                       fontWeight: FontWeight.bold,
@@ -346,12 +420,14 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
                                     vertical: 2,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: Theme.of(context).colorScheme.primary
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .primary
                                         .withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Text(
-                                    '${stock.toInt()} in stock',
+                                    '${p.totalStock} in stock',
                                     style: TextStyle(
                                       color: Theme.of(
                                         context,
@@ -371,36 +447,35 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
                 ),
               );
             },
-            onSelected: (InventoryItem selection) {
+            onSelected: (p) {
               setState(() {
-                _selectedProduct = selection;
-                _productCtrl.text = selection.productName;
+                _selectedProduct = p;
+                _productCtrl.text = p.product.name;
                 if (_qtyCtrl.text.isEmpty) _qtyCtrl.text = '1';
-                _priceCtrl.text = '0'; // Default price
               });
             },
-            fieldViewBuilder:
-                (context, controller, focusNode, onEditingComplete) {
-                  if (controller.text.isEmpty && _productCtrl.text.isNotEmpty) {
-                    controller.text = _productCtrl.text;
-                  }
-                  controller.addListener(() {
-                    _productCtrl.text = controller.text;
-                  });
-                  return AppInput(
-                    controller: controller,
-                    focusNode: focusNode,
-                    onFieldSubmitted: (_) => onEditingComplete(),
-                    hintText: 'Start typing product name...',
-                  );
-                },
+            fieldViewBuilder: (ctx, controller, focusNode, onEditingComplete) {
+              if (controller.text.isEmpty && _productCtrl.text.isNotEmpty) {
+                controller.text = _productCtrl.text;
+              }
+              controller.addListener(() => _productCtrl.text = controller.text);
+              return AppInput(
+                controller: controller,
+                focusNode: focusNode,
+                onFieldSubmitted: (_) => onEditingComplete(),
+                hintText: _sourceStore == null
+                    ? 'Select a source store first'
+                    : 'Start typing product name…',
+                enabled: _sourceStore != null,
+              );
+            },
           ),
           if (_selectedProduct != null) ...[
-            SizedBox(height: rSize(context, 8)),
+            SizedBox(height: context.getRSize(8)),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4.0),
+              padding: const EdgeInsets.symmetric(horizontal: 4),
               child: Text(
-                'Available in source: ${_selectedProduct!.getStockForStore(_sourceStore?.id ?? "").toInt()}',
+                'Available in source: ${_selectedProduct!.totalStock}',
                 style: TextStyle(
                   color: _subtext,
                   fontSize: rFontSize(context, 12),
@@ -408,41 +483,13 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
               ),
             ),
           ],
-          SizedBox(height: rSize(context, 16)),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    AppInput(
-                      labelText: 'Unit Price $activeCurrencySymbol',
-                      controller: _priceCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      inputFormatters: [CurrencyInputFormatter()],
-                      hintText: '0.0',
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(width: context.getRSize(12)),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    AppInput(
-                      labelText: 'Quantity',
-                      controller: _qtyCtrl,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      hintText: '0',
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          SizedBox(height: context.getRSize(16)),
+          AppInput(
+            labelText: 'Quantity',
+            controller: _qtyCtrl,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            hintText: '0',
           ),
         ],
       ),

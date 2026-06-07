@@ -49,7 +49,7 @@ class ActivityLogsAccessScreen extends ConsumerWidget {
         data: (list) => SettingsFadeIn(
           child: ListView(
             padding: EdgeInsets.fromLTRB(
-                24, 24, 24, 24 + context.deviceBottomInset),
+                24, 24, 24, 24 + context.deviceBottomPadding),
             children: [
               Text(
                 'Choose which roles can open Activity Logs. The CEO always has access.',

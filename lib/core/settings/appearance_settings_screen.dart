@@ -69,7 +69,7 @@ class AppearanceSettingsScreen extends ConsumerWidget {
           : SettingsFadeIn(
               child: ListView(
                 padding: EdgeInsets.fromLTRB(
-                    24, 24, 24, 24 + context.deviceBottomInset),
+                    24, 24, 24, 24 + context.deviceBottomPadding),
                 children: [
                   Text(
                     'Pick the colour for the whole business. It applies to every '

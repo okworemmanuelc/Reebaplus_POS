@@ -124,7 +124,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           : SettingsFadeIn(
               child: ListView(
                 padding: EdgeInsets.fromLTRB(
-                    24, 24, 24, 24 + context.deviceBottomInset),
+                    24, 24, 24, 24 + context.deviceBottomPadding),
                 children: [
                   TextField(
                     controller: _searchCtrl,

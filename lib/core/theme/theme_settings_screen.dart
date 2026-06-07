@@ -25,7 +25,7 @@ class ThemeSettingsScreen extends StatelessWidget {
               context.getRSize(20),
               context.getRSize(24),
               context.getRSize(20),
-              context.getRSize(24) + context.deviceBottomInset,
+              context.getRSize(24) + context.deviceBottomPadding,
             ),
             children: [
               Text(

@@ -35,10 +35,9 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   String _selectedPeriod = kDatePeriodLabels.first; // Today (§30.6/§30.11)
 
-  // Store filter (null = All)
+  // Store filter (null = All). Follows the §12.1 nav-drawer store picker via
+  // `lockedStoreProvider`; no per-screen store dropdown.
   String? _selectedStoreId;
-  List<StoreData> _stores = [];
-  StreamSubscription? _storesSub;
 
   // Total SKUs card expand state (§11.5 — Cashier/Stock keeper).
   bool _skusExpanded = false;
@@ -75,15 +74,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Future<void> _initializeData() async {
-    // Stores for the filter dropdown
     final db = ref.read(databaseProvider);
-    _storesSub = db.storesDao.watchActiveStores().listen((wh) {
-      if (mounted) {
-        setState(() {
-          _stores = wh;
-        });
-      }
-    });
 
     _ordersSub = ref.read(orderServiceProvider).watchAllOrdersWithItems().listen((orders) async {
       if (mounted) {
@@ -156,7 +147,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   void dispose() {
-    _storesSub?.cancel();
     _ordersSub?.cancel();
     _expensesSub?.cancel();
     _customersSub?.cancel();
@@ -203,32 +193,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ? 'Stock Overview'
             : 'Business Overview';
 
-    // ── Store filter lock (§11.2) ────────────────────────────────────────────
-    // CEO is always free. Manager is free only when the CEO toggle is on.
-    // Cashier/Stock keeper are always locked to their assigned store(s).
-    final canViewAllStores =
-        isCeo || (isManager && ref.watch(managerCanViewAllStoresProvider));
-    final assignedStoreIds = (userId == null
-            ? const <UserStoreData>[]
-            : (ref.watch(myUserStoresProvider(userId)).valueOrNull ??
-                const <UserStoreData>[]))
-        .map((s) => s.storeId)
-        .toSet();
-    final storeLocked = slug != null && !canViewAllStores;
-    final lockedStores =
-        _stores.where((s) => assignedStoreIds.contains(s.id)).toList();
-
-    // Pin a locked user's filter to an allowed store, re-subscribing once.
-    // Single store → that one; multiple → first allowed if the current
-    // selection isn't one of theirs (e.g. the default "All").
-    if (storeLocked && lockedStores.isNotEmpty &&
-        !lockedStores.any((s) => s.id == _selectedStoreId)) {
-      final id = lockedStores.first.id;
+    // ── Store filter (§12.1) ─────────────────────────────────────────────────
+    // The store filter follows the nav-drawer store picker (null = "All
+    // Stores"). Confinement is enforced upstream — the picker only offers the
+    // user's selectable stores, and MainLayout pins confined users to a real
+    // store. Re-subscribe the per-store streams when the active store changes.
+    final desiredStoreId = ref.watch(lockedStoreProvider).value;
+    if (_selectedStoreId != desiredStoreId) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || _selectedStoreId == id) return;
-        setState(() => _selectedStoreId = id);
-        _subscribeInventory(id);
-        _subscribeExpenses(id);
+        if (!mounted || _selectedStoreId == desiredStoreId) return;
+        setState(() => _selectedStoreId = desiredStoreId);
+        _subscribeInventory(desiredStoreId);
+        _subscribeExpenses(desiredStoreId);
       });
     }
 
@@ -353,8 +329,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             children: [
               _buildPeriodHeader(
-                storeLocked: storeLocked,
-                lockedStores: lockedStores,
                 showReports: isCeo || isManager,
               ),
               SizedBox(height: context.spacingM),
@@ -384,8 +358,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildPeriodHeader({
-    required bool storeLocked,
-    required List<StoreData> lockedStores,
     required bool showReports,
   }) {
     return Column(
@@ -418,30 +390,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ],
         ),
         SizedBox(height: context.getRSize(12)),
+        // §12.1: the store is chosen in the nav-drawer picker; Home just shows
+        // the period filter here now.
         Row(
           children: [
-            // Locked to a single store → fixed chip. Locked but assigned to
-            // several → dropdown limited to those stores (no "All"). Free →
-            // full picker with "All Stores".
-            if (storeLocked && lockedStores.length > 1) ...[
-              Flexible(
-                child: _buildStoreDropdown(
-                  stores: lockedStores,
-                  includeAll: false,
-                ),
-              ),
-              SizedBox(width: context.getRSize(8)),
-            ] else if (storeLocked) ...[
-              Flexible(
-                child: _buildLockedStoreChip(
-                  lockedStores.isEmpty ? '' : lockedStores.first.name,
-                ),
-              ),
-              SizedBox(width: context.getRSize(8)),
-            ] else if (_stores.isNotEmpty) ...[
-              Flexible(child: _buildStoreDropdown()),
-              SizedBox(width: context.getRSize(8)),
-            ],
             Flexible(child: _buildPeriodDropdown()),
           ],
         ),
@@ -499,68 +451,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildLockedStoreChip(String name) {
-    return Container(
-      height: 48,
-      padding: EdgeInsets.symmetric(horizontal: context.getRSize(12)),
-      decoration: BoxDecoration(
-        color: _surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _border),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.store_outlined,
-            size: context.getRSize(14),
-            color: Theme.of(context).colorScheme.primary,
-          ),
-          SizedBox(width: context.getRSize(6)),
-          Flexible(
-            child: Text(
-              name.isEmpty ? 'My Store' : name,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: context.getRFontSize(13),
-                fontWeight: FontWeight.w600,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-            ),
-          ),
-          SizedBox(width: context.getRSize(4)),
-          Icon(Icons.lock_outline, size: context.getRSize(12), color: _subtext),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStoreDropdown({List<StoreData>? stores, bool includeAll = true}) {
-    final list = stores ?? _stores;
-    return SizedBox(
-      width: context.getRSize(160),
-      child: AppDropdown<String?>(
-        value: _selectedStoreId,
-        items: [
-          if (includeAll)
-            const DropdownMenuItem<String?>(
-              value: null,
-              child: Text('All Stores'),
-            ),
-          ...list.map(
-            (wh) => DropdownMenuItem<String?>(
-                value: wh.id, child: Text(wh.name)),
-          ),
-        ],
-        onChanged: (v) {
-          setState(() => _selectedStoreId = v);
-          _subscribeInventory(v);
-          _subscribeExpenses(v);
-        },
       ),
     );
   }

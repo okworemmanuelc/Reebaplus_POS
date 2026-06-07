@@ -196,7 +196,7 @@ class _UserTipsModalState extends State<UserTipsModal> {
                 context.getRSize(24),
                 0,
                 context.getRSize(24),
-                context.deviceBottomInset + context.getRSize(16),
+                context.deviceBottomPadding + context.getRSize(16),
               ),
               child: Row(
                 children: [

@@ -132,7 +132,7 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
           : SettingsFadeIn(
               child: ListView(
                 padding: EdgeInsets.fromLTRB(
-                    24, 24, 24, 24 + context.deviceBottomInset),
+                    24, 24, 24, 24 + context.deviceBottomPadding),
                 children: [
                   const SettingsSectionTitle('Business'),
                   const SizedBox(height: 16),

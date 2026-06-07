@@ -46,7 +46,7 @@ class RolesPermissionsScreen extends ConsumerWidget {
               data: (list) => SettingsFadeIn(
                 child: ListView(
                   padding: EdgeInsets.fromLTRB(
-                      24, 24, 24, 24 + context.deviceBottomInset),
+                      24, 24, 24, 24 + context.deviceBottomPadding),
                   children: [
                     Text(
                       'Tap a role to set what it can do.',
