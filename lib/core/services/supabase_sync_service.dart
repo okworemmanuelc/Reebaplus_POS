@@ -137,6 +137,50 @@ class SupabaseSyncService {
   bool _pushing = false;
   bool _loggedJwtClaimsThisSession = false;
 
+  /// Ceiling chunk size for a batched push call on Wi-Fi/ethernet — well
+  /// under the ~200-row group max so one round trip stays small enough to
+  /// finish (or time out) quickly on a weak link.
+  static const int _pushChunkCeilingWifi = 25;
+
+  /// Ceiling chunk size on cellular-only connections. A mobile radio pays a
+  /// large per-request "tail" energy cost almost regardless of payload size,
+  /// so on a weak mobile link it's cheaper to send fewer rows per attempt
+  /// (and retry the remainder on the next tick) than to time out on a bigger
+  /// one and resend everything.
+  static const int _pushChunkCeilingCellular = 10;
+
+  /// Floor for the adaptive chunk size — a push cycle always attempts at
+  /// least this many rows per call even after repeated timeouts.
+  static const int _minPushChunkSize = 5;
+
+  /// Per-chunk network timeout, escalating with how many times this row has
+  /// already been retried (`SyncQueueData.attempts`). A fresh row gets a
+  /// short 5s timeout — enough for a normal REST round trip, but short
+  /// enough to fail fast (and stop draining the radio) on a dead
+  /// connection. Each backoff-spaced retry gets more patience, capped at
+  /// 15s. A chunk mixes attempt counts by taking the highest.
+  static Duration _pushChunkTimeoutForAttempts(int attempts) {
+    switch (attempts) {
+      case 0:
+        return const Duration(seconds: 5);
+      case 1:
+        return const Duration(seconds: 10);
+      default:
+        return const Duration(seconds: 15);
+    }
+  }
+
+  /// Consecutive successful chunks required before the adaptive size grows
+  /// back toward the connection-type ceiling.
+  static const int _chunkGrowthStreak = 3;
+
+  /// Adaptive push-chunk size for this session. Shrinks (halves, floored at
+  /// [_minPushChunkSize]) whenever a chunk times out, and grows back toward
+  /// the current connection-type ceiling after [_chunkGrowthStreak]
+  /// consecutive clean chunks.
+  int _pushChunkSize = _pushChunkCeilingWifi;
+  int _chunkSuccessStreak = 0;
+
   /// Connectivity signal driven by `Connectivity().onConnectivityChanged`.
   /// Surfaced to the UI so the drawer's "Syncing…" badge can flip to
   /// "Offline — N queued" when there's no network. Defaults to true so the
@@ -221,6 +265,13 @@ class SupabaseSyncService {
   /// Wired by AuthService. Invoked when the Realtime callback observes
   /// the current session row being revoked by another device.
   VoidCallback? onCurrentSessionRevoked;
+
+  /// Wired by AuthService. Invoked (after a positive tombstone confirmation)
+  /// when the active business has been permanently deleted by its owner
+  /// (master plan §10.3). The handler wipes local data + full-logout so a
+  /// STAFF device doesn't keep looping on permission-denied pulls against a
+  /// business that no longer exists in the cloud.
+  Future<void> Function()? onActiveBusinessDeleted;
 
   /// Wired by AuthService to expose the current device user's local id
   /// (`users.id`, not auth.uid). Retained as a generic identity hook for
@@ -596,6 +647,28 @@ class SupabaseSyncService {
       return;
     }
 
+    // Battery: bail before touching the radio at all if there's definitely
+    // no usable network — same "all results are none" check the
+    // connectivity listener uses to flip `isOnline`. The periodic timer
+    // will call us again; no point waking the modem for a call that can
+    // only fail or hang.
+    final connectivity = await Connectivity().checkConnectivity();
+    if (connectivity.isEmpty ||
+        connectivity.every((r) => r == ConnectivityResult.none)) {
+      debugPrint('[SyncService] Skipping push: no connectivity.');
+      return;
+    }
+    // Cellular-only links get a smaller chunk ceiling (see
+    // _pushChunkCeilingCellular). If the previous run's adaptive size is
+    // already above today's ceiling (e.g. switched from Wi-Fi to mobile
+    // data), clamp down immediately rather than waiting for a timeout.
+    final chunkCeiling = (connectivity.contains(ConnectivityResult.mobile) &&
+            !connectivity.contains(ConnectivityResult.wifi) &&
+            !connectivity.contains(ConnectivityResult.ethernet))
+        ? _pushChunkCeilingCellular
+        : _pushChunkCeilingWifi;
+    if (_pushChunkSize > chunkCeiling) _pushChunkSize = chunkCeiling;
+
     // Pass businessId explicitly so getPendingItems doesn't have to consult
     // the resolver. Defense-in-depth — keeps the push path safe even if the
     // resolver becomes null between this guard and the query (it shouldn't,
@@ -714,6 +787,7 @@ class SupabaseSyncService {
       // user on this device and would push under the wrong JWT.
       final validPayloads = <Map<String, dynamic>>[];
       final validIds = <String>[];
+      final validAttempts = <int>[];
       final mismatchedIds = <String>[];
       final authMismatched = <SyncQueueData>[];
       for (final item in items) {
@@ -736,6 +810,7 @@ class SupabaseSyncService {
           }
           validPayloads.add(_normalizePayloadForCloud(group.table, raw));
           validIds.add(item.id);
+          validAttempts.add(item.attempts);
         } catch (e) {
           await _db.syncDao.markFailed(item.id, 'decode_error: $e');
         }
@@ -764,82 +839,130 @@ class SupabaseSyncService {
         '${validIds.length > 3 ? "…" : ""}',
       );
 
-      try {
-        if (group.action == 'insert' ||
-            group.action == 'update' ||
-            group.action == 'upsert') {
-          // An explicit per-row conflict target (action_type's 3rd segment)
-          // wins; otherwise fall back to a per-table natural-key target for
-          // caches whose id can diverge from the cloud's (see
-          // _naturalKeyPushConflictTargets). Null → PostgREST defaults to PK.
-          final conflictTarget = group.conflictTarget ??
-              _naturalKeyPushConflictTargets[group.table];
-          if (conflictTarget != null) {
-            await _supabase
-                .from(group.table)
-                .upsert(validPayloads, onConflict: conflictTarget);
-          } else {
-            await _supabase.from(group.table).upsert(validPayloads);
-          }
-        } else if (group.action == 'delete') {
-          // Hard delete only used for tombstones the cloud needs to forget.
-          // Soft delete (is_deleted=true) goes through the upsert path above.
-          final deleteIds = validPayloads
-              .map((p) => p['id'] as String?)
-              .whereType<String>()
-              .toList();
-          if (deleteIds.isNotEmpty) {
-            await _supabase
-                .from(group.table)
-                .delete()
-                .inFilter('id', deleteIds);
-          }
-        }
-        await _db.syncDao.markDoneBatch(validIds);
-      } catch (e) {
-        final code = e is PostgrestException ? (e.code ?? '?') : '?';
-        // Legacy order-number collision self-heal (§30.8.1). The cloud already
-        // holds one of these orders' numbers under a different id (a pre-device-
-        // tag offline dup). Renumber the local copy with THIS device's tag and
-        // re-enqueue so it uploads and frees the number for the cloud's order to
-        // restore. Per-row so a non-colliding order in the same batch isn't
-        // touched. Handled here → skip the generic classification below.
-        if (group.table == 'orders' &&
-            group.action == 'upsert' &&
-            _isOrderNumberCollision(e)) {
-          await _healOrderNumberCollisions(validPayloads, validIds);
-          continue;
-        }
-        // §6.8 failure classification — parity with the domain-RPC path
-        // (_pushDomainItems). Without it a per-table upsert that hits a cloud
-        // constraint retried forever (uncapped transient backoff):
-        //   - 23503 (foreign_key_violation) → FK-deferred: the parent row may
-        //     still arrive on the next pull; long backoff, capped at 3 then
-        //     orphaned (e.g. order_items whose order hasn't landed yet).
-        //   - other 23xxx / P0001 / privilege / bad-parameter → permanent →
-        //     orphan auto-move. A duplicate order_number can never insert under
-        //     its own id, so retrying is futile — surface it for operator review.
-        //   - everything else (network, 5xx) → transient → standard backoff.
-        final isFkViolation = code == '23503';
-        final isPermanent = !isFkViolation &&
-            (code == 'P0001' ||
-                code.startsWith('23') ||
-                code == 'insufficient_privilege' ||
-                code == 'invalid_parameter_value');
-        debugPrint(
-          '[SyncService] Batch push failed for ${group.table}:${group.action} '
-          '(${validIds.length} items, code=$code, permanent=$isPermanent, '
-          'fk_deferred=$isFkViolation): $e',
+      // Battery + weak-link reliability: send this group in chunks of at
+      // most _pushChunkSize rows instead of one call that could carry the
+      // whole (up to 200-row) group. A chunk that times out shrinks the
+      // size for the rest of this run; a clean streak grows it back toward
+      // chunkCeiling. See the _pushChunkSize field doc.
+      for (var start = 0;
+          start < validPayloads.length;
+          start += _pushChunkSize) {
+        final end = (start + _pushChunkSize < validPayloads.length)
+            ? start + _pushChunkSize
+            : validPayloads.length;
+        final chunkPayloads = validPayloads.sublist(start, end);
+        final chunkIds = validIds.sublist(start, end);
+        final chunkAttempts = validAttempts.sublist(start, end);
+        final chunkTimeout = _pushChunkTimeoutForAttempts(
+          chunkAttempts.fold(0, (max, a) => a > max ? a : max),
         );
-        // On batch failure, mark every item failed individually so the
-        // existing exponential-backoff per-row state machine still applies.
-        for (final id in validIds) {
-          await _db.syncDao.markFailed(
-            id,
-            e.toString(),
-            permanent: isPermanent,
-            fkDeferred: isFkViolation,
+
+        try {
+          if (group.action == 'insert' ||
+              group.action == 'update' ||
+              group.action == 'upsert') {
+            // An explicit per-row conflict target (action_type's 3rd segment)
+            // wins; otherwise fall back to a per-table natural-key target for
+            // caches whose id can diverge from the cloud's (see
+            // _naturalKeyPushConflictTargets). Null → PostgREST defaults to PK.
+            final conflictTarget = group.conflictTarget ??
+                _naturalKeyPushConflictTargets[group.table];
+            final upsert = conflictTarget != null
+                ? _supabase
+                    .from(group.table)
+                    .upsert(chunkPayloads, onConflict: conflictTarget)
+                : _supabase.from(group.table).upsert(chunkPayloads);
+            await upsert.timeout(chunkTimeout);
+          } else if (group.action == 'delete') {
+            // Hard delete only used for tombstones the cloud needs to forget.
+            // Soft delete (is_deleted=true) goes through the upsert path above.
+            final deleteIds = chunkPayloads
+                .map((p) => p['id'] as String?)
+                .whereType<String>()
+                .toList();
+            if (deleteIds.isNotEmpty) {
+              await _supabase
+                  .from(group.table)
+                  .delete()
+                  .inFilter('id', deleteIds)
+                  .timeout(_pushChunkTimeout);
+            }
+          }
+          await _db.syncDao.markDoneBatch(chunkIds);
+          // A clean chunk below the connection's ceiling counts toward
+          // growing the adaptive size back up; already-at-ceiling just
+          // resets the streak.
+          if (_pushChunkSize < chunkCeiling) {
+            _chunkSuccessStreak++;
+            if (_chunkSuccessStreak >= _chunkGrowthStreak) {
+              _chunkSuccessStreak = 0;
+              final grown = _pushChunkSize * 2;
+              _pushChunkSize = grown < chunkCeiling ? grown : chunkCeiling;
+            }
+          } else {
+            _chunkSuccessStreak = 0;
+          }
+        } on TimeoutException catch (e) {
+          // This size is too big for the current link — halve it (floored
+          // at _minPushChunkSize) so the retry, and the rest of this run,
+          // waste less radio-on time stalling at the same dead-end size.
+          _chunkSuccessStreak = 0;
+          final shrunk = _pushChunkSize ~/ 2;
+          _pushChunkSize =
+              shrunk < _minPushChunkSize ? _minPushChunkSize : shrunk;
+          debugPrint(
+            '[SyncService] Chunk push timed out for '
+            '${group.table}:${group.action} (${chunkIds.length} items) — '
+            'shrinking chunk size to $_pushChunkSize: $e',
           );
+          for (final id in chunkIds) {
+            await _db.syncDao.markFailed(id, 'timeout: $e');
+          }
+        } catch (e) {
+          final code = e is PostgrestException ? (e.code ?? '?') : '?';
+          // Legacy order-number collision self-heal (§30.8.1). The cloud already
+          // holds one of these orders' numbers under a different id (a pre-device-
+          // tag offline dup). Renumber the local copy with THIS device's tag and
+          // re-enqueue so it uploads and frees the number for the cloud's order to
+          // restore. Per-row so a non-colliding order in the same chunk isn't
+          // touched. Handled here → skip the generic classification below.
+          if (group.table == 'orders' &&
+              group.action == 'upsert' &&
+              _isOrderNumberCollision(e)) {
+            await _healOrderNumberCollisions(chunkPayloads, chunkIds);
+            continue;
+          }
+          // §6.8 failure classification — parity with the domain-RPC path
+          // (_pushDomainItems). Without it a per-table upsert that hits a cloud
+          // constraint retried forever (uncapped transient backoff):
+          //   - 23503 (foreign_key_violation) → FK-deferred: the parent row may
+          //     still arrive on the next pull; long backoff, capped at 3 then
+          //     orphaned (e.g. order_items whose order hasn't landed yet).
+          //   - other 23xxx / P0001 / privilege / bad-parameter → permanent →
+          //     orphan auto-move. A duplicate order_number can never insert under
+          //     its own id, so retrying is futile — surface it for operator review.
+          //   - everything else (network, 5xx) → transient → standard backoff.
+          final isFkViolation = code == '23503';
+          final isPermanent = !isFkViolation &&
+              (code == 'P0001' ||
+                  code.startsWith('23') ||
+                  code == 'insufficient_privilege' ||
+                  code == 'invalid_parameter_value');
+          debugPrint(
+            '[SyncService] Chunk push failed for ${group.table}:${group.action} '
+            '(${chunkIds.length} items, code=$code, permanent=$isPermanent, '
+            'fk_deferred=$isFkViolation): $e',
+          );
+          // On chunk failure, mark every item failed individually so the
+          // existing exponential-backoff per-row state machine still applies.
+          for (final id in chunkIds) {
+            await _db.syncDao.markFailed(
+              id,
+              e.toString(),
+              permanent: isPermanent,
+              fkDeferred: isFkViolation,
+            );
+          }
         }
       }
     }
@@ -1535,6 +1658,14 @@ class SupabaseSyncService {
       pullStatus.value = PullStatus.idle;
     } catch (e, st) {
       debugPrint('[SyncService] Minimum-login pull failed: $e\n$st');
+      // A staff device that relaunches AFTER the owner deleted the business
+      // hits this path (the pull fails with permission-denied because the whole
+      // tenant — profiles/users/business — is gone). Confirm via the tombstone
+      // and wipe + sign out instead of surfacing "check your connection".
+      if (await _wipeIfBusinessDeleted(businessId)) {
+        pullStatus.value = PullStatus.idle;
+        return;
+      }
       pullStatus.value = PullStatus(
         stage: PullStage.failed,
         failedReason: e.toString(),
@@ -2300,6 +2431,17 @@ class SupabaseSyncService {
                   debugPrint(
                     '[SyncService] Realtime Event: ${payload.eventType} on businesses',
                   );
+                  // The owner permanently deleted this business (§10.3). On a
+                  // staff device the cascade-DELETE event arrives here: confirm
+                  // via the tombstone, then wipe + sign out (instant path; the
+                  // login pull + reconnect backstops cover offline devices).
+                  if (payload.eventType == PostgresChangeEvent.delete) {
+                    final id = payload.oldRecord['id'] as String?;
+                    if (id == businessId) {
+                      await _wipeIfBusinessDeleted(businessId);
+                    }
+                    return;
+                  }
                   final newRecord = payload.newRecord;
                   if (newRecord.isNotEmpty) {
                     await _restoreTableData('businesses', [newRecord]);
@@ -2365,6 +2507,45 @@ class SupabaseSyncService {
       );
       CrashReporter.record(e, st, context: 'sync.realtime.${payload.table}');
     }
+  }
+
+  /// Authoritative, false-positive-proof check for "did the owner delete this
+  /// business?" (master plan §10.3 staff propagation). Reads the cloud-only
+  /// `deleted_businesses` tombstone, which carries a row ONLY for a genuinely
+  /// deleted business — never for a suspended/removed staff member, so a
+  /// confirmation here can safely trigger a device wipe.
+  ///
+  /// Returns true ONLY on a confirmed tombstone row. Any error (offline, RLS
+  /// hiccup, transient permission-denied) returns false so an ambiguous failure
+  /// can NEVER wipe a staff device. The staff JWT survives the cascade (only the
+  /// CEO's auth.users row is deleted), and the tombstone is readable by any
+  /// authenticated caller, so this succeeds even after membership is gone.
+  Future<bool> _confirmBusinessDeleted(String businessId) async {
+    try {
+      final rows = await _supabase
+          .from('deleted_businesses')
+          .select('business_id')
+          .eq('business_id', businessId)
+          .limit(1);
+      return rows.isNotEmpty;
+    } catch (e) {
+      debugPrint('[SyncService] deleted_businesses check failed: $e');
+      return false;
+    }
+  }
+
+  /// Confirms via the tombstone and, if positive, hands off to AuthService to
+  /// wipe + full-logout this device. Re-entry is guarded inside AuthService.
+  Future<bool> _wipeIfBusinessDeleted(String businessId) async {
+    if (await _confirmBusinessDeleted(businessId)) {
+      debugPrint(
+        '[SyncService] Active business $businessId was deleted by its owner — '
+        'wiping this device.',
+      );
+      await onActiveBusinessDeleted?.call();
+      return true;
+    }
+    return false;
   }
 
   /// Stops listening to real-time changes (e.g., on logout).
@@ -2598,6 +2779,11 @@ class SupabaseSyncService {
       if (businessId != null) {
         unawaited(() async {
           try {
+            // Reconnect backstop for a staff device that was offline when the
+            // owner deleted the business (§10.3) and never relaunched: if the
+            // tombstone now confirms the deletion, wipe + sign out and skip the
+            // pull (it would only fail with permission-denied).
+            if (await _wipeIfBusinessDeleted(businessId)) return;
             final prefs = await SharedPreferences.getInstance();
             final key = '$_lastSyncPrefix$businessId';
             final lastSyncStr = prefs.getString(key);

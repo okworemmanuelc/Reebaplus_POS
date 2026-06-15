@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 
 class CategoryFilterBar extends StatelessWidget {
@@ -63,6 +62,7 @@ class _CategoryChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(25),
@@ -73,16 +73,16 @@ class _CategoryChip extends StatelessWidget {
           vertical: context.getRSize(6),
         ),
         decoration: BoxDecoration(
-          color: isSelected ? blueMain : Colors.transparent,
+          color: isSelected ? scheme.primary : Colors.transparent,
           borderRadius: BorderRadius.circular(25),
           border: Border.all(
-            color: isSelected ? blueMain : borderCol,
+            color: isSelected ? scheme.primary : borderCol,
             width: 1.5,
           ),
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+                    color: scheme.primary.withValues(alpha: 0.3),
                     blurRadius: 8,
                     offset: const Offset(0, 4),
                   ),
@@ -95,7 +95,7 @@ class _CategoryChip extends StatelessWidget {
             style: TextStyle(
               fontSize: context.getRFontSize(13),
               fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-              color: isSelected ? Colors.white : textCol,
+              color: isSelected ? scheme.onPrimary : textCol,
             ),
           ),
         ),

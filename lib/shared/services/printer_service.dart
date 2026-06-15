@@ -10,7 +10,15 @@ class PrinterService {
   PrinterService();
 
   Future<bool> requestPermissions() async {
-    if (!Platform.isAndroid) return true;
+    if (!Platform.isAndroid) {
+      // iOS / macOS use CoreBluetooth, not runtime permissions — there is no
+      // dialog to request here. The native Bluetooth-access prompt fires the
+      // first time the plugin creates its CBCentralManager (i.e. on the first
+      // call below). What matters before we scan is that Bluetooth has actually
+      // powered on; _ensureBleReady waits for that. A false result means
+      // Bluetooth is off or the app was denied access.
+      return _ensureBleReady();
+    }
     try {
       // Printing to an already-paired thermal printer needs BLUETOOTH_CONNECT
       // on Android 12+ (API 31+). BLUETOOTH_SCAN is only for discovering NEW
@@ -36,18 +44,58 @@ class PrinterService {
     }
   }
 
+  /// iOS/macOS only: the plugin lazily creates its `CBCentralManager` on the
+  /// first method call, and its state starts as `.unknown`, settling to
+  /// `.poweredOn` asynchronously. If we scan (`getPairedDevices`) before it
+  /// settles, the native scan sees `.unknown`, never starts, and returns an
+  /// empty list — the #1 reason iOS shows "no printers" on first open. Polling
+  /// `bluetoothEnabled` both creates the manager and reports its real state, so
+  /// we wait (≤ ~3.6s) for it to power on. No-op concept on Android.
+  Future<bool> _ensureBleReady() async {
+    for (var i = 0; i < 12; i++) {
+      try {
+        if (await PrintBluetoothThermal.bluetoothEnabled) return true;
+      } catch (_) {
+        // Adapter not ready yet — keep polling until the timeout.
+      }
+      await Future.delayed(const Duration(milliseconds: 300));
+    }
+    AppLogger.error('Bluetooth not ready (off or unauthorized) after warm-up');
+    return false;
+  }
+
   Future<bool> get isConnected async {
     return await PrintBluetoothThermal.connectionStatus;
   }
 
   Future<List<BluetoothInfo>> getPairedDevices() async {
+    // On Android this reads the OS bonded (paired) list. On iOS/macOS the
+    // plugin runs a ~5s BLE scan instead and returns *nearby* devices — which
+    // silently finds nothing unless CoreBluetooth has powered on first, so warm
+    // it up before scanning. (No-op on Android.)
+    if (!Platform.isAndroid) {
+      await _ensureBleReady();
+    }
     return await PrintBluetoothThermal.pairedBluetooths;
   }
 
   Future<bool> connect(String macAddress) async {
     try {
       AppLogger.info('Connecting to printer: $macAddress');
-      return await PrintBluetoothThermal.connect(macPrinterAddress: macAddress);
+      final ok = await PrintBluetoothThermal.connect(
+        macPrinterAddress: macAddress,
+      );
+      if (!ok) return false;
+      // iOS/macOS (CoreBluetooth): connect() returns true the moment the link
+      // is up, but the plugin only *starts* GATT service + characteristic
+      // discovery at that point. The writable characteristic isn't ready for a
+      // brief window, so an immediate writeBytes finds no characteristic and
+      // fails. Give discovery time to land before reporting success. Android
+      // (Bluetooth Classic SPP) has no separate discovery step.
+      if (!Platform.isAndroid) {
+        await Future.delayed(const Duration(milliseconds: 1500));
+      }
+      return true;
     } catch (e) {
       AppLogger.error('Error connecting to printer: $e');
       return false;

@@ -105,7 +105,7 @@ class _OtpBoxRowState extends State<OtpBoxRow> with WidgetsBindingObserver {
                 focusNode: _focusNode,
                 keyboardType: TextInputType.number,
                 maxLength: 6,
-                textInputAction: TextInputAction.none,
+                textInputAction: TextInputAction.done,
                 onChanged: widget.onChanged,
                 onSubmitted: (_) => widget.onSubmit?.call(),
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],

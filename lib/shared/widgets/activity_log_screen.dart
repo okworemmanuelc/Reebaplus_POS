@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
+import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
 
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/models/activity_log.dart';
@@ -97,7 +98,7 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
                         height: 2.5,
                         width: context.getRSize(16),
                         decoration: BoxDecoration(
-                          color: blueMain,
+                          color: Theme.of(context).colorScheme.primary,
                           borderRadius: BorderRadius.circular(2),
                         ),
                       ),
@@ -119,13 +120,18 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
                 Container(
                   padding: EdgeInsets.all(context.getRSize(8)),
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [blueLight, blueMain],
+                    gradient: LinearGradient(
+                      colors: [
+                        Theme.of(context).colorScheme.secondary,
+                        Theme.of(context).colorScheme.primary,
+                      ],
                     ),
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
-                        color: blueMain.withValues(alpha: 0.3),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.primary.withValues(alpha: 0.3),
                         blurRadius: 8,
                         offset: const Offset(0, 2),
                       ),
@@ -133,7 +139,7 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
                   ),
                   child: Icon(
                     FontAwesomeIcons.clockRotateLeft,
-                    color: Colors.white,
+                    color: Theme.of(context).colorScheme.onPrimary,
                     size: context.getRSize(16),
                   ),
                 ),
@@ -158,7 +164,7 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
                         'System History',
                         style: TextStyle(
                           fontSize: context.getRFontSize(11),
-                          color: blueMain,
+                          color: Theme.of(context).colorScheme.primary,
                           fontWeight: FontWeight.w600,
                         ),
                         maxLines: 1,
@@ -297,20 +303,22 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
     Color borderCol,
   ) {
     // Determine the icon and color based on the action or type
+    final scheme = Theme.of(context).colorScheme;
+    final semantic = Theme.of(context).extension<AppSemanticColors>();
     final actionLower = log.action.toLowerCase();
     IconData icon = FontAwesomeIcons.bolt;
-    Color iconColor = blueMain;
+    Color iconColor = scheme.primary;
 
     if (actionLower.contains('order') ||
         actionLower.contains('pos') ||
         actionLower.contains('sale')) {
       icon = FontAwesomeIcons.cashRegister;
-      iconColor = success;
+      iconColor = semantic?.success ?? success;
     } else if (actionLower.contains('inventory') ||
         actionLower.contains('stock') ||
         actionLower.contains('delivery')) {
       icon = FontAwesomeIcons.boxesStacked;
-      iconColor = const Color(0xFFF59E0B); // amber
+      iconColor = semantic?.warning ?? const Color(0xFFF59E0B); // amber
     } else if (actionLower.contains('customer')) {
       icon = FontAwesomeIcons.user;
       iconColor = const Color(0xFF8B5CF6); // purple
@@ -400,7 +408,7 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
                             vertical: context.getRSize(2),
                           ),
                           decoration: BoxDecoration(
-                            color: blueMain.withValues(alpha: 0.1),
+                            color: scheme.primary.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
@@ -417,7 +425,7 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
                             style: TextStyle(
                               fontSize: context.getRFontSize(10),
                               fontWeight: FontWeight.bold,
-                              color: blueMain,
+                              color: scheme.primary,
                             ),
                           ),
                         ),

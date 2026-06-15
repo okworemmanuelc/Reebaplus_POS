@@ -125,6 +125,8 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       Theme.of(context).textTheme.bodySmall?.color ??
       Theme.of(context).iconTheme.color!;
   Color get _border => Theme.of(context).dividerColor;
+  Color get _primary => Theme.of(context).colorScheme.primary;
+  Color get _onPrimary => Theme.of(context).colorScheme.onPrimary;
 
   @override
   void initState() {
@@ -1152,7 +1154,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   Widget _buildPrintingBanner() {
     return Container(
       width: double.infinity,
-      color: Colors.blue.shade600,
+      color: _primary,
       padding: EdgeInsets.symmetric(
         horizontal: context.getRSize(20),
         vertical: context.getRSize(12),
@@ -1163,13 +1165,13 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           Icon(
             FontAwesomeIcons.print,
             size: context.getRSize(16),
-            color: Colors.white,
+            color: _onPrimary,
           ),
           SizedBox(width: context.getRSize(10)),
           Text(
             'Printing receipt…',
             style: TextStyle(
-              color: Colors.white,
+              color: _onPrimary,
               fontWeight: FontWeight.w700,
               fontSize: context.getRFontSize(14),
             ),
@@ -1433,10 +1435,10 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       child: Container(
         padding: EdgeInsets.all(context.getRSize(14)),
         decoration: BoxDecoration(
-          color: on ? blueMain.withValues(alpha: 0.08) : _surface,
+          color: on ? _primary.withValues(alpha: 0.08) : _surface,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: on ? blueMain : _border,
+            color: on ? _primary : _border,
             width: on ? 1.5 : 1,
           ),
         ),
@@ -1445,7 +1447,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             Icon(
               on ? Icons.check_box : Icons.check_box_outline_blank,
               size: context.getRSize(22),
-              color: on ? blueMain : _subtext,
+              color: on ? _primary : _subtext,
             ),
             SizedBox(width: context.getRSize(12)),
             Expanded(
@@ -1538,10 +1540,10 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           vertical: context.getRSize(12),
         ),
         decoration: BoxDecoration(
-          color: selected ? blueMain.withValues(alpha: 0.10) : _surface,
+          color: selected ? _primary.withValues(alpha: 0.10) : _surface,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: selected ? blueMain : _border,
+            color: selected ? _primary : _border,
             width: selected ? 2 : 1,
           ),
         ),
@@ -1551,7 +1553,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             Icon(
               icon,
               size: context.getRSize(16),
-              color: selected ? blueMain : _subtext,
+              color: selected ? _primary : _subtext,
             ),
             SizedBox(width: context.getRSize(8)),
             Flexible(
@@ -1562,7 +1564,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                 style: TextStyle(
                   fontSize: context.getRFontSize(13),
                   fontWeight: selected ? FontWeight.bold : FontWeight.w600,
-                  color: selected ? blueMain : _subtext,
+                  color: selected ? _primary : _subtext,
                 ),
               ),
             ),
@@ -1823,7 +1825,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
               : _surface,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: active ? blueMain : _border,
+            color: active ? _primary : _border,
             width: active ? 2 : 1,
           ),
         ),
@@ -1833,13 +1835,13 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
               width: context.getRSize(42),
               height: context.getRSize(42),
               decoration: BoxDecoration(
-                color: (active ? blueMain : _subtext).withValues(alpha: 0.12),
+                color: (active ? _primary : _subtext).withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
                 FontAwesomeIcons.fileInvoiceDollar,
                 size: context.getRSize(18),
-                color: active ? blueMain : _subtext,
+                color: active ? _primary : _subtext,
               ),
             ),
             SizedBox(width: context.getRSize(14)),
@@ -1852,7 +1854,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                     style: TextStyle(
                       fontWeight: active ? FontWeight.bold : FontWeight.w600,
                       fontSize: context.getRFontSize(14),
-                      color: active ? blueMain : _text,
+                      color: active ? _primary : _text,
                     ),
                   ),
                   SizedBox(height: context.getRSize(2)),
@@ -1871,10 +1873,10 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
               width: context.getRSize(22),
               height: context.getRSize(22),
               decoration: BoxDecoration(
-                color: active ? blueMain : Colors.transparent,
+                color: active ? _primary : Colors.transparent,
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: active ? blueMain : _border,
+                  color: active ? _primary : _border,
                   width: 2,
                 ),
               ),
@@ -1882,7 +1884,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                   ? Icon(
                       Icons.check,
                       size: context.getRSize(14),
-                      color: Colors.white,
+                      color: _onPrimary,
                     )
                   : null,
             ),
@@ -2033,7 +2035,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             style: TextStyle(
               fontSize: context.getRFontSize(bold ? 18 : 14),
               fontWeight: FontWeight.w800,
-              color: accent ? blueMain : _text,
+              color: accent ? _primary : _text,
             ),
           ),
         ],

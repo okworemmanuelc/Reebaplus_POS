@@ -6,6 +6,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:reebaplus_pos/core/data/business_types.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
+import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
 
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -321,6 +322,9 @@ class _CartScreenState extends ConsumerState<CartScreen>
       Theme.of(context).textTheme.bodySmall?.color ??
       Theme.of(context).iconTheme.color!;
   Color get _border => Theme.of(context).dividerColor;
+  Color get _primary => Theme.of(context).colorScheme.primary;
+  Color get _success =>
+      Theme.of(context).extension<AppSemanticColors>()?.success ?? success;
 
   void _showChangeCustomerModal() {
     // Default picker store — lone owner picks from POS lock.
@@ -686,7 +690,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
         vertical: context.getRSize(2),
       ),
       decoration: BoxDecoration(
-        color: Colors.green.withValues(alpha: 0.12),
+        color: _success.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
@@ -694,7 +698,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
         style: TextStyle(
           fontSize: context.getRFontSize(11),
           fontWeight: FontWeight.w800,
-          color: Colors.green.shade700,
+          color: _success,
         ),
       ),
     );
@@ -722,7 +726,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
           style: TextStyle(
             fontSize: context.getRFontSize(large ? 22 : 15),
             fontWeight: FontWeight.w800,
-            color: large ? blueMain : _text,
+            color: large ? _primary : _text,
           ),
         ),
       ],
@@ -1119,7 +1123,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                         rawColor.replaceFirst('#', '0xFF'),
                                       ),
                                     )
-                                  : Colors.blue;
+                                  : Theme.of(context).colorScheme.primary;
                               // Build card once, reused in both paths
                               final card = InkWell(
                                 borderRadius: BorderRadius.circular(14),
@@ -1325,7 +1329,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                             style: TextStyle(
                                               fontSize: context.getRFontSize(14),
                                               fontWeight: FontWeight.w600,
-                                              color: Colors.green.shade700,
+                                              color: _success,
                                             ),
                                           ),
                                           Text(
@@ -1333,7 +1337,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                             style: TextStyle(
                                               fontSize: context.getRFontSize(15),
                                               fontWeight: FontWeight.w800,
-                                              color: Colors.green.shade700,
+                                              color: _success,
                                             ),
                                           ),
                                         ],
@@ -1367,7 +1371,9 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                                   decoration: BoxDecoration(
                                                     gradient: LinearGradient(
                                                       colors: [
-                                                        blueLight,
+                                                        Theme.of(
+                                                          context,
+                                                        ).colorScheme.secondary,
                                                         Theme.of(
                                                           context,
                                                         ).colorScheme.primary,
@@ -1382,7 +1388,9 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                                     FontAwesomeIcons
                                                         .beerMugEmpty,
                                                     size: context.getRSize(14),
-                                                    color: Colors.white,
+                                                    color: Theme.of(
+                                                      context,
+                                                    ).colorScheme.onPrimary,
                                                   ),
                                                 ),
                                                 SizedBox(

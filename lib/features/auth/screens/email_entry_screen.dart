@@ -54,7 +54,16 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
     // in and revoked this session). Read-and-clear so a later rebuild of
     // this screen doesn't show it again.
     final auth = ref.read(authProvider);
-    if (auth.kickedByRemoteSignIn) {
+    if (auth.businessDeletedRemotely) {
+      auth.businessDeletedRemotely = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        AppNotification.showInfo(
+          context,
+          'This business was deleted by the owner. You have been signed out.',
+        );
+      });
+    } else if (auth.kickedByRemoteSignIn) {
       auth.kickedByRemoteSignIn = false;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;

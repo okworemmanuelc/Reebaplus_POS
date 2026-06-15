@@ -7,6 +7,7 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/shared/models/notification.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
+import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
 import 'package:reebaplus_pos/features/orders/screens/crate_return_approval_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 
@@ -88,10 +89,12 @@ class NotificationsModal extends ConsumerWidget {
                           vertical: context.getRSize(12),
                         ),
                         decoration: BoxDecoration(
-                          color: blueMain.withValues(alpha: 0.1),
+                          color: Theme.of(context).colorScheme.primary
+                              .withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
-                            color: blueMain.withValues(alpha: 0.2),
+                            color: Theme.of(context).colorScheme.primary
+                                .withValues(alpha: 0.2),
                           ),
                         ),
                         child: Row(
@@ -99,9 +102,9 @@ class NotificationsModal extends ConsumerWidget {
                             SizedBox(
                               width: context.getRSize(14),
                               height: context.getRSize(14),
-                              child: const CircularProgressIndicator(
+                              child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                color: blueMain,
+                                color: Theme.of(context).colorScheme.primary,
                               ),
                             ),
                             SizedBox(width: context.getRSize(12)),
@@ -109,7 +112,7 @@ class NotificationsModal extends ConsumerWidget {
                               child: Text(
                                 'Syncing $count file${count == 1 ? '' : 's'} to cloud...',
                                 style: TextStyle(
-                                  color: blueMain,
+                                  color: Theme.of(context).colorScheme.primary,
                                   fontSize: context.getRFontSize(13),
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -180,7 +183,7 @@ class NotificationsModal extends ConsumerWidget {
               Icon(
                 FontAwesomeIcons.bell,
                 size: context.getRSize(20),
-                color: blueMain,
+                color: Theme.of(context).colorScheme.primary,
               ),
               SizedBox(width: context.getRSize(12)),
               Text(
@@ -250,7 +253,7 @@ class _NotificationCard extends ConsumerWidget {
     final Color borderCol = Theme.of(context).dividerColor;
 
     final IconData icon = _getIconForType(notification.type);
-    final Color iconColor = _getColorForType(notification.type);
+    final Color iconColor = _getColorForType(context, notification.type);
 
     return GestureDetector(
       onTap: notification.type == 'product_update'
@@ -336,15 +339,17 @@ class _NotificationCard extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Row(
+        title: Row(
           children: [
             Icon(
               FontAwesomeIcons.penToSquare,
               size: 16,
-              color: Color(0xFFF5A623),
+              color:
+                  Theme.of(ctx).extension<AppSemanticColors>()?.warning ??
+                  const Color(0xFFF5A623),
             ),
-            SizedBox(width: 8),
-            Text('Product Update'),
+            const SizedBox(width: 8),
+            const Text('Product Update'),
           ],
         ),
         content: Column(
@@ -424,44 +429,48 @@ class _NotificationCard extends ConsumerWidget {
     }
   }
 
-  Color _getColorForType(String type) {
+  Color _getColorForType(BuildContext context, String type) {
+    final scheme = Theme.of(context).colorScheme;
+    final semantic = Theme.of(context).extension<AppSemanticColors>();
+    final successCol = semantic?.success ?? success;
+    final warningCol = semantic?.warning ?? const Color(0xFFF5A623);
     switch (type) {
       case 'new_order':
-        return success;
+        return successCol;
       case 'low_stock':
-        return const Color(0xFFF59E0B);
+        return warningCol;
       case 'large_expense':
-        return danger;
+        return scheme.error;
       case 'new_delivery':
-        return blueMain;
+        return scheme.primary;
       case 'failed_transaction':
-        return danger;
+        return scheme.error;
       case 'product_update':
-        return const Color(0xFFF5A623);
+        return warningCol;
       case 'crate_short_return':
-        return const Color(0xFFF5A623);
+        return warningCol;
       case 'crate_return_approved':
-        return success;
+        return successCol;
       case 'crate_return_rejected':
-        return danger;
+        return scheme.error;
       case 'stock_approval.requested':
-        return const Color(0xFFF5A623);
+        return warningCol;
       case 'stock_approval.approved':
-        return success;
+        return successCol;
       case 'stock_approval.rejected':
-        return danger;
+        return scheme.error;
       case 'staff.invited':
-        return blueMain;
+        return scheme.primary;
       case 'staff.suspended':
-        return danger;
+        return scheme.error;
       case 'staff.reactivated':
-        return success;
+        return successCol;
       case 'staff.role_changed':
-        return blueMain;
+        return scheme.primary;
       case 'staff.profile_updated':
-        return blueMain;
+        return scheme.primary;
       default:
-        return blueMain;
+        return scheme.primary;
     }
   }
 

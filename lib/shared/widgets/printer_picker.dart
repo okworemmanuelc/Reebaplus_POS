@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
@@ -78,16 +80,36 @@ class _PrinterPickerState extends ConsumerState<PrinterPicker> {
           ),
           Divider(height: 1, color: border),
           if (_isLoading)
-            const Padding(
-              padding: EdgeInsets.all(32),
-              child: Center(child: CircularProgressIndicator()),
+            Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Center(child: CircularProgressIndicator()),
+                  // iOS/macOS scan for nearby printers (~5s); a bare spinner
+                  // looks stuck, so label what's happening.
+                  if (!Platform.isAndroid) ...[
+                    SizedBox(height: context.getRSize(12)),
+                    Text(
+                      'Scanning for nearby printers…',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: subtext),
+                    ),
+                  ],
+                ],
+              ),
             )
           else if (_devices.isEmpty)
             Padding(
               padding: const EdgeInsets.all(32),
               child: Center(
                 child: Text(
-                  'No paired printers found.\nPlease pair your printer in Bluetooth settings.',
+                  // iOS/macOS discover BLE printers by scanning while they're
+                  // powered on — they are NOT paired in iOS Bluetooth settings,
+                  // so don't tell users to go there.
+                  Platform.isAndroid
+                      ? 'No paired printers found.\nPair your printer in Bluetooth settings, then tap refresh.'
+                      : 'No printers found nearby.\nMake sure your printer is switched on and in range and Bluetooth is enabled, then tap refresh.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: subtext),
                 ),

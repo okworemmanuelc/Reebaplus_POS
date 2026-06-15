@@ -66,6 +66,12 @@ class AuthService extends ValueNotifier<UserData?> {
     _sync.currentSessionIdResolver = () => currentSessionId;
     _sync.onCurrentSessionRevoked = _handleRemoteKick;
 
+    // Propagate an owner's "Delete Business & Account" (§10.3) to this device:
+    // when SyncService confirms (via the cloud tombstone) that the active
+    // business was permanently deleted, wipe local data + full-logout so a
+    // staff device doesn't loop on permission-denied pulls.
+    _sync.onActiveBusinessDeleted = _handleActiveBusinessDeleted;
+
     _sync.currentUserIdResolver = () => value?.id;
   }
 
@@ -664,6 +670,41 @@ class AuthService extends ValueNotifier<UserData?> {
   /// sign-in. Consumed by [EmailEntryScreen] to show a snackbar, then reset.
   bool kickedByRemoteSignIn = false;
 
+  /// Re-entry guard for the business-deleted wipe (§10.3): the realtime
+  /// DELETE, the login-pull backstop, and the reconnect backstop can all fire
+  /// for the same deletion.
+  bool _handlingBusinessDeleted = false;
+
+  /// One-shot flag: set to true when this device was wiped because the owner
+  /// permanently deleted the business (§10.3). Consumed by [EmailEntryScreen]
+  /// to show a snackbar, then reset.
+  bool businessDeletedRemotely = false;
+
+  /// Called by SyncService (after a positive cloud-tombstone confirmation) when
+  /// the active business has been permanently deleted by its owner (§10.3).
+  /// Wipes ALL local data and full-logout to Welcome — the staff equivalent of
+  /// the CEO's own [deleteBusinessAndAccount] wipe.
+  // sync-exempt: §10.3 — mirrors a business the cloud already hard-deleted; the
+  // local clearAllData() wipe pushes nothing (same contract as
+  // deleteBusinessAndAccount). No raw synced-table write happens here.
+  Future<void> _handleActiveBusinessDeleted() async {
+    if (_handlingBusinessDeleted) return;
+    _handlingBusinessDeleted = true;
+    try {
+      businessDeletedRemotely = true;
+      // clearAllData failing must NOT block logout — the cloud already
+      // destroyed the business; we just need this device off it.
+      try {
+        await _db.clearAllData();
+      } catch (e) {
+        debugPrint('[AuthService] business-deleted clearAllData error: $e');
+      }
+      await fullLogout();
+    } finally {
+      _handlingBusinessDeleted = false;
+    }
+  }
+
   /// Called by SyncService when our session row's revoked_at flips, or by
   /// [verifyLocalSessionStillActive] when the local row is missing/expired.
   Future<void> _handleRemoteKick() async {
@@ -925,7 +966,7 @@ class AuthService extends ValueNotifier<UserData?> {
 
   /// Maps a `delete_business` RPC error to plain English for the CEO.
   String _deleteBusinessMessage(PostgrestException e) {
-    if (e.message.contains('not_ceo_of_business') || (e.code == '42501')) {
+    if (e.message.contains('not_owner_of_business') || (e.code == '42501')) {
       return 'Only the business owner can delete the business.';
     }
     return 'Could not delete your business. Please try again.';
