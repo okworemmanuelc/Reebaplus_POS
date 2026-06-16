@@ -57,6 +57,21 @@ Future<PostVerifyRoute> resolvePostVerifyRoute(
     preferredBusinessId: account?.businessId,
   );
 
+  // Cloud confirms this auth identity has no business, yet a local row for
+  // this email survives from a previous business on this device — most
+  // commonly: the same email re-registered after "Delete Business & Account"
+  // (§10.3) and the device's wipe never ran/completed. A confirmed
+  // `deleted_businesses` tombstone for the stale row's business wipes this
+  // device and clears `localUser`, so the email is treated as brand-new
+  // rather than logging into the dead tenant (tenant_mismatch / RLS errors
+  // on pull and push). Ambiguous results (offline, no tombstone) leave
+  // `localUser` untouched — offline PIN login must keep working.
+  if (account == null && localUser != null) {
+    if (await auth.wipeOrphanedLocalBusiness(localUser.businessId)) {
+      localUser = null;
+    }
+  }
+
   if (account != null && localUser == null) {
     return ExistingAccountRoute(account);
   }

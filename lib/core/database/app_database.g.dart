@@ -2559,17 +2559,6 @@ class $UsersTable extends Users with TableInfo<$UsersTable, UserData> {
     requiredDuringInsert: false,
     defaultValue: currentDateAndTime,
   );
-  static const VerificationMeta _lastNotificationSentAtMeta =
-      const VerificationMeta('lastNotificationSentAt');
-  @override
-  late final GeneratedColumn<DateTime> lastNotificationSentAt =
-      GeneratedColumn<DateTime>(
-        'last_notification_sent_at',
-        aliasedName,
-        true,
-        type: DriftSqlType.dateTime,
-        requiredDuringInsert: false,
-      );
   static const VerificationMeta _lastUpdatedAtMeta = const VerificationMeta(
     'lastUpdatedAt',
   );
@@ -2599,7 +2588,6 @@ class $UsersTable extends Users with TableInfo<$UsersTable, UserData> {
     biometricEnabled,
     storeId,
     createdAt,
-    lastNotificationSentAt,
     lastUpdatedAt,
   ];
   @override
@@ -2716,15 +2704,6 @@ class $UsersTable extends Users with TableInfo<$UsersTable, UserData> {
         createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
       );
     }
-    if (data.containsKey('last_notification_sent_at')) {
-      context.handle(
-        _lastNotificationSentAtMeta,
-        lastNotificationSentAt.isAcceptableOrUnknown(
-          data['last_notification_sent_at']!,
-          _lastNotificationSentAtMeta,
-        ),
-      );
-    }
     if (data.containsKey('last_updated_at')) {
       context.handle(
         _lastUpdatedAtMeta,
@@ -2799,10 +2778,6 @@ class $UsersTable extends Users with TableInfo<$UsersTable, UserData> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
-      lastNotificationSentAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}last_notification_sent_at'],
-      ),
       lastUpdatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}last_updated_at'],
@@ -2831,7 +2806,6 @@ class UserData extends DataClass implements Insertable<UserData> {
   final bool biometricEnabled;
   final String? storeId;
   final DateTime createdAt;
-  final DateTime? lastNotificationSentAt;
   final DateTime lastUpdatedAt;
   const UserData({
     required this.id,
@@ -2848,7 +2822,6 @@ class UserData extends DataClass implements Insertable<UserData> {
     required this.biometricEnabled,
     this.storeId,
     required this.createdAt,
-    this.lastNotificationSentAt,
     required this.lastUpdatedAt,
   });
   @override
@@ -2882,11 +2855,6 @@ class UserData extends DataClass implements Insertable<UserData> {
       map['store_id'] = Variable<String>(storeId);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
-    if (!nullToAbsent || lastNotificationSentAt != null) {
-      map['last_notification_sent_at'] = Variable<DateTime>(
-        lastNotificationSentAt,
-      );
-    }
     map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
     return map;
   }
@@ -2921,9 +2889,6 @@ class UserData extends DataClass implements Insertable<UserData> {
           ? const Value.absent()
           : Value(storeId),
       createdAt: Value(createdAt),
-      lastNotificationSentAt: lastNotificationSentAt == null && nullToAbsent
-          ? const Value.absent()
-          : Value(lastNotificationSentAt),
       lastUpdatedAt: Value(lastUpdatedAt),
     );
   }
@@ -2948,9 +2913,6 @@ class UserData extends DataClass implements Insertable<UserData> {
       biometricEnabled: serializer.fromJson<bool>(json['biometricEnabled']),
       storeId: serializer.fromJson<String?>(json['storeId']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
-      lastNotificationSentAt: serializer.fromJson<DateTime?>(
-        json['lastNotificationSentAt'],
-      ),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
     );
   }
@@ -2972,9 +2934,6 @@ class UserData extends DataClass implements Insertable<UserData> {
       'biometricEnabled': serializer.toJson<bool>(biometricEnabled),
       'storeId': serializer.toJson<String?>(storeId),
       'createdAt': serializer.toJson<DateTime>(createdAt),
-      'lastNotificationSentAt': serializer.toJson<DateTime?>(
-        lastNotificationSentAt,
-      ),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
     };
   }
@@ -2994,7 +2953,6 @@ class UserData extends DataClass implements Insertable<UserData> {
     bool? biometricEnabled,
     Value<String?> storeId = const Value.absent(),
     DateTime? createdAt,
-    Value<DateTime?> lastNotificationSentAt = const Value.absent(),
     DateTime? lastUpdatedAt,
   }) => UserData(
     id: id ?? this.id,
@@ -3013,9 +2971,6 @@ class UserData extends DataClass implements Insertable<UserData> {
     biometricEnabled: biometricEnabled ?? this.biometricEnabled,
     storeId: storeId.present ? storeId.value : this.storeId,
     createdAt: createdAt ?? this.createdAt,
-    lastNotificationSentAt: lastNotificationSentAt.present
-        ? lastNotificationSentAt.value
-        : this.lastNotificationSentAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
   );
   UserData copyWithCompanion(UsersCompanion data) {
@@ -3046,9 +3001,6 @@ class UserData extends DataClass implements Insertable<UserData> {
           : this.biometricEnabled,
       storeId: data.storeId.present ? data.storeId.value : this.storeId,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-      lastNotificationSentAt: data.lastNotificationSentAt.present
-          ? data.lastNotificationSentAt.value
-          : this.lastNotificationSentAt,
       lastUpdatedAt: data.lastUpdatedAt.present
           ? data.lastUpdatedAt.value
           : this.lastUpdatedAt,
@@ -3072,7 +3024,6 @@ class UserData extends DataClass implements Insertable<UserData> {
           ..write('biometricEnabled: $biometricEnabled, ')
           ..write('storeId: $storeId, ')
           ..write('createdAt: $createdAt, ')
-          ..write('lastNotificationSentAt: $lastNotificationSentAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt')
           ..write(')'))
         .toString();
@@ -3094,7 +3045,6 @@ class UserData extends DataClass implements Insertable<UserData> {
     biometricEnabled,
     storeId,
     createdAt,
-    lastNotificationSentAt,
     lastUpdatedAt,
   );
   @override
@@ -3115,7 +3065,6 @@ class UserData extends DataClass implements Insertable<UserData> {
           other.biometricEnabled == this.biometricEnabled &&
           other.storeId == this.storeId &&
           other.createdAt == this.createdAt &&
-          other.lastNotificationSentAt == this.lastNotificationSentAt &&
           other.lastUpdatedAt == this.lastUpdatedAt);
 }
 
@@ -3134,7 +3083,6 @@ class UsersCompanion extends UpdateCompanion<UserData> {
   final Value<bool> biometricEnabled;
   final Value<String?> storeId;
   final Value<DateTime> createdAt;
-  final Value<DateTime?> lastNotificationSentAt;
   final Value<DateTime> lastUpdatedAt;
   final Value<int> rowid;
   const UsersCompanion({
@@ -3152,7 +3100,6 @@ class UsersCompanion extends UpdateCompanion<UserData> {
     this.biometricEnabled = const Value.absent(),
     this.storeId = const Value.absent(),
     this.createdAt = const Value.absent(),
-    this.lastNotificationSentAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -3171,7 +3118,6 @@ class UsersCompanion extends UpdateCompanion<UserData> {
     this.biometricEnabled = const Value.absent(),
     this.storeId = const Value.absent(),
     this.createdAt = const Value.absent(),
-    this.lastNotificationSentAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : businessId = Value(businessId),
@@ -3192,7 +3138,6 @@ class UsersCompanion extends UpdateCompanion<UserData> {
     Expression<bool>? biometricEnabled,
     Expression<String>? storeId,
     Expression<DateTime>? createdAt,
-    Expression<DateTime>? lastNotificationSentAt,
     Expression<DateTime>? lastUpdatedAt,
     Expression<int>? rowid,
   }) {
@@ -3211,8 +3156,6 @@ class UsersCompanion extends UpdateCompanion<UserData> {
       if (biometricEnabled != null) 'biometric_enabled': biometricEnabled,
       if (storeId != null) 'store_id': storeId,
       if (createdAt != null) 'created_at': createdAt,
-      if (lastNotificationSentAt != null)
-        'last_notification_sent_at': lastNotificationSentAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -3233,7 +3176,6 @@ class UsersCompanion extends UpdateCompanion<UserData> {
     Value<bool>? biometricEnabled,
     Value<String?>? storeId,
     Value<DateTime>? createdAt,
-    Value<DateTime?>? lastNotificationSentAt,
     Value<DateTime>? lastUpdatedAt,
     Value<int>? rowid,
   }) {
@@ -3252,8 +3194,6 @@ class UsersCompanion extends UpdateCompanion<UserData> {
       biometricEnabled: biometricEnabled ?? this.biometricEnabled,
       storeId: storeId ?? this.storeId,
       createdAt: createdAt ?? this.createdAt,
-      lastNotificationSentAt:
-          lastNotificationSentAt ?? this.lastNotificationSentAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -3304,11 +3244,6 @@ class UsersCompanion extends UpdateCompanion<UserData> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
-    if (lastNotificationSentAt.present) {
-      map['last_notification_sent_at'] = Variable<DateTime>(
-        lastNotificationSentAt.value,
-      );
-    }
     if (lastUpdatedAt.present) {
       map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
     }
@@ -3335,7 +3270,6 @@ class UsersCompanion extends UpdateCompanion<UserData> {
           ..write('biometricEnabled: $biometricEnabled, ')
           ..write('storeId: $storeId, ')
           ..write('createdAt: $createdAt, ')
-          ..write('lastNotificationSentAt: $lastNotificationSentAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -46073,7 +46007,6 @@ typedef $$UsersTableCreateCompanionBuilder =
       Value<bool> biometricEnabled,
       Value<String?> storeId,
       Value<DateTime> createdAt,
-      Value<DateTime?> lastNotificationSentAt,
       Value<DateTime> lastUpdatedAt,
       Value<int> rowid,
     });
@@ -46093,7 +46026,6 @@ typedef $$UsersTableUpdateCompanionBuilder =
       Value<bool> biometricEnabled,
       Value<String?> storeId,
       Value<DateTime> createdAt,
-      Value<DateTime?> lastNotificationSentAt,
       Value<DateTime> lastUpdatedAt,
       Value<int> rowid,
     });
@@ -46384,11 +46316,6 @@ class $$UsersTableFilterComposer extends Composer<_$AppDatabase, $UsersTable> {
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<DateTime> get lastNotificationSentAt => $composableBuilder(
-    column: $table.lastNotificationSentAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -46739,11 +46666,6 @@ class $$UsersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<DateTime> get lastNotificationSentAt => $composableBuilder(
-    column: $table.lastNotificationSentAt,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<DateTime> get lastUpdatedAt => $composableBuilder(
     column: $table.lastUpdatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -46850,11 +46772,6 @@ class $$UsersTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
-
-  GeneratedColumn<DateTime> get lastNotificationSentAt => $composableBuilder(
-    column: $table.lastNotificationSentAt,
-    builder: (column) => column,
-  );
 
   GeneratedColumn<DateTime> get lastUpdatedAt => $composableBuilder(
     column: $table.lastUpdatedAt,
@@ -47189,7 +47106,6 @@ class $$UsersTableTableManager
                 Value<bool> biometricEnabled = const Value.absent(),
                 Value<String?> storeId = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
-                Value<DateTime?> lastNotificationSentAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => UsersCompanion(
@@ -47207,7 +47123,6 @@ class $$UsersTableTableManager
                 biometricEnabled: biometricEnabled,
                 storeId: storeId,
                 createdAt: createdAt,
-                lastNotificationSentAt: lastNotificationSentAt,
                 lastUpdatedAt: lastUpdatedAt,
                 rowid: rowid,
               ),
@@ -47227,7 +47142,6 @@ class $$UsersTableTableManager
                 Value<bool> biometricEnabled = const Value.absent(),
                 Value<String?> storeId = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
-                Value<DateTime?> lastNotificationSentAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => UsersCompanion.insert(
@@ -47245,7 +47159,6 @@ class $$UsersTableTableManager
                 biometricEnabled: biometricEnabled,
                 storeId: storeId,
                 createdAt: createdAt,
-                lastNotificationSentAt: lastNotificationSentAt,
                 lastUpdatedAt: lastUpdatedAt,
                 rowid: rowid,
               ),

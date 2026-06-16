@@ -137,7 +137,6 @@ class Users extends Table {
       boolean().withDefault(const Constant(false))();
   TextColumn get storeId => text().nullable().references(Stores, #id)();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
-  DateTimeColumn get lastNotificationSentAt => dateTime().nullable()();
   DateTimeColumn get lastUpdatedAt =>
       dateTime().withDefault(currentDateAndTime)();
 
@@ -1676,7 +1675,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 48;
+  int get schemaVersion => 49;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3464,6 +3463,26 @@ class AppDatabase extends _$AppDatabase {
           "VALUES ('settings.delete_business', "
           "'Delete the business and account', 'System')",
         );
+      }
+      if (from < 49) {
+        // v49: drop the dead `last_notification_sent_at` column from users. The
+        // "Waiting for Assignment" screen and its 48h escalation-notification
+        // system were removed; nothing reads or writes the column anymore.
+        // Mirrors supabase/migrations/0115_drop_last_notification_sent_at.sql.
+        //
+        // Raw DROP COLUMN (not m.alterTable(TableMigration(users))) on purpose:
+        // TableMigration rebuilds from the CURRENT Drift schema and couples this
+        // block to it — exactly the trap the v12 users rebuild hit (see the
+        // `from < 12` note above). DROP COLUMN is independent of the live shape.
+        // SQLite 3.35+ supports it (bundled via sqlite3_flutter_libs). Wrapped in
+        // try/catch for idempotency: the revert-then-re-upgrade migration tests
+        // build users at the v49 shape (no column) before driving onUpgrade, so
+        // the DROP would otherwise error with "no such column".
+        try {
+          await customStatement(
+            'ALTER TABLE users DROP COLUMN last_notification_sent_at',
+          );
+        } catch (_) {/* already gone */}
       }
     },
     beforeOpen: (details) async {

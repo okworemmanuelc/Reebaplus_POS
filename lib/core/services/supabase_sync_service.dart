@@ -435,7 +435,6 @@ class SupabaseSyncService {
       'avatar_color',
       'biometric_enabled',
       'store_id',
-      'last_notification_sent_at',
       'created_at',
       'last_updated_at',
       // NOTE: `phone`, `status`, `joined_at`, `is_deleted` were removed
@@ -885,7 +884,7 @@ class SupabaseSyncService {
                   .from(group.table)
                   .delete()
                   .inFilter('id', deleteIds)
-                  .timeout(_pushChunkTimeout);
+                  .timeout(chunkTimeout);
             }
           }
           await _db.syncDao.markDoneBatch(chunkIds);
@@ -2534,6 +2533,14 @@ class SupabaseSyncService {
     }
   }
 
+  /// Public wrapper for [_confirmBusinessDeleted] — used by
+  /// [AuthService.wipeOrphanedLocalBusiness] to detect a stale local user row
+  /// left behind by a previous "Delete Business & Account" (§10.3) on THIS
+  /// device, e.g. when the same email re-registers afterwards. Same
+  /// false-positive-proof contract: true only on a confirmed tombstone row.
+  Future<bool> confirmBusinessDeleted(String businessId) =>
+      _confirmBusinessDeleted(businessId);
+
   /// Confirms via the tombstone and, if positive, hands off to AuthService to
   /// wipe + full-logout this device. Re-entry is guarded inside AuthService.
   Future<bool> _wipeIfBusinessDeleted(String businessId) async {
@@ -3324,7 +3331,7 @@ class SupabaseSyncService {
           // Cloud-owned fields mirrored here (keep in sync with app_database
           // `Users` table and `0001_initial.sql public.users`):
           //   businessId, authUserId, name, email, storeId,
-          //   createdAt, lastNotificationSentAt, lastUpdatedAt.
+          //   createdAt, lastUpdatedAt.
           // Device-local fields intentionally omitted (never overwrite from
           // cloud):
           //   pin, pinHash, pinSalt, pinIterations, passwordHash,
@@ -3346,9 +3353,6 @@ class SupabaseSyncService {
               r['createdAt'],
               fallback: lastUpdatedAt,
             );
-            final lastNotificationSentAt = r['lastNotificationSentAt'] == null
-                ? null
-                : parseTs(r['lastNotificationSentAt']);
 
             if (existing != null) {
               await (_db.update(_db.users)
@@ -3359,7 +3363,6 @@ class SupabaseSyncService {
                   name: Value(r['name'] as String? ?? ''),
                   email: Value(r['email'] as String?),
                   storeId: Value(r['storeId'] as String?),
-                  lastNotificationSentAt: Value(lastNotificationSentAt),
                   lastUpdatedAt: Value(lastUpdatedAt),
                 ),
               );
@@ -3376,7 +3379,6 @@ class SupabaseSyncService {
                       pin: kSetupRequiredPin,
                       storeId: Value(r['storeId'] as String?),
                       createdAt: Value(createdAt),
-                      lastNotificationSentAt: Value(lastNotificationSentAt),
                       lastUpdatedAt: Value(lastUpdatedAt),
                     ),
                   );

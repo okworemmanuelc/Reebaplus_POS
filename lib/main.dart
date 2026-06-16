@@ -21,7 +21,6 @@ import 'package:reebaplus_pos/features/auth/screens/login_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/who_is_working_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/welcome_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/otp_verification_screen.dart';
-import 'package:reebaplus_pos/features/auth/screens/store_assignment_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_background.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
@@ -401,10 +400,6 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
                 case PostLoginRoute.none:
                   break;
               }
-            }
- 
-            if (user.storeId == null) {
-              return StoreAssignmentScreen(user: user);
             }
 
             // Subscription gate (master plan §32). The PRO / FREE TRIAL name

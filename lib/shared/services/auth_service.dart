@@ -581,9 +581,6 @@ class AuthService extends ValueNotifier<UserData?> {
                 debugPrint('[AuthService] touchLastLogin error: $e')),
       );
 
-      if (user.storeId == null) {
-        scheduleMicrotask(() => _handleOnboardingAlerts(user));
-      }
 
       // Record a session row for this login. Fire-and-forget — local DB write
       // shouldn't block the post-login UI; failures are logged.
@@ -680,6 +677,26 @@ class AuthService extends ValueNotifier<UserData?> {
   /// to show a snackbar, then reset.
   bool businessDeletedRemotely = false;
 
+  /// Checks the `deleted_businesses` tombstone for [businessId]. If confirmed,
+  /// the stale local `users` row [resolvePostVerifyRoute] just found belongs to
+  /// a business THIS device already had — and which its owner permanently
+  /// deleted (§10.3) — most commonly because the same email re-registered
+  /// afterwards and the device's earlier wipe never ran/completed. Wipes all
+  /// local data so the re-registration proceeds on a clean device, and returns
+  /// true so the caller treats this as "no local user".
+  ///
+  /// Any ambiguity (offline, no tombstone) returns false — never a
+  /// false-positive wipe, same guarantee as [_handleActiveBusinessDeleted].
+  Future<bool> wipeOrphanedLocalBusiness(String businessId) async {
+    if (!await _sync.confirmBusinessDeleted(businessId)) return false;
+    try {
+      await _db.clearAllData();
+    } catch (e) {
+      debugPrint('[AuthService] wipeOrphanedLocalBusiness clearAllData error: $e');
+    }
+    return true;
+  }
+
   /// Called by SyncService (after a positive cloud-tombstone confirmation) when
   /// the active business has been permanently deleted by its owner (§10.3).
   /// Wipes ALL local data and full-logout to Welcome — the staff equivalent of
@@ -734,83 +751,6 @@ class AuthService extends ValueNotifier<UserData?> {
     }
   }
 
-  /// Single entry point for all initialization/notification logic for new/unassigned staff.
-  Future<void> _handleOnboardingAlerts(UserData user) async {
-    try {
-      final now = DateTime.now();
-      UserData currentUser = user;
-
-      final joinDate = currentUser.createdAt;
-      final hoursSinceJoin = now.difference(joinDate).inHours;
-      final deadline = joinDate.add(const Duration(hours: 48));
-      final deadlineStr =
-          '${deadline.hour.toString().padLeft(2, '0')}:${deadline.minute.toString().padLeft(2, '0')} on ${deadline.day}/${deadline.month}';
-
-      // 2. Initial notification to CEO
-      if (currentUser.lastNotificationSentAt == null) {
-        await _db.notificationsDao.create(
-          'warning',
-          'Assignment Required: ${currentUser.name} has joined. Please assign a store before the 48h deadline ($deadlineStr).',
-          linkedRecordId: currentUser.id.toString(),
-        );
-
-        // Bump must reach the cloud so a second device doesn't re-fire
-        // the same warning. Companion carries the id so enqueueUpsert
-        // can coalesce on (action_type, payload.id).
-        final notifBump = UsersCompanion(
-          id: Value(currentUser.id),
-          lastNotificationSentAt: Value(now),
-        );
-        await (_db.update(_db.users)..where((u) => u.id.equals(currentUser.id)))
-            .write(notifBump);
-        // Full-row enqueue: a partial users upsert omits the NOT NULL name.
-        // Local-only columns (pin, etc.) are stripped by the cloud whitelist.
-        await _db.syncDao.enqueueUpsert(
-          'users',
-          currentUser.toCompanion(true).copyWith(
-                lastNotificationSentAt: Value(now),
-              ),
-        );
-      }
-
-      // 3. Escalation notification (if 48h passed)
-      if (hoursSinceJoin >= 48) {
-        final lastSent = currentUser.lastNotificationSentAt;
-        if (lastSent != null && now.difference(lastSent).inHours >= 24) {
-          await _db.notificationsDao.create(
-            'danger',
-            'URGENT: 48h Countdown expired for ${currentUser.name} (Deadline: $deadlineStr). Store assignment remains pending.',
-            linkedRecordId: currentUser.id.toString(),
-          );
-
-          final escalationBump = UsersCompanion(
-            id: Value(currentUser.id),
-            lastNotificationSentAt: Value(now),
-          );
-          await (_db.update(_db.users)
-                ..where((u) => u.id.equals(currentUser.id)))
-              .write(escalationBump);
-          // Full-row enqueue (see above): partial users upsert omits NOT NULL name.
-          await _db.syncDao.enqueueUpsert(
-            'users',
-            currentUser.toCompanion(true).copyWith(
-                  lastNotificationSentAt: Value(now),
-                ),
-          );
-        }
-      }
-
-      // Refresh final state once after all updates (if any)
-      final finalUser = await (_db.select(
-        _db.users,
-      )..where((u) => u.id.equals(currentUser.id))).getSingle();
-      if (finalUser != value) {
-        value = finalUser;
-      }
-    } catch (e, stack) {
-      debugPrint('[AuthService] Error in onboarding alerts: $e\n$stack');
-    }
-  }
 
   /// If true, the LoginScreen will skip automatically prompting for Biometrics
   /// so that users who explicitly pressed "Log Out" aren't immediately logged back in.

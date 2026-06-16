@@ -31,7 +31,7 @@ If no regressions, the next feature unit is one of:
 ## Completed
 
 ### Foundation
-- Database schema rebuild — Drift schema v13 (Session 2). Now at **v48** after
+- Database schema rebuild — Drift schema v13 (Session 2). Now at **v49** after
   141 sessions of incremental migrations.
 - Role + permission seeding for new businesses (Session 2). 30 permission keys,
   4 default roles (CEO / Manager / Cashier / Stock keeper) seeded on business
@@ -93,6 +93,34 @@ If no regressions, the next feature unit is one of:
   §23 is a tombstone. Hard Rule #8. No reintroduction.
 - Track Shipments §22 — **removed entirely**, folded into Supplier Accounts
   (Session 110). §22 is a tombstone.
+- Codebase cleanup — deleted 7 dead/unused files (CustomerLedgerScreen, ApprovalsScreen, WelcomeVerificationModal, sync_service.dart stub, guarded.dart helper, products_data.dart, filter_bar.dart) and resolved compile error in supabase_sync_service.dart (Session 142).
+- Removed dead `last_notification_sent_at` schema + backend remnants (Session 142):
+  the "Waiting for Assignment" screen, its main.dart routing guard, and the
+  `_handleOnboardingAlerts` escalation system were deleted in a prior session;
+  this drops the leftover column. Drift schema **v48 → v49** — `users` column
+  removed from the table class, raw `ALTER TABLE users DROP COLUMN
+  last_notification_sent_at` onUpgrade step (try/catch idempotent, NOT
+  TableMigration — same decoupling rationale as the v12 users rebuild), pull
+  restore + push whitelist refs stripped from `supabase_sync_service.dart`,
+  Drift code regenerated. Cloud migration
+  `0115_drop_last_notification_sent_at.sql` written (NOT yet pushed). `storeId`
+  untouched (still used for store-locking). `flutter analyze lib` clean;
+  migration/sync/auth/database suites pass.
+- Fixed orphaned-tenant re-registration bug (§10.3 follow-up, Session 142):
+  re-registering with the same email after "Delete Business & Account" left a
+  stale local `users` row (old `businessId`) when the device's wipe never
+  ran/completed. `resolvePostVerifyRoute` was routing this case to
+  `LoginRoute` with the dead `businessId`, causing `tenant_mismatch` on pull
+  and RLS `42501` on push (stale `sync_queue` rows). Now: when the cloud
+  confirms no business for the auth identity (`fetchSupabaseAccount() ==
+  null`) and a confirmed `deleted_businesses` tombstone matches the stale
+  row's `businessId`, `AuthService.wipeOrphanedLocalBusiness` (new —
+  `SupabaseSyncService.confirmBusinessDeleted`, a public wrapper of
+  `_confirmBusinessDeleted`) wipes the device via `clearAllData()` and the
+  email is routed as brand-new (`NoAccountFoundRoute`). Ambiguous results (no
+  tombstone / offline) preserve the existing offline PIN-login path —
+  never a false-positive wipe. New test:
+  `test/auth/post_verify_route_orphan_business_test.dart`.
 
 ---
 
@@ -151,8 +179,7 @@ If no regressions, the next feature unit is one of:
   primary. Confirm whether an explicit `onPrimary` pass across all
   `ColorScheme.dark(...)` blocks in `app_theme.dart` is wanted.
 
-- **`CustomerLedgerScreen` dead code** — no entry point after the Reports hub
-  cleanup (Session 136). Confirm: delete or keep for Phase 2.
+- **`CustomerLedgerScreen` dead code** — deleted (Session 142).
 
 - **Free Apple ID provisioning** — real-device cert expires after 7 days.
   Re-run `flutter run` to refresh. Confirm before any iOS release testing.
@@ -242,8 +269,8 @@ Read this file first, then `CLAUDE.md`, then the master plan section relevant
 to the unit being picked up.
 
 **Repository state:**
-- Drift client schema: **v48**.
-- Cloud migrations deployed through: **0114**.
+- Drift client schema: **v49**.
+- Cloud migrations deployed through: **0114** (0115 written, not yet pushed).
 - `flutter test test/sync/` — **115 pass** (Session 141 baseline).
 - Full suite last confirmed: 168 pass (Session 127). Counts vary by which
   folders are included in the run.
