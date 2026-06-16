@@ -25,8 +25,9 @@ class PinDots extends StatelessWidget {
           height: 14,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color:
-                isFilled ? Theme.of(context).colorScheme.primary : authTextPrimary(context).withValues(alpha: 0.05),
+            color: isFilled
+                ? Theme.of(context).colorScheme.primary
+                : authTextPrimary(context).withValues(alpha: 0.05),
             border: Border.all(
               color: isFilled
                   ? Theme.of(context).colorScheme.primary
@@ -48,8 +49,7 @@ class PinKey extends StatelessWidget {
   final VoidCallback onTap;
 
   const PinKey({super.key, this.label, this.icon, required this.onTap})
-      : assert(label != null || icon != null,
-            'PinKey needs a label or an icon');
+    : assert(label != null || icon != null, 'PinKey needs a label or an icon');
 
   @override
   Widget build(BuildContext context) {
@@ -132,10 +132,12 @@ class PinKeypad extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: digits
-          .map((d) => Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                child: PinKey(label: d, onTap: () => onDigit(d)),
-              ))
+          .map(
+            (d) => Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              child: PinKey(label: d, onTap: () => onDigit(d)),
+            ),
+          )
           .toList(),
     );
   }

@@ -29,6 +29,7 @@ import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/product_name.dart';
 import 'package:reebaplus_pos/features/pos/widgets/edit_item_modal.dart';
 import 'package:reebaplus_pos/shared/services/cart_service.dart';
+import 'package:reebaplus_pos/shared/utils/product_icon_helper.dart';
 
 class CartScreen extends ConsumerStatefulWidget {
   final List<Map<String, dynamic>> cart;
@@ -269,8 +270,11 @@ class _CartScreenState extends ConsumerState<CartScreen>
                               try {
                                 await db.ordersDao.deleteSavedCart(cart.id);
                               } catch (e, st) {
-                                CrashReporter.record(e, st,
-                                    context: 'pos.cart.delete_saved');
+                                CrashReporter.record(
+                                  e,
+                                  st,
+                                  context: 'pos.cart.delete_saved',
+                                );
                                 if (!mounted) return;
                                 AppNotification.showError(
                                   this.context,
@@ -289,10 +293,16 @@ class _CartScreenState extends ConsumerState<CartScreen>
                               }
                               cartSvc.loadCart(items, customer);
                               Navigator.pop(modalCtx);
-                              AppNotification.showSuccess(context, 'Cart loaded');
+                              AppNotification.showSuccess(
+                                context,
+                                'Cart loaded',
+                              );
                             } catch (e, st) {
-                              CrashReporter.record(e, st,
-                                  context: 'pos.cart.load_saved');
+                              CrashReporter.record(
+                                e,
+                                st,
+                                context: 'pos.cart.load_saved',
+                              );
                               if (!mounted) return;
                               Navigator.pop(modalCtx);
                               AppNotification.showError(
@@ -356,204 +366,192 @@ class _CartScreenState extends ConsumerState<CartScreen>
               height: MediaQuery.of(modalCtx).size.height * 0.85,
               child: Column(
                 children: [
-                          Padding(
-                            padding: EdgeInsets.fromLTRB(
-                              modalCtx.getRSize(20),
-                              modalCtx.getRSize(14),
-                              modalCtx.getRSize(20),
-                              0,
-                            ),
-                            child: Center(
-                              child: Container(
-                                width: modalCtx.getRSize(40),
-                                height: modalCtx.getRSize(4),
-                                decoration: BoxDecoration(
-                                  color: _border,
-                                  borderRadius: BorderRadius.circular(2),
-                                ),
-                              ),
-                            ),
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      modalCtx.getRSize(20),
+                      modalCtx.getRSize(14),
+                      modalCtx.getRSize(20),
+                      0,
+                    ),
+                    child: Center(
+                      child: Container(
+                        width: modalCtx.getRSize(40),
+                        height: modalCtx.getRSize(4),
+                        decoration: BoxDecoration(
+                          color: _border,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: modalCtx.getRSize(16)),
+                  Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: modalCtx.getRSize(20),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Select Customer',
+                          style: TextStyle(
+                            fontSize: modalCtx.getRFontSize(18),
+                            fontWeight: FontWeight.w800,
+                            color: _text,
                           ),
-                          SizedBox(height: modalCtx.getRSize(16)),
-                          Padding(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: modalCtx.getRSize(20),
+                        ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Creating a customer needs `customers.add`
+                            // (hard rule #6/#7) — hide "New" otherwise.
+                            // The AddCustomerSheet save handler re-checks
+                            // the same key at the write boundary.
+                            if (hasPermission(ref, 'customers.add')) ...[
+                              AppButton(
+                                text: 'New',
+                                variant: AppButtonVariant.secondary,
+                                isFullWidth: false,
+                                height: modalCtx.getRSize(36),
+                                icon: FontAwesomeIcons.userPlus.data,
+                                onPressed: () {
+                                  Navigator.pop(modalCtx);
+                                  AddCustomerSheet.show(
+                                    context,
+                                    onCustomerAdded: (newCustomer) {
+                                      setState(
+                                        () => _activeCustomer = newCustomer,
+                                      );
+                                      widget.onCustomerChanged(newCustomer);
+                                      ref
+                                          .read(cartProvider)
+                                          .setActiveCustomer(newCustomer);
+                                    },
+                                  );
+                                },
+                              ),
+                              SizedBox(width: modalCtx.getRSize(8)),
+                            ],
+                            IconButton(
+                              onPressed: () => Navigator.pop(modalCtx),
+                              icon: Icon(Icons.close, color: _subtext),
                             ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  'Select Customer',
-                                  style: TextStyle(
-                                    fontSize: modalCtx.getRFontSize(18),
-                                    fontWeight: FontWeight.w800,
-                                    color: _text,
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  // ── Store filter ──
+                  if (_stores.isNotEmpty)
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        modalCtx.getRSize(20),
+                        modalCtx.getRSize(4),
+                        modalCtx.getRSize(20),
+                        0,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            FontAwesomeIcons.store.data,
+                            size: modalCtx.getRSize(12),
+                            color: _subtext,
+                          ),
+                          SizedBox(width: modalCtx.getRSize(6)),
+                          Expanded(
+                            child: AppDropdown<String?>(
+                              value: pickerStoreId,
+                              items: [
+                                DropdownMenuItem<String?>(
+                                  value: null,
+                                  child: Text(
+                                    'All Stores',
+                                    style: TextStyle(
+                                      fontSize: modalCtx.getRFontSize(13),
+                                      fontWeight: FontWeight.w600,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.primary,
+                                    ),
                                   ),
                                 ),
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    // Creating a customer needs `customers.add`
-                                    // (hard rule #6/#7) — hide "New" otherwise.
-                                    // The AddCustomerSheet save handler re-checks
-                                    // the same key at the write boundary.
-                                    if (hasPermission(ref, 'customers.add')) ...[
-                                      AppButton(
-                                        text: 'New',
-                                        variant: AppButtonVariant.secondary,
-                                        isFullWidth: false,
-                                        height: modalCtx.getRSize(36),
-                                        icon: FontAwesomeIcons.userPlus,
-                                        onPressed: () {
-                                          Navigator.pop(modalCtx);
-                                          AddCustomerSheet.show(
-                                            context,
-                                            onCustomerAdded: (newCustomer) {
-                                              setState(
-                                                () => _activeCustomer =
-                                                    newCustomer,
-                                              );
-                                              widget.onCustomerChanged(
-                                                newCustomer,
-                                              );
-                                              ref
-                                                  .read(cartProvider)
-                                                  .setActiveCustomer(
-                                                      newCustomer);
-                                            },
-                                          );
-                                        },
+                                ..._stores.map(
+                                  (w) => DropdownMenuItem<String?>(
+                                    value: w.id,
+                                    child: Text(
+                                      w.name,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: modalCtx.getRFontSize(13),
+                                        fontWeight: FontWeight.w600,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.primary,
                                       ),
-                                      SizedBox(width: modalCtx.getRSize(8)),
-                                    ],
-                                    IconButton(
-                                      onPressed: () => Navigator.pop(modalCtx),
-                                      icon: Icon(Icons.close, color: _subtext),
                                     ),
-                                  ],
+                                  ),
                                 ),
                               ],
+                              onChanged: (id) =>
+                                  setDialogState(() => pickerStoreId = id),
                             ),
                           ),
-                          // ── Store filter ──
-                          if (_stores.isNotEmpty)
-                            Padding(
-                              padding: EdgeInsets.fromLTRB(
-                                modalCtx.getRSize(20),
-                                modalCtx.getRSize(4),
-                                modalCtx.getRSize(20),
-                                0,
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    FontAwesomeIcons.store,
-                                    size: modalCtx.getRSize(12),
-                                    color: _subtext,
-                                  ),
-                                  SizedBox(width: modalCtx.getRSize(6)),
-                                  Expanded(
-                                    child: AppDropdown<String?>(
-                                      value: pickerStoreId,
-                                      items: [
-                                        DropdownMenuItem<String?>(
-                                          value: null,
-                                          child: Text(
-                                            'All Stores',
-                                            style: TextStyle(
-                                              fontSize: modalCtx.getRFontSize(
-                                                13,
-                                              ),
-                                              fontWeight: FontWeight.w600,
-                                              color: Theme.of(
-                                                context,
-                                              ).colorScheme.primary,
-                                            ),
-                                          ),
-                                        ),
-                                        ..._stores.map(
-                                          (w) => DropdownMenuItem<String?>(
-                                            value: w.id,
-                                            child: Text(
-                                              w.name,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: TextStyle(
-                                                fontSize: modalCtx.getRFontSize(
-                                                  13,
-                                                ),
-                                                fontWeight: FontWeight.w600,
-                                                color: Theme.of(
-                                                  context,
-                                                ).colorScheme.primary,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                      onChanged: (id) => setDialogState(
-                                        () => pickerStoreId = id,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          Padding(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: modalCtx.getRSize(20),
-                              vertical: modalCtx.getRSize(8),
-                            ),
-                            child: AppInput(
-                              onChanged: (v) {
-                                setDialogState(() {
-                                  searchQuery = v;
-                                });
-                              },
-                              hintText: 'Search customers...',
-                              prefixIcon: Icon(
-                                FontAwesomeIcons.magnifyingGlass,
-                                size: modalCtx.getRSize(16),
-                                color: _subtext,
-                              ),
-                              fillColor: Theme.of(context).cardColor,
-                            ),
+                        ],
+                      ),
+                    ),
+                  Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: modalCtx.getRSize(20),
+                      vertical: modalCtx.getRSize(8),
+                    ),
+                    child: AppInput(
+                      onChanged: (v) {
+                        setDialogState(() {
+                          searchQuery = v;
+                        });
+                      },
+                      hintText: 'Search customers...',
+                      prefixIcon: Icon(
+                        FontAwesomeIcons.magnifyingGlass.data,
+                        size: modalCtx.getRSize(16),
+                        color: _subtext,
+                      ),
+                      fillColor: Theme.of(context).cardColor,
+                    ),
+                  ),
+                  Expanded(
+                    child: ValueListenableBuilder<List<Customer>>(
+                      valueListenable: ref.read(customerServiceProvider),
+                      builder: (_, allCustomers, __) {
+                        final customers = allCustomers.where((c) {
+                          // Store filter
+                          if (pickerStoreId != null &&
+                              c.storeId != pickerStoreId) {
+                            return false;
+                          }
+                          // Search filter
+                          if (searchQuery.isEmpty) return true;
+                          final q = searchQuery.toLowerCase();
+                          return c.name.toLowerCase().contains(q) ||
+                              (c.phone?.toLowerCase().contains(q) ?? false);
+                        }).toList();
+                        return ListView(
+                          padding: EdgeInsets.fromLTRB(
+                            modalCtx.getRSize(20),
+                            0,
+                            modalCtx.getRSize(20),
+                            modalCtx.deviceBottomPadding + 20,
                           ),
-                          Expanded(
-                            child: ValueListenableBuilder<List<Customer>>(
-                              valueListenable: ref.read(
-                                customerServiceProvider,
-                              ),
-                              builder: (_, allCustomers, __) {
-                                final customers = allCustomers.where((c) {
-                                  // Store filter
-                                  if (pickerStoreId != null &&
-                                      c.storeId != pickerStoreId) {
-                                    return false;
-                                  }
-                                  // Search filter
-                                  if (searchQuery.isEmpty) return true;
-                                  final q = searchQuery.toLowerCase();
-                                  return c.name.toLowerCase().contains(q) ||
-                                      (c.phone?.toLowerCase().contains(q) ??
-                                          false);
-                                }).toList();
-                                return ListView(
-                                  padding: EdgeInsets.fromLTRB(
-                                    modalCtx.getRSize(20),
-                                    0,
-                                    modalCtx.getRSize(20),
-                                    modalCtx.deviceBottomPadding + 20,
-                                  ),
-                                  children: [
-                                    _buildCustomerTile(null, modalCtx),
-                                    ...customers.map(
-                                      (c) => _buildCustomerTile(c, modalCtx),
-                                    ),
-                                  ],
-                                );
-                              },
+                          children: [
+                            _buildCustomerTile(null, modalCtx),
+                            ...customers.map(
+                              (c) => _buildCustomerTile(c, modalCtx),
                             ),
-                          ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
                 ],
               ),
             );
@@ -568,7 +566,8 @@ class _CartScreenState extends ConsumerState<CartScreen>
     final name = customer?.name ?? 'Walk-in Customer';
     final balanceKobo = customer == null
         ? 0
-        : (ref.watch(walletBalancesKoboProvider).valueOrNull?[customer.id] ?? 0);
+        : (ref.watch(walletBalancesKoboProvider).valueOrNull?[customer.id] ??
+              0);
     final customerWallet = balanceKobo / 100.0;
     final isOwe = customerWallet < 0;
 
@@ -605,8 +604,8 @@ class _CartScreenState extends ConsumerState<CartScreen>
               ),
               child: Icon(
                 customer == null
-                    ? FontAwesomeIcons.userTag
-                    : FontAwesomeIcons.user,
+                    ? FontAwesomeIcons.userTag.data
+                    : FontAwesomeIcons.user.data,
                 size: modalCtx.getRSize(16),
                 color: Theme.of(context).colorScheme.primary,
               ),
@@ -629,7 +628,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                     Row(
                       children: [
                         Icon(
-                          FontAwesomeIcons.nairaSign,
+                          FontAwesomeIcons.nairaSign.data,
                           size: modalCtx.getRSize(10),
                           color: customerWallet == 0
                               ? success
@@ -653,7 +652,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
             ),
             if (isSelected)
               Icon(
-                FontAwesomeIcons.circleCheck,
+                FontAwesomeIcons.circleCheck.data,
                 color: Theme.of(context).colorScheme.primary,
                 size: modalCtx.getRSize(18),
               ),
@@ -683,7 +682,9 @@ class _CartScreenState extends ConsumerState<CartScreen>
     final valueText = value == value.toInt()
         ? value.toInt().toString()
         : value.toStringAsFixed(1);
-    final label = kind == 'naira' ? '−$activeCurrencySymbol$valueText' : '−$valueText%';
+    final label = kind == 'naira'
+        ? '−$activeCurrencySymbol$valueText'
+        : '−$valueText%';
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: context.getRSize(8),
@@ -735,7 +736,9 @@ class _CartScreenState extends ConsumerState<CartScreen>
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
+    ref.watch(
+      currencySymbolProvider,
+    ); // rebuild money displays when currency changes
     final cartItems = List<Map<String, dynamic>>.from(
       ref.read(cartProvider).value,
     );
@@ -775,12 +778,12 @@ class _CartScreenState extends ConsumerState<CartScreen>
     final bottleItems = !isCrate
         ? const <Map<String, dynamic>>[]
         : cartItems
-            .where(
-              (i) =>
-                  (i['unit'] as String?)?.toLowerCase() == 'bottle' &&
-                  (i['trackEmpties'] as bool? ?? false),
-            )
-            .toList();
+              .where(
+                (i) =>
+                    (i['unit'] as String?)?.toLowerCase() == 'bottle' &&
+                    (i['trackEmpties'] as bool? ?? false),
+              )
+              .toList();
     final hasBottles = bottleItems.isNotEmpty;
 
     // Compute aggregate deposit across items.
@@ -887,9 +890,9 @@ class _CartScreenState extends ConsumerState<CartScreen>
     final activeBalanceKobo = _activeCustomer == null
         ? 0
         : (ref
-                .watch(walletBalancesKoboProvider)
-                .valueOrNull?[_activeCustomer!.id] ??
-            0);
+                  .watch(walletBalancesKoboProvider)
+                  .valueOrNull?[_activeCustomer!.id] ??
+              0);
     final customerWallet = activeBalanceKobo / 100.0;
     final isOwe = customerWallet < 0;
 
@@ -900,8 +903,8 @@ class _CartScreenState extends ConsumerState<CartScreen>
         backgroundColor: _surface,
         elevation: 0,
         leading: const MenuButton(),
-        title: const AppBarHeader(
-          icon: FontAwesomeIcons.cartShopping,
+        title: AppBarHeader(
+          icon: FontAwesomeIcons.cartShopping.data,
           title: 'Cart',
           subtitle: 'Review Selection',
         ),
@@ -933,7 +936,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                 child: Row(
                   children: [
                     Icon(
-                      FontAwesomeIcons.trashCan,
+                      FontAwesomeIcons.trashCan.data,
                       color: Theme.of(context).colorScheme.error,
                       size: context.getRSize(13),
                     ),
@@ -987,8 +990,8 @@ class _CartScreenState extends ConsumerState<CartScreen>
                       ),
                       child: Icon(
                         _activeCustomer == null
-                            ? FontAwesomeIcons.userTag
-                            : FontAwesomeIcons.user,
+                            ? FontAwesomeIcons.userTag.data
+                            : FontAwesomeIcons.user.data,
                         size: context.getRSize(16),
                         color: Theme.of(context).colorScheme.primary,
                       ),
@@ -1010,7 +1013,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                           Row(
                             children: [
                               Icon(
-                                FontAwesomeIcons.nairaSign,
+                                FontAwesomeIcons.nairaSign.data,
                                 size: context.getRSize(11),
                                 color: customerWallet == 0
                                     ? success
@@ -1069,7 +1072,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(
-                            FontAwesomeIcons.cartArrowDown,
+                            FontAwesomeIcons.cartArrowDown.data,
                             size: context.getRSize(48),
                             color: _border,
                           ),
@@ -1088,7 +1091,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                           AppButton(
                             text: 'Recall',
                             variant: AppButtonVariant.outline,
-                            icon: FontAwesomeIcons.clockRotateLeft,
+                            icon: FontAwesomeIcons.clockRotateLeft.data,
                             isFullWidth: false,
                             onPressed: _viewSavedCarts,
                           ),
@@ -1152,16 +1155,14 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                         ),
                                         child: Icon(
                                           item['icon'] == null
-                                              ? FontAwesomeIcons.box
+                                              ? FontAwesomeIcons.box.data
                                               : item['icon'] is IconData
                                               ? item['icon'] as IconData
-                                              : IconData(
+                                              : item['icon'] is int
+                                              ? productIconFromCodePoint(
                                                   item['icon'] as int,
-                                                  fontFamily:
-                                                      'FontAwesomeSolid',
-                                                  fontPackage:
-                                                      'font_awesome_flutter',
-                                                ),
+                                                )
+                                              : FontAwesomeIcons.box.data,
                                           color: c,
                                           size: context.getRSize(22),
                                         ),
@@ -1327,7 +1328,9 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                           Text(
                                             'Saved',
                                             style: TextStyle(
-                                              fontSize: context.getRFontSize(14),
+                                              fontSize: context.getRFontSize(
+                                                14,
+                                              ),
                                               fontWeight: FontWeight.w600,
                                               color: _success,
                                             ),
@@ -1335,7 +1338,9 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                           Text(
                                             '−${formatCurrency(discountTotal)}',
                                             style: TextStyle(
-                                              fontSize: context.getRFontSize(15),
+                                              fontSize: context.getRFontSize(
+                                                15,
+                                              ),
                                               fontWeight: FontWeight.w800,
                                               color: _success,
                                             ),
@@ -1386,7 +1391,8 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                                   ),
                                                   child: Icon(
                                                     FontAwesomeIcons
-                                                        .beerMugEmpty,
+                                                        .beerMugEmpty
+                                                        .data,
                                                     size: context.getRSize(14),
                                                     color: Theme.of(
                                                       context,
@@ -1422,41 +1428,44 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                                   children: [
                                                     Expanded(
                                                       child: Row(
-                                                      children: [
-                                                        Container(
-                                                          width: context
-                                                              .getRSize(8),
-                                                          height: context
-                                                              .getRSize(8),
-                                                          decoration:
-                                                              BoxDecoration(
-                                                                color:
-                                                                    line.color,
-                                                                shape: BoxShape
-                                                                    .circle,
-                                                              ),
-                                                        ),
-                                                        SizedBox(
-                                                          width: context
-                                                              .getRSize(8),
-                                                        ),
-                                                        Flexible(
-                                                          child: Text(
-                                                          '${line.label}  ×${line.qty.toStringAsFixed(1)}',
-                                                          overflow: TextOverflow.ellipsis,
-                                                          style: TextStyle(
-                                                            fontSize: context
-                                                                .getRFontSize(
-                                                                  13,
+                                                        children: [
+                                                          Container(
+                                                            width: context
+                                                                .getRSize(8),
+                                                            height: context
+                                                                .getRSize(8),
+                                                            decoration:
+                                                                BoxDecoration(
+                                                                  color: line
+                                                                      .color,
+                                                                  shape: BoxShape
+                                                                      .circle,
                                                                 ),
-                                                            fontWeight:
-                                                                FontWeight.w600,
-                                                            color: _subtext,
                                                           ),
-                                                        ),
-                                                        ),
-                                                      ],
-                                                    ),
+                                                          SizedBox(
+                                                            width: context
+                                                                .getRSize(8),
+                                                          ),
+                                                          Flexible(
+                                                            child: Text(
+                                                              '${line.label}  ×${line.qty.toStringAsFixed(1)}',
+                                                              overflow:
+                                                                  TextOverflow
+                                                                      .ellipsis,
+                                                              style: TextStyle(
+                                                                fontSize: context
+                                                                    .getRFontSize(
+                                                                      13,
+                                                                    ),
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w600,
+                                                                color: _subtext,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
                                                     ),
                                                     Text(
                                                       formatCurrency(
@@ -1561,7 +1570,9 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                           child: AppButton(
                                             text: 'Save Cart',
                                             variant: AppButtonVariant.outline,
-                                            icon: FontAwesomeIcons.floppyDisk,
+                                            icon: FontAwesomeIcons
+                                                .floppyDisk
+                                                .data,
                                             onPressed: _saveCurrentCart,
                                           ),
                                         ),
@@ -1571,7 +1582,8 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                             text: 'Recall',
                                             variant: AppButtonVariant.outline,
                                             icon: FontAwesomeIcons
-                                                .clockRotateLeft,
+                                                .clockRotateLeft
+                                                .data,
                                             onPressed: _viewSavedCarts,
                                           ),
                                         ),
@@ -1582,7 +1594,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                     AppButton(
                                       text: 'Proceed to Checkout',
                                       variant: AppButtonVariant.primary,
-                                      icon: FontAwesomeIcons.checkToSlot,
+                                      icon: FontAwesomeIcons.checkToSlot.data,
                                       onPressed: () {
                                         final currentCustomer = _activeCustomer;
                                         void goToCheckout() {

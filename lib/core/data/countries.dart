@@ -39,3 +39,38 @@ const List<String> kCountries = [
 
 /// The default country (master plan §30.6).
 const String kDefaultCountry = 'Nigeria';
+
+/// International dialing codes for all countries in [kCountries] (§30.6).
+const Map<String, String> kCountryDialCodes = {
+  'Nigeria': '+234',
+  'Benin': '+229',
+  'Cameroon': '+237',
+  'Canada': '+1',
+  'Chad': '+235',
+  'China': '+86',
+  'Egypt': '+20',
+  'France': '+33',
+  'Germany': '+49',
+  'Ghana': '+233',
+  'India': '+91',
+  'Italy': '+39',
+  'Ivory Coast': '+225',
+  'Kenya': '+254',
+  'Liberia': '+231',
+  'Mali': '+223',
+  'Morocco': '+212',
+  'Niger': '+227',
+  'Rwanda': '+250',
+  'Senegal': '+221',
+  'Sierra Leone': '+232',
+  'South Africa': '+27',
+  'Spain': '+34',
+  'Tanzania': '+255',
+  'Togo': '+228',
+  'Uganda': '+256',
+  'United Arab Emirates': '+971',
+  'United Kingdom': '+44',
+  'United States': '+1',
+  'Zambia': '+260',
+  'Zimbabwe': '+263',
+};

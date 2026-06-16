@@ -28,10 +28,10 @@ class SupplierLedgerEntryTile extends StatelessWidget {
 
   IconData get _icon {
     if (entry.referenceType == 'invoice') {
-      return FontAwesomeIcons.fileInvoiceDollar;
+      return FontAwesomeIcons.fileInvoiceDollar.data;
     }
-    if (entry.referenceType == 'void') return FontAwesomeIcons.rotateLeft;
-    return FontAwesomeIcons.moneyBillTransfer;
+    if (entry.referenceType == 'void') return FontAwesomeIcons.rotateLeft.data;
+    return FontAwesomeIcons.moneyBillTransfer.data;
   }
 
   String get _friendlyRefType {
@@ -57,7 +57,8 @@ class SupplierLedgerEntryTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final cardBg = Theme.of(context).cardColor;
     final text = Theme.of(context).colorScheme.onSurface;
-    final subtext = Theme.of(context).textTheme.bodySmall?.color ??
+    final subtext =
+        Theme.of(context).textTheme.bodySmall?.color ??
         Theme.of(context).iconTheme.color!;
     final border = Theme.of(context).dividerColor;
 
@@ -67,8 +68,11 @@ class SupplierLedgerEntryTile extends StatelessWidget {
     final sign = entry.signedAmountKobo < 0 ? '-' : '+';
     final hasReceipt = (entry.receiptPath ?? '').isNotEmpty;
 
-    final dateAndNote = DateFormat('d MMM y').format(entry.activityDate) +
-        ((entry.referenceNote ?? '').isNotEmpty ? ' • ${entry.referenceNote}' : '');
+    final dateAndNote =
+        DateFormat('d MMM y').format(entry.activityDate) +
+        ((entry.referenceNote ?? '').isNotEmpty
+            ? ' • ${entry.referenceNote}'
+            : '');
     final subtitle = [
       if (supplierName != null) _friendlyRefType,
       dateAndNote,
@@ -110,8 +114,9 @@ class SupplierLedgerEntryTile extends StatelessWidget {
                             fontSize: context.getRFontSize(15),
                             fontWeight: FontWeight.bold,
                             color: text,
-                            decoration:
-                                isVoided ? TextDecoration.lineThrough : null,
+                            decoration: isVoided
+                                ? TextDecoration.lineThrough
+                                : null,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -119,8 +124,11 @@ class SupplierLedgerEntryTile extends StatelessWidget {
                       ),
                       if (hasReceipt) ...[
                         SizedBox(width: context.getRSize(6)),
-                        Icon(FontAwesomeIcons.paperclip,
-                            size: context.getRSize(11), color: subtext),
+                        Icon(
+                          FontAwesomeIcons.paperclip.data,
+                          size: context.getRSize(11),
+                          color: subtext,
+                        ),
                       ],
                     ],
                   ),

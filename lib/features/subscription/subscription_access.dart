@@ -52,11 +52,10 @@ extension SubscriptionAccessX on SubscriptionAccess {
   /// Paid → 'PRO'; inside the free trial → 'FREE TRIAL'; expired/inactive/grace
   /// show no tag.
   String? get badgeLabel => switch (this) {
-        SubscriptionAccess.active => 'PRO',
-        SubscriptionAccess.trialActive => 'FREE TRIAL',
-        SubscriptionAccess.trialExpired ||
-        SubscriptionAccess.inactive ||
-        SubscriptionAccess.grace =>
-          null,
-      };
+    SubscriptionAccess.active => 'PRO',
+    SubscriptionAccess.trialActive => 'FREE TRIAL',
+    SubscriptionAccess.trialExpired ||
+    SubscriptionAccess.inactive ||
+    SubscriptionAccess.grace => null,
+  };
 }

@@ -62,7 +62,9 @@ class _StaffPermissionsScreenState
   bool _guard() {
     if (!ref.read(currentUserPermissionsProvider).contains('settings.manage')) {
       AppNotification.showError(
-          context, 'You don\'t have permission to do that.');
+        context,
+        'You don\'t have permission to do that.',
+      );
       return false;
     }
     return true;
@@ -72,8 +74,11 @@ class _StaffPermissionsScreenState
   /// [target] differs from the role default; when they match, the override is
   /// cleared so the permission inherits the role again.
   Future<void> _setEffective(String key, bool target, bool roleDefault) async {
-    await _db.userPermissionOverridesDao
-        .setOverride(user.id, key, target == roleDefault ? null : target);
+    await _db.userPermissionOverridesDao.setOverride(
+      user.id,
+      key,
+      target == roleDefault ? null : target,
+    );
   }
 
   Future<void> _toggle(
@@ -99,14 +104,15 @@ class _StaffPermissionsScreenState
       // Turning a permission off also forces off any effectively-granted
       // permission that depends on it (§10.2.1 dependency gating) — a child can't
       // stay on once its parent is off. Mirrors the per-role cascade.
-      final cascaded =
-          descendantsOf(key).where(effective.contains).toList()..sort();
+      final cascaded = descendantsOf(key).where(effective.contains).toList()
+        ..sort();
       await _setEffective(key, false, roleDefaultOf(key));
       for (final dep in cascaded) {
         await _setEffective(dep, false, roleDefaultOf(dep));
       }
-      final suffix =
-          cascaded.isEmpty ? '' : ' (also revoked: ${cascaded.join(', ')})';
+      final suffix = cascaded.isEmpty
+          ? ''
+          : ' (also revoked: ${cascaded.join(', ')})';
       await _db.activityLogDao.log(
         action: 'settings.user_permission.override',
         description: 'Revoked "$key" for ${user.name} (override)$suffix',
@@ -115,7 +121,9 @@ class _StaffPermissionsScreenState
     } catch (e) {
       if (mounted) {
         AppNotification.showError(
-            context, 'Could not update permission. Please try again.');
+          context,
+          'Could not update permission. Please try again.',
+        );
       }
     }
   }
@@ -150,25 +158,33 @@ class _StaffPermissionsScreenState
       ),
     );
     if (confirmed != true) return;
-    if (!_guard()) return; // re-check after the await (permission may have changed)
+    if (!_guard()) {
+      return; // re-check after the await (permission may have changed)
+    }
 
     try {
-      final cleared =
-          await _db.userPermissionOverridesDao.clearAllForUser(user.id);
+      final cleared = await _db.userPermissionOverridesDao.clearAllForUser(
+        user.id,
+      );
       await _db.activityLogDao.log(
         action: 'settings.user_permission.restore_defaults',
-        description: 'Restored ${role.name} defaults for ${user.name} '
+        description:
+            'Restored ${role.name} defaults for ${user.name} '
             '(cleared $cleared override${cleared == 1 ? '' : 's'})',
         staffId: _db.currentUserId,
       );
       if (mounted) {
         AppNotification.showSuccess(
-            context, 'Restored ${role.name} defaults for ${user.name}.');
+          context,
+          'Restored ${role.name} defaults for ${user.name}.',
+        );
       }
     } catch (e) {
       if (mounted) {
         AppNotification.showError(
-            context, 'Could not restore defaults. Please try again.');
+          context,
+          'Could not restore defaults. Please try again.',
+        );
       }
     }
   }
@@ -191,18 +207,20 @@ class _StaffPermissionsScreenState
       ),
       body: !canManage
           ? const SettingsNoAccess()
-          : ref.watch(allPermissionsProvider).when(
-                loading: () => const SizedBox.shrink(),
-                error: (_, __) => Center(
-                  child: Text(
-                    'Couldn\'t load permissions.',
-                    style: TextStyle(
-                      color: t.colorScheme.onSurface.withValues(alpha: 0.6),
+          : ref
+                .watch(allPermissionsProvider)
+                .when(
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, __) => Center(
+                    child: Text(
+                      'Couldn\'t load permissions.',
+                      style: TextStyle(
+                        color: t.colorScheme.onSurface.withValues(alpha: 0.6),
+                      ),
                     ),
                   ),
+                  data: (perms) => _buildBody(t, perms),
                 ),
-                data: (perms) => _buildBody(t, perms),
-              ),
     );
   }
 
@@ -221,7 +239,7 @@ class _StaffPermissionsScreenState
     // This person's overrides, keyed for lookup.
     final overrides =
         ref.watch(userPermissionOverridesProvider(user.id)).valueOrNull ??
-            const <UserPermissionOverrideData>[];
+        const <UserPermissionOverrideData>[];
     final overrideByKey = {for (final o in overrides) o.permissionKey: o};
 
     // Effective set = role defaults ± overrides (same as the runtime resolver).
@@ -250,15 +268,19 @@ class _StaffPermissionsScreenState
 
     return SettingsFadeIn(
       child: ListView(
-        padding:
-            EdgeInsets.fromLTRB(24, 24, 24, 24 + context.deviceBottomPadding),
+        padding: EdgeInsets.fromLTRB(
+          24,
+          24,
+          24,
+          24 + context.deviceBottomPadding,
+        ),
         children: [
           Text(
             _isCeo
                 ? 'The CEO always has full access — these can\'t be changed.'
                 : 'Overrides the ${role.name} role defaults for ${user.name}. '
-                    'Flip a toggle to override; flip it back to the role default '
-                    'to inherit again.',
+                      'Flip a toggle to override; flip it back to the role default '
+                      'to inherit again.',
             style: TextStyle(
               fontSize: 13,
               height: 1.4,
@@ -270,14 +292,20 @@ class _StaffPermissionsScreenState
             SettingsSectionTitle(entry.key),
             const SizedBox(height: 8),
             _permissionGroupCard(
-                t, entry.value, roleDefaults, effective, overrideByKey, byKey),
+              t,
+              entry.value,
+              roleDefaults,
+              effective,
+              overrideByKey,
+              byKey,
+            ),
             const SizedBox(height: 20),
           ],
           if (!_isCeo) ...[
             const SizedBox(height: 4),
             AppButton(
               text: 'Restore defaults',
-              icon: FontAwesomeIcons.arrowRotateLeft,
+              icon: FontAwesomeIcons.arrowRotateLeft.data,
               variant: AppButtonVariant.outline,
               onPressed: overrides.isEmpty
                   ? null
@@ -288,8 +316,8 @@ class _StaffPermissionsScreenState
               overrides.isEmpty
                   ? '${user.name} is already on the ${role.name} defaults.'
                   : 'Clears all ${overrides.length} '
-                      'override${overrides.length == 1 ? '' : 's'} and returns '
-                      '${user.name} to the ${role.name} defaults.',
+                        'override${overrides.length == 1 ? '' : 's'} and returns '
+                        '${user.name} to the ${role.name} defaults.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 12,
@@ -312,59 +340,61 @@ class _StaffPermissionsScreenState
   ) {
     return Container(
       decoration: AppDecorations.glassCard(context, radius: 16),
-      child: Column(
-        children: [
-          for (final perm in perms)
-            () {
-              final parent = parentOf(perm.key);
-              final parentOff = !_isCeo &&
-                  parent != null &&
-                  !effective.contains(parent);
-              final isOverridden = overrideByKey.containsKey(perm.key);
-              final roleDefault = roleDefaults.contains(perm.key);
+      child: Material(
+        type: MaterialType.transparency,
+        child: Column(
+          children: [
+            for (final perm in perms)
+              () {
+                final parent = parentOf(perm.key);
+                final parentOff =
+                    !_isCeo && parent != null && !effective.contains(parent);
+                final isOverridden = overrideByKey.containsKey(perm.key);
+                final roleDefault = roleDefaults.contains(perm.key);
 
-              String? subtitle;
-              if (parentOff) {
-                subtitle =
-                    'Requires "${byKey[parent]?.description ?? parent}"';
-              } else if (!_isCeo && isOverridden) {
-                subtitle =
-                    'Overridden — role default is ${roleDefault ? 'on' : 'off'}';
-              }
+                String? subtitle;
+                if (parentOff) {
+                  subtitle =
+                      'Requires "${byKey[parent]?.description ?? parent}"';
+                } else if (!_isCeo && isOverridden) {
+                  subtitle =
+                      'Overridden — role default is ${roleDefault ? 'on' : 'off'}';
+                }
 
-              return SwitchListTile(
-                title: Text(
-                  perm.description,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: t.colorScheme.onSurface,
+                return SwitchListTile(
+                  title: Text(
+                    perm.description,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: t.colorScheme.onSurface,
+                    ),
                   ),
-                ),
-                subtitle: subtitle == null
-                    ? null
-                    : Text(
-                        subtitle,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: t.colorScheme.onSurface.withValues(
-                            alpha: parentOff ? 0.5 : 0.7,
+                  subtitle: subtitle == null
+                      ? null
+                      : Text(
+                          subtitle,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: t.colorScheme.onSurface.withValues(
+                              alpha: parentOff ? 0.5 : 0.7,
+                            ),
+                            fontWeight: (!parentOff && !_isCeo && isOverridden)
+                                ? FontWeight.w600
+                                : FontWeight.normal,
                           ),
-                          fontWeight: (!parentOff && !_isCeo && isOverridden)
-                              ? FontWeight.w600
-                              : FontWeight.normal,
                         ),
-                      ),
-                value: _isCeo
-                    ? true
-                    : !parentOff && effective.contains(perm.key),
-                onChanged: (_isCeo || parentOff)
-                    ? null
-                    : (v) => _toggle(perm.key, v, roleDefaults, effective),
-                activeThumbColor: t.colorScheme.primary,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-              );
-            }(),
-        ],
+                  value: _isCeo
+                      ? true
+                      : !parentOff && effective.contains(perm.key),
+                  onChanged: (_isCeo || parentOff)
+                      ? null
+                      : (v) => _toggle(perm.key, v, roleDefaults, effective),
+                  activeThumbColor: t.colorScheme.primary,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                );
+              }(),
+          ],
+        ),
       ),
     );
   }

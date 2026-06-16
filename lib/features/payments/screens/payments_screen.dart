@@ -24,7 +24,8 @@ class PaymentsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(currencySymbolProvider);
     final bg = Theme.of(context).scaffoldBackgroundColor;
-    final subtext = Theme.of(context).textTheme.bodySmall?.color ??
+    final subtext =
+        Theme.of(context).textTheme.bodySmall?.color ??
         Theme.of(context).iconTheme.color!;
 
     // §21 access: Supplier Accounts is gated by `suppliers.manage`. Fail CLOSED:
@@ -53,7 +54,7 @@ class PaymentsScreen extends ConsumerWidget {
           ? AppFAB(
               heroTag: 'suppliers_fab',
               onPressed: () => SupplierFormSheet.show(context),
-              icon: FontAwesomeIcons.plus,
+              icon: FontAwesomeIcons.plus.data,
               label: 'Add Supplier',
             )
           : null,
@@ -115,22 +116,25 @@ class PaymentsScreen extends ConsumerWidget {
           Container(
             padding: EdgeInsets.all(context.getRSize(8)),
             decoration: BoxDecoration(
-              gradient: LinearGradient(colors: [
-                Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
-                Theme.of(context).colorScheme.primary
-              ]),
+              gradient: LinearGradient(
+                colors: [
+                  Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
+                  Theme.of(context).colorScheme.primary,
+                ],
+              ),
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                  color:
-                      Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.primary.withValues(alpha: 0.3),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
               ],
             ),
             child: Icon(
-              FontAwesomeIcons.moneyBillWave,
+              FontAwesomeIcons.moneyBillWave.data,
               color: Colors.white,
               size: context.getRSize(16),
             ),
@@ -171,13 +175,14 @@ class PaymentsScreen extends ConsumerWidget {
   }
 
   Widget _buildSuppliersBody(BuildContext context, WidgetRef ref) {
-    final subtext = Theme.of(context).textTheme.bodySmall?.color ??
+    final subtext =
+        Theme.of(context).textTheme.bodySmall?.color ??
         Theme.of(context).iconTheme.color!;
     final suppliers =
         ref.watch(allSuppliersProvider).valueOrNull ?? const <SupplierData>[];
     final balances =
         ref.watch(supplierBalancesKoboProvider).valueOrNull ??
-            const <String, int>{};
+        const <String, int>{};
     // §21.11 — balances shown are scoped to the active store.
     final scopeLabel = ref.watch(activeStoreLabelProvider);
 
@@ -266,7 +271,8 @@ class _TransactionHistoryLink extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).colorScheme.onSurface;
-    final subtext = Theme.of(context).textTheme.bodySmall?.color ??
+    final subtext =
+        Theme.of(context).textTheme.bodySmall?.color ??
         Theme.of(context).iconTheme.color!;
     final primary = Theme.of(context).colorScheme.primary;
     final border = Theme.of(context).dividerColor;
@@ -291,7 +297,7 @@ class _TransactionHistoryLink extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
-                FontAwesomeIcons.receipt,
+                FontAwesomeIcons.receipt.data,
                 color: primary,
                 size: context.getRSize(16),
               ),
@@ -348,7 +354,8 @@ class _SupplierRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).colorScheme.onSurface;
-    final subtext = Theme.of(context).textTheme.bodySmall?.color ??
+    final subtext =
+        Theme.of(context).textTheme.bodySmall?.color ??
         Theme.of(context).iconTheme.color!;
     final border = Theme.of(context).dividerColor;
 
@@ -362,8 +369,8 @@ class _SupplierRow extends StatelessWidget {
     final balLabel = owed
         ? 'Owed ${formatCurrency(balanceKobo.abs() / 100)}'
         : (balanceKobo > 0
-            ? 'Credit ${formatCurrency(balanceKobo / 100)}'
-            : 'Settled');
+              ? 'Credit ${formatCurrency(balanceKobo / 100)}'
+              : 'Settled');
 
     return GestureDetector(
       onTap: onTap,
@@ -381,11 +388,13 @@ class _SupplierRow extends StatelessWidget {
               width: context.getRSize(48),
               height: context.getRSize(48),
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                color: Theme.of(
+                  context,
+                ).colorScheme.primary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
-                FontAwesomeIcons.buildingColumns,
+                FontAwesomeIcons.buildingColumns.data,
                 color: Theme.of(context).colorScheme.primary,
                 size: context.getRSize(20),
               ),

@@ -25,40 +25,42 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen> {
   Color get _bg => Theme.of(context).scaffoldBackgroundColor;
   Color get _surface => Theme.of(context).colorScheme.surface;
   Color get textCol => Theme.of(context).colorScheme.onSurface;
-  Color get subtextCol => Theme.of(context).textTheme.bodySmall?.color ?? Theme.of(context).iconTheme.color!;
+  Color get subtextCol =>
+      Theme.of(context).textTheme.bodySmall?.color ??
+      Theme.of(context).iconTheme.color!;
   Color get borderCol => Theme.of(context).dividerColor;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-          backgroundColor: _bg,
-          drawer: const AppDrawer(activeRoute: 'deliveries'),
-          appBar: _buildAppBar(context),
-          body: Column(
-            children: [
-              _buildFilterChips(context),
-              Expanded(
-                child: Builder(
-                  builder: (context) {
-                    final deliveries = ref.watch(deliveryServiceProvider).value;
-                    final filtered = _getFilteredDeliveries(deliveries);
+      backgroundColor: _bg,
+      drawer: const AppDrawer(activeRoute: 'deliveries'),
+      appBar: _buildAppBar(context),
+      body: Column(
+        children: [
+          _buildFilterChips(context),
+          Expanded(
+            child: Builder(
+              builder: (context) {
+                final deliveries = ref.watch(deliveryServiceProvider).value;
+                final filtered = _getFilteredDeliveries(deliveries);
 
-                    if (filtered.isEmpty) {
-                      return _buildEmptyState(context);
-                    }
+                if (filtered.isEmpty) {
+                  return _buildEmptyState(context);
+                }
 
-                    return _buildDeliveriesList(context, filtered);
-                  },
-                ),
-              ),
-            ],
+                return _buildDeliveriesList(context, filtered);
+              },
+            ),
           ),
-          floatingActionButton: AppFAB(
-            heroTag: 'deliveries_fab',
-            onPressed: () => ReceiveDeliverySheet.show(context),
-            icon: FontAwesomeIcons.truckRampBox,
-            label: 'Receive Delivery',
-          ),
+        ],
+      ),
+      floatingActionButton: AppFAB(
+        heroTag: 'deliveries_fab',
+        onPressed: () => ReceiveDeliverySheet.show(context),
+        icon: FontAwesomeIcons.truckRampBox.data,
+        label: 'Receive Delivery',
+      ),
     );
   }
 
@@ -121,7 +123,6 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen> {
       ],
     );
   }
-
 
   Widget _buildFilterChips(BuildContext context) {
     final filters = ['Today', 'This Week', 'This Month', 'This Year', 'All'];
@@ -187,7 +188,7 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            FontAwesomeIcons.boxOpen,
+            FontAwesomeIcons.boxOpen.data,
             size: context.getRSize(48),
             color: borderCol,
           ),
@@ -265,7 +266,9 @@ class _DeliveryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textCol = Theme.of(context).colorScheme.onSurface;
-    final subtextCol = Theme.of(context).textTheme.bodySmall?.color ?? Theme.of(context).iconTheme.color!;
+    final subtextCol =
+        Theme.of(context).textTheme.bodySmall?.color ??
+        Theme.of(context).iconTheme.color!;
     final borderCol = Theme.of(context).dividerColor;
     final cardCol = Theme.of(context).cardColor;
     final isPending = delivery.status == 'pending';
@@ -308,7 +311,7 @@ class _DeliveryCard extends StatelessWidget {
                 Row(
                   children: [
                     Icon(
-                      FontAwesomeIcons.truck,
+                      FontAwesomeIcons.truck.data,
                       size: context.getRSize(14),
                       color: subtextCol,
                     ),
@@ -415,7 +418,3 @@ class _DeliveryCard extends StatelessWidget {
     );
   }
 }
-
-
-
-

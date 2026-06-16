@@ -49,12 +49,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       });
 
       // Watch orders for current user
-      _ordersSub = (db.select(db.orders)
-            ..where((t) => t.staffId.equals(user.id)))
-          .watch()
-          .listen((data) {
-        if (mounted) setState(() => _staffOrders = data);
-      });
+      _ordersSub =
+          (db.select(
+            db.orders,
+          )..where((t) => t.staffId.equals(user.id))).watch().listen((data) {
+            if (mounted) setState(() => _staffOrders = data);
+          });
 
       setState(() => _contentReady = true);
     });
@@ -68,7 +68,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
+    ref.watch(
+      currencySymbolProvider,
+    ); // rebuild money displays when currency changes
     final user = ref.watch(authProvider).currentUser;
     if (user == null) {
       return const SharedScaffold(
@@ -77,10 +79,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       );
     }
 
-    final storeName = _stores
-            .where((w) => w.id == user.storeId)
-            .firstOrNull
-            ?.name ??
+    final storeName =
+        _stores.where((w) => w.id == user.storeId).firstOrNull?.name ??
         'Unassigned';
 
     // Real role (master plan §8.2) — null until the membership + role rows are
@@ -101,7 +101,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         onPressed: () => Navigator.pop(context),
       ),
       title: AppBarHeader(
-        icon: FontAwesomeIcons.user,
+        icon: FontAwesomeIcons.user.data,
         title: user.name,
         subtitle: roleName.toUpperCase(),
       ),
@@ -125,9 +125,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       backgroundColor: _bg,
       appBar: appBar,
       body: ListView(
-        padding: EdgeInsets.all(context.getRSize(20)).copyWith(
-          bottom: context.getRSize(20) + context.deviceBottomPadding,
-        ),
+        padding: EdgeInsets.all(
+          context.getRSize(20),
+        ).copyWith(bottom: context.getRSize(20) + context.deviceBottomPadding),
         children: [
           ProfileHeaderCard(
             name: user.name,
@@ -138,14 +138,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               if (subAccess.badgeLabel != null)
                 ProfilePill(
                   icon: subAccess == SubscriptionAccess.active
-                      ? FontAwesomeIcons.crown
-                      : FontAwesomeIcons.solidClock,
+                      ? FontAwesomeIcons.crown.data
+                      : FontAwesomeIcons.solidClock.data,
                   label: subAccess.badgeLabel!,
                   color: subAccess == SubscriptionAccess.active
                       ? Theme.of(context).colorScheme.primary
                       : const Color(0xFFF59E0B),
                 ),
-              ProfilePill(icon: FontAwesomeIcons.store, label: storeName),
+              ProfilePill(icon: FontAwesomeIcons.store.data, label: storeName),
             ],
           ),
           SizedBox(height: context.getRSize(24)),
@@ -155,22 +155,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             title: 'Account Details',
             rows: [
               ProfileInfoRow(
-                icon: FontAwesomeIcons.store,
+                icon: FontAwesomeIcons.store.data,
                 label: 'Store',
                 value: storeName,
               ),
               ProfileInfoRow(
-                icon: FontAwesomeIcons.envelope,
+                icon: FontAwesomeIcons.envelope.data,
                 label: 'Email',
                 value: user.email ?? 'Not provided',
               ),
               ProfileInfoRow(
-                icon: FontAwesomeIcons.fingerprint,
+                icon: FontAwesomeIcons.fingerprint.data,
                 label: 'Biometrics',
                 value: user.biometricEnabled ? 'Enabled' : 'Disabled',
               ),
               ProfileInfoRow(
-                icon: FontAwesomeIcons.calendarDay,
+                icon: FontAwesomeIcons.calendarDay.data,
                 label: 'Member Since',
                 value:
                     '${user.createdAt.day}/${user.createdAt.month}/${user.createdAt.year}',
@@ -181,7 +181,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           AppButton(
             text: 'Edit Profile',
             variant: AppButtonVariant.outline,
-            icon: FontAwesomeIcons.penToSquare,
+            icon: FontAwesomeIcons.penToSquare.data,
             onPressed: () {
               final u = ref.read(authProvider).currentUser;
               if (u == null) return;
@@ -205,19 +205,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       ProfileStat(
         label: 'Total Orders',
         value: orders.length.toString(),
-        icon: FontAwesomeIcons.receipt,
+        icon: FontAwesomeIcons.receipt.data,
         color: Theme.of(context).colorScheme.primary,
       ),
       ProfileStat(
         label: 'Completed',
         value: completed.length.toString(),
-        icon: FontAwesomeIcons.checkDouble,
+        icon: FontAwesomeIcons.checkDouble.data,
         color: AppColors.success,
       ),
       ProfileStat(
         label: 'Sales Volume',
         value: formatCurrency(totalSales),
-        icon: FontAwesomeIcons.nairaSign,
+        icon: FontAwesomeIcons.nairaSign.data,
         color: const Color(0xFFA855F7),
       ),
     ];

@@ -83,13 +83,13 @@ class _QuickSaleModalState extends ConsumerState<QuickSaleModal>
       _priceCtrl.text.isNotEmpty;
 
   Map<String, dynamic> _buildProduct(String name, double priceNaira) => {
-        'name': name,
-        'subtitle': 'Quick Sale',
-        'price': priceNaira,
-        'icon': FontAwesomeIcons.bolt,
-        'color': Theme.of(context).colorScheme.primary,
-        'category': 'Other',
-      };
+    'name': name,
+    'subtitle': 'Quick Sale',
+    'price': priceNaira,
+    'icon': FontAwesomeIcons.bolt,
+    'color': Theme.of(context).colorScheme.primary,
+    'category': 'Other',
+  };
 
   // Direct add (CEO/Manager): unchanged behaviour.
   void _addToCart() {
@@ -101,7 +101,9 @@ class _QuickSaleModalState extends ConsumerState<QuickSaleModal>
       return;
     }
     final priceNaira = parseCurrency(_priceCtrl.text);
-    ref.read(cartProvider).addItem(
+    ref
+        .read(cartProvider)
+        .addItem(
           _buildProduct(_nameCtrl.text, priceNaira),
           qty: double.tryParse(_qtyCtrl.text) ?? 1.0,
         );
@@ -141,9 +143,11 @@ class _QuickSaleModalState extends ConsumerState<QuickSaleModal>
     final name = _nameCtrl.text.trim();
     final qty = double.tryParse(_qtyCtrl.text) ?? 1.0;
     final priceNaira = parseCurrency(_priceCtrl.text);
-    final qtyLabel =
-        qty == qty.roundToDouble() ? qty.toInt().toString() : qty.toString();
-    final summary = '$qtyLabel × $name @ ${formatCurrency(priceNaira)} '
+    final qtyLabel = qty == qty.roundToDouble()
+        ? qty.toInt().toString()
+        : qty.toString();
+    final summary =
+        '$qtyLabel × $name @ ${formatCurrency(priceNaira)} '
         '= ${formatCurrency(qty * priceNaira)}';
     final uid = ref.read(authProvider).currentUser?.id;
 
@@ -166,8 +170,9 @@ class _QuickSaleModalState extends ConsumerState<QuickSaleModal>
         _requestId = id;
         _submitting = false;
       });
-      _statusSub =
-          db.quickSaleRequestsDao.watchRequest(id).listen(_onStatusChange);
+      _statusSub = db.quickSaleRequestsDao
+          .watchRequest(id)
+          .listen(_onStatusChange);
     } catch (e, st) {
       CrashReporter.record(e, st, context: 'pos.quick_sale.request');
       if (!mounted) return;
@@ -181,11 +186,16 @@ class _QuickSaleModalState extends ConsumerState<QuickSaleModal>
     if (r.status == 'approved') {
       _resolved = true;
       if (!mounted) return;
-      ref.read(cartProvider).addItem(
+      ref
+          .read(cartProvider)
+          .addItem(
             _buildProduct(_pendingName, _pendingPriceNaira),
             qty: _pendingQty,
           );
-      AppNotification.showSuccess(context, 'Quick sale approved — added to cart.');
+      AppNotification.showSuccess(
+        context,
+        'Quick sale approved — added to cart.',
+      );
       Navigator.pop(context);
     } else if (r.status == 'rejected') {
       _resolved = true;
@@ -245,14 +255,17 @@ class _QuickSaleModalState extends ConsumerState<QuickSaleModal>
           AppInput(
             controller: _nameCtrl,
             labelText: 'Item Name',
-            prefixIcon: Icon(FontAwesomeIcons.tag, size: context.getRSize(16)),
+            prefixIcon: Icon(
+              FontAwesomeIcons.tag.data,
+              size: context.getRSize(16),
+            ),
           ),
           SizedBox(height: context.getRSize(12)),
           AppInput(
             controller: _qtyCtrl,
             labelText: 'Quantity',
             prefixIcon: Icon(
-              FontAwesomeIcons.cubes,
+              FontAwesomeIcons.cubes.data,
               size: context.getRSize(16),
             ),
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -264,7 +277,7 @@ class _QuickSaleModalState extends ConsumerState<QuickSaleModal>
             labelText: 'Price Per Unit ($activeCurrencySymbol)',
             hintText: 'e.g. 500',
             prefixIcon: Icon(
-              FontAwesomeIcons.nairaSign,
+              FontAwesomeIcons.nairaSign.data,
               size: context.getRSize(16),
             ),
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -275,7 +288,7 @@ class _QuickSaleModalState extends ConsumerState<QuickSaleModal>
             Row(
               children: [
                 Icon(
-                  FontAwesomeIcons.circleInfo,
+                  FontAwesomeIcons.circleInfo.data,
                   size: context.getRSize(13),
                   color: widget.subtextCol,
                 ),
@@ -305,7 +318,7 @@ class _QuickSaleModalState extends ConsumerState<QuickSaleModal>
         FadeTransition(
           opacity: Tween<double>(begin: 0.35, end: 1.0).animate(_pulse),
           child: Icon(
-            FontAwesomeIcons.hourglassHalf,
+            FontAwesomeIcons.hourglassHalf.data,
             size: context.getRSize(34),
             color: Theme.of(context).colorScheme.primary,
           ),
@@ -339,7 +352,7 @@ class _QuickSaleModalState extends ConsumerState<QuickSaleModal>
           child: Row(
             children: [
               Icon(
-                FontAwesomeIcons.bolt,
+                FontAwesomeIcons.bolt.data,
                 size: context.getRSize(14),
                 color: Theme.of(context).colorScheme.primary,
               ),
@@ -363,27 +376,27 @@ class _QuickSaleModalState extends ConsumerState<QuickSaleModal>
   }
 
   List<Widget> _formActions() => [
-        AppButton(
-          text: 'Cancel',
-          variant: AppButtonVariant.ghost,
-          isFullWidth: false,
-          onPressed: _submitting ? null : () => Navigator.pop(context),
-        ),
-        AppButton(
-          text: widget.requireApproval ? 'Send for Approval' : 'Send to Cart',
-          variant: AppButtonVariant.primary,
-          isFullWidth: false,
-          isLoading: _submitting,
-          onPressed: widget.requireApproval ? _sendForApproval : _addToCart,
-        ),
-      ];
+    AppButton(
+      text: 'Cancel',
+      variant: AppButtonVariant.ghost,
+      isFullWidth: false,
+      onPressed: _submitting ? null : () => Navigator.pop(context),
+    ),
+    AppButton(
+      text: widget.requireApproval ? 'Send for Approval' : 'Send to Cart',
+      variant: AppButtonVariant.primary,
+      isFullWidth: false,
+      isLoading: _submitting,
+      onPressed: widget.requireApproval ? _sendForApproval : _addToCart,
+    ),
+  ];
 
   List<Widget> _waitingActions() => [
-        AppButton(
-          text: 'Cancel Request',
-          variant: AppButtonVariant.outline,
-          isFullWidth: false,
-          onPressed: _withdrawAndClose,
-        ),
-      ];
+    AppButton(
+      text: 'Cancel Request',
+      variant: AppButtonVariant.outline,
+      isFullWidth: false,
+      onPressed: _withdrawAndClose,
+    ),
+  ];
 }

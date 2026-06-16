@@ -22,7 +22,8 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/receipt_widget.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
-import 'package:reebaplus_pos/features/deliveries/data/models/delivery_receipt.dart' as model;
+import 'package:reebaplus_pos/features/deliveries/data/models/delivery_receipt.dart'
+    as model;
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/menu_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
@@ -113,7 +114,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
+    ref.watch(
+      currencySymbolProvider,
+    ); // rebuild money displays when currency changes
     return SharedScaffold(
       activeRoute: 'orders',
       backgroundColor: _bg,
@@ -127,8 +130,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
           final activeStoreId = ref.watch(lockedStoreProvider).value;
 
           return ordersAsync.when(
-            loading: () =>
-                const Center(child: CircularProgressIndicator()),
+            loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Center(child: Text('Error: $e')),
             data: (allOrders) {
               final now = DateTime.now();
@@ -136,8 +138,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
               final allOrdersWithItems = activeStoreId == null
                   ? allOrders
                   : allOrders
-                      .where((o) => o.order.storeId == activeStoreId)
-                      .toList();
+                        .where((o) => o.order.storeId == activeStoreId)
+                        .toList();
 
               final pending = _applySearch(
                 allOrdersWithItems
@@ -151,8 +153,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
               final completed = _applySearch(
                 separatedCompleted.where((o) {
                   final t = o.order.completedAt ?? o.order.createdAt;
-                  return datePeriodFromLabel(_completedFilter)
-                      .includes(t, now: now);
+                  return datePeriodFromLabel(
+                    _completedFilter,
+                  ).includes(t, now: now);
                 }).toList(),
               );
 
@@ -162,8 +165,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
               final cancelled = _applySearch(
                 separatedCancelled.where((o) {
                   final t = o.order.cancelledAt ?? o.order.createdAt;
-                  return datePeriodFromLabel(_cancelledFilter)
-                      .includes(t, now: now);
+                  return datePeriodFromLabel(
+                    _cancelledFilter,
+                  ).includes(t, now: now);
                 }).toList(),
               );
 
@@ -197,8 +201,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       elevation: 0,
       iconTheme: IconThemeData(color: textCol),
       leading: const MenuButton(),
-      title: const AppBarHeader(
-        icon: FontAwesomeIcons.receipt,
+      title: AppBarHeader(
+        icon: FontAwesomeIcons.receipt.data,
         title: 'Orders',
         subtitle: 'Sales History',
       ),
@@ -220,13 +224,19 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
           fontWeight: FontWeight.bold,
           fontSize: context.getRFontSize(14),
         ),
-        tabs: const [
-          Tab(icon: Icon(FontAwesomeIcons.boxOpen, size: 16), text: 'Pending'),
+        tabs: [
           Tab(
-            icon: Icon(FontAwesomeIcons.clipboardCheck, size: 16),
+            icon: Icon(FontAwesomeIcons.boxOpen.data, size: 16),
+            text: 'Pending',
+          ),
+          Tab(
+            icon: Icon(FontAwesomeIcons.clipboardCheck.data, size: 16),
             text: 'Completed',
           ),
-          Tab(icon: Icon(FontAwesomeIcons.ban, size: 16), text: 'Cancelled'),
+          Tab(
+            icon: Icon(FontAwesomeIcons.ban.data, size: 16),
+            text: 'Cancelled',
+          ),
         ],
       ),
     );
@@ -244,7 +254,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     ValueChanged<String>? onSelectFilter,
     List<String>? filterOptions,
   }) {
-    final showFilter = selectedFilter != null &&
+    final showFilter =
+        selectedFilter != null &&
         onSelectFilter != null &&
         filterOptions != null;
     return Container(
@@ -274,59 +285,56 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
 
   Widget _buildSearchField(BuildContext context) {
     return TextField(
-        controller: _searchController,
-        onChanged: _onSearchChanged,
-        style: TextStyle(
-          color: textCol,
-          fontSize: context.getRFontSize(14),
+      controller: _searchController,
+      onChanged: _onSearchChanged,
+      style: TextStyle(color: textCol, fontSize: context.getRFontSize(14)),
+      decoration: InputDecoration(
+        hintText: 'Search by customer or order #',
+        hintStyle: TextStyle(
+          color: subtextCol,
+          fontSize: context.getRFontSize(13),
         ),
-        decoration: InputDecoration(
-          hintText: 'Search by customer or order #',
-          hintStyle: TextStyle(
-            color: subtextCol,
-            fontSize: context.getRFontSize(13),
-          ),
-          prefixIcon: Icon(
-            FontAwesomeIcons.magnifyingGlass,
-            size: context.getRSize(15),
-            color: subtextCol,
-          ),
-          suffixIcon: _searchQuery.isNotEmpty
-              ? GestureDetector(
-                  onTap: () {
-                    _searchController.clear();
-                    setState(() => _searchQuery = '');
-                  },
-                  child: Icon(
-                    FontAwesomeIcons.xmark,
-                    size: context.getRSize(14),
-                    color: subtextCol,
-                  ),
-                )
-              : null,
-          filled: true,
-          fillColor: _bg,
-          contentPadding: EdgeInsets.symmetric(
-            horizontal: context.getRSize(16),
-            vertical: context.getRSize(10),
-          ),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: borderCol),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: borderCol),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(
-              color: Theme.of(context).colorScheme.primary,
-              width: 1.5,
-            ),
+        prefixIcon: Icon(
+          FontAwesomeIcons.magnifyingGlass.data,
+          size: context.getRSize(15),
+          color: subtextCol,
+        ),
+        suffixIcon: _searchQuery.isNotEmpty
+            ? GestureDetector(
+                onTap: () {
+                  _searchController.clear();
+                  setState(() => _searchQuery = '');
+                },
+                child: Icon(
+                  FontAwesomeIcons.xmark.data,
+                  size: context.getRSize(14),
+                  color: subtextCol,
+                ),
+              )
+            : null,
+        filled: true,
+        fillColor: _bg,
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: context.getRSize(16),
+          vertical: context.getRSize(10),
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: borderCol),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: borderCol),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(
+            color: Theme.of(context).colorScheme.primary,
+            width: 1.5,
           ),
         ),
-      );
+      ),
+    );
   }
 
   /// Period-filter dropdown that sits inline with the search bar (§19.1).
@@ -354,7 +362,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
             child: Row(
               children: [
                 Icon(
-                  FontAwesomeIcons.check,
+                  FontAwesomeIcons.check.data,
                   size: context.getRSize(11),
                   color: o == selected
                       ? Theme.of(context).colorScheme.primary
@@ -366,8 +374,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                   style: TextStyle(
                     color: textCol,
                     fontSize: context.getRFontSize(13),
-                    fontWeight:
-                        o == selected ? FontWeight.w700 : FontWeight.normal,
+                    fontWeight: o == selected
+                        ? FontWeight.w700
+                        : FontWeight.normal,
                   ),
                 ),
               ],
@@ -388,7 +397,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              FontAwesomeIcons.calendarDay,
+              FontAwesomeIcons.calendarDay.data,
               size: context.getRSize(13),
               color: subtextCol,
             ),
@@ -403,7 +412,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
             ),
             SizedBox(width: context.getRSize(6)),
             Icon(
-              FontAwesomeIcons.chevronDown,
+              FontAwesomeIcons.chevronDown.data,
               size: context.getRSize(10),
               color: subtextCol,
             ),
@@ -431,8 +440,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       0,
       (sum, o) => sum + o.order.netAmountKobo,
     );
-    final unassigned =
-        list.where((o) => o.order.riderName == 'Pick-up Order').length;
+    final unassigned = list
+        .where((o) => o.order.riderName == 'Pick-up Order')
+        .length;
 
     // §19.2: no "Outstanding" card — a pending order is already settled at
     // checkout (received or charged to the wallet, §14.3), so it never owes.
@@ -450,11 +460,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
           value: formatCurrency(totalValue / 100.0),
           color: Theme.of(context).colorScheme.primary,
         ),
-      _StatItem(
-        label: 'Pick-up',
-        value: '$unassigned',
-        color: subtextCol,
-      ),
+      _StatItem(label: 'Pick-up', value: '$unassigned', color: subtextCol),
     ];
 
     final searchBarHeight = context.getRSize(64.0);
@@ -491,11 +497,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     );
 
     final stats = [
-      _StatItem(
-        label: 'Completed',
-        value: '${list.length}',
-        color: success,
-      ),
+      _StatItem(label: 'Completed', value: '${list.length}', color: success),
       if (managerUp) ...[
         _StatItem(
           label: 'Revenue',
@@ -543,15 +545,12 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       0,
       (sum, o) => sum + o.order.netAmountKobo,
     );
-    final refundsIssued =
-        list.where((o) => o.order.status == 'refunded').length;
+    final refundsIssued = list
+        .where((o) => o.order.status == 'refunded')
+        .length;
 
     final stats = [
-      _StatItem(
-        label: 'Cancelled',
-        value: '${list.length}',
-        color: danger,
-      ),
+      _StatItem(label: 'Cancelled', value: '${list.length}', color: danger),
       if (managerUp)
         _StatItem(
           label: 'Value Forfeited',
@@ -597,17 +596,17 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       IconData icon;
       String text;
       if (status == 'pending') {
-        icon = FontAwesomeIcons.boxOpen;
+        icon = FontAwesomeIcons.boxOpen.data;
         text = _searchQuery.isNotEmpty
             ? 'No pending orders match "$_searchQuery"'
             : 'No pending orders';
       } else if (status == 'completed') {
-        icon = FontAwesomeIcons.clipboardCheck;
+        icon = FontAwesomeIcons.clipboardCheck.data;
         text = _searchQuery.isNotEmpty
             ? 'No completed orders match "$_searchQuery"'
             : 'No completed orders';
       } else {
-        icon = FontAwesomeIcons.ban;
+        icon = FontAwesomeIcons.ban.data;
         text = _searchQuery.isNotEmpty
             ? 'No cancelled orders match "$_searchQuery"'
             : 'No cancelled orders';
@@ -650,31 +649,28 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
           context.getRSize(100) + context.bottomInset,
         ),
         sliver: SliverList(
-          delegate: SliverChildBuilderDelegate(
-            (context, index) {
-              final item = list[index];
-              return _OrderCard(
-                orderWithItems: item,
-                status: status,
-                onMarkAsDelivered: status == 'pending'
-                    ? () => _markAsDelivered(item)
-                    : null,
-                // §19.7: Refund replaces the old Cancel button on the Pending
-                // tab and is hidden unless the user may cancel a sale. It
-                // reverses the sale (stock, payment, both wallet legs) and moves
-                // the order to Cancelled. The Completed and Cancelled tabs have
-                // no Refund button (§19.8).
-                onRefund: (status == 'pending' && canRefund)
-                    ? () => _refundPendingOrder(item.order)
-                    : null,
-                onAssignRider: status == 'pending'
-                    ? (orderId) => _showRiderSelection(context, orderId)
-                    : null,
-                onViewReceipt: () => _viewReceipt(context, item),
-              );
-            },
-            childCount: list.length,
-          ),
+          delegate: SliverChildBuilderDelegate((context, index) {
+            final item = list[index];
+            return _OrderCard(
+              orderWithItems: item,
+              status: status,
+              onMarkAsDelivered: status == 'pending'
+                  ? () => _markAsDelivered(item)
+                  : null,
+              // §19.7: Refund replaces the old Cancel button on the Pending
+              // tab and is hidden unless the user may cancel a sale. It
+              // reverses the sale (stock, payment, both wallet legs) and moves
+              // the order to Cancelled. The Completed and Cancelled tabs have
+              // no Refund button (§19.8).
+              onRefund: (status == 'pending' && canRefund)
+                  ? () => _refundPendingOrder(item.order)
+                  : null,
+              onAssignRider: status == 'pending'
+                  ? (orderId) => _showRiderSelection(context, orderId)
+                  : null,
+              onViewReceipt: () => _viewReceipt(context, item),
+            );
+          }, childCount: list.length),
         ),
       ),
     ];
@@ -703,7 +699,10 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     try {
       await ref
           .read(orderServiceProvider)
-          .markAsCompleted(order.id, ref.read(authProvider).currentUser?.id ?? '');
+          .markAsCompleted(
+            order.id,
+            ref.read(authProvider).currentUser?.id ?? '',
+          );
 
       final receipt = model.DeliveryReceipt(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -725,7 +724,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
         );
       }
     } catch (e) {
-      if (mounted) AppNotification.showError(context, 'Could not complete order: $e');
+      if (mounted) {
+        AppNotification.showError(context, 'Could not complete order: $e');
+      }
       return;
     }
   }
@@ -794,7 +795,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                 ),
                 AppButton(
                   text: 'Issue Refund',
-                  icon: FontAwesomeIcons.rotateLeft,
+                  icon: FontAwesomeIcons.rotateLeft.data,
                   variant: AppButtonVariant.danger,
                   size: AppButtonSize.small,
                   onPressed: reason.isEmpty
@@ -812,17 +813,12 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     );
   }
 
-  void _executeRefund(
-    OrderData order,
-    String reason,
-  ) async {
+  void _executeRefund(OrderData order, String reason) async {
     final staffId = ref.read(authProvider).currentUser?.id ?? '';
     try {
-      await ref.read(orderServiceProvider).markAsCancelled(
-            order.id,
-            reason,
-            staffId,
-          );
+      await ref
+          .read(orderServiceProvider)
+          .markAsCancelled(order.id, reason, staffId);
       if (mounted) {
         AppNotification.showSuccess(
           context,
@@ -830,14 +826,18 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
         );
       }
     } catch (e) {
-      if (mounted) AppNotification.showError(context, 'Could not issue refund: $e');
+      if (mounted) {
+        AppNotification.showError(context, 'Could not issue refund: $e');
+      }
     }
   }
 
   void _showRiderSelection(BuildContext context, String orderId) async {
     // Staff/riders are no longer tracked. Mark the order as pick-up by default.
     try {
-      await ref.read(orderServiceProvider).assignRider(orderId, 'Pick-up Order');
+      await ref
+          .read(orderServiceProvider)
+          .assignRider(orderId, 'Pick-up Order');
     } catch (e) {
       if (context.mounted) {
         AppNotification.showError(
@@ -916,7 +916,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                               richOrder.customer?.name ?? 'Walk-in Customer',
                           customerAddress:
                               richOrder.customer?.addressText ?? 'N/A',
-                          cashReceived: currentOrder.paymentType == 'Wallet Payment'
+                          cashReceived:
+                              currentOrder.paymentType == 'Wallet Payment'
                               ? currentOrder.netAmountKobo / 100.0
                               : currentOrder.amountPaidKobo / 100.0,
                           reprintDate: reprintDate,
@@ -932,15 +933,15 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                     ),
                   ),
                   Padding(
-                    padding: EdgeInsets.all(context.getRSize(16)).add(
-                      EdgeInsets.only(bottom: context.deviceBottomPadding),
-                    ),
+                    padding: EdgeInsets.all(
+                      context.getRSize(16),
+                    ).add(EdgeInsets.only(bottom: context.deviceBottomPadding)),
                     child: Row(
                       children: [
                         Expanded(
                           child: AppButton(
                             text: 'Print',
-                            icon: FontAwesomeIcons.print,
+                            icon: FontAwesomeIcons.print.data,
                             onPressed: () {
                               setModalState(() {
                                 reprintDate = DateTime.now();
@@ -961,7 +962,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                         Expanded(
                           child: AppButton(
                             text: 'Share',
-                            icon: FontAwesomeIcons.shareNodes,
+                            icon: FontAwesomeIcons.shareNodes.data,
                             variant: AppButtonVariant.secondary,
                             onPressed: () async {
                               setModalState(() {
@@ -1035,10 +1036,10 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       final walletBalance = richOrder.customer == null
           ? null
           : (await ref
-                  .read(databaseProvider)
-                  .customersDao
-                  .getWalletBalanceKobo(richOrder.customer!.id)) /
-              100.0;
+                    .read(databaseProvider)
+                    .customersDao
+                    .getWalletBalanceKobo(richOrder.customer!.id)) /
+                100.0;
 
       final bytes = await ThermalReceiptService.buildReceipt(
         orderId: order.orderNumber,
@@ -1223,9 +1224,7 @@ class _SummaryStrip extends StatelessWidget {
               decoration: isLast
                   ? null
                   : BoxDecoration(
-                      border: Border(
-                        right: BorderSide(color: borderCol),
-                      ),
+                      border: Border(right: BorderSide(color: borderCol)),
                     ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.center,
@@ -1233,8 +1232,8 @@ class _SummaryStrip extends StatelessWidget {
                   Text(
                     stat.value,
                     style: TextStyle(
-                      color: stat.color ??
-                          Theme.of(context).colorScheme.onSurface,
+                      color:
+                          stat.color ?? Theme.of(context).colorScheme.onSurface,
                       fontWeight: FontWeight.bold,
                       fontSize: context.getRFontSize(13),
                     ),
@@ -1309,8 +1308,18 @@ class _OrderCard extends ConsumerWidget {
         t.year == now.year && t.month == now.month && t.day == now.day;
     if (isToday) return 'Today';
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     return '${t.day.toString().padLeft(2, '0')} ${months[t.month - 1]} ${t.year}';
   }
@@ -1337,7 +1346,8 @@ class _OrderCard extends ConsumerWidget {
     // The footer block (divider + money rows) is replaced by just the
     // cancellation reason when money is hidden — so a low role still sees why a
     // cancelled order was cancelled, with no money.
-    final showCancelReason = status == 'cancelled' &&
+    final showCancelReason =
+        status == 'cancelled' &&
         order.cancellationReason != null &&
         order.cancellationReason!.isNotEmpty;
 
@@ -1361,13 +1371,16 @@ class _OrderCard extends ConsumerWidget {
     // Balance comes from the live ledger via walletBalancesKoboProvider.
     final balances =
         ref.watch(walletBalancesKoboProvider).valueOrNull ?? const <int, int>{};
-    final walletBalanceKobo = customer == null ? 0 : (balances[customer.id] ?? 0);
+    final walletBalanceKobo = customer == null
+        ? 0
+        : (balances[customer.id] ?? 0);
     final showWalletDebt = customer != null && walletBalanceKobo < 0;
 
     // §19.4: who created the order (staffId → user name). Not a monetary value,
     // so it shows for every role (the §19.3 money-hiding rule does not apply).
     final users =
-        ref.watch(usersByBusinessProvider).valueOrNull ?? const <String, UserData>{};
+        ref.watch(usersByBusinessProvider).valueOrNull ??
+        const <String, UserData>{};
     final creatorName = order.staffId == null
         ? 'Unknown'
         : (users[order.staffId!]?.name ?? 'Unknown');
@@ -1432,7 +1445,7 @@ class _OrderCard extends ConsumerWidget {
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                                 child: Icon(
-                                  FontAwesomeIcons.user,
+                                  FontAwesomeIcons.user.data,
                                   size: context.getRSize(15),
                                   color: primary,
                                 ),
@@ -1475,7 +1488,7 @@ class _OrderCard extends ConsumerWidget {
                                   children: [
                                     IconButton(
                                       icon: Icon(
-                                        FontAwesomeIcons.motorcycle,
+                                        FontAwesomeIcons.motorcycle.data,
                                         size: context.getRSize(18),
                                         color: primary,
                                       ),
@@ -1538,7 +1551,7 @@ class _OrderCard extends ConsumerWidget {
                                     Row(
                                       children: [
                                         Icon(
-                                          FontAwesomeIcons.user,
+                                          FontAwesomeIcons.user.data,
                                           size: context.getRSize(9),
                                           color: subtextCol,
                                         ),
@@ -1548,7 +1561,9 @@ class _OrderCard extends ConsumerWidget {
                                             'By $creatorName',
                                             style: TextStyle(
                                               color: subtextCol,
-                                              fontSize: context.getRFontSize(11),
+                                              fontSize: context.getRFontSize(
+                                                11,
+                                              ),
                                             ),
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
@@ -1562,7 +1577,10 @@ class _OrderCard extends ConsumerWidget {
                               // Payment type badge
                               _PaymentBadge(
                                 label: _paymentLabel(order.paymentType),
-                                color: _paymentColor(order.paymentType, primary),
+                                color: _paymentColor(
+                                  order.paymentType,
+                                  primary,
+                                ),
                               ),
                             ],
                           ),
@@ -1677,8 +1695,9 @@ class _OrderCard extends ConsumerWidget {
                                               'Total  ',
                                               style: TextStyle(
                                                 color: subtextCol,
-                                                fontSize:
-                                                    context.getRFontSize(12),
+                                                fontSize: context.getRFontSize(
+                                                  12,
+                                                ),
                                               ),
                                             ),
                                             Text(
@@ -1688,8 +1707,9 @@ class _OrderCard extends ConsumerWidget {
                                               style: TextStyle(
                                                 color: primary,
                                                 fontWeight: FontWeight.bold,
-                                                fontSize:
-                                                    context.getRFontSize(15),
+                                                fontSize: context.getRFontSize(
+                                                  15,
+                                                ),
                                               ),
                                             ),
                                           ],
@@ -1718,7 +1738,7 @@ class _OrderCard extends ConsumerWidget {
                                 Row(
                                   children: [
                                     Icon(
-                                      FontAwesomeIcons.tag,
+                                      FontAwesomeIcons.tag.data,
                                       size: context.getRSize(11),
                                       color: success,
                                     ),
@@ -1747,7 +1767,7 @@ class _OrderCard extends ConsumerWidget {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Icon(
-                                      FontAwesomeIcons.circleInfo,
+                                      FontAwesomeIcons.circleInfo.data,
                                       size: context.getRSize(11),
                                       color: subtextCol,
                                     ),
@@ -1782,9 +1802,7 @@ class _OrderCard extends ConsumerWidget {
                             ),
                             decoration: BoxDecoration(
                               color: surfaceCol,
-                              border: Border(
-                                top: BorderSide(color: borderCol),
-                              ),
+                              border: Border(top: BorderSide(color: borderCol)),
                             ),
                             child: Row(
                               children: [
@@ -1794,7 +1812,7 @@ class _OrderCard extends ConsumerWidget {
                                   Expanded(
                                     child: AppButton(
                                       text: 'Refund',
-                                      icon: FontAwesomeIcons.rotateLeft,
+                                      icon: FontAwesomeIcons.rotateLeft.data,
                                       variant: AppButtonVariant.danger,
                                       size: AppButtonSize.xsmall,
                                       onPressed: onRefund,
@@ -1806,7 +1824,7 @@ class _OrderCard extends ConsumerWidget {
                                   Expanded(
                                     child: AppButton(
                                       text: 'Confirm',
-                                      icon: FontAwesomeIcons.truckFast,
+                                      icon: FontAwesomeIcons.truckFast.data,
                                       size: AppButtonSize.xsmall,
                                       onPressed: onMarkAsDelivered,
                                     ),
@@ -1842,17 +1860,17 @@ class _StatusBadge extends StatelessWidget {
     switch (status) {
       case 'completed':
         color = success;
-        icon = FontAwesomeIcons.check;
+        icon = FontAwesomeIcons.check.data;
         label = 'DONE';
         break;
       case 'refunded':
         color = blueMain;
-        icon = FontAwesomeIcons.rotateLeft;
+        icon = FontAwesomeIcons.rotateLeft.data;
         label = 'REFUNDED';
         break;
       default:
         color = danger;
-        icon = FontAwesomeIcons.ban;
+        icon = FontAwesomeIcons.ban.data;
         label = 'CANCELLED';
     }
 
@@ -1961,7 +1979,7 @@ class _WalletDebtBadge extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            FontAwesomeIcons.wallet,
+            FontAwesomeIcons.wallet.data,
             size: context.getRSize(10),
             color: danger,
           ),

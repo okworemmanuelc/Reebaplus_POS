@@ -54,8 +54,9 @@ class _SupplierFormSheetState extends ConsumerState<SupplierFormSheet> {
     _emailCtrl = TextEditingController(text: s?.email ?? '');
     _addressCtrl = TextEditingController(text: s?.address ?? '');
     _bankAcctNameCtrl = TextEditingController(text: s?.bankAccountName ?? '');
-    _bankAcctNumberCtrl =
-        TextEditingController(text: s?.bankAccountNumber ?? '');
+    _bankAcctNumberCtrl = TextEditingController(
+      text: s?.bankAccountNumber ?? '',
+    );
     _bankNameCtrl = TextEditingController(text: s?.bankName ?? '');
     _notesCtrl = TextEditingController(text: s?.notes ?? '');
   }
@@ -85,7 +86,9 @@ class _SupplierFormSheetState extends ConsumerState<SupplierFormSheet> {
   Future<void> _save() async {
     if (!_formKey.currentState!.validate() || _saving) return;
     // Write-boundary re-check (hard rule #6 / 3-layer enforcement).
-    if (!ref.read(currentUserPermissionsProvider).contains('suppliers.manage')) {
+    if (!ref
+        .read(currentUserPermissionsProvider)
+        .contains('suppliers.manage')) {
       Navigator.pop(context);
       return;
     }
@@ -93,17 +96,19 @@ class _SupplierFormSheetState extends ConsumerState<SupplierFormSheet> {
     setState(() => _saving = true);
     try {
       if (_isEdit) {
-        await db.catalogDao.updateSupplier(SuppliersCompanion(
-          id: Value(widget.existing!.id),
-          name: Value(_nameCtrl.text.trim()),
-          phone: Value(_orNull(_phoneCtrl.text)),
-          email: Value(_orNull(_emailCtrl.text)),
-          address: Value(_orNull(_addressCtrl.text)),
-          bankAccountName: Value(_orNull(_bankAcctNameCtrl.text)),
-          bankAccountNumber: Value(_orNull(_bankAcctNumberCtrl.text)),
-          bankName: Value(_orNull(_bankNameCtrl.text)),
-          notes: Value(_orNull(_notesCtrl.text)),
-        ));
+        await db.catalogDao.updateSupplier(
+          SuppliersCompanion(
+            id: Value(widget.existing!.id),
+            name: Value(_nameCtrl.text.trim()),
+            phone: Value(_orNull(_phoneCtrl.text)),
+            email: Value(_orNull(_emailCtrl.text)),
+            address: Value(_orNull(_addressCtrl.text)),
+            bankAccountName: Value(_orNull(_bankAcctNameCtrl.text)),
+            bankAccountNumber: Value(_orNull(_bankAcctNumberCtrl.text)),
+            bankName: Value(_orNull(_bankNameCtrl.text)),
+            notes: Value(_orNull(_notesCtrl.text)),
+          ),
+        );
         await db.activityLogDao.logActivity(
           action: 'supplier.edit',
           description: 'Edited supplier ${_nameCtrl.text.trim()}',
@@ -115,25 +120,30 @@ class _SupplierFormSheetState extends ConsumerState<SupplierFormSheet> {
         final businessId = ref.read(authProvider).currentUser?.businessId;
         if (businessId == null) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text(
-                  'Cannot save: account not fully loaded yet. Try again in a moment.'),
-            ));
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Cannot save: account not fully loaded yet. Try again in a moment.',
+                ),
+              ),
+            );
             setState(() => _saving = false);
           }
           return;
         }
-        final id = await db.catalogDao.insertSupplier(SuppliersCompanion.insert(
-          businessId: businessId,
-          name: _nameCtrl.text.trim(),
-          phone: Value(_orNull(_phoneCtrl.text)),
-          email: Value(_orNull(_emailCtrl.text)),
-          address: Value(_orNull(_addressCtrl.text)),
-          bankAccountName: Value(_orNull(_bankAcctNameCtrl.text)),
-          bankAccountNumber: Value(_orNull(_bankAcctNumberCtrl.text)),
-          bankName: Value(_orNull(_bankNameCtrl.text)),
-          notes: Value(_orNull(_notesCtrl.text)),
-        ));
+        final id = await db.catalogDao.insertSupplier(
+          SuppliersCompanion.insert(
+            businessId: businessId,
+            name: _nameCtrl.text.trim(),
+            phone: Value(_orNull(_phoneCtrl.text)),
+            email: Value(_orNull(_emailCtrl.text)),
+            address: Value(_orNull(_addressCtrl.text)),
+            bankAccountName: Value(_orNull(_bankAcctNameCtrl.text)),
+            bankAccountNumber: Value(_orNull(_bankAcctNumberCtrl.text)),
+            bankName: Value(_orNull(_bankNameCtrl.text)),
+            notes: Value(_orNull(_notesCtrl.text)),
+          ),
+        );
         await db.activityLogDao.logActivity(
           action: 'supplier.add',
           description: 'Added supplier ${_nameCtrl.text.trim()}',
@@ -170,8 +180,9 @@ class _SupplierFormSheetState extends ConsumerState<SupplierFormSheet> {
             child: Container(
               decoration: BoxDecoration(
                 color: _surface,
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(28)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(28),
+                ),
               ),
               child: Form(
                 key: _formKey,
@@ -300,7 +311,9 @@ class _SupplierFormSheetState extends ConsumerState<SupplierFormSheet> {
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
+                      Theme.of(
+                        context,
+                      ).colorScheme.primary.withValues(alpha: 0.7),
                       Theme.of(context).colorScheme.primary,
                     ],
                     begin: Alignment.topLeft,
@@ -309,7 +322,7 @@ class _SupplierFormSheetState extends ConsumerState<SupplierFormSheet> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
-                  FontAwesomeIcons.buildingColumns,
+                  FontAwesomeIcons.buildingColumns.data,
                   color: Colors.white,
                   size: context.getRSize(20),
                 ),

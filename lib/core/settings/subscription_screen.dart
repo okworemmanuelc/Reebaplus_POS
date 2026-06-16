@@ -43,7 +43,11 @@ class SubscriptionScreen extends ConsumerWidget {
           : SettingsFadeIn(
               child: ListView(
                 padding: EdgeInsets.fromLTRB(
-                    24, 24, 24, 24 + context.deviceBottomPadding),
+                  24,
+                  24,
+                  24,
+                  24 + context.deviceBottomPadding,
+                ),
                 children: [
                   const SettingsSectionTitle('PLAN & STATUS'),
                   const SizedBox(height: 16),
@@ -121,8 +125,12 @@ class SubscriptionScreen extends ConsumerWidget {
             ),
           ),
           Divider(height: 28, color: t.dividerColor),
-          _detailRow(context, Icons.event_rounded, _periodLabel(access),
-              _periodValue(business, access)),
+          _detailRow(
+            context,
+            Icons.event_rounded,
+            _periodLabel(access),
+            _periodValue(business, access),
+          ),
         ],
       ),
     );
@@ -131,12 +139,12 @@ class SubscriptionScreen extends ConsumerWidget {
   // ── helpers ────────────────────────────────────────────────────────────
 
   (String, Color) _statusChip(SubscriptionAccess access) => switch (access) {
-        SubscriptionAccess.active => ('ACTIVE', _green),
-        SubscriptionAccess.trialActive => ('FREE TRIAL', _amber),
-        SubscriptionAccess.trialExpired => ('TRIAL ENDED', _red),
-        SubscriptionAccess.inactive => ('INACTIVE', _red),
-        SubscriptionAccess.grace => ('—', _amber),
-      };
+    SubscriptionAccess.active => ('ACTIVE', _green),
+    SubscriptionAccess.trialActive => ('FREE TRIAL', _amber),
+    SubscriptionAccess.trialExpired => ('TRIAL ENDED', _red),
+    SubscriptionAccess.inactive => ('INACTIVE', _red),
+    SubscriptionAccess.grace => ('—', _amber),
+  };
 
   String _planTitle(String? plan) => 'Monthly subscription';
 
@@ -158,7 +166,9 @@ class SubscriptionScreen extends ConsumerWidget {
         final d = business.trialEndsAt as DateTime?;
         if (d == null) return '—';
         final days = d.difference(DateTime.now()).inDays;
-        final left = days <= 0 ? 'today' : '$days day${days == 1 ? '' : 's'} left';
+        final left = days <= 0
+            ? 'today'
+            : '$days day${days == 1 ? '' : 's'} left';
         return '${fmt.format(d)}  ·  $left';
       case SubscriptionAccess.trialExpired:
         final d = business.trialEndsAt as DateTime?;
@@ -171,7 +181,11 @@ class SubscriptionScreen extends ConsumerWidget {
   }
 
   Widget _detailRow(
-      BuildContext context, IconData icon, String label, String value) {
+    BuildContext context,
+    IconData icon,
+    String label,
+    String value,
+  ) {
     final t = Theme.of(context);
     final subtext = t.colorScheme.onSurface.withValues(alpha: 0.6);
     return Row(

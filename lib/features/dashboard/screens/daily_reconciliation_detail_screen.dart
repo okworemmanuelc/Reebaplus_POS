@@ -37,12 +37,20 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
     final theme = Theme.of(context);
     final isCeo = ref.watch(currentUserRoleProvider)?.slug == 'ceo';
     final scopeLabel = ref.watch(activeStoreLabelProvider);
-    final d = computeReconData(ref,
-        start: start, endExclusive: endExclusive, isCeo: isCeo);
+    final d = computeReconData(
+      ref,
+      start: start,
+      endExclusive: endExclusive,
+      isCeo: isCeo,
+    );
     final children = grouping.finer == null
         ? const <ReconBucket>[]
-        : buildReconBuckets(ref,
-            start: start, endExclusive: endExclusive, grouping: grouping.finer!);
+        : buildReconBuckets(
+            ref,
+            start: start,
+            endExclusive: endExclusive,
+            grouping: grouping.finer!,
+          );
 
     return SharedScaffold(
       activeRoute: 'dashboard',
@@ -53,26 +61,33 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title,
-                style: context.h3.copyWith(fontWeight: FontWeight.bold)),
-            Text(scopeLabel,
-                style: context.bodySmall.copyWith(color: theme.hintColor)),
+            Text(
+              title,
+              style: context.h3.copyWith(fontWeight: FontWeight.bold),
+            ),
+            Text(
+              scopeLabel,
+              style: context.bodySmall.copyWith(color: theme.hintColor),
+            ),
           ],
         ),
         actions: [
           IconButton(
             tooltip: 'Export CSV',
-            icon: Icon(FontAwesomeIcons.fileCsv,
-                size: 18, color: context.primaryColor),
+            icon: Icon(
+              FontAwesomeIcons.fileCsv.data,
+              size: 18,
+              color: context.primaryColor,
+            ),
             onPressed: () => _exportCsv(context, d, isCeo, scopeLabel),
           ),
           const SizedBox(width: 8),
         ],
       ),
       body: ListView(
-        padding: EdgeInsets.all(context.spacingM).copyWith(
-          bottom: context.spacingM + context.deviceBottomPadding,
-        ),
+        padding: EdgeInsets.all(
+          context.spacingM,
+        ).copyWith(bottom: context.spacingM + context.deviceBottomPadding),
         children: [
           _salesCard(context, theme, d),
           if (isCeo) ...[
@@ -105,78 +120,156 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
   // ── Cards ───────────────────────────────────────────────────────────────
 
   Widget _salesCard(BuildContext context, ThemeData theme, ReconData d) {
-    return _card(context, theme, 'Sales summary', FontAwesomeIcons.chartLine,
-        context.primaryColor, [
-      _line(context, theme, 'Items sold', fmtNumber(d.itemsSold)),
-      _line(context, theme, 'Products (SKUs) sold', fmtNumber(d.skus)),
-      _line(context, theme, 'Total sales',
-          formatCurrency(d.totalRevenueKobo / 100.0), strong: true),
-      _line(context, theme, 'Best staff',
+    return _card(
+      context,
+      theme,
+      'Sales summary',
+      FontAwesomeIcons.chartLine.data,
+      context.primaryColor,
+      [
+        _line(context, theme, 'Items sold', fmtNumber(d.itemsSold)),
+        _line(context, theme, 'Products (SKUs) sold', fmtNumber(d.skus)),
+        _line(
+          context,
+          theme,
+          'Total sales',
+          formatCurrency(d.totalRevenueKobo / 100.0),
+          strong: true,
+        ),
+        _line(
+          context,
+          theme,
+          'Best staff',
           d.bestStaff == null
               ? '—'
-              : '${d.bestStaff} (${formatCurrency(d.bestStaffKobo / 100.0)})'),
-      _line(context, theme, 'Top item',
-          d.topItem == null ? '—' : '${d.topItem} (×${d.topItemQty})'),
-    ]);
+              : '${d.bestStaff} (${formatCurrency(d.bestStaffKobo / 100.0)})',
+        ),
+        _line(
+          context,
+          theme,
+          'Top item',
+          d.topItem == null ? '—' : '${d.topItem} (×${d.topItemQty})',
+        ),
+      ],
+    );
   }
 
   Widget _plCard(BuildContext context, ThemeData theme, ReconData d) {
     final net = d.netProfitKobo;
-    final netColor =
-        net >= 0 ? const Color(0xFF22C55E) : theme.colorScheme.error;
-    return _card(context, theme, 'Profit & Loss', FontAwesomeIcons.chartPie,
-        netColor, [
-      _line(context, theme, 'Revenue',
-          formatCurrency(d.costedRevenueKobo / 100.0)),
-      _line(context, theme, 'Cost of goods sold',
-          '− ${formatCurrency(d.cogsKobo / 100.0)}'),
-      _divider(theme),
-      _line(context, theme, 'Gross profit',
-          formatCurrency(d.grossProfitKobo / 100.0),
-          strong: true),
-      _line(context, theme, 'Expenses (${d.expensesCount})',
-          '− ${formatCurrency(d.expensesKobo / 100.0)}'),
-      _line(context, theme, 'Damages (at cost)',
-          '− ${formatCurrency(d.damageCostKobo / 100.0)}'),
-      _divider(theme),
-      _line(context, theme, 'Net profit', formatCurrency(net / 100.0),
-          strong: true, color: netColor),
-      if (d.uncostedItems > 0) ...[
-        const SizedBox(height: 6),
-        Text(
-          'Excludes ${fmtNumber(d.uncostedItems)} item(s) sold with no recorded '
-          'buying price (e.g. quick sales).',
-          style: context.bodySmall.copyWith(color: theme.hintColor),
+    final netColor = net >= 0
+        ? const Color(0xFF22C55E)
+        : theme.colorScheme.error;
+    return _card(
+      context,
+      theme,
+      'Profit & Loss',
+      FontAwesomeIcons.chartPie.data,
+      netColor,
+      [
+        _line(
+          context,
+          theme,
+          'Revenue',
+          formatCurrency(d.costedRevenueKobo / 100.0),
         ),
+        _line(
+          context,
+          theme,
+          'Cost of goods sold',
+          '− ${formatCurrency(d.cogsKobo / 100.0)}',
+        ),
+        _divider(theme),
+        _line(
+          context,
+          theme,
+          'Gross profit',
+          formatCurrency(d.grossProfitKobo / 100.0),
+          strong: true,
+        ),
+        _line(
+          context,
+          theme,
+          'Expenses (${d.expensesCount})',
+          '− ${formatCurrency(d.expensesKobo / 100.0)}',
+        ),
+        _line(
+          context,
+          theme,
+          'Damages (at cost)',
+          '− ${formatCurrency(d.damageCostKobo / 100.0)}',
+        ),
+        _divider(theme),
+        _line(
+          context,
+          theme,
+          'Net profit',
+          formatCurrency(net / 100.0),
+          strong: true,
+          color: netColor,
+        ),
+        if (d.uncostedItems > 0) ...[
+          const SizedBox(height: 6),
+          Text(
+            'Excludes ${fmtNumber(d.uncostedItems)} item(s) sold with no recorded '
+            'buying price (e.g. quick sales).',
+            style: context.bodySmall.copyWith(color: theme.hintColor),
+          ),
+        ],
       ],
-    ]);
+    );
   }
 
   Widget _statementCard(BuildContext context, ThemeData theme, ReconData d) {
-    return _card(context, theme, 'Statement of account',
-        FontAwesomeIcons.moneyBillTransfer, Colors.blueAccent, [
-      _line(context, theme, 'Goods received',
-          formatCurrency(d.goodsReceivedKobo / 100.0)),
-      _line(context, theme, 'Paid to suppliers',
-          formatCurrency(d.supplierPaidKobo / 100.0)),
-      _line(context, theme, 'Refunds', formatCurrency(d.refundsKobo / 100.0)),
-      _line(context, theme, 'Outstanding customer debt',
+    return _card(
+      context,
+      theme,
+      'Statement of account',
+      FontAwesomeIcons.moneyBillTransfer.data,
+      Colors.blueAccent,
+      [
+        _line(
+          context,
+          theme,
+          'Goods received',
+          formatCurrency(d.goodsReceivedKobo / 100.0),
+        ),
+        _line(
+          context,
+          theme,
+          'Paid to suppliers',
+          formatCurrency(d.supplierPaidKobo / 100.0),
+        ),
+        _line(context, theme, 'Refunds', formatCurrency(d.refundsKobo / 100.0)),
+        _line(
+          context,
+          theme,
+          'Outstanding customer debt',
           formatCurrency(d.totalOwedKobo / 100.0),
-          color: d.totalOwedKobo > 0 ? theme.colorScheme.error : null),
-      if (d.showCrates)
-        _line(context, theme, 'Crate deposits held (now)',
-            formatCurrency(d.crateDepositKobo / 100.0)),
-      const SizedBox(height: 6),
-      Text(
-        'Recorded money flows — not a balanced cash ledger. Goods received is a '
-        'purchase (an asset), not a P&L cost.',
-        style: context.bodySmall.copyWith(color: theme.hintColor),
-      ),
-    ]);
+          color: d.totalOwedKobo > 0 ? theme.colorScheme.error : null,
+        ),
+        if (d.showCrates)
+          _line(
+            context,
+            theme,
+            'Crate deposits held (now)',
+            formatCurrency(d.crateDepositKobo / 100.0),
+          ),
+        const SizedBox(height: 6),
+        Text(
+          'Recorded money flows — not a balanced cash ledger. Goods received is a '
+          'purchase (an asset), not a P&L cost.',
+          style: context.bodySmall.copyWith(color: theme.hintColor),
+        ),
+      ],
+    );
   }
 
-  Widget _shrinkageCard(BuildContext context, ThemeData theme, ReconData d,
-      {required bool retail}) {
+  Widget _shrinkageCard(
+    BuildContext context,
+    ThemeData theme,
+    ReconData d, {
+    required bool retail,
+  }) {
     final shortageVal = retail ? d.shortageRetailKobo : d.shortageCostKobo;
     final damageVal = retail ? d.damageRetailKobo : d.damageCostKobo;
     final danger = d.shortageUnits > 0;
@@ -184,18 +277,30 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
       context,
       theme,
       retail ? 'Sellable value unaccounted' : 'Stock shrinkage (at cost)',
-      FontAwesomeIcons.triangleExclamation,
+      FontAwesomeIcons.triangleExclamation.data,
       Colors.redAccent,
       [
-        _line(context, theme, 'Stock shortages',
-            '${fmtNumber(d.shortageUnits)} unit(s) · ${formatCurrency(shortageVal / 100.0)}',
-            danger: danger),
-        _line(context, theme, 'Damages recorded',
-            '${fmtNumber(d.damageUnits)} unit(s) · ${formatCurrency(damageVal / 100.0)}'),
+        _line(
+          context,
+          theme,
+          'Stock shortages',
+          '${fmtNumber(d.shortageUnits)} unit(s) · ${formatCurrency(shortageVal / 100.0)}',
+          danger: danger,
+        ),
+        _line(
+          context,
+          theme,
+          'Damages recorded',
+          '${fmtNumber(d.damageUnits)} unit(s) · ${formatCurrency(damageVal / 100.0)}',
+        ),
         _divider(theme),
-        _line(context, theme, 'Total',
-            formatCurrency((shortageVal + damageVal) / 100.0),
-            strong: true),
+        _line(
+          context,
+          theme,
+          'Total',
+          formatCurrency((shortageVal + damageVal) / 100.0),
+          strong: true,
+        ),
         if (retail) ...[
           const SizedBox(height: 6),
           Text(
@@ -215,28 +320,48 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
       context,
       theme,
       'Stock audit',
-      FontAwesomeIcons.boxesStacked,
+      FontAwesomeIcons.boxesStacked.data,
       Colors.blueAccent,
       [
         if (!d.hasStockCount)
-          Text('No stock count taken in this period.',
-              style: context.bodySmall.copyWith(color: theme.hintColor))
+          Text(
+            'No stock count taken in this period.',
+            style: context.bodySmall.copyWith(color: theme.hintColor),
+          )
         else ...[
-          _line(context, theme, 'Products counted',
-              fmtNumber(d.productsCounted)),
-          _line(context, theme, 'Short',
-              '${fmtNumber(d.shortageCount)} products · ${fmtNumber(d.shortageUnits)} units',
-              danger: hasShortage),
-          _line(context, theme, 'Surplus',
-              '${fmtNumber(d.surplusCount)} products · ${fmtNumber(d.surplusUnits)} units'),
+          _line(
+            context,
+            theme,
+            'Products counted',
+            fmtNumber(d.productsCounted),
+          ),
+          _line(
+            context,
+            theme,
+            'Short',
+            '${fmtNumber(d.shortageCount)} products · ${fmtNumber(d.shortageUnits)} units',
+            danger: hasShortage,
+          ),
+          _line(
+            context,
+            theme,
+            'Surplus',
+            '${fmtNumber(d.surplusCount)} products · ${fmtNumber(d.surplusUnits)} units',
+          ),
           if (d.shortages.isNotEmpty) ...[
             const SizedBox(height: 6),
-            Text('Shortages',
-                style: context.bodySmall.copyWith(fontWeight: FontWeight.w700)),
+            Text(
+              'Shortages',
+              style: context.bodySmall.copyWith(fontWeight: FontWeight.w700),
+            ),
             for (final s in d.shortages)
-              _line(context, theme, s.name,
-                  '${s.diff} (had ${s.system}, counted ${s.actual})',
-                  danger: true),
+              _line(
+                context,
+                theme,
+                s.name,
+                '${s.diff} (had ${s.system}, counted ${s.actual})',
+                danger: true,
+              ),
           ],
         ],
       ],
@@ -244,33 +369,70 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _debtsExpensesCard(BuildContext context, ThemeData theme, ReconData d) {
-    return _card(context, theme, 'Debts & expenses',
-        FontAwesomeIcons.moneyBillWave, Colors.redAccent, [
-      _line(context, theme, 'Outstanding customer debt (business-wide)',
+  Widget _debtsExpensesCard(
+    BuildContext context,
+    ThemeData theme,
+    ReconData d,
+  ) {
+    return _card(
+      context,
+      theme,
+      'Debts & expenses',
+      FontAwesomeIcons.moneyBillWave.data,
+      Colors.redAccent,
+      [
+        _line(
+          context,
+          theme,
+          'Outstanding customer debt (business-wide)',
           formatCurrency(d.totalOwedKobo / 100.0),
-          danger: d.totalOwedKobo > 0),
-      _line(context, theme, 'Expenses recorded (${d.expensesCount})',
-          formatCurrency(d.expensesKobo / 100.0)),
-    ]);
+          danger: d.totalOwedKobo > 0,
+        ),
+        _line(
+          context,
+          theme,
+          'Expenses recorded (${d.expensesCount})',
+          formatCurrency(d.expensesKobo / 100.0),
+        ),
+      ],
+    );
   }
 
   Widget _cratesCard(BuildContext context, ThemeData theme, ReconData d) {
-    return _card(context, theme, 'Empty crates (held now)',
-        FontAwesomeIcons.boxOpen, Colors.brown, [
-      _line(context, theme, 'Crates held', '${fmtNumber(d.crateUnits)} crate(s)'),
-    ]);
+    return _card(
+      context,
+      theme,
+      'Empty crates (held now)',
+      FontAwesomeIcons.boxOpen.data,
+      Colors.brown,
+      [
+        _line(
+          context,
+          theme,
+          'Crates held',
+          '${fmtNumber(d.crateUnits)} crate(s)',
+        ),
+      ],
+    );
   }
 
   Widget _breakdown(
-      BuildContext context, ThemeData theme, List<ReconBucket> children) {
+    BuildContext context,
+    ThemeData theme,
+    List<ReconBucket> children,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: EdgeInsets.only(left: context.spacingS, bottom: context.spacingS),
-          child: Text('Breakdown by ${children.first.grouping.label.toLowerCase()}',
-              style: context.bodyMedium.copyWith(fontWeight: FontWeight.bold)),
+          padding: EdgeInsets.only(
+            left: context.spacingS,
+            bottom: context.spacingS,
+          ),
+          child: Text(
+            'Breakdown by ${children.first.grouping.label.toLowerCase()}',
+            style: context.bodyMedium.copyWith(fontWeight: FontWeight.bold),
+          ),
         ),
         for (final b in children) ...[
           _bucketCard(context, theme, b),
@@ -288,12 +450,14 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
         borderRadius: BorderRadius.circular(context.radiusL),
         onTap: () => Navigator.push(
           context,
-          slideDownRoute(DailyReconciliationDetailScreen(
-            start: b.start,
-            endExclusive: b.endExclusive,
-            grouping: b.grouping,
-            title: b.label,
-          )),
+          slideDownRoute(
+            DailyReconciliationDetailScreen(
+              start: b.start,
+              endExclusive: b.endExclusive,
+              grouping: b.grouping,
+              title: b.label,
+            ),
+          ),
         ),
         child: Container(
           padding: EdgeInsets.all(context.spacingM),
@@ -312,28 +476,37 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(b.label,
-                        style: context.bodyMedium
-                            .copyWith(fontWeight: FontWeight.bold)),
+                    Text(
+                      b.label,
+                      style: context.bodyMedium.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     const SizedBox(height: 4),
-                    Text('${fmtNumber(b.itemsSold)} items sold',
-                        style:
-                            context.bodySmall.copyWith(color: theme.hintColor)),
+                    Text(
+                      '${fmtNumber(b.itemsSold)} items sold',
+                      style: context.bodySmall.copyWith(color: theme.hintColor),
+                    ),
                   ],
                 ),
               ),
               if (mismatch)
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: theme.colorScheme.error.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: Text('Mismatch',
-                      style: context.bodySmall.copyWith(
-                          color: theme.colorScheme.error,
-                          fontWeight: FontWeight.w700)),
+                  child: Text(
+                    'Mismatch',
+                    style: context.bodySmall.copyWith(
+                      color: theme.colorScheme.error,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ),
               const SizedBox(width: 8),
               Icon(Icons.chevron_right_rounded, color: theme.hintColor),
@@ -346,9 +519,15 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
 
   // ── Shared widgets ────────────────────────────────────────────────────────
 
-  Widget _card(BuildContext context, ThemeData theme, String title,
-      IconData icon, Color color, List<Widget> children,
-      {bool danger = false}) {
+  Widget _card(
+    BuildContext context,
+    ThemeData theme,
+    String title,
+    IconData icon,
+    Color color,
+    List<Widget> children, {
+    bool danger = false,
+  }) {
     return Container(
       padding: EdgeInsets.all(context.spacingM),
       decoration: BoxDecoration(
@@ -367,9 +546,10 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
             children: [
               Icon(icon, size: 15, color: color),
               const SizedBox(width: 8),
-              Text(title,
-                  style:
-                      context.bodyMedium.copyWith(fontWeight: FontWeight.bold)),
+              Text(
+                title,
+                style: context.bodyMedium.copyWith(fontWeight: FontWeight.bold),
+              ),
             ],
           ),
           SizedBox(height: context.spacingS),
@@ -379,8 +559,15 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _line(BuildContext context, ThemeData theme, String label, String value,
-      {bool strong = false, bool danger = false, Color? color}) {
+  Widget _line(
+    BuildContext context,
+    ThemeData theme,
+    String label,
+    String value, {
+    bool strong = false,
+    bool danger = false,
+    Color? color,
+  }) {
     final c = color ?? (danger ? theme.colorScheme.error : null);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
@@ -388,28 +575,38 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Expanded(
-            child: Text(label,
-                style: context.bodySmall.copyWith(color: theme.hintColor)),
+            child: Text(
+              label,
+              style: context.bodySmall.copyWith(color: theme.hintColor),
+            ),
           ),
           const SizedBox(width: 8),
-          Text(value,
-              style: context.bodySmall.copyWith(
-                fontWeight: strong ? FontWeight.w800 : FontWeight.w600,
-                color: c,
-              )),
+          Text(
+            value,
+            style: context.bodySmall.copyWith(
+              fontWeight: strong ? FontWeight.w800 : FontWeight.w600,
+              color: c,
+            ),
+          ),
         ],
       ),
     );
   }
 
   Widget _divider(ThemeData theme) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Divider(
-            height: 1, color: theme.dividerColor.withValues(alpha: 0.25)),
-      );
+    padding: const EdgeInsets.symmetric(vertical: 4),
+    child: Divider(
+      height: 1,
+      color: theme.dividerColor.withValues(alpha: 0.25),
+    ),
+  );
 
   Future<void> _exportCsv(
-      BuildContext context, ReconData d, bool isCeo, String scope) async {
+    BuildContext context,
+    ReconData d,
+    bool isCeo,
+    String scope,
+  ) async {
     String money(int kobo) => (kobo / 100.0).toStringAsFixed(2);
     final rows = <List<String>>[
       ['Items sold', '${d.itemsSold}'],
@@ -424,11 +621,16 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
         ['Paid to suppliers', money(d.supplierPaidKobo)],
         ['Refunds', money(d.refundsKobo)],
         ['Stock shortages (units)', '${d.shortageUnits}'],
-        ['Stock shrinkage (at cost)', money(d.shortageCostKobo + d.damageCostKobo)],
+        [
+          'Stock shrinkage (at cost)',
+          money(d.shortageCostKobo + d.damageCostKobo),
+        ],
       ] else ...[
         ['Stock shortages (units)', '${d.shortageUnits}'],
-        ['Sellable value unaccounted',
-          money(d.shortageRetailKobo + d.damageRetailKobo)],
+        [
+          'Sellable value unaccounted',
+          money(d.shortageRetailKobo + d.damageRetailKobo),
+        ],
       ],
       ['Expenses recorded', money(d.expensesKobo)],
       ['Outstanding customer debt', money(d.totalOwedKobo)],
@@ -443,9 +645,9 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
       );
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not export: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not export: $e')));
       }
     }
   }

@@ -129,7 +129,6 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
   /// unlock). Computed once in [_checkDeviceUser].
   bool _deviceMultiStaff = false;
 
-
   /// Regenerated on auth-state changes to force MaterialApp's internal
   /// Navigator to rebuild its route stack (clears stale MainLayout).
   GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
@@ -244,8 +243,9 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
       final db = ref.read(databaseProvider);
       final user = await db.storesDao.getUserById(userId);
       if (user != null) {
-        final count = await db.userBusinessesDao
-            .countActiveStaffForBusiness(user.businessId);
+        final count = await db.userBusinessesDao.countActiveStaffForBusiness(
+          user.businessId,
+        );
         multiStaff = count > 1;
       }
     }
@@ -505,8 +505,7 @@ class _SessionExpiredScreenState extends ConsumerState<_SessionExpiredScreen> {
     }
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) =>
-            OtpVerificationScreen(user: widget.user, email: email),
+        builder: (_) => OtpVerificationScreen(user: widget.user, email: email),
       ),
     );
   }
@@ -530,8 +529,11 @@ class _SessionExpiredScreenState extends ConsumerState<_SessionExpiredScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Spacer(),
-              Icon(Icons.lock_clock_outlined,
-                  size: 72, color: theme.colorScheme.primary),
+              Icon(
+                Icons.lock_clock_outlined,
+                size: 72,
+                color: theme.colorScheme.primary,
+              ),
               const SizedBox(height: 20),
               Text(
                 'Session expired',

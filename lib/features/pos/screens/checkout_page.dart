@@ -29,6 +29,7 @@ import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/printer_picker.dart';
 import 'package:reebaplus_pos/shared/services/cart_service.dart';
+import 'package:reebaplus_pos/shared/utils/product_icon_helper.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CheckoutPage — shown after "Proceed to Checkout" in the cart.
@@ -170,8 +171,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     // viewer), sell from / resolve the user's first selectable store — matching
     // the POS grid's fallback — before the legacy currentUser.storeId fallback.
     final selectable = ref.read(selectableStoresProvider);
-    final storeId = nav.lockedStoreId.value ??
-        (selectable.isNotEmpty ? selectable.first.id : auth.currentUser?.storeId);
+    final storeId =
+        nav.lockedStoreId.value ??
+        (selectable.isNotEmpty
+            ? selectable.first.id
+            : auth.currentUser?.storeId);
 
     // Stream-driven so a remote rename of the active store or a new
     // manufacturer arriving via realtime updates the receipt header / map
@@ -239,8 +243,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   /// current mode. Negative = debt. For Cash / Transfer the entered amount
   /// counts; Wallet / Credit Sale pay nothing now, so the full total is charged.
   int get _projectedWalletKobo {
-    final paidKobo =
-        _mode == PayMode.cashTransfer ? (_cashReceivedValue * 100).round() : 0;
+    final paidKobo = _mode == PayMode.cashTransfer
+        ? (_cashReceivedValue * 100).round()
+        : 0;
     return _currentCustomerWalletKobo + paidKobo - _totalKobo;
   }
 
@@ -250,8 +255,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   /// gated even if the customer is already in debt.
   bool get _overDebtLimit {
     if (_isWalkIn) return false;
-    final paidKobo =
-        _mode == PayMode.cashTransfer ? (_cashReceivedValue * 100).round() : 0;
+    final paidKobo = _mode == PayMode.cashTransfer
+        ? (_cashReceivedValue * 100).round()
+        : 0;
     if (paidKobo >= _totalKobo) return false;
     final projectedKobo = _projectedWalletKobo;
     if (projectedKobo >= 0) return false;
@@ -314,17 +320,16 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       widget.crateLines.isNotEmpty;
 
   /// Total deposit PAID at checkout (kobo) — 0 unless [_depositApplies].
-  int get _depositTotalKobo => _depositApplies
-      ? _depositByMfr.values.fold<int>(0, (s, v) => s + v)
-      : 0;
+  int get _depositTotalKobo =>
+      _depositApplies ? _depositByMfr.values.fold<int>(0, (s, v) => s + v) : 0;
 
   /// The full/expected deposit if every brand's crates were deposited in full
   /// (rate × crates summed). Shown as a reference; not added to the payable.
   int get _fullDepositKobo => widget.crateLines.fold<int>(0, (s, line) {
-        final rateKobo = (line['rateKobo'] as int?) ?? 0;
-        final crates = (line['crates'] as num?)?.toDouble() ?? 0;
-        return s + (rateKobo * crates).round();
-      });
+    final rateKobo = (line['rateKobo'] as int?) ?? 0;
+    final crates = (line['crates'] as num?)?.toDouble() ?? 0;
+    return s + (rateKobo * crates).round();
+  });
 
   /// The payable total the customer settles = goods + the deposit held.
   int get _totalKobo => _goodsTotalKobo + _depositTotalKobo;
@@ -332,7 +337,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   // ── build ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
+    ref.watch(
+      currencySymbolProvider,
+    ); // rebuild money displays when currency changes
     return Scaffold(
       backgroundColor: _bg,
       appBar: AppBar(
@@ -435,8 +442,8 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                   ),
                   child: Icon(
                     _isWalkIn
-                        ? FontAwesomeIcons.userTag
-                        : FontAwesomeIcons.user,
+                        ? FontAwesomeIcons.userTag.data
+                        : FontAwesomeIcons.user.data,
                     size: context.getRSize(16),
                     color: Theme.of(context).colorScheme.primary,
                   ),
@@ -493,7 +500,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             text: 'Confirm Payment',
             variant: AppButtonVariant.primary,
             isLoading: _isProcessing,
-            icon: FontAwesomeIcons.check,
+            icon: FontAwesomeIcons.check.data,
             onPressed: _confirmPayment,
           ),
         ],
@@ -515,10 +522,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         Text(
           'Refundable deposit held for the empties. Each brand starts at '
           '${formatCurrency(0)} — tap a brand to enter how much was paid.',
-          style: TextStyle(
-            fontSize: context.getRFontSize(12),
-            color: _subtext,
-          ),
+          style: TextStyle(fontSize: context.getRFontSize(12), color: _subtext),
         ),
         SizedBox(height: context.getRSize(12)),
         // Full/expected deposit reference (rate × crates across all brands).
@@ -529,10 +533,14 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             vertical: context.getRSize(12),
           ),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.07),
+            color: Theme.of(
+              context,
+            ).colorScheme.primary.withValues(alpha: 0.07),
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
+              color: Theme.of(
+                context,
+              ).colorScheme.primary.withValues(alpha: 0.2),
             ),
           ),
           child: Row(
@@ -608,7 +616,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(
-                FontAwesomeIcons.beerMugEmpty,
+                FontAwesomeIcons.beerMugEmpty.data,
                 size: context.getRSize(14),
                 color: Theme.of(context).colorScheme.primary,
               ),
@@ -650,7 +658,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             ),
             SizedBox(width: context.getRSize(8)),
             Icon(
-              FontAwesomeIcons.penToSquare,
+              FontAwesomeIcons.penToSquare.data,
               size: context.getRSize(13),
               color: _subtext,
             ),
@@ -743,7 +751,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                     ctrl.text = (fullKobo ~/ 100).toString();
                   },
                   icon: Icon(
-                    FontAwesomeIcons.wandMagicSparkles,
+                    FontAwesomeIcons.wandMagicSparkles.data,
                     size: context.getRSize(13),
                   ),
                   label: Text('Use full (${formatCurrency(fullKobo / 100.0)})'),
@@ -766,7 +774,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                       variant: AppButtonVariant.primary,
                       onPressed: () {
                         final val = (parseCurrency(ctrl.text) * 100).round();
-                        setState(() => _depositByMfr[mfrId] = val < 0 ? 0 : val);
+                        setState(
+                          () => _depositByMfr[mfrId] = val < 0 ? 0 : val,
+                        );
                         Navigator.pop(sheetCtx);
                       },
                     ),
@@ -895,8 +905,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     }
 
     // ── Validate by mode ──────────────────────────────────────────────────
-    final paidKobo =
-        _mode == PayMode.cashTransfer ? (_cashReceivedValue * 100).round() : 0;
+    final paidKobo = _mode == PayMode.cashTransfer
+        ? (_cashReceivedValue * 100).round()
+        : 0;
 
     if (_isWalkIn) {
       // Walk-ins have no wallet (hard rule 14): Cash / Transfer only, paid in
@@ -905,7 +916,10 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       // genuine underpayment to block.
       if (_mode != PayMode.cashTransfer ||
           (paidKobo > 0 && paidKobo < _totalKobo)) {
-        AppNotification.showError(context, 'Walk-in customers must pay in full');
+        AppNotification.showError(
+          context,
+          'Walk-in customers must pay in full',
+        );
         return;
       }
     } else {
@@ -989,8 +1003,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       // §12.1 "All Stores" fallback → first selectable store (matches the POS
       // grid), then the legacy currentUser.storeId fallback.
       final selectable = ref.read(selectableStoresProvider);
-      final storeId = nav.lockedStoreId.value ??
-          (selectable.isNotEmpty ? selectable.first.id : auth.currentUser?.storeId);
+      final storeId =
+          nav.lockedStoreId.value ??
+          (selectable.isNotEmpty
+              ? selectable.first.id
+              : auth.currentUser?.storeId);
 
       // Ensure store address is resolved before proceeding to receipt
       if (_storeAddress == null && storeId != null) {
@@ -1061,8 +1078,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           _amountPaid = amountPaidKobo / 100.0;
           // True post-sale wallet net = old + credit(paid) − debit(total).
           // Walk-ins have no wallet (§14.3).
-          _receiptWalletBalance =
-              _isWalkIn ? null : (oldWalletKobo + amountPaidKobo - totalKobo) / 100.0;
+          _receiptWalletBalance = _isWalkIn
+              ? null
+              : (oldWalletKobo + amountPaidKobo - totalKobo) / 100.0;
           _receiptCratesOwed = cratesOwed;
           _receiptCratesCredit = cratesCredit;
           _paymentConfirmed = true;
@@ -1111,9 +1129,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           duration: const Duration(milliseconds: 300),
           transitionBuilder: (child, anim) =>
               FadeTransition(opacity: anim, child: child),
-          child: _isPrinting
-              ? _buildPrintingBanner()
-              : const SizedBox.shrink(),
+          child: _isPrinting ? _buildPrintingBanner() : const SizedBox.shrink(),
         ),
         Expanded(
           child: SingleChildScrollView(
@@ -1163,7 +1179,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            FontAwesomeIcons.print,
+            FontAwesomeIcons.print.data,
             size: context.getRSize(16),
             color: _onPrimary,
           ),
@@ -1209,7 +1225,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
               Expanded(
                 child: _receiptButton(
                   'Print Receipt',
-                  FontAwesomeIcons.print,
+                  FontAwesomeIcons.print.data,
                   Theme.of(context).colorScheme.primary,
                   _printReceipt,
                 ),
@@ -1218,7 +1234,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
               Expanded(
                 child: _receiptButton(
                   'Share Receipt',
-                  FontAwesomeIcons.shareNodes,
+                  FontAwesomeIcons.shareNodes.data,
                   success,
                   _shareReceipt,
                 ),
@@ -1480,7 +1496,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             Expanded(
               child: _methodChip(
                 'Cash / Transfer',
-                FontAwesomeIcons.moneyBill,
+                FontAwesomeIcons.moneyBill.data,
                 _mode == PayMode.cashTransfer,
                 () => setState(() => _mode = PayMode.cashTransfer),
               ),
@@ -1490,7 +1506,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
               Expanded(
                 child: _methodChip(
                   'Pay from Wallet',
-                  FontAwesomeIcons.wallet,
+                  FontAwesomeIcons.wallet.data,
                   _mode == PayMode.wallet,
                   () => setState(() => _mode = PayMode.wallet),
                 ),
@@ -1620,10 +1636,12 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
     String hint;
     if (diffKobo < 0) {
-      hint = 'Shortfall ${formatCurrency(-diffKobo / 100.0)} added to '
+      hint =
+          'Shortfall ${formatCurrency(-diffKobo / 100.0)} added to '
           '$_customerDisplayName\'s wallet as debt.';
     } else if (diffKobo > 0) {
-      hint = 'Excess ${formatCurrency(diffKobo / 100.0)} added to '
+      hint =
+          'Excess ${formatCurrency(diffKobo / 100.0)} added to '
           '$_customerDisplayName\'s wallet.';
     } else {
       hint = 'Fully paid — no change to the wallet.';
@@ -1687,7 +1705,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           child: Text(
             isDebt
                 ? 'Wallet credit can\'t cover the order — the shortfall is added '
-                    'as debt.'
+                      'as debt.'
                 : 'The order is charged to the wallet credit.',
             style: TextStyle(
               fontSize: context.getRFontSize(12),
@@ -1773,10 +1791,10 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   Widget _debtLimitWarning(int limitKobo, int projectedKobo) {
     final msg = limitKobo <= 0
         ? '$_customerDisplayName has no debt limit set — set one before booking '
-            'this debt.'
+              'this debt.'
         : 'Over $_customerDisplayName\'s debt limit of '
-            '${formatCurrency(limitKobo / 100.0)} by '
-            '${formatCurrency(((-projectedKobo) - limitKobo) / 100.0)}.';
+              '${formatCurrency(limitKobo / 100.0)} by '
+              '${formatCurrency(((-projectedKobo) - limitKobo) / 100.0)}.';
     return Padding(
       padding: EdgeInsets.only(top: context.getRSize(8)),
       child: Container(
@@ -1789,7 +1807,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         child: Row(
           children: [
             Icon(
-              FontAwesomeIcons.triangleExclamation,
+              FontAwesomeIcons.triangleExclamation.data,
               size: context.getRSize(14),
               color: danger,
             ),
@@ -1839,7 +1857,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
-                FontAwesomeIcons.fileInvoiceDollar,
+                FontAwesomeIcons.fileInvoiceDollar.data,
                 size: context.getRSize(18),
                 color: active ? _primary : _subtext,
               ),
@@ -1944,12 +1962,8 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     final itemIcon = rawIcon is IconData
         ? rawIcon
         : rawIcon is int
-        ? IconData(
-            rawIcon,
-            fontFamily: 'FontAwesomeSolid',
-            fontPackage: 'font_awesome_flutter',
-          )
-        : FontAwesomeIcons.box;
+        ? productIconFromCodePoint(rawIcon)
+        : FontAwesomeIcons.box.data;
 
     return Padding(
       padding: EdgeInsets.symmetric(
@@ -2042,5 +2056,4 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       ),
     );
   }
-
 }

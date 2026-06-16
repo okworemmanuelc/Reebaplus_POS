@@ -26,8 +26,7 @@ class WhoIsWorkingScreen extends ConsumerStatefulWidget {
   const WhoIsWorkingScreen({super.key});
 
   @override
-  ConsumerState<WhoIsWorkingScreen> createState() =>
-      _WhoIsWorkingScreenState();
+  ConsumerState<WhoIsWorkingScreen> createState() => _WhoIsWorkingScreenState();
 }
 
 class _WhoIsWorkingScreenState extends ConsumerState<WhoIsWorkingScreen> {
@@ -83,9 +82,7 @@ class _WhoIsWorkingScreenState extends ConsumerState<WhoIsWorkingScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => LoginScreen(presetUser: presetUser),
-        ),
+        MaterialPageRoute(builder: (_) => LoginScreen(presetUser: presetUser)),
       );
     });
   }
@@ -105,9 +102,9 @@ class _WhoIsWorkingScreenState extends ConsumerState<WhoIsWorkingScreen> {
     final user = entry.user;
     // Has a PIN → straight to the PIN screen (§8.4).
     if (user.pinHash != null) {
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => LoginScreen(presetUser: user)),
-      );
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => LoginScreen(presetUser: user)));
       return;
     }
 
@@ -190,10 +187,11 @@ class _WhoIsWorkingScreenState extends ConsumerState<WhoIsWorkingScreen> {
         }
         // Arrange by role (CEO → Manager → Cashier → Stock keeper), then name
         // — consistent with the Staff Management list (§9.2).
-        final ordered = [...staff]..sort((a, b) {
-          final r = roleRank(a.role?.slug).compareTo(roleRank(b.role?.slug));
-          return r != 0 ? r : a.user.name.compareTo(b.user.name);
-        });
+        final ordered = [...staff]
+          ..sort((a, b) {
+            final r = roleRank(a.role?.slug).compareTo(roleRank(b.role?.slug));
+            return r != 0 ? r : a.user.name.compareTo(b.user.name);
+          });
         return _PickerList(
           key: const ValueKey('picker'),
           businessId: businessId,
@@ -219,7 +217,8 @@ class _PickerList extends ConsumerWidget {
   });
 
   String _businessName(WidgetRef ref) {
-    final businesses = ref.watch(localBusinessesProvider).valueOrNull ?? const [];
+    final businesses =
+        ref.watch(localBusinessesProvider).valueOrNull ?? const [];
     for (final b in businesses) {
       if (b.id == businessId) return b.name;
     }
@@ -272,10 +271,8 @@ class _PickerList extends ConsumerWidget {
           child: ListView.builder(
             padding: EdgeInsets.only(bottom: context.getRSize(12)),
             itemCount: staff.length,
-            itemBuilder: (context, i) => _StaffPickerCard(
-              entry: staff[i],
-              onTap: () => onTap(staff[i]),
-            ),
+            itemBuilder: (context, i) =>
+                _StaffPickerCard(entry: staff[i], onTap: () => onTap(staff[i])),
           ),
         ),
         // ── Escape hatch: account not in the list → back to Welcome (§4) so a
@@ -288,9 +285,9 @@ class _PickerList extends ConsumerWidget {
           ),
           child: Center(
             child: TextButton.icon(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const WelcomeScreen()),
-              ),
+              onPressed: () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const WelcomeScreen())),
               icon: Icon(
                 Icons.person_add_alt_1_outlined,
                 size: context.getRFontSize(18),

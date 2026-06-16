@@ -108,7 +108,8 @@ class _NotificationOverlay extends StatefulWidget {
   State<_NotificationOverlay> createState() => _NotificationOverlayState();
 }
 
-class _NotificationOverlayState extends State<_NotificationOverlay> with SingleTickerProviderStateMixin {
+class _NotificationOverlayState extends State<_NotificationOverlay>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _opacityAnimation;
   late Animation<Offset> _slideAnimation;
@@ -130,10 +131,7 @@ class _NotificationOverlayState extends State<_NotificationOverlay> with SingleT
     _slideAnimation = Tween<Offset>(
       begin: const Offset(0, -0.2),
       end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOutBack,
-    ));
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutBack));
 
     widget.state.addListener(_onStateChanged);
     _onStateChanged();
@@ -200,8 +198,10 @@ class _NotificationOverlayState extends State<_NotificationOverlay> with SingleT
                 child: Container(
                   clipBehavior: Clip.antiAlias,
                   decoration: BoxDecoration(
-                    color: _currentData != null 
-                        ? _getBackgroundColor(_currentData!.type).withValues(alpha: 0.95)
+                    color: _currentData != null
+                        ? _getBackgroundColor(
+                            _currentData!.type,
+                          ).withValues(alpha: 0.95)
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
@@ -214,16 +214,25 @@ class _NotificationOverlayState extends State<_NotificationOverlay> with SingleT
                   ),
                   child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 300),
-                    transitionBuilder: (Widget child, Animation<double> animation) {
-                      return FadeTransition(opacity: animation, child: child);
-                    },
+                    transitionBuilder:
+                        (Widget child, Animation<double> animation) {
+                          return FadeTransition(
+                            opacity: animation,
+                            child: child,
+                          );
+                        },
                     child: Padding(
                       key: ValueKey(_currentData?.message ?? ''),
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 16,
+                      ),
                       child: Row(
                         children: [
                           Icon(
-                            _currentData != null ? _getIcon(_currentData!.type) : Icons.info,
+                            _currentData != null
+                                ? _getIcon(_currentData!.type)
+                                : Icons.info,
                             color: Colors.white,
                             size: 26,
                           ),
@@ -234,7 +243,9 @@ class _NotificationOverlayState extends State<_NotificationOverlay> with SingleT
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  _currentData != null ? _currentData!.message : '',
+                                  _currentData != null
+                                      ? _currentData!.message
+                                      : '',
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 15,
@@ -259,8 +270,7 @@ class _NotificationOverlayState extends State<_NotificationOverlay> with SingleT
                                   horizontal: 8,
                                 ),
                                 minimumSize: const Size(0, 0),
-                                tapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               ),
                               child: Text(
                                 _currentData!.actionLabel!,
@@ -274,7 +284,11 @@ class _NotificationOverlayState extends State<_NotificationOverlay> with SingleT
                           ],
                           const SizedBox(width: 8),
                           const IconButton(
-                            icon: Icon(Icons.close, color: Colors.white70, size: 20),
+                            icon: Icon(
+                              Icons.close,
+                              color: Colors.white70,
+                              size: 20,
+                            ),
                             onPressed: AppNotification.hide,
                             padding: EdgeInsets.zero,
                             constraints: BoxConstraints(),

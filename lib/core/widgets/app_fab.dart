@@ -32,21 +32,16 @@ class AppFAB extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    
+
     // Width should match "Add Store" style (~160-180px responsive)
     final double defaultWidth = rSize(context, 165);
-    
+
     Widget fab = Container(
       height: rSize(context, 50),
-      constraints: BoxConstraints(
-        minWidth: width ?? defaultWidth,
-      ),
+      constraints: BoxConstraints(minWidth: width ?? defaultWidth),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [
-            colorScheme.primary,
-            colorScheme.secondary,
-          ],
+          colors: [colorScheme.primary, colorScheme.secondary],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -71,8 +66,8 @@ class AppFAB extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
-                  icon, 
-                  color: colorScheme.onPrimary, 
+                  icon,
+                  color: colorScheme.onPrimary,
                   size: rSize(context, 18),
                 ),
                 SizedBox(width: rSize(context, 10)),

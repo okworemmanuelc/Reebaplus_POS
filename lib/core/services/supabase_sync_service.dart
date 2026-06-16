@@ -24,10 +24,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class SaleSyncException implements Exception {
   final String orderId;
   final String errorMessage;
-  const SaleSyncException({
-    required this.orderId,
-    required this.errorMessage,
-  });
+  const SaleSyncException({required this.orderId, required this.errorMessage});
   @override
   String toString() => 'SaleSyncException(orderId=$orderId): $errorMessage';
 }
@@ -91,13 +88,12 @@ class PullStatus {
     int? tablesDone,
     int? tablesTotal,
     String? failedReason,
-  }) =>
-      PullStatus(
-        stage: stage ?? this.stage,
-        tablesDone: tablesDone ?? this.tablesDone,
-        tablesTotal: tablesTotal ?? this.tablesTotal,
-        failedReason: failedReason ?? this.failedReason,
-      );
+  }) => PullStatus(
+    stage: stage ?? this.stage,
+    tablesDone: tablesDone ?? this.tablesDone,
+    tablesTotal: tablesTotal ?? this.tablesTotal,
+    failedReason: failedReason ?? this.failedReason,
+  );
 }
 
 /// Result of decoding the current Supabase session's access token.
@@ -153,6 +149,28 @@ class SupabaseSyncService {
   /// least this many rows per call even after repeated timeouts.
   static const int _minPushChunkSize = 5;
 
+  // ---------------------------------------------------------------------------
+  // Pull-side page size ceilings (symmetric with push chunk ceilings above).
+  // Selected at the start of pullInitialData from the live connectivity signal.
+  // ---------------------------------------------------------------------------
+
+  /// Rows per page on Wi-Fi / Ethernet. Large datasets (orders, order_items)
+  /// still fit comfortably within the Supabase HTTP/2 response window.
+  static const int _pullPageSizeWifi = 500;
+
+  /// Rows per page on cellular-only connections. Smaller payload reduces the
+  /// chance of timing out mid-download on a weak mobile radio.
+  static const int _pullPageSizeCellular = 100;
+
+  /// Rows per page when the connection quality is poor or unknown. Aggressive
+  /// floor to maximise the chance each page completes within a 15s timeout.
+  static const int _pullPageSizePoor = 50;
+
+  /// Absolute floor: a page-level timeout halves the current page size, but
+  /// never below this value. Below 10 rows per page the per-request overhead
+  /// dominates and throughput collapses.
+  static const int _minPullPageSize = 10;
+
   /// Per-chunk network timeout, escalating with how many times this row has
   /// already been retried (`SyncQueueData.attempts`). A fresh row gets a
   /// short 5s timeout — enough for a normal REST round trip, but short
@@ -168,6 +186,23 @@ class SupabaseSyncService {
       default:
         return const Duration(seconds: 15);
     }
+  }
+
+  /// Returns the pull page-size ceiling for the current [connectivity] signal.
+  /// Mirrors the push-side `chunkCeiling` selection pattern.
+  static int _pullPageCeilingFor(List<ConnectivityResult> connectivity) {
+    if (connectivity.isEmpty ||
+        connectivity.every((r) => r == ConnectivityResult.none)) {
+      return _pullPageSizePoor;
+    }
+    if (connectivity.contains(ConnectivityResult.wifi) ||
+        connectivity.contains(ConnectivityResult.ethernet)) {
+      return _pullPageSizeWifi;
+    }
+    if (connectivity.contains(ConnectivityResult.mobile)) {
+      return _pullPageSizeCellular;
+    }
+    return _pullPageSizePoor;
   }
 
   /// Consecutive successful chunks required before the adaptive size grows
@@ -191,8 +226,9 @@ class SupabaseSyncService {
   /// Stage of the data-pull state machine. Drives the MainLayout catch-up
   /// banner via `pullStatusProvider`. Mirrors the `isOnline` pattern — public
   /// field, exposed directly, lifted to Riverpod in app_providers.dart.
-  final ValueNotifier<PullStatus> pullStatus =
-      ValueNotifier<PullStatus>(PullStatus.idle);
+  final ValueNotifier<PullStatus> pullStatus = ValueNotifier<PullStatus>(
+    PullStatus.idle,
+  );
 
   /// Re-entrancy guard for `pullChanges`. setCurrentUser fires it on every
   /// login boundary; the connectivity-recovery listener may also fire it;
@@ -540,8 +576,7 @@ class SupabaseSyncService {
     String table,
     List<dynamic> data, {
     Set<String>? fkSkipped,
-  }) =>
-      _restoreTableData(table, data, fkSkipped: fkSkipped);
+  }) => _restoreTableData(table, data, fkSkipped: fkSkipped);
 
   /// Exposes the realtime DELETE handler to unit tests — same rationale as
   /// [restoreTableDataForTesting]: replay a DELETE payload against `_db`
@@ -559,8 +594,7 @@ class SupabaseSyncService {
   Future<void> reconcileHardDeletesForTesting(
     String businessId,
     Map<String, List<dynamic>> snapshot,
-  ) =>
-      _reconcileHardDeletes(businessId, snapshot);
+  ) => _reconcileHardDeletes(businessId, snapshot);
 
   /// Applies an incoming realtime DELETE locally. The cloud is the source of
   /// truth for the removal, so this deletes the local row WITHOUT enqueueing
@@ -572,18 +606,19 @@ class SupabaseSyncService {
   Future<void> _deleteLocalRowById(String table, String id) async {
     switch (table) {
       case 'role_permissions':
-        await (_db.delete(_db.rolePermissions)..where((t) => t.id.equals(id)))
-            .go();
+        await (_db.delete(
+          _db.rolePermissions,
+        )..where((t) => t.id.equals(id))).go();
         break;
       case 'user_permission_overrides':
-        await (_db.delete(_db.userPermissionOverrides)
-              ..where((t) => t.id.equals(id)))
-            .go();
+        await (_db.delete(
+          _db.userPermissionOverrides,
+        )..where((t) => t.id.equals(id))).go();
         break;
       case 'store_role_permissions':
-        await (_db.delete(_db.storeRolePermissions)
-              ..where((t) => t.id.equals(id)))
-            .go();
+        await (_db.delete(
+          _db.storeRolePermissions,
+        )..where((t) => t.id.equals(id))).go();
         break;
       case 'user_stores':
         await (_db.delete(_db.userStores)..where((t) => t.id.equals(id))).go();
@@ -592,8 +627,9 @@ class SupabaseSyncService {
         await (_db.delete(_db.savedCarts)..where((t) => t.id.equals(id))).go();
         break;
       case 'notifications':
-        await (_db.delete(_db.notifications)..where((t) => t.id.equals(id)))
-            .go();
+        await (_db.delete(
+          _db.notifications,
+        )..where((t) => t.id.equals(id))).go();
         break;
       default:
         debugPrint(
@@ -661,7 +697,8 @@ class SupabaseSyncService {
     // _pushChunkCeilingCellular). If the previous run's adaptive size is
     // already above today's ceiling (e.g. switched from Wi-Fi to mobile
     // data), clamp down immediately rather than waiting for a timeout.
-    final chunkCeiling = (connectivity.contains(ConnectivityResult.mobile) &&
+    final chunkCeiling =
+        (connectivity.contains(ConnectivityResult.mobile) &&
             !connectivity.contains(ConnectivityResult.wifi) &&
             !connectivity.contains(ConnectivityResult.ethernet))
         ? _pushChunkCeilingCellular
@@ -765,8 +802,9 @@ class SupabaseSyncService {
     // they truly don't depend on each other.
     final orderedGroups = groups.keys.toList()
       ..sort(
-        (a, b) => _priorityFor('${a.table}:${a.action}')
-            .compareTo(_priorityFor('${b.table}:${b.action}')),
+        (a, b) => _priorityFor(
+          '${a.table}:${a.action}',
+        ).compareTo(_priorityFor('${b.table}:${b.action}')),
       );
 
     debugPrint(
@@ -816,8 +854,11 @@ class SupabaseSyncService {
       }
       if (mismatchedIds.isNotEmpty) {
         for (final id in mismatchedIds) {
-          await _db.syncDao
-              .markFailed(id, 'missing_business_id', permanent: true);
+          await _db.syncDao.markFailed(
+            id,
+            'missing_business_id',
+            permanent: true,
+          );
         }
       }
       if (authMismatched.isNotEmpty) {
@@ -825,7 +866,7 @@ class SupabaseSyncService {
           await _db.syncDao.markFailed(
             item.id,
             'auth_user_mismatch: queued by ${item.authUserId}, '
-                'current is $currentAuthUid',
+            'current is $currentAuthUid',
             permanent: true,
           );
         }
@@ -843,9 +884,11 @@ class SupabaseSyncService {
       // whole (up to 200-row) group. A chunk that times out shrinks the
       // size for the rest of this run; a clean streak grows it back toward
       // chunkCeiling. See the _pushChunkSize field doc.
-      for (var start = 0;
-          start < validPayloads.length;
-          start += _pushChunkSize) {
+      for (
+        var start = 0;
+        start < validPayloads.length;
+        start += _pushChunkSize
+      ) {
         final end = (start + _pushChunkSize < validPayloads.length)
             ? start + _pushChunkSize
             : validPayloads.length;
@@ -864,12 +907,13 @@ class SupabaseSyncService {
             // wins; otherwise fall back to a per-table natural-key target for
             // caches whose id can diverge from the cloud's (see
             // _naturalKeyPushConflictTargets). Null → PostgREST defaults to PK.
-            final conflictTarget = group.conflictTarget ??
+            final conflictTarget =
+                group.conflictTarget ??
                 _naturalKeyPushConflictTargets[group.table];
             final upsert = conflictTarget != null
                 ? _supabase
-                    .from(group.table)
-                    .upsert(chunkPayloads, onConflict: conflictTarget)
+                      .from(group.table)
+                      .upsert(chunkPayloads, onConflict: conflictTarget)
                 : _supabase.from(group.table).upsert(chunkPayloads);
             await upsert.timeout(chunkTimeout);
           } else if (group.action == 'delete') {
@@ -907,8 +951,9 @@ class SupabaseSyncService {
           // waste less radio-on time stalling at the same dead-end size.
           _chunkSuccessStreak = 0;
           final shrunk = _pushChunkSize ~/ 2;
-          _pushChunkSize =
-              shrunk < _minPushChunkSize ? _minPushChunkSize : shrunk;
+          _pushChunkSize = shrunk < _minPushChunkSize
+              ? _minPushChunkSize
+              : shrunk;
           debugPrint(
             '[SyncService] Chunk push timed out for '
             '${group.table}:${group.action} (${chunkIds.length} items) — '
@@ -942,7 +987,8 @@ class SupabaseSyncService {
           //     its own id, so retrying is futile — surface it for operator review.
           //   - everything else (network, 5xx) → transient → standard backoff.
           final isFkViolation = code == '23503';
-          final isPermanent = !isFkViolation &&
+          final isPermanent =
+              !isFkViolation &&
               (code == 'P0001' ||
                   code.startsWith('23') ||
                   code == 'insufficient_privilege' ||
@@ -1001,8 +1047,11 @@ class SupabaseSyncService {
       try {
         payload = jsonDecode(item.payload) as Map<String, dynamic>;
       } catch (e) {
-        await _db.syncDao
-            .markFailed(item.id, 'decode_error: $e', permanent: true);
+        await _db.syncDao.markFailed(
+          item.id,
+          'decode_error: $e',
+          permanent: true,
+        );
         continue;
       }
 
@@ -1013,8 +1062,11 @@ class SupabaseSyncService {
       if (item.businessId != sessionBusinessId ||
           payloadBiz is! String ||
           payloadBiz != sessionBusinessId) {
-        await _db.syncDao
-            .markFailed(item.id, 'missing_business_id', permanent: true);
+        await _db.syncDao.markFailed(
+          item.id,
+          'missing_business_id',
+          permanent: true,
+        );
         continue;
       }
 
@@ -1026,7 +1078,7 @@ class SupabaseSyncService {
         await _db.syncDao.markFailed(
           item.id,
           'auth_user_mismatch: queued by ${item.authUserId}, '
-              'current is $currentAuthUid',
+          'current is $currentAuthUid',
           permanent: true,
         );
         continue;
@@ -1037,11 +1089,8 @@ class SupabaseSyncService {
         final response = await _supabase.rpc(rpcName, params: payload);
         await _applyDomainResponse(rpcName, response);
         await _db.syncDao.markDone(item.id);
-        final replayed =
-            response is Map && response['replayed'] == true;
-        debugPrint(
-          '[SyncService] domain $rpcName ok (replayed=$replayed)',
-        );
+        final replayed = response is Map && response['replayed'] == true;
+        debugPrint('[SyncService] domain $rpcName ok (replayed=$replayed)');
       } on PostgrestException catch (e) {
         // §6.8 failure classification:
         //   - 23503 (foreign_key_violation) → FK-deferred: parent likely
@@ -1051,7 +1100,8 @@ class SupabaseSyncService {
         //   - everything else → transient → standard exp backoff.
         final code = e.code ?? '';
         final isFkViolation = code == '23503';
-        final isPermanent = !isFkViolation &&
+        final isPermanent =
+            !isFkViolation &&
             (code == 'P0001' ||
                 code.startsWith('23') ||
                 code == 'insufficient_privilege' ||
@@ -1102,15 +1152,19 @@ class SupabaseSyncService {
   Future<bool> _healLocalOrderNumberBlocker(OrderData cloudOrder) async {
     final deviceTag = await _resolveDeviceTag();
     if (deviceTag == null) return false;
-    final blocker = await (_db.select(_db.orders)
-          ..where((t) =>
-              t.businessId.equals(cloudOrder.businessId) &
-              t.orderNumber.equals(cloudOrder.orderNumber) &
-              t.id.equals(cloudOrder.id).not()))
-        .getSingleOrNull();
+    final blocker =
+        await (_db.select(_db.orders)..where(
+              (t) =>
+                  t.businessId.equals(cloudOrder.businessId) &
+                  t.orderNumber.equals(cloudOrder.orderNumber) &
+                  t.id.equals(cloudOrder.id).not(),
+            ))
+            .getSingleOrNull();
     if (blocker == null) return false;
-    final newNumber =
-        await _db.ordersDao.renumberForCollisionHeal(blocker.id, deviceTag);
+    final newNumber = await _db.ordersDao.renumberForCollisionHeal(
+      blocker.id,
+      deviceTag,
+    );
     if (newNumber == null) return false;
     debugPrint(
       '[SyncService] freed order number "${cloudOrder.orderNumber}" — '
@@ -1127,7 +1181,9 @@ class SupabaseSyncService {
   /// cloud's colliding order to restore. Non-colliding rows in the batch upload
   /// normally; other errors fall back to the standard classification.
   Future<void> _healOrderNumberCollisions(
-      List<Map<String, dynamic>> payloads, List<String> queueIds) async {
+    List<Map<String, dynamic>> payloads,
+    List<String> queueIds,
+  ) async {
     final deviceTag = await _resolveDeviceTag();
     for (var i = 0; i < payloads.length; i++) {
       final payload = payloads[i];
@@ -1144,25 +1200,34 @@ class SupabaseSyncService {
           // targets PENDING rows, so marking this 'done' first prevents the
           // fresh upsert from merging back into the row we're abandoning.
           await _db.syncDao.markDoneBatch([queueId]);
-          final newNumber =
-              await _db.ordersDao.renumberForCollisionHeal(orderId, deviceTag);
-          debugPrint(newNumber != null
-              ? '[SyncService] healed legacy order-number collision on order '
-                  '$orderId → $newNumber (re-enqueued).'
-              : '[SyncService] order $orderId collision unresolved (already '
-                  'tagged or gone); left as-is.');
+          final newNumber = await _db.ordersDao.renumberForCollisionHeal(
+            orderId,
+            deviceTag,
+          );
+          debugPrint(
+            newNumber != null
+                ? '[SyncService] healed legacy order-number collision on order '
+                      '$orderId → $newNumber (re-enqueued).'
+                : '[SyncService] order $orderId collision unresolved (already '
+                      'tagged or gone); left as-is.',
+          );
           continue;
         }
         // Not an order-number collision → classify like the batch path.
         final code = e is PostgrestException ? (e.code ?? '?') : '?';
         final isFk = code == '23503';
-        final isPerm = !isFk &&
+        final isPerm =
+            !isFk &&
             (code == 'P0001' ||
                 code.startsWith('23') ||
                 code == 'insufficient_privilege' ||
                 code == 'invalid_parameter_value');
-        await _db.syncDao
-            .markFailed(queueId, e.toString(), permanent: isPerm, fkDeferred: isFk);
+        await _db.syncDao.markFailed(
+          queueId,
+          e.toString(),
+          permanent: isPerm,
+          fkDeferred: isFk,
+        );
       }
     }
   }
@@ -1178,10 +1243,7 @@ class SupabaseSyncService {
   Future<void> applyServerResponse(String rpcName, dynamic response) =>
       _applyDomainResponse(rpcName, response);
 
-  Future<void> _applyDomainResponse(
-    String rpcName,
-    dynamic response,
-  ) async {
+  Future<void> _applyDomainResponse(String rpcName, dynamic response) async {
     if (response is! Map) return;
     final map = Map<String, dynamic>.from(response);
 
@@ -1204,14 +1266,16 @@ class SupabaseSyncService {
             continue;
           }
           final lua = luaStr != null ? DateTime.tryParse(luaStr) : null;
-          await (_db.update(_db.inventory)
-                ..where((t) =>
-                    t.productId.equals(productId) &
-                    t.storeId.equals(storeId)))
-              .write(InventoryCompanion(
-            quantity: Value(quantity),
-            lastUpdatedAt: Value(lua ?? DateTime.now()),
-          ));
+          await (_db.update(_db.inventory)..where(
+                (t) =>
+                    t.productId.equals(productId) & t.storeId.equals(storeId),
+              ))
+              .write(
+                InventoryCompanion(
+                  quantity: Value(quantity),
+                  lastUpdatedAt: Value(lua ?? DateTime.now()),
+                ),
+              );
         }
       }
 
@@ -1248,7 +1312,9 @@ class SupabaseSyncService {
       // `order_id`/`order_last_updated_at`).
       final orderRow = map['order'];
       if (orderRow is Map) {
-        await _restoreTableData('orders', [Map<String, dynamic>.from(orderRow)]);
+        await _restoreTableData('orders', [
+          Map<String, dynamic>.from(orderRow),
+        ]);
       }
       // pos_create_product_v2: server returns the canonical product row.
       // Route through _restoreTableData so the cloud's `last_updated_at`
@@ -1256,22 +1322,24 @@ class SupabaseSyncService {
       // pre-insert. Same pattern as `order` above.
       final productRow = map['product'];
       if (productRow is Map) {
-        await _restoreTableData(
-            'products', [Map<String, dynamic>.from(productRow)]);
+        await _restoreTableData('products', [
+          Map<String, dynamic>.from(productRow),
+        ]);
       }
       // pos_record_sale_v2: server returns the canonical order_items array.
       // The thin-local DAO doesn't pre-insert items; this is the sole
       // local writer for them.
       final orderItems = map['order_items'];
       if (orderItems is List && orderItems.isNotEmpty) {
-        await _restoreTableData(
-            'order_items', List<dynamic>.from(orderItems));
+        await _restoreTableData('order_items', List<dynamic>.from(orderItems));
       }
 
       final stockTxns = map['stock_transactions'];
       if (stockTxns is List && stockTxns.isNotEmpty) {
         await _restoreTableData(
-            'stock_transactions', List<dynamic>.from(stockTxns));
+          'stock_transactions',
+          List<dynamic>.from(stockTxns),
+        );
       }
       // pos_inventory_delta_v2 also returns server-minted stock_adjustments
       // for movement_type='adjustment' rows; route through the standard
@@ -1279,22 +1347,30 @@ class SupabaseSyncService {
       final stockAdjustments = map['stock_adjustments'];
       if (stockAdjustments is List && stockAdjustments.isNotEmpty) {
         await _restoreTableData(
-            'stock_adjustments', List<dynamic>.from(stockAdjustments));
+          'stock_adjustments',
+          List<dynamic>.from(stockAdjustments),
+        );
       }
       final voidedPayments = map['voided_payments'];
       if (voidedPayments is List && voidedPayments.isNotEmpty) {
         await _restoreTableData(
-            'payment_transactions', List<dynamic>.from(voidedPayments));
+          'payment_transactions',
+          List<dynamic>.from(voidedPayments),
+        );
       }
       final refundPayments = map['refund_payments'];
       if (refundPayments is List && refundPayments.isNotEmpty) {
         await _restoreTableData(
-            'payment_transactions', List<dynamic>.from(refundPayments));
+          'payment_transactions',
+          List<dynamic>.from(refundPayments),
+        );
       }
       final walletCompens = map['wallet_compensations'];
       if (walletCompens is List && walletCompens.isNotEmpty) {
         await _restoreTableData(
-            'wallet_transactions', List<dynamic>.from(walletCompens));
+          'wallet_transactions',
+          List<dynamic>.from(walletCompens),
+        );
       }
 
       // pos_create_customer (v2): server returns the canonical customer +
@@ -1307,8 +1383,7 @@ class SupabaseSyncService {
         if (cid != null && lua != null) {
           final parsed = DateTime.tryParse(lua);
           if (parsed != null) {
-            await (_db.update(_db.customers)
-                  ..where((t) => t.id.equals(cid)))
+            await (_db.update(_db.customers)..where((t) => t.id.equals(cid)))
                 .write(CustomersCompanion(lastUpdatedAt: Value(parsed)));
           }
         }
@@ -1336,13 +1411,15 @@ class SupabaseSyncService {
       // is the right behaviour anyway.
       final walletTxn = map['wallet_transaction'];
       if (walletTxn is Map) {
-        await _restoreTableData(
-            'wallet_transactions', [Map<String, dynamic>.from(walletTxn)]);
+        await _restoreTableData('wallet_transactions', [
+          Map<String, dynamic>.from(walletTxn),
+        ]);
       }
       final paymentTxn = map['payment_transaction'];
       if (paymentTxn is Map) {
-        await _restoreTableData(
-            'payment_transactions', [Map<String, dynamic>.from(paymentTxn)]);
+        await _restoreTableData('payment_transactions', [
+          Map<String, dynamic>.from(paymentTxn),
+        ]);
       }
 
       // pos_record_expense (v2): server returns canonical expense and
@@ -1383,11 +1460,11 @@ class SupabaseSyncService {
         if (id != null && lua != null) {
           final parsed = DateTime.tryParse(lua);
           if (parsed != null) {
-            await (_db.update(_db.walletTransactions)
-                  ..where((t) => t.id.equals(id)))
-                .write(WalletTransactionsCompanion(
-              lastUpdatedAt: Value(parsed),
-            ));
+            await (_db.update(
+              _db.walletTransactions,
+            )..where((t) => t.id.equals(id))).write(
+              WalletTransactionsCompanion(lastUpdatedAt: Value(parsed)),
+            );
           }
         }
       }
@@ -1398,11 +1475,11 @@ class SupabaseSyncService {
         if (id != null && lua != null) {
           final parsed = DateTime.tryParse(lua);
           if (parsed != null) {
-            await (_db.update(_db.walletTransactions)
-                  ..where((t) => t.id.equals(id)))
-                .write(WalletTransactionsCompanion(
-              lastUpdatedAt: Value(parsed),
-            ));
+            await (_db.update(
+              _db.walletTransactions,
+            )..where((t) => t.id.equals(id))).write(
+              WalletTransactionsCompanion(lastUpdatedAt: Value(parsed)),
+            );
           }
         }
       }
@@ -1417,11 +1494,11 @@ class SupabaseSyncService {
         if (id != null && lua != null) {
           final parsed = DateTime.tryParse(lua);
           if (parsed != null) {
-            await (_db.update(_db.pendingCrateReturns)
-                  ..where((t) => t.id.equals(id)))
-                .write(PendingCrateReturnsCompanion(
-              lastUpdatedAt: Value(parsed),
-            ));
+            await (_db.update(
+              _db.pendingCrateReturns,
+            )..where((t) => t.id.equals(id))).write(
+              PendingCrateReturnsCompanion(lastUpdatedAt: Value(parsed)),
+            );
           }
         }
       }
@@ -1439,8 +1516,7 @@ class SupabaseSyncService {
         if (id != null && lua != null) {
           final parsed = DateTime.tryParse(lua);
           if (parsed != null) {
-            await (_db.update(_db.crateLedger)
-                  ..where((t) => t.id.equals(id)))
+            await (_db.update(_db.crateLedger)..where((t) => t.id.equals(id)))
                 .write(CrateLedgerCompanion(lastUpdatedAt: Value(parsed)));
           }
         }
@@ -1461,24 +1537,30 @@ class SupabaseSyncService {
             businessIdStr != null) {
           final customerId = balanceRow['customer_id'] as String?;
           if (customerId != null) {
-            await (_db.update(_db.customerCrateBalances)
-                  ..where((t) =>
+            await (_db.update(_db.customerCrateBalances)..where(
+                  (t) =>
                       t.businessId.equals(businessIdStr) &
                       t.customerId.equals(customerId) &
-                      t.manufacturerId.equals(manufacturerId)))
-                .write(CustomerCrateBalancesCompanion(
-              balance: Value(balance),
-              lastUpdatedAt: Value(parsed),
-            ));
+                      t.manufacturerId.equals(manufacturerId),
+                ))
+                .write(
+                  CustomerCrateBalancesCompanion(
+                    balance: Value(balance),
+                    lastUpdatedAt: Value(parsed),
+                  ),
+                );
           } else {
-            await (_db.update(_db.manufacturerCrateBalances)
-                  ..where((t) =>
+            await (_db.update(_db.manufacturerCrateBalances)..where(
+                  (t) =>
                       t.businessId.equals(businessIdStr) &
-                      t.manufacturerId.equals(manufacturerId)))
-                .write(ManufacturerCrateBalancesCompanion(
-              balance: Value(balance),
-              lastUpdatedAt: Value(parsed),
-            ));
+                      t.manufacturerId.equals(manufacturerId),
+                ))
+                .write(
+                  ManufacturerCrateBalancesCompanion(
+                    balance: Value(balance),
+                    lastUpdatedAt: Value(parsed),
+                  ),
+                );
           }
         }
       }
@@ -1495,8 +1577,7 @@ class SupabaseSyncService {
           if (id != null && lua != null) {
             final parsed = DateTime.tryParse(lua);
             if (parsed != null) {
-              await (_db.update(_db.crateLedger)
-                    ..where((t) => t.id.equals(id)))
+              await (_db.update(_db.crateLedger)..where((t) => t.id.equals(id)))
                   .write(CrateLedgerCompanion(lastUpdatedAt: Value(parsed)));
             }
           }
@@ -1510,18 +1591,25 @@ class SupabaseSyncService {
           final mfrId = storeBalRow['manufacturer_id'] as String?;
           final bal = storeBalRow['balance'];
           final lua = storeBalRow['last_updated_at'] as String?;
-          if (bizId != null && storeId != null && mfrId != null && bal is int && lua != null) {
+          if (bizId != null &&
+              storeId != null &&
+              mfrId != null &&
+              bal is int &&
+              lua != null) {
             final parsed = DateTime.tryParse(lua);
             if (parsed != null) {
-              await (_db.update(_db.storeCrateBalances)
-                    ..where((t) =>
+              await (_db.update(_db.storeCrateBalances)..where(
+                    (t) =>
                         t.businessId.equals(bizId) &
                         t.storeId.equals(storeId) &
-                        t.manufacturerId.equals(mfrId)))
-                  .write(StoreCrateBalancesCompanion(
-                balance: Value(bal),
-                lastUpdatedAt: Value(parsed),
-              ));
+                        t.manufacturerId.equals(mfrId),
+                  ))
+                  .write(
+                    StoreCrateBalancesCompanion(
+                      balance: Value(bal),
+                      lastUpdatedAt: Value(parsed),
+                    ),
+                  );
             }
           }
         }
@@ -1581,10 +1669,7 @@ class SupabaseSyncService {
     if (updated == null) {
       final orphan = await _db.syncDao.findOrphanByOriginalId(item.id);
       if (orphan != null) {
-        throw SaleSyncException(
-          orderId: orderId,
-          errorMessage: orphan.reason,
-        );
+        throw SaleSyncException(orderId: orderId, errorMessage: orphan.reason);
       }
     }
   }
@@ -1618,9 +1703,7 @@ class SupabaseSyncService {
   /// `last_sync_timestamp::<businessId>` — that's the full-pull's job.
   Future<void> syncMinimumLogin(String businessId) async {
     _currentBusinessId = businessId;
-    debugPrint(
-      '[SyncService] Minimum-login pull for business $businessId...',
-    );
+    debugPrint('[SyncService] Minimum-login pull for business $businessId...');
     pullStatus.value = const PullStatus(
       stage: PullStage.minimum,
       tablesTotal: 4,
@@ -1635,10 +1718,14 @@ class SupabaseSyncService {
     //                 if we want one fewer request on the critical path.
     // The download is parallel via Future.wait — list ordering only
     // controls the sequential restore below.
+    final minConnectivity = await Connectivity().checkConnectivity();
+    final minPageSize = _pullPageCeilingFor(minConnectivity);
     const tables = ['profiles', 'businesses', 'stores', 'users'];
     try {
       final fetched = await Future.wait(
-        tables.map((t) => _fetchOneTable(t, businessId, null)),
+        tables.map(
+          (t) => _fetchOneTable(t, businessId, null, pageSize: minPageSize),
+        ),
       );
       for (var i = 0; i < tables.length; i++) {
         final t = tables[i];
@@ -1781,9 +1868,7 @@ class SupabaseSyncService {
       // purposes; the deferred set lives in its own pref and the
       // SyncIssues "Catching up" card surfaces it independently.
       await prefs.setInt(_consecutiveFailuresKey(businessId), 0);
-      pullStatus.value = pullStatus.value.copyWith(
-        stage: PullStage.completed,
-      );
+      pullStatus.value = pullStatus.value.copyWith(stage: PullStage.completed);
     } catch (e, st) {
       debugPrint('[SyncService] pullChanges failed: $e\n$st');
       final fails =
@@ -1958,36 +2043,58 @@ class SupabaseSyncService {
       '[SyncService] Pulling data for business $businessId (since: ${since?.toIso8601String() ?? "beginning"})...',
     );
 
+    // Determine pull page size from the live connectivity signal. On slow or
+    // unknown links, bypass the monolithic `pos_pull_snapshot` RPC entirely —
+    // a 60-second aggregate query that would time out mathematically on a weak
+    // cellular link — and go straight to the paginated PostgREST path.
+    final connectivity = await Connectivity().checkConnectivity();
+    final pageSize = _pullPageCeilingFor(connectivity);
+    final isSlow = pageSize <= _pullPageSizeCellular;
+
     Map<String, List<dynamic>>? snapshot;
     Set<String> skipped = const <String>{};
-    try {
-      final result = await _supabase.rpc(
-        'pos_pull_snapshot',
-        params: {
-          'p_business_id': businessId,
-          'p_since': since?.toIso8601String(),
-        },
-      ).timeout(const Duration(seconds: 60));
-      if (result is Map) {
-        snapshot = <String, List<dynamic>>{
-          for (final entry in result.entries)
-            if (entry.value is List)
-              entry.key.toString(): List<dynamic>.from(entry.value as List),
-        };
+
+    if (!isSlow) {
+      try {
+        final result = await _supabase
+            .rpc(
+              'pos_pull_snapshot',
+              params: {
+                'p_business_id': businessId,
+                'p_since': since?.toIso8601String(),
+              },
+            )
+            .timeout(const Duration(seconds: 60));
+        if (result is Map) {
+          snapshot = <String, List<dynamic>>{
+            for (final entry in result.entries)
+              if (entry.value is List)
+                entry.key.toString(): List<dynamic>.from(entry.value as List),
+          };
+          debugPrint(
+            '[SyncService] Snapshot RPC returned '
+            '${snapshot.values.fold<int>(0, (a, l) => a + l.length)} rows '
+            'across ${snapshot.length} tables.',
+          );
+        }
+      } catch (e) {
         debugPrint(
-          '[SyncService] Snapshot RPC returned '
-          '${snapshot.values.fold<int>(0, (a, l) => a + l.length)} rows '
-          'across ${snapshot.length} tables.',
+          '[SyncService] Snapshot RPC unavailable, falling back to per-table fetch: $e',
         );
       }
-    } catch (e) {
+    } else {
       debugPrint(
-        '[SyncService] Snapshot RPC unavailable, falling back to per-table fetch: $e',
+        '[SyncService] Slow connection (pageSize=$pageSize) — '
+        'bypassing monolithic RPC, using paginated PostgREST path.',
       );
     }
 
     if (snapshot == null) {
-      final fallback = await _pullViaPostgRest(businessId, since);
+      final fallback = await _pullViaPostgRest(
+        businessId,
+        since,
+        pageSize: pageSize,
+      );
       snapshot = fallback.data;
       skipped = fallback.skipped;
     }
@@ -2174,34 +2281,34 @@ class SupabaseSyncService {
     final ids = cloudIds.toList();
     switch (table) {
       case 'role_permissions':
-        return (_db.delete(_db.rolePermissions)
-              ..where((t) =>
-                  t.businessId.equals(businessId) & t.id.isIn(ids).not()))
+        return (_db.delete(_db.rolePermissions)..where(
+              (t) => t.businessId.equals(businessId) & t.id.isIn(ids).not(),
+            ))
             .go();
       case 'user_permission_overrides':
-        return (_db.delete(_db.userPermissionOverrides)
-              ..where((t) =>
-                  t.businessId.equals(businessId) & t.id.isIn(ids).not()))
+        return (_db.delete(_db.userPermissionOverrides)..where(
+              (t) => t.businessId.equals(businessId) & t.id.isIn(ids).not(),
+            ))
             .go();
       case 'store_role_permissions':
-        return (_db.delete(_db.storeRolePermissions)
-              ..where((t) =>
-                  t.businessId.equals(businessId) & t.id.isIn(ids).not()))
+        return (_db.delete(_db.storeRolePermissions)..where(
+              (t) => t.businessId.equals(businessId) & t.id.isIn(ids).not(),
+            ))
             .go();
       case 'user_stores':
-        return (_db.delete(_db.userStores)
-              ..where((t) =>
-                  t.businessId.equals(businessId) & t.id.isIn(ids).not()))
+        return (_db.delete(_db.userStores)..where(
+              (t) => t.businessId.equals(businessId) & t.id.isIn(ids).not(),
+            ))
             .go();
       case 'saved_carts':
-        return (_db.delete(_db.savedCarts)
-              ..where((t) =>
-                  t.businessId.equals(businessId) & t.id.isIn(ids).not()))
+        return (_db.delete(_db.savedCarts)..where(
+              (t) => t.businessId.equals(businessId) & t.id.isIn(ids).not(),
+            ))
             .go();
       case 'notifications':
-        return (_db.delete(_db.notifications)
-              ..where((t) =>
-                  t.businessId.equals(businessId) & t.id.isIn(ids).not()))
+        return (_db.delete(_db.notifications)..where(
+              (t) => t.businessId.equals(businessId) & t.id.isIn(ids).not(),
+            ))
             .go();
       default:
         return 0;
@@ -2225,16 +2332,61 @@ class SupabaseSyncService {
   /// is responsible for not advancing the per-business sync cursor so
   /// the next pull catches them up.
   Future<({Map<String, List<dynamic>> data, Set<String> skipped})>
-      _pullViaPostgRest(
+  _pullViaPostgRest(
     String businessId,
-    DateTime? since,
-  ) async {
+    DateTime? since, {
+    required int pageSize,
+  }) async {
+    final isSlow = pageSize <= _pullPageSizeCellular;
+
+    if (isSlow) {
+      // On cellular / poor connections, fetch tables SEQUENTIALLY in _pullOrder
+      // to avoid the parallel burst congesting an already-weak link.
+      // FK-safe order is preserved (same as the Wi-Fi path below).
+      debugPrint(
+        '[SyncService] Sequential paginated pull '
+        '(pageSize=$pageSize, ${_pullOrder.length} tables)...',
+      );
+      final results = <String, List<dynamic>>{};
+      final failed = <String>{};
+      for (final table in _pullOrder) {
+        try {
+          final data = await _fetchOneTable(
+            table,
+            businessId,
+            since,
+            pageSize: pageSize,
+          );
+          results[table] = data;
+        } catch (e) {
+          debugPrint('[SyncService] Sequential fetch failed for $table: $e');
+          results[table] = const <dynamic>[];
+          failed.add(table);
+        }
+      }
+      if (failed.isEmpty) {
+        return (data: results, skipped: const <String>{});
+      }
+      final critical = failed.difference(_deferrableTables);
+      if (critical.isNotEmpty) {
+        throw PartialPullException(critical);
+      }
+      debugPrint(
+        '[SyncService] Continuing past deferrable failures (sequential): '
+        '${failed.join(", ")}. last_sync_timestamp will not advance; '
+        'next pull will be a full pull to catch up.',
+      );
+      return (data: results, skipped: failed);
+    }
+
+    // Wi-Fi / Ethernet path: parallel first pass for speed, sequential retry
+    // for any first-pass failures (same logic as before, plus pageSize).
     final firstPass = await Future.wait(
       _pullOrder.map((table) async {
         try {
           return _FetchOutcome(
             table,
-            await _fetchOneTable(table, businessId, since),
+            await _fetchOneTable(table, businessId, since, pageSize: pageSize),
             null,
           );
         } catch (e) {
@@ -2268,7 +2420,12 @@ class SupabaseSyncService {
         '${outcome.error}. Retrying after backoff...',
       );
       try {
-        final data = await _fetchOneTable(outcome.table, businessId, since);
+        final data = await _fetchOneTable(
+          outcome.table,
+          businessId,
+          since,
+          pageSize: pageSize,
+        );
         results[outcome.table] = data;
         debugPrint(
           '[SyncService] Retry succeeded for ${outcome.table}: '
@@ -2301,20 +2458,25 @@ class SupabaseSyncService {
     return (data: results, skipped: failed);
   }
 
-  /// Single-table PostgREST fetch. Extracted so the parallel first pass
-  /// and the sequential retry pass share one source of truth for the
-  /// query shape + timeout.
+  /// Single-table PostgREST fetch with cursor-based pagination.
   ///
-  /// 25s client timeout (vs the previous 15s) absorbs response-download
-  /// time on slow cellular without exceeding the Supabase gateway
-  /// window. The harder ceiling is the server-side `statement_timeout`
-  /// for the `authenticated` role (8s on Supabase platform default),
-  /// but that bounds query execution, not the network leg.
+  /// Fetches rows in pages of [pageSize] rows, ordered by `last_updated_at`
+  /// ascending (and `id` ascending as a secondary tie-break for all tables
+  /// except `system_config`). This ordering guarantees stable pagination —
+  /// no row is skipped or double-counted across page boundaries.
+  ///
+  /// On a page-level [TimeoutException] the page size is halved (floored at
+  /// [_minPullPageSize]) and the same offset is retried once. A second
+  /// timeout at the floor propagates so the caller can classify the failure.
+  ///
+  /// `system_config` is global (no tenant filter, no `id` column, tiny
+  /// dataset) — it is fetched in a single unpaginated call.
   Future<List<dynamic>> _fetchOneTable(
     String table,
     String businessId,
-    DateTime? since,
-  ) async {
+    DateTime? since, {
+    int pageSize = _pullPageSizeWifi,
+  }) async {
     final isGlobal = table == 'system_config';
     var query = _supabase.from(table).select();
 
@@ -2332,9 +2494,60 @@ class SupabaseSyncService {
       query = query.gt('last_updated_at', since.toIso8601String());
     }
 
-    final List<dynamic> data =
-        await query.timeout(const Duration(seconds: 25));
-    return data;
+    // system_config: global, tiny, no `id` column — single unpaginated call.
+    if (isGlobal) {
+      final List<dynamic> data = await query.timeout(
+        const Duration(seconds: 25),
+      );
+      return data;
+    }
+
+    // Stable ordering required for pagination: rows must not shift across
+    // page boundaries as new rows arrive mid-pull. `last_updated_at` alone
+    // is not unique (multiple rows can share a second boundary); `id` breaks
+    // ties deterministically.
+    //
+    // `.order()` returns PostgrestTransformBuilder, which is a subtype of
+    // PostgrestBuilder but NOT PostgrestFilterBuilder — declare a new variable
+    // so the type annotation stays correct.
+    final orderedQuery = query
+        .order('last_updated_at', ascending: true)
+        .order('id', ascending: true);
+
+    final allRows = <dynamic>[];
+    int offset = 0;
+    int currentPageSize = pageSize;
+
+    while (true) {
+      try {
+        final List<dynamic> page = await orderedQuery
+            .range(offset, offset + currentPageSize - 1)
+            .timeout(const Duration(seconds: 15));
+
+        if (page.isEmpty) break;
+        allRows.addAll(page);
+        offset += page.length;
+        if (page.length < currentPageSize) break; // last page
+      } on TimeoutException catch (e) {
+        final halved = currentPageSize ~/ 2;
+        if (halved < _minPullPageSize) {
+          // Already at floor — surface so the caller can classify failure.
+          debugPrint(
+            '[SyncService] Pull page timeout at min size for $table '
+            '(offset=$offset, size=$currentPageSize): $e',
+          );
+          rethrow;
+        }
+        currentPageSize = halved;
+        debugPrint(
+          '[SyncService] Pull page timeout for $table '
+          '(offset=$offset) — shrinking page to $currentPageSize and retrying.',
+        );
+        // Retry the same offset with the smaller page size (offset unchanged).
+      }
+    }
+
+    return allRows;
   }
 
   /// Cheap single-row refresh of the `businesses` row from the cloud, applied
@@ -2678,7 +2891,9 @@ class SupabaseSyncService {
       // evaluates eligibility — getPendingItems naturally filters by
       // nextAttemptAt, so the cost is one indexed select per tick when
       // nothing is due.
-      _autoPushPeriodic ??= Timer.periodic(_autoPushPeriodicInterval, (_) async {
+      _autoPushPeriodic ??= Timer.periodic(_autoPushPeriodicInterval, (
+        _,
+      ) async {
         try {
           if (_pushing) return;
           await _db.syncDao.resetStuckInProgress();
@@ -2750,8 +2965,9 @@ class SupabaseSyncService {
             'is_deleted': w.isDeleted,
           }),
         );
-        await (_db.update(_db.stores)..where((t) => t.id.equals(w.id)))
-            .write(StoresCompanion(lastUpdatedAt: Value(now)));
+        await (_db.update(_db.stores)..where((t) => t.id.equals(w.id))).write(
+          StoresCompanion(lastUpdatedAt: Value(now)),
+        );
         enqueued++;
       }
 
@@ -2896,9 +3112,9 @@ class SupabaseSyncService {
       final flagKey = 'users_backfill_v1::$businessId';
       if (prefs.getBool(flagKey) == true) return;
 
-      final rows = await (_db.select(_db.users)
-            ..where((t) => t.businessId.equals(businessId)))
-          .get();
+      final rows = await (_db.select(
+        _db.users,
+      )..where((t) => t.businessId.equals(businessId))).get();
       if (rows.isEmpty) {
         await prefs.setBool(flagKey, true);
         return;
@@ -3054,17 +3270,18 @@ class SupabaseSyncService {
     if (rows.isEmpty) return rows;
     if (table == 'system_config') return rows;
 
-    final ids =
-        rows.map((r) => r['id']).whereType<String>().toSet().toList();
+    final ids = rows.map((r) => r['id']).whereType<String>().toSet().toList();
     if (ids.isEmpty) return rows;
 
     // Drift stores DateTime as integer Unix seconds; reading the raw
     // column type and comparing in epoch space avoids DateTime parse cost.
     final placeholders = List.filled(ids.length, '?').join(',');
-    final localResults = await _db.customSelect(
-      'SELECT id, last_updated_at FROM $table WHERE id IN ($placeholders)',
-      variables: ids.map(Variable.withString).toList(),
-    ).get();
+    final localResults = await _db
+        .customSelect(
+          'SELECT id, last_updated_at FROM $table WHERE id IN ($placeholders)',
+          variables: ids.map(Variable.withString).toList(),
+        )
+        .get();
 
     final localEpoch = <String, int?>{};
     for (final row in localResults) {
@@ -3204,8 +3421,8 @@ class SupabaseSyncService {
   /// `lastUpdatedAt`) are explicitly mutable, so they ride in a separate
   /// targeted update gated by `t.voidedAt.isNull()` — a local-then-newer void
   /// isn't clobbered by a stale cloud snapshot.
-  Future<void> _restoreLedgerTable<TableT extends Table,
-      RowT extends Insertable<RowT>>(
+  Future<void>
+  _restoreLedgerTable<TableT extends Table, RowT extends Insertable<RowT>>(
     List<dynamic> rows, {
     required String tableName,
     required TableInfo<TableT, RowT> table,
@@ -3338,9 +3555,9 @@ class SupabaseSyncService {
           //   biometricEnabled, avatarColor.
           for (var r in rows) {
             final id = r['id'] as String;
-            final existing =
-                await (_db.select(_db.users)
-                  ..where((u) => u.id.equals(id))).getSingleOrNull();
+            final existing = await (_db.select(
+              _db.users,
+            )..where((u) => u.id.equals(id))).getSingleOrNull();
 
             DateTime parseTs(Object? v, {DateTime? fallback}) {
               if (v is String) return DateTime.parse(v);
@@ -3349,14 +3566,12 @@ class SupabaseSyncService {
             }
 
             final lastUpdatedAt = parseTs(r['lastUpdatedAt']);
-            final createdAt = parseTs(
-              r['createdAt'],
-              fallback: lastUpdatedAt,
-            );
+            final createdAt = parseTs(r['createdAt'], fallback: lastUpdatedAt);
 
             if (existing != null) {
-              await (_db.update(_db.users)
-                ..where((u) => u.id.equals(id))).write(
+              await (_db.update(
+                _db.users,
+              )..where((u) => u.id.equals(id))).write(
                 UsersCompanion(
                   businessId: Value(r['businessId'] as String),
                   authUserId: Value(r['authUserId'] as String?),
@@ -3409,11 +3624,12 @@ class SupabaseSyncService {
             // key but a different id first, so the incoming cloud row applies
             // cleanly and the device converges on the cloud's id. Restore path
             // — local only, never enqueue (§5 exception #1; re-pushing loops).
-            await (_db.delete(_db.rolePermissions)
-                  ..where((t) =>
+            await (_db.delete(_db.rolePermissions)..where(
+                  (t) =>
                       t.roleId.equals(row.roleId) &
                       t.permissionKey.equals(row.permissionKey) &
-                      t.id.equals(row.id).not()))
+                      t.id.equals(row.id).not(),
+                ))
                 .go();
             await _db.into(_db.rolePermissions).insertOnConflictUpdate(row);
           }
@@ -3429,12 +3645,13 @@ class SupabaseSyncService {
             // but a different id first, so the incoming cloud row applies
             // cleanly and the device converges on the cloud's id. Restore path
             // — local only, never enqueue (§5 exception #1; re-pushing loops).
-            await (_db.delete(_db.userPermissionOverrides)
-                  ..where((t) =>
+            await (_db.delete(_db.userPermissionOverrides)..where(
+                  (t) =>
                       t.businessId.equals(row.businessId) &
                       t.userId.equals(row.userId) &
                       t.permissionKey.equals(row.permissionKey) &
-                      t.id.equals(row.id).not()))
+                      t.id.equals(row.id).not(),
+                ))
                 .go();
             await _db
                 .into(_db.userPermissionOverrides)
@@ -3453,12 +3670,13 @@ class SupabaseSyncService {
             // incoming cloud row applies cleanly and the device converges on the
             // cloud's id. Restore path — local only, never enqueue (§5 exception
             // #1; re-pushing loops).
-            await (_db.delete(_db.storeRolePermissions)
-                  ..where((t) =>
+            await (_db.delete(_db.storeRolePermissions)..where(
+                  (t) =>
                       t.storeId.equals(row.storeId) &
                       t.roleId.equals(row.roleId) &
                       t.permissionKey.equals(row.permissionKey) &
-                      t.id.equals(row.id).not()))
+                      t.id.equals(row.id).not(),
+                ))
                 .go();
             await _db
                 .into(_db.storeRolePermissions)
@@ -3549,29 +3767,26 @@ class SupabaseSyncService {
             // align the local `id` to the cloud's so pushes/pulls converge on
             // one canonical row — same approach as store_crate_balances /
             // settings. FK-resilient: references products + stores.
-            await _insertResilient(
-              'inventory',
-              r,
-              fkSkipped,
-              () {
-                final parsed = InventoryData.fromJson(r);
-                return _db.into(_db.inventory).insert(
-                      parsed,
-                      onConflict: DoUpdate(
-                        (_) => InventoryCompanion(
-                          id: Value(parsed.id),
-                          quantity: Value(parsed.quantity),
-                          lastUpdatedAt: Value(parsed.lastUpdatedAt),
-                        ),
-                        target: [
-                          _db.inventory.businessId,
-                          _db.inventory.productId,
-                          _db.inventory.storeId,
-                        ],
+            await _insertResilient('inventory', r, fkSkipped, () {
+              final parsed = InventoryData.fromJson(r);
+              return _db
+                  .into(_db.inventory)
+                  .insert(
+                    parsed,
+                    onConflict: DoUpdate(
+                      (_) => InventoryCompanion(
+                        id: Value(parsed.id),
+                        quantity: Value(parsed.quantity),
+                        lastUpdatedAt: Value(parsed.lastUpdatedAt),
                       ),
-                    );
-              },
-            );
+                      target: [
+                        _db.inventory.businessId,
+                        _db.inventory.productId,
+                        _db.inventory.storeId,
+                      ],
+                    ),
+                  );
+            });
           }
           break;
         case 'customers':
@@ -3626,28 +3841,22 @@ class SupabaseSyncService {
             // manufacturers(manufacturer_id). Skip-and-defer if a parent slice
             // is late (a full re-pull catches it up). No JSON columns.
             final data = OrderCrateLineData.fromJson(r);
-            await _insertResilient(
-              'order_crate_lines',
-              r,
-              fkSkipped,
-              () async {
-                // Cloud is authoritative. Heal any stale local row that holds
-                // the same natural key (business_id, order_id, manufacturer_id)
-                // under a DIFFERENT id — left behind by the pre-fix insertLine
-                // that let local/cloud ids diverge. Without this the cloud row's
-                // insert would hit the UNIQUE constraint (2067) forever.
-                await (_db.delete(_db.orderCrateLines)
-                      ..where((t) =>
-                          t.businessId.equals(data.businessId) &
-                          t.orderId.equals(data.orderId) &
-                          t.manufacturerId.equals(data.manufacturerId) &
-                          t.id.equals(data.id).not()))
-                    .go();
-                await _db
-                    .into(_db.orderCrateLines)
-                    .insertOnConflictUpdate(data);
-              },
-            );
+            await _insertResilient('order_crate_lines', r, fkSkipped, () async {
+              // Cloud is authoritative. Heal any stale local row that holds
+              // the same natural key (business_id, order_id, manufacturer_id)
+              // under a DIFFERENT id — left behind by the pre-fix insertLine
+              // that let local/cloud ids diverge. Without this the cloud row's
+              // insert would hit the UNIQUE constraint (2067) forever.
+              await (_db.delete(_db.orderCrateLines)..where(
+                    (t) =>
+                        t.businessId.equals(data.businessId) &
+                        t.orderId.equals(data.orderId) &
+                        t.manufacturerId.equals(data.manufacturerId) &
+                        t.id.equals(data.id).not(),
+                  ))
+                  .go();
+              await _db.into(_db.orderCrateLines).insertOnConflictUpdate(data);
+            });
           }
           break;
         case 'expenses':
@@ -3723,7 +3932,9 @@ class SupabaseSyncService {
               fkSkipped,
               () {
                 final parsed = ManufacturerCrateBalance.fromJson(r);
-                return _db.into(_db.manufacturerCrateBalances).insert(
+                return _db
+                    .into(_db.manufacturerCrateBalances)
+                    .insert(
                       parsed,
                       onConflict: DoUpdate(
                         (_) => ManufacturerCrateBalancesCompanion(
@@ -3755,29 +3966,26 @@ class SupabaseSyncService {
             // cloud's so pushes/pulls converge on one canonical row — same
             // approach as the `settings` case below. FK-resilient: references
             // stores + manufacturers.
-            await _insertResilient(
-              'store_crate_balances',
-              r,
-              fkSkipped,
-              () {
-                final parsed = StoreCrateBalanceData.fromJson(r);
-                return _db.into(_db.storeCrateBalances).insert(
-                      parsed,
-                      onConflict: DoUpdate(
-                        (_) => StoreCrateBalancesCompanion(
-                          id: Value(parsed.id),
-                          balance: Value(parsed.balance),
-                          lastUpdatedAt: Value(parsed.lastUpdatedAt),
-                        ),
-                        target: [
-                          _db.storeCrateBalances.businessId,
-                          _db.storeCrateBalances.storeId,
-                          _db.storeCrateBalances.manufacturerId,
-                        ],
+            await _insertResilient('store_crate_balances', r, fkSkipped, () {
+              final parsed = StoreCrateBalanceData.fromJson(r);
+              return _db
+                  .into(_db.storeCrateBalances)
+                  .insert(
+                    parsed,
+                    onConflict: DoUpdate(
+                      (_) => StoreCrateBalancesCompanion(
+                        id: Value(parsed.id),
+                        balance: Value(parsed.balance),
+                        lastUpdatedAt: Value(parsed.lastUpdatedAt),
                       ),
-                    );
-              },
-            );
+                      target: [
+                        _db.storeCrateBalances.businessId,
+                        _db.storeCrateBalances.storeId,
+                        _db.storeCrateBalances.manufacturerId,
+                      ],
+                    ),
+                  );
+            });
           }
           break;
         case 'crate_ledger':
@@ -3832,29 +4040,26 @@ class SupabaseSyncService {
             // so reconcile on UNIQUE(business_id, customer_id, manufacturer_id)
             // to avoid a 2067 collision when the two ids diverge. FK-resilient:
             // references customers / crate_size_groups.
-            await _insertResilient(
-              'customer_crate_balances',
-              r,
-              fkSkipped,
-              () {
-                final parsed = CustomerCrateBalance.fromJson(r);
-                return _db.into(_db.customerCrateBalances).insert(
-                      parsed,
-                      onConflict: DoUpdate(
-                        (_) => CustomerCrateBalancesCompanion(
-                          id: Value(parsed.id),
-                          balance: Value(parsed.balance),
-                          lastUpdatedAt: Value(parsed.lastUpdatedAt),
-                        ),
-                        target: [
-                          _db.customerCrateBalances.businessId,
-                          _db.customerCrateBalances.customerId,
-                          _db.customerCrateBalances.manufacturerId,
-                        ],
+            await _insertResilient('customer_crate_balances', r, fkSkipped, () {
+              final parsed = CustomerCrateBalance.fromJson(r);
+              return _db
+                  .into(_db.customerCrateBalances)
+                  .insert(
+                    parsed,
+                    onConflict: DoUpdate(
+                      (_) => CustomerCrateBalancesCompanion(
+                        id: Value(parsed.id),
+                        balance: Value(parsed.balance),
+                        lastUpdatedAt: Value(parsed.lastUpdatedAt),
                       ),
-                    );
-              },
-            );
+                      target: [
+                        _db.customerCrateBalances.businessId,
+                        _db.customerCrateBalances.customerId,
+                        _db.customerCrateBalances.manufacturerId,
+                      ],
+                    ),
+                  );
+            });
           }
           break;
         case 'delivery_receipts':
@@ -3935,8 +4140,11 @@ class SupabaseSyncService {
               'stock_adjustment_requests',
               r,
               fkSkipped,
-              () => _db.into(_db.stockAdjustmentRequests).insertOnConflictUpdate(
-                  StockAdjustmentRequestData.fromJson(r)),
+              () => _db
+                  .into(_db.stockAdjustmentRequests)
+                  .insertOnConflictUpdate(
+                    StockAdjustmentRequestData.fromJson(r),
+                  ),
             );
           }
           break;
@@ -3951,8 +4159,9 @@ class SupabaseSyncService {
               'quick_sale_requests',
               r,
               fkSkipped,
-              () => _db.into(_db.quickSaleRequests).insertOnConflictUpdate(
-                  QuickSaleRequestData.fromJson(r)),
+              () => _db
+                  .into(_db.quickSaleRequests)
+                  .insertOnConflictUpdate(QuickSaleRequestData.fromJson(r)),
             );
           }
           break;
@@ -3996,7 +4205,9 @@ class SupabaseSyncService {
           // `id` because nothing else FK-references settings.id.
           for (var r in rows) {
             final parsed = SettingData.fromJson(r);
-            await _db.into(_db.settings).insert(
+            await _db
+                .into(_db.settings)
+                .insert(
                   parsed,
                   onConflict: DoUpdate(
                     (_) => SettingsCompanion(

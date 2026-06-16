@@ -370,8 +370,9 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
     // Defense-in-depth (hard rule #6): this editor mutates product details, so
     // bail if `products.edit_price` was revoked while the sheet was open.
     if (!_canEditPrice) {
-      setState(() =>
-          _errorMessage = 'You no longer have permission to edit products.');
+      setState(
+        () => _errorMessage = 'You no longer have permission to edit products.',
+      );
       return;
     }
 
@@ -484,7 +485,8 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
             storeId: _selectedStore!.id,
             quantityDiff: qtyToAdd,
             reason: 'Restock by $actorName',
-            summary: '$actorName requested +$qtyToAdd ${widget.product.unit}(s) '
+            summary:
+                '$actorName requested +$qtyToAdd ${widget.product.unit}(s) '
                 'of $name (${_selectedStore!.name})',
             requestedBy: auth.currentUser?.id,
           );
@@ -576,7 +578,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
-                      FontAwesomeIcons.penToSquare,
+                      FontAwesomeIcons.penToSquare.data,
                       color: Theme.of(context).colorScheme.primary,
                       size: 18,
                     ),
@@ -609,7 +611,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                                   ),
                                 )
                               : Icon(
-                                  FontAwesomeIcons.image,
+                                  FontAwesomeIcons.image.data,
                                   color: Theme.of(context).colorScheme.primary,
                                   size: 18,
                                 ),
@@ -759,7 +761,8 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                         Expanded(
                           child: AppInput(
                             controller: _retailPriceCtrl,
-                            labelText: 'Retailer Price ($activeCurrencySymbol) *',
+                            labelText:
+                                'Retailer Price ($activeCurrencySymbol) *',
                             hintText: 'e.g. 500',
                             keyboardType: const TextInputType.numberWithOptions(
                               decimal: true,
@@ -771,7 +774,8 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                         Expanded(
                           child: AppInput(
                             controller: _wholesalePriceCtrl,
-                            labelText: 'Wholesaler Price ($activeCurrencySymbol) *',
+                            labelText:
+                                'Wholesaler Price ($activeCurrencySymbol) *',
                             hintText: '0.00',
                             keyboardType: const TextInputType.numberWithOptions(
                               decimal: true,
@@ -936,9 +940,12 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                                   );
                                   if (m != null) _selectManufacturer(m);
                                 } catch (e, st) {
-                                  CrashReporter.record(e, st,
-                                      context:
-                                          'inventory.update_product.create_manufacturer');
+                                  CrashReporter.record(
+                                    e,
+                                    st,
+                                    context:
+                                        'inventory.update_product.create_manufacturer',
+                                  );
                                   if (mounted) {
                                     setState(
                                       () => _errorMessage =
@@ -957,7 +964,8 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                     // ── TRACK EMPTIES + CRATE VALUE (directly below Manufacturer) ─
                     // Crate-only (rule #13): hidden for non-Bar/Beer-distributor
                     // businesses; _effectiveTrackEmpties forces it off on save.
-                    if (_unit.toLowerCase() == 'bottle' && _isCrateBusiness) ...[
+                    if (_unit.toLowerCase() == 'bottle' &&
+                        _isCrateBusiness) ...[
                       CheckboxListTile(
                         value: _trackEmpties,
                         onChanged: (v) =>
@@ -976,7 +984,8 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                         const SizedBox(height: 6),
                         AppInput(
                           controller: _emptyCrateValueCtrl,
-                          labelText: 'Empty Crate Value ($activeCurrencySymbol)',
+                          labelText:
+                              'Empty Crate Value ($activeCurrencySymbol)',
                           hintText: '0.00',
                           keyboardType: const TextInputType.numberWithOptions(
                             decimal: true,
@@ -1039,9 +1048,12 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                                   if (!mounted) return;
                                   if (s != null) _selectSupplier(s);
                                 } catch (e, st) {
-                                  CrashReporter.record(e, st,
-                                      context:
-                                          'inventory.update_product.create_supplier');
+                                  CrashReporter.record(
+                                    e,
+                                    st,
+                                    context:
+                                        'inventory.update_product.create_supplier',
+                                  );
                                   if (!mounted) return;
                                   setState(
                                     () => _errorMessage =
@@ -1083,7 +1095,9 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                         labelText: 'QUANTITY TO ADD',
                         hintText: '0',
                         keyboardType: TextInputType.number,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -1127,8 +1141,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                               ),
                             )
                             .toList(),
-                        onChanged: (v) =>
-                            setState(() => _selectedStore = v),
+                        onChanged: (v) => setState(() => _selectedStore = v),
                       ),
                     const SizedBox(height: 24),
                   ],

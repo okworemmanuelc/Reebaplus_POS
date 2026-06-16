@@ -88,8 +88,8 @@ Future<void> showStorePickerSheet(
                     children: [
                       Icon(
                         o.id == null
-                            ? FontAwesomeIcons.layerGroup
-                            : FontAwesomeIcons.store,
+                            ? FontAwesomeIcons.layerGroup.data
+                            : FontAwesomeIcons.store.data,
                         size: context.getRSize(15),
                         color: selected ? primary : subtextColor,
                       ),
@@ -98,8 +98,9 @@ Future<void> showStorePickerSheet(
                         child: Text(
                           o.name,
                           style: TextStyle(
-                            fontWeight:
-                                selected ? FontWeight.bold : FontWeight.w600,
+                            fontWeight: selected
+                                ? FontWeight.bold
+                                : FontWeight.w600,
                             fontSize: context.getRFontSize(14.5),
                             color: selected ? primary : textColor,
                           ),
@@ -109,7 +110,7 @@ Future<void> showStorePickerSheet(
                       ),
                       if (selected)
                         Icon(
-                          FontAwesomeIcons.check,
+                          FontAwesomeIcons.check.data,
                           size: context.getRSize(14),
                           color: primary,
                         ),

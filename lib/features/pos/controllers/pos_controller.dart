@@ -37,9 +37,9 @@ class PosController extends ChangeNotifier {
     required AppDatabase database,
     required NavigationService navigationService,
     required CartService cartService,
-  })  : _database = database,
-        _navigationService = navigationService,
-        _cartService = cartService {
+  }) : _database = database,
+       _navigationService = navigationService,
+       _cartService = cartService {
     _init();
   }
 
@@ -74,8 +74,9 @@ class PosController extends ChangeNotifier {
   }
 
   void _loadManufacturers() {
-    _manufacturersSub =
-        _database.inventoryDao.watchAllManufacturers().listen((list) {
+    _manufacturersSub = _database.inventoryDao.watchAllManufacturers().listen((
+      list,
+    ) {
       if (_disposed) return;
       manufacturers = list;
       notifyListeners();
@@ -174,11 +175,7 @@ class PosController extends ChangeNotifier {
 
   List<ProductDataWithStock> get filteredProducts {
     var items = allProducts
-        .where(
-          (item) =>
-              item.product.isAvailable &&
-              !item.product.isDeleted,
-        )
+        .where((item) => item.product.isAvailable && !item.product.isDeleted)
         .where((item) {
           if (selectedManufacturerId == 'All') return true;
           return item.product.manufacturerId?.toString() ==

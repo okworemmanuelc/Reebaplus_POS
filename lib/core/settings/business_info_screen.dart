@@ -50,8 +50,9 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
     final db = ref.read(databaseProvider);
     final bizId = db.currentBusinessId;
     final biz = bizId != null
-        ? await (db.select(db.businesses)..where((t) => t.id.equals(bizId)))
-            .getSingleOrNull()
+        ? await (db.select(
+            db.businesses,
+          )..where((t) => t.id.equals(bizId))).getSingleOrNull()
         : (await db.select(db.businesses).get()).firstOrNull;
     final currency = await db.settingsDao.get('default_currency');
 
@@ -59,13 +60,20 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
     setState(() {
       _nameController.text = biz?.name ?? '';
       _phoneController.text = biz?.phone ?? '';
-      _type = kBusinessTypes.contains(biz?.type) ? biz?.type : null;
+      // DB stores 'Beer distributor' (legacy canonical); display as 'Beverage distributor'.
+      var loadedType = biz?.type;
+      if (loadedType == 'Beer distributor') {
+        loadedType = 'Beverage distributor';
+      }
+      _type = kBusinessTypes.contains(loadedType) ? loadedType : null;
       // Normalise legacy label-style values (e.g. "NGN (₦)") to a clean ISO
       // code so the picker shows "NGN" and saving repairs the stored value.
       _currency = normalizeCurrencyCode(currency);
-      _currencyCodes = {kDefaultCurrency, ...kCountryCurrency.values, _currency}
-          .toList()
-        ..sort();
+      _currencyCodes = {
+        kDefaultCurrency,
+        ...kCountryCurrency.values,
+        _currency,
+      }.toList()..sort();
       _loading = false;
     });
   }
@@ -75,7 +83,10 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
     // write site re-checks too. ref.read (not hasPermission/watch) — this is a
     // callback, matching staff_detail_screen.dart.
     if (!ref.read(currentUserPermissionsProvider).contains('settings.manage')) {
-      AppNotification.showError(context, 'You don\'t have permission to do that.');
+      AppNotification.showError(
+        context,
+        'You don\'t have permission to do that.',
+      );
       return;
     }
     final name = _nameController.text.trim();
@@ -87,9 +98,13 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
     setState(() => _saving = true);
     final db = ref.read(databaseProvider);
     try {
+      // Map display label back to DB canonical before writing.
+      final dbType = _type == 'Beverage distributor'
+          ? 'Beer distributor'
+          : _type;
       await db.businessesDao.updateInfo(
         name: name,
-        type: _type,
+        type: dbType,
         phone: _phoneController.text.trim(),
       );
       await db.settingsDao.set('default_currency', _currency);
@@ -132,7 +147,11 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
           : SettingsFadeIn(
               child: ListView(
                 padding: EdgeInsets.fromLTRB(
-                    24, 24, 24, 24 + context.deviceBottomPadding),
+                  24,
+                  24,
+                  24,
+                  24 + context.deviceBottomPadding,
+                ),
                 children: [
                   const SettingsSectionTitle('Business'),
                   const SizedBox(height: 16),

@@ -34,4 +34,3 @@ class PaymentService extends ValueNotifier<List<Payment>> {
     value = value.where((p) => p.id != id).toList();
   }
 }
-

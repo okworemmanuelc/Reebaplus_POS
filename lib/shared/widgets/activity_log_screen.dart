@@ -51,180 +51,178 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
     }
 
     final bgCol = Theme.of(context).scaffoldBackgroundColor;
-        final surfaceCol = Theme.of(context).colorScheme.surface;
-        final textCol = Theme.of(context).colorScheme.onSurface;
-        final subtextCol =
-            Theme.of(context).textTheme.bodySmall?.color ??
-            Theme.of(context).iconTheme.color!;
-        final borderCol = Theme.of(context).dividerColor;
-        final cardCol = Theme.of(context).cardColor;
+    final surfaceCol = Theme.of(context).colorScheme.surface;
+    final textCol = Theme.of(context).colorScheme.onSurface;
+    final subtextCol =
+        Theme.of(context).textTheme.bodySmall?.color ??
+        Theme.of(context).iconTheme.color!;
+    final borderCol = Theme.of(context).dividerColor;
+    final cardCol = Theme.of(context).cardColor;
 
-        // §12.1: the store filter follows the nav-drawer store picker (null =
-        // "All Stores"); no per-screen store dropdown. Mirror it into the local
-        // filter so `_filterLogs` keeps working.
-        final desiredStoreId = ref.watch(lockedStoreProvider).value;
-        if (_selectedStoreId != desiredStoreId) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted && _selectedStoreId != desiredStoreId) {
-              setState(() => _selectedStoreId = desiredStoreId);
-            }
-          });
+    // §12.1: the store filter follows the nav-drawer store picker (null =
+    // "All Stores"); no per-screen store dropdown. Mirror it into the local
+    // filter so `_filterLogs` keeps working.
+    final desiredStoreId = ref.watch(lockedStoreProvider).value;
+    if (_selectedStoreId != desiredStoreId) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _selectedStoreId != desiredStoreId) {
+          setState(() => _selectedStoreId = desiredStoreId);
         }
+      });
+    }
 
-        return Scaffold(
-          backgroundColor: bgCol,
-          appBar: AppBar(
-            backgroundColor: surfaceCol,
-            elevation: 0,
-            leading: Builder(
-              builder: (ctx) => InkWell(
-                borderRadius: BorderRadius.circular(12),
-                onTap: () => Scaffold.of(ctx).openDrawer(),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        height: 2.5,
-                        width: context.getRSize(22),
-                        decoration: BoxDecoration(
-                          color: textCol,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                      Container(
-                        height: 2.5,
-                        width: context.getRSize(16),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primary,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                      Container(
-                        height: 2.5,
-                        width: context.getRSize(22),
-                        decoration: BoxDecoration(
-                          color: textCol,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                    ],
+    return Scaffold(
+      backgroundColor: bgCol,
+      appBar: AppBar(
+        backgroundColor: surfaceCol,
+        elevation: 0,
+        leading: Builder(
+          builder: (ctx) => InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => Scaffold.of(ctx).openDrawer(),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    height: 2.5,
+                    width: context.getRSize(22),
+                    decoration: BoxDecoration(
+                      color: textCol,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
-                ),
+                  Container(
+                    height: 2.5,
+                    width: context.getRSize(16),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primary,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  Container(
+                    height: 2.5,
+                    width: context.getRSize(22),
+                    decoration: BoxDecoration(
+                      color: textCol,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ],
               ),
             ),
-            title: Row(
-              children: [
-                Container(
-                  padding: EdgeInsets.all(context.getRSize(8)),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Theme.of(context).colorScheme.secondary,
-                        Theme.of(context).colorScheme.primary,
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.primary.withValues(alpha: 0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Icon(
-                    FontAwesomeIcons.clockRotateLeft,
-                    color: Theme.of(context).colorScheme.onPrimary,
-                    size: context.getRSize(16),
-                  ),
-                ),
-                SizedBox(width: context.getRSize(12)),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          'Activity Logs',
-                          style: TextStyle(
-                            fontSize: context.getRFontSize(18),
-                            fontWeight: FontWeight.w800,
-                            color: textCol,
-                            letterSpacing: -0.5,
-                          ),
-                        ),
-                      ),
-                      Text(
-                        'System History',
-                        style: TextStyle(
-                          fontSize: context.getRFontSize(11),
-                          color: Theme.of(context).colorScheme.primary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              const NotificationBell(),
-              SizedBox(width: context.getRSize(8)),
-            ],
           ),
-          drawer: const AppDrawer(activeRoute: 'activity_logs'),
-          body: Column(
-            children: [
-              Expanded(
-                child: Builder(
-                  builder: (context) {
-                    final logs = ref.watch(activityLogProvider).value;
-                    final filteredLogs = _filterLogs(logs);
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: EdgeInsets.all(context.getRSize(8)),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Theme.of(context).colorScheme.secondary,
+                    Theme.of(context).colorScheme.primary,
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Icon(
+                FontAwesomeIcons.clockRotateLeft.data,
+                color: Theme.of(context).colorScheme.onPrimary,
+                size: context.getRSize(16),
+              ),
+            ),
+            SizedBox(width: context.getRSize(12)),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      'Activity Logs',
+                      style: TextStyle(
+                        fontSize: context.getRFontSize(18),
+                        fontWeight: FontWeight.w800,
+                        color: textCol,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    'System History',
+                    style: TextStyle(
+                      fontSize: context.getRFontSize(11),
+                      color: Theme.of(context).colorScheme.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          const NotificationBell(),
+          SizedBox(width: context.getRSize(8)),
+        ],
+      ),
+      drawer: const AppDrawer(activeRoute: 'activity_logs'),
+      body: Column(
+        children: [
+          Expanded(
+            child: Builder(
+              builder: (context) {
+                final logs = ref.watch(activityLogProvider).value;
+                final filteredLogs = _filterLogs(logs);
 
-                    if (_loading) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
+                if (_loading) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-                    if (filteredLogs.isEmpty) {
-                      return _buildEmptyState(context, textCol, subtextCol);
-                    }
+                if (filteredLogs.isEmpty) {
+                  return _buildEmptyState(context, textCol, subtextCol);
+                }
 
-                    return ListView.separated(
-                      padding: context
-                          .rPadding(16)
-                          .add(
-                            EdgeInsets.only(
-                              bottom: context.deviceBottomPadding,
-                            ),
-                          ),
-                      itemCount: filteredLogs.length,
-                      separatorBuilder: (context, index) =>
-                          SizedBox(height: context.getRSize(12)),
-                      itemBuilder: (context, index) {
-                        return _buildLogCard(
-                          context,
-                          filteredLogs[index],
-                          cardCol,
-                          surfaceCol,
-                          textCol,
-                          subtextCol,
-                          borderCol,
-                        );
-                      },
+                return ListView.separated(
+                  padding: context
+                      .rPadding(16)
+                      .add(
+                        EdgeInsets.only(bottom: context.deviceBottomPadding),
+                      ),
+                  itemCount: filteredLogs.length,
+                  separatorBuilder: (context, index) =>
+                      SizedBox(height: context.getRSize(12)),
+                  itemBuilder: (context, index) {
+                    return _buildLogCard(
+                      context,
+                      filteredLogs[index],
+                      cardCol,
+                      surfaceCol,
+                      textCol,
+                      subtextCol,
+                      borderCol,
                     );
                   },
-                ),
-              ),
-            ],
+                );
+              },
+            ),
           ),
+        ],
+      ),
     );
   }
 
@@ -245,7 +243,6 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
       if (!isStoreScoped) return true;
       return log.storeId == _selectedStoreId;
     }).toList();
-
   }
 
   Widget _buildEmptyState(
@@ -264,7 +261,7 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
               shape: BoxShape.circle,
             ),
             child: Icon(
-              FontAwesomeIcons.clockRotateLeft,
+              FontAwesomeIcons.clockRotateLeft.data,
               size: context.getRSize(48),
               color: subtextCol.withValues(alpha: 0.5),
             ),
@@ -306,21 +303,21 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
     final scheme = Theme.of(context).colorScheme;
     final semantic = Theme.of(context).extension<AppSemanticColors>();
     final actionLower = log.action.toLowerCase();
-    IconData icon = FontAwesomeIcons.bolt;
+    IconData icon = FontAwesomeIcons.bolt.data;
     Color iconColor = scheme.primary;
 
     if (actionLower.contains('order') ||
         actionLower.contains('pos') ||
         actionLower.contains('sale')) {
-      icon = FontAwesomeIcons.cashRegister;
+      icon = FontAwesomeIcons.cashRegister.data;
       iconColor = semantic?.success ?? success;
     } else if (actionLower.contains('inventory') ||
         actionLower.contains('stock') ||
         actionLower.contains('delivery')) {
-      icon = FontAwesomeIcons.boxesStacked;
+      icon = FontAwesomeIcons.boxesStacked.data;
       iconColor = semantic?.warning ?? const Color(0xFFF59E0B); // amber
     } else if (actionLower.contains('customer')) {
-      icon = FontAwesomeIcons.user;
+      icon = FontAwesomeIcons.user.data;
       iconColor = const Color(0xFF8B5CF6); // purple
     }
 
@@ -415,11 +412,8 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
                             kStores
                                 .firstWhere(
                                   (w) => w.id == log.storeId,
-                                  orElse: () => Store(
-                                    id: '',
-                                    name: 'N/A',
-                                    location: '',
-                                  ),
+                                  orElse: () =>
+                                      Store(id: '', name: 'N/A', location: ''),
                                 )
                                 .name,
                             style: TextStyle(

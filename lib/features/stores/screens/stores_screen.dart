@@ -116,7 +116,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Icon(
-                            FontAwesomeIcons.store,
+                            FontAwesomeIcons.store.data,
                             color: Theme.of(context).colorScheme.primary,
                             size: rSize(ctx, 18),
                           ),
@@ -138,10 +138,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                       controller: nameCtrl,
                       labelText: 'Store Name',
                       hintText: 'e.g. Main Store, Annex B',
-                      prefixIcon: const Icon(
-                        Icons.store_outlined,
-                        size: 20,
-                      ),
+                      prefixIcon: const Icon(Icons.store_outlined, size: 20),
                       validator: (v) => v == null || v.trim().isEmpty
                           ? 'Name is required'
                           : null,
@@ -205,8 +202,10 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                                 final combinedLocation =
                                     '${addressCtrl.text.trim()}, ${cityStateCtrl.text.trim()}, ${countryCtrl.text.trim()}';
 
-                                final whBusinessId =
-                                    ref.read(authProvider).currentUser?.businessId;
+                                final whBusinessId = ref
+                                    .read(authProvider)
+                                    .currentUser
+                                    ?.businessId;
                                 if (whBusinessId == null) return;
                                 final whComp = StoresCompanion.insert(
                                   id: Value(UuidV7.generate()),
@@ -216,8 +215,10 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                                   lastUpdatedAt: Value(DateTime.now()),
                                 );
                                 await db.into(db.stores).insert(whComp);
-                                await db.syncDao
-                                    .enqueueUpsert('stores', whComp);
+                                await db.syncDao.enqueueUpsert(
+                                  'stores',
+                                  whComp,
+                                );
                                 if (ctx.mounted) Navigator.pop(ctx);
                               } catch (e) {
                                 setSheet(() => saving = false);
@@ -305,7 +306,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Icon(
-                            FontAwesomeIcons.penToSquare,
+                            FontAwesomeIcons.penToSquare.data,
                             color: Theme.of(context).colorScheme.primary,
                             size: rSize(ctx, 18),
                           ),
@@ -326,10 +327,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                       controller: nameCtrl,
                       labelText: 'Store Name',
                       hintText: 'e.g. Main Store',
-                      prefixIcon: const Icon(
-                        Icons.store_outlined,
-                        size: 20,
-                      ),
+                      prefixIcon: const Icon(Icons.store_outlined, size: 20),
                       validator: (v) => v == null || v.trim().isEmpty
                           ? 'Name is required'
                           : null,
@@ -392,18 +390,21 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                                 lastUpdatedAt: Value(DateTime.now()),
                               );
                               try {
-                                await (db.update(
-                                  db.stores,
-                                )..where((t) => t.id.equals(store.id)))
+                                await (db.update(db.stores)
+                                      ..where((t) => t.id.equals(store.id)))
                                     .write(whComp);
-                                await db.syncDao
-                                    .enqueueUpsert('stores', whComp);
+                                await db.syncDao.enqueueUpsert(
+                                  'stores',
+                                  whComp,
+                                );
                                 if (ctx.mounted) Navigator.pop(ctx);
                               } catch (e) {
                                 setSheet(() => saving = false);
                                 if (ctx.mounted) {
-                                  AppNotification.showError(ctx,
-                                      'Could not save store. Please try again.');
+                                  AppNotification.showError(
+                                    ctx,
+                                    'Could not save store. Please try again.',
+                                  );
                                 }
                               }
                             },
@@ -419,10 +420,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
   }
 
   // ── Delete Store ───────────────────────────────────────────────────────
-  Future<void> _confirmDelete(
-    BuildContext context,
-    StoreData store,
-  ) async {
+  Future<void> _confirmDelete(BuildContext context, StoreData store) async {
     final db = ref.read(databaseProvider);
     final rows = await (db.select(
       db.inventory,
@@ -521,21 +519,25 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                 lastUpdatedAt: Value(DateTime.now()),
               );
               try {
-                await (db.update(db.stores)
-                      ..where((t) => t.id.equals(store.id)))
-                    .write(whComp);
+                await (db.update(
+                  db.stores,
+                )..where((t) => t.id.equals(store.id))).write(whComp);
                 // Full-row enqueue: a partial stores upsert omits the NOT NULL name.
                 await db.syncDao.enqueueUpsert(
                   'stores',
-                  store.toCompanion(true).copyWith(
+                  store
+                      .toCompanion(true)
+                      .copyWith(
                         isDeleted: const Value(true),
                         lastUpdatedAt: whComp.lastUpdatedAt,
                       ),
                 );
               } catch (e) {
                 if (context.mounted) {
-                  AppNotification.showError(context,
-                      'Could not delete store. Please try again.');
+                  AppNotification.showError(
+                    context,
+                    'Could not delete store. Please try again.',
+                  );
                 }
               }
             },
@@ -561,8 +563,8 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
         backgroundColor: _surface,
         elevation: 0,
         leading: const MenuButton(),
-        title: const AppBarHeader(
-          icon: FontAwesomeIcons.store,
+        title: AppBarHeader(
+          icon: FontAwesomeIcons.store.data,
           title: 'Stores',
           subtitle: 'Manage Storage Locations',
         ),
@@ -573,9 +575,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
               icon: const Icon(Icons.swap_horiz_rounded),
               onPressed: () => Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => const StockTransferScreen(),
-                ),
+                MaterialPageRoute(builder: (_) => const StockTransferScreen()),
               ),
             ),
           if (canManage || hasPermission(ref, 'stores.receive_transfer'))
@@ -653,7 +653,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
               shape: BoxShape.circle,
             ),
             child: Icon(
-              FontAwesomeIcons.store,
+              FontAwesomeIcons.store.data,
               size: rSize(context, 40),
               color: Theme.of(
                 context,
@@ -769,8 +769,7 @@ class _StoreCardState extends ConsumerState<_StoreCard> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) =>
-                      StoreDetailsScreen(store: widget.store),
+                  builder: (context) => StoreDetailsScreen(store: widget.store),
                 ),
               );
             },
@@ -788,7 +787,7 @@ class _StoreCardState extends ConsumerState<_StoreCard> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
-                      FontAwesomeIcons.store,
+                      FontAwesomeIcons.store.data,
                       color: Theme.of(context).colorScheme.primary,
                       size: rSize(context, 20),
                     ),
@@ -835,7 +834,7 @@ class _StoreCardState extends ConsumerState<_StoreCard> {
                     ),
                   ),
                   Icon(
-                    FontAwesomeIcons.chevronRight,
+                    FontAwesomeIcons.chevronRight.data,
                     size: rSize(context, 13),
                     color: _subtext,
                   ),
@@ -854,7 +853,7 @@ class _StoreCardState extends ConsumerState<_StoreCard> {
               children: [
                 Expanded(
                   child: _statCell(
-                    icon: FontAwesomeIcons.boxesStacked,
+                    icon: FontAwesomeIcons.boxesStacked.data,
                     label: 'Total Units',
                     value: totalStock.toString(),
                     color: Theme.of(context).colorScheme.primary,
@@ -863,7 +862,7 @@ class _StoreCardState extends ConsumerState<_StoreCard> {
                 Container(width: 1, height: 36, color: _strongBorder),
                 Expanded(
                   child: _statCell(
-                    icon: FontAwesomeIcons.tag,
+                    icon: FontAwesomeIcons.tag.data,
                     label: 'Products',
                     value: productCount.toString(),
                     color: AppColors.success,
@@ -886,7 +885,7 @@ class _StoreCardState extends ConsumerState<_StoreCard> {
               children: [
                 Expanded(
                   child: _actionButton(
-                    icon: FontAwesomeIcons.penToSquare,
+                    icon: FontAwesomeIcons.penToSquare.data,
                     color: Theme.of(context).colorScheme.primary,
                     label: 'Edit',
                     onTap: widget.onEdit,
@@ -895,7 +894,7 @@ class _StoreCardState extends ConsumerState<_StoreCard> {
                 Container(width: 1, height: 36, color: _strongBorder),
                 Expanded(
                   child: _actionButton(
-                    icon: FontAwesomeIcons.trash,
+                    icon: FontAwesomeIcons.trash.data,
                     color: Theme.of(context).colorScheme.error,
                     label: 'Delete',
                     onTap: widget.onDelete,

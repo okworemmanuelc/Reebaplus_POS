@@ -36,6 +36,7 @@ import 'package:reebaplus_pos/core/utils/product_name.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
+import 'package:reebaplus_pos/shared/utils/product_icon_helper.dart';
 
 class InventoryScreen extends ConsumerStatefulWidget {
   const InventoryScreen({super.key});
@@ -44,12 +45,13 @@ class InventoryScreen extends ConsumerStatefulWidget {
 }
 
 class _InventoryScreenState extends ConsumerState<InventoryScreen>
-    // TickerProviderStateMixin (plural): the tab set is dynamic (role /
-    // business-type guards), so the TabController is rebuilt when the visible
-    // count changes. SingleTickerProviderStateMixin permanently records its one
-    // ticker and would throw on the second controller — the plural mixin tracks
-    // tickers in a set and releases each on dispose.
-    with TickerProviderStateMixin {
+        // TickerProviderStateMixin (plural): the tab set is dynamic (role /
+        // business-type guards), so the TabController is rebuilt when the visible
+        // count changes. SingleTickerProviderStateMixin permanently records its one
+        // ticker and would throw on the second controller — the plural mixin tracks
+        // tickers in a set and releases each on dispose.
+        with
+        TickerProviderStateMixin {
   late TabController _tabController;
   int _currentTab = 0;
   String _selectedManufacturer = 'all';
@@ -127,7 +129,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
 
     final showSuppliers = perms.contains('suppliers.manage');
     final showCrates = isCrateBusiness(businessType);
-    final showHistory = role.slug == 'ceo' ||
+    final showHistory =
+        role.slug == 'ceo' ||
         role.slug == 'manager' ||
         role.slug == 'stock_keeper';
 
@@ -146,8 +149,9 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   /// data resolves), disposing the old one first to release its ticker.
   void _syncTabController(List<String> keys) {
     if (_listEquals(keys, _tabKeys)) return;
-    final priorKey =
-        _currentTab < _tabKeys.length ? _tabKeys[_currentTab] : 'products';
+    final priorKey = _currentTab < _tabKeys.length
+        ? _tabKeys[_currentTab]
+        : 'products';
     var newIndex = keys.indexOf(priorKey);
     if (newIndex < 0) newIndex = 0;
     _tabKeys = keys;
@@ -173,20 +177,20 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   }
 
   String _tabLabel(String key) => switch (key) {
-        'suppliers' => 'Suppliers',
-        'crates' => 'Empty Crates',
-        'history' => 'History',
-        _ => 'Products',
-      };
+    'suppliers' => 'Suppliers',
+    'crates' => 'Empty Crates',
+    'history' => 'History',
+    _ => 'Products',
+  };
 
   Widget _tabBody(BuildContext context, String key) => switch (key) {
-        'suppliers' => _buildSuppliersTab(context),
-        'crates' => _buildCratesTab(context),
-        'history' => InventoryHistoryTab(
-            storeId: _selectedStoreId == 'all' ? null : _selectedStoreId,
-          ),
-        _ => _buildProductsTab(context),
-      };
+    'suppliers' => _buildSuppliersTab(context),
+    'crates' => _buildCratesTab(context),
+    'history' => InventoryHistoryTab(
+      storeId: _selectedStoreId == 'all' ? null : _selectedStoreId,
+    ),
+    _ => _buildProductsTab(context),
+  };
 
   // Currently-visible tab keys, in order. Recomputed in build() from role /
   // permission / business-type guards (§16.7 / §16.10); the TabController is
@@ -232,7 +236,9 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         },
       );
 
-      _crateSizeGroupsSub = db.inventoryDao.watchAllCrateSizeGroups().listen((data) {
+      _crateSizeGroupsSub = db.inventoryDao.watchAllCrateSizeGroups().listen((
+        data,
+      ) {
         if (mounted) setState(() => _dbCrateSizeGroups = data);
       });
     });
@@ -256,8 +262,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     _productsSub?.cancel();
     _emptyCratesSumSub?.cancel();
 
-    final storeId =
-        _selectedStoreId == 'all' ? null : _selectedStoreId;
+    final storeId = _selectedStoreId == 'all' ? null : _selectedStoreId;
 
     final db = ref.read(databaseProvider);
     final productStream = storeId != null
@@ -284,7 +289,9 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
+    ref.watch(
+      currencySymbolProvider,
+    ); // rebuild money displays when currency changes
     // Defense-in-depth (hard rules #6/#7): Inventory is gated on stock.view
     // (§16.7). The drawer item and bottom-nav Stock tab already hide without it;
     // this guards a deep-link / programmatic switch to the tab. SharedScaffold
@@ -306,8 +313,9 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
           child: Text(
             'You don\'t have access to Inventory.',
             style: TextStyle(
-              color:
-                  Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.6),
             ),
           ),
         ),
@@ -321,7 +329,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     final tabsReady = visibleTabs != null;
     if (tabsReady) _syncTabController(visibleTabs);
 
-    final onProductsTab = tabsReady &&
+    final onProductsTab =
+        tabsReady &&
         _currentTab < _tabKeys.length &&
         _tabKeys[_currentTab] == 'products';
     // Add Product FAB is gated on `products.add` (§16.7) — CEO + Manager only.
@@ -337,7 +346,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
               // lifts the FAB above the system nav; don't add the inset.
               reserveBottomInset: false,
               onPressed: _showAddProductSheet,
-              icon: FontAwesomeIcons.plus,
+              icon: FontAwesomeIcons.plus.data,
               label: 'Add Product',
             )
           : null,
@@ -352,8 +361,9 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                       SliverToBoxAdapter(child: _buildSummaryCards(context)),
                       SliverPersistentHeader(
                         pinned: true,
-                        delegate:
-                            _StickyTabBarDelegate(child: _buildTabBar(context)),
+                        delegate: _StickyTabBarDelegate(
+                          child: _buildTabBar(context),
+                        ),
                       ),
                     ];
                   },
@@ -374,8 +384,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       backgroundColor: _surface,
       elevation: 0,
       leading: const MenuButton(),
-      title: const AppBarHeader(
-        icon: FontAwesomeIcons.boxesStacked,
+      title: AppBarHeader(
+        icon: FontAwesomeIcons.boxesStacked.data,
         title: 'Inventory',
         subtitle: 'Stock Management',
       ),
@@ -397,8 +407,11 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         // keeper, Manager, CEO — AND the `stock.adjust` permission, since the
         // count/damage actions decrement stock and the key is independently
         // revocable. Otherwise hide the icon entirely (hard rule #7).
-        if (const {'ceo', 'manager', 'stock_keeper'}
-                .contains(ref.watch(currentUserRoleProvider)?.slug) &&
+        if (const {
+              'ceo',
+              'manager',
+              'stock_keeper',
+            }.contains(ref.watch(currentUserRoleProvider)?.slug) &&
             hasPermission(ref, 'stock.adjust'))
           IconButton(
             tooltip: 'Daily Stock Count',
@@ -407,10 +420,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
               context,
               slideDownRoute(
                 StockCountScreen(
-                  storeId: ref
-                      .read(navigationProvider)
-                      .lockedStoreId
-                      .value,
+                  storeId: ref.read(navigationProvider).lockedStoreId.value,
                 ),
               ),
             ),
@@ -443,7 +453,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         context,
         'Total SKUs',
         '$totalItems',
-        FontAwesomeIcons.layerGroup,
+        FontAwesomeIcons.layerGroup.data,
         Theme.of(context).colorScheme.primary,
         isActive: _stockFilter == 'all',
         onTap: () => setState(() {
@@ -455,7 +465,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         context,
         'Low Stock',
         '$lowStock',
-        FontAwesomeIcons.triangleExclamation,
+        FontAwesomeIcons.triangleExclamation.data,
         AppColors.warning,
         isActive: _stockFilter == 'low',
         onTap: () => setState(() {
@@ -467,7 +477,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         context,
         'Out of Stock',
         '$outOfStock',
-        FontAwesomeIcons.ban,
+        FontAwesomeIcons.ban.data,
         danger,
         isActive: _stockFilter == 'out',
         onTap: () => setState(() {
@@ -482,7 +492,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
           context,
           'Total Crates',
           '${totalCrates.toInt()}',
-          FontAwesomeIcons.beerMugEmpty,
+          FontAwesomeIcons.beerMugEmpty.data,
           success,
           isActive: _currentTab == _tabKeys.indexOf('crates'),
           onTap: () => setState(() {
@@ -496,7 +506,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         context,
         'Near Expiry',
         '$nearExpiry',
-        FontAwesomeIcons.hourglassHalf,
+        FontAwesomeIcons.hourglassHalf.data,
         AppColors.warning,
         isActive: _stockFilter == 'expiry',
         onTap: () => setState(() {
@@ -615,9 +625,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         ),
         indicatorColor: Theme.of(context).colorScheme.primary,
         indicatorWeight: 3,
-        tabs: [
-          for (final key in _tabKeys) Tab(text: _tabLabel(key)),
-        ],
+        tabs: [for (final key in _tabKeys) Tab(text: _tabLabel(key))],
       ),
     );
   }
@@ -704,7 +712,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
           child: AppButton(
             text: 'Add Supplier',
             variant: AppButtonVariant.secondary,
-            icon: FontAwesomeIcons.plus,
+            icon: FontAwesomeIcons.plus.data,
             onPressed: _showAddSupplierDialog,
           ),
         ),
@@ -754,7 +762,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Icon(
-                                FontAwesomeIcons.buildingColumns,
+                                FontAwesomeIcons.buildingColumns.data,
                                 color: Theme.of(context).colorScheme.primary,
                                 size: context.getRSize(20),
                               ),
@@ -862,8 +870,9 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                       ),
                     ],
                     onChanged: (val) => setState(
-                      () => _selectedCategoryId =
-                          (val == null || val == 'all') ? null : val,
+                      () => _selectedCategoryId = (val == null || val == 'all')
+                          ? null
+                          : val,
                     ),
                   ),
           ),
@@ -940,9 +949,11 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   /// Days until [expiry] relative to today (negative = already expired).
   int _daysToExpiry(DateTime expiry) {
     final now = DateTime.now();
-    return DateTime(expiry.year, expiry.month, expiry.day)
-        .difference(DateTime(now.year, now.month, now.day))
-        .inDays;
+    return DateTime(
+      expiry.year,
+      expiry.month,
+      expiry.day,
+    ).difference(DateTime(now.year, now.month, now.day)).inDays;
   }
 
   /// A product is "flagged" when it has an expiry date that is past or within
@@ -964,8 +975,9 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     }
     if (flagged.isEmpty) return list;
     flagged.sort(
-      (a, b) => _daysToExpiry(a.product.expiryDate!)
-          .compareTo(_daysToExpiry(b.product.expiryDate!)),
+      (a, b) => _daysToExpiry(
+        a.product.expiryDate!,
+      ).compareTo(_daysToExpiry(b.product.expiryDate!)),
     );
     return [...flagged, ...rest];
   }
@@ -1051,11 +1063,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
           id: product.id.toString(),
           productName: product.name,
           subtitle: product.subtitle ?? '',
-          icon: IconData(
-            product.iconCodePoint ?? 0xf0fc,
-            fontFamily: 'FontAwesomeSolid',
-            fontPackage: 'font_awesome_flutter',
-          ),
+          icon: productIconFromCodePoint(product.iconCodePoint),
           color: accent,
           storeStock: {'w1': item.totalStock.toDouble()},
           lowStockThreshold: product.lowStockThreshold.toDouble(),
@@ -1108,11 +1116,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Icon(
-                  IconData(
-                    product.iconCodePoint ?? 0xf0fc,
-                    fontFamily: 'FontAwesomeSolid',
-                    fontPackage: 'font_awesome_flutter',
-                  ),
+                  productIconFromCodePoint(product.iconCodePoint),
                   color: accent,
                   size: context.getRSize(24),
                 ),
@@ -1255,7 +1259,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
             ),
             AppButton(
               text: 'Add New',
-              icon: FontAwesomeIcons.circlePlus,
+              icon: FontAwesomeIcons.circlePlus.data,
               variant: AppButtonVariant.ghost,
               isFullWidth: false,
               onPressed: _showAddManufacturerDialog,
@@ -1311,7 +1315,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
             context,
             'Empty In Stock',
             totalEmpty.toString(),
-            FontAwesomeIcons.beerMugEmpty,
+            FontAwesomeIcons.beerMugEmpty.data,
             AppColors.warning,
           ),
         ),
@@ -1321,7 +1325,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
             context,
             'Full (Crate)',
             totalFull.toString(),
-            FontAwesomeIcons.wineBottle,
+            FontAwesomeIcons.wineBottle.data,
             Theme.of(context).colorScheme.primary,
           ),
         ),
@@ -1415,7 +1419,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(
-                    FontAwesomeIcons.industry,
+                    FontAwesomeIcons.industry.data,
                     color: Theme.of(context).colorScheme.secondary,
                     size: context.getRSize(16),
                   ),
@@ -1564,7 +1568,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         child: Column(
           children: [
             Icon(
-              FontAwesomeIcons.boxOpen,
+              FontAwesomeIcons.boxOpen.data,
               size: context.getRSize(32),
               color: _border,
             ),
@@ -1590,99 +1594,96 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => Container(
-          decoration: BoxDecoration(
-            color: _surface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-          ),
-          padding: EdgeInsets.fromLTRB(
-            24,
-            24,
-            24,
-            24 + ctx.deviceBottomPadding,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Add Manufacturer',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w900,
-                  color: _text,
-                ),
-              ),
-              const SizedBox(height: 20),
-              _styledDialogField(nameCtrl, 'Name', 'e.g. Nigerian Breweries'),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: _styledDialogField(
-                      stockCtrl,
-                      'Initial Empty',
-                      '0',
-                      isNumber: true,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _styledDialogField(
-                      depositCtrl,
-                      'Deposit ($activeCurrencySymbol)',
-                      '0',
-                      isNumber: true,
-                      isCurrency: true,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 32),
-              AppButton(
-                text: 'Add Manufacturer',
-                variant: AppButtonVariant.primary,
-                onPressed: () async {
-                  if (nameCtrl.text.trim().isEmpty) return;
-                  final mfrName = nameCtrl.text.trim();
-                  final mfrBusinessId =
-                      ref.read(authProvider).currentUser?.businessId;
-                  if (mfrBusinessId == null) return;
-                  try {
-                    await ref
-                        .read(databaseProvider)
-                        .inventoryDao
-                        .insertManufacturer(
-                          ManufacturersCompanion.insert(
-                            name: mfrName,
-                            businessId: mfrBusinessId,
-                            emptyCrateStock: Value(
-                              int.tryParse(stockCtrl.text.trim()) ?? 0,
-                            ),
-                            depositAmountKobo: Value(
-                              ((parseCurrency(depositCtrl.text)) * 100).round(),
-                            ),
-                          ),
-                        );
-                    await ref
-                        .read(activityLogProvider)
-                        .logAction(
-                          'add_manufacturer',
-                          '${ref.read(authProvider).currentUser?.name ?? 'Unknown'} added manufacturer: $mfrName',
-                        );
-                    if (context.mounted) Navigator.pop(ctx);
-                  } catch (_) {
-                    if (ctx.mounted) {
-                      AppNotification.showError(
-                        ctx,
-                        'Could not add manufacturer. Please try again.',
-                      );
-                    }
-                  }
-                },
-              ),
-            ],
-          ),
+        decoration: BoxDecoration(
+          color: _surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
         ),
+        padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + ctx.deviceBottomPadding),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Add Manufacturer',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w900,
+                color: _text,
+              ),
+            ),
+            const SizedBox(height: 20),
+            _styledDialogField(nameCtrl, 'Name', 'e.g. Nigerian Breweries'),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _styledDialogField(
+                    stockCtrl,
+                    'Initial Empty',
+                    '0',
+                    isNumber: true,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _styledDialogField(
+                    depositCtrl,
+                    'Deposit ($activeCurrencySymbol)',
+                    '0',
+                    isNumber: true,
+                    isCurrency: true,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 32),
+            AppButton(
+              text: 'Add Manufacturer',
+              variant: AppButtonVariant.primary,
+              onPressed: () async {
+                if (nameCtrl.text.trim().isEmpty) return;
+                final mfrName = nameCtrl.text.trim();
+                final mfrBusinessId = ref
+                    .read(authProvider)
+                    .currentUser
+                    ?.businessId;
+                if (mfrBusinessId == null) return;
+                try {
+                  await ref
+                      .read(databaseProvider)
+                      .inventoryDao
+                      .insertManufacturer(
+                        ManufacturersCompanion.insert(
+                          name: mfrName,
+                          businessId: mfrBusinessId,
+                          emptyCrateStock: Value(
+                            int.tryParse(stockCtrl.text.trim()) ?? 0,
+                          ),
+                          depositAmountKobo: Value(
+                            ((parseCurrency(depositCtrl.text)) * 100).round(),
+                          ),
+                        ),
+                      );
+                  await ref
+                      .read(activityLogProvider)
+                      .logAction(
+                        'add_manufacturer',
+                        '${ref.read(authProvider).currentUser?.name ?? 'Unknown'} added manufacturer: $mfrName',
+                      );
+                  if (context.mounted) Navigator.pop(ctx);
+                } catch (_) {
+                  if (ctx.mounted) {
+                    AppNotification.showError(
+                      ctx,
+                      'Could not add manufacturer. Please try again.',
+                    );
+                  }
+                }
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1705,241 +1706,235 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setB) => Container(
-            decoration: BoxDecoration(
-              color: _surface,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(28),
-              ),
-            ),
-            padding: EdgeInsets.fromLTRB(
-              24,
-              24,
-              24,
-              24 + ctx.deviceBottomPadding,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Update ${mfr.name}',
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w900,
-                          color: _text,
-                        ),
+          decoration: BoxDecoration(
+            color: _surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          padding: EdgeInsets.fromLTRB(
+            24,
+            24,
+            24,
+            24 + ctx.deviceBottomPadding,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Update ${mfr.name}',
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                        color: _text,
                       ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.pop(ctx),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                _styledDialogField(
-                  stockCtrl,
-                  'Empty Crates In Stock',
-                  'e.g. 50',
-                  isNumber: true,
-                ),
-                const SizedBox(height: 12),
-
-                // Deposit Amount with CEO Check
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Deposit Amount ($activeCurrencySymbol)',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: _subtext,
-                          ),
-                        ),
-                        Row(
-                          children: [
-                            _modeChip(
-                              'Add',
-                              depositMode == 'add',
-                              () => setB(() => depositMode = 'add'),
-                            ),
-                            const SizedBox(width: 4),
-                            _modeChip(
-                              'Change',
-                              depositMode == 'change',
-                              () => setB(() => depositMode = 'change'),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    _styledDialogField(
-                      depositCtrl,
-                      '',
-                      depositMode == 'add'
-                          ? 'Amount to add'
-                          : 'New total amount',
-                      isNumber: true,
-                      isCurrency: true,
-                      readOnly: !isCEO,
-                      showLabel: false,
-                    ),
-                  ],
-                ),
-
-                if (isCEO) ...[
-                  const SizedBox(height: 20),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.primary.withValues(alpha: 0.05),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.primary.withValues(alpha: 0.1),
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  FontAwesomeIcons.shieldHalved,
-                                  size: 14,
-                                  color: Theme.of(context).colorScheme.primary,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'CEO: CRATE PRICE',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w900,
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.primary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            Row(
-                              children: [
-                                _modeChip(
-                                  'Add',
-                                  priceMode == 'add',
-                                  () => setB(() => priceMode = 'add'),
-                                  small: true,
-                                ),
-                                const SizedBox(width: 4),
-                                _modeChip(
-                                  'Change',
-                                  priceMode == 'change',
-                                  () => setB(() => priceMode = 'change'),
-                                  small: true,
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        _styledDialogField(
-                          crateValueCtrl,
-                          'Bulk Update Price ($activeCurrencySymbol)',
-                          priceMode == 'add'
-                              ? '+ /- amount'
-                              : 'New price for all items',
-                          isNumber: true,
-                          isCurrency: true,
-                        ),
-                      ],
                     ),
                   ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
                 ],
+              ),
+              const SizedBox(height: 20),
+              _styledDialogField(
+                stockCtrl,
+                'Empty Crates In Stock',
+                'e.g. 50',
+                isNumber: true,
+              ),
+              const SizedBox(height: 12),
 
-                const SizedBox(height: 32),
-                AppButton(
-                  text: 'Save Changes',
-                  variant: AppButtonVariant.primary,
-                  onPressed: () async {
-                    final db = ref.read(databaseProvider);
-                    try {
-                      // Update Stock
-                      await db.inventoryDao.updateManufacturerStock(
+              // Deposit Amount with CEO Check
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Deposit Amount ($activeCurrencySymbol)',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: _subtext,
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          _modeChip(
+                            'Add',
+                            depositMode == 'add',
+                            () => setB(() => depositMode = 'add'),
+                          ),
+                          const SizedBox(width: 4),
+                          _modeChip(
+                            'Change',
+                            depositMode == 'change',
+                            () => setB(() => depositMode = 'change'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  _styledDialogField(
+                    depositCtrl,
+                    '',
+                    depositMode == 'add' ? 'Amount to add' : 'New total amount',
+                    isNumber: true,
+                    isCurrency: true,
+                    readOnly: !isCEO,
+                    showLabel: false,
+                  ),
+                ],
+              ),
+
+              if (isCEO) ...[
+                const SizedBox(height: 20),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.primary.withValues(alpha: 0.1),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                FontAwesomeIcons.shieldHalved.data,
+                                size: 14,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'CEO: CRATE PRICE',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w900,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Row(
+                            children: [
+                              _modeChip(
+                                'Add',
+                                priceMode == 'add',
+                                () => setB(() => priceMode = 'add'),
+                                small: true,
+                              ),
+                              const SizedBox(width: 4),
+                              _modeChip(
+                                'Change',
+                                priceMode == 'change',
+                                () => setB(() => priceMode = 'change'),
+                                small: true,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      _styledDialogField(
+                        crateValueCtrl,
+                        'Bulk Update Price ($activeCurrencySymbol)',
+                        priceMode == 'add'
+                            ? '+ /- amount'
+                            : 'New price for all items',
+                        isNumber: true,
+                        isCurrency: true,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
+              const SizedBox(height: 32),
+              AppButton(
+                text: 'Save Changes',
+                variant: AppButtonVariant.primary,
+                onPressed: () async {
+                  final db = ref.read(databaseProvider);
+                  try {
+                    // Update Stock
+                    await db.inventoryDao.updateManufacturerStock(
+                      mfr.id,
+                      int.tryParse(stockCtrl.text.trim()) ?? emptyCount,
+                      storeId: ref.read(lockedStoreProvider).value,
+                    );
+
+                    // Update Deposit
+                    if (isCEO && depositCtrl.text.isNotEmpty) {
+                      final inputVal = parseCurrency(depositCtrl.text);
+                      final inputKobo = (inputVal * 100).round();
+                      int newDepositKobo = mfr.depositAmountKobo;
+                      if (depositMode == 'add') {
+                        newDepositKobo += inputKobo;
+                      } else {
+                        newDepositKobo = inputKobo;
+                      }
+                      await db.inventoryDao.updateManufacturerDeposit(
                         mfr.id,
-                        int.tryParse(stockCtrl.text.trim()) ?? emptyCount,
-                        storeId: ref.read(lockedStoreProvider).value,
+                        newDepositKobo,
                       );
+                    }
 
-                      // Update Deposit
-                      if (isCEO && depositCtrl.text.isNotEmpty) {
-                        final inputVal = parseCurrency(depositCtrl.text);
-                        final inputKobo = (inputVal * 100).round();
-                        int newDepositKobo = mfr.depositAmountKobo;
-                        if (depositMode == 'add') {
-                          newDepositKobo += inputKobo;
-                        } else {
-                          newDepositKobo = inputKobo;
-                        }
-                        await db.inventoryDao.updateManufacturerDeposit(
+                    // Update Product Crate Values
+                    if (isCEO && crateValueCtrl.text.isNotEmpty) {
+                      final inputVal = parseCurrency(crateValueCtrl.text);
+                      final inputKobo = (inputVal * 100).round();
+
+                      if (priceMode == 'add') {
+                        await db.catalogDao.updateManufacturerEmptyCrateValue(
                           mfr.id,
-                          newDepositKobo,
+                          inputKobo,
                         );
-                      }
-
-                      // Update Product Crate Values
-                      if (isCEO && crateValueCtrl.text.isNotEmpty) {
-                        final inputVal = parseCurrency(crateValueCtrl.text);
-                        final inputKobo = (inputVal * 100).round();
-
-                        if (priceMode == 'add') {
-                          await db.catalogDao.updateManufacturerEmptyCrateValue(
-                            mfr.id,
-                            inputKobo,
-                          );
-                        } else {
-                          await db.catalogDao.updateManufacturerEmptyCrateValue(
-                            mfr.id,
-                            inputKobo,
-                          );
-                        }
-                      }
-
-                      await ref
-                          .read(activityLogProvider)
-                          .logAction(
-                            'update_manufacturer',
-                            '${ref.read(authProvider).currentUser?.name ?? 'Unknown'} updated crate stock/deposit for ${mfr.name}',
-                          );
-                      if (context.mounted) Navigator.pop(ctx);
-                    } catch (_) {
-                      if (ctx.mounted) {
-                        AppNotification.showError(
-                          ctx,
-                          'Could not save changes. Please try again.',
+                      } else {
+                        await db.catalogDao.updateManufacturerEmptyCrateValue(
+                          mfr.id,
+                          inputKobo,
                         );
                       }
                     }
-                  },
-                ),
-              ],
-            ),
+
+                    await ref
+                        .read(activityLogProvider)
+                        .logAction(
+                          'update_manufacturer',
+                          '${ref.read(authProvider).currentUser?.name ?? 'Unknown'} updated crate stock/deposit for ${mfr.name}',
+                        );
+                    if (context.mounted) Navigator.pop(ctx);
+                  } catch (_) {
+                    if (ctx.mounted) {
+                      AppNotification.showError(
+                        ctx,
+                        'Could not save changes. Please try again.',
+                      );
+                    }
+                  }
+                },
+              ),
+            ],
           ),
+        ),
       ),
     );
   }
@@ -1988,8 +1983,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       readOnly: readOnly,
       keyboardType: isNumber
           ? (isCurrency
-              ? const TextInputType.numberWithOptions(decimal: true)
-              : TextInputType.number)
+                ? const TextInputType.numberWithOptions(decimal: true)
+                : TextInputType.number)
           : TextInputType.text,
       inputFormatters: isCurrency
           ? [CurrencyInputFormatter()]
@@ -2013,7 +2008,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(
-                FontAwesomeIcons.box,
+                FontAwesomeIcons.box.data,
                 size: context.getRSize(14),
                 color: Theme.of(context).colorScheme.secondary,
               ),
@@ -2112,75 +2107,68 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => Container(
-          decoration: BoxDecoration(
-            color: _surface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-          ),
-          padding: EdgeInsets.fromLTRB(
-            24,
-            24,
-            24,
-            24 + ctx.deviceBottomPadding,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Update ${grp.name}',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: _text,
-                ),
-              ),
-              const SizedBox(height: 20),
-              _styledDialogField(
-                stockCtrl,
-                'Physical Stock',
-                '0',
-                isNumber: true,
-              ),
-              const SizedBox(height: 24),
-              AppButton(
-                text: 'Save Changes',
-                variant: AppButtonVariant.primary,
-                onPressed: () async {
-                  final newStock =
-                      int.tryParse(stockCtrl.text.trim()) ??
-                      grp.emptyCrateStock;
-                  try {
-                    await ref
-                        .read(databaseProvider)
-                        .inventoryDao
-                        .updateCrateGroupStock(grp.id, newStock);
-                    await ref
-                        .read(activityLogProvider)
-                        .logAction(
-                          'crate_group_update',
-                          '${ref.read(authProvider).currentUser?.name ?? 'Unknown'} set ${grp.name} crate stock to $newStock',
-                        );
-                    if (context.mounted) Navigator.pop(ctx);
-                  } catch (_) {
-                    if (ctx.mounted) {
-                      AppNotification.showError(
-                        ctx,
-                        'Could not update crate stock. Please try again.',
-                      );
-                    }
-                  }
-                },
-              ),
-            ],
-          ),
+        decoration: BoxDecoration(
+          color: _surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
         ),
+        padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + ctx.deviceBottomPadding),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Update ${grp.name}',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: _text,
+              ),
+            ),
+            const SizedBox(height: 20),
+            _styledDialogField(
+              stockCtrl,
+              'Physical Stock',
+              '0',
+              isNumber: true,
+            ),
+            const SizedBox(height: 24),
+            AppButton(
+              text: 'Save Changes',
+              variant: AppButtonVariant.primary,
+              onPressed: () async {
+                final newStock =
+                    int.tryParse(stockCtrl.text.trim()) ?? grp.emptyCrateStock;
+                try {
+                  await ref
+                      .read(databaseProvider)
+                      .inventoryDao
+                      .updateCrateGroupStock(grp.id, newStock);
+                  await ref
+                      .read(activityLogProvider)
+                      .logAction(
+                        'crate_group_update',
+                        '${ref.read(authProvider).currentUser?.name ?? 'Unknown'} set ${grp.name} crate stock to $newStock',
+                      );
+                  if (context.mounted) Navigator.pop(ctx);
+                } catch (_) {
+                  if (ctx.mounted) {
+                    AppNotification.showError(
+                      ctx,
+                      'Could not update crate stock. Please try again.',
+                    );
+                  }
+                }
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 
   void _showAddProductSheet() {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) =>
-            AddProductScreen(onProductAdded: () => setState(() {})),
+        builder: (_) => AddProductScreen(onProductAdded: () => setState(() {})),
       ),
     );
   }
@@ -2194,85 +2182,79 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => Container(
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-          ),
-          padding: EdgeInsets.fromLTRB(
-            24,
-            24,
-            24,
-            24 + ctx.deviceBottomPadding,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: _border,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                'Add New Supplier',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                  color: _text,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Only select for crate / bottle products',
-                style: TextStyle(fontSize: 11, color: _subtext),
-              ),
-              const SizedBox(height: 20),
-              _styledDialogField(
-                nameCtrl,
-                'Supplier / Company Name',
-                'e.g. SABMiller Nigeria',
-              ),
-              const SizedBox(height: 16),
-              _styledDialogField(
-                contactCtrl,
-                'Contact Details / Rep Info',
-                'e.g. John Doe, 08012345678',
-              ),
-              const SizedBox(height: 32),
-              AppButton(
-                text: 'Add Supplier',
-                variant: AppButtonVariant.primary,
-                onPressed: () async {
-                  if (nameCtrl.text.trim().isEmpty) return;
-                  final newSupplier = Supplier(
-                    id: 's${DateTime.now().millisecondsSinceEpoch}',
-                    name: nameCtrl.text.trim(),
-                    crateGroup: CrateGroup.nbPlc,
-                    trackInventory: true,
-                    contactDetails: contactCtrl.text.trim(),
-                    amountPaid: 0.0,
-                    supplierWallet: 0.0,
-                  );
-                  ref.read(supplierServiceProvider).addSupplier(newSupplier);
-                  await ref
-                      .read(activityLogProvider)
-                      .logAction(
-                        'new_supplier',
-                        'Supplier added: ${newSupplier.name}',
-                      );
-                  if (ctx.mounted) Navigator.pop(ctx);
-                },
-
-              ),
-            ],
-          ),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
         ),
+        padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + ctx.deviceBottomPadding),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: _border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Add New Supplier',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                color: _text,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Only select for crate / bottle products',
+              style: TextStyle(fontSize: 11, color: _subtext),
+            ),
+            const SizedBox(height: 20),
+            _styledDialogField(
+              nameCtrl,
+              'Supplier / Company Name',
+              'e.g. SABMiller Nigeria',
+            ),
+            const SizedBox(height: 16),
+            _styledDialogField(
+              contactCtrl,
+              'Contact Details / Rep Info',
+              'e.g. John Doe, 08012345678',
+            ),
+            const SizedBox(height: 32),
+            AppButton(
+              text: 'Add Supplier',
+              variant: AppButtonVariant.primary,
+              onPressed: () async {
+                if (nameCtrl.text.trim().isEmpty) return;
+                final newSupplier = Supplier(
+                  id: 's${DateTime.now().millisecondsSinceEpoch}',
+                  name: nameCtrl.text.trim(),
+                  crateGroup: CrateGroup.nbPlc,
+                  trackInventory: true,
+                  contactDetails: contactCtrl.text.trim(),
+                  amountPaid: 0.0,
+                  supplierWallet: 0.0,
+                );
+                ref.read(supplierServiceProvider).addSupplier(newSupplier);
+                await ref
+                    .read(activityLogProvider)
+                    .logAction(
+                      'new_supplier',
+                      'Supplier added: ${newSupplier.name}',
+                    );
+                if (ctx.mounted) Navigator.pop(ctx);
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -97,8 +97,9 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
     _qtyCtrl = TextEditingController(text: _initialQtyText());
 
     final existingValue = (widget.item['discountValue'] as num?) ?? 0;
-    _discountKind =
-        (widget.item['discountKind'] as String?) == 'naira' ? 'naira' : 'percent';
+    _discountKind = (widget.item['discountKind'] as String?) == 'naira'
+        ? 'naira'
+        : 'percent';
     _discountCtrl = TextEditingController(
       text: existingValue > 0 ? _trimNum(existingValue) : '',
     );
@@ -208,8 +209,10 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
     final qty = rawQty > _maxQty ? _maxQty : rawQty;
     final unitPriceKobo = (widget.item['unitPriceKobo'] as num).toInt();
     final lineTotalKobo = (unitPriceKobo * qty).round();
-    final resolved =
-        _resolveDiscount(lineTotalKobo: lineTotalKobo, maxPercent: maxPercent);
+    final resolved = _resolveDiscount(
+      lineTotalKobo: lineTotalKobo,
+      maxPercent: maxPercent,
+    );
 
     // Auto-snap the percent input to the role cap when exceeded (§13.2).
     if (resolved.cappedByRole && _discountKind == 'percent') {
@@ -217,8 +220,9 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || _discountCtrl.text == capText) return;
         _discountCtrl.text = capText;
-        _discountCtrl.selection =
-            TextSelection.collapsed(offset: capText.length);
+        _discountCtrl.selection = TextSelection.collapsed(
+          offset: capText.length,
+        );
       });
     }
 
@@ -246,233 +250,276 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
           context.deviceBottomPadding + context.getRSize(24),
         ),
         child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Drag Handle
-          Center(
-            child: Container(
-              width: context.getRSize(40),
-              height: context.getRSize(4),
-              decoration: BoxDecoration(
-                color: border.withValues(alpha: 0.4),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          SizedBox(height: context.getRSize(24)),
-
-          // Header with Icon
-          Row(
-            children: [
-              Container(
-                padding: EdgeInsets.all(context.getRSize(14)),
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Drag Handle
+            Center(
+              child: Container(
+                width: context.getRSize(40),
+                height: context.getRSize(4),
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      primary.withValues(alpha: 0.2),
-                      primary.withValues(alpha: 0.1),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+                  color: border.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            SizedBox(height: context.getRSize(24)),
+
+            // Header with Icon
+            Row(
+              children: [
+                Container(
+                  padding: EdgeInsets.all(context.getRSize(14)),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        primary.withValues(alpha: 0.2),
+                        primary.withValues(alpha: 0.1),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(18),
                   ),
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: Icon(
-                  FontAwesomeIcons.pills,
-                  size: context.getRSize(20),
-                  color: primary,
-                ),
-              ),
-              SizedBox(width: context.getRSize(16)),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.isNew ? 'Add to Cart' : 'Edit Quantity',
-                      style: TextStyle(
-                        fontSize: context.getRFontSize(20),
-                        fontWeight: FontWeight.w900,
-                        color: text,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                    Text(
-                      widget.item['name'],
-                      style: TextStyle(
-                        fontSize: context.getRFontSize(14),
-                        color: text.withValues(alpha: 0.5),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Material(
-                color: border.withValues(alpha: 0.1),
-                shape: const CircleBorder(),
-                child: IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: Icon(
-                    Icons.close,
+                  child: Icon(
+                    FontAwesomeIcons.pills.data,
                     size: context.getRSize(20),
-                    color: text.withValues(alpha: 0.5),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: context.getRSize(32)),
-
-          // Premium Quantity Selector
-          Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: context.getRSize(12),
-              vertical: context.getRSize(12),
-            ),
-            decoration: BoxDecoration(
-              color: t.colorScheme.surface,
-              borderRadius: BorderRadius.circular(28),
-              border: Border.all(
-                color: border.withValues(alpha: 0.6),
-                width: 1.5,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: primary.withValues(alpha: 0.05),
-                  blurRadius: 15,
-                  offset: const Offset(0, 5),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                _qtyBtn(
-                  FontAwesomeIcons.minus,
-                  () => _updateQty(-1),
-                  color: Colors.red,
-                ),
-                SizedBox(width: context.getRSize(12)),
-                Expanded(
-                  child: Container(
-                    padding: EdgeInsets.symmetric(
-                      vertical: context.getRSize(4),
-                    ),
-                    decoration: BoxDecoration(
-                      color: border.withValues(alpha: 0.05),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: AppInput(
-                      controller: _qtyCtrl,
-                      autofocus: true,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      inputFormatters: [CurrencyInputFormatter(grouping: false)],
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: context.getRFontSize(32),
-                        fontWeight: FontWeight.w900,
-                        color: primary,
-                        letterSpacing: 1,
-                      ),
-                      border: InputBorder.none,
-                      fillColor: Colors.transparent,
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                  ),
-                ),
-                SizedBox(width: context.getRSize(12)),
-                _qtyBtn(
-                  FontAwesomeIcons.plus,
-                  () => _updateQty(1),
-                  color: Colors.green,
-                ),
-              ],
-            ),
-          ),
-          // Micro-adjustment chips — only when the product allows
-          // fractional sales (§13.2). Hidden entirely otherwise.
-          if (widget.item['allowFractionalSales'] == true) ...[
-            SizedBox(height: context.getRSize(12)),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _microAdjustChip('-0.5', () => _updateQty(-0.5)),
-                SizedBox(width: context.getRSize(12)),
-                _microAdjustChip('+0.5', () => _updateQty(0.5)),
-              ],
-            ),
-          ],
-          // Available-stock cap hint — only in add mode (§16).
-          if (widget.isNew) ...[
-            SizedBox(height: context.getRSize(10)),
-            Text(
-              '${_trimNum(widget.maxStock)} in stock — quantity can\'t exceed this',
-              style: TextStyle(
-                fontSize: context.getRFontSize(12),
-                fontWeight: FontWeight.w600,
-                color: text.withValues(alpha: 0.5),
-              ),
-            ),
-          ],
-
-          SizedBox(height: context.getRSize(28)),
-
-          // ── Apply Discount (§13.2) ────────────────────────────────────────
-          _discountSection(
-            canDiscount: canDiscount,
-            maxPercent: maxPercent,
-            lineTotalKobo: lineTotalKobo,
-            discountKobo: resolved.discountKobo,
-            cappedByRole: resolved.cappedByRole,
-          ),
-
-          SizedBox(height: context.getRSize(32)),
-
-          // Action Buttons
-          if (widget.isNew)
-            Row(
-              children: [
-                Expanded(
-                  flex: 2,
-                  child: AppButton(
-                    text: 'Cancel',
-                    variant: AppButtonVariant.ghost,
-                    height: context.getRSize(56),
-                    onPressed: () => Navigator.pop(context),
+                    color: primary,
                   ),
                 ),
                 SizedBox(width: context.getRSize(16)),
                 Expanded(
-                  flex: 3,
-                  child: AppButton(
-                    text: 'Add to Cart',
-                    variant: AppButtonVariant.primary,
-                    height: context.getRSize(56),
-                    onPressed: () {
-                      final cart = ref.read(cartProvider);
-                      final id = widget.newProduct!.id;
-                      // Never exceed available stock (the POS card count).
-                      final upper = _maxQty < 0.5 ? 0.5 : _maxQty;
-                      final qtyVal =
-                          (double.tryParse(_qtyCtrl.text) ?? 1.0).clamp(
-                        0.5,
-                        upper,
-                      );
-                      // Set the line to this total (matches the cart editor):
-                      // update if the product is already in the cart, else add.
-                      final exists = cart.value.any((i) => i['id'] == id);
-                      final accepted = exists
-                          ? cart.updateQty(widget.item['name'], qtyVal)
-                          : cart.addItem(
-                              widget.newProduct!,
-                              qty: qtyVal,
-                              maxStock: widget.maxStock,
-                              tier: widget.tier,
-                            );
-                      // Apply the resolved (role-capped) discount to the line.
-                      if (resolved.discountKobo > 0) {
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.isNew ? 'Add to Cart' : 'Edit Quantity',
+                        style: TextStyle(
+                          fontSize: context.getRFontSize(20),
+                          fontWeight: FontWeight.w900,
+                          color: text,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      Text(
+                        widget.item['name'],
+                        style: TextStyle(
+                          fontSize: context.getRFontSize(14),
+                          color: text.withValues(alpha: 0.5),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Material(
+                  color: border.withValues(alpha: 0.1),
+                  shape: const CircleBorder(),
+                  child: IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: Icon(
+                      Icons.close,
+                      size: context.getRSize(20),
+                      color: text.withValues(alpha: 0.5),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: context.getRSize(32)),
+
+            // Premium Quantity Selector
+            Container(
+              padding: EdgeInsets.symmetric(
+                horizontal: context.getRSize(12),
+                vertical: context.getRSize(12),
+              ),
+              decoration: BoxDecoration(
+                color: t.colorScheme.surface,
+                borderRadius: BorderRadius.circular(28),
+                border: Border.all(
+                  color: border.withValues(alpha: 0.6),
+                  width: 1.5,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: primary.withValues(alpha: 0.05),
+                    blurRadius: 15,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  _qtyBtn(
+                    FontAwesomeIcons.minus.data,
+                    () => _updateQty(-1),
+                    color: Colors.red,
+                  ),
+                  SizedBox(width: context.getRSize(12)),
+                  Expanded(
+                    child: Container(
+                      padding: EdgeInsets.symmetric(
+                        vertical: context.getRSize(4),
+                      ),
+                      decoration: BoxDecoration(
+                        color: border.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: AppInput(
+                        controller: _qtyCtrl,
+                        autofocus: true,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        inputFormatters: [
+                          CurrencyInputFormatter(grouping: false),
+                        ],
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: context.getRFontSize(32),
+                          fontWeight: FontWeight.w900,
+                          color: primary,
+                          letterSpacing: 1,
+                        ),
+                        border: InputBorder.none,
+                        fillColor: Colors.transparent,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: context.getRSize(12)),
+                  _qtyBtn(
+                    FontAwesomeIcons.plus.data,
+                    () => _updateQty(1),
+                    color: Colors.green,
+                  ),
+                ],
+              ),
+            ),
+            // Micro-adjustment chips — only when the product allows
+            // fractional sales (§13.2). Hidden entirely otherwise.
+            if (widget.item['allowFractionalSales'] == true) ...[
+              SizedBox(height: context.getRSize(12)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _microAdjustChip('-0.5', () => _updateQty(-0.5)),
+                  SizedBox(width: context.getRSize(12)),
+                  _microAdjustChip('+0.5', () => _updateQty(0.5)),
+                ],
+              ),
+            ],
+            // Available-stock cap hint — only in add mode (§16).
+            if (widget.isNew) ...[
+              SizedBox(height: context.getRSize(10)),
+              Text(
+                '${_trimNum(widget.maxStock)} in stock — quantity can\'t exceed this',
+                style: TextStyle(
+                  fontSize: context.getRFontSize(12),
+                  fontWeight: FontWeight.w600,
+                  color: text.withValues(alpha: 0.5),
+                ),
+              ),
+            ],
+
+            SizedBox(height: context.getRSize(28)),
+
+            // ── Apply Discount (§13.2) ────────────────────────────────────────
+            _discountSection(
+              canDiscount: canDiscount,
+              maxPercent: maxPercent,
+              lineTotalKobo: lineTotalKobo,
+              discountKobo: resolved.discountKobo,
+              cappedByRole: resolved.cappedByRole,
+            ),
+
+            SizedBox(height: context.getRSize(32)),
+
+            // Action Buttons
+            if (widget.isNew)
+              Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: AppButton(
+                      text: 'Cancel',
+                      variant: AppButtonVariant.ghost,
+                      height: context.getRSize(56),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ),
+                  SizedBox(width: context.getRSize(16)),
+                  Expanded(
+                    flex: 3,
+                    child: AppButton(
+                      text: 'Add to Cart',
+                      variant: AppButtonVariant.primary,
+                      height: context.getRSize(56),
+                      onPressed: () {
+                        final cart = ref.read(cartProvider);
+                        final id = widget.newProduct!.id;
+                        // Never exceed available stock (the POS card count).
+                        final upper = _maxQty < 0.5 ? 0.5 : _maxQty;
+                        final qtyVal = (double.tryParse(_qtyCtrl.text) ?? 1.0)
+                            .clamp(0.5, upper);
+                        // Set the line to this total (matches the cart editor):
+                        // update if the product is already in the cart, else add.
+                        final exists = cart.value.any((i) => i['id'] == id);
+                        final accepted = exists
+                            ? cart.updateQty(widget.item['name'], qtyVal)
+                            : cart.addItem(
+                                widget.newProduct!,
+                                qty: qtyVal,
+                                maxStock: widget.maxStock,
+                                tier: widget.tier,
+                              );
+                        // Apply the resolved (role-capped) discount to the line.
+                        if (resolved.discountKobo > 0) {
+                          final entered =
+                              double.tryParse(_discountCtrl.text.trim()) ?? 0.0;
+                          cart.setLineDiscount(
+                            widget.item['name'],
+                            kind: _discountKind,
+                            enteredValue: entered,
+                            discountKobo: resolved.discountKobo,
+                          );
+                        }
+                        Navigator.pop(context, accepted);
+                      },
+                    ),
+                  ),
+                ],
+              )
+            else
+              Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: AppButton(
+                      text: 'Remove',
+                      variant: AppButtonVariant.danger,
+                      icon: FontAwesomeIcons.trashCan.data,
+                      height: context.getRSize(56),
+                      onPressed: () {
+                        ref.read(cartProvider).removeItem(widget.item['name']);
+                        // Return the removed line so the cart can offer Undo.
+                        Navigator.pop(context, widget.item);
+                      },
+                    ),
+                  ),
+                  SizedBox(width: context.getRSize(16)),
+                  Expanded(
+                    flex: 3,
+                    child: AppButton(
+                      text: 'Save Changes',
+                      variant: AppButtonVariant.primary,
+                      height: context.getRSize(56),
+                      onPressed: () {
+                        final cart = ref.read(cartProvider);
+                        final qty = double.tryParse(_qtyCtrl.text) ?? 1.0;
+                        cart.updateQty(widget.item['name'], qty);
+                        // Persist the resolved (role-capped) discount alongside qty.
                         final entered =
                             double.tryParse(_discountCtrl.text.trim()) ?? 0.0;
                         cart.setLineDiscount(
@@ -481,58 +528,14 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
                           enteredValue: entered,
                           discountKobo: resolved.discountKobo,
                         );
-                      }
-                      Navigator.pop(context, accepted);
-                    },
+                        Navigator.pop(context);
+                      },
+                    ),
                   ),
-                ),
-              ],
-            )
-          else
-            Row(
-              children: [
-                Expanded(
-                  flex: 2,
-                  child: AppButton(
-                    text: 'Remove',
-                    variant: AppButtonVariant.danger,
-                    icon: FontAwesomeIcons.trashCan,
-                    height: context.getRSize(56),
-                    onPressed: () {
-                      ref.read(cartProvider).removeItem(widget.item['name']);
-                      // Return the removed line so the cart can offer Undo.
-                      Navigator.pop(context, widget.item);
-                    },
-                  ),
-                ),
-                SizedBox(width: context.getRSize(16)),
-                Expanded(
-                  flex: 3,
-                  child: AppButton(
-                    text: 'Save Changes',
-                    variant: AppButtonVariant.primary,
-                    height: context.getRSize(56),
-                    onPressed: () {
-                      final cart = ref.read(cartProvider);
-                      final qty = double.tryParse(_qtyCtrl.text) ?? 1.0;
-                      cart.updateQty(widget.item['name'], qty);
-                      // Persist the resolved (role-capped) discount alongside qty.
-                      final entered =
-                          double.tryParse(_discountCtrl.text.trim()) ?? 0.0;
-                      cart.setLineDiscount(
-                        widget.item['name'],
-                        kind: _discountKind,
-                        enteredValue: entered,
-                        discountKobo: resolved.discountKobo,
-                      );
-                      Navigator.pop(context);
-                    },
-                  ),
-                ),
-              ],
-            ),
-        ],
-      ),
+                ],
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -561,7 +564,7 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
         child: Row(
           children: [
             Icon(
-              FontAwesomeIcons.lock,
+              FontAwesomeIcons.lock.data,
               size: context.getRSize(14),
               color: text.withValues(alpha: 0.45),
             ),
@@ -609,7 +612,9 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
                   decimal: true,
                 ),
                 inputFormatters: [CurrencyInputFormatter(grouping: false)],
-                hintText: _discountKind == 'percent' ? '0%' : '${activeCurrencySymbol}0',
+                hintText: _discountKind == 'percent'
+                    ? '0%'
+                    : '${activeCurrencySymbol}0',
               ),
             ),
           ],
@@ -671,9 +676,9 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
             style: TextStyle(
               fontSize: context.getRFontSize(16),
               fontWeight: FontWeight.w800,
-              color: selected ? primary : t.colorScheme.onSurface.withValues(
-                alpha: 0.6,
-              ),
+              color: selected
+                  ? primary
+                  : t.colorScheme.onSurface.withValues(alpha: 0.6),
             ),
           ),
         ),

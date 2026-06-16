@@ -146,86 +146,91 @@ class AppDrawer extends ConsumerWidget {
           // requireBusinessId() with no current business.
           if (user == null || !canViewSyncIssues(ref))
             const SizedBox.shrink()
-          else StreamBuilder<int>(
-            stream: ref.read(databaseProvider).syncDao.watchPendingCount(),
-            builder: (context, pendingSnap) {
-              return StreamBuilder<int>(
-                stream:
-                    ref.read(databaseProvider).syncDao.watchFailedCount(),
-                builder: (context, failedSnap) {
-                  return ValueListenableBuilder<bool>(
-                    valueListenable:
-                        ref.read(supabaseSyncServiceProvider).isOnline,
-                    builder: (context, online, _) {
-                  final pending = pendingSnap.data ?? 0;
-                  final failed = failedSnap.data ?? 0;
-                  if (pending == 0 && failed == 0) {
-                    return const SizedBox.shrink();
-                  }
-                  final hasFailures = failed > 0;
-                  final accent = hasFailures
-                      ? Theme.of(context).colorScheme.error
-                      : Theme.of(context).colorScheme.primary;
-                  final label = !online && pending > 0
-                      ? 'Offline — $pending queued'
-                      : hasFailures && pending == 0
-                          ? '$failed failed'
-                          : pending > 0 && hasFailures
-                              ? 'Syncing $pending · $failed failed'
-                              : 'Syncing $pending file${pending == 1 ? '' : 's'}…';
-                  return InkWell(
-                    borderRadius: BorderRadius.circular(10),
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                            builder: (_) => const SyncIssuesScreen()),
-                      );
-                    },
-                    child: Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: accent.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (!hasFailures)
-                            SizedBox(
-                              width: 10,
-                              height: 10,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 1.5,
-                                color: accent,
+          else
+            StreamBuilder<int>(
+              stream: ref.read(databaseProvider).syncDao.watchPendingCount(),
+              builder: (context, pendingSnap) {
+                return StreamBuilder<int>(
+                  stream: ref.read(databaseProvider).syncDao.watchFailedCount(),
+                  builder: (context, failedSnap) {
+                    return ValueListenableBuilder<bool>(
+                      valueListenable: ref
+                          .read(supabaseSyncServiceProvider)
+                          .isOnline,
+                      builder: (context, online, _) {
+                        final pending = pendingSnap.data ?? 0;
+                        final failed = failedSnap.data ?? 0;
+                        if (pending == 0 && failed == 0) {
+                          return const SizedBox.shrink();
+                        }
+                        final hasFailures = failed > 0;
+                        final accent = hasFailures
+                            ? Theme.of(context).colorScheme.error
+                            : Theme.of(context).colorScheme.primary;
+                        final label = !online && pending > 0
+                            ? 'Offline — $pending queued'
+                            : hasFailures && pending == 0
+                            ? '$failed failed'
+                            : pending > 0 && hasFailures
+                            ? 'Syncing $pending · $failed failed'
+                            : 'Syncing $pending file${pending == 1 ? '' : 's'}…';
+                        return InkWell(
+                          borderRadius: BorderRadius.circular(10),
+                          onTap: () {
+                            Navigator.pop(context);
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const SyncIssuesScreen(),
                               ),
-                            )
-                          else
-                            Icon(Icons.error_outline,
-                                size: 12, color: accent),
-                          const SizedBox(width: 8),
-                          Text(
-                            label,
-                            style: TextStyle(
-                              color: accent.withValues(alpha: 0.9),
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
+                            );
+                          },
+                          child: Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: accent.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (!hasFailures)
+                                  SizedBox(
+                                    width: 10,
+                                    height: 10,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 1.5,
+                                      color: accent,
+                                    ),
+                                  )
+                                else
+                                  Icon(
+                                    Icons.error_outline,
+                                    size: 12,
+                                    color: accent,
+                                  ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  label,
+                                  style: TextStyle(
+                                    color: accent.withValues(alpha: 0.9),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                  );
-                    },
-                  );
-                },
-              );
-            },
-          ),
+                        );
+                      },
+                    );
+                  },
+                );
+              },
+            ),
           Row(
             children: [
               Flexible(
@@ -321,7 +326,7 @@ class AppDrawer extends ConsumerWidget {
         _buildStorePicker(context, ref),
         _navItem(
           context,
-          FontAwesomeIcons.chartLine,
+          FontAwesomeIcons.chartLine.data,
           'Home',
           active: activeRoute == 'dashboard',
           onTap: () => _navigateTo(context, ref, 'dashboard'),
@@ -331,7 +336,7 @@ class AppDrawer extends ConsumerWidget {
         if (hasPermission(ref, 'sales.make'))
           _navItem(
             context,
-            FontAwesomeIcons.cashRegister,
+            FontAwesomeIcons.cashRegister.data,
             'Point of Sale',
             active: activeRoute == 'pos',
             onTap: () => _navigateTo(context, ref, 'pos'),
@@ -341,7 +346,7 @@ class AppDrawer extends ConsumerWidget {
         if (hasPermission(ref, 'stock.view'))
           _navItem(
             context,
-            FontAwesomeIcons.boxesStacked,
+            FontAwesomeIcons.boxesStacked.data,
             'Inventory',
             active: activeRoute == 'inventory',
             onTap: () => _navigateTo(context, ref, 'inventory'),
@@ -349,7 +354,7 @@ class AppDrawer extends ConsumerWidget {
         // Orders — visible to all four roles (§27.3).
         _navItem(
           context,
-          FontAwesomeIcons.truckFast,
+          FontAwesomeIcons.truckFast.data,
           'Orders',
           active: activeRoute == 'orders',
           onTap: () => _navigateTo(context, ref, 'orders'),
@@ -359,7 +364,7 @@ class AppDrawer extends ConsumerWidget {
         if (hasPermission(ref, 'customers.add'))
           _navItem(
             context,
-            FontAwesomeIcons.users,
+            FontAwesomeIcons.users.data,
             'Customers',
             active: activeRoute == 'customers',
             onTap: () => _navigateTo(context, ref, 'customers'),
@@ -369,7 +374,7 @@ class AppDrawer extends ConsumerWidget {
         if (hasPermission(ref, 'suppliers.manage'))
           _navItem(
             context,
-            FontAwesomeIcons.moneyBillWave,
+            FontAwesomeIcons.moneyBillWave.data,
             'Supplier Accounts',
             active:
                 activeRoute == 'supplier_accounts' || activeRoute == 'payments',
@@ -381,7 +386,7 @@ class AppDrawer extends ConsumerWidget {
         if (hasPermission(ref, 'reports.see_expenses'))
           _navItem(
             context,
-            FontAwesomeIcons.fileInvoiceDollar,
+            FontAwesomeIcons.fileInvoiceDollar.data,
             'Expenses',
             active: activeRoute == 'expenses',
             onTap: () => _navigateTo(context, ref, 'expenses'),
@@ -393,7 +398,7 @@ class AppDrawer extends ConsumerWidget {
             hasPermission(ref, 'stores.receive_transfer'))
           _navItem(
             context,
-            FontAwesomeIcons.store,
+            FontAwesomeIcons.store.data,
             'Stores',
             active: activeRoute == 'store',
             onTap: () => _navigateTo(context, ref, 'store'),
@@ -406,7 +411,7 @@ class AppDrawer extends ConsumerWidget {
         if (hasPermission(ref, 'activity_logs.view'))
           _navItem(
             context,
-            FontAwesomeIcons.clockRotateLeft,
+            FontAwesomeIcons.clockRotateLeft.data,
             'Activity Logs',
             active: activeRoute == 'activity_logs',
             onTap: () => _navigateTo(context, ref, 'activity_logs'),
@@ -419,7 +424,7 @@ class AppDrawer extends ConsumerWidget {
         if (hasPermission(ref, 'staff.invite'))
           _navItem(
             context,
-            FontAwesomeIcons.userGroup,
+            FontAwesomeIcons.userGroup.data,
             'Staff Management',
             active: false,
             onTap: () {
@@ -437,7 +442,7 @@ class AppDrawer extends ConsumerWidget {
         if (hasPermission(ref, 'settings.manage'))
           _navItem(
             context,
-            FontAwesomeIcons.gear,
+            FontAwesomeIcons.gear.data,
             'CEO Settings',
             active: false,
             onTap: () {
@@ -454,7 +459,7 @@ class AppDrawer extends ConsumerWidget {
         if (isBelowCeo)
           _navItem(
             context,
-            FontAwesomeIcons.gear,
+            FontAwesomeIcons.gear.data,
             'Settings',
             active: false,
             onTap: () {
@@ -470,7 +475,7 @@ class AppDrawer extends ConsumerWidget {
         if (canViewSyncIssues(ref))
           _navItem(
             context,
-            FontAwesomeIcons.cloudArrowUp,
+            FontAwesomeIcons.cloudArrowUp.data,
             'Sync Issues',
             active: false,
             onTap: () {
@@ -487,7 +492,7 @@ class AppDrawer extends ConsumerWidget {
         SizedBox(height: context.getRSize(12)),
         _navItem(
           context,
-          FontAwesomeIcons.rightFromBracket,
+          FontAwesomeIcons.rightFromBracket.data,
           'Log Out',
           active: false,
           outlined: true,
@@ -536,9 +541,7 @@ class AppDrawer extends ConsumerWidget {
         // roles below CEO it now lives inside Staff Settings (§10.5).
         if (!isBelowCeo) _buildAppearanceTile(context),
         // Extra space for system navigation bar
-        SizedBox(
-          height: context.deviceBottomPadding + context.getRSize(20),
-        ),
+        SizedBox(height: context.deviceBottomPadding + context.getRSize(20)),
       ],
     );
   }
@@ -680,7 +683,9 @@ class AppDrawer extends ConsumerWidget {
         break;
       }
     }
-    final label = activeStore?.name ?? (canViewAll ? 'All Stores' : selectable.first.name);
+    final label =
+        activeStore?.name ??
+        (canViewAll ? 'All Stores' : selectable.first.name);
 
     return Container(
       margin: EdgeInsets.only(bottom: context.getRSize(6)),
@@ -709,7 +714,7 @@ class AppDrawer extends ConsumerWidget {
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
-                    FontAwesomeIcons.store,
+                    FontAwesomeIcons.store.data,
                     size: context.getRSize(15),
                     color: primary,
                   ),
@@ -743,7 +748,7 @@ class AppDrawer extends ConsumerWidget {
                 ),
                 SizedBox(width: context.getRSize(8)),
                 Icon(
-                  FontAwesomeIcons.chevronDown,
+                  FontAwesomeIcons.chevronDown.data,
                   size: context.getRSize(13),
                   color: subtextColor,
                 ),
@@ -804,7 +809,7 @@ class AppDrawer extends ConsumerWidget {
                 ),
                 child: Center(
                   child: Icon(
-                    FontAwesomeIcons.palette,
+                    FontAwesomeIcons.palette.data,
                     size: context.getRSize(14),
                     color: Colors.white,
                   ),
@@ -836,7 +841,7 @@ class AppDrawer extends ConsumerWidget {
                 ),
               ),
               Icon(
-                FontAwesomeIcons.chevronRight,
+                FontAwesomeIcons.chevronRight.data,
                 size: context.getRSize(14),
                 color: Colors.white.withValues(alpha: 0.8),
               ),
@@ -848,9 +853,7 @@ class AppDrawer extends ConsumerWidget {
   }
 }
 
-
 // ── Navigation Registration (Now Legacy/Optional) ───────────────────────────
 // These were used to break circular imports before the MainLayout shell refactor.
-// Current MainLayout directly imports screens, but keeping definitions for reference 
+// Current MainLayout directly imports screens, but keeping definitions for reference
 // or until all feature-to-drawer links are fully migrated to NvigationService.
-

@@ -72,71 +72,76 @@ class NotificationsModal extends ConsumerWidget {
                   // would otherwise hit requireBusinessId() during logout.
                   if (!loggedIn)
                     const SizedBox.shrink()
-                  else StreamBuilder<int>(
-                    stream: db.syncDao.watchPendingCount(),
-                    builder: (context, snap) {
-                      final count = snap.data ?? 0;
-                      if (count == 0) return const SizedBox.shrink();
+                  else
+                    StreamBuilder<int>(
+                      stream: db.syncDao.watchPendingCount(),
+                      builder: (context, snap) {
+                        final count = snap.data ?? 0;
+                        if (count == 0) return const SizedBox.shrink();
 
-                      return Container(
-                        width: double.infinity,
-                        margin: EdgeInsets.symmetric(
-                          horizontal: context.getRSize(20),
-                          vertical: context.getRSize(8),
-                        ),
-                        padding: EdgeInsets.symmetric(
-                          horizontal: context.getRSize(16),
-                          vertical: context.getRSize(12),
-                        ),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primary
-                              .withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: Theme.of(context).colorScheme.primary
-                                .withValues(alpha: 0.2),
+                        return Container(
+                          width: double.infinity,
+                          margin: EdgeInsets.symmetric(
+                            horizontal: context.getRSize(20),
+                            vertical: context.getRSize(8),
                           ),
-                        ),
-                        child: Row(
-                          children: [
-                            SizedBox(
-                              width: context.getRSize(14),
-                              height: context.getRSize(14),
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: context.getRSize(16),
+                            vertical: context.getRSize(12),
+                          ),
+                          decoration: BoxDecoration(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.primary.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.primary.withValues(alpha: 0.2),
                             ),
-                            SizedBox(width: context.getRSize(12)),
-                            Expanded(
-                              child: Text(
-                                'Syncing $count file${count == 1 ? '' : 's'} to cloud...',
-                                style: TextStyle(
+                          ),
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                width: context.getRSize(14),
+                                height: context.getRSize(14),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
                                   color: Theme.of(context).colorScheme.primary,
-                                  fontSize: context.getRFontSize(13),
-                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
-                            ),
-                            Text(
-                              'Background',
-                              style: TextStyle(
-                                color:
-                                    Theme.of(
+                              SizedBox(width: context.getRSize(12)),
+                              Expanded(
+                                child: Text(
+                                  'Syncing $count file${count == 1 ? '' : 's'} to cloud...',
+                                  style: TextStyle(
+                                    color: Theme.of(
                                       context,
-                                    ).textTheme.bodySmall?.color ??
-                                    Theme.of(
-                                      context,
-                                    ).iconTheme.color!.withValues(alpha: 0.6),
-                                fontSize: context.getRFontSize(11),
-                                fontWeight: FontWeight.w500,
+                                    ).colorScheme.primary,
+                                    fontSize: context.getRFontSize(13),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
+                              Text(
+                                'Background',
+                                style: TextStyle(
+                                  color:
+                                      Theme.of(
+                                        context,
+                                      ).textTheme.bodySmall?.color ??
+                                      Theme.of(
+                                        context,
+                                      ).iconTheme.color!.withValues(alpha: 0.6),
+                                  fontSize: context.getRFontSize(11),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
 
                   Divider(height: 1, color: Theme.of(context).dividerColor),
                   // List
@@ -150,7 +155,9 @@ class NotificationsModal extends ConsumerWidget {
                         return ListView.separated(
                           controller: scrollController,
                           padding: EdgeInsets.all(context.getRSize(16)).add(
-                            EdgeInsets.only(bottom: context.deviceBottomPadding),
+                            EdgeInsets.only(
+                              bottom: context.deviceBottomPadding,
+                            ),
                           ),
                           itemCount: notifications.length,
                           separatorBuilder: (context, index) =>
@@ -181,7 +188,7 @@ class NotificationsModal extends ConsumerWidget {
           Row(
             children: [
               Icon(
-                FontAwesomeIcons.bell,
+                FontAwesomeIcons.bell.data,
                 size: context.getRSize(20),
                 color: Theme.of(context).colorScheme.primary,
               ),
@@ -217,7 +224,7 @@ class NotificationsModal extends ConsumerWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            FontAwesomeIcons.bellSlash,
+            FontAwesomeIcons.bellSlash.data,
             size: context.getRSize(48),
             color: Theme.of(context).dividerColor,
           ),
@@ -259,8 +266,8 @@ class _NotificationCard extends ConsumerWidget {
       onTap: notification.type == 'product_update'
           ? () => _showProductUpdateSummary(context, notification, ref)
           : notification.type == 'crate_short_return'
-              ? () => _openCrateReturnApproval(context, notification, ref)
-              : null,
+          ? () => _openCrateReturnApproval(context, notification, ref)
+          : null,
       child: Container(
         padding: EdgeInsets.all(context.getRSize(16)),
         decoration: BoxDecoration(
@@ -310,7 +317,9 @@ class _NotificationCard extends ConsumerWidget {
                 color: subtextCol,
               ),
               onPressed: () {
-                ref.read(notificationProvider).deleteNotification(notification.id);
+                ref
+                    .read(notificationProvider)
+                    .deleteNotification(notification.id);
               },
             ),
           ],
@@ -342,7 +351,7 @@ class _NotificationCard extends ConsumerWidget {
         title: Row(
           children: [
             Icon(
-              FontAwesomeIcons.penToSquare,
+              FontAwesomeIcons.penToSquare.data,
               size: 16,
               color:
                   Theme.of(ctx).extension<AppSemanticColors>()?.warning ??
@@ -391,41 +400,41 @@ class _NotificationCard extends ConsumerWidget {
   IconData _getIconForType(String type) {
     switch (type) {
       case 'new_order':
-        return FontAwesomeIcons.receipt;
+        return FontAwesomeIcons.receipt.data;
       case 'low_stock':
-        return FontAwesomeIcons.triangleExclamation;
+        return FontAwesomeIcons.triangleExclamation.data;
       case 'large_expense':
-        return FontAwesomeIcons.fileInvoiceDollar;
+        return FontAwesomeIcons.fileInvoiceDollar.data;
       case 'new_delivery':
-        return FontAwesomeIcons.truckRampBox;
+        return FontAwesomeIcons.truckRampBox.data;
       case 'failed_transaction':
-        return FontAwesomeIcons.circleExclamation;
+        return FontAwesomeIcons.circleExclamation.data;
       case 'product_update':
-        return FontAwesomeIcons.penToSquare;
+        return FontAwesomeIcons.penToSquare.data;
       case 'crate_short_return':
-        return FontAwesomeIcons.boxOpen;
+        return FontAwesomeIcons.boxOpen.data;
       case 'crate_return_approved':
-        return FontAwesomeIcons.circleCheck;
+        return FontAwesomeIcons.circleCheck.data;
       case 'crate_return_rejected':
-        return FontAwesomeIcons.circleXmark;
+        return FontAwesomeIcons.circleXmark.data;
       case 'stock_approval.requested':
-        return FontAwesomeIcons.clipboardList;
+        return FontAwesomeIcons.clipboardList.data;
       case 'stock_approval.approved':
-        return FontAwesomeIcons.circleCheck;
+        return FontAwesomeIcons.circleCheck.data;
       case 'stock_approval.rejected':
-        return FontAwesomeIcons.circleXmark;
+        return FontAwesomeIcons.circleXmark.data;
       case 'staff.invited':
-        return FontAwesomeIcons.userPlus;
+        return FontAwesomeIcons.userPlus.data;
       case 'staff.suspended':
-        return FontAwesomeIcons.userSlash;
+        return FontAwesomeIcons.userSlash.data;
       case 'staff.reactivated':
-        return FontAwesomeIcons.userCheck;
+        return FontAwesomeIcons.userCheck.data;
       case 'staff.role_changed':
-        return FontAwesomeIcons.userGear;
+        return FontAwesomeIcons.userGear.data;
       case 'staff.profile_updated':
-        return FontAwesomeIcons.userPen;
+        return FontAwesomeIcons.userPen.data;
       default:
-        return FontAwesomeIcons.bell;
+        return FontAwesomeIcons.bell.data;
     }
   }
 
@@ -475,7 +484,10 @@ class _NotificationCard extends ConsumerWidget {
   }
 
   void _openCrateReturnApproval(
-      BuildContext context, NotificationModel notification, WidgetRef ref) {
+    BuildContext context,
+    NotificationModel notification,
+    WidgetRef ref,
+  ) {
     final pendingReturnId = notification.linkedRecordId;
     final notifId = notification.id;
     if (pendingReturnId == null || pendingReturnId.isEmpty) return;

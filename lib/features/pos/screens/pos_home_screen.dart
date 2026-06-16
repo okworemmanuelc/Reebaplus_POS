@@ -58,7 +58,9 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
+    ref.watch(
+      currencySymbolProvider,
+    ); // rebuild money displays when currency changes
     // §12 / hard rule #6: POS is gated to roles that hold `sales.make` (CEO,
     // Manager, Cashier). Stock keeper is already hidden in the sidebar; this is
     // defense-in-depth against deep-links / bottom-nav.
@@ -71,8 +73,9 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
             child: Text(
               'You don\'t have access to Point of Sale.',
               style: TextStyle(
-                color:
-                    Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.6),
               ),
             ),
           ),
@@ -99,9 +102,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
       return SharedScaffold(
         activeRoute: 'pos',
         backgroundColor: bgCol,
-        body: const SafeArea(
-          child: SizedBox.shrink(),
-        ),
+        body: const SafeArea(child: SizedBox.shrink()),
       );
     }
 
@@ -121,98 +122,89 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
     return ListenableBuilder(
       listenable: _controller!,
       builder: (context, _) {
-            final bgCol = Theme.of(context).scaffoldBackgroundColor;
-            final surfaceCol = Theme.of(context).colorScheme.surface;
-            final cardCol = Theme.of(context).cardColor;
-            final textCol = Theme.of(context).colorScheme.onSurface;
-            final subtextCol =
-                Theme.of(context).textTheme.bodySmall?.color ??
-                Theme.of(context).iconTheme.color!;
-            final borderCol = Theme.of(context).dividerColor;
+        final bgCol = Theme.of(context).scaffoldBackgroundColor;
+        final surfaceCol = Theme.of(context).colorScheme.surface;
+        final cardCol = Theme.of(context).cardColor;
+        final textCol = Theme.of(context).colorScheme.onSurface;
+        final subtextCol =
+            Theme.of(context).textTheme.bodySmall?.color ??
+            Theme.of(context).iconTheme.color!;
+        final borderCol = Theme.of(context).dividerColor;
 
-            return SharedScaffold(
-              activeRoute: 'pos',
-              backgroundColor: bgCol,
-              appBar: _buildAppBar(context, surfaceCol, textCol, subtextCol),
-              floatingActionButton: context.isPhone
-                  ? _buildCartFab(context)
-                  : null,
-              body: SafeArea(
-                top: false,
-                child: Column(
-                  children: [
-                    _buildHeader(
-                      context,
-                      surfaceCol,
-                      textCol,
-                      subtextCol,
-                      borderCol,
-                    ),
-                    if (_controller!.isSearching)
-                      _buildSearchField(
-                        surfaceCol,
-                        cardCol,
-                        textCol,
-                        subtextCol,
-                      ),
-                    _controller!.isLoading
-                        ? const SizedBox.shrink()
-                        : CategoryFilterBar(
-                            categories: [
-                              'All',
-                              ..._controller!.categories.map((c) => c.name),
-                            ],
-                            selectedCategory:
-                                _controller!.selectedCategoryId == null
-                                ? 'All'
-                                : _controller!.categories
-                                      .firstWhere(
-                                        (c) =>
-                                            c.id ==
-                                            _controller!.selectedCategoryId,
-                                      )
-                                      .name,
-                            onCategorySelected: (name) {
-                              if (name == 'All') {
-                                _controller!.selectCategory(null);
-                              } else {
-                                final cat = _controller!.categories.firstWhere(
-                                  (c) => c.name == name,
-                                );
-                                _controller!.selectCategory(cat.id);
-                              }
-                            },
-                            textCol: textCol,
-                            borderCol: borderCol,
-                          ),
-                    Expanded(
-                      // ...
-                      child: _controller!.isLoading
-                          ? const SizedBox.shrink()
-                          : TweenAnimationBuilder<double>(
-                              // §12.5: subtle fade-in for content, no spinner.
-                              tween: Tween(begin: 0, end: 1),
-                              duration: const Duration(milliseconds: 250),
-                              builder: (_, v, child) =>
-                                  Opacity(opacity: v, child: child),
-                              child: AppRefreshWrapper(
-                                child: ProductGrid(
-                                  products: _controller!.filteredProducts,
-                                  onProductTap: (item) =>
-                                      _addToCart(context, item),
-                                  cardCol: cardCol,
-                                  textCol: textCol,
-                                  subtextCol: subtextCol,
-                                  borderCol: borderCol,
-                                  controller: _controller!,
-                                ),
-                              ),
-                            ),
-                    ),
-                  ],
+        return SharedScaffold(
+          activeRoute: 'pos',
+          backgroundColor: bgCol,
+          appBar: _buildAppBar(context, surfaceCol, textCol, subtextCol),
+          floatingActionButton: context.isPhone ? _buildCartFab(context) : null,
+          body: SafeArea(
+            top: false,
+            child: Column(
+              children: [
+                _buildHeader(
+                  context,
+                  surfaceCol,
+                  textCol,
+                  subtextCol,
+                  borderCol,
                 ),
-              ),
-            );
+                if (_controller!.isSearching)
+                  _buildSearchField(surfaceCol, cardCol, textCol, subtextCol),
+                _controller!.isLoading
+                    ? const SizedBox.shrink()
+                    : CategoryFilterBar(
+                        categories: [
+                          'All',
+                          ..._controller!.categories.map((c) => c.name),
+                        ],
+                        selectedCategory:
+                            _controller!.selectedCategoryId == null
+                            ? 'All'
+                            : _controller!.categories
+                                  .firstWhere(
+                                    (c) =>
+                                        c.id == _controller!.selectedCategoryId,
+                                  )
+                                  .name,
+                        onCategorySelected: (name) {
+                          if (name == 'All') {
+                            _controller!.selectCategory(null);
+                          } else {
+                            final cat = _controller!.categories.firstWhere(
+                              (c) => c.name == name,
+                            );
+                            _controller!.selectCategory(cat.id);
+                          }
+                        },
+                        textCol: textCol,
+                        borderCol: borderCol,
+                      ),
+                Expanded(
+                  // ...
+                  child: _controller!.isLoading
+                      ? const SizedBox.shrink()
+                      : TweenAnimationBuilder<double>(
+                          // §12.5: subtle fade-in for content, no spinner.
+                          tween: Tween(begin: 0, end: 1),
+                          duration: const Duration(milliseconds: 250),
+                          builder: (_, v, child) =>
+                              Opacity(opacity: v, child: child),
+                          child: AppRefreshWrapper(
+                            child: ProductGrid(
+                              products: _controller!.filteredProducts,
+                              onProductTap: (item) => _addToCart(context, item),
+                              cardCol: cardCol,
+                              textCol: textCol,
+                              subtextCol: subtextCol,
+                              borderCol: borderCol,
+                              controller: _controller!,
+                            ),
+                          ),
+                        ),
+                ),
+              ],
+            ),
+          ),
+        );
       },
     );
   }
@@ -228,8 +220,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
     final t = Theme.of(context);
     final primary = t.colorScheme.primary;
     final textCol = t.colorScheme.onSurface;
-    final subtextCol =
-        t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
+    final subtextCol = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
     final bizName = ref.watch(currentBusinessNameProvider);
 
     return SharedScaffold(
@@ -240,11 +231,14 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
         elevation: 0,
         leading: const MenuButton(),
         title: AppBarHeader(
-          icon: FontAwesomeIcons.beerMugEmpty,
+          icon: FontAwesomeIcons.beerMugEmpty.data,
           title: bizName.isNotEmpty ? bizName : 'Reebaplus POS',
           subtitle: 'Point of Sale',
         ),
-        actions: [const NotificationBell(), SizedBox(width: context.getRSize(16))],
+        actions: [
+          const NotificationBell(),
+          SizedBox(width: context.getRSize(16)),
+        ],
       ),
       body: SafeArea(
         top: false,
@@ -262,7 +256,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
-                    FontAwesomeIcons.store,
+                    FontAwesomeIcons.store.data,
                     size: context.getRSize(28),
                     color: primary,
                   ),
@@ -291,7 +285,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
                 SizedBox(height: context.getRSize(24)),
                 AppButton(
                   text: 'Choose Store',
-                  icon: FontAwesomeIcons.store,
+                  icon: FontAwesomeIcons.store.data,
                   isFullWidth: false,
                   onPressed: () => showStorePickerSheet(context, ref),
                 ),
@@ -321,7 +315,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
       elevation: 0,
       leading: const MenuButton(),
       title: AppBarHeader(
-        icon: FontAwesomeIcons.beerMugEmpty,
+        icon: FontAwesomeIcons.beerMugEmpty.data,
         title: bizName.isNotEmpty ? bizName : 'Reebaplus POS',
         subtitle: _controller!.currentStoreName ?? 'Point of Sale',
       ),
@@ -329,8 +323,8 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
         IconButton(
           icon: Icon(
             _controller!.isSearching
-                ? FontAwesomeIcons.xmark
-                : FontAwesomeIcons.magnifyingGlass,
+                ? FontAwesomeIcons.xmark.data
+                : FontAwesomeIcons.magnifyingGlass.data,
             size: 17,
             color: subtextCol,
           ),
@@ -433,7 +427,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
           ),
         ),
         child: Icon(
-          FontAwesomeIcons.bolt,
+          FontAwesomeIcons.bolt.data,
           size: context.getRSize(18),
           color: Theme.of(context).colorScheme.primary,
         ),
@@ -460,9 +454,11 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
           // the FAB above the system nav; don't add the inset.
           reserveBottomInset: false,
           onPressed: () {
-            ref.read(navigationProvider).setIndex(8); // 8 = CartScreen (9 is Deliveries)
+            ref
+                .read(navigationProvider)
+                .setIndex(8); // 8 = CartScreen (9 is Deliveries)
           },
-          icon: FontAwesomeIcons.cartShopping,
+          icon: FontAwesomeIcons.cartShopping.data,
           label: 'Go to Cart',
           trailing: Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -504,7 +500,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
         onChanged: (v) => _controller!.updateSearch(v),
         hintText: 'Search products...',
         prefixIcon: Icon(
-          FontAwesomeIcons.magnifyingGlass,
+          FontAwesomeIcons.magnifyingGlass.data,
           size: context.getRSize(16),
         ),
       ),
@@ -512,7 +508,9 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
   }
 
   void _addToCart(BuildContext context, ProductDataWithStock item) {
-    final accepted = ref.read(cartProvider).addItem(
+    final accepted = ref
+        .read(cartProvider)
+        .addItem(
           item.product,
           qty: 1.0,
           maxStock: item.totalStock,
@@ -556,5 +554,4 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
       ),
     );
   }
-
 }

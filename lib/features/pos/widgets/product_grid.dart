@@ -44,7 +44,7 @@ class ProductGrid extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              FontAwesomeIcons.magnifyingGlass,
+              FontAwesomeIcons.magnifyingGlass.data,
               size: context.getRSize(48),
               color: subtextCol.withValues(alpha: 0.3),
             ),
@@ -338,7 +338,7 @@ class _ProductCardState extends ConsumerState<_ProductCard>
                                           height: double.infinity,
                                           fit: BoxFit.cover,
                                           errorBuilder: (ctx, _, __) => Icon(
-                                            FontAwesomeIcons.beerMugEmpty,
+                                            FontAwesomeIcons.beerMugEmpty.data,
                                             size: context.getRSize(32),
                                             color: Theme.of(context)
                                                 .colorScheme
@@ -347,7 +347,7 @@ class _ProductCardState extends ConsumerState<_ProductCard>
                                           ),
                                         )
                                       : Icon(
-                                          FontAwesomeIcons.beerMugEmpty,
+                                          FontAwesomeIcons.beerMugEmpty.data,
                                           size: context.getRSize(32),
                                           color: Theme.of(context)
                                               .colorScheme
@@ -434,7 +434,7 @@ class _ProductCardState extends ConsumerState<_ProductCard>
                                   ),
                                   if (isLowStock)
                                     Icon(
-                                      FontAwesomeIcons.triangleExclamation,
+                                      FontAwesomeIcons.triangleExclamation.data,
                                       size: context.getRSize(10),
                                       color: Theme.of(
                                         context,

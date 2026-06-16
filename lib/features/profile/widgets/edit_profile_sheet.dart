@@ -71,7 +71,8 @@ class _EditProfileSheetState extends State<EditProfileSheet> {
     }
 
     final changed =
-        name != widget.user.name.trim() || _selectedHex != widget.user.avatarColor;
+        name != widget.user.name.trim() ||
+        _selectedHex != widget.user.avatarColor;
 
     setState(() => _saving = true);
     final db = widget.parentRef.read(databaseProvider);
@@ -92,11 +93,12 @@ class _EditProfileSheetState extends State<EditProfileSheet> {
       // editing their own profile does not notify. The actor is never
       // self-notified. fireNotification routes through enqueueUpsert (synced),
       // so it reaches each recipient's device live.
-      final editorSlug =
-          widget.parentRef.read(currentUserRoleProvider)?.slug;
+      final editorSlug = widget.parentRef.read(currentUserRoleProvider)?.slug;
       if (changed && editorSlug != null && editorSlug != 'ceo') {
-        final recipients =
-            await db.userBusinessesDao.getUserIdsForRoleSlugs(['ceo', 'manager']);
+        final recipients = await db.userBusinessesDao.getUserIdsForRoleSlugs([
+          'ceo',
+          'manager',
+        ]);
         for (final recipientId in recipients) {
           if (recipientId == widget.user.id) continue;
           await db.notificationsDao.fireNotification(
@@ -195,8 +197,11 @@ class _EditProfileSheetState extends State<EditProfileSheet> {
                       ),
                     ),
                     child: _selectedHex == hex
-                        ? const Icon(Icons.check_rounded,
-                            color: Colors.white, size: 20)
+                        ? const Icon(
+                            Icons.check_rounded,
+                            color: Colors.white,
+                            size: 20,
+                          )
                         : null,
                   ),
                 ),

@@ -143,10 +143,7 @@ class _ReceiveDeliverySheetState extends ConsumerState<ReceiveDeliverySheet> {
   Future<void> _submit() async {
     // Validate store
     if (_selectedStore == null) {
-      AppNotification.showError(
-        context,
-        'Please select a destination store.',
-      );
+      AppNotification.showError(context, 'Please select a destination store.');
       return;
     }
 
@@ -336,8 +333,8 @@ class _ReceiveDeliverySheetState extends ConsumerState<ReceiveDeliverySheet> {
       controller: ctrl,
       keyboardType: isNumber
           ? (isCurrency
-              ? const TextInputType.numberWithOptions(decimal: true)
-              : TextInputType.number)
+                ? const TextInputType.numberWithOptions(decimal: true)
+                : TextInputType.number)
           : TextInputType.text,
       inputFormatters: isCurrency
           ? [CurrencyInputFormatter()]
@@ -495,7 +492,7 @@ class _ReceiveDeliverySheetState extends ConsumerState<ReceiveDeliverySheet> {
                   InkWell(
                     onTap: () => _removeLine(index),
                     child: Icon(
-                      FontAwesomeIcons.circleMinus,
+                      FontAwesomeIcons.circleMinus.data,
                       color: Theme.of(context).colorScheme.error,
                       size: context.getRSize(18),
                     ),
@@ -662,7 +659,7 @@ class _ReceiveDeliverySheetState extends ConsumerState<ReceiveDeliverySheet> {
               ),
               AppButton(
                 text: 'Add Item',
-                icon: FontAwesomeIcons.plus,
+                icon: FontAwesomeIcons.plus.data,
                 variant: AppButtonVariant.ghost,
                 isFullWidth: false,
                 onPressed: () => _addLine(scrollController),

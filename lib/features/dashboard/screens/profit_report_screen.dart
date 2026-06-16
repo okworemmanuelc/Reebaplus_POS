@@ -74,15 +74,18 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
       }
     }
 
-    final products = byProduct.values
-        .map((a) => _ProductProfit(
-              name: a.name,
-              qty: a.qty,
-              revenueKobo: a.revenueKobo,
-              cogsKobo: a.cogsKobo,
-            ))
-        .toList()
-      ..sort((a, b) => b.profitKobo.compareTo(a.profitKobo));
+    final products =
+        byProduct.values
+            .map(
+              (a) => _ProductProfit(
+                name: a.name,
+                qty: a.qty,
+                revenueKobo: a.revenueKobo,
+                cogsKobo: a.cogsKobo,
+              ),
+            )
+            .toList()
+          ..sort((a, b) => b.profitKobo.compareTo(a.profitKobo));
 
     return _ProfitData(
       revenueKobo: revenueKobo,
@@ -119,29 +122,31 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
     ]);
     try {
       await shareCsv(
-        csv: buildCsv(
-          [
-            'Product', 'Qty sold', 'Revenue',
-            if (canSeeCost) 'Cost of goods',
-            'Gross profit', 'Margin %',
-          ],
-          rows,
-        ),
+        csv: buildCsv([
+          'Product',
+          'Qty sold',
+          'Revenue',
+          if (canSeeCost) 'Cost of goods',
+          'Gross profit',
+          'Margin %',
+        ], rows),
         fileName: 'profit_report_${_period.replaceAll(' ', '_')}',
         subject: 'Profit Report — $_period',
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not export: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not export: $e')));
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
+    ref.watch(
+      currencySymbolProvider,
+    ); // rebuild money displays when currency changes
     final theme = Theme.of(context);
     // `reports.see_cost_prices` ("See buying prices in reports") gates the raw
     // Cost-of-goods figure on top of the screen's upstream `reports.see_profit`
@@ -166,8 +171,11 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
         actions: [
           IconButton(
             tooltip: 'Export CSV',
-            icon: Icon(FontAwesomeIcons.fileCsv,
-                size: 18, color: context.primaryColor),
+            icon: Icon(
+              FontAwesomeIcons.fileCsv.data,
+              size: 18,
+              color: context.primaryColor,
+            ),
             onPressed: hasCostedData ? () => _exportCsv(data) : null,
           ),
           SizedBox(
@@ -175,9 +183,12 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
             child: AppDropdown<String>(
               value: _period,
               items: kDatePeriodLabels
-                  .map((p) => DropdownMenuItem(
+                  .map(
+                    (p) => DropdownMenuItem(
                       value: p,
-                      child: Text(p, style: const TextStyle(fontSize: 12))))
+                      child: Text(p, style: const TextStyle(fontSize: 12)),
+                    ),
+                  )
                   .toList(),
               onChanged: (v) =>
                   setState(() => _period = v ?? kDatePeriodLabels.first),
@@ -196,8 +207,11 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
                 if (hasCostedData) _headline(theme, data, canSeeCost),
                 if (data.uncostedItems > 0) ...[
                   if (hasCostedData) SizedBox(height: context.spacingM),
-                  _uncostedNote(theme, data.uncostedItems,
-                      allUncosted: !hasCostedData),
+                  _uncostedNote(
+                    theme,
+                    data.uncostedItems,
+                    allUncosted: !hasCostedData,
+                  ),
                 ],
                 if (hasCostedData) ...[
                   SizedBox(height: context.spacingM),
@@ -208,7 +222,11 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
     );
   }
 
-  Widget _uncostedNote(ThemeData theme, int items, {required bool allUncosted}) {
+  Widget _uncostedNote(
+    ThemeData theme,
+    int items, {
+    required bool allUncosted,
+  }) {
     return Container(
       width: double.infinity,
       padding: EdgeInsets.all(context.spacingM),
@@ -220,15 +238,19 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(FontAwesomeIcons.circleInfo, size: 15, color: theme.hintColor),
+          Icon(
+            FontAwesomeIcons.circleInfo.data,
+            size: 15,
+            color: theme.hintColor,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               allUncosted
                   ? '$items item${items == 1 ? '' : 's'} sold this period had no '
-                      'recorded buying price, so profit can\'t be calculated.'
+                        'recorded buying price, so profit can\'t be calculated.'
                   : 'Profit excludes $items item${items == 1 ? '' : 's'} sold '
-                      'with no recorded buying price.',
+                        'with no recorded buying price.',
               style: context.bodySmall.copyWith(color: theme.hintColor),
             ),
           ),
@@ -242,11 +264,16 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(FontAwesomeIcons.chartLine,
-              size: 40, color: theme.hintColor.withValues(alpha: 0.5)),
+          Icon(
+            FontAwesomeIcons.chartLine.data,
+            size: 40,
+            color: theme.hintColor.withValues(alpha: 0.5),
+          ),
           SizedBox(height: context.spacingM),
-          Text('No data for this period.',
-              style: context.bodyMedium.copyWith(color: theme.hintColor)),
+          Text(
+            'No data for this period.',
+            style: context.bodyMedium.copyWith(color: theme.hintColor),
+          ),
         ],
       ),
     );
@@ -254,7 +281,9 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
 
   Widget _headline(ThemeData theme, _ProfitData data, bool canSeeCost) {
     final profit = data.profitKobo;
-    final color = profit >= 0 ? const Color(0xFF22C55E) : theme.colorScheme.error;
+    final color = profit >= 0
+        ? const Color(0xFF22C55E)
+        : theme.colorScheme.error;
     return Container(
       width: double.infinity,
       padding: EdgeInsets.all(context.spacingM),
@@ -268,19 +297,24 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
         children: [
           Row(
             children: [
-              Icon(FontAwesomeIcons.chartLine, color: color, size: 16),
+              Icon(FontAwesomeIcons.chartLine.data, color: color, size: 16),
               const SizedBox(width: 8),
-              Text('Gross Profit',
-                  style: context.bodyMedium
-                      .copyWith(fontWeight: FontWeight.w700, color: color)),
+              Text(
+                'Gross Profit',
+                style: context.bodyMedium.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                ),
+              ),
             ],
           ),
           SizedBox(height: context.spacingS),
           Text(
             formatCurrency(profit / 100.0),
             style: context.h2.copyWith(
-                fontWeight: FontWeight.w900,
-                color: theme.colorScheme.onSurface),
+              fontWeight: FontWeight.w900,
+              color: theme.colorScheme.onSurface,
+            ),
           ),
           SizedBox(height: context.spacingS),
           Wrap(
@@ -289,8 +323,11 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
             children: [
               _chip(theme, 'Revenue', formatCurrency(data.revenueKobo / 100.0)),
               if (canSeeCost)
-                _chip(theme, 'Cost of goods',
-                    formatCurrency(data.cogsKobo / 100.0)),
+                _chip(
+                  theme,
+                  'Cost of goods',
+                  formatCurrency(data.cogsKobo / 100.0),
+                ),
               _chip(theme, 'Margin', '${data.marginPct.toStringAsFixed(1)}%'),
             ],
           ),
@@ -306,10 +343,13 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
         color: theme.colorScheme.onSurface.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(20),
       ),
-      child: Text('$label: $value',
-          style: context.bodySmall.copyWith(
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-              fontWeight: FontWeight.w600)),
+      child: Text(
+        '$label: $value',
+        style: context.bodySmall.copyWith(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+          fontWeight: FontWeight.w600,
+        ),
+      ),
     );
   }
 
@@ -324,14 +364,17 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('By product',
-              style: context.bodyMedium.copyWith(fontWeight: FontWeight.bold)),
+          Text(
+            'By product',
+            style: context.bodyMedium.copyWith(fontWeight: FontWeight.bold),
+          ),
           SizedBox(height: context.spacingS),
           for (var i = 0; i < data.products.length; i++) ...[
             if (i > 0)
               Divider(
-                  height: context.spacingM,
-                  color: theme.dividerColor.withValues(alpha: 0.2)),
+                height: context.spacingM,
+                color: theme.dividerColor.withValues(alpha: 0.2),
+              ),
             _productRow(theme, data.products[i]),
           ],
         ],
@@ -340,8 +383,9 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
   }
 
   Widget _productRow(ThemeData theme, _ProductProfit p) {
-    final color =
-        p.profitKobo >= 0 ? const Color(0xFF22C55E) : theme.colorScheme.error;
+    final color = p.profitKobo >= 0
+        ? const Color(0xFF22C55E)
+        : theme.colorScheme.error;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -349,11 +393,12 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(p.name,
-                  style:
-                      context.bodyMedium.copyWith(fontWeight: FontWeight.w600),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis),
+              Text(
+                p.name,
+                style: context.bodyMedium.copyWith(fontWeight: FontWeight.w600),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
               const SizedBox(height: 2),
               Text(
                 '×${p.qty}  ·  Rev ${formatCurrency(p.revenueKobo / 100.0)}  ·  ${p.marginPct.toStringAsFixed(1)}%',
@@ -363,9 +408,13 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
           ),
         ),
         const SizedBox(width: 8),
-        Text(formatCurrency(p.profitKobo / 100.0),
-            style: context.bodyMedium
-                .copyWith(fontWeight: FontWeight.w700, color: color)),
+        Text(
+          formatCurrency(p.profitKobo / 100.0),
+          style: context.bodyMedium.copyWith(
+            fontWeight: FontWeight.w700,
+            color: color,
+          ),
+        ),
       ],
     );
   }

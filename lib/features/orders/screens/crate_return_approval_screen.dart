@@ -125,9 +125,11 @@ class _CrateReturnApprovalScreenState
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(FontAwesomeIcons.circleCheck,
-                        color: Colors.green.withValues(alpha: 0.5),
-                        size: context.getRSize(48)),
+                    Icon(
+                      FontAwesomeIcons.circleCheck.data,
+                      color: Colors.green.withValues(alpha: 0.5),
+                      size: context.getRSize(48),
+                    ),
                     const SizedBox(height: 16),
                     Text(
                       'No pending returns',
@@ -145,8 +147,9 @@ class _CrateReturnApprovalScreenState
             // Group by submission (customerId + approximate submittedAt)
             final Map<String, List<PendingReturnWithDetails>> groups = {};
             for (final r in returns) {
-              final timeKey =
-                  DateFormat('yyyy-MM-dd HH:mm').format(r.returnRow.submittedAt);
+              final timeKey = DateFormat(
+                'yyyy-MM-dd HH:mm',
+              ).format(r.returnRow.submittedAt);
               final key = '${r.returnRow.customerId}_$timeKey';
               groups.putIfAbsent(key, () => []);
               groups[key]!.add(r);
@@ -226,7 +229,9 @@ class _SubmissionBatchTile extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      DateFormat('MMM d, h:mm a').format(first.returnRow.submittedAt),
+                      DateFormat(
+                        'MMM d, h:mm a',
+                      ).format(first.returnRow.submittedAt),
                       style: TextStyle(
                         color: text.withValues(alpha: 0.6),
                         fontSize: 12,
@@ -249,57 +254,72 @@ class _SubmissionBatchTile extends StatelessWidget {
             ),
           ),
           const Divider(height: 1),
-          ...batch.map((item) => Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(FontAwesomeIcons.box,
-                          size: 14, color: Colors.orange),
+          ...batch.map(
+            (item) => Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            item.manufacturer.name,
-                            style: const TextStyle(fontWeight: FontWeight.w500),
-                          ),
-                          Text(
-                            'Quantity: ${item.returnRow.quantity}',
-                            style: TextStyle(
-                              color: text.withValues(alpha: 0.6),
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
-                      ),
+                    child: Icon(
+                      FontAwesomeIcons.box.data,
+                      size: 14,
+                      color: Colors.orange,
                     ),
-                    const SizedBox(width: 8),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        IconButton(
-                          icon: const Icon(FontAwesomeIcons.xmark,
-                              color: Colors.red, size: 18),
-                          onPressed: processing ? null : () => onReject(item.returnRow.id),
+                        Text(
+                          item.manufacturer.name,
+                          style: const TextStyle(fontWeight: FontWeight.w500),
                         ),
-                        IconButton(
-                          icon: const Icon(FontAwesomeIcons.check,
-                              color: Colors.green, size: 18),
-                          onPressed: processing ? null : () => onApprove(item.returnRow.id),
+                        Text(
+                          'Quantity: ${item.returnRow.quantity}',
+                          style: TextStyle(
+                            color: text.withValues(alpha: 0.6),
+                            fontSize: 13,
+                          ),
                         ),
                       ],
                     ),
-                  ],
-                ),
-              )),
+                  ),
+                  const SizedBox(width: 8),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: Icon(
+                          FontAwesomeIcons.xmark.data,
+                          color: Colors.red,
+                          size: 18,
+                        ),
+                        onPressed: processing
+                            ? null
+                            : () => onReject(item.returnRow.id),
+                      ),
+                      IconButton(
+                        icon: Icon(
+                          FontAwesomeIcons.check.data,
+                          color: Colors.green,
+                          size: 18,
+                        ),
+                        onPressed: processing
+                            ? null
+                            : () => onApprove(item.returnRow.id),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );

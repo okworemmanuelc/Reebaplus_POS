@@ -54,7 +54,8 @@ class EditCustomerSheet extends ConsumerStatefulWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      isDismissible: false, // no tap-outside dismiss — guard against losing edits
+      isDismissible:
+          false, // no tap-outside dismiss — guard against losing edits
       enableDrag: false, // no drag-down dismiss
       backgroundColor: Colors.transparent,
       builder: (_) => EditCustomerSheet(
@@ -77,7 +78,9 @@ class EditCustomerSheet extends ConsumerStatefulWidget {
 class _EditCustomerSheetState extends ConsumerState<EditCustomerSheet> {
   late final _nameCtrl = TextEditingController(text: widget.initialName);
   late final _addressCtrl = TextEditingController(text: widget.initialAddress);
-  late final _locationCtrl = TextEditingController(text: widget.initialLocation);
+  late final _locationCtrl = TextEditingController(
+    text: widget.initialLocation,
+  );
   late final _phoneCtrl = TextEditingController(text: widget.initialPhone);
   late PriceTier _selectedGroup = widget.initialPriceTier;
   final _formKey = GlobalKey<FormState>();
@@ -125,8 +128,14 @@ class _EditCustomerSheetState extends ConsumerState<EditCustomerSheet> {
           labelText: 'Price Tier',
           value: _selectedGroup,
           items: const [
-            DropdownMenuItem(value: PriceTier.retailer, child: Text('Retailer')),
-            DropdownMenuItem(value: PriceTier.wholesaler, child: Text('Wholesaler')),
+            DropdownMenuItem(
+              value: PriceTier.retailer,
+              child: Text('Retailer'),
+            ),
+            DropdownMenuItem(
+              value: PriceTier.wholesaler,
+              child: Text('Wholesaler'),
+            ),
           ],
           onChanged: (val) {
             if (val != null) setState(() => _selectedGroup = val);
@@ -149,9 +158,7 @@ class _EditCustomerSheetState extends ConsumerState<EditCustomerSheet> {
         return Container(
           decoration: BoxDecoration(
             color: _surface,
-            borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(28),
-            ),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
           ),
           child: Form(
             key: _formKey,
@@ -183,7 +190,7 @@ class _EditCustomerSheetState extends ConsumerState<EditCustomerSheet> {
                             onPressed: () => Navigator.pop(context),
                             tooltip: 'Back',
                             icon: Icon(
-                              FontAwesomeIcons.arrowLeft,
+                              FontAwesomeIcons.arrowLeft.data,
                               color: _text,
                               size: context.getRSize(18),
                             ),
@@ -194,21 +201,28 @@ class _EditCustomerSheetState extends ConsumerState<EditCustomerSheet> {
                             height: context.getRSize(44),
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
-                                colors: [Theme.of(context).colorScheme.primary.withValues(alpha: 0.7), Theme.of(context).colorScheme.primary],
+                                colors: [
+                                  Theme.of(
+                                    context,
+                                  ).colorScheme.primary.withValues(alpha: 0.7),
+                                  Theme.of(context).colorScheme.primary,
+                                ],
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                               ),
                               borderRadius: BorderRadius.circular(12),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.primary.withValues(alpha: 0.3),
                                   blurRadius: 8,
                                   offset: const Offset(0, 2),
                                 ),
                               ],
                             ),
                             child: Icon(
-                              FontAwesomeIcons.penToSquare,
+                              FontAwesomeIcons.penToSquare.data,
                               color: Colors.white,
                               size: context.getRSize(18),
                             ),
@@ -230,7 +244,9 @@ class _EditCustomerSheetState extends ConsumerState<EditCustomerSheet> {
                                   'Update Client Information',
                                   style: TextStyle(
                                     fontSize: context.getRFontSize(13),
-                                    color: Theme.of(context).colorScheme.primary,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.primary,
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
@@ -259,7 +275,9 @@ class _EditCustomerSheetState extends ConsumerState<EditCustomerSheet> {
                         labelText: 'Customer Name',
                         controller: _nameCtrl,
                         hintText: 'e.g. John Doe',
-                        validator: (v) => (v == null || v.trim().isEmpty) ? 'This field is required' : null,
+                        validator: (v) => (v == null || v.trim().isEmpty)
+                            ? 'This field is required'
+                            : null,
                       ),
                       _groupDropdown(),
                       AppDropdown<String>(
@@ -272,28 +290,36 @@ class _EditCustomerSheetState extends ConsumerState<EditCustomerSheet> {
                             child: Text(wh.name),
                           );
                         }).toList(),
-                        onChanged: (val) => setState(() => _selectedStoreId = val),
-                        validator: (v) => v == null ? 'Please select a store' : null,
+                        onChanged: (val) =>
+                            setState(() => _selectedStoreId = val),
+                        validator: (v) =>
+                            v == null ? 'Please select a store' : null,
                       ),
                       SizedBox(height: context.getRSize(16)),
                       AppInput(
                         labelText: 'Address',
                         controller: _addressCtrl,
                         hintText: 'e.g. 123 Main Street',
-                        validator: (v) => (v == null || v.trim().isEmpty) ? 'This field is required' : null,
+                        validator: (v) => (v == null || v.trim().isEmpty)
+                            ? 'This field is required'
+                            : null,
                       ),
                       AppInput(
                         labelText: 'Google Maps Location',
                         controller: _locationCtrl,
                         hintText: 'e.g. Plus Code or Link',
-                        validator: (v) => (v == null || v.trim().isEmpty) ? 'This field is required' : null,
+                        validator: (v) => (v == null || v.trim().isEmpty)
+                            ? 'This field is required'
+                            : null,
                       ),
                       AppInput(
                         labelText: 'Phone Number',
                         controller: _phoneCtrl,
                         hintText: 'e.g. 08012345678',
                         keyboardType: TextInputType.phone,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
                         validator: (v) => (v == null || v.trim().isEmpty)
                             ? 'This field is required'
                             : null,
@@ -304,12 +330,12 @@ class _EditCustomerSheetState extends ConsumerState<EditCustomerSheet> {
 
                 // Button
                 Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      context.getRSize(20),
-                      context.getRSize(16),
-                      context.getRSize(20),
-                      context.deviceBottomPadding + context.getRSize(16),
-                    ),
+                  padding: EdgeInsets.fromLTRB(
+                    context.getRSize(20),
+                    context.getRSize(16),
+                    context.getRSize(20),
+                    context.deviceBottomPadding + context.getRSize(16),
+                  ),
                   child: AppButton(
                     text: 'Save Details',
                     variant: AppButtonVariant.primary,
@@ -343,7 +369,9 @@ class _EditCustomerSheetState extends ConsumerState<EditCustomerSheet> {
                         } catch (_) {
                           if (!context.mounted) return;
                           AppNotification.showError(
-                              context, 'Could not update customer. Please try again.');
+                            context,
+                            'Could not update customer. Please try again.',
+                          );
                         }
                       }
                     },

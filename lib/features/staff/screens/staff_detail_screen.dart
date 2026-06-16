@@ -49,9 +49,10 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
     // Total sales made + count (§9.5) — cheap aggregate over completed orders
     // the member rang up (orders.staff_id). A one-shot read, not a synced write.
     final db = ref.read(databaseProvider);
-    final memberships = await db.userBusinessesDao.watchForCurrentBusiness().first;
-    final m =
-        memberships.where((r) => r.id == widget.membershipId).firstOrNull;
+    final memberships = await db.userBusinessesDao
+        .watchForCurrentBusiness()
+        .first;
+    final m = memberships.where((r) => r.id == widget.membershipId).firstOrNull;
     if (m == null) return;
     final result = await db
         .customSelect(
@@ -84,7 +85,24 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
     // Defense-in-depth (hard rule #6): re-check the specific permission at the
     // start, not only at button render. Change-role has its own permission
     // (§9), separate from invite/suspend.
-    if (!ref.read(currentUserPermissionsProvider).contains('staff.change_role')) {
+    if (!ref
+        .read(currentUserPermissionsProvider)
+        .contains('staff.change_role')) {
+      return;
+    }
+    // Owner protection: the original business creator's role is immutable.
+    final targetUser =
+        ref.read(usersByBusinessProvider).valueOrNull?[membership.userId];
+    final ownerId = ref.read(currentBusinessProvider)?.ownerId;
+    if (ownerId != null &&
+        targetUser?.authUserId != null &&
+        targetUser!.authUserId == ownerId) {
+      if (mounted) {
+        AppNotification.showError(
+          context,
+          "You cannot change the owner's role.",
+        );
+      }
       return;
     }
     final picked = await showDialog<RoleData>(
@@ -133,8 +151,11 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
     final db = ref.read(databaseProvider);
     final currentUser = ref.read(authProvider).currentUser;
     final affectedName =
-        ref.read(usersByBusinessProvider).valueOrNull?[membership.userId]?.name ??
-            'A staff member';
+        ref
+            .read(usersByBusinessProvider)
+            .valueOrNull?[membership.userId]
+            ?.name ??
+        'A staff member';
     final actorName = currentUser?.name ?? 'A manager';
     final actorIsCeo = ref.read(currentUserRoleProvider)?.slug == 'ceo';
     try {
@@ -152,8 +173,9 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
       // reaches the recipient's device live.
       final fromTo = 'from ${currentRole?.name ?? 'Unknown'} to ${picked.name}';
       if (!actorIsCeo) {
-        final ceoIds =
-            await db.userBusinessesDao.getUserIdsForRoleSlugs(['ceo']);
+        final ceoIds = await db.userBusinessesDao.getUserIdsForRoleSlugs([
+          'ceo',
+        ]);
         for (final ceoId in ceoIds) {
           if (ceoId == currentUser?.id) continue;
           await db.notificationsDao.fireNotification(
@@ -177,7 +199,9 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
     } catch (_) {
       if (mounted) {
         AppNotification.showError(
-            context, 'Could not change role. Please try again.');
+          context,
+          'Could not change role. Please try again.',
+        );
       }
     }
   }
@@ -196,7 +220,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
         content: Text(
           suspending
               ? 'A suspended member can no longer sign in or make sales. '
-                  'They stay in the list, greyed out.'
+                    'They stay in the list, greyed out.'
               : 'This member will regain access to the app.',
         ),
         actions: [
@@ -208,7 +232,8 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
             onPressed: () => Navigator.pop(ctx, true),
             style: suspending
                 ? TextButton.styleFrom(
-                    foregroundColor: Theme.of(ctx).colorScheme.error)
+                    foregroundColor: Theme.of(ctx).colorScheme.error,
+                  )
                 : null,
             child: Text(suspending ? 'Suspend' : 'Reactivate'),
           ),
@@ -220,8 +245,11 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
     final db = ref.read(databaseProvider);
     final currentUser = ref.read(authProvider).currentUser;
     final affectedName =
-        ref.read(usersByBusinessProvider).valueOrNull?[membership.userId]?.name ??
-            'A staff member';
+        ref
+            .read(usersByBusinessProvider)
+            .valueOrNull?[membership.userId]
+            ?.name ??
+        'A staff member';
     final actorName = currentUser?.name ?? 'A manager';
     final actorIsCeo = ref.read(currentUserRoleProvider)?.slug == 'ceo';
     final newStatus = suspending ? 'suspended' : 'active';
@@ -229,15 +257,17 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
       await db.userBusinessesDao.setStatus(membership.id, newStatus);
       await db.activityLogDao.log(
         action: 'staff.suspend',
-        description:
-            suspending ? 'Suspended staff member' : 'Reactivated staff member',
+        description: suspending
+            ? 'Suspended staff member'
+            : 'Reactivated staff member',
         staffId: currentUser?.id,
       );
       // §26.4 Staff — "Staff suspended/reactivated (fires to CEO)". Fires only when
       // a non-CEO (a Manager) made the change; the CEO is never self-notified.
       if (!actorIsCeo) {
-        final ceoIds =
-            await db.userBusinessesDao.getUserIdsForRoleSlugs(['ceo']);
+        final ceoIds = await db.userBusinessesDao.getUserIdsForRoleSlugs([
+          'ceo',
+        ]);
         for (final ceoId in ceoIds) {
           if (ceoId == currentUser?.id) continue;
           await db.notificationsDao.fireNotification(
@@ -253,14 +283,17 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
       }
       if (!mounted) return;
       AppNotification.showSuccess(
-          context, suspending ? 'Staff suspended.' : 'Staff reactivated.');
+        context,
+        suspending ? 'Staff suspended.' : 'Staff reactivated.',
+      );
     } catch (_) {
       if (mounted) {
         AppNotification.showError(
-            context,
-            suspending
-                ? 'Could not suspend staff. Please try again.'
-                : 'Could not reactivate staff. Please try again.');
+          context,
+          suspending
+              ? 'Could not suspend staff. Please try again.'
+              : 'Could not reactivate staff. Please try again.',
+        );
       }
     }
   }
@@ -290,10 +323,11 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
       AppNotification.showError(context, 'No stores to assign.');
       return;
     }
-    final current = (ref.read(myUserStoresProvider(user.id)).valueOrNull ??
-            const <UserStoreData>[])
-        .map((s) => s.storeId)
-        .toSet();
+    final current =
+        (ref.read(myUserStoresProvider(user.id)).valueOrNull ??
+                const <UserStoreData>[])
+            .map((s) => s.storeId)
+            .toSet();
     final selected = {...current};
 
     final t = Theme.of(context);
@@ -360,8 +394,9 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                   SizedBox(height: context.getRSize(12)),
                   AppButton(
                     text: 'Save',
-                    onPressed:
-                        selected.isEmpty ? null : () => Navigator.pop(ctx, true),
+                    onPressed: selected.isEmpty
+                        ? null
+                        : () => Navigator.pop(ctx, true),
                   ),
                 ],
               ),
@@ -394,26 +429,32 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
     } catch (_) {
       if (mounted) {
         AppNotification.showError(
-            context, 'Could not update store assignments. Please try again.');
+          context,
+          'Could not update store assignments. Please try again.',
+        );
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
+    ref.watch(
+      currencySymbolProvider,
+    ); // rebuild money displays when currency changes
     final t = Theme.of(context);
     final text = t.colorScheme.onSurface;
     final subtext = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
 
     final memberships =
         ref.watch(userBusinessesProvider).valueOrNull ?? const [];
-    final membership =
-        memberships.where((m) => m.id == widget.membershipId).firstOrNull;
+    final membership = memberships
+        .where((m) => m.id == widget.membershipId)
+        .firstOrNull;
     final users = ref.watch(usersByBusinessProvider).valueOrNull ?? const {};
     final roles = ref.watch(allRolesProvider).valueOrNull ?? const [];
     final rolesById = {for (final r in roles) r.id: r};
     final mySlug = ref.watch(currentUserRoleProvider)?.slug;
+    final business = ref.watch(currentBusinessProvider);
 
     if (membership == null) {
       return Scaffold(
@@ -423,26 +464,32 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
     }
 
     final user = users[membership.userId];
+    final isTargetOwner =
+        user?.authUserId != null &&
+        business?.ownerId != null &&
+        user!.authUserId == business!.ownerId;
     final role = rolesById[membership.roleId];
     // §9.5 multi-store: the assignment is the set of stores in user_stores (the
     // same source the Home store-lock reads), not the single legacy users.store.
     final assignedStores =
         ref.watch(myUserStoresProvider(user?.id ?? '')).valueOrNull ??
-            const <UserStoreData>[];
+        const <UserStoreData>[];
     final allStores =
         ref.watch(allStoresProvider).valueOrNull ?? const <StoreData>[];
     final storeNameById = {for (final s in allStores) s.id: s.name};
-    final assignedStoreNames = assignedStores
-        .map((a) => storeNameById[a.storeId])
-        .whereType<String>()
-        .toList()
-      ..sort();
+    final assignedStoreNames =
+        assignedStores
+            .map((a) => storeNameById[a.storeId])
+            .whereType<String>()
+            .toList()
+          ..sort();
     final suspended = membership.status == 'suspended';
     final roleOptions = _invitableRoles(roles, mySlug);
     // §9.5 staff store-assignment editor. The CEO isn't store-assigned (sees
     // every store), so it's not offered on a CEO target. Hidden, not greyed,
     // without the permission (hard rule #7); re-checked at the write site.
-    final canAssignStores = !widget.readOnly &&
+    final canAssignStores =
+        !widget.readOnly &&
         role?.slug != 'ceo' &&
         hasPermission(ref, 'staff.assign_stores');
 
@@ -476,13 +523,13 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                   pills: [
                     ProfilePill(
                       icon: suspended
-                          ? FontAwesomeIcons.userSlash
-                          : FontAwesomeIcons.circleCheck,
+                          ? FontAwesomeIcons.userSlash.data
+                          : FontAwesomeIcons.circleCheck.data,
                       label: suspended ? 'Suspended' : 'Active',
                       color: suspended ? subtext : t.colorScheme.primary,
                     ),
                     ProfilePill(
-                      icon: FontAwesomeIcons.store,
+                      icon: FontAwesomeIcons.store.data,
                       label: _storeSummary(assignedStoreNames),
                     ),
                   ],
@@ -495,7 +542,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                       value: _totalSalesKobo == null
                           ? '…'
                           : _ordersCount.toString(),
-                      icon: FontAwesomeIcons.receipt,
+                      icon: FontAwesomeIcons.receipt.data,
                       color: t.colorScheme.primary,
                     ),
                     ProfileStat(
@@ -503,7 +550,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                       value: _totalSalesKobo == null
                           ? '…'
                           : formatCurrency(_totalSalesKobo! / 100.0),
-                      icon: FontAwesomeIcons.sackDollar,
+                      icon: FontAwesomeIcons.sackDollar.data,
                       color: const Color(0xFFA855F7),
                     ),
                   ],
@@ -527,13 +574,15 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                 // greyed (hard rule #7). The manageable→readOnly logic already
                 // restricts which staff a viewer can act on.
                 if (!widget.readOnly &&
-                    (hasPermission(ref, 'staff.change_role') ||
+                    ((hasPermission(ref, 'staff.change_role') &&
+                            !isTargetOwner) ||
                         hasPermission(ref, 'staff.suspend'))) ...[
                   SizedBox(height: context.getRSize(24)),
-                  if (hasPermission(ref, 'staff.change_role')) ...[
+                  if (hasPermission(ref, 'staff.change_role') &&
+                      !isTargetOwner) ...[
                     AppButton(
                       text: 'Change role',
-                      icon: FontAwesomeIcons.userGear,
+                      icon: FontAwesomeIcons.userGear.data,
                       variant: AppButtonVariant.secondary,
                       onPressed: () =>
                           _changeRole(membership, role, roleOptions),
@@ -544,8 +593,8 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                     AppButton(
                       text: suspended ? 'Reactivate' : 'Suspend',
                       icon: suspended
-                          ? FontAwesomeIcons.userCheck
-                          : FontAwesomeIcons.userSlash,
+                          ? FontAwesomeIcons.userCheck.data
+                          : FontAwesomeIcons.userSlash.data,
                       variant: suspended
                           ? AppButtonVariant.success
                           : AppButtonVariant.danger,
@@ -570,7 +619,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
   ) {
     final rows = <ProfileInfoRow>[
       ProfileInfoRow(
-        icon: FontAwesomeIcons.store,
+        icon: FontAwesomeIcons.store.data,
         label: 'Assigned store${assignedStoreNames.length == 1 ? '' : 's'}',
         value: assignedStoreNames.isEmpty
             ? (onEditStores == null ? '—' : 'Unassigned')
@@ -578,12 +627,12 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
         onTap: onEditStores,
       ),
       ProfileInfoRow(
-        icon: FontAwesomeIcons.envelope,
+        icon: FontAwesomeIcons.envelope.data,
         label: 'Email',
         value: user.email ?? '—',
       ),
       ProfileInfoRow(
-        icon: FontAwesomeIcons.clock,
+        icon: FontAwesomeIcons.clock.data,
         label: 'Last login',
         value: membership.lastLoginAt == null
             ? 'Never logged in'
@@ -598,8 +647,8 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
       final overrideCount = isCeo
           ? 0
           : (ref.watch(userPermissionOverridesProvider(user.id)).valueOrNull ??
-                  const [])
-              .length;
+                    const [])
+                .length;
       final String state;
       final Color? stateColor;
       if (isCeo) {
@@ -614,18 +663,18 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
       }
       rows.add(
         ProfileInfoRow(
-          icon: FontAwesomeIcons.userShield,
+          icon: FontAwesomeIcons.userShield.data,
           label: 'Permission access',
           value: state,
           valueColor: stateColor,
           onTap: isCeo
               ? null
               : () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          StaffPermissionsScreen(user: user, role: role),
-                    ),
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        StaffPermissionsScreen(user: user, role: role),
                   ),
+                ),
         ),
       );
     }

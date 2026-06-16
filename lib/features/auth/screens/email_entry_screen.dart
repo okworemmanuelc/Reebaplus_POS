@@ -131,8 +131,10 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
       setState(() => _loading = false);
 
       final Widget page = switch (route) {
-        ExistingAccountRoute(:final account) =>
-          ExistingAccountScreen(email: email, account: account),
+        ExistingAccountRoute(:final account) => ExistingAccountScreen(
+          email: email,
+          account: account,
+        ),
         NoAccountFoundRoute() => NoAccountFoundScreen(email: email),
         LoginRoute(:final user) => LoginScreen(presetUser: user),
         CreatePinRoute(:final user) => CreatePinScreen(user: user),
@@ -345,9 +347,7 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
               Row(
                 children: [
                   Expanded(
-                    child: Divider(
-                      color: textColor.withValues(alpha: 0.2),
-                    ),
+                    child: Divider(color: textColor.withValues(alpha: 0.2)),
                   ),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -361,9 +361,7 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
                     ),
                   ),
                   Expanded(
-                    child: Divider(
-                      color: textColor.withValues(alpha: 0.2),
-                    ),
+                    child: Divider(color: textColor.withValues(alpha: 0.2)),
                   ),
                 ],
               ),

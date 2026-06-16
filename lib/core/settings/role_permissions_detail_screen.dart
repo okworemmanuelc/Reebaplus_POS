@@ -113,7 +113,8 @@ class _RolePermissionsDetailScreenState
         .map((s) => s.settingValue)
         .firstOrNull;
 
-    _discount = int.tryParse(valueOf(_kMaxDiscount) ?? '') ?? _defaultDiscount();
+    _discount =
+        int.tryParse(valueOf(_kMaxDiscount) ?? '') ?? _defaultDiscount();
     _lastSavedDiscount = _discount;
     if (!_isCeo) {
       final kobo = int.tryParse(valueOf(_kMaxExpenseKobo) ?? '') ?? 0;
@@ -142,7 +143,9 @@ class _RolePermissionsDetailScreenState
   bool _guard() {
     if (!ref.read(currentUserPermissionsProvider).contains('settings.manage')) {
       AppNotification.showError(
-          context, 'You don\'t have permission to do that.');
+        context,
+        'You don\'t have permission to do that.',
+      );
       return false;
     }
     return true;
@@ -164,25 +167,29 @@ class _RolePermissionsDetailScreenState
       // (§10.2 dependency gating) — a child can't stay on once its parent is off.
       // revoke() is idempotent, but we intersect with the granted set so the
       // activity log records only what actually changed.
-      final granted = (ref.read(rolePermissionsProvider(role.id)).valueOrNull ??
-              const <RolePermissionData>[])
-          .map((g) => g.permissionKey)
-          .toSet();
-      final cascaded =
-          descendantsOf(key).where(granted.contains).toList()..sort();
+      final granted =
+          (ref.read(rolePermissionsProvider(role.id)).valueOrNull ??
+                  const <RolePermissionData>[])
+              .map((g) => g.permissionKey)
+              .toSet();
+      final cascaded = descendantsOf(key).where(granted.contains).toList()
+        ..sort();
       await _db.rolePermissionsDao.revoke(role.id, key);
       for (final dep in cascaded) {
         await _db.rolePermissionsDao.revoke(role.id, dep);
       }
-      final suffix =
-          cascaded.isEmpty ? '' : ' (also revoked: ${cascaded.join(', ')})';
+      final suffix = cascaded.isEmpty
+          ? ''
+          : ' (also revoked: ${cascaded.join(', ')})';
       await _db.activityLogDao.log(
         action: 'settings.role_permission.toggle',
         description: 'Revoked "$key" for ${role.name}$suffix',
         staffId: _db.currentUserId,
       );
     } catch (_) {
-      if (mounted) AppNotification.showError(context, "Couldn't update permission.");
+      if (mounted) {
+        AppNotification.showError(context, "Couldn't update permission.");
+      }
     }
   }
 
@@ -211,8 +218,11 @@ class _RolePermissionsDetailScreenState
     if (!_guard()) return;
     setState(() => _viewAllStores = enable);
     try {
-      await _db.roleSettingsDao
-          .set(role.id, kManagerViewAllStoresKey, enable.toString());
+      await _db.roleSettingsDao.set(
+        role.id,
+        kManagerViewAllStoresKey,
+        enable.toString(),
+      );
       await _db.activityLogDao.log(
         action: 'settings.role_setting.view_all_stores',
         description:
@@ -222,8 +232,7 @@ class _RolePermissionsDetailScreenState
     } catch (_) {
       if (mounted) {
         setState(() => _viewAllStores = !enable);
-        AppNotification.showError(
-            context, "Couldn't update store visibility.");
+        AppNotification.showError(context, "Couldn't update store visibility.");
       }
     }
   }
@@ -247,7 +256,9 @@ class _RolePermissionsDetailScreenState
     } catch (_) {
       if (mounted) {
         AppNotification.showError(
-            context, "Couldn't save expense approval limit.");
+          context,
+          "Couldn't save expense approval limit.",
+        );
       }
     }
   }
@@ -275,18 +286,20 @@ class _RolePermissionsDetailScreenState
       ),
       body: !canManage
           ? const SettingsNoAccess()
-          : ref.watch(allPermissionsProvider).when(
-                loading: () => const SizedBox.shrink(),
-                error: (_, __) => Center(
-                  child: Text(
-                    'Couldn\'t load permissions.',
-                    style: TextStyle(
-                      color: t.colorScheme.onSurface.withValues(alpha: 0.6),
+          : ref
+                .watch(allPermissionsProvider)
+                .when(
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, __) => Center(
+                    child: Text(
+                      'Couldn\'t load permissions.',
+                      style: TextStyle(
+                        color: t.colorScheme.onSurface.withValues(alpha: 0.6),
+                      ),
                     ),
                   ),
+                  data: (perms) => _buildBody(t, perms),
                 ),
-                data: (perms) => _buildBody(t, perms),
-              ),
     );
   }
 
@@ -296,10 +309,11 @@ class _RolePermissionsDetailScreenState
     final perms = permsRaw
         .where((p) => !kHiddenPermissionKeys.contains(p.key))
         .toList();
-    final granted = (ref.watch(rolePermissionsProvider(role.id)).valueOrNull ??
-            const <RolePermissionData>[])
-        .map((g) => g.permissionKey)
-        .toSet();
+    final granted =
+        (ref.watch(rolePermissionsProvider(role.id)).valueOrNull ??
+                const <RolePermissionData>[])
+            .map((g) => g.permissionKey)
+            .toSet();
     // For the "Requires …" hint on a gated child toggle (§10.2).
     final byKey = {for (final p in perms) p.key: p};
 
@@ -325,7 +339,11 @@ class _RolePermissionsDetailScreenState
     return SettingsFadeIn(
       child: ListView(
         padding: EdgeInsets.fromLTRB(
-            24, 24, 24, 24 + context.deviceBottomPadding),
+          24,
+          24,
+          24,
+          24 + context.deviceBottomPadding,
+        ),
         children: [
           // Permission scope selector (§10.2.1): Business (real, default) vs
           // Store (Phase-1 placeholder). User-scope overrides live on the staff
@@ -347,47 +365,47 @@ class _RolePermissionsDetailScreenState
           if (_storeScope)
             ..._buildStoreScope(t, perms, granted, byKey)
           else ...[
-          if (_isCeo)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 20),
-              child: Text(
-                'The CEO always has full access — these can\'t be changed.',
-                style: TextStyle(
-                  fontSize: 13,
-                  height: 1.4,
-                  color: t.colorScheme.onSurface.withValues(alpha: 0.6),
+            if (_isCeo)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 20),
+                child: Text(
+                  'The CEO always has full access — these can\'t be changed.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.4,
+                    color: t.colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
                 ),
               ),
-            ),
-          // Stores section sits first: the Manager-only "Allow viewing other
-          // stores" toggle (§11.2) and, directly below it, the store
-          // permission toggle(s) — e.g. "Add, edit, and remove stores" (§10.1).
-          if (_isManager || storesPerms != null) ...[
-            const SettingsSectionTitle('Stores'),
-            const SizedBox(height: 8),
-            if (_isManager) _viewAllStoresCard(t),
-            if (_isManager && storesPerms != null) const SizedBox(height: 8),
-            if (storesPerms != null)
-              _permissionGroupCard(t, storesPerms, granted, byKey),
-            const SizedBox(height: 20),
-          ],
-          for (final entry in groups.entries) ...[
-            SettingsSectionTitle(entry.key),
-            const SizedBox(height: 8),
-            _permissionGroupCard(t, entry.value, granted, byKey),
-            // The per-role discount limit lives under Sales (§10.2) — it's the
-            // sole discount control now that the give-discount toggle is gone.
-            if (entry.key == 'Sales') ...[
+            // Stores section sits first: the Manager-only "Allow viewing other
+            // stores" toggle (§11.2) and, directly below it, the store
+            // permission toggle(s) — e.g. "Add, edit, and remove stores" (§10.1).
+            if (_isManager || storesPerms != null) ...[
+              const SettingsSectionTitle('Stores'),
               const SizedBox(height: 8),
-              _discountCard(t),
+              if (_isManager) _viewAllStoresCard(t),
+              if (_isManager && storesPerms != null) const SizedBox(height: 8),
+              if (storesPerms != null)
+                _permissionGroupCard(t, storesPerms, granted, byKey),
+              const SizedBox(height: 20),
             ],
-            // The per-role expense-approval limit lives under Expenses (§10.2).
-            if (entry.key == 'Expenses') ...[
+            for (final entry in groups.entries) ...[
+              SettingsSectionTitle(entry.key),
               const SizedBox(height: 8),
-              _expenseCard(t),
+              _permissionGroupCard(t, entry.value, granted, byKey),
+              // The per-role discount limit lives under Sales (§10.2) — it's the
+              // sole discount control now that the give-discount toggle is gone.
+              if (entry.key == 'Sales') ...[
+                const SizedBox(height: 8),
+                _discountCard(t),
+              ],
+              // The per-role expense-approval limit lives under Expenses (§10.2).
+              if (entry.key == 'Expenses') ...[
+                const SizedBox(height: 8),
+                _expenseCard(t),
+              ],
+              const SizedBox(height: 20),
             ],
-            const SizedBox(height: 20),
-          ],
           ],
         ],
       ),
@@ -402,10 +420,18 @@ class _RolePermissionsDetailScreenState
       decoration: AppDecorations.glassCard(context, radius: 14),
       child: Row(
         children: [
-          _scopeSegment(t, 'Business', !_storeScope,
-              () => setState(() => _storeScope = false)),
           _scopeSegment(
-              t, 'Store', _storeScope, () => setState(() => _storeScope = true)),
+            t,
+            'Business',
+            !_storeScope,
+            () => setState(() => _storeScope = false),
+          ),
+          _scopeSegment(
+            t,
+            'Store',
+            _storeScope,
+            () => setState(() => _storeScope = true),
+          ),
         ],
       ),
     );
@@ -478,15 +504,21 @@ class _RolePermissionsDetailScreenState
 
     // Resolve the selected store without setState-during-build: fall back to the
     // first store when nothing is picked or the pick is stale.
-    final selectedId = (_selectedStoreId != null &&
+    final selectedId =
+        (_selectedStoreId != null &&
             stores.any((s) => s.id == _selectedStoreId))
         ? _selectedStoreId!
         : stores.first.id;
 
     // This store's overrides for this role, keyed for lookup.
-    final overrides = ref
-            .watch(storeRolePermissionsProvider(
-                (storeId: selectedId, roleId: role.id)))
+    final overrides =
+        ref
+            .watch(
+              storeRolePermissionsProvider((
+                storeId: selectedId,
+                roleId: role.id,
+              )),
+            )
             .valueOrNull ??
         const <StoreRolePermissionData>[];
     final overrideByKey = {for (final o in overrides) o.permissionKey: o};
@@ -520,14 +552,21 @@ class _RolePermissionsDetailScreenState
       for (final entry in groups.entries) ...[
         SettingsSectionTitle(entry.key),
         const SizedBox(height: 8),
-        _storePermissionGroupCard(t, selectedId, entry.value, businessDefaults,
-            effective, overrideByKey, byKey),
+        _storePermissionGroupCard(
+          t,
+          selectedId,
+          entry.value,
+          businessDefaults,
+          effective,
+          overrideByKey,
+          byKey,
+        ),
         const SizedBox(height: 20),
       ],
       const SizedBox(height: 4),
       AppButton(
         text: 'Restore store defaults',
-        icon: FontAwesomeIcons.arrowRotateLeft,
+        icon: FontAwesomeIcons.arrowRotateLeft.data,
         variant: AppButtonVariant.outline,
         onPressed: overrides.isEmpty
             ? null
@@ -538,8 +577,8 @@ class _RolePermissionsDetailScreenState
         overrides.isEmpty
             ? 'This store uses the ${role.name} business defaults.'
             : 'Clears all ${overrides.length} '
-                'override${overrides.length == 1 ? '' : 's'} for this store and '
-                'returns it to the ${role.name} business defaults.',
+                  'override${overrides.length == 1 ? '' : 's'} for this store and '
+                  'returns it to the ${role.name} business defaults.',
         textAlign: TextAlign.center,
         style: TextStyle(
           fontSize: 12,
@@ -638,7 +677,11 @@ class _RolePermissionsDetailScreenState
     bool businessDefault,
   ) async {
     await _db.storeRolePermissionsDao.setOverride(
-        storeId, role.id, key, target == businessDefault ? null : target);
+      storeId,
+      role.id,
+      key,
+      target == businessDefault ? null : target,
+    );
   }
 
   Future<void> _toggleStore(
@@ -666,14 +709,15 @@ class _RolePermissionsDetailScreenState
       // Turning a permission off also forces off any effectively-granted
       // permission that depends on it (§10.2 dependency gating) — a child can't
       // stay on once its parent is off. Mirrors the per-role / per-user cascade.
-      final cascaded =
-          descendantsOf(key).where(effective.contains).toList()..sort();
+      final cascaded = descendantsOf(key).where(effective.contains).toList()
+        ..sort();
       await _setStoreEffective(storeId, key, false, defaultOf(key));
       for (final dep in cascaded) {
         await _setStoreEffective(storeId, dep, false, defaultOf(dep));
       }
-      final suffix =
-          cascaded.isEmpty ? '' : ' (also revoked: ${cascaded.join(', ')})';
+      final suffix = cascaded.isEmpty
+          ? ''
+          : ' (also revoked: ${cascaded.join(', ')})';
       await _db.activityLogDao.log(
         action: 'settings.store_permission.override',
         description:
@@ -683,7 +727,9 @@ class _RolePermissionsDetailScreenState
     } catch (_) {
       if (mounted) {
         AppNotification.showError(
-            context, "Couldn't update this store's permission.");
+          context,
+          "Couldn't update this store's permission.",
+        );
       }
     }
   }
@@ -718,25 +764,31 @@ class _RolePermissionsDetailScreenState
       ),
     );
     if (confirmed != true) return;
-    if (!_guard()) return; // re-check after the await (permission may have changed)
+    if (!_guard()) {
+      return; // re-check after the await (permission may have changed)
+    }
 
     try {
-      final cleared = await _db.storeRolePermissionsDao
-          .clearAllForStoreRole(storeId, role.id);
+      final cleared = await _db.storeRolePermissionsDao.clearAllForStoreRole(
+        storeId,
+        role.id,
+      );
       await _db.activityLogDao.log(
         action: 'settings.store_permission.restore_defaults',
-        description: 'Restored ${role.name} business defaults at a store '
+        description:
+            'Restored ${role.name} business defaults at a store '
             '(cleared $cleared override${cleared == 1 ? '' : 's'})',
         staffId: _db.currentUserId,
       );
       if (mounted) {
         AppNotification.showSuccess(
-            context, 'Restored ${role.name} defaults for this store.');
+          context,
+          'Restored ${role.name} defaults for this store.',
+        );
       }
     } catch (_) {
       if (mounted) {
-        AppNotification.showError(
-            context, "Couldn't restore store defaults.");
+        AppNotification.showError(context, "Couldn't restore store defaults.");
       }
     }
   }
@@ -755,55 +807,64 @@ class _RolePermissionsDetailScreenState
   ) {
     return Container(
       decoration: AppDecorations.glassCard(context, radius: 16),
-      child: Column(
-        children: [
-          for (final perm in perms)
-            () {
-              final parent = parentOf(perm.key);
-              final parentOff = parent != null && !effective.contains(parent);
-              final isOverridden = overrideByKey.containsKey(perm.key);
-              final businessDefault = businessDefaults.contains(perm.key);
+      child: Material(
+        type: MaterialType.transparency,
+        child: Column(
+          children: [
+            for (final perm in perms)
+              () {
+                final parent = parentOf(perm.key);
+                final parentOff = parent != null && !effective.contains(parent);
+                final isOverridden = overrideByKey.containsKey(perm.key);
+                final businessDefault = businessDefaults.contains(perm.key);
 
-              String? subtitle;
-              if (parentOff) {
-                subtitle = 'Requires "${byKey[parent]?.description ?? parent}"';
-              } else if (isOverridden) {
-                subtitle =
-                    'Overridden — business default is ${businessDefault ? 'on' : 'off'}';
-              }
+                String? subtitle;
+                if (parentOff) {
+                  subtitle =
+                      'Requires "${byKey[parent]?.description ?? parent}"';
+                } else if (isOverridden) {
+                  subtitle =
+                      'Overridden — business default is ${businessDefault ? 'on' : 'off'}';
+                }
 
-              return SwitchListTile(
-                title: Text(
-                  perm.description,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: t.colorScheme.onSurface,
+                return SwitchListTile(
+                  title: Text(
+                    perm.description,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: t.colorScheme.onSurface,
+                    ),
                   ),
-                ),
-                subtitle: subtitle == null
-                    ? null
-                    : Text(
-                        subtitle,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: t.colorScheme.onSurface.withValues(
-                            alpha: parentOff ? 0.5 : 0.7,
+                  subtitle: subtitle == null
+                      ? null
+                      : Text(
+                          subtitle,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: t.colorScheme.onSurface.withValues(
+                              alpha: parentOff ? 0.5 : 0.7,
+                            ),
+                            fontWeight: (!parentOff && isOverridden)
+                                ? FontWeight.w600
+                                : FontWeight.normal,
                           ),
-                          fontWeight: (!parentOff && isOverridden)
-                              ? FontWeight.w600
-                              : FontWeight.normal,
                         ),
-                      ),
-                value: !parentOff && effective.contains(perm.key),
-                onChanged: parentOff
-                    ? null
-                    : (v) => _toggleStore(
-                        storeId, perm.key, v, businessDefaults, effective),
-                activeThumbColor: t.colorScheme.primary,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-              );
-            }(),
-        ],
+                  value: !parentOff && effective.contains(perm.key),
+                  onChanged: parentOff
+                      ? null
+                      : (v) => _toggleStore(
+                          storeId,
+                          perm.key,
+                          v,
+                          businessDefaults,
+                          effective,
+                        ),
+                  activeThumbColor: t.colorScheme.primary,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                );
+              }(),
+          ],
+        ),
       ),
     );
   }
@@ -819,39 +880,46 @@ class _RolePermissionsDetailScreenState
   ) {
     return Container(
       decoration: AppDecorations.glassCard(context, radius: 16),
-      child: Column(
-        children: [
-          for (final perm in perms)
-            () {
-              final parent = parentOf(perm.key);
-              final parentOff =
-                  !_isCeo && parent != null && !granted.contains(parent);
-              return SwitchListTile(
-                title: Text(
-                  perm.description,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: t.colorScheme.onSurface,
+      child: Material(
+        type: MaterialType.transparency,
+        child: Column(
+          children: [
+            for (final perm in perms)
+              () {
+                final parent = parentOf(perm.key);
+                final parentOff =
+                    !_isCeo && parent != null && !granted.contains(parent);
+                return SwitchListTile(
+                  title: Text(
+                    perm.description,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: t.colorScheme.onSurface,
+                    ),
                   ),
-                ),
-                subtitle: parentOff
-                    ? Text(
-                        'Requires "${byKey[parent]?.description ?? parent}"',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: t.colorScheme.onSurface.withValues(alpha: 0.5),
-                        ),
-                      )
-                    : null,
-                value: _isCeo ? true : !parentOff && granted.contains(perm.key),
-                onChanged: (_isCeo || parentOff)
-                    ? null
-                    : (v) => _togglePermission(perm.key, v),
-                activeThumbColor: t.colorScheme.primary,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-              );
-            }(),
-        ],
+                  subtitle: parentOff
+                      ? Text(
+                          'Requires "${byKey[parent]?.description ?? parent}"',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: t.colorScheme.onSurface.withValues(
+                              alpha: 0.5,
+                            ),
+                          ),
+                        )
+                      : null,
+                  value: _isCeo
+                      ? true
+                      : !parentOff && granted.contains(perm.key),
+                  onChanged: (_isCeo || parentOff)
+                      ? null
+                      : (v) => _togglePermission(perm.key, v),
+                  activeThumbColor: t.colorScheme.primary,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                );
+              }(),
+          ],
+        ),
       ),
     );
   }
@@ -861,27 +929,30 @@ class _RolePermissionsDetailScreenState
   Widget _viewAllStoresCard(ThemeData t) {
     return Container(
       decoration: AppDecorations.glassCard(context, radius: 16),
-      child: SwitchListTile(
-        title: Text(
-          'Allow viewing other stores',
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w600,
-            color: t.colorScheme.onSurface,
+      child: Material(
+        type: MaterialType.transparency,
+        child: SwitchListTile(
+          title: Text(
+            'Allow viewing other stores',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: t.colorScheme.onSurface,
+            ),
           ),
-        ),
-        subtitle: Text(
-          'Lets this role switch stores on Home to check stock and request restock. Off by default.',
-          style: TextStyle(
-            fontSize: 13,
-            height: 1.3,
-            color: t.colorScheme.onSurface.withValues(alpha: 0.6),
+          subtitle: Text(
+            'Lets this role switch stores on Home to check stock and request restock. Off by default.',
+            style: TextStyle(
+              fontSize: 13,
+              height: 1.3,
+              color: t.colorScheme.onSurface.withValues(alpha: 0.6),
+            ),
           ),
+          value: _viewAllStores,
+          onChanged: (v) => _commitViewAllStores(v),
+          activeThumbColor: t.colorScheme.primary,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16),
         ),
-        value: _viewAllStores,
-        onChanged: (v) => _commitViewAllStores(v),
-        activeThumbColor: t.colorScheme.primary,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
       ),
     );
   }

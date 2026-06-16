@@ -71,5 +71,5 @@ class SubscriptionThanksService extends ChangeNotifier {
 
 final subscriptionThanksProvider =
     ChangeNotifierProvider<SubscriptionThanksService>(
-  (ref) => SubscriptionThanksService(),
-);
+      (ref) => SubscriptionThanksService(),
+    );

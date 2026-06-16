@@ -45,4 +45,3 @@ class NotificationService extends ValueNotifier<List<NotificationModel>> {
 
   int get unreadCount => value.where((n) => !n.isRead).length;
 }
-

@@ -34,7 +34,7 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
-  font_awesome_flutter: ^10.12.0
+  font_awesome_flutter: ^11.0.0
   share_plus: ^10.1.3
   # Tilde range — pinned to the current minor (6.3.x) so platform schemes
   # in ios/Runner/Info.plist + AndroidManifest.xml stay in sync with the
@@ -43,7 +43,7 @@ dependencies:
   screenshot: ^3.0.0
   esc_pos_utils_plus: ^2.0.3
   permission_handler: ^11.3.1
-  print_bluetooth_thermal: ^1.1.9
+  print_bluetooth_thermal: ^1.2.2
   path_provider: ^2.1.5
   intl: ^0.20.2
   barcode_widget: ^2.0.4
@@ -61,7 +61,7 @@ dependencies:
   supabase_flutter: ^2.10.0
   google_sign_in: ^6.2.1
   local_auth: ^2.2.0
-  shared_preferences: ^2.2.3
+  shared_preferences: ^2.5.5
   flutter_secure_storage: ^9.2.4
   crypto: ^3.0.3
   rxdart: 0.28.0

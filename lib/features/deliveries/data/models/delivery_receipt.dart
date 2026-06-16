@@ -99,4 +99,3 @@ class DeliveryReceiptService extends ValueNotifier<List<DeliveryReceipt>> {
     }
   }
 }
-

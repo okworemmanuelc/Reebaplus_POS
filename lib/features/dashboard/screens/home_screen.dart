@@ -76,14 +76,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Future<void> _initializeData() async {
     final db = ref.read(databaseProvider);
 
-    _ordersSub = ref.read(orderServiceProvider).watchAllOrdersWithItems().listen((orders) async {
-      if (mounted) {
-        setState(() {
-          _allOrdersWithItems = orders;
-          _ordersLoading = false;
+    _ordersSub = ref
+        .read(orderServiceProvider)
+        .watchAllOrdersWithItems()
+        .listen((orders) async {
+          if (mounted) {
+            setState(() {
+              _allOrdersWithItems = orders;
+              _ordersLoading = false;
+            });
+          }
         });
-      }
-    });
 
     _subscribeExpenses(_selectedStoreId);
 
@@ -122,7 +125,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           _totalStockValue = items.fold<double>(
             0,
             (sum, item) =>
-                sum + (item.totalStock * item.product.retailerPriceKobo / 100.0),
+                sum +
+                (item.totalStock * item.product.retailerPriceKobo / 100.0),
           );
           _inventoryLoading = false;
         });
@@ -159,7 +163,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
+    ref.watch(
+      currencySymbolProvider,
+    ); // rebuild money displays when currency changes
+    final bizName = ref.watch(currentBusinessNameProvider);
     // ── Role resolution & §11.4 card visibility ─────────────────────────────
     final role = ref.watch(currentUserRoleProvider);
     final slug = role?.slug;
@@ -174,7 +181,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     // #6): these cards open the full Sales / Expenses breakdowns, so a
     // Manager/Cashier whose report key is revoked must not see the card. CEO is
     // always-on.
-    final showTotalSales = isCeo ||
+    final showTotalSales =
+        isCeo ||
         ((isManager || isCashier) && hasPermission(ref, 'reports.see_sales'));
     final showNetProfit = isCeo || hasPermission(ref, 'reports.see_profit');
     final showPending = slug != null; // all four roles
@@ -183,15 +191,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final showStockValue =
         isCeo || (isManager && hasPermission(ref, 'stock.view'));
     final showTotalSkus = isCashier || isStockKeeper;
-    final showWallet = isCeo ||
+    final showWallet =
+        isCeo ||
         ((isManager || isCashier) && hasPermission(ref, 'customers.add'));
     final showStaffSales = isCeo || isManager;
 
     final subtitle = isCashier
         ? "Today's Sales"
         : isStockKeeper
-            ? 'Stock Overview'
-            : 'Business Overview';
+        ? 'Stock Overview'
+        : 'Business Overview';
 
     // ── Store filter (§12.1) ─────────────────────────────────────────────────
     // The store filter follows the nav-drawer store picker (null = "All
@@ -214,8 +223,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           (o) =>
               _isDateInPeriod(o.order.createdAt, _selectedPeriod) &&
               o.order.status == 'completed' &&
-              (_selectedStoreId == null ||
-                  o.order.storeId == _selectedStoreId),
+              (_selectedStoreId == null || o.order.storeId == _selectedStoreId),
         )
         .toList();
 
@@ -223,25 +231,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     // here we only need the period filter. Total Expenses counts APPROVED
     // expenses only (§20.1) — pending/rejected aren't actual spend yet.
     final filteredExpenses = _allExpenses
-        .where((e) =>
-            e.expense.status == 'approved' &&
-            _isDateInPeriod(e.expense.expenseDate, _selectedPeriod))
+        .where(
+          (e) =>
+              e.expense.status == 'approved' &&
+              _isDateInPeriod(e.expense.expenseDate, _selectedPeriod),
+        )
         .toList();
-
 
     // Filter customers by store for credit/debt metrics
     final filteredCustomers = _selectedStoreId == null
         ? _customers
-        : _customers
-              .where((c) => c.storeId == _selectedStoreId)
-              .toList();
+        : _customers.where((c) => c.storeId == _selectedStoreId).toList();
 
     // Metrics. Cashier sees own sales only (§11.4); other roles see the
     // store/period-scoped total.
     final salesOrders = isCashier
         ? filteredOrdersWithItems
-            .where((o) => o.order.staffId == userId)
-            .toList()
+              .where((o) => o.order.staffId == userId)
+              .toList()
         : filteredOrdersWithItems;
     final totalSales = salesOrders.fold<double>(
       0,
@@ -251,7 +258,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       0,
       (sum, e) => sum + e.expense.amountKobo / 100.0,
     );
-
 
     // Profit — only for items that had a buying price at the time of sale.
     // Uses the snapshotted buyingPriceKobo on the order item, not the current product price.
@@ -277,8 +283,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         .where(
           (o) =>
               o.order.status == 'pending' &&
-              (_selectedStoreId == null ||
-                  o.order.storeId == _selectedStoreId),
+              (_selectedStoreId == null || o.order.storeId == _selectedStoreId),
         )
         .length;
 
@@ -306,60 +311,56 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ..sort((a, b) => b.value.compareTo(a.value));
 
     return SharedScaffold(
-        activeRoute: 'dashboard',
-        backgroundColor: _bg,
-        appBar: AppBar(
-          backgroundColor: _surface,
-          elevation: 0,
-          leading: const MenuButton(),
-          title: AppBarHeader(
-            icon: FontAwesomeIcons.chartLine,
-            title: 'Reebaplus POS',
-            subtitle: subtitle,
-          ),
-          actions: [
-            const NotificationBell(),
-            SizedBox(width: context.getRSize(8)),
+      activeRoute: 'dashboard',
+      backgroundColor: _bg,
+      appBar: AppBar(
+        backgroundColor: _surface,
+        elevation: 0,
+        leading: const MenuButton(),
+        title: AppBarHeader(
+          icon: FontAwesomeIcons.chartLine.data,
+          title: bizName.isNotEmpty ? bizName : 'Reebaplus POS',
+          subtitle: subtitle,
+        ),
+        actions: [
+          const NotificationBell(),
+          SizedBox(width: context.getRSize(8)),
+        ],
+      ),
+      body: AppRefreshWrapper(
+        child: ListView(
+          padding: EdgeInsets.all(
+            context.spacingM,
+          ).copyWith(bottom: context.spacingM + context.bottomInset),
+          children: [
+            _buildPeriodHeader(showReports: isCeo || isManager),
+            SizedBox(height: context.spacingM),
+            _buildMetricsList(
+              sales: totalSales,
+              pending: pendingOrdersCount,
+              profit: netProfit,
+              credit: totalCredit,
+              debt: totalDebt,
+              expenses: totalExpenses,
+              filteredOrders: salesOrders,
+              staffSalesList: staffSalesList,
+              showTotalSales: showTotalSales,
+              showNetProfit: showNetProfit,
+              showPending: showPending,
+              showExpenses: showExpenses,
+              showStockValue: showStockValue,
+              showTotalSkus: showTotalSkus,
+              showWallet: showWallet,
+              showStaffSales: showStaffSales,
+            ),
+            SizedBox(height: context.spacingL),
           ],
         ),
-        body: AppRefreshWrapper(
-          child: ListView(
-            padding: EdgeInsets.all(context.spacingM).copyWith(
-              bottom: context.spacingM + context.bottomInset,
-            ),
-            children: [
-              _buildPeriodHeader(
-                showReports: isCeo || isManager,
-              ),
-              SizedBox(height: context.spacingM),
-              _buildMetricsList(
-                sales: totalSales,
-                pending: pendingOrdersCount,
-                profit: netProfit,
-                credit: totalCredit,
-                debt: totalDebt,
-                expenses: totalExpenses,
-                filteredOrders: salesOrders,
-                staffSalesList: staffSalesList,
-                showTotalSales: showTotalSales,
-                showNetProfit: showNetProfit,
-                showPending: showPending,
-                showExpenses: showExpenses,
-                showStockValue: showStockValue,
-                showTotalSkus: showTotalSkus,
-                showWallet: showWallet,
-                showStaffSales: showStaffSales,
-              ),
-              SizedBox(height: context.spacingL),
-            ],
-          ),
-        ),
+      ),
     );
   }
 
-  Widget _buildPeriodHeader({
-    required bool showReports,
-  }) {
+  Widget _buildPeriodHeader({required bool showReports}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -392,11 +393,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         SizedBox(height: context.getRSize(12)),
         // §12.1: the store is chosen in the nav-drawer picker; Home just shows
         // the period filter here now.
-        Row(
-          children: [
-            Flexible(child: _buildPeriodDropdown()),
-          ],
-        ),
+        Row(children: [Flexible(child: _buildPeriodDropdown())]),
       ],
     );
   }
@@ -419,7 +416,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                FontAwesomeIcons.fileContract,
+                FontAwesomeIcons.fileContract.data,
                 size: 14,
                 color: context.primaryColor,
               ),
@@ -458,8 +455,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget _buildPeriodDropdown() {
     // §30.11 / §19.2: roles below Manager are capped to Today/This Week/This Month.
     final options = datePeriodLabelsForRole(managerUp: isManagerOrAbove(ref));
-    final selected =
-        options.contains(_selectedPeriod) ? _selectedPeriod : options.last;
+    final selected = options.contains(_selectedPeriod)
+        ? _selectedPeriod
+        : options.last;
     return SizedBox(
       width: context.getRSize(140),
       child: AppDropdown<String>(
@@ -476,11 +474,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void _openSalesDetail(List<OrderWithItems> orders, String mode) {
     Navigator.of(context).push(
       slideDownRoute(
-        SalesDetailScreen(
-          orders: orders,
-          mode: mode,
-          period: _selectedPeriod,
-        ),
+        SalesDetailScreen(orders: orders, mode: mode, period: _selectedPeriod),
       ),
     );
   }
@@ -512,104 +506,114 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
 
     if (showTotalSales && !_ordersLoading) {
-      add(_robustMetricCard(
-        label: 'Total Sales',
-        value: formatCurrency(sales),
-        subtitle: 'Generated from $_selectedPeriod transactions',
-        icon: FontAwesomeIcons.nairaSign,
-        color: Theme.of(context).colorScheme.primary,
-        trend: sales > 0 ? 'Active' : 'No sales',
-        isNeutral: true,
-        onTap: () => _openSalesDetail(filteredOrders, 'sales'),
-      ));
+      add(
+        _robustMetricCard(
+          label: 'Total Sales',
+          value: formatCurrency(sales),
+          subtitle: 'Generated from $_selectedPeriod transactions',
+          icon: FontAwesomeIcons.nairaSign.data,
+          color: Theme.of(context).colorScheme.primary,
+          trend: sales > 0 ? 'Active' : 'No sales',
+          isNeutral: true,
+          onTap: () => _openSalesDetail(filteredOrders, 'sales'),
+        ),
+      );
     }
     if (showNetProfit && !(_ordersLoading || _expensesLoading)) {
-      add(_robustMetricCard(
-        label: 'Net Profit',
-        value: profit != null ? formatCurrency(profit) : '—',
-        subtitle: profit != null
-            ? 'Revenue minus cost of goods & expenses'
-            : 'Add buying prices to products to see profit',
-        icon: FontAwesomeIcons.chartLine,
-        color: profit != null
-            ? (profit >= 0 ? success : danger)
-            : Theme.of(context).colorScheme.primary,
-        trend: profit != null
-            ? (profit >= 0 ? 'Positive' : 'Negative')
-            : 'N/A',
-        isPositive: profit == null || profit >= 0,
-        onTap: profit != null
-            ? () => _openSalesDetail(filteredOrders, 'profit')
-            : null,
-      ));
+      add(
+        _robustMetricCard(
+          label: 'Net Profit',
+          value: profit != null ? formatCurrency(profit) : '—',
+          subtitle: profit != null
+              ? 'Revenue minus cost of goods & expenses'
+              : 'Add buying prices to products to see profit',
+          icon: FontAwesomeIcons.chartLine.data,
+          color: profit != null
+              ? (profit >= 0 ? success : danger)
+              : Theme.of(context).colorScheme.primary,
+          trend: profit != null
+              ? (profit >= 0 ? 'Positive' : 'Negative')
+              : 'N/A',
+          isPositive: profit == null || profit >= 0,
+          onTap: profit != null
+              ? () => _openSalesDetail(filteredOrders, 'profit')
+              : null,
+        ),
+      );
     }
     if (showPending && !_ordersLoading) {
-      add(_robustMetricCard(
-        label: 'Pending Orders',
-        value: pending.toString(),
-        subtitle: 'Orders awaiting fulfillment',
-        icon: FontAwesomeIcons.clock,
-        color: AppColors.warning,
-        trend: pending > 0 ? 'Attention' : 'Clear',
-        isNeutral: true,
-        onTap: () {
-          Navigator.of(context).push(
-            slideLeftRoute(const OrdersScreen(initialIndex: 0)),
-          );
-        },
-      ));
+      add(
+        _robustMetricCard(
+          label: 'Pending Orders',
+          value: pending.toString(),
+          subtitle: 'Orders awaiting fulfillment',
+          icon: FontAwesomeIcons.clock.data,
+          color: AppColors.warning,
+          trend: pending > 0 ? 'Attention' : 'Clear',
+          isNeutral: true,
+          onTap: () {
+            Navigator.of(
+              context,
+            ).push(slideLeftRoute(const OrdersScreen(initialIndex: 0)));
+          },
+        ),
+      );
     }
     if (showExpenses && !_expensesLoading) {
-      add(_robustMetricCard(
-        label: 'Total Expenses',
-        value: formatCurrency(expenses),
-        subtitle: 'Including operations & staff',
-        icon: FontAwesomeIcons.fileInvoiceDollar,
-        color: Theme.of(context).colorScheme.error,
-        trend: expenses > 0 ? 'Recorded' : 'None',
-        isPositive: false,
-        inverted: true,
-        onTap: () {
-          // Home and Expenses share the canonical chip set (§30.11), so the
-          // selected period passes straight through.
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => ExpensesScreen(initialPeriod: _selectedPeriod),
-            ),
-          );
-        },
-      ));
+      add(
+        _robustMetricCard(
+          label: 'Total Expenses',
+          value: formatCurrency(expenses),
+          subtitle: 'Including operations & staff',
+          icon: FontAwesomeIcons.fileInvoiceDollar.data,
+          color: Theme.of(context).colorScheme.error,
+          trend: expenses > 0 ? 'Recorded' : 'None',
+          isPositive: false,
+          inverted: true,
+          onTap: () {
+            // Home and Expenses share the canonical chip set (§30.11), so the
+            // selected period passes straight through.
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => ExpensesScreen(initialPeriod: _selectedPeriod),
+              ),
+            );
+          },
+        ),
+      );
     }
     if (showStockValue && !_inventoryLoading) {
-      add(_robustMetricCard(
-        label: 'Stock Value',
-        value: formatCurrency(_totalStockValue),
-        subtitle: 'Estimated inventory worth',
-        icon: FontAwesomeIcons.boxesStacked,
-        color: Theme.of(context).colorScheme.primary,
-        trend: 'Live',
-        isNeutral: true,
-        onTap: () => ref.read(navigationProvider).setIndex(2),
-      ));
+      add(
+        _robustMetricCard(
+          label: 'Stock Value',
+          value: formatCurrency(_totalStockValue),
+          subtitle: 'Estimated inventory worth',
+          icon: FontAwesomeIcons.boxesStacked.data,
+          color: Theme.of(context).colorScheme.primary,
+          trend: 'Live',
+          isNeutral: true,
+          onTap: () => ref.read(navigationProvider).setIndex(2),
+        ),
+      );
     }
     if (showTotalSkus && !_inventoryLoading) {
       add(_buildTotalSkusCard());
     }
     if (showWallet && !_customersLoading) {
-      add(_robustMetricCard(
-        label: 'Customer Wallet',
-        value: 'Cr: ${formatCurrency(credit)}',
-        subtitle: 'Debt: ${formatCurrency(debt)}',
-        icon: FontAwesomeIcons.wallet,
-        color: Theme.of(context).colorScheme.primary,
-        trend: debt > 0 ? 'Pending Recov.' : 'Healthy',
-        isPositive: debt == 0,
-        onTap: () {
-          Navigator.of(context).push(
-            slideLeftRoute(const CustomersScreen()),
-          );
-        },
-      ));
+      add(
+        _robustMetricCard(
+          label: 'Customer Wallet',
+          value: 'Cr: ${formatCurrency(credit)}',
+          subtitle: 'Debt: ${formatCurrency(debt)}',
+          icon: FontAwesomeIcons.wallet.data,
+          color: Theme.of(context).colorScheme.primary,
+          trend: debt > 0 ? 'Pending Recov.' : 'Healthy',
+          isPositive: debt == 0,
+          onTap: () {
+            Navigator.of(context).push(slideLeftRoute(const CustomersScreen()));
+          },
+        ),
+      );
     }
 
     return Column(
@@ -625,15 +629,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   /// counts.
   Widget _buildTotalSkusCard() {
     final totalSkus = _inventoryItems.length;
-    final manufacturers = ref.watch(allManufacturersProvider).valueOrNull ??
+    final manufacturers =
+        ref.watch(allManufacturersProvider).valueOrNull ??
         const <ManufacturerData>[];
     final names = {for (final m in manufacturers) m.id: m.name};
 
     final counts = <String, int>{};
     for (final item in _inventoryItems) {
       final mid = item.product.manufacturerId;
-      final label =
-          mid == null ? 'Unspecified' : (names[mid] ?? 'Unspecified');
+      final label = mid == null ? 'Unspecified' : (names[mid] ?? 'Unspecified');
       counts[label] = (counts[label] ?? 0) + 1;
     }
     final grouped = counts.entries.toList()
@@ -680,8 +684,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         ),
                         borderRadius: BorderRadius.circular(16),
                       ),
-                      child: Icon(FontAwesomeIcons.boxesStacked,
-                          color: color, size: context.getRSize(24)),
+                      child: Icon(
+                        FontAwesomeIcons.boxesStacked.data,
+                        color: color,
+                        size: context.getRSize(24),
+                      ),
                     ),
                     SizedBox(width: context.spacingM),
                     Expanded(
@@ -735,7 +742,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 child: Text(
                   'No products yet',
                   style: TextStyle(
-                      color: _subtext, fontSize: context.getRFontSize(13)),
+                    color: _subtext,
+                    fontSize: context.getRFontSize(13),
+                  ),
                 ),
               )
             else
@@ -777,7 +786,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildStaffSalesSection(List<MapEntry<String, double>> staffSalesList) {
+  Widget _buildStaffSalesSection(
+    List<MapEntry<String, double>> staffSalesList,
+  ) {
     if (_ordersLoading) {
       return const SizedBox.shrink();
     }
@@ -894,8 +905,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }) {
     final trendColor = isNeutral ? _subtext : (isPositive ? success : danger);
     final trendIcon = isNeutral
-        ? FontAwesomeIcons.circleExclamation
-        : (isPositive ? FontAwesomeIcons.arrowUp : FontAwesomeIcons.arrowDown);
+        ? FontAwesomeIcons.circleExclamation.data
+        : (isPositive
+              ? FontAwesomeIcons.arrowUp.data
+              : FontAwesomeIcons.arrowDown.data);
 
     final card = Container(
       width: double.infinity,

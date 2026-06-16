@@ -28,12 +28,12 @@ class MigrationEventSummary {
   });
 
   Map<String, dynamic> toJson() => {
-        'version': version,
-        'step': step,
-        'severity': severity,
-        'error_message': errorMessage,
-        'occurred_at': occurredAt.toIso8601String(),
-      };
+    'version': version,
+    'step': step,
+    'severity': severity,
+    'error_message': errorMessage,
+    'occurred_at': occurredAt.toIso8601String(),
+  };
 
   /// Dedupe key — matches the natural identity of an event.
   String get _key => '$version|$step|${occurredAt.toIso8601String()}';
@@ -56,12 +56,12 @@ class SchemaColumnIssue {
   });
 
   Map<String, dynamic> toJson() => {
-        'table': table,
-        'expected_column': expectedColumn,
-        'expected_type': expectedType,
-        'healed': healed,
-        if (healError != null) 'heal_error': healError,
-      };
+    'table': table,
+    'expected_column': expectedColumn,
+    'expected_type': expectedType,
+    'healed': healed,
+    if (healError != null) 'heal_error': healError,
+  };
 }
 
 /// A Drift-defined table that is entirely absent from SQLite.
@@ -70,17 +70,13 @@ class SchemaTableIssue {
   bool healed;
   String? healError;
 
-  SchemaTableIssue({
-    required this.table,
-    this.healed = false,
-    this.healError,
-  });
+  SchemaTableIssue({required this.table, this.healed = false, this.healError});
 
   Map<String, dynamic> toJson() => {
-        'table': table,
-        'healed': healed,
-        if (healError != null) 'heal_error': healError,
-      };
+    'table': table,
+    'healed': healed,
+    if (healError != null) 'heal_error': healError,
+  };
 }
 
 class SchemaAuditResult {
@@ -111,18 +107,19 @@ class SchemaAuditResult {
   bool get hasAnyIssue => missingColumns.isNotEmpty || missingTables.isNotEmpty;
 
   Map<String, dynamic> toJson() => {
-        'schema_version': schemaVersion,
-        'ran_at': ranAt.toIso8601String(),
-        'fatal': fatal,
-        'platform': Platform.operatingSystem,
-        'os_version': Platform.operatingSystemVersion,
-        'device_user_id': deviceUserId,
-        'business_id': businessId,
-        'missing_tables': missingTables.map((t) => t.toJson()).toList(),
-        'missing_columns': missingColumns.map((c) => c.toJson()).toList(),
-        'recent_migration_events':
-            recentMigrationEvents.map((e) => e.toJson()).toList(),
-      };
+    'schema_version': schemaVersion,
+    'ran_at': ranAt.toIso8601String(),
+    'fatal': fatal,
+    'platform': Platform.operatingSystem,
+    'os_version': Platform.operatingSystemVersion,
+    'device_user_id': deviceUserId,
+    'business_id': businessId,
+    'missing_tables': missingTables.map((t) => t.toJson()).toList(),
+    'missing_columns': missingColumns.map((c) => c.toJson()).toList(),
+    'recent_migration_events': recentMigrationEvents
+        .map((e) => e.toJson())
+        .toList(),
+  };
 }
 
 /// Compares the actual SQLite schema against Drift's declared schema and
@@ -158,20 +155,24 @@ class SchemaAudit {
 
       for (final col in tableInfo.$columns) {
         if (!actualColumns.contains(col.name)) {
-          missingColumns.add(SchemaColumnIssue(
-            table: actualName,
-            expectedColumn: col.name,
-            expectedType: col.type.toString(),
-          ));
+          missingColumns.add(
+            SchemaColumnIssue(
+              table: actualName,
+              expectedColumn: col.name,
+              expectedType: col.type.toString(),
+            ),
+          );
         }
       }
     }
 
-    if (attemptHeal && (missingTables.isNotEmpty || missingColumns.isNotEmpty)) {
+    if (attemptHeal &&
+        (missingTables.isNotEmpty || missingColumns.isNotEmpty)) {
       await _heal(missingTables, missingColumns);
     }
 
-    final fatal = missingColumns.any((c) => !c.healed) ||
+    final fatal =
+        missingColumns.any((c) => !c.healed) ||
         missingTables.any((t) => !t.healed);
 
     final telemetry = await _collectTelemetry();
@@ -217,10 +218,12 @@ class SchemaAudit {
     // 1) In-DB rows. May fail on a fresh install where the table doesn't
     // exist yet — swallow.
     try {
-      final rows = await db.customSelect(
-        'SELECT version, step, severity, error_message, occurred_at '
-        'FROM migration_events ORDER BY id DESC LIMIT 20',
-      ).get();
+      final rows = await db
+          .customSelect(
+            'SELECT version, step, severity, error_message, occurred_at '
+            'FROM migration_events ORDER BY id DESC LIMIT 20',
+          )
+          .get();
       for (final r in rows) {
         final ev = MigrationEventSummary(
           version: r.read<int>('version'),
@@ -236,7 +239,9 @@ class SchemaAudit {
     // 2) Flat-file rows — survive transaction rollbacks for critical errors.
     try {
       final docsDir = await getApplicationDocumentsDirectory();
-      final file = File(p.join(docsDir.path, 'diagnostics', 'migration_events.jsonl'));
+      final file = File(
+        p.join(docsDir.path, 'diagnostics', 'migration_events.jsonl'),
+      );
       if (await file.exists()) {
         final lines = await file.readAsLines();
         for (final line in lines.reversed.take(50)) {
@@ -401,10 +406,13 @@ class SchemaAudit {
         'business_id': businessId,
         'missing_tables': missingTables.map((t) => t.toJson()).toList(),
         'missing_columns': missingColumns.map((c) => c.toJson()).toList(),
-        'recent_migration_events':
-            recentMigrationEvents.map((e) => e.toJson()).toList(),
+        'recent_migration_events': recentMigrationEvents
+            .map((e) => e.toJson())
+            .toList(),
       };
-      await file.writeAsString(const JsonEncoder.withIndent('  ').convert(payload));
+      await file.writeAsString(
+        const JsonEncoder.withIndent('  ').convert(payload),
+      );
 
       await _pruneOldReports(dir);
 
@@ -417,11 +425,12 @@ class SchemaAudit {
 
   Future<void> _pruneOldReports(Directory dir) async {
     try {
-      final entries = (await dir.list().toList())
-          .whereType<File>()
-          .where((f) => p.basename(f.path).startsWith('schema_audit_'))
-          .toList()
-        ..sort((a, b) => b.path.compareTo(a.path));
+      final entries =
+          (await dir.list().toList())
+              .whereType<File>()
+              .where((f) => p.basename(f.path).startsWith('schema_audit_'))
+              .toList()
+            ..sort((a, b) => b.path.compareTo(a.path));
       for (final stale in entries.skip(5)) {
         try {
           await stale.delete();

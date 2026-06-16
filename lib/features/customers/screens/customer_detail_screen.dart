@@ -86,8 +86,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
       if (mounted) setState(() => _walletBalance = bal);
     });
 
-    _depositsHeldSub =
-        db.customersDao.watchWalletDepositsHeldKobo(id).listen((held) {
+    _depositsHeldSub = db.customersDao.watchWalletDepositsHeldKobo(id).listen((
+      held,
+    ) {
       if (mounted) setState(() => _depositsHeld = held);
     });
 
@@ -126,9 +127,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
   String get _address =>
       _customerData?.address ?? widget.customer?.addressText ?? '';
   String get _groupName =>
-      _customerData?.priceTier ??
-      widget.customer?.priceTier.name ??
-      'retailer';
+      _customerData?.priceTier ?? widget.customer?.priceTier.name ?? 'retailer';
   DateTime get _joinedAt =>
       _customerData?.createdAt ?? widget.customer?.createdAt ?? DateTime.now();
   int get _limitKobo =>
@@ -267,8 +266,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                     _SheetField(
                       controller: amountCtrl,
                       label: 'Amount (₦)',
-                      keyboard:
-                          const TextInputType.numberWithOptions(decimal: true),
+                      keyboard: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       inputFormatters: [CurrencyInputFormatter()],
                       validator: (v) {
                         final n = parseCurrency(v ?? '');
@@ -286,10 +286,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                       ),
                     ),
                     SizedBox(height: ctx.getRSize(8)),
-                    ...[
-                      ('cash', 'Cash'),
-                      ('transfer', 'Bank Transfer'),
-                    ].map((opt) {
+                    ...[('cash', 'Cash'), ('transfer', 'Bank Transfer')].map((
+                      opt,
+                    ) {
                       final isSel = selectedMethod == opt.$1;
                       return GestureDetector(
                         onTap: () =>
@@ -343,55 +342,56 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                       label: 'Add Funds',
                       icon: Icons.add,
                       onPressed: () async {
-                              if (!formKey.currentState!.validate()) return;
-                              final amount = parseCurrency(amountCtrl.text);
-                              final note = noteCtrl.text.trim();
-                              final method = selectedMethod;
-                              final messenger = ScaffoldMessenger.of(context);
-                              // Defense-in-depth write-boundary re-check (§10.2.1):
-                              // the Add Funds button is already render-gated on
-                              // `customers.wallet.update`, but re-check the
-                              // effective permission before moving money so a
-                              // revoked override is honored at the action too.
-                              if (!ref
-                                  .read(currentUserPermissionsProvider)
-                                  .contains('customers.wallet.update')) {
-                                Navigator.pop(ctx);
-                                messenger.showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                        'You don\'t have permission to do that.'),
-                                  ),
-                                );
-                                return;
-                              }
-                              Navigator.pop(ctx);
-                              try {
-                                await ref
-                                    .read(customerServiceProvider)
-                                    .topUpWallet(
-                                      customerId: id,
-                                      amountKobo: (amount * 100).round(),
-                                      method: method,
-                                      staffId: staffId,
-                                      note: note.isEmpty ? null : note,
-                                    );
-                                messenger.showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      '₦${amount.toStringAsFixed(0)} added to wallet',
-                                    ),
-                                    backgroundColor: success,
-                                  ),
-                                );
-                              } catch (_) {
-                                messenger.showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Could not add funds'),
-                                  ),
-                                );
-                              }
-                            },
+                        if (!formKey.currentState!.validate()) return;
+                        final amount = parseCurrency(amountCtrl.text);
+                        final note = noteCtrl.text.trim();
+                        final method = selectedMethod;
+                        final messenger = ScaffoldMessenger.of(context);
+                        // Defense-in-depth write-boundary re-check (§10.2.1):
+                        // the Add Funds button is already render-gated on
+                        // `customers.wallet.update`, but re-check the
+                        // effective permission before moving money so a
+                        // revoked override is honored at the action too.
+                        if (!ref
+                            .read(currentUserPermissionsProvider)
+                            .contains('customers.wallet.update')) {
+                          Navigator.pop(ctx);
+                          messenger.showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'You don\'t have permission to do that.',
+                              ),
+                            ),
+                          );
+                          return;
+                        }
+                        Navigator.pop(ctx);
+                        try {
+                          await ref
+                              .read(customerServiceProvider)
+                              .topUpWallet(
+                                customerId: id,
+                                amountKobo: (amount * 100).round(),
+                                method: method,
+                                staffId: staffId,
+                                note: note.isEmpty ? null : note,
+                              );
+                          messenger.showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                '₦${amount.toStringAsFixed(0)} added to wallet',
+                              ),
+                              backgroundColor: success,
+                            ),
+                          );
+                        } catch (_) {
+                          messenger.showSnackBar(
+                            const SnackBar(
+                              content: Text('Could not add funds'),
+                            ),
+                          );
+                        }
+                      },
                     ),
                     SizedBox(
                       height: ctx.deviceBottomPadding + ctx.getRSize(16),
@@ -446,8 +446,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     }
 
     final amountCtrl = TextEditingController(
-      text: (availableKobo / 100)
-          .toStringAsFixed(availableKobo % 100 == 0 ? 0 : 2),
+      text: (availableKobo / 100).toStringAsFixed(
+        availableKobo % 100 == 0 ? 0 : 2,
+      ),
     );
     final noteCtrl = TextEditingController();
     final formKey = GlobalKey<FormState>();
@@ -504,15 +505,27 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                         children: [
                           if (creditAvail > 0)
                             _refundAvailRow(
-                                ctx, 'Wallet credit', creditAvail, onSurface),
+                              ctx,
+                              'Wallet credit',
+                              creditAvail,
+                              onSurface,
+                            ),
                           if (depositAvail > 0)
-                            _refundAvailRow(ctx, 'Crate deposit held',
-                                depositAvail, onSurface),
+                            _refundAvailRow(
+                              ctx,
+                              'Crate deposit held',
+                              depositAvail,
+                              onSurface,
+                            ),
                           if (creditAvail > 0 && depositAvail > 0) ...[
                             Divider(height: ctx.getRSize(16)),
                             _refundAvailRow(
-                                ctx, 'Available', availableKobo, onSurface,
-                                bold: true),
+                              ctx,
+                              'Available',
+                              availableKobo,
+                              onSurface,
+                              bold: true,
+                            ),
                           ],
                         ],
                       ),
@@ -521,8 +534,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                     _SheetField(
                       controller: amountCtrl,
                       label: 'Amount to refund (₦)',
-                      keyboard:
-                          const TextInputType.numberWithOptions(decimal: true),
+                      keyboard: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       inputFormatters: [CurrencyInputFormatter()],
                       validator: (v) {
                         final n = parseCurrency(v ?? '');
@@ -603,7 +617,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                         child: Row(
                           children: [
                             Icon(
-                              FontAwesomeIcons.circleInfo,
+                              FontAwesomeIcons.circleInfo.data,
                               size: ctx.getRSize(14),
                               color: accent,
                             ),
@@ -632,7 +646,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                     SizedBox(height: ctx.getRSize(24)),
                     AmberButton(
                       label: inDebt ? 'Refund to Wallet' : 'Refund Cash',
-                      icon: FontAwesomeIcons.moneyBillTransfer,
+                      icon: FontAwesomeIcons.moneyBillTransfer.data,
                       onPressed: () async {
                         if (!formKey.currentState!.validate()) return;
                         final amount = parseCurrency(amountCtrl.text);
@@ -651,8 +665,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                           Navigator.pop(ctx);
                           messenger.showSnackBar(
                             const SnackBar(
-                              content:
-                                  Text('You don\'t have permission to do that.'),
+                              content: Text(
+                                'You don\'t have permission to do that.',
+                              ),
                             ),
                           );
                           return;
@@ -817,9 +832,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                   }
                 },
               ),
-              SizedBox(
-                height: ctx.deviceBottomPadding + ctx.getRSize(16),
-              ),
+              SizedBox(height: ctx.deviceBottomPadding + ctx.getRSize(16)),
             ],
           ),
         ),
@@ -1002,19 +1015,17 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                   // from the raw view so the bar clears the system nav (MainLayout's
                   // resize handles the keyboard).
                   Padding(
-                    padding: EdgeInsets.all(ctx.getRSize(16)).add(
-                      EdgeInsets.only(bottom: ctx.deviceBottomPadding),
-                    ),
+                    padding: EdgeInsets.all(
+                      ctx.getRSize(16),
+                    ).add(EdgeInsets.only(bottom: ctx.deviceBottomPadding)),
                     child: Row(
                       children: [
                         Expanded(
                           child: AppButton(
                             text: 'Print',
-                            icon: FontAwesomeIcons.print,
+                            icon: FontAwesomeIcons.print.data,
                             onPressed: () {
-                              setModalState(
-                                () => reprintDate = DateTime.now(),
-                              );
+                              setModalState(() => reprintDate = DateTime.now());
                               _printReceiptFromDetail(
                                 ctx,
                                 order,
@@ -1028,20 +1039,15 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                         Expanded(
                           child: AppButton(
                             text: 'Share',
-                            icon: FontAwesomeIcons.shareNodes,
+                            icon: FontAwesomeIcons.shareNodes.data,
                             variant: AppButtonVariant.secondary,
                             onPressed: () async {
-                              setModalState(
-                                () => reshareDate = DateTime.now(),
-                              );
+                              setModalState(() => reshareDate = DateTime.now());
                               await Future.delayed(
                                 const Duration(milliseconds: 100),
                               );
                               if (ctx.mounted) {
-                                _shareReceiptFromDetail(
-                                  ctx,
-                                  order.orderNumber,
-                                );
+                                _shareReceiptFromDetail(ctx, order.orderNumber);
                               }
                             },
                           ),
@@ -1192,7 +1198,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
+    ref.watch(
+      currencySymbolProvider,
+    ); // rebuild money displays when currency changes
     final theme = Theme.of(context);
     final showCrates = _showCratesTab();
 
@@ -1217,7 +1225,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                 padding: EdgeInsets.all(context.getRSize(8)),
                 decoration: AppDecorations.primaryGradient(context, radius: 12),
                 child: Icon(
-                  FontAwesomeIcons.user,
+                  FontAwesomeIcons.user.data,
                   color: Colors.white,
                   size: context.getRSize(16),
                 ),
@@ -1263,7 +1271,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                 hasPermission(ref, 'customers.delete'))
               IconButton(
                 icon: Icon(
-                  FontAwesomeIcons.trashCan,
+                  FontAwesomeIcons.trashCan.data,
                   size: context.getRSize(18),
                   color: danger,
                 ),
@@ -1378,7 +1386,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                               child: Padding(
                                 padding: EdgeInsets.all(context.getRSize(4)),
                                 child: Icon(
-                                  FontAwesomeIcons.penToSquare,
+                                  FontAwesomeIcons.penToSquare.data,
                                   size: context.getRSize(15),
                                   color: theme.colorScheme.primary,
                                 ),
@@ -1400,7 +1408,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                 if (_phone.isNotEmpty) ...[
                   SizedBox(height: context.getRSize(6)),
                   _InfoRow(
-                    icon: FontAwesomeIcons.phone,
+                    icon: FontAwesomeIcons.phone.data,
                     text: _phone,
                     theme: theme,
                   ),
@@ -1408,14 +1416,14 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                 if (_address.isNotEmpty && _address != 'N/A') ...[
                   SizedBox(height: context.getRSize(4)),
                   _InfoRow(
-                    icon: FontAwesomeIcons.locationDot,
+                    icon: FontAwesomeIcons.locationDot.data,
                     text: _address,
                     theme: theme,
                   ),
                 ],
                 SizedBox(height: context.getRSize(4)),
                 _InfoRow(
-                  icon: FontAwesomeIcons.calendarCheck,
+                  icon: FontAwesomeIcons.calendarCheck.data,
                   text: 'Since ${DateFormat('MMM yyyy').format(_joinedAt)}',
                   theme: theme,
                 ),
@@ -1444,7 +1452,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
             Row(
               children: [
                 Icon(
-                  FontAwesomeIcons.wallet,
+                  FontAwesomeIcons.wallet.data,
                   size: context.getRSize(14),
                   color: theme.colorScheme.primary,
                 ),
@@ -1473,7 +1481,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
             Row(
               children: [
                 Icon(
-                  FontAwesomeIcons.creditCard,
+                  FontAwesomeIcons.creditCard.data,
                   size: context.getRSize(12),
                   color: theme.colorScheme.onSurface.withAlpha(102),
                 ),
@@ -1497,7 +1505,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
               Row(
                 children: [
                   Icon(
-                    FontAwesomeIcons.boxOpen,
+                    FontAwesomeIcons.boxOpen.data,
                     size: context.getRSize(12),
                     color: theme.colorScheme.primary.withAlpha(178),
                   ),
@@ -1538,14 +1546,12 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                     ),
                     dropdownColor: theme.colorScheme.surface,
                     icon: Icon(
-                      FontAwesomeIcons.chevronDown,
+                      FontAwesomeIcons.chevronDown.data,
                       size: context.getRSize(11),
                       color: theme.colorScheme.onSurface.withAlpha(128),
                     ),
                     items: _periodOptions
-                        .map(
-                          (p) => DropdownMenuItem(value: p, child: Text(p)),
-                        )
+                        .map((p) => DropdownMenuItem(value: p, child: Text(p)))
                         .toList(),
                     onChanged: (v) =>
                         setState(() => _selectedPeriod = v ?? 'To Date'),
@@ -1559,12 +1565,18 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                 // §18.4 — Add Funds: CEO/Manager/Cashier (customers.wallet.update).
                 // Set debt limit: CEO/Manager only (customers.set_debt_limit).
                 // Refund Cash: CEO/Manager only (customers.wallet.withdraw).
-                final canAddFunds =
-                    hasPermission(ref, 'customers.wallet.update');
-                final canSetLimit =
-                    hasPermission(ref, 'customers.set_debt_limit');
-                final canRefund =
-                    hasPermission(ref, 'customers.wallet.withdraw');
+                final canAddFunds = hasPermission(
+                  ref,
+                  'customers.wallet.update',
+                );
+                final canSetLimit = hasPermission(
+                  ref,
+                  'customers.set_debt_limit',
+                );
+                final canRefund = hasPermission(
+                  ref,
+                  'customers.wallet.withdraw',
+                );
                 return Column(
                   children: [
                     Row(
@@ -1573,7 +1585,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                           Expanded(
                             child: AmberButton(
                               label: 'Add Funds',
-                              icon: FontAwesomeIcons.plus,
+                              icon: FontAwesomeIcons.plus.data,
                               height: 42,
                               onPressed: _showAddFundsSheet,
                             ),
@@ -1585,7 +1597,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                             child: OutlinedButton.icon(
                               onPressed: _showSetLimitSheet,
                               icon: Icon(
-                                FontAwesomeIcons.penToSquare,
+                                FontAwesomeIcons.penToSquare.data,
                                 size: 14,
                                 color: theme.colorScheme.onSurface,
                               ),
@@ -1615,7 +1627,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                         child: OutlinedButton.icon(
                           onPressed: _showRefundCashSheet,
                           icon: Icon(
-                            FontAwesomeIcons.moneyBillTransfer,
+                            FontAwesomeIcons.moneyBillTransfer.data,
                             size: 14,
                             color: theme.colorScheme.onSurface,
                           ),
@@ -1660,17 +1672,17 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
         fontWeight: FontWeight.w700,
       ),
       tabs: [
-        const Tab(
-          icon: Icon(FontAwesomeIcons.clockRotateLeft, size: 16),
+        Tab(
+          icon: Icon(FontAwesomeIcons.clockRotateLeft.data, size: 16),
           text: 'Wallet',
         ),
-        const Tab(
-          icon: Icon(FontAwesomeIcons.fileLines, size: 16),
+        Tab(
+          icon: Icon(FontAwesomeIcons.fileLines.data, size: 16),
           text: 'Orders',
         ),
         if (showCrates)
-          const Tab(
-            icon: Icon(FontAwesomeIcons.boxOpen, size: 16),
+          Tab(
+            icon: Icon(FontAwesomeIcons.boxOpen.data, size: 16),
             text: 'Crates',
           ),
       ],
@@ -1764,7 +1776,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
   Widget _buildWalletHistoryTab(ThemeData theme) {
     if (_walletHistory.isEmpty) {
       return _EmptyState(
-        icon: FontAwesomeIcons.hourglass,
+        icon: FontAwesomeIcons.hourglass.data,
         message: 'No wallet transactions yet',
         theme: theme,
       );
@@ -1785,7 +1797,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
         Expanded(
           child: filtered.isEmpty
               ? _EmptyState(
-                  icon: FontAwesomeIcons.filterCircleXmark,
+                  icon: FontAwesomeIcons.filterCircleXmark.data,
                   message: 'No transactions in this period',
                   theme: theme,
                 )
@@ -1818,8 +1830,8 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                               ),
                               child: Icon(
                                 isCredit
-                                    ? FontAwesomeIcons.arrowDown
-                                    : FontAwesomeIcons.arrowUp,
+                                    ? FontAwesomeIcons.arrowDown.data
+                                    : FontAwesomeIcons.arrowUp.data,
                                 color: color,
                                 size: ctx.getRSize(16),
                               ),
@@ -1874,7 +1886,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
   Widget _buildOrdersTab(ThemeData theme) {
     if (_orders.isEmpty) {
       return _EmptyState(
-        icon: FontAwesomeIcons.receipt,
+        icon: FontAwesomeIcons.receipt.data,
         message: 'No orders placed yet',
         theme: theme,
       );
@@ -1908,7 +1920,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
-                      FontAwesomeIcons.receipt,
+                      FontAwesomeIcons.receipt.data,
                       color: theme.colorScheme.primary,
                       size: ctx.getRSize(16),
                     ),
@@ -2027,7 +2039,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                FontAwesomeIcons.plus,
+                FontAwesomeIcons.plus.data,
                 color: theme.colorScheme.primary,
                 size: context.getRSize(16),
               ),
@@ -2057,7 +2069,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
               ),
             ),
             Icon(
-              FontAwesomeIcons.chevronRight,
+              FontAwesomeIcons.chevronRight.data,
               size: context.getRSize(13),
               color: theme.colorScheme.onSurface.withAlpha(100),
             ),
@@ -2097,7 +2109,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                FontAwesomeIcons.boxOpen,
+                FontAwesomeIcons.boxOpen.data,
                 color: color,
                 size: context.getRSize(16),
               ),
@@ -2200,10 +2212,10 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                   labelText: 'Manufacturer',
                   hintText: 'Select a manufacturer',
                   items: manufacturers
-                      .map((m) => DropdownMenuItem(
-                            value: m.id,
-                            child: Text(m.name),
-                          ))
+                      .map(
+                        (m) =>
+                            DropdownMenuItem(value: m.id, child: Text(m.name)),
+                      )
                       .toList(),
                   onChanged: (v) => setSheetState(() => selectedId = v),
                   validator: (v) =>
@@ -2229,8 +2241,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                     if (!formKey.currentState!.validate()) return;
                     final mfrId = selectedId!;
                     final qty = int.parse(qtyCtrl.text.trim());
-                    final mfrName =
-                        manufacturers.firstWhere((m) => m.id == mfrId).name;
+                    final mfrName = manufacturers
+                        .firstWhere((m) => m.id == mfrId)
+                        .name;
                     final messenger = ScaffoldMessenger.of(context);
                     // Write-boundary re-check (§10.2.1): honor a revoked override.
                     if (!ref
@@ -2239,8 +2252,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                       Navigator.pop(ctx);
                       messenger.showSnackBar(
                         const SnackBar(
-                          content:
-                              Text('You don\'t have permission to do that.'),
+                          content: Text(
+                            'You don\'t have permission to do that.',
+                          ),
                         ),
                       );
                       return;
@@ -2284,7 +2298,6 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
       ),
     );
   }
-
 }
 
 class _InfoRow extends StatelessWidget {

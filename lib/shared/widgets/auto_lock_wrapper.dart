@@ -56,8 +56,8 @@ class _AutoLockWrapperState extends ConsumerState<AutoLockWrapper>
     // still using the app (Notification Center, Control Center, system
     // alerts, app switcher, mid-call). Only treat genuine background
     // states as a pause so those don't accrue toward the auto-lock timer.
-    final isBackgrounded = state == AppLifecycleState.paused ||
-        state == AppLifecycleState.hidden;
+    final isBackgrounded =
+        state == AppLifecycleState.paused || state == AppLifecycleState.hidden;
     if (isBackgrounded) {
       if (!prefs.containsKey(_pausedTimeKey)) {
         await prefs.setInt(
@@ -105,8 +105,9 @@ class _AutoLockWrapperState extends ConsumerState<AutoLockWrapper>
             _auth.fullLogout();
           }
         } else {
-          final intervalStr =
-              await _db.settingsDao.get('auto_lock_interval_seconds');
+          final intervalStr = await _db.settingsDao.get(
+            'auto_lock_interval_seconds',
+          );
           // Default 5 min (300 s) when unset — master plan §10.1/§8.5. The
           // Security page presets (1/3/5/10/15/30 min) have no "Never" option,
           // so auto-lock is always on, only the interval is adjustable.
@@ -125,7 +126,6 @@ class _AutoLockWrapperState extends ConsumerState<AutoLockWrapper>
       }
     }
   }
-
 
   @override
   Widget build(BuildContext context) {

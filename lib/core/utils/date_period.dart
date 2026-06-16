@@ -18,13 +18,7 @@
 library;
 
 /// The five canonical calendar periods.
-enum DatePeriod {
-  today,
-  thisWeek,
-  thisMonth,
-  thisYear,
-  toDate,
-}
+enum DatePeriod { today, thisWeek, thisMonth, thisYear, toDate }
 
 extension DatePeriodX on DatePeriod {
   /// Human label shown on the chip / dropdown.

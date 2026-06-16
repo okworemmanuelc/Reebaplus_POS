@@ -24,25 +24,25 @@ class _ProfileProbe {
   final String? businessId;
   final String? error;
   const _ProfileProbe.loading()
-      : fetched = false,
-        found = false,
-        businessId = null,
-        error = null;
+    : fetched = false,
+      found = false,
+      businessId = null,
+      error = null;
   const _ProfileProbe.notFound()
-      : fetched = true,
-        found = false,
-        businessId = null,
-        error = null;
+    : fetched = true,
+      found = false,
+      businessId = null,
+      error = null;
   const _ProfileProbe.ok(String? bid)
-      : fetched = true,
-        found = true,
-        businessId = bid,
-        error = null;
+    : fetched = true,
+      found = true,
+      businessId = bid,
+      error = null;
   const _ProfileProbe.failed(String e)
-      : fetched = true,
-        found = false,
-        businessId = null,
-        error = e;
+    : fetched = true,
+      found = false,
+      businessId = null,
+      error = e;
 }
 
 enum _SyncErrorKind {
@@ -59,7 +59,9 @@ _SyncErrorKind _classify(String? error) {
   if (error == null) return _SyncErrorKind.other;
   final e = error.toLowerCase();
   if (e == 'missing_business_id') return _SyncErrorKind.missingBusinessId;
-  if (e.startsWith('auth_user_mismatch')) return _SyncErrorKind.authUserMismatch;
+  if (e.startsWith('auth_user_mismatch')) {
+    return _SyncErrorKind.authUserMismatch;
+  }
   if (e.contains('row-level security')) return _SyncErrorKind.rls;
   if (e.contains('duplicate key')) return _SyncErrorKind.duplicateKey;
   if (e.contains('violates foreign key')) return _SyncErrorKind.fk;
@@ -127,13 +129,18 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
       return;
     }
     final prefs = await SharedPreferences.getInstance();
-    final raw =
-        prefs.getString(SupabaseSyncService.pendingDeferredTablesKey(businessId));
+    final raw = prefs.getString(
+      SupabaseSyncService.pendingDeferredTablesKey(businessId),
+    );
     if (!mounted) return;
     setState(() {
       _deferredTables = (raw == null || raw.isEmpty)
           ? const []
-          : raw.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+          : raw
+                .split(',')
+                .map((s) => s.trim())
+                .where((s) => s.isNotEmpty)
+                .toList();
     });
   }
 
@@ -146,14 +153,14 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
     try {
       await sync.syncAll(businessId);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Re-sync complete.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Re-sync complete.')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Re-sync failed: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Re-sync failed: $e')));
     } finally {
       if (mounted) setState(() => _retryingDeferred = false);
       await _loadDeferredTables();
@@ -171,7 +178,9 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
     final supa = Supabase.instance.client;
     final user = supa.auth.currentUser;
     if (user == null) {
-      if (mounted) setState(() => _profile = const _ProfileProbe.failed('no session'));
+      if (mounted) {
+        setState(() => _profile = const _ProfileProbe.failed('no session'));
+      }
       return;
     }
     try {
@@ -188,7 +197,9 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
       final bid = raw?.toString();
       if (mounted) setState(() => _profile = _ProfileProbe.ok(bid));
     } catch (e) {
-      if (mounted) setState(() => _profile = _ProfileProbe.failed(e.toString()));
+      if (mounted) {
+        setState(() => _profile = _ProfileProbe.failed(e.toString()));
+      }
     }
   }
 
@@ -273,17 +284,24 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
         centerTitle: true,
       ),
       body: ListView(
-        padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + context.deviceBottomPadding),
+        padding: EdgeInsets.fromLTRB(
+          20,
+          20,
+          20,
+          20 + context.deviceBottomPadding,
+        ),
         children: [
           _sectionHeader(t, 'Health'),
           const SizedBox(height: 12),
-          _healthCard(t,
-              businessId: businessId,
-              claims: claims,
-              profile: _profile,
-              pending: pendingCount,
-              failed: failedCount,
-              orphaned: orphanCount),
+          _healthCard(
+            t,
+            businessId: businessId,
+            claims: claims,
+            profile: _profile,
+            pending: pendingCount,
+            failed: failedCount,
+            orphaned: orphanCount,
+          ),
           const SizedBox(height: 28),
           if (_deferredTables.isNotEmpty) ...[
             _sectionHeader(t, 'Catching up'),
@@ -313,9 +331,7 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
                 return _emptyCard(t, 'No pending items.');
               }
               return Column(
-                children: [
-                  for (final item in items) _pendingItemTile(t, item),
-                ],
+                children: [for (final item in items) _pendingItemTile(t, item)],
               );
             },
           ),
@@ -333,9 +349,7 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
                 return _emptyCard(t, 'No failed items.');
               }
               return Column(
-                children: [
-                  for (final item in items) _failedItemTile(t, item),
-                ],
+                children: [for (final item in items) _failedItemTile(t, item)],
               );
             },
           ),
@@ -371,9 +385,7 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
                 return _emptyCard(t, 'No orphaned items.');
               }
               return Column(
-                children: [
-                  for (final item in items) _orphanItemTile(t, item),
-                ],
+                children: [for (final item in items) _orphanItemTile(t, item)],
               );
             },
           ),
@@ -388,14 +400,14 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
   }
 
   Widget _sectionHeader(ThemeData t, String text) => Text(
-        text.toUpperCase(),
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-          color: t.colorScheme.primary,
-          letterSpacing: 1.2,
-        ),
-      );
+    text.toUpperCase(),
+    style: TextStyle(
+      fontSize: 13,
+      fontWeight: FontWeight.w700,
+      color: t.colorScheme.primary,
+      letterSpacing: 1.2,
+    ),
+  );
 
   Widget _deferredCard(ThemeData t, List<String> tables) {
     return Container(
@@ -407,15 +419,16 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
           Row(
             children: [
               Icon(
-                FontAwesomeIcons.cloudArrowDown,
+                FontAwesomeIcons.cloudArrowDown.data,
                 size: 16,
                 color: t.colorScheme.primary,
               ),
               const SizedBox(width: 8),
               Text(
                 'Some history is still catching up',
-                style: t.textTheme.titleSmall
-                    ?.copyWith(fontWeight: FontWeight.w700),
+                style: t.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ],
           ),
@@ -496,10 +509,10 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
     final claimText = !claims.hasSession
         ? 'No active Supabase session'
         : claims.error != null
-            ? 'JWT decode error: ${claims.error}'
-            : claims.businessId != null
-                ? 'JWT business_id: ${claims.businessId} (via ${claims.source}, informational)'
-                : 'JWT business_id: not present (expected — RLS uses profiles join)';
+        ? 'JWT decode error: ${claims.error}'
+        : claims.businessId != null
+        ? 'JWT business_id: ${claims.businessId} (via ${claims.source}, informational)'
+        : 'JWT business_id: not present (expected — RLS uses profiles join)';
 
     // Profile probe: this is what `get_user_business_id()` actually returns,
     // and therefore what RLS will enforce. Mismatch with local businessId is
@@ -532,22 +545,39 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _healthRow(t, FontAwesomeIcons.idBadge, 'Local businessId',
-              businessId?.toString() ?? '—'),
-          const SizedBox(height: 10),
-          _healthRow(t, FontAwesomeIcons.userCheck, 'Cloud profile',
-              profileText,
-              valueColor: profileColor),
-          const SizedBox(height: 10),
-          _healthRow(t, FontAwesomeIcons.key, 'JWT claim', claimText,
-              valueColor: claimColor),
-          const SizedBox(height: 10),
-          _healthRow(t, FontAwesomeIcons.clockRotateLeft, 'Pending in queue',
-              pending.toString()),
+          _healthRow(
+            t,
+            FontAwesomeIcons.idBadge.data,
+            'Local businessId',
+            businessId?.toString() ?? '—',
+          ),
           const SizedBox(height: 10),
           _healthRow(
             t,
-            FontAwesomeIcons.triangleExclamation,
+            FontAwesomeIcons.userCheck.data,
+            'Cloud profile',
+            profileText,
+            valueColor: profileColor,
+          ),
+          const SizedBox(height: 10),
+          _healthRow(
+            t,
+            FontAwesomeIcons.key.data,
+            'JWT claim',
+            claimText,
+            valueColor: claimColor,
+          ),
+          const SizedBox(height: 10),
+          _healthRow(
+            t,
+            FontAwesomeIcons.clockRotateLeft.data,
+            'Pending in queue',
+            pending.toString(),
+          ),
+          const SizedBox(height: 10),
+          _healthRow(
+            t,
+            FontAwesomeIcons.triangleExclamation.data,
             'Failed in queue',
             failed.toString(),
             valueColor: failed == 0 ? null : t.colorScheme.error,
@@ -555,7 +585,7 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
           const SizedBox(height: 10),
           _healthRow(
             t,
-            FontAwesomeIcons.ghost,
+            FontAwesomeIcons.ghost.data,
             'Orphaned (auto-archived)',
             orphaned.toString(),
             valueColor: orphaned == 0 ? null : t.colorScheme.error,
@@ -565,12 +595,21 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
     );
   }
 
-  Widget _healthRow(ThemeData t, IconData icon, String label, String value,
-      {Color? valueColor}) {
+  Widget _healthRow(
+    ThemeData t,
+    IconData icon,
+    String label,
+    String value, {
+    Color? valueColor,
+  }) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 14, color: t.colorScheme.onSurface.withValues(alpha: 0.6)),
+        Icon(
+          icon,
+          size: 14,
+          color: t.colorScheme.onSurface.withValues(alpha: 0.6),
+        ),
         const SizedBox(width: 10),
         Flexible(
           child: Text(
@@ -598,18 +637,18 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
   }
 
   Widget _emptyCard(ThemeData t, String text) => Container(
-        padding: const EdgeInsets.all(20),
-        decoration: AppDecorations.glassCard(context, radius: 16),
-        child: Center(
-          child: Text(
-            text,
-            style: TextStyle(
-              fontSize: 13,
-              color: t.colorScheme.onSurface.withValues(alpha: 0.7),
-            ),
-          ),
+    padding: const EdgeInsets.all(20),
+    decoration: AppDecorations.glassCard(context, radius: 16),
+    child: Center(
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 13,
+          color: t.colorScheme.onSurface.withValues(alpha: 0.7),
         ),
-      );
+      ),
+    ),
+  );
 
   Future<void> _retryAllOrphans() async {
     final dao = _db.syncDao;
@@ -653,8 +692,7 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: t.colorScheme.error.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(6),
@@ -747,8 +785,9 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
                     );
                   }
                 },
-                style:
-                    TextButton.styleFrom(foregroundColor: t.colorScheme.error),
+                style: TextButton.styleFrom(
+                  foregroundColor: t.colorScheme.error,
+                ),
                 child: const Text('Discard'),
               ),
             ],
@@ -770,7 +809,9 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
             _SyncErrorKind.duplicateKey => Colors.amber,
             _SyncErrorKind.fk => Colors.deepOrange,
             _SyncErrorKind.network => Colors.blueGrey,
-            _SyncErrorKind.other => t.colorScheme.onSurface.withValues(alpha: 0.6),
+            _SyncErrorKind.other => t.colorScheme.onSurface.withValues(
+              alpha: 0.6,
+            ),
           }
         : t.colorScheme.primary;
     final payloadPreview = item.payload.length > 200
@@ -790,8 +831,7 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: badgeColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(6),
@@ -884,8 +924,9 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
                     );
                   }
                 },
-                style:
-                    TextButton.styleFrom(foregroundColor: t.colorScheme.error),
+                style: TextButton.styleFrom(
+                  foregroundColor: t.colorScheme.error,
+                ),
                 child: const Text('Discard'),
               ),
             ],
@@ -920,8 +961,7 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: kindColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(6),
@@ -1017,7 +1057,9 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
                     );
                   }
                 },
-                style: TextButton.styleFrom(foregroundColor: t.colorScheme.error),
+                style: TextButton.styleFrom(
+                  foregroundColor: t.colorScheme.error,
+                ),
                 child: const Text('Discard'),
               ),
             ],
@@ -1040,8 +1082,11 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  Icon(FontAwesomeIcons.tableCells,
-                      size: 14, color: t.colorScheme.primary),
+                  Icon(
+                    FontAwesomeIcons.tableCells.data,
+                    size: 14,
+                    color: t.colorScheme.primary,
+                  ),
                   const SizedBox(width: 12),
                   Flexible(
                     child: Text(
@@ -1054,9 +1099,7 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
                     ),
                   ),
                   Icon(
-                    _auditExpanded
-                        ? Icons.expand_less
-                        : Icons.expand_more,
+                    _auditExpanded ? Icons.expand_less : Icons.expand_more,
                     color: t.colorScheme.onSurface.withValues(alpha: 0.6),
                   ),
                 ],
@@ -1115,25 +1158,29 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
   }
 
   Widget _auditTable(ThemeData t, List<TableDiagnosticRow> rows) {
-    Widget cell(String text,
-            {bool header = false, Color? color, TextAlign? align}) =>
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-          child: Text(
-            text,
-            textAlign: align,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: header ? FontWeight.w700 : FontWeight.w500,
-              color: color ??
-                  (header
-                      ? t.colorScheme.primary
-                      : t.colorScheme.onSurface.withValues(alpha: 0.85)),
-              fontFamily: header ? null : 'monospace',
-            ),
-          ),
-        );
+    Widget cell(
+      String text, {
+      bool header = false,
+      Color? color,
+      TextAlign? align,
+    }) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+      child: Text(
+        text,
+        textAlign: align,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: header ? FontWeight.w700 : FontWeight.w500,
+          color:
+              color ??
+              (header
+                  ? t.colorScheme.primary
+                  : t.colorScheme.onSurface.withValues(alpha: 0.85)),
+          fontFamily: header ? null : 'monospace',
+        ),
+      ),
+    );
 
     const colTable = 180.0;
     const colInt = 72.0;
@@ -1141,13 +1188,13 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
     const total = colTable + colInt * 3 + colDiag;
 
     Widget row(List<Widget> children, {Color? bg}) => Container(
-          color: bg,
-          height: 30,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: children,
-          ),
-        );
+      color: bg,
+      height: 30,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: children,
+      ),
+    );
 
     Widget sized(double w, Widget child) => SizedBox(width: w, child: child);
 
@@ -1170,22 +1217,33 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
             for (final r in rows)
               row([
                 sized(colTable, cell(r.table)),
-                sized(colInt,
-                    cell(r.local?.toString() ?? '—', align: TextAlign.right)),
                 sized(
-                    colInt,
-                    cell(r.remoteAuthed?.toString() ?? '—',
-                        align: TextAlign.right)),
+                  colInt,
+                  cell(r.local?.toString() ?? '—', align: TextAlign.right),
+                ),
                 sized(
-                    colInt,
-                    cell(r.remoteService?.toString() ?? '—',
-                        align: TextAlign.right)),
+                  colInt,
+                  cell(
+                    r.remoteAuthed?.toString() ?? '—',
+                    align: TextAlign.right,
+                  ),
+                ),
                 sized(
-                    colDiag,
-                    cell(_diagnose(r),
-                        color: _diagnose(r) == 'OK'
-                            ? Colors.green
-                            : t.colorScheme.error)),
+                  colInt,
+                  cell(
+                    r.remoteService?.toString() ?? '—',
+                    align: TextAlign.right,
+                  ),
+                ),
+                sized(
+                  colDiag,
+                  cell(
+                    _diagnose(r),
+                    color: _diagnose(r) == 'OK'
+                        ? Colors.green
+                        : t.colorScheme.error,
+                  ),
+                ),
               ]),
           ],
         ),
@@ -1206,4 +1264,3 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
     return '—';
   }
 }
-

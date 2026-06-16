@@ -24,4 +24,3 @@ class DeliveryService extends ValueNotifier<List<Delivery>> {
     return list;
   }
 }
-

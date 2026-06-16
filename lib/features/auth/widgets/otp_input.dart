@@ -147,9 +147,8 @@ class _OtpBoxRowState extends State<OtpBoxRow> with WidgetsBindingObserver {
                             color: widget.hasError
                                 ? errorColor
                                 : isActive
-                                    ? widget.textColor
-                                    : widget.textColor
-                                          .withValues(alpha: 0.3),
+                                ? widget.textColor
+                                : widget.textColor.withValues(alpha: 0.3),
                             width: isActive ? 2 : 1,
                           ),
                         ),

@@ -8,23 +8,16 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
-Phase 1 — In progress. Session 141 complete (2026-06-10).
-141 sessions logged. Codebase is live and being verified on-device.
+Phase 1 — In progress. Session 148 complete (2026-06-16).
+148 sessions logged. Codebase is live and being verified on-device.
 
 ---
 
 ## Current Goal
 
-On-device verification of the Session 141 sync push chunking fix under a real
-throttled or flaky connection (Android network-conditioner or airplane-mode
-toggling mid-sync). Logic-level tests pass (115/115 sync suite); behaviour
-under an actual poor connection has not yet been confirmed.
-
-If no regressions, the next feature unit is one of:
-- App-wide sweep for remaining hardcoded brand colours (`blueMain` /
-  `blueLight` / raw `Colors.*`) if the user wants full theme consistency.
-- Pull-side chunking / pagination of `pos_pull_snapshot` if large-business
-  pulls are still struggling on poor connections after the push fix.
+On-device verification of Session 143 pull-side pagination (throttled/cellular
+connection), Session 144 onboarding form updates (business type picker,
+phone + LGA fields), and verification of the permission gating screen rendering.
 
 ---
 
@@ -84,6 +77,16 @@ If no regressions, the next feature unit is one of:
 - Sync push chunking — adaptive chunk sizing (Wi-Fi 25 rows, cellular 10,
   floor 5), 15s timeout per chunk, halve on timeout / double after 3 clean
   chunks, skip on no-network (Session 141).
+- Pull-side pagination (Session 143): `_fetchOneTable` now fetches in pages
+  ordered by `last_updated_at` + `id` asc; page size is connectivity-driven
+  (Wi-Fi 500 / cellular 100 / poor 50, floor 10). On cellular/poor the
+  monolithic `pos_pull_snapshot` RPC is bypassed entirely; `_pullViaPostgRest`
+  fetches tables sequentially (in `_pullOrder` FK-safe order) instead of
+  parallel `Future.wait`. Adaptive timeout: a page-level TimeoutException
+  halves the page size and retries the same offset; propagates when already
+  at the floor. `syncMinimumLogin` also passes connectivity-based page size.
+  LWW guard, hard-delete reconciliation, and the deferred-table cursor logic
+  are all preserved. `flutter analyze` clean; 115/115 sync tests pass.
 - Theme colour system — 5 palettes × light/dark; POS filter chips,
   cart/checkout totals, notifications, activity logs now theme-aware
   (Session 140).
@@ -93,6 +96,21 @@ If no regressions, the next feature unit is one of:
   §23 is a tombstone. Hard Rule #8. No reintroduction.
 - Track Shipments §22 — **removed entirely**, folded into Supplier Accounts
   (Session 110). §22 is a tombstone.
+- Onboarding + registration form alignment (Session 144): all 7 business types
+  now rendered in CEO sign-up picker (Restaurant/Supermarket/Bar/Pharmacy/
+  Building Materials/Boutique greyed-out with "Coming soon" badge; only Beverage
+  distributor selectable). Store Details step now collects Store Phone Number
+  (digits-only, min 8 digits) and LGA/District (searchable autocomplete,
+  populated from kNigerianLgas[state] when country is Nigeria; resets when state
+  changes via ValueKey). `OnboardingDraft.lgaDistrict` added; `locationCombined`
+  now emits Street → LGA → State → Country. `_submitBusinessType` maps
+  'Beverage distributor' → 'Beer distributor' before writing to draft (DB
+  canonical preserved). `BusinessInfoScreen._load` maps 'Beer distributor' →
+  'Beverage distributor' for dropdown; `_save` maps back. New file:
+  `lib/core/data/nigerian_lgas.dart` (36 states + FCT with full LGA lists).
+  `kBusinessTypes` updated to 7 entries using 'Beverage distributor' display
+  label; `isCrateBusiness` now accepts all three spellings. `flutter analyze`
+  clean; 22/22 auth tests pass.
 - Codebase cleanup — deleted 7 dead/unused files (CustomerLedgerScreen, ApprovalsScreen, WelcomeVerificationModal, sync_service.dart stub, guarded.dart helper, products_data.dart, filter_bar.dart) and resolved compile error in supabase_sync_service.dart (Session 142).
 - Removed dead `last_notification_sent_at` schema + backend remnants (Session 142):
   the "Waiting for Assignment" screen, its main.dart routing guard, and the
@@ -121,6 +139,22 @@ If no regressions, the next feature unit is one of:
   tombstone / offline) preserve the existing offline PIN-login path —
   never a false-positive wipe. New test:
   `test/auth/post_verify_route_orphan_business_test.dart`.
+- Fixed ListTile debug assertion crashes in tests and UI (Session 145): SwitchListTile widgets wrapped inside decorated containers (such as AppDecorations.glassCard) triggered a debug assertion failure on newer Flutter versions ("ListTile background color or ink splashes may be invisible"). Wrapped the inner columns/list-tiles in transparent Material widgets: in `_permissionGroupCard` and `_viewAllStoresCard` in `role_permissions_detail_screen.dart`, and `_permissionGroupCard` in `staff_permissions_screen.dart`. Ran `dart format lib/` to clean formatting, verified `flutter analyze lib` is 100% clean, and ran the entire test suite ensuring 429/429 tests pass.
+- Declarative back interception + tab history traversal (Session 146): Migrated `MainLayout` from `WidgetsBindingObserver.didPopRoute` to `PopScope(canPop: false, onPopInvokedWithResult: ...)` — the modern Flutter back-interception API. Removed `WidgetsBindingObserver` mixin, `addObserver`/`removeObserver` calls, and the `didPopRoute` override. Updated `NavigationService.handleBackPress` Step 3: tries `popIndex()` first (returns the user to the previous tab in history), then falls back to navigating to the home tab (Step 3.5). Both files analyze clean.
+- Owner role protection (Session 148): Drift schema **v49 → v50** — added
+  `ownerId` (nullable TEXT) column to `Businesses` table, mirroring the cloud's
+  existing `owner_id` column. Raw `ALTER TABLE businesses ADD COLUMN owner_id
+  TEXT` onUpgrade step (try/catch idempotent). `createNewOwner` and
+  `completeOnboarding` in `auth_service.dart` now write `ownerId` explicitly in
+  the local mirror inserts. `staff_detail_screen.dart`: computes `isTargetOwner`
+  (`user.authUserId == business.ownerId`) after the membership null-guard; the
+  "Change role" button is hidden (render-gate + outer section guard updated) when
+  the target is the owner; `_changeRole` has a defense-in-depth re-check that
+  returns early with an error notification ("You cannot change the owner's role.")
+  if the gate is somehow bypassed. `currentBusinessProvider` (already in tree)
+  supplies the live `ownerId`. `build_runner` regenerated; `flutter analyze`
+  clean (no errors).
+- Debug-mode audit + Stock Count review sheet (Session 147): Audited all `kDebugMode` and `assert` gates across the codebase. Found two intentional `kDebugMode` uses: `logger.dart` (debug logging only) and `sync_issues_screen.dart:1124` (service-role-key + project-URL fields hidden in release — developer tool, correct by design). Two `assert`-only constructor guards in `create_pin_screen.dart` and `pin_keypad.dart` are silently bypassed in release mode (noted, not changed — valid Flutter pattern). `build.gradle.kts` release build uses debug signing key (TODO comment present; no functional divergence for biometric/secure-storage since both modes share the same keystore). Replaced the simple `AlertDialog` in `StockCountScreen._confirmAndSave()` with a `DraggableScrollableSheet` review panel: summary chips (counted / adjusted / short / over), full itemised list of every product with a diff (product name, system → actual, coloured diff badge), "all matched" empty state with a green check icon, and "Back" + "Confirm & Save Count" action buttons. `flutter analyze` clean — 18 pre-existing `avoid_print` infos in test file only.
 
 ---
 
@@ -142,10 +176,9 @@ If no regressions, the next feature unit is one of:
 
 ## Next Up
 
-1. On-device verify Session 141 push chunking under a throttled / flaky
-   connection.
-2. Decide: app-wide colour sweep vs pull-side `pos_pull_snapshot` chunking
-   vs next feature unit.
+1. On-device verify Session 143 pull pagination under a throttled / flaky /
+   cellular connection.
+2. Decide: app-wide colour sweep vs next feature unit.
 3. **Inventory + Product Details §16** — not started.
 4. **Orders §19** — not started.
 5. **Expenses + Pending Approval flow §20** — store-scope wired (Session 133);
@@ -161,11 +194,6 @@ If no regressions, the next feature unit is one of:
 ---
 
 ## Open Questions
-
-- **Pull-side chunking** — `pos_pull_snapshot` has a 60s timeout with a 25s
-  per-table fallback. Session 141 left it untouched. If poor-connection pull
-  failures persist, paginating the snapshot requires a cloud RPC change. Decide
-  before starting any sync work.
 
 - **Receipt §15 refund button** — deferred multiple times. Confirm the exact
   UX (who triggers it, from which screen, what it writes to the ledger) before
@@ -272,8 +300,7 @@ to the unit being picked up.
 - Drift client schema: **v49**.
 - Cloud migrations deployed through: **0114** (0115 written, not yet pushed).
 - `flutter test test/sync/` — **115 pass** (Session 141 baseline).
-- Full suite last confirmed: 168 pass (Session 127). Counts vary by which
-  folders are included in the run.
+- Full suite last confirmed: 429 pass (Session 145).
 - `flutter analyze lib` — clean. 18 pre-existing `avoid_print` infos in
   `test/database/roles_v13_report.dart` only; not regressions.
 - iOS build enabled; free Apple ID cert expires after 7 days — re-run

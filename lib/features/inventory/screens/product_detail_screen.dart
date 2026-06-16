@@ -206,9 +206,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     if (mounted) setState(() => _salesSummary = summary);
 
     // Load last shipment from shipments
-    final delivery = await db.shipmentsDao.getLastShipmentForProduct(
-      productId,
-    );
+    final delivery = await db.shipmentsDao.getLastShipmentForProduct(productId);
     if (mounted) {
       setState(() {
         _lastDelivery = delivery;
@@ -287,14 +285,14 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   void _seedFieldsFrom(ProductData product) {
     _nameController.text = product.name;
     _subtitleController.text = product.subtitle ?? '';
-    _buyingPriceController.text =
-        (product.buyingPriceKobo / 100).toStringAsFixed(0);
-    _retailPriceController.text =
-        (product.retailerPriceKobo / 100).toStringAsFixed(0);
-    _wholesalerPriceController.text =
-        (product.wholesalerPriceKobo / 100).toStringAsFixed(0);
-    _emptyCrateValueController.text =
-        (product.emptyCrateValueKobo / 100).toStringAsFixed(0);
+    _buyingPriceController.text = (product.buyingPriceKobo / 100)
+        .toStringAsFixed(0);
+    _retailPriceController.text = (product.retailerPriceKobo / 100)
+        .toStringAsFixed(0);
+    _wholesalerPriceController.text = (product.wholesalerPriceKobo / 100)
+        .toStringAsFixed(0);
+    _emptyCrateValueController.text = (product.emptyCrateValueKobo / 100)
+        .toStringAsFixed(0);
     _lowStockController.text = product.lowStockThreshold.toString();
     _monthlyTarget = product.monthlyTargetUnits;
     _monthlyTargetController.text = _monthlyTarget.toString();
@@ -364,10 +362,10 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         product.id,
         name: name,
         manufacturerId: _selectedManufacturerId,
-        buyingPriceKobo:
-            (parseCurrency(_buyingPriceController.text) * 100).round(),
-        retailerPriceKobo:
-            (parseCurrency(_retailPriceController.text) * 100).round(),
+        buyingPriceKobo: (parseCurrency(_buyingPriceController.text) * 100)
+            .round(),
+        retailerPriceKobo: (parseCurrency(_retailPriceController.text) * 100)
+            .round(),
         wholesalerPriceKobo:
             (parseCurrency(_wholesalerPriceController.text) * 100).round(),
         emptyCrateValueKobo: crateValueKobo,
@@ -375,7 +373,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         unit: _selectedUnit,
         trackEmpties: _trackEmpties,
         allowFractionalSales: _allowFractionalSales,
-        lowStockThreshold: int.tryParse(_lowStockController.text.trim()) ??
+        lowStockThreshold:
+            int.tryParse(_lowStockController.text.trim()) ??
             product.lowStockThreshold,
         imagePath: _imagePath,
         monthlyTargetUnits: _isCeo ? _monthlyTarget : null,
@@ -454,7 +453,9 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
+    ref.watch(
+      currencySymbolProvider,
+    ); // rebuild money displays when currency changes
     // Subscribe to permission changes so the role-gated UI (buying row,
     // action button) rebuilds when the role + its grants resolve locally.
     // The `_canEdit` family of getters read the same provider.
@@ -472,8 +473,9 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       (prev, next) {
         final rows = next.valueOrNull;
         if (rows == null || !mounted) return;
-        final match =
-            rows.where((r) => r.product.id == widget.item.id).firstOrNull;
+        final match = rows
+            .where((r) => r.product.id == widget.item.id)
+            .firstOrNull;
         if (match == null) return;
         final p = match.product;
         final newStock = match.totalStock.toDouble();
@@ -523,9 +525,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     if (!_contentReady) {
       return Scaffold(
         backgroundColor: _bg,
-        body: const SafeArea(
-          child: Center(child: CircularProgressIndicator()),
-        ),
+        body: const SafeArea(child: Center(child: CircularProgressIndicator())),
       );
     }
 
@@ -546,8 +546,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   // ═══════════════════════════════════════════════════════════════════════════
 
   Widget _buildSliverAppBar(BuildContext context) {
-    final isLow =
-        _liveStock > 0 && _liveStock <= widget.item.lowStockThreshold;
+    final isLow = _liveStock > 0 && _liveStock <= widget.item.lowStockThreshold;
     final isOut = _liveStock == 0;
     Color statusColor = success;
     String statusLabel = 'In Stock';
@@ -618,7 +617,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
-                FontAwesomeIcons.trashCan,
+                FontAwesomeIcons.trashCan.data,
                 size: context.getRSize(18),
                 color: Theme.of(context).colorScheme.error,
               ),
@@ -690,8 +689,10 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                               decoration: BoxDecoration(
                                 color: Theme.of(context).colorScheme.primary,
                                 shape: BoxShape.circle,
-                                border:
-                                    Border.all(color: Colors.white, width: 2),
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 2,
+                                ),
                               ),
                               child: Icon(
                                 Icons.edit,
@@ -790,7 +791,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             // (restock) or the Stock keeper's Update Stock modal, never inline.
             _infoRow(
               context,
-              FontAwesomeIcons.cubesStacked,
+              FontAwesomeIcons.cubesStacked.data,
               'Total Quantity',
               '${_liveStock.toStringAsFixed(_liveStock % 1 == 0 ? 0 : 1)}'
                   '${_selectedUnit != null ? ' ${_selectedUnit!}' : ''}',
@@ -800,7 +801,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             // Description / subtitle
             _infoRow(
               context,
-              FontAwesomeIcons.alignLeft,
+              FontAwesomeIcons.alignLeft.data,
               'Description',
               _editMode ? '' : _subtitleController.text,
               const Color(0xFF06B6D4),
@@ -811,7 +812,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             _divider(context),
             _infoRow(
               context,
-              FontAwesomeIcons.industry,
+              FontAwesomeIcons.industry.data,
               'Manufacturer',
               '',
               const Color(0xFF6366F1),
@@ -859,7 +860,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
               _divider(context),
               _infoRow(
                 context,
-                FontAwesomeIcons.truck,
+                FontAwesomeIcons.truck.data,
                 'Supplier',
                 '',
                 const Color(0xFF0EA5E9),
@@ -898,7 +899,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             // Category Dropdown
             _infoRow(
               context,
-              FontAwesomeIcons.tag,
+              FontAwesomeIcons.tag.data,
               'Category',
               '',
               success,
@@ -908,10 +909,14 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                   value: _selectedCategoryId,
                   items: [
                     const DropdownMenuItem<String?>(
-                        value: null, child: Text("None")),
+                      value: null,
+                      child: Text("None"),
+                    ),
                     ..._allCategories.map(
                       (c) => DropdownMenuItem<String?>(
-                          value: c.id, child: Text(c.name)),
+                        value: c.id,
+                        child: Text(c.name),
+                      ),
                     ),
                   ],
                   onChanged: _editMode
@@ -924,7 +929,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             // Product Unit Dropdown
             _infoRow(
               context,
-              FontAwesomeIcons.box,
+              FontAwesomeIcons.box.data,
               'Product Unit',
               '',
               const Color(0xFFF59E0B),
@@ -945,7 +950,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             // Low Stock Alert
             _infoRow(
               context,
-              FontAwesomeIcons.triangleExclamation,
+              FontAwesomeIcons.triangleExclamation.data,
               'Low Stock Alert',
               '',
               const Color(0xFFEF4444),
@@ -960,7 +965,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             // Size dropdown
             _infoRow(
               context,
-              FontAwesomeIcons.layerGroup,
+              FontAwesomeIcons.layerGroup.data,
               'Size',
               '',
               const Color(0xFF8B5CF6),
@@ -974,8 +979,9 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                     DropdownMenuItem(value: 'medium', child: Text('Medium')),
                     DropdownMenuItem(value: 'small', child: Text('Small')),
                   ],
-                  onChanged:
-                      _editMode ? (v) => setState(() => _size = v) : (_) {},
+                  onChanged: _editMode
+                      ? (v) => setState(() => _size = v)
+                      : (_) {},
                 ),
               ),
             ),
@@ -983,7 +989,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             // Expiry date (editable)
             _infoRow(
               context,
-              FontAwesomeIcons.calendarXmark,
+              FontAwesomeIcons.calendarXmark.data,
               'Expiry Date',
               '',
               const Color(0xFFF59E0B),
@@ -993,7 +999,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             // Allow fractional sales
             _infoRow(
               context,
-              FontAwesomeIcons.divide,
+              FontAwesomeIcons.divide.data,
               'Allow fractional sales',
               '',
               const Color(0xFF6366F1),
@@ -1008,7 +1014,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             // Track empty crate returns
             _infoRow(
               context,
-              FontAwesomeIcons.recycle,
+              FontAwesomeIcons.recycle.data,
               'Track empty crates',
               '',
               const Color(0xFF14B8A6),
@@ -1024,7 +1030,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
               // Empty Crate Value — shared at the manufacturer level (§16.5)
               _infoRow(
                 context,
-                FontAwesomeIcons.circleDollarToSlot,
+                FontAwesomeIcons.circleDollarToSlot.data,
                 'Empty Crate Value',
                 '',
                 const Color(0xFF14B8A6),
@@ -1042,7 +1048,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
               // Empty Crates — manufacturer total (read-only)
               _infoRow(
                 context,
-                FontAwesomeIcons.beerMugEmpty,
+                FontAwesomeIcons.beerMugEmpty.data,
                 'Empty Crates',
                 _emptyCrateStock?.toString() ?? '0',
                 const Color(0xFFF59E0B),
@@ -1061,7 +1067,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             if (_canEditBuying) ...[
               _infoRow(
                 context,
-                FontAwesomeIcons.dollarSign,
+                FontAwesomeIcons.dollarSign.data,
                 'Buying Price',
                 '',
                 const Color(0xFFF59E0B),
@@ -1071,7 +1077,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             ],
             _infoRow(
               context,
-              FontAwesomeIcons.tag,
+              FontAwesomeIcons.tag.data,
               'Retailer Price',
               '',
               Theme.of(context).colorScheme.primary,
@@ -1080,7 +1086,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             _divider(context),
             _infoRow(
               context,
-              FontAwesomeIcons.users,
+              FontAwesomeIcons.users.data,
               'Wholesaler Price',
               '',
               const Color(0xFF8B5CF6),
@@ -1089,7 +1095,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             _divider(context),
             _infoRow(
               context,
-              FontAwesomeIcons.chartLine,
+              FontAwesomeIcons.chartLine.data,
               'Total Stock Value',
               formatCurrency(totalStockValue),
               Theme.of(context).colorScheme.primary,
@@ -1137,7 +1143,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             AppButton(
               text: 'Save Product',
               variant: AppButtonVariant.primary,
-              icon: FontAwesomeIcons.floppyDisk,
+              icon: FontAwesomeIcons.floppyDisk.data,
               isLoading: _savingChanges,
               onPressed: _productData == null ? null : _saveChanges,
             ),
@@ -1146,9 +1152,10 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             AppButton(
               text: 'Update Stock',
               variant: AppButtonVariant.primary,
-              icon: FontAwesomeIcons.boxesStacked,
-              onPressed:
-                  _productData == null ? null : () => _showUpdateStockModal(),
+              icon: FontAwesomeIcons.boxesStacked.data,
+              onPressed: _productData == null
+                  ? null
+                  : () => _showUpdateStockModal(),
             ),
           ] else if (!_canEdit) ...[
             // ── Read-only notice ──────────────────────────────────────
@@ -1441,7 +1448,9 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                         controller: _monthlyTargetController,
                         readOnly: !(_editMode && _isCeo),
                         keyboardType: TextInputType.number,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
                         onChanged: (val) {
                           setState(() {
                             _monthlyTarget = int.tryParse(val) ?? 0;
@@ -1533,7 +1542,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     return _infoCard(context, [
       _infoRow(
         context,
-        FontAwesomeIcons.calendarDay,
+        FontAwesomeIcons.calendarDay.data,
         'Date',
         _fmtDate(d.date),
         Theme.of(context).colorScheme.primary,
@@ -1541,7 +1550,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       _divider(context),
       _infoRow(
         context,
-        FontAwesomeIcons.truckFast,
+        FontAwesomeIcons.truckFast.data,
         'Quantity Received',
         '${d.quantity} units',
         const Color(0xFF6366F1),
@@ -1549,7 +1558,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       _divider(context),
       _infoRow(
         context,
-        FontAwesomeIcons.dollarSign,
+        FontAwesomeIcons.dollarSign.data,
         'Price Per Unit',
         formatCurrency(d.unitPriceKobo / 100),
         const Color(0xFFF59E0B),
@@ -1557,7 +1566,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       _divider(context),
       _infoRow(
         context,
-        FontAwesomeIcons.receipt,
+        FontAwesomeIcons.receipt.data,
         'Total Delivery Cost',
         formatCurrency(d.totalKobo / 100),
         success,
@@ -1642,8 +1651,11 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         }
       }
     } catch (e, st) {
-      CrashReporter.record(e, st,
-          context: 'inventory.product_detail.update_image');
+      CrashReporter.record(
+        e,
+        st,
+        context: 'inventory.product_detail.update_image',
+      );
       if (mounted) {
         AppNotification.showError(context, 'Failed to pick image: $e');
       }
@@ -1659,9 +1671,11 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   Widget? _expiryBadge(BuildContext context, DateTime expiry) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final days = DateTime(expiry.year, expiry.month, expiry.day)
-        .difference(today)
-        .inDays;
+    final days = DateTime(
+      expiry.year,
+      expiry.month,
+      expiry.day,
+    ).difference(today).inDays;
     String label;
     Color color;
     if (days < 0) {
@@ -1732,69 +1746,76 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         // revoked while the sheet is open — these getters read live perms.
         canAddNow: () => _canAddStock,
         canRemoveNow: () => _canAdjustStock,
-        onSave: ({
-          required bool isRemove,
-          required int qty,
-          required StoreData store,
-          String? reason,
-          required String notes,
-        }) async {
-          final auth = ref.read(authProvider);
-          final actorName = auth.currentUser?.name ?? 'Unknown';
-          final delta = isRemove ? -qty : qty;
-          final note = isRemove
-              ? '${reason!}${notes.isEmpty ? '' : ': $notes'}'
-              : (notes.isEmpty ? 'Stock added by $actorName' : notes);
-          final summary = '$actorName ${isRemove ? 'removed' : 'added'} $qty '
-              '${product.unit}(s) of ${product.name} '
-              '(${store.name})'
-              '${isRemove ? ' — ${reason!}' : ''}';
-          final isStockKeeper =
-              ref.read(currentUserRoleProvider)?.slug == 'stock_keeper';
-          try {
-            if (isStockKeeper) {
-              // §16.6.1 — a stock keeper's change needs Manager/CEO approval.
-              // Record a pending request; inventory stays untouched until it is
-              // approved in the Reports hub. The DAO fires the approval-request
-              // notification to the CEO + the affected store's Manager(s).
-              await db.stockAdjustmentRequestsDao.requestStockAdjustment(
-                productId: product.id,
-                storeId: store.id,
-                quantityDiff: delta,
-                reason: note,
-                summary: summary,
-                requestedBy: auth.currentUser?.id,
-              );
-              sentForApproval = true;
-              return null;
-            }
-            // Manager / CEO adjust directly — no approval needed.
-            await db.inventoryDao.adjustStock(
-              product.id,
-              store.id,
-              delta,
-              note,
-              auth.currentUser?.id,
-            );
-            await ref.read(activityLogProvider).logAction(
-                  'stock_adjustment',
-                  summary,
-                  productId: product.id,
-                  storeId: store.id,
+        onSave:
+            ({
+              required bool isRemove,
+              required int qty,
+              required StoreData store,
+              String? reason,
+              required String notes,
+            }) async {
+              final auth = ref.read(authProvider);
+              final actorName = auth.currentUser?.name ?? 'Unknown';
+              final delta = isRemove ? -qty : qty;
+              final note = isRemove
+                  ? '${reason!}${notes.isEmpty ? '' : ': $notes'}'
+                  : (notes.isEmpty ? 'Stock added by $actorName' : notes);
+              final summary =
+                  '$actorName ${isRemove ? 'removed' : 'added'} $qty '
+                  '${product.unit}(s) of ${product.name} '
+                  '(${store.name})'
+                  '${isRemove ? ' — ${reason!}' : ''}';
+              final isStockKeeper =
+                  ref.read(currentUserRoleProvider)?.slug == 'stock_keeper';
+              try {
+                if (isStockKeeper) {
+                  // §16.6.1 — a stock keeper's change needs Manager/CEO approval.
+                  // Record a pending request; inventory stays untouched until it is
+                  // approved in the Reports hub. The DAO fires the approval-request
+                  // notification to the CEO + the affected store's Manager(s).
+                  await db.stockAdjustmentRequestsDao.requestStockAdjustment(
+                    productId: product.id,
+                    storeId: store.id,
+                    quantityDiff: delta,
+                    reason: note,
+                    summary: summary,
+                    requestedBy: auth.currentUser?.id,
+                  );
+                  sentForApproval = true;
+                  return null;
+                }
+                // Manager / CEO adjust directly — no approval needed.
+                await db.inventoryDao.adjustStock(
+                  product.id,
+                  store.id,
+                  delta,
+                  note,
+                  auth.currentUser?.id,
                 );
-            widget.onUpdateStock();
-            // Reflect the change on this screen immediately (#1).
-            await _refreshLiveStock();
-            return null;
-          } catch (e, st) {
-            CrashReporter.record(e, st,
-                context: 'inventory.product_detail.stock_adjust');
-            debugPrint('UpdateStock modal save error: $e');
-            return isStockKeeper
-                ? 'Could not send for approval: $e'
-                : 'Could not update stock: $e';
-          }
-        },
+                await ref
+                    .read(activityLogProvider)
+                    .logAction(
+                      'stock_adjustment',
+                      summary,
+                      productId: product.id,
+                      storeId: store.id,
+                    );
+                widget.onUpdateStock();
+                // Reflect the change on this screen immediately (#1).
+                await _refreshLiveStock();
+                return null;
+              } catch (e, st) {
+                CrashReporter.record(
+                  e,
+                  st,
+                  context: 'inventory.product_detail.stock_adjust',
+                );
+                debugPrint('UpdateStock modal save error: $e');
+                return isStockKeeper
+                    ? 'Could not send for approval: $e'
+                    : 'Could not update stock: $e';
+              }
+            },
       ),
     );
     if (!mounted) return;
@@ -1951,7 +1972,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                   final rows = await db.inventoryDao.getProductsWithStock(
                     storeId: s.id,
                   );
-                  final qty = rows
+                  final qty =
+                      rows
                           .where((r) => r.product.id == productId)
                           .firstOrNull
                           ?.totalStock ??
@@ -1967,8 +1989,11 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                   }
                 }
               } catch (e, st) {
-                CrashReporter.record(e, st,
-                    context: 'inventory.product_detail.delete_stock_zero');
+                CrashReporter.record(
+                  e,
+                  st,
+                  context: 'inventory.product_detail.delete_stock_zero',
+                );
                 debugPrint('Delete stock-zeroing error: $e');
               }
               try {
@@ -1986,11 +2011,16 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                 Navigator.pop(context);
                 AppNotification.showSuccess(context, '$productName deleted');
               } catch (e, st) {
-                CrashReporter.record(e, st,
-                    context: 'inventory.product_detail.delete');
+                CrashReporter.record(
+                  e,
+                  st,
+                  context: 'inventory.product_detail.delete',
+                );
                 if (!context.mounted) return;
                 AppNotification.showError(
-                    context, 'Could not delete product. Please try again.');
+                  context,
+                  'Could not delete product. Please try again.',
+                );
               }
             },
           ),
@@ -2040,7 +2070,8 @@ class _UpdateStockSheet extends ConsumerStatefulWidget {
     required StoreData store,
     String? reason,
     required String notes,
-  }) onSave;
+  })
+  onSave;
 
   @override
   ConsumerState<_UpdateStockSheet> createState() => _UpdateStockSheetState();
@@ -2069,9 +2100,9 @@ class _UpdateStockSheetState extends ConsumerState<_UpdateStockSheet> {
     // Start in whichever mode is allowed (Add by default).
     _isRemove = !widget.canAdd && widget.canRemove;
     _selectedStore = widget.stores.cast<StoreData?>().firstWhere(
-          (s) => s?.id == widget.initialStoreId,
-          orElse: () => widget.stores.first,
-        )!;
+      (s) => s?.id == widget.initialStoreId,
+      orElse: () => widget.stores.first,
+    )!;
   }
 
   @override
@@ -2098,12 +2129,16 @@ class _UpdateStockSheetState extends ConsumerState<_UpdateStockSheet> {
     // case it was revoked while the sheet was open.
     if (_isRemove && !widget.canRemoveNow()) {
       AppNotification.showError(
-          context, 'You don\'t have permission to remove stock.');
+        context,
+        'You don\'t have permission to remove stock.',
+      );
       return;
     }
     if (!_isRemove && !widget.canAddNow()) {
       AppNotification.showError(
-          context, 'You don\'t have permission to add stock.');
+        context,
+        'You don\'t have permission to add stock.',
+      );
       return;
     }
     setState(() => _saving = true);
@@ -2173,7 +2208,7 @@ class _UpdateStockSheetState extends ConsumerState<_UpdateStockSheet> {
           20,
           20 + context.deviceBottomPadding,
         ),
-          child: Column(
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -2196,10 +2231,7 @@ class _UpdateStockSheetState extends ConsumerState<_UpdateStockSheet> {
                 color: _text,
               ),
             ),
-            Text(
-              product.name,
-              style: TextStyle(fontSize: 13, color: _subtext),
-            ),
+            Text(product.name, style: TextStyle(fontSize: 13, color: _subtext)),
             const SizedBox(height: 16),
             Row(
               children: [
@@ -2227,10 +2259,7 @@ class _UpdateStockSheetState extends ConsumerState<_UpdateStockSheet> {
                     .map(
                       (s) => DropdownMenuItem(
                         value: s,
-                        child: Text(
-                          s.name,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        child: Text(s.name, overflow: TextOverflow.ellipsis),
                       ),
                     )
                     .toList(),
@@ -2261,9 +2290,7 @@ class _UpdateStockSheetState extends ConsumerState<_UpdateStockSheet> {
                 value: _reason,
                 hintText: 'Select a reason',
                 items: _reasons
-                    .map(
-                      (r) => DropdownMenuItem(value: r, child: Text(r)),
-                    )
+                    .map((r) => DropdownMenuItem(value: r, child: Text(r)))
                     .toList(),
                 onChanged: (v) => setState(() => _reason = v),
               ),

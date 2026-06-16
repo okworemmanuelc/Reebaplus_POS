@@ -24,8 +24,9 @@ class StockApprovalsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final stockRequests = ref.watch(viewerScopedPendingStockRequestsProvider);
-    final quickRequests =
-        ref.watch(viewerScopedPendingQuickSaleRequestsProvider);
+    final quickRequests = ref.watch(
+      viewerScopedPendingQuickSaleRequestsProvider,
+    );
     final stores = ref.watch(allStoresProvider).valueOrNull ?? const [];
     final usersById =
         ref.watch(usersByBusinessProvider).valueOrNull ?? const {};
@@ -84,7 +85,7 @@ class _EmptyState extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            FontAwesomeIcons.clipboardCheck,
+            FontAwesomeIcons.clipboardCheck.data,
             size: 40,
             color: Theme.of(context).hintColor,
           ),
@@ -119,8 +120,9 @@ class _ApprovalCard extends ConsumerStatefulWidget {
 class _ApprovalCardState extends ConsumerState<_ApprovalCard> {
   bool _busy = false;
 
-  Color get _accent =>
-      widget.request.quantityDiff < 0 ? Colors.red.shade600 : Colors.green.shade600;
+  Color get _accent => widget.request.quantityDiff < 0
+      ? Colors.red.shade600
+      : Colors.green.shade600;
 
   Future<void> _decide({required bool approve}) async {
     final approverId = ref.read(authProvider).currentUser?.id;
@@ -167,9 +169,7 @@ class _ApprovalCardState extends ConsumerState<_ApprovalCard> {
       setState(() => _busy = false);
       AppNotification.showError(
         context,
-        approve
-            ? 'Could not approve: ${_friendly(e)}'
-            : 'Could not reject: $e',
+        approve ? 'Could not approve: ${_friendly(e)}' : 'Could not reject: $e',
       );
     }
   }
@@ -415,8 +415,7 @@ class _QuickSaleApprovalCardState
         approve ? 'Approved — sent to the cashier.' : 'Quick Sale rejected.',
       );
     } catch (e, st) {
-      CrashReporter.record(e, st,
-          context: 'orders.quick_sale_approval.decide');
+      CrashReporter.record(e, st, context: 'orders.quick_sale_approval.decide');
       if (!mounted) return;
       setState(() => _busy = false);
       AppNotification.showError(
@@ -430,8 +429,9 @@ class _QuickSaleApprovalCardState
   Widget build(BuildContext context) {
     final r = widget.request;
     final qty = r.quantity;
-    final qtyLabel =
-        qty == qty.roundToDouble() ? qty.toInt().toString() : qty.toString();
+    final qtyLabel = qty == qty.roundToDouble()
+        ? qty.toInt().toString()
+        : qty.toString();
     final totalNaira = qty * r.unitPriceKobo / 100.0;
 
     return Container(
@@ -461,7 +461,7 @@ class _QuickSaleApprovalCardState
               color: _accent.withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
-            child: Icon(FontAwesomeIcons.bolt, color: _accent, size: 18),
+            child: Icon(FontAwesomeIcons.bolt.data, color: _accent, size: 18),
           ),
           title: Text(
             r.itemName,
@@ -495,7 +495,10 @@ class _QuickSaleApprovalCardState
             _detailRow(context, 'Item', r.itemName),
             _detailRow(context, 'Quantity', qtyLabel),
             _detailRow(
-                context, 'Unit price', formatCurrency(r.unitPriceKobo / 100.0)),
+              context,
+              'Unit price',
+              formatCurrency(r.unitPriceKobo / 100.0),
+            ),
             _detailRow(context, 'Total', formatCurrency(totalNaira)),
             _detailRow(context, 'When', _fullStamp(r.createdAt)),
             SizedBox(height: context.spacingM),

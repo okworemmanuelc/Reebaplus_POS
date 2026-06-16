@@ -51,7 +51,11 @@ class SyncIssuesAccessScreen extends ConsumerWidget {
               data: (list) => SettingsFadeIn(
                 child: ListView(
                   padding: EdgeInsets.fromLTRB(
-                      24, 24, 24, 24 + context.deviceBottomPadding),
+                    24,
+                    24,
+                    24,
+                    24 + context.deviceBottomPadding,
+                  ),
                   children: [
                     Text(
                       'Choose which roles can open Sync Issues (the sync '
@@ -83,7 +87,8 @@ class _RoleToggle extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = Theme.of(context);
     final isCeo = role.slug == 'ceo';
-    final grants = ref.watch(rolePermissionsProvider(role.id)).valueOrNull ?? [];
+    final grants =
+        ref.watch(rolePermissionsProvider(role.id)).valueOrNull ?? [];
     final hasView = grants.any((g) => g.permissionKey == _kSyncView);
 
     return SettingsTile(
@@ -103,7 +108,10 @@ class _RoleToggle extends ConsumerWidget {
     // ref.read (not hasPermission/watch) — callback, matches the other settings
     // sub-pages.
     if (!ref.read(currentUserPermissionsProvider).contains('settings.manage')) {
-      AppNotification.showError(context, 'You don\'t have permission to do that.');
+      AppNotification.showError(
+        context,
+        'You don\'t have permission to do that.',
+      );
       return;
     }
     final db = ref.read(databaseProvider);

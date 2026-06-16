@@ -89,8 +89,8 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
     if (!mounted) return;
     setState(() {
       _stores = stores;
-      _selectedStoreId = widget.storeId ??
-          (stores.isNotEmpty ? stores.first.id : null);
+      _selectedStoreId =
+          widget.storeId ?? (stores.isNotEmpty ? stores.first.id : null);
     });
     await _loadProducts();
   }
@@ -105,7 +105,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
     final storeName = storeId == null
         ? null
         : (_storeNameFor(storeId) ??
-            (await db.storesDao.getStore(storeId))?.name);
+              (await db.storesDao.getStore(storeId))?.name);
     if (!mounted) return;
     setState(() {
       _items = items;
@@ -143,59 +143,333 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
     return actual - _items[index].totalStock;
   }
 
-  /// Confirm dialog before committing (Save Count adjusts live stock). Shows a
-  /// short summary of what will change, then saves only on confirm.
+  /// Pre-save review sheet: shows every product with a diff (or "all matched")
+  /// so the user can verify figures before committing. Save Count only proceeds
+  /// on explicit confirmation.
   Future<void> _confirmAndSave() async {
-    var changes = 0;
-    var shortages = 0;
+    // Snapshot diffs now; the text-field controllers may change while the sheet
+    // is open if the user scrolls, so we capture once before showing.
+    final changedIndexes = <int>[];
     for (int i = 0; i < _items.length; i++) {
-      final d = _diff(i);
-      if (d == 0) continue;
-      changes++;
-      if (d < 0) shortages++;
+      if (_diff(i) != 0) changedIndexes.add(i);
     }
+    final shortages = changedIndexes.where((i) => _diff(i) < 0).length;
+    final surpluses = changedIndexes.where((i) => _diff(i) > 0).length;
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dctx) => AlertDialog(
-        backgroundColor: _surface,
-        title: Text(
-          'Save stock count?',
-          style: TextStyle(
-            color: _text,
-            fontWeight: FontWeight.w800,
-            fontSize: context.getRFontSize(17),
-          ),
-        ),
-        content: Text(
-          changes == 0
-              ? 'No differences for $_storeLabel — the count will be recorded '
-                  'with no stock changes.'
-              : '$changes product${changes == 1 ? '' : 's'} will be adjusted for '
-                  '$_storeLabel'
-                  '${shortages > 0 ? ' ($shortages shortage${shortages == 1 ? '' : 's'})' : ''}'
-                  '. This updates stock and cannot be undone.',
-          style: TextStyle(
-            color: _subtext,
-            fontSize: context.getRFontSize(14),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dctx, false),
-            child: Text('Cancel', style: TextStyle(color: _subtext)),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dctx, true),
-            child: const Text('Save Count'),
-          ),
-        ],
-      ),
+    final confirmed = await _showReviewSheet(
+      changedIndexes: changedIndexes,
+      shortages: shortages,
+      surpluses: surpluses,
     );
 
     if (confirmed == true && mounted) {
       await _saveCount();
     }
+  }
+
+  /// Bottom sheet listing every product that will change (or "all matched").
+  /// Returns true on "Confirm & Save", null/false on dismiss or "Back".
+  Future<bool?> _showReviewSheet({
+    required List<int> changedIndexes,
+    required int shortages,
+    required int surpluses,
+  }) {
+    return showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => DraggableScrollableSheet(
+        initialChildSize: changedIndexes.isEmpty ? 0.45 : 0.75,
+        maxChildSize: 0.95,
+        minChildSize: 0.35,
+        builder: (sheetCtx, scrollCtrl) => Container(
+          decoration: BoxDecoration(
+            color: _surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            children: [
+              // Handle
+              Padding(
+                padding: EdgeInsets.symmetric(vertical: context.getRSize(12)),
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: _border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              // Header
+              Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: context.getRSize(20),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      FontAwesomeIcons.clipboardList.data,
+                      size: context.getRSize(16),
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    SizedBox(width: context.getRSize(10)),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Review Count',
+                            style: TextStyle(
+                              color: _text,
+                              fontSize: context.getRFontSize(18),
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          Text(
+                            _storeLabel,
+                            style: TextStyle(
+                              color: _subtext,
+                              fontSize: context.getRFontSize(12),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(height: context.getRSize(10)),
+              // Summary chips
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: context.getRSize(20)),
+                child: Wrap(
+                  spacing: context.getRSize(8),
+                  runSpacing: context.getRSize(6),
+                  children: [
+                    _reviewChip(
+                      '${_items.length} counted',
+                      _subtext,
+                      _border.withValues(alpha: 0.5),
+                    ),
+                    if (changedIndexes.isNotEmpty)
+                      _reviewChip(
+                        '${changedIndexes.length} adjusted',
+                        Theme.of(context).colorScheme.primary,
+                        Theme.of(
+                          context,
+                        ).colorScheme.primary.withValues(alpha: 0.1),
+                      ),
+                    if (shortages > 0)
+                      _reviewChip(
+                        '$shortages short',
+                        danger,
+                        danger.withValues(alpha: 0.1),
+                      ),
+                    if (surpluses > 0)
+                      _reviewChip(
+                        '$surpluses over',
+                        success,
+                        success.withValues(alpha: 0.1),
+                      ),
+                  ],
+                ),
+              ),
+              SizedBox(height: context.getRSize(10)),
+              Divider(color: _border, height: 1),
+              // Changed items list or "all matched" state
+              Expanded(
+                child: changedIndexes.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              FontAwesomeIcons.circleCheck.data,
+                              size: context.getRSize(36),
+                              color: success.withValues(alpha: 0.6),
+                            ),
+                            SizedBox(height: context.getRSize(12)),
+                            Text(
+                              'All products matched',
+                              style: TextStyle(
+                                color: _text,
+                                fontSize: context.getRFontSize(15),
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            SizedBox(height: context.getRSize(4)),
+                            Text(
+                              'The count will be recorded with no stock changes.',
+                              style: TextStyle(
+                                color: _subtext,
+                                fontSize: context.getRFontSize(13),
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.separated(
+                        controller: scrollCtrl,
+                        padding: EdgeInsets.fromLTRB(
+                          context.getRSize(16),
+                          context.getRSize(10),
+                          context.getRSize(16),
+                          context.getRSize(10),
+                        ),
+                        itemCount: changedIndexes.length,
+                        separatorBuilder: (_, __) =>
+                            SizedBox(height: context.getRSize(6)),
+                        itemBuilder: (_, idx) {
+                          final i = changedIndexes[idx];
+                          final item = _items[i];
+                          final d = _diff(i);
+                          final actual = item.totalStock + d;
+                          final isShort = d < 0;
+                          final diffColor = isShort ? danger : success;
+                          final sign = d > 0 ? '+' : '';
+                          return Container(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: context.getRSize(12),
+                              vertical: context.getRSize(10),
+                            ),
+                            decoration: BoxDecoration(
+                              color: _card,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: diffColor.withValues(alpha: 0.3),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    item.product.name,
+                                    style: TextStyle(
+                                      color: _text,
+                                      fontSize: context.getRFontSize(13),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                SizedBox(width: context.getRSize(8)),
+                                Text(
+                                  '${item.totalStock} → $actual',
+                                  style: TextStyle(
+                                    color: _subtext,
+                                    fontSize: context.getRFontSize(12),
+                                  ),
+                                ),
+                                SizedBox(width: context.getRSize(10)),
+                                Container(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: context.getRSize(8),
+                                    vertical: context.getRSize(3),
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: diffColor.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    '$sign$d',
+                                    style: TextStyle(
+                                      color: diffColor,
+                                      fontSize: context.getRFontSize(12),
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+              ),
+              // Action buttons
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                  context.getRSize(16),
+                  context.getRSize(8),
+                  context.getRSize(16),
+                  context.deviceBottomPadding + context.getRSize(16),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(sheetCtx, false),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: _text,
+                          side: BorderSide(color: _border),
+                          padding: EdgeInsets.symmetric(
+                            vertical: context.getRSize(14),
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: Text(
+                          'Back',
+                          style: TextStyle(
+                            fontSize: context.getRFontSize(14),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: context.getRSize(12)),
+                    Expanded(
+                      flex: 2,
+                      child: FilledButton(
+                        onPressed: () => Navigator.pop(sheetCtx, true),
+                        style: FilledButton.styleFrom(
+                          padding: EdgeInsets.symmetric(
+                            vertical: context.getRSize(14),
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: Text(
+                          'Confirm & Save Count',
+                          style: TextStyle(
+                            fontSize: context.getRFontSize(14),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _reviewChip(String label, Color textColor, Color bgColor) {
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: context.getRSize(10),
+        vertical: context.getRSize(4),
+      ),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: textColor,
+          fontSize: context.getRFontSize(12),
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
   }
 
   Future<void> _saveCount() async {
@@ -261,10 +535,10 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
         type: 'stock_count_saved',
         message: shortages > 0
             ? 'Stock count saved for $_storeLabel — '
-                '$shortages shortage${shortages == 1 ? '' : 's'} flagged. '
-                'Reconciliation report ready.'
+                  '$shortages shortage${shortages == 1 ? '' : 's'} flagged. '
+                  'Reconciliation report ready.'
             : 'Stock count saved for $_storeLabel — '
-                'reconciliation report ready.',
+                  'reconciliation report ready.',
         severity: shortages > 0 ? 'warning' : 'info',
       );
 
@@ -308,8 +582,10 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
     required String severity,
   }) async {
     final actorId = ref.read(authProvider).currentUser?.id;
-    final recipients =
-        await db.userBusinessesDao.getUserIdsForRoleSlugs(['ceo', 'manager']);
+    final recipients = await db.userBusinessesDao.getUserIdsForRoleSlugs([
+      'ceo',
+      'manager',
+    ]);
     final targets = recipients.isEmpty
         ? (actorId == null ? const <String>[] : [actorId])
         : recipients;
@@ -444,7 +720,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                     Row(
                       children: [
                         Icon(
-                          FontAwesomeIcons.triangleExclamation,
+                          FontAwesomeIcons.triangleExclamation.data,
                           size: context.getRSize(16),
                           color: danger,
                         ),
@@ -488,10 +764,12 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                       labelText: 'Reason',
                       value: reasonKey,
                       items: _kDamageReasons.entries
-                          .map((e) => DropdownMenuItem(
-                                value: e.key,
-                                child: Text(e.value),
-                              ))
+                          .map(
+                            (e) => DropdownMenuItem(
+                              value: e.key,
+                              child: Text(e.value),
+                            ),
+                          )
                           .toList(),
                       onChanged: (v) =>
                           setSheet(() => reasonKey = v ?? reasonKey),
@@ -593,7 +871,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                 child: Row(
                   children: [
                     Icon(
-                      FontAwesomeIcons.clockRotateLeft,
+                      FontAwesomeIcons.clockRotateLeft.data,
                       size: context.getRSize(16),
                       color: Theme.of(context).colorScheme.primary,
                     ),
@@ -618,7 +896,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          FontAwesomeIcons.clockRotateLeft,
+                          FontAwesomeIcons.clockRotateLeft.data,
                           size: context.getRSize(36),
                           color: _border,
                         ),
@@ -674,7 +952,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Icon(
-                            FontAwesomeIcons.clipboardCheck,
+                            FontAwesomeIcons.clipboardCheck.data,
                             size: context.getRSize(14),
                             color: Theme.of(context).colorScheme.primary,
                           ),
@@ -845,8 +1123,9 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
         color: _card,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: (c.shortageCount > 0 ? danger : _border)
-              .withValues(alpha: c.shortageCount > 0 ? 0.3 : 1),
+          color: (c.shortageCount > 0 ? danger : _border).withValues(
+            alpha: c.shortageCount > 0 ? 0.3 : 1,
+          ),
         ),
       ),
       child: Column(
@@ -855,7 +1134,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
           Row(
             children: [
               Icon(
-                FontAwesomeIcons.store,
+                FontAwesomeIcons.store.data,
                 size: context.getRSize(11),
                 color: Theme.of(context).colorScheme.primary,
               ),
@@ -984,7 +1263,8 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
     final role = ref.watch(currentUserRoleProvider);
     final perms = ref.watch(currentUserPermissionsProvider);
     const allowed = {'ceo', 'manager', 'stock_keeper'};
-    final blocked = role == null ||
+    final blocked =
+        role == null ||
         perms.isEmpty ||
         !allowed.contains(role.slug) ||
         !perms.contains('stock.adjust');
@@ -1021,125 +1301,125 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
       );
     }
     return Scaffold(
-        backgroundColor: _bg,
-        appBar: AppBar(
-          backgroundColor: _surface,
-          elevation: 0,
-          leading: IconButton(
-            icon: Icon(Icons.arrow_back_ios_new, color: _text, size: 20),
-            onPressed: () => Navigator.pop(context),
-          ),
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Daily Stock Count',
-                style: TextStyle(
-                  color: _text,
-                  fontSize: context.getRFontSize(16),
-                  fontWeight: FontWeight.w800,
-                ),
+      backgroundColor: _bg,
+      appBar: AppBar(
+        backgroundColor: _surface,
+        elevation: 0,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back_ios_new, color: _text, size: 20),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Daily Stock Count',
+              style: TextStyle(
+                color: _text,
+                fontSize: context.getRFontSize(16),
+                fontWeight: FontWeight.w800,
               ),
-              // §17.1: subtitle = store NAME (store icon, never the raw id).
-              Row(
-                children: [
-                  Icon(
-                    FontAwesomeIcons.store,
-                    size: context.getRSize(10),
+            ),
+            // §17.1: subtitle = store NAME (store icon, never the raw id).
+            Row(
+              children: [
+                Icon(
+                  FontAwesomeIcons.store.data,
+                  size: context.getRSize(10),
+                  color: _subtext,
+                ),
+                SizedBox(width: context.getRSize(5)),
+                Text(
+                  _storeLabel,
+                  style: TextStyle(
                     color: _subtext,
+                    fontSize: context.getRFontSize(11),
                   ),
-                  SizedBox(width: context.getRSize(5)),
-                  Text(
-                    _storeLabel,
-                    style: TextStyle(
-                      color: _subtext,
-                      fontSize: context.getRFontSize(11),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          actions: [
-            if (!_loading && _items.isNotEmpty)
-              IconButton(
-                icon: Icon(
-                  FontAwesomeIcons.triangleExclamation,
-                  color: _text,
-                  size: context.getRSize(16),
                 ),
-                tooltip: 'Record Damages',
-                onPressed: _saving ? null : () => _recordDamages(context),
-              ),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          if (!_loading && _items.isNotEmpty)
             IconButton(
               icon: Icon(
-                FontAwesomeIcons.clockRotateLeft,
+                FontAwesomeIcons.triangleExclamation.data,
                 color: _text,
                 size: context.getRSize(16),
               ),
-              tooltip: 'View History',
-              onPressed: () => _viewHistory(context),
+              tooltip: 'Record Damages',
+              onPressed: _saving ? null : () => _recordDamages(context),
             ),
-            if (!_loading && _saving)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Center(
-                  child: SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
+          IconButton(
+            icon: Icon(
+              FontAwesomeIcons.clockRotateLeft.data,
+              color: _text,
+              size: context.getRSize(16),
+            ),
+            tooltip: 'View History',
+            onPressed: () => _viewHistory(context),
+          ),
+          if (!_loading && _saving)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Theme.of(context).colorScheme.primary,
                   ),
                 ),
               ),
-          ],
-        ),
-        body: Column(
-          children: [
-            // §17: the count is per store. When entered unscoped with more than
-            // one store, a picker chooses which store to count (kept above the
-            // list so it stays reachable even when a store has no products).
-            if (widget.storeId == null && _stores.length > 1)
-              _buildStorePicker(context),
-            Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _items.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                FontAwesomeIcons.boxOpen,
-                                size: context.getRSize(48),
-                                color: _subtext.withValues(alpha: 0.4),
-                              ),
-                              SizedBox(height: context.getRSize(16)),
-                              Text(
-                                'No products found',
-                                style: TextStyle(
-                                  color: _subtext,
-                                  fontSize: context.getRFontSize(16),
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        )
-                      : _buildTable(context),
             ),
-          ],
-        ),
-        floatingActionButton: _loading || _saving || _items.isEmpty
-            ? null
-            : AppFAB(
-                heroTag: 'save_count_fab',
-                onPressed: _confirmAndSave,
-                icon: FontAwesomeIcons.floppyDisk,
-                label: 'Save Count',
-              ),
+        ],
+      ),
+      body: Column(
+        children: [
+          // §17: the count is per store. When entered unscoped with more than
+          // one store, a picker chooses which store to count (kept above the
+          // list so it stays reachable even when a store has no products).
+          if (widget.storeId == null && _stores.length > 1)
+            _buildStorePicker(context),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _items.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          FontAwesomeIcons.boxOpen.data,
+                          size: context.getRSize(48),
+                          color: _subtext.withValues(alpha: 0.4),
+                        ),
+                        SizedBox(height: context.getRSize(16)),
+                        Text(
+                          'No products found',
+                          style: TextStyle(
+                            color: _subtext,
+                            fontSize: context.getRFontSize(16),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : _buildTable(context),
+          ),
+        ],
+      ),
+      floatingActionButton: _loading || _saving || _items.isEmpty
+          ? null
+          : AppFAB(
+              heroTag: 'save_count_fab',
+              onPressed: _confirmAndSave,
+              icon: FontAwesomeIcons.floppyDisk.data,
+              label: 'Save Count',
+            ),
     );
   }
 

@@ -21,14 +21,19 @@ class ReorderAlertService {
 
   /// Checks for products below ROP and returns a list of alerts.
   Future<List<ReorderAlert>> checkAndNotify(String locationId) async {
-    final productsBelowROP = await _stockLedgerDao.getProductsBelowROP(locationId);
-    
-    return productsBelowROP.map((p) => ReorderAlert(
-      productId: p.productId,
-      productName: p.productName,
-      currentStock: p.currentStock,
-      rop: p.rop,
-    )).toList();
+    final productsBelowROP = await _stockLedgerDao.getProductsBelowROP(
+      locationId,
+    );
+
+    return productsBelowROP
+        .map(
+          (p) => ReorderAlert(
+            productId: p.productId,
+            productName: p.productName,
+            currentStock: p.currentStock,
+            rop: p.rop,
+          ),
+        )
+        .toList();
   }
 }
-

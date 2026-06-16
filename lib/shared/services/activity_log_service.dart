@@ -58,4 +58,3 @@ class ActivityLogService extends ValueNotifier<List<ActivityLog>> {
     return data.map((d) => ActivityLog.fromDb(d)).toList();
   }
 }
-

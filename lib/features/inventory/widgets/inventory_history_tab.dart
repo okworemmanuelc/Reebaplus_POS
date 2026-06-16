@@ -67,8 +67,7 @@ class _InventoryHistoryTabState extends ConsumerState<InventoryHistoryTab> {
 
     final db = ref.read(databaseProvider);
     final dates = _getDateRange(_selectedPeriod);
-    final wId =
-        widget.storeId is String && widget.storeId.toString() == 'all'
+    final wId = widget.storeId is String && widget.storeId.toString() == 'all'
         ? null
         : widget.storeId;
 

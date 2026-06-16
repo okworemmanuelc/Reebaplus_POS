@@ -45,9 +45,9 @@ class _DeleteBusinessScreenState extends ConsumerState<DeleteBusinessScreen> {
 
     setState(() => _deleting = true);
     try {
-      await ref.read(authProvider).deleteBusinessAndAccount(
-            businessId: businessId,
-          );
+      await ref
+          .read(authProvider)
+          .deleteBusinessAndAccount(businessId: businessId);
       // On success the auth state is wiped and the app root reroutes to the
       // Welcome screen; this widget is torn down. Nothing more to do here.
     } on DeleteBusinessException catch (e) {
@@ -106,7 +106,11 @@ class _DeleteBusinessScreenState extends ConsumerState<DeleteBusinessScreen> {
       body: SettingsFadeIn(
         child: ListView(
           padding: EdgeInsets.fromLTRB(
-              24, 24, 24, 24 + context.deviceBottomPadding),
+            24,
+            24,
+            24,
+            24 + context.deviceBottomPadding,
+          ),
           children: [
             // ── Warning banner ──────────────────────────────────────────
             Container(
@@ -161,8 +165,7 @@ class _DeleteBusinessScreenState extends ConsumerState<DeleteBusinessScreen> {
               variant: AppButtonVariant.danger,
               icon: Icons.delete_forever_rounded,
               isLoading: _deleting,
-              onPressed:
-                  _deleting ? null : () => _confirmDelete(business.id),
+              onPressed: _deleting ? null : () => _confirmDelete(business.id),
             ),
             const SizedBox(height: 12),
             Center(

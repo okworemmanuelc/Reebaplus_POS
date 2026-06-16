@@ -83,7 +83,9 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                         style: TextStyle(
                           fontSize: 15,
                           height: 1.4,
-                          color: authTextPrimary(context).withValues(alpha: 0.65),
+                          color: authTextPrimary(
+                            context,
+                          ).withValues(alpha: 0.65),
                         ),
                       ),
                       const SizedBox(height: 44),
@@ -151,10 +153,7 @@ class _SmallPrint extends StatelessWidget {
   void _openPlaceholder(BuildContext context, String title) {
     Navigator.of(context).push(
       SmoothRoute(
-        page: ComingSoonScreen(
-          title: title,
-          message: '$title — coming soon.',
-        ),
+        page: ComingSoonScreen(title: title, message: '$title — coming soon.'),
       ),
     );
   }
@@ -210,9 +209,14 @@ class _WelcomeLogo extends StatelessWidget {
           width: 104,
           height: 104,
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+            color: Theme.of(
+              context,
+            ).colorScheme.primary.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Theme.of(context).colorScheme.primary, width: 2),
+            border: Border.all(
+              color: Theme.of(context).colorScheme.primary,
+              width: 2,
+            ),
           ),
           alignment: Alignment.center,
           child: Text(
@@ -228,4 +232,3 @@ class _WelcomeLogo extends StatelessWidget {
     );
   }
 }
-

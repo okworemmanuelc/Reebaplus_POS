@@ -48,7 +48,7 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
     // Manager only their assigned store(s)).
     final pendingApprovals =
         ref.watch(viewerScopedPendingStockRequestsProvider).length +
-            ref.watch(viewerScopedPendingQuickSaleRequestsProvider).length;
+        ref.watch(viewerScopedPendingQuickSaleRequestsProvider).length;
 
     // Build the visible card list first so the grid can size itself to what
     // actually renders (cards are hidden per role / business type — rule #7).
@@ -62,7 +62,7 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
           context,
           title: 'Approvals',
           subtitle: 'Stock & quick sales',
-          icon: FontAwesomeIcons.clipboardList,
+          icon: FontAwesomeIcons.clipboardList.data,
           color: Colors.orange,
           badgeCount: pendingApprovals,
           onTap: () => Navigator.push(
@@ -79,7 +79,7 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
           context,
           title: 'Daily Reconciliation',
           subtitle: 'Day · Week · Month · Year',
-          icon: FontAwesomeIcons.clipboardCheck,
+          icon: FontAwesomeIcons.clipboardCheck.data,
           color: Colors.indigo,
           onTap: () => Navigator.push(
             context,
@@ -93,7 +93,7 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
           context,
           title: 'Crate Deposits',
           subtitle: 'Held · Refunded · Kept',
-          icon: FontAwesomeIcons.beerMugEmpty,
+          icon: FontAwesomeIcons.beerMugEmpty.data,
           color: Colors.teal,
           onTap: () => Navigator.push(
             context,
@@ -107,13 +107,11 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
           context,
           title: 'Profit Report',
           subtitle: 'Margins & COGS',
-          icon: FontAwesomeIcons.chartPie,
+          icon: FontAwesomeIcons.chartPie.data,
           color: Colors.green,
           onTap: () => Navigator.push(
             context,
-            slideDownRoute(
-              ProfitReportScreen(initialPeriod: _selectedPeriod),
-            ),
+            slideDownRoute(ProfitReportScreen(initialPeriod: _selectedPeriod)),
           ),
         ),
     ];
@@ -179,7 +177,7 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
       child: Row(
         children: [
           Icon(
-            FontAwesomeIcons.calendarDay,
+            FontAwesomeIcons.calendarDay.data,
             size: context.getRSize(14),
             color: Theme.of(context).hintColor,
           ),
@@ -292,8 +290,10 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
                   top: 0,
                   right: 0,
                   child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 3,
+                    ),
                     decoration: BoxDecoration(
                       color: color,
                       borderRadius: BorderRadius.circular(10),

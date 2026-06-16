@@ -48,12 +48,10 @@ class InventoryItem {
     this.unit,
   });
 
-  double get totalStock =>
-      storeStock.values.fold(0.0, (sum, val) => sum + val);
+  double get totalStock => storeStock.values.fold(0.0, (sum, val) => sum + val);
 
   // Helper to get stock for a specific store
-  double getStockForStore(String storeId) =>
-      storeStock[storeId] ?? 0.0;
+  double getStockForStore(String storeId) => storeStock[storeId] ?? 0.0;
 
   InventoryItem copyWith({
     String? id,

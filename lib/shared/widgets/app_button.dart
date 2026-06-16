@@ -78,15 +78,14 @@ class AppButton extends StatelessWidget {
         // Match the success banner green (AppNotification) so a "success"
         // button reads as the same green everywhere, on every theme.
         final successColor = Colors.green.shade600;
-        gradient = [
-          Color.lerp(successColor, Colors.white, 0.1)!,
-          successColor,
-        ];
+        gradient = [Color.lerp(successColor, Colors.white, 0.1)!, successColor];
         textColor = Colors.white;
         break;
     }
 
-    if (isDisabled && (variant == AppButtonVariant.primary || variant == AppButtonVariant.success)) {
+    if (isDisabled &&
+        (variant == AppButtonVariant.primary ||
+            variant == AppButtonVariant.success)) {
       gradient = [Colors.grey.shade400, Colors.grey.shade500];
     } else if (isDisabled) {
       bgColor = Colors.grey.withValues(alpha: 0.1);
@@ -161,12 +160,17 @@ class AppButton extends StatelessWidget {
               : null,
           color: gradient == null ? bgColor : null,
           border: border != null ? Border.fromBorderSide(border) : null,
-          boxShadow: (variant == AppButtonVariant.primary || variant == AppButtonVariant.success) && !isDisabled
+          boxShadow:
+              (variant == AppButtonVariant.primary ||
+                      variant == AppButtonVariant.success) &&
+                  !isDisabled
               ? [
                   BoxShadow(
-                    color: (variant == AppButtonVariant.success
-                        ? Colors.green.shade600
-                        : t.colorScheme.primary).withValues(alpha: 0.3),
+                    color:
+                        (variant == AppButtonVariant.success
+                                ? Colors.green.shade600
+                                : t.colorScheme.primary)
+                            .withValues(alpha: 0.3),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
                   ),

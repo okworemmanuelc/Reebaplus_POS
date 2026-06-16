@@ -33,8 +33,12 @@ const Color success = Color(0xFF10B981);
 
 // Brand Colors (shared across light & dark)
 const Color amberPrimary = Color(0xFFF5A623);
-const Color amberPrimaryDark = Color(0xFFD97706); // Darker amber for better contrast on white
-const Color contrastAmber = Color(0xFFD97706); // Specifically for light theme high-contrast elements
+const Color amberPrimaryDark = Color(
+  0xFFD97706,
+); // Darker amber for better contrast on white
+const Color contrastAmber = Color(
+  0xFFD97706,
+); // Specifically for light theme high-contrast elements
 const Color amberDark = Color(0xFFFF7A00);
 const Color amberGlow = Color(0x59F5A623); // rgba(245,166,35,0.35)
 const Color dangerRed = Color(0xFFFF3B30);
@@ -54,7 +58,9 @@ const Color alSurface = Color(0xFFFFFFFF);
 const Color alSurface2 = Color(0xFFEDF0F5);
 const Color alBorder = Color(0x12000000); // rgba(0,0,0,0.07)
 const Color alTextPrimary = Color(0xFF0E1420);
-const Color alTextSecondary = Color(0xFF4B5563); // Darkened for better contrast (was 7A8899)
+const Color alTextSecondary = Color(
+  0xFF4B5563,
+); // Darkened for better contrast (was 7A8899)
 // ═══════════════════════════════════════════════════════════════════════════
 // PURPLE VIOLET PALETTE (new)
 // ═══════════════════════════════════════════════════════════════════════════
@@ -87,8 +93,12 @@ const Color plTextSecondary = Color(0xFF6B7280);
 
 // Brand Colors (darker, less neon than the old emerald)
 const Color greenPrimary = Color(0xFF22C55E); // dark-theme primary
-const Color greenContrast = Color(0xFF15803D); // light-theme primary (deep forest)
-const Color greenPrimaryDark = Color(0xFF15803D); // light selectedItem / chip-selected
+const Color greenContrast = Color(
+  0xFF15803D,
+); // light-theme primary (deep forest)
+const Color greenPrimaryDark = Color(
+  0xFF15803D,
+); // light selectedItem / chip-selected
 const Color greenDark = Color(0xFF166534); // secondary / gradient end
 const Color greenGlow = Color(0x5922C55E);
 

@@ -12,16 +12,18 @@ String camelToSnake(String input) {
 /// milliseconds since epoch, which Postgres rejects as a `timestamptz`
 /// literal (22008 / "date/time field value out of range"). Force ISO-8601
 /// strings so the cloud accepts the value directly.
-const _cloudSerializer =
-    ValueSerializer.defaults(serializeDateTimeValuesAsString: true);
+const _cloudSerializer = ValueSerializer.defaults(
+  serializeDateTimeValuesAsString: true,
+);
 
 /// Robust serialization helper to extract cloud-ready key-value maps
 /// from any Drift `Insertable` (supporting both `DataClass` and `Companion`).
 Map<String, dynamic> serializeInsertable(Insertable row) {
   final Map<String, dynamic> rawMap;
   if (row is DataClass) {
-    rawMap = (row as dynamic).toJson(serializer: _cloudSerializer)
-        as Map<String, dynamic>;
+    rawMap =
+        (row as dynamic).toJson(serializer: _cloudSerializer)
+            as Map<String, dynamic>;
   } else {
     final columns = row.toColumns(true);
     rawMap = columns.map((k, v) {

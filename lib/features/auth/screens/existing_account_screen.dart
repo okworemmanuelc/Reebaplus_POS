@@ -59,16 +59,15 @@ class _ExistingAccountScreenState extends ConsumerState<ExistingAccountScreen> {
       }
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => CreatePinScreen(user: user),
-        ),
+        MaterialPageRoute(builder: (_) => CreatePinScreen(user: user)),
       );
     } catch (e, stack) {
       debugPrint('[ExistingAccountScreen] syncOnLogin failed: $e\n$stack');
       if (!mounted) return;
       setState(() => _loading = false);
       final msg = e.toString().toLowerCase();
-      final isNetwork = e is PartialPullException ||
+      final isNetwork =
+          e is PartialPullException ||
           msg.contains('socketexception') ||
           msg.contains('failed host lookup') ||
           msg.contains('clientexception') ||
@@ -82,7 +81,7 @@ class _ExistingAccountScreenState extends ConsumerState<ExistingAccountScreen> {
     }
   }
 
-  Future<void> _onCreateNew() async {
+  Future<void> _onUseDifferentEmail() async {
     if (_loading) return;
     // Capture provider up front — this method awaits a dialog then a
     // fullLogout, and `ref` is invalidated the moment the element is
@@ -92,11 +91,10 @@ class _ExistingAccountScreenState extends ConsumerState<ExistingAccountScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Create a new business?'),
-        content: Text(
-          'Your email is already linked to ${widget.account.businessName}. '
-          'To set up a new business, you’ll be signed out so you can register '
-          'with a different email.',
+        title: const Text('Sign out?'),
+        content: const Text(
+          'Each email is linked to one business. '
+          'To sign in with a different account, you\'ll be signed out.',
         ),
         actions: [
           TextButton(
@@ -105,7 +103,7 @@ class _ExistingAccountScreenState extends ConsumerState<ExistingAccountScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Sign out & continue'),
+            child: const Text('Sign out'),
           ),
         ],
       ),
@@ -131,8 +129,7 @@ class _ExistingAccountScreenState extends ConsumerState<ExistingAccountScreen> {
               Align(
                 alignment: Alignment.topLeft,
                 child: IconButton(
-                  icon: Icon(Icons.arrow_back_ios,
-                      color: textColor, size: 20),
+                  icon: Icon(Icons.arrow_back_ios, color: textColor, size: 20),
                   onPressed: _loading
                       ? null
                       : () => Navigator.of(context).pop(),
@@ -150,7 +147,7 @@ class _ExistingAccountScreenState extends ConsumerState<ExistingAccountScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'We found an existing account for ${_maskEmail(widget.email)}.\nSelect a business to continue.',
+                    'We found an existing account for ${_maskEmail(widget.email)}. Tap below to continue.',
                     style: TextStyle(
                       fontSize: 15,
                       color: textColor.withValues(alpha: 0.65),
@@ -165,9 +162,9 @@ class _ExistingAccountScreenState extends ConsumerState<ExistingAccountScreen> {
 
                   Center(
                     child: TextButton(
-                      onPressed: _loading ? null : _onCreateNew,
+                      onPressed: _loading ? null : _onUseDifferentEmail,
                       child: Text(
-                        'Create a new business instead',
+                        'Use a different email instead',
                         style: TextStyle(
                           color: textColor.withValues(alpha: 0.75),
                           fontSize: 14,
@@ -211,8 +208,7 @@ class _ExistingAccountScreenState extends ConsumerState<ExistingAccountScreen> {
                     color: primary.withValues(alpha: 0.15),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(Icons.business_rounded,
-                      color: primary, size: 26),
+                  child: Icon(Icons.business_rounded, color: primary, size: 26),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -230,8 +226,9 @@ class _ExistingAccountScreenState extends ConsumerState<ExistingAccountScreen> {
                       const SizedBox(height: 6),
                       Builder(
                         builder: (context) {
-                          final tagColor =
-                              roleTagColor(widget.account.roleSlug);
+                          final tagColor = roleTagColor(
+                            widget.account.roleSlug,
+                          );
                           return Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 10,

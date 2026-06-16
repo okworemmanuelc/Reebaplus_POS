@@ -2,12 +2,14 @@ import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:reebaplus_pos/core/data/countries.dart';
-import 'package:reebaplus_pos/core/data/currencies.dart';
+import 'package:reebaplus_pos/core/data/nigerian_lgas.dart';
 import 'package:reebaplus_pos/core/data/nigerian_states.dart';
+import 'package:reebaplus_pos/core/data/currencies.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
@@ -47,14 +49,29 @@ class CeoSignUpScreen extends ConsumerStatefulWidget {
 class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
   static const int _totalSteps = 9;
 
-  /// The six master-plan business types (§1.2), in plan order.
-  static const List<({String label, IconData icon})> _businessTypes = [
-    (label: 'Restaurant', icon: Icons.restaurant_rounded),
-    (label: 'Supermarket', icon: Icons.local_grocery_store_rounded),
-    (label: 'Bar', icon: Icons.local_bar_rounded),
-    (label: 'Beer distributor', icon: Icons.sports_bar_rounded),
-    (label: 'Pharmacy', icon: Icons.local_pharmacy_rounded),
-    (label: 'Boutique', icon: Icons.checkroom_rounded),
+  /// All seven master-plan business types (§1.2). Only 'Beverage distributor'
+  /// is selectable; the other six are visible but greyed-out as coming soon.
+  static const List<({String label, IconData icon, bool comingSoon})>
+  _businessTypes = [
+    (label: 'Restaurant', icon: Icons.restaurant_rounded, comingSoon: true),
+    (
+      label: 'Supermarket',
+      icon: Icons.local_grocery_store_rounded,
+      comingSoon: true,
+    ),
+    (label: 'Bar', icon: Icons.local_bar_rounded, comingSoon: true),
+    (
+      label: 'Beverage distributor',
+      icon: Icons.sports_bar_rounded,
+      comingSoon: false,
+    ),
+    (label: 'Pharmacy', icon: Icons.local_pharmacy_rounded, comingSoon: true),
+    (
+      label: 'Building Materials',
+      icon: Icons.foundation_rounded,
+      comingSoon: true,
+    ),
+    (label: 'Boutique', icon: Icons.checkroom_rounded, comingSoon: true),
   ];
 
   // Obvious PINs to block (master plan §5.1). Mirrors create_pin_screen.dart.
@@ -87,13 +104,18 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
   // Step controllers (persist across step navigation so back keeps values).
   final _businessNameCtrl = TextEditingController();
   final _storeNameCtrl = TextEditingController();
+  final _storePhoneCtrl = TextEditingController();
   final _storeAddressCtrl = TextEditingController();
+  // Plain-text fallback controllers for State and LGA when country ≠ Nigeria.
+  final _statePlainCtrl = TextEditingController();
+  final _lgaPlainCtrl = TextEditingController();
   final _fullNameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _otpCtrl = TextEditingController();
 
   String? _businessType;
   String _stateValue = '';
+  String _lgaValue = '';
   String _countryValue = kDefaultCountry;
 
   // Per-step inline validation messages.
@@ -141,13 +163,42 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
   void dispose() {
     _businessNameCtrl.dispose();
     _storeNameCtrl.dispose();
+    _storePhoneCtrl.dispose();
     _storeAddressCtrl.dispose();
+    _statePlainCtrl.dispose();
+    _lgaPlainCtrl.dispose();
     _fullNameCtrl.dispose();
     _emailCtrl.dispose();
     _otpCtrl.dispose();
     _resendTimer?.cancel();
     _lockoutTimer?.cancel();
     super.dispose();
+  }
+
+  String formatPhoneNumber(String rawNumber, String dialCode) {
+    var cleaned = rawNumber.trim().replaceAll(RegExp(r'[\s\-()]+'), '');
+    if (cleaned.isEmpty) return '';
+    if (cleaned.startsWith('00')) {
+      cleaned = '+${cleaned.substring(2)}';
+    }
+    final hasPlus = cleaned.startsWith('+');
+    final digitsOnly = hasPlus ? cleaned.substring(1) : cleaned;
+
+    final dialDigits = dialCode.replaceAll('+', '');
+
+    if (digitsOnly.startsWith(dialDigits)) {
+      var local = digitsOnly.substring(dialDigits.length);
+      if (local.startsWith('0')) {
+        local = local.substring(1);
+      }
+      return '$dialCode$local';
+    } else {
+      var local = digitsOnly;
+      if (local.startsWith('0')) {
+        local = local.substring(1);
+      }
+      return '$dialCode$local';
+    }
   }
 
   // ── Bootstrap ──────────────────────────────────────────────────────────
@@ -199,6 +250,8 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
       _emailCtrl.text = verified;
       draftNotifier.update((d) => d.email = verified);
     }
+    // Pre-populate the phone prefix for Nigeria
+    _storePhoneCtrl.text = kCountryDialCodes[kDefaultCountry] ?? '';
     if (mounted) setState(() => _booting = false);
   }
 
@@ -246,11 +299,15 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
       return;
     }
     if (!RegExp(r'^[A-Za-z][A-Za-z &-]*$').hasMatch(name)) {
-      setState(() => _businessNameError =
-          'Letters, spaces, "&" and "-" only — no numbers or symbols.');
+      setState(
+        () => _businessNameError =
+            'Letters, spaces, "&" and "-" only — no numbers or symbols.',
+      );
       return;
     }
-    ref.read(onboardingDraftProvider.notifier).update((d) => d.businessName = name);
+    ref
+        .read(onboardingDraftProvider.notifier)
+        .update((d) => d.businessName = name);
     setState(() => _businessNameError = null);
     _goTo(1);
   }
@@ -259,9 +316,14 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
 
   void _submitBusinessType() {
     if (_businessType == null) return;
+    // 'Beverage distributor' is the display label; DB canonical is 'Beer distributor'
+    // (existing rows use that string — preserves crate gating without a migration).
+    final dbType = _businessType == 'Beverage distributor'
+        ? 'Beer distributor'
+        : _businessType;
     ref
         .read(onboardingDraftProvider.notifier)
-        .update((d) => d.businessType = _businessType);
+        .update((d) => d.businessType = dbType);
     _goTo(2);
   }
 
@@ -269,18 +331,41 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
 
   void _submitStoreDetails() {
     final storeName = _storeNameCtrl.text.trim();
+    final phone = _storePhoneCtrl.text.trim();
     final address = _storeAddressCtrl.text.trim();
     if (storeName.length < 2) {
-      setState(() => _storeError = 'Enter a store name (at least 2 characters).');
+      setState(
+        () => _storeError = 'Enter a store name (at least 2 characters).',
+      );
+      return;
+    }
+    final dialCode = kCountryDialCodes[_countryValue.trim()] ?? '';
+    final formattedPhone = formatPhoneNumber(phone, dialCode);
+    final phoneDigits = formattedPhone.replaceAll(RegExp(r'\D'), '');
+    if (phoneDigits.length < 8) {
+      setState(
+        () => _storeError = 'Enter a valid phone number (at least 8 digits).',
+      );
       return;
     }
     if (address.isEmpty) {
       setState(() => _storeError = 'Enter the store address.');
       return;
     }
+    if (_stateValue.trim().isEmpty) {
+      setState(() => _storeError = 'Enter the State / Region.');
+      return;
+    }
+    if (_lgaValue.trim().isEmpty) {
+      setState(() => _storeError = 'Enter the Local Government / District.');
+      return;
+    }
+    _storePhoneCtrl.text = formattedPhone;
     ref.read(onboardingDraftProvider.notifier).update((d) {
       d.locationName = storeName;
+      d.businessPhone = formattedPhone;
       d.streetAddress = address;
+      d.lgaDistrict = _lgaValue.trim();
       d.cityState = _stateValue.trim();
       d.country = _countryValue.trim();
       d.currency = currencyForCountry(_countryValue.trim());
@@ -298,15 +383,16 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
       return;
     }
     if (!RegExp(r"^[A-Za-z][A-Za-z '-]*$").hasMatch(name)) {
-      setState(() =>
-          _fullNameError = 'Letters only — no numbers or symbols.');
+      setState(() => _fullNameError = 'Letters only — no numbers or symbols.');
       return;
     }
     if (RegExp(r'(.)\1\1').hasMatch(name)) {
       setState(() => _fullNameError = 'That doesn\'t look like a real name.');
       return;
     }
-    ref.read(onboardingDraftProvider.notifier).update((d) => d.ownerName = name);
+    ref
+        .read(onboardingDraftProvider.notifier)
+        .update((d) => d.ownerName = name);
     setState(() => _fullNameError = null);
     // Skip email (4) + OTP (5) when the email was verified upstream.
     _goTo(_emailSkipped ? 6 : 4);
@@ -410,7 +496,10 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
       if (_otpFailedAttempts >= 5) {
         final prefs = await SharedPreferences.getInstance();
         final lockoutTime = DateTime.now().add(const Duration(minutes: 30));
-        await prefs.setString('otp_lockout_until', lockoutTime.toIso8601String());
+        await prefs.setString(
+          'otp_lockout_until',
+          lockoutTime.toIso8601String(),
+        );
         if (!mounted) return;
         setState(() {
           _otpVerifying = false;
@@ -539,9 +628,8 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
     try {
       final draft = draftNotifier.require();
       // Feed the §5-dropped fields safe defaults before the commit. Currency
-      // was set from the country at step 3.
+      // and businessPhone were set from step 3.
       draft.businessEmail = draft.email;
-      draft.businessPhone = '';
       draft.timezone = 'Africa/Lagos';
       draft.taxRegNumber = null;
 
@@ -630,8 +718,11 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
                 Opacity(
                   opacity: showBack ? 1 : 0,
                   child: IconButton(
-                    icon: Icon(Icons.arrow_back_ios,
-                        color: authTextPrimary(context), size: 20),
+                    icon: Icon(
+                      Icons.arrow_back_ios,
+                      color: authTextPrimary(context),
+                      size: 20,
+                    ),
                     onPressed: showBack ? _back : null,
                   ),
                 ),
@@ -677,8 +768,8 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
       title: "What's your business called?",
       subtitle: 'This is the name your customers will see on receipts.',
       children: [
-        AuthInputCard(child:
-          TextField(
+        AuthInputCard(
+          child: TextField(
             controller: _businessNameCtrl,
             textCapitalization: TextCapitalization.words,
             textInputAction: TextInputAction.done,
@@ -713,7 +804,10 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
               label: t.label,
               icon: t.icon,
               selected: selected,
-              onTap: () => setState(() => _businessType = t.label),
+              comingSoon: t.comingSoon,
+              onTap: t.comingSoon
+                  ? null
+                  : () => setState(() => _businessType = t.label),
             ),
           );
         }),
@@ -728,63 +822,140 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
 
   Widget _buildStoreDetailsStep() {
     final currency = currencyForCountry(_countryValue.trim());
+    final isNigeria = _countryValue.trim().toLowerCase() == 'nigeria';
+    final lgaOptions = isNigeria
+        ? (kNigerianLgas[_stateValue] ?? <String>[])
+        : <String>[];
     return AuthFormShell(
       title: 'Your first store',
       subtitle: 'You can add more stores later.',
       children: [
-        AuthInputCard(child:
-          TextField(
+        AuthInputCard(
+          child: TextField(
             controller: _storeNameCtrl,
             textCapitalization: TextCapitalization.words,
             style: TextStyle(color: authTextPrimary(context)),
+            decoration:
+                AppDecorations.authInputDecoration(
+                  context,
+                  label: 'Store name',
+                  prefixIcon: Icons.store_mall_directory_outlined,
+                ).copyWith(
+                  hintText: 'Abuja Branch',
+                  hintStyle: TextStyle(
+                    color: authTextPrimary(context).withValues(alpha: 0.35),
+                  ),
+                ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        AuthInputCard(
+          child: TextField(
+            controller: _storePhoneCtrl,
+            keyboardType: TextInputType.phone,
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'[0-9+]')),
+            ],
+            style: TextStyle(color: authTextPrimary(context)),
             decoration: AppDecorations.authInputDecoration(
               context,
-              label: 'Store name',
-              prefixIcon: Icons.store_mall_directory_outlined,
-            ).copyWith(
-              hintText: 'Abuja Branch',
-              hintStyle: TextStyle(color: authTextPrimary(context).withValues(alpha: 0.35)),
+              label: 'Store phone number',
+              prefixIcon: Icons.phone_outlined,
             ),
           ),
         ),
         const SizedBox(height: 12),
-        AuthInputCard(child:
-          TextField(
+        AuthInputCard(
+          child: TextField(
             controller: _storeAddressCtrl,
             textCapitalization: TextCapitalization.words,
             style: TextStyle(color: authTextPrimary(context)),
             decoration: AppDecorations.authInputDecoration(
               context,
-              label: 'Address',
+              label: 'Street address',
               prefixIcon: Icons.location_on_outlined,
             ),
           ),
         ),
         const SizedBox(height: 12),
-        AuthInputCard(child:
-          _AutocompleteField(
-            label: 'State',
-            icon: Icons.map_outlined,
-            initial: _stateValue,
-            options: kNigerianStates,
-            onChanged: (v) => _stateValue = v,
-          ),
-        ),
-        const SizedBox(height: 12),
-        AuthInputCard(child:
-          _AutocompleteField(
+        AuthInputCard(
+          child: _AutocompleteField(
             label: 'Country',
             icon: Icons.public_outlined,
             initial: _countryValue,
             options: kCountries,
-            onChanged: (v) => setState(() => _countryValue = v),
+            onChanged: (v) => setState(() {
+              _countryValue = v;
+              _stateValue = '';
+              _lgaValue = '';
+              _statePlainCtrl.clear();
+              _lgaPlainCtrl.clear();
+              final dialCode = kCountryDialCodes[v] ?? '';
+              _storePhoneCtrl.text = dialCode;
+            }),
           ),
+        ),
+        const SizedBox(height: 12),
+        AuthInputCard(
+          child: isNigeria
+              ? _AutocompleteField(
+                  key: const ValueKey('state_ng'),
+                  label: 'State / Region',
+                  icon: Icons.map_outlined,
+                  initial: _stateValue,
+                  options: kNigerianStates,
+                  onChanged: (v) => setState(() {
+                    _stateValue = v;
+                    _lgaValue = '';
+                    _lgaPlainCtrl.clear();
+                  }),
+                )
+              : TextField(
+                  controller: _statePlainCtrl,
+                  textCapitalization: TextCapitalization.words,
+                  style: TextStyle(color: authTextPrimary(context)),
+                  onChanged: (v) => setState(() {
+                    _stateValue = v;
+                    _lgaValue = '';
+                  }),
+                  decoration: AppDecorations.authInputDecoration(
+                    context,
+                    label: 'State / Region',
+                    prefixIcon: Icons.map_outlined,
+                  ),
+                ),
+        ),
+        const SizedBox(height: 12),
+        AuthInputCard(
+          child: isNigeria
+              ? _AutocompleteField(
+                  key: ValueKey('lga_$_stateValue'),
+                  label: 'Local Government / District',
+                  icon: Icons.account_balance_outlined,
+                  initial: _lgaValue,
+                  options: lgaOptions,
+                  onChanged: (v) => _lgaValue = v,
+                )
+              : TextField(
+                  controller: _lgaPlainCtrl,
+                  textCapitalization: TextCapitalization.words,
+                  style: TextStyle(color: authTextPrimary(context)),
+                  onChanged: (v) => _lgaValue = v,
+                  decoration: AppDecorations.authInputDecoration(
+                    context,
+                    label: 'District (optional)',
+                    prefixIcon: Icons.account_balance_outlined,
+                  ),
+                ),
         ),
         const SizedBox(height: 12),
         Row(
           children: [
-            Icon(Icons.payments_outlined,
-                size: 18, color: authTextPrimary(context).withValues(alpha: 0.6)),
+            Icon(
+              Icons.payments_outlined,
+              size: 18,
+              color: authTextPrimary(context).withValues(alpha: 0.6),
+            ),
             const SizedBox(width: 8),
             Text(
               'Currency: $currency',
@@ -817,8 +988,8 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
       title: "What's your name?",
       subtitle: "You'll be set up as the CEO of this business.",
       children: [
-        AuthInputCard(child:
-          TextField(
+        AuthInputCard(
+          child: TextField(
             controller: _fullNameCtrl,
             textCapitalization: TextCapitalization.words,
             textInputAction: TextInputAction.done,
@@ -845,8 +1016,8 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
       title: 'Your email',
       subtitle: "We'll send a 6-digit code to confirm it's you.",
       children: [
-        AuthInputCard(child:
-          TextField(
+        AuthInputCard(
+          child: TextField(
             controller: _emailCtrl,
             keyboardType: TextInputType.emailAddress,
             textInputAction: TextInputAction.done,
@@ -875,80 +1046,79 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
   Widget _buildOtpStep() {
     return AuthCenteredScroll(
       children: [
-          Text(
-            'Check your email',
+        Text(
+          'Check your email',
+          style: TextStyle(
+            fontSize: 26,
+            fontWeight: FontWeight.w800,
+            color: authTextPrimary(context),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Enter the 6-digit code sent to\n${_emailCtrl.text.trim()}',
+          style: TextStyle(
+            fontSize: 15,
+            height: 1.4,
+            color: authTextPrimary(context).withValues(alpha: 0.65),
+          ),
+        ),
+        const SizedBox(height: 28),
+        ShakeWidget(
+          key: _otpShakeKey,
+          child: OtpBoxRow(
+            controller: _otpCtrl,
+            hasError: _otpError != null,
+            ignorePointers: _otpLockedOut,
+            readOnly: _otpVerifying,
+            textColor: authTextPrimary(context),
+            onSubmit: () {
+              if (_otpCtrl.text.trim().length == 6) _verifyOtp();
+            },
+          ),
+        ),
+        const SizedBox(height: 12),
+        Center(
+          child: Text(
+            'Code expires in 5 minutes',
             style: TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.w800,
-              color: authTextPrimary(context),
+              color: authTextPrimary(context).withValues(alpha: 0.5),
+              fontSize: 13,
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            'Enter the 6-digit code sent to\n${_emailCtrl.text.trim()}',
-            style: TextStyle(
-              fontSize: 15,
-              height: 1.4,
-              color: authTextPrimary(context).withValues(alpha: 0.65),
-            ),
+        ),
+        const SizedBox(height: 8),
+        Center(child: AuthErrorText(_otpError)),
+        const SizedBox(height: 8),
+        if (_otpVerified)
+          const AppButton(
+            text: 'Verified  ✓',
+            variant: AppButtonVariant.success,
+            onPressed: null,
+          )
+        else
+          AppButton(
+            text: 'Verify',
+            isLoading: _otpVerifying,
+            onPressed: _otpCtrl.text.trim().length == 6 && !_otpLockedOut
+                ? _verifyOtp
+                : null,
           ),
-          const SizedBox(height: 28),
-          ShakeWidget(
-            key: _otpShakeKey,
-            child: OtpBoxRow(
-              controller: _otpCtrl,
-              hasError: _otpError != null,
-              ignorePointers: _otpLockedOut,
-              readOnly: _otpVerifying,
-              textColor: authTextPrimary(context),
-              onSubmit: () {
-                if (_otpCtrl.text.trim().length == 6) _verifyOtp();
-              },
-            ),
-          ),
-          const SizedBox(height: 12),
-          Center(
-            child: Text(
-              'Code expires in 5 minutes',
-              style: TextStyle(
-                color: authTextPrimary(context).withValues(alpha: 0.5),
-                fontSize: 13,
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Center(child: AuthErrorText(_otpError)),
-          const SizedBox(height: 8),
-          if (_otpVerified)
-            const AppButton(
-              text: 'Verified  ✓',
-              variant: AppButtonVariant.success,
-              onPressed: null,
-            )
-          else
-            AppButton(
-              text: 'Verify',
-              isLoading: _otpVerifying,
-              onPressed: _otpCtrl.text.trim().length == 6 && !_otpLockedOut
-                  ? _verifyOtp
-                  : null,
-            ),
-          const SizedBox(height: 16),
-          Center(
-            child: _resendCountdown > 0
-                ? Text(
-                    'Resend code in 0:${_resendCountdown.toString().padLeft(2, '0')}',
-                    style: TextStyle(
-                      color: authTextPrimary(context).withValues(alpha: 0.5),
-                      fontSize: 13,
-                    ),
-                  )
-                : TextButton(
-                    onPressed:
-                        (_sendingOtp || _otpLockedOut) ? null : _resendOtp,
-                    child: const Text('Resend code'),
+        const SizedBox(height: 16),
+        Center(
+          child: _resendCountdown > 0
+              ? Text(
+                  'Resend code in 0:${_resendCountdown.toString().padLeft(2, '0')}',
+                  style: TextStyle(
+                    color: authTextPrimary(context).withValues(alpha: 0.5),
+                    fontSize: 13,
                   ),
-          ),
+                )
+              : TextButton(
+                  onPressed: (_sendingOtp || _otpLockedOut) ? null : _resendOtp,
+                  child: const Text('Resend code'),
+                ),
+        ),
       ],
     );
   }
@@ -958,38 +1128,38 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
     return AuthCenteredScroll(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-          if (_committing)
-            _buildCommitting()
-          else ...[
-            Text(
-              confirming ? 'Confirm your PIN' : 'Create a PIN',
-              style: TextStyle(
-                fontSize: 26,
-                fontWeight: FontWeight.w800,
-                color: authTextPrimary(context),
-              ),
+        if (_committing)
+          _buildCommitting()
+        else ...[
+          Text(
+            confirming ? 'Confirm your PIN' : 'Create a PIN',
+            style: TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.w800,
+              color: authTextPrimary(context),
             ),
-            const SizedBox(height: 8),
-            Text(
-              confirming
-                  ? 'Re-enter the same 6-digit PIN to confirm.'
-                  : 'Choose a 6-digit PIN you\'ll use to log in.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 15,
-                color: authTextPrimary(context).withValues(alpha: 0.65),
-              ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            confirming
+                ? 'Re-enter the same 6-digit PIN to confirm.'
+                : 'Choose a 6-digit PIN you\'ll use to log in.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 15,
+              color: authTextPrimary(context).withValues(alpha: 0.65),
             ),
-            const SizedBox(height: 28),
-            ShakeWidget(
-              key: confirming ? _confirmPinShakeKey : _createPinShakeKey,
-              child: PinDots(filled: _pin.length),
-            ),
-            const SizedBox(height: 12),
-            AuthErrorText(_pinError),
-            const SizedBox(height: 12),
-            PinKeypad(onDigit: _onPinDigit, onBackspace: _onPinBackspace),
-          ],
+          ),
+          const SizedBox(height: 28),
+          ShakeWidget(
+            key: confirming ? _confirmPinShakeKey : _createPinShakeKey,
+            child: PinDots(filled: _pin.length),
+          ),
+          const SizedBox(height: 12),
+          AuthErrorText(_pinError),
+          const SizedBox(height: 12),
+          PinKeypad(onDigit: _onPinDigit, onBackspace: _onPinBackspace),
+        ],
       ],
     );
   }
@@ -1001,8 +1171,14 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
         children: [
           CircleAvatar(
             radius: 44,
-            backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
-            child: Icon(Icons.check_rounded, size: 48, color: Theme.of(context).colorScheme.primary),
+            backgroundColor: Theme.of(
+              context,
+            ).colorScheme.primary.withValues(alpha: 0.12),
+            child: Icon(
+              Icons.check_rounded,
+              size: 48,
+              color: Theme.of(context).colorScheme.primary,
+            ),
           ),
           const SizedBox(height: 24),
           Text(
@@ -1031,8 +1207,11 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
                 color: Colors.greenAccent.withValues(alpha: 0.15),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.check_circle_rounded,
-                  color: Colors.greenAccent, size: 80),
+              child: const Icon(
+                Icons.check_circle_rounded,
+                color: Colors.greenAccent,
+                size: 80,
+              ),
             ),
             const SizedBox(height: 32),
             Text(
@@ -1097,18 +1276,20 @@ class _TypeCard extends StatelessWidget {
   final String label;
   final IconData icon;
   final bool selected;
-  final VoidCallback onTap;
+  final bool comingSoon;
+  final VoidCallback? onTap;
 
   const _TypeCard({
     required this.label,
     required this.icon,
     required this.selected,
     required this.onTap,
+    this.comingSoon = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Material(
+    final card = Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
@@ -1130,8 +1311,13 @@ class _TypeCard extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Icon(icon,
-                  color: selected ? Theme.of(context).colorScheme.primary : authTextPrimary(context), size: 26),
+              Icon(
+                icon,
+                color: selected
+                    ? Theme.of(context).colorScheme.primary
+                    : authTextPrimary(context),
+                size: 26,
+              ),
               const SizedBox(width: 16),
               Expanded(
                 child: Text(
@@ -1144,13 +1330,38 @@ class _TypeCard extends StatelessWidget {
                 ),
               ),
               if (selected)
-                Icon(Icons.check_circle_rounded,
-                    color: Theme.of(context).colorScheme.primary, size: 22),
+                Icon(
+                  Icons.check_circle_rounded,
+                  color: Theme.of(context).colorScheme.primary,
+                  size: 22,
+                ),
+              if (comingSoon)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: authTextPrimary(context).withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    'Coming soon',
+                    style: TextStyle(
+                      color: authTextPrimary(context).withValues(alpha: 0.55),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
       ),
     );
+
+    if (comingSoon) return Opacity(opacity: 0.5, child: card);
+    return card;
   }
 }
 
@@ -1165,6 +1376,7 @@ class _AutocompleteField extends StatelessWidget {
   final ValueChanged<String> onChanged;
 
   const _AutocompleteField({
+    super.key,
     required this.label,
     required this.icon,
     required this.initial,
@@ -1190,8 +1402,11 @@ class _AutocompleteField extends StatelessWidget {
           onChanged: onChanged,
           onSubmitted: (_) => onFieldSubmitted(),
           style: TextStyle(color: authTextPrimary(context)),
-          decoration:
-              AppDecorations.authInputDecoration(context, label: label, prefixIcon: icon),
+          decoration: AppDecorations.authInputDecoration(
+            context,
+            label: label,
+            prefixIcon: icon,
+          ),
         );
       },
       optionsViewBuilder: (context, onSelected, opts) {
@@ -1207,15 +1422,21 @@ class _AutocompleteField extends StatelessWidget {
                 padding: EdgeInsets.zero,
                 shrinkWrap: true,
                 children: opts
-                    .map((o) => InkWell(
-                          onTap: () => onSelected(o),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 12),
-                            child: Text(o,
-                                style: TextStyle(color: authTextPrimary(context))),
+                    .map(
+                      (o) => InkWell(
+                        onTap: () => onSelected(o),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
                           ),
-                        ))
+                          child: Text(
+                            o,
+                            style: TextStyle(color: authTextPrimary(context)),
+                          ),
+                        ),
+                      ),
+                    )
                     .toList(),
               ),
             ),
@@ -1225,4 +1446,3 @@ class _AutocompleteField extends StatelessWidget {
     );
   }
 }
-

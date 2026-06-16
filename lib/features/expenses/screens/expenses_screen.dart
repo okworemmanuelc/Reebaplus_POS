@@ -99,7 +99,9 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
+    ref.watch(
+      currencySymbolProvider,
+    ); // rebuild money displays when currency changes
     // Hard rule #6 (load-bearing): the Expenses screen IS the expense
     // report/list, so it requires `reports.see_expenses`. The drawer item and
     // the Home "Total Expenses" card are gated on the same key, but guard the
@@ -135,8 +137,9 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
           final allExpenses = ref.watch(viewerScopedExpensesProvider);
           final categoryNames =
               ref.watch(expenseCategoryNamesProvider).valueOrNull ??
-                  const <String, String>{};
-          final users = ref.watch(usersByBusinessProvider).valueOrNull ??
+              const <String, String>{};
+          final users =
+              ref.watch(usersByBusinessProvider).valueOrNull ??
               const <String, UserData>{};
 
           // §20.8 — active-store scope: caption it (when the picker is in play)
@@ -153,9 +156,11 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
 
           // Approved expenses inside the selected period (the headline total).
           final periodApproved = allExpenses
-              .where((e) =>
-                  e.expense.status == 'approved' &&
-                  _isInPeriod(e.expense.expenseDate, _effectivePeriod))
+              .where(
+                (e) =>
+                    e.expense.status == 'approved' &&
+                    _isInPeriod(e.expense.expenseDate, _effectivePeriod),
+              )
               .toList();
           final approvedTotal = periodApproved.fold<int>(
             0,
@@ -214,7 +219,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
           ? AppFAB(
               heroTag: 'expenses_fab',
               onPressed: () => AddExpenseScreen.show(context),
-              icon: FontAwesomeIcons.plus,
+              icon: FontAwesomeIcons.plus.data,
               label: 'Add Expense',
             )
           : null,
@@ -283,15 +288,16 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                  color:
-                      Theme.of(context).colorScheme.error.withValues(alpha: 0.3),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.error.withValues(alpha: 0.3),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
               ],
             ),
             child: Icon(
-              FontAwesomeIcons.fileInvoiceDollar,
+              FontAwesomeIcons.fileInvoiceDollar.data,
               color: Colors.white,
               size: context.getRSize(16),
             ),
@@ -338,9 +344,15 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
           fontWeight: FontWeight.bold,
           fontSize: context.getRFontSize(14),
         ),
-        tabs: const [
-          Tab(icon: Icon(FontAwesomeIcons.list, size: 16), text: 'Expenses'),
-          Tab(icon: Icon(FontAwesomeIcons.chartPie, size: 16), text: 'Stats'),
+        tabs: [
+          Tab(
+            icon: Icon(FontAwesomeIcons.list.data, size: 16),
+            text: 'Expenses',
+          ),
+          Tab(
+            icon: Icon(FontAwesomeIcons.chartPie.data, size: 16),
+            text: 'Stats',
+          ),
         ],
       ),
     );
@@ -393,8 +405,11 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(FontAwesomeIcons.store,
-                              size: context.getRSize(10), color: _subtext),
+                          Icon(
+                            FontAwesomeIcons.store.data,
+                            size: context.getRSize(10),
+                            color: _subtext,
+                          ),
                           SizedBox(width: context.getRSize(5)),
                           Text(
                             scopeLabel,
@@ -414,7 +429,9 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
                   width: context.getRSize(130),
                   items: _periodOptions.map((String val) {
                     return DropdownMenuItem<String>(
-                        value: val, child: Text(val));
+                      value: val,
+                      child: Text(val),
+                    );
                   }).toList(),
                   onChanged: (val) {
                     if (val != null) setState(() => _periodFilter = val);
@@ -484,7 +501,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
         Row(
           children: [
             Icon(
-              FontAwesomeIcons.bullseye,
+              FontAwesomeIcons.bullseye.data,
               size: context.getRSize(12),
               color: _subtext,
             ),
@@ -502,7 +519,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
         if (isCeo)
           AppButton(
             text: 'Set budget',
-            icon: FontAwesomeIcons.bullseye,
+            icon: FontAwesomeIcons.bullseye.data,
             variant: AppButtonVariant.outline,
             size: AppButtonSize.xsmall,
             isFullWidth: false,
@@ -532,7 +549,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
             Row(
               children: [
                 Icon(
-                  FontAwesomeIcons.bullseye,
+                  FontAwesomeIcons.bullseye.data,
                   size: context.getRSize(12),
                   color: isOver ? danger : success,
                 ),
@@ -565,7 +582,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
                     child: Padding(
                       padding: EdgeInsets.all(context.getRSize(4)),
                       child: Icon(
-                        FontAwesomeIcons.penToSquare,
+                        FontAwesomeIcons.penToSquare.data,
                         size: context.getRSize(11),
                         color: _subtext,
                       ),
@@ -582,7 +599,9 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
           child: LinearProgressIndicator(
             value: percent > 1.0 ? 1.0 : percent,
             backgroundColor: _border,
-            valueColor: AlwaysStoppedAnimation<Color>(isOver ? danger : success),
+            valueColor: AlwaysStoppedAnimation<Color>(
+              isOver ? danger : success,
+            ),
             minHeight: context.getRSize(6),
           ),
         ),
@@ -706,7 +725,9 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     } catch (_) {
       if (mounted) {
         AppNotification.showError(
-            context, 'Could not update budget. Please try again.');
+          context,
+          'Could not update budget. Please try again.',
+        );
       }
     }
   }
@@ -723,9 +744,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
   }) {
     final canApprove = hasPermission(ref, 'expenses.approve');
     final pending = canApprove
-        ? allExpenses
-            .where((e) => e.expense.status == 'pending')
-            .toList()
+        ? allExpenses.where((e) => e.expense.status == 'pending').toList()
         : const <ExpenseWithCategory>[];
 
     // Period-filtered list (all statuses) for the main grouped section.
@@ -752,14 +771,24 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
         ),
         children: [
           if (pending.isNotEmpty)
-            _buildPendingApprovals(context, pending, categoryNames, users,
-                storeNameById, showRowStore),
+            _buildPendingApprovals(
+              context,
+              pending,
+              categoryNames,
+              users,
+              storeNameById,
+              showRowStore,
+            ),
           ...sortedCategories.expand((cat) {
             final catList = grouped[cat]!
               ..sort(
-                  (a, b) => b.expense.expenseDate.compareTo(a.expense.expenseDate));
-            final catSum =
-                catList.fold<int>(0, (s, e) => s + e.expense.amountKobo);
+                (a, b) =>
+                    b.expense.expenseDate.compareTo(a.expense.expenseDate),
+              );
+            final catSum = catList.fold<int>(
+              0,
+              (s, e) => s + e.expense.amountKobo,
+            );
             return [
               Padding(
                 padding: EdgeInsets.fromLTRB(
@@ -794,10 +823,18 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
                   ],
                 ),
               ),
-              ...catList.map((e) => _buildExpenseCard(context, e, categoryNames,
+              ...catList.map(
+                (e) => _buildExpenseCard(
+                  context,
+                  e,
+                  categoryNames,
                   users,
                   withMenu: true,
-                  storeName: showRowStore ? _storeLabel(e, storeNameById) : null)),
+                  storeName: showRowStore
+                      ? _storeLabel(e, storeNameById)
+                      : null,
+                ),
+              ),
             ];
           }),
         ],
@@ -810,8 +847,11 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(FontAwesomeIcons.receipt,
-              size: context.getRSize(48), color: _border),
+          Icon(
+            FontAwesomeIcons.receipt.data,
+            size: context.getRSize(48),
+            color: _border,
+          ),
           SizedBox(height: context.getRSize(16)),
           Text(
             message,
@@ -870,7 +910,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
           Row(
             children: [
               Icon(
-                FontAwesomeIcons.clockRotateLeft,
+                FontAwesomeIcons.clockRotateLeft.data,
                 size: context.getRSize(13),
                 color: amberPrimaryDark,
               ),
@@ -886,13 +926,15 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
             ],
           ),
           SizedBox(height: context.getRSize(10)),
-          ...pending.map((e) => _buildPendingRow(
-                context,
-                e,
-                categoryNames,
-                users,
-                showRowStore ? _storeLabel(e, storeNameById) : null,
-              )),
+          ...pending.map(
+            (e) => _buildPendingRow(
+              context,
+              e,
+              categoryNames,
+              users,
+              showRowStore ? _storeLabel(e, storeNameById) : null,
+            ),
+          ),
         ],
       ),
     );
@@ -958,7 +1000,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
               Expanded(
                 child: AppButton(
                   text: 'Reject',
-                  icon: FontAwesomeIcons.xmark,
+                  icon: FontAwesomeIcons.xmark.data,
                   variant: AppButtonVariant.danger,
                   size: AppButtonSize.xsmall,
                   onPressed: () => _rejectExpense(exp),
@@ -968,7 +1010,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
               Expanded(
                 child: AppButton(
                   text: 'Approve',
-                  icon: FontAwesomeIcons.check,
+                  icon: FontAwesomeIcons.check.data,
                   variant: AppButtonVariant.success,
                   size: AppButtonSize.xsmall,
                   onPressed: () => _approveExpense(exp),
@@ -996,7 +1038,9 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     } catch (_) {
       if (mounted) {
         AppNotification.showError(
-            context, 'Could not approve expense. Please try again.');
+          context,
+          'Could not approve expense. Please try again.',
+        );
       }
     }
   }
@@ -1058,11 +1102,10 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
                 ),
                 AppButton(
                   text: 'Reject',
-                  icon: FontAwesomeIcons.xmark,
+                  icon: FontAwesomeIcons.xmark.data,
                   variant: AppButtonVariant.danger,
                   size: AppButtonSize.small,
-                  onPressed:
-                      r.isEmpty ? null : () => Navigator.pop(ctx, r),
+                  onPressed: r.isEmpty ? null : () => Navigator.pop(ctx, r),
                 ),
               ],
             );
@@ -1084,7 +1127,9 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     } catch (_) {
       if (mounted) {
         AppNotification.showError(
-            context, 'Could not reject expense. Please try again.');
+          context,
+          'Could not reject expense. Please try again.',
+        );
       }
     }
   }
@@ -1128,7 +1173,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
             ),
             AppButton(
               text: 'Delete',
-              icon: FontAwesomeIcons.trash,
+              icon: FontAwesomeIcons.trash.data,
               variant: AppButtonVariant.danger,
               size: AppButtonSize.small,
               onPressed: () => Navigator.pop(ctx, true),
@@ -1153,7 +1198,9 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     } catch (_) {
       if (mounted) {
         AppNotification.showError(
-            context, 'Could not delete expense. Please try again.');
+          context,
+          'Could not delete expense. Please try again.',
+        );
       }
     }
   }
@@ -1165,7 +1212,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
 
     return PopupMenuButton<String>(
       icon: Icon(
-        FontAwesomeIcons.ellipsisVertical,
+        FontAwesomeIcons.ellipsisVertical.data,
         size: context.getRSize(14),
         color: _subtext,
       ),
@@ -1183,8 +1230,11 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
             value: 'edit',
             child: Row(
               children: [
-                Icon(FontAwesomeIcons.penToSquare,
-                    size: context.getRSize(13), color: _text),
+                Icon(
+                  FontAwesomeIcons.penToSquare.data,
+                  size: context.getRSize(13),
+                  color: _text,
+                ),
                 SizedBox(width: context.getRSize(10)),
                 Text('Edit', style: TextStyle(color: _text)),
               ],
@@ -1195,8 +1245,11 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
             value: 'delete',
             child: Row(
               children: [
-                Icon(FontAwesomeIcons.trash,
-                    size: context.getRSize(13), color: danger),
+                Icon(
+                  FontAwesomeIcons.trash.data,
+                  size: context.getRSize(13),
+                  color: danger,
+                ),
                 SizedBox(width: context.getRSize(10)),
                 const Text('Delete', style: TextStyle(color: danger)),
               ],
@@ -1260,9 +1313,9 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
 
     return AppRefreshWrapper(
       child: ListView(
-        padding: EdgeInsets.all(context.getRSize(16)).copyWith(
-          bottom: context.getRSize(100) + context.deviceBottomPadding,
-        ),
+        padding: EdgeInsets.all(
+          context.getRSize(16),
+        ).copyWith(bottom: context.getRSize(100) + context.deviceBottomPadding),
         children: [
           _buildAnnualProjectionCard(context),
           SizedBox(height: context.getRSize(16)),
@@ -1296,7 +1349,9 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
                     children: List.generate(sortedCats.length, (index) {
                       final cat = sortedCats[index];
                       final amt = catTotals[cat]!;
-                      final flex = total == 0 ? 0 : (amt / total * 1000).toInt();
+                      final flex = total == 0
+                          ? 0
+                          : (amt / total * 1000).toInt();
                       if (flex == 0) return const SizedBox();
                       return Expanded(
                         flex: flex,
@@ -1382,10 +1437,12 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     final now = DateTime.now();
     final allExpenses = ref.watch(viewerScopedExpensesProvider);
     final monthKobo = allExpenses
-        .where((e) =>
-            e.expense.status == 'approved' &&
-            e.expense.expenseDate.year == now.year &&
-            e.expense.expenseDate.month == now.month)
+        .where(
+          (e) =>
+              e.expense.status == 'approved' &&
+              e.expense.expenseDate.year == now.year &&
+              e.expense.expenseDate.month == now.month,
+        )
         .fold<int>(0, (s, e) => s + e.expense.amountKobo);
 
     final pct = monthKobo / goalKobo * 100;
@@ -1406,8 +1463,11 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
           children: [
             Row(
               children: [
-                Icon(FontAwesomeIcons.bullseye,
-                    size: context.getRSize(14), color: color),
+                Icon(
+                  FontAwesomeIcons.bullseye.data,
+                  size: context.getRSize(14),
+                  color: color,
+                ),
                 SizedBox(width: context.getRSize(8)),
                 Text(
                   'This month vs budget',
@@ -1475,8 +1535,11 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
           children: [
             Row(
               children: [
-                Icon(FontAwesomeIcons.userTag,
-                    size: context.getRSize(14), color: _subtext),
+                Icon(
+                  FontAwesomeIcons.userTag.data,
+                  size: context.getRSize(14),
+                  color: _subtext,
+                ),
                 SizedBox(width: context.getRSize(8)),
                 Text(
                   'Top staff by spend',
@@ -1529,14 +1592,19 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
   Widget _buildAnnualProjectionCard(BuildContext context) {
     final now = DateTime.now();
     final allExpenses = ref.watch(viewerScopedExpensesProvider);
-    final currentYearApproved = allExpenses.where((e) =>
-        e.expense.status == 'approved' &&
-        e.expense.expenseDate.year == now.year);
+    final currentYearApproved = allExpenses.where(
+      (e) =>
+          e.expense.status == 'approved' &&
+          e.expense.expenseDate.year == now.year,
+    );
     final totalThisYear = currentYearApproved.fold<double>(
-        0, (s, e) => s + e.expense.amountKobo / 100.0);
+      0,
+      (s, e) => s + e.expense.amountKobo / 100.0,
+    );
 
-    final projection =
-        currentYearApproved.isEmpty ? 0.0 : (totalThisYear / now.month) * 12;
+    final projection = currentYearApproved.isEmpty
+        ? 0.0
+        : (totalThisYear / now.month) * 12;
     return Container(
       padding: EdgeInsets.all(context.getRSize(20)),
       decoration: BoxDecoration(
@@ -1561,7 +1629,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
           Row(
             children: [
               Icon(
-                FontAwesomeIcons.chartLine,
+                FontAwesomeIcons.chartLine.data,
                 color: Colors.white,
                 size: context.getRSize(16),
               ),
@@ -1604,6 +1672,7 @@ class _ExpenseCard extends StatelessWidget {
   final ExpenseData exp;
   final String categoryName;
   final String recordedByName;
+
   /// §20.8 — when set (an "All Stores" aggregate view), the store that recorded
   /// the expense is shown on the card. Null in a single-store-scoped view.
   final String? storeName;
@@ -1620,19 +1689,19 @@ class _ExpenseCard extends StatelessWidget {
   IconData _getIconForCategory(String category) {
     switch (category.toLowerCase()) {
       case 'fuel':
-        return FontAwesomeIcons.gasPump;
+        return FontAwesomeIcons.gasPump.data;
       case 'salary':
-        return FontAwesomeIcons.users;
+        return FontAwesomeIcons.users.data;
       case 'rent':
-        return FontAwesomeIcons.building;
+        return FontAwesomeIcons.building.data;
       case 'maintenance':
-        return FontAwesomeIcons.wrench;
+        return FontAwesomeIcons.wrench.data;
       case 'utilities':
-        return FontAwesomeIcons.bolt;
+        return FontAwesomeIcons.bolt.data;
       case 'supplies':
-        return FontAwesomeIcons.box;
+        return FontAwesomeIcons.box.data;
       default:
-        return FontAwesomeIcons.fileInvoice;
+        return FontAwesomeIcons.fileInvoice.data;
     }
   }
 
@@ -1640,7 +1709,8 @@ class _ExpenseCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final cardBg = Theme.of(context).cardColor;
     final textCol = Theme.of(context).colorScheme.onSurface;
-    final subtextCol = Theme.of(context).textTheme.bodySmall?.color ??
+    final subtextCol =
+        Theme.of(context).textTheme.bodySmall?.color ??
         Theme.of(context).iconTheme.color!;
     final borderCol = Theme.of(context).dividerColor;
 
@@ -1675,10 +1745,9 @@ class _ExpenseCard extends StatelessWidget {
                 Container(
                   padding: EdgeInsets.all(context.getRSize(12)),
                   decoration: BoxDecoration(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .error
-                        .withValues(alpha: 0.1),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.error.withValues(alpha: 0.1),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
@@ -1749,7 +1818,7 @@ class _ExpenseCard extends StatelessWidget {
                       Row(
                         children: [
                           Icon(
-                            FontAwesomeIcons.userPen,
+                            FontAwesomeIcons.userPen.data,
                             size: context.getRSize(10),
                             color: subtextCol,
                           ),
@@ -1765,7 +1834,7 @@ class _ExpenseCard extends StatelessWidget {
                               exp.reference!.isNotEmpty) ...[
                             SizedBox(width: context.getRSize(12)),
                             Icon(
-                              FontAwesomeIcons.hashtag,
+                              FontAwesomeIcons.hashtag.data,
                               size: context.getRSize(10),
                               color: subtextCol,
                             ),
@@ -1790,8 +1859,11 @@ class _ExpenseCard extends StatelessWidget {
                         SizedBox(height: context.getRSize(6)),
                         Row(
                           children: [
-                            Icon(FontAwesomeIcons.store,
-                                size: context.getRSize(10), color: subtextCol),
+                            Icon(
+                              FontAwesomeIcons.store.data,
+                              size: context.getRSize(10),
+                              color: subtextCol,
+                            ),
                             SizedBox(width: context.getRSize(4)),
                             Expanded(
                               child: Text(

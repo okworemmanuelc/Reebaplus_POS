@@ -44,6 +44,10 @@ class Businesses extends Table {
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
       dateTime().withDefault(currentDateAndTime)();
+  // Mirrors public.businesses.owner_id — the auth_user_id of the business
+  // creator. Set locally during onboarding and backfilled from cloud on pull.
+  // Used to prevent any CEO (including added ones) from changing the owner's role.
+  TextColumn get ownerId => text().nullable()();
   // Subscription / access gating (master plan §32). Set by the web admin
   // console in the cloud; CLOUD-AUTHORITATIVE / APP-READ-ONLY — these columns
   // are deliberately omitted from the businesses push whitelist
@@ -245,9 +249,19 @@ class SupplierLedgerEntries extends Table {
 /// `schemaVersion`, add the matching `onUpgrade` table rebuild, and ship the
 /// cloud migration that widens the Supabase CHECK.
 const List<String> kProductUnits = [
-  'Bottle', 'Can', 'PET', 'Sachet', 'Keg',
-  'Crate', 'Pack', 'Carton', 'Piece', 'Bag',
-  'Box', 'Tin', 'Other',
+  'Bottle',
+  'Can',
+  'PET',
+  'Sachet',
+  'Keg',
+  'Crate',
+  'Pack',
+  'Carton',
+  'Piece',
+  'Bag',
+  'Box',
+  'Tin',
+  'Other',
 ];
 
 @DataClassName('ProductData')
@@ -269,8 +283,7 @@ class Products extends Table {
   // (retail / bulk breaker / distributor / selling) were dropped; products
   // now hold exactly three prices — buying (already here), retailer,
   // wholesaler. See master plan §16.5.
-  IntColumn get retailerPriceKobo =>
-      integer().withDefault(const Constant(0))();
+  IntColumn get retailerPriceKobo => integer().withDefault(const Constant(0))();
   IntColumn get wholesalerPriceKobo =>
       integer().withDefault(const Constant(0))();
   IntColumn get buyingPriceKobo => integer().withDefault(const Constant(0))();
@@ -343,8 +356,7 @@ class Customers extends Table {
   TextColumn get email => text().nullable()();
   TextColumn get address => text().nullable()();
   TextColumn get googleMapsLocation => text().nullable()();
-  TextColumn get priceTier =>
-      text().withDefault(const Constant('retailer'))();
+  TextColumn get priceTier => text().withDefault(const Constant('retailer'))();
   IntColumn get walletLimitKobo => integer().withDefault(const Constant(0))();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
@@ -940,7 +952,8 @@ class Expenses extends Table {
   DateTimeColumn get approvedAt => dateTime().nullable()();
   // The user-picked expense date (§20.2 date picker), distinct from createdAt.
   // Display/reporting only.
-  DateTimeColumn get expenseDate => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get expenseDate =>
+      dateTime().withDefault(currentDateAndTime)();
   // Local file path of the receipt photo (§20.2). Phase 1 is local-only; cloud
   // upload + cross-device sync of the image is deferred.
   TextColumn get receiptPath => text().nullable()();
@@ -1192,8 +1205,7 @@ class Notifications extends Table {
   // NULL = broadcast (visible to every member); set = targeted at one user
   // (only visible to that user via NotificationsDao). Mirror of the cloud
   // column added in 0026_accept_invite_v3.sql.
-  TextColumn get recipientUserId =>
-      text().nullable().references(Users, #id)();
+  TextColumn get recipientUserId => text().nullable().references(Users, #id)();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
       dateTime().withDefault(currentDateAndTime)();
@@ -1202,8 +1214,9 @@ class Notifications extends Table {
   Set<Column> get primaryKey => {id};
 
   @override
-  List<String> get customConstraints =>
-      ["CHECK (severity IN ('info', 'warning', 'alert'))"];
+  List<String> get customConstraints => [
+    "CHECK (severity IN ('info', 'warning', 'alert'))",
+  ];
 }
 
 @DataClassName('SettingData')
@@ -1313,9 +1326,7 @@ class RolePermissions extends Table {
   Set<Column> get primaryKey => {id};
 
   @override
-  List<String> get customConstraints => [
-    'UNIQUE (role_id, permission_key)',
-  ];
+  List<String> get customConstraints => ['UNIQUE (role_id, permission_key)'];
 }
 
 /// Per-staff permission override (master plan §10.2.1). A row means this user's
@@ -1391,9 +1402,7 @@ class RoleSettings extends Table {
   Set<Column> get primaryKey => {id};
 
   @override
-  List<String> get customConstraints => [
-    'UNIQUE (role_id, setting_key)',
-  ];
+  List<String> get customConstraints => ['UNIQUE (role_id, setting_key)'];
 }
 
 @DataClassName('UserBusinessData')
@@ -1459,9 +1468,7 @@ class UserStores extends Table {
   Set<Column> get primaryKey => {id};
 
   @override
-  List<String> get customConstraints => [
-    'UNIQUE (user_id, store_id)',
-  ];
+  List<String> get customConstraints => ['UNIQUE (user_id, store_id)'];
 }
 
 // Global (non-tenant) config — replaces sentinel-business-id pattern.
@@ -1675,7 +1682,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 49;
+  int get schemaVersion => 50;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1697,9 +1704,7 @@ class AppDatabase extends _$AppDatabase {
         // through a completed flow), so default them to true to match
         // the SQL back-fill in supabase/migrations/0004_onboarding_resume.sql.
         await m.addColumn(businesses, businesses.onboardingComplete);
-        await customStatement(
-          'UPDATE businesses SET onboarding_complete = 1',
-        );
+        await customStatement('UPDATE businesses SET onboarding_complete = 1');
       }
       if (from < 4) {
         // v4: enqueue-time coalescing. Adds a partial unique index on
@@ -1877,10 +1882,14 @@ class AppDatabase extends _$AppDatabase {
             "DELETE FROM business_members "
             "WHERE is_deleted = 1 OR status = 'removed'",
           );
-        } catch (_) {/* table may already be gone or column missing */}
+        } catch (_) {
+          /* table may already be gone or column missing */
+        }
         try {
           await customStatement('DELETE FROM users WHERE is_deleted = 1');
-        } catch (_) {/* column already dropped */}
+        } catch (_) {
+          /* column already dropped */
+        }
         await customStatement(
           "DELETE FROM sync_queue "
           "WHERE action_type IN ('users:upsert', 'business_members:upsert')",
@@ -1927,15 +1936,9 @@ class AppDatabase extends _$AppDatabase {
         await customStatement(
           'DROP INDEX IF EXISTS idx_business_members_business_lua',
         );
-        await customStatement(
-          'DROP INDEX IF EXISTS idx_business_members_user',
-        );
-        await customStatement(
-          'DROP INDEX IF EXISTS idx_invites_business_lua',
-        );
-        await customStatement(
-          'DROP INDEX IF EXISTS uq_invites_pending_code',
-        );
+        await customStatement('DROP INDEX IF EXISTS idx_business_members_user');
+        await customStatement('DROP INDEX IF EXISTS idx_invites_business_lua');
+        await customStatement('DROP INDEX IF EXISTS uq_invites_pending_code');
         await customStatement(
           'DROP INDEX IF EXISTS uq_invites_pending_human_code',
         );
@@ -1947,10 +1950,14 @@ class AppDatabase extends _$AppDatabase {
         // rather than erroring. SQLite has no DROP COLUMN IF EXISTS.
         try {
           await customStatement('ALTER TABLE users DROP COLUMN role');
-        } catch (_) {/* already gone */}
+        } catch (_) {
+          /* already gone */
+        }
         try {
           await customStatement('ALTER TABLE users DROP COLUMN role_tier');
-        } catch (_) {/* already gone */}
+        } catch (_) {
+          /* already gone */
+        }
       }
       if (from < 13) {
         // v13 (Reebaplus master plan §2.4): data-driven roles +
@@ -2441,7 +2448,9 @@ class AppDatabase extends _$AppDatabase {
         ]) {
           try {
             await customStatement('ALTER TABLE products DROP COLUMN $col');
-          } catch (_) {/* already gone */}
+          } catch (_) {
+            /* already gone */
+          }
         }
 
         // 4. Forward pending sync_queue payloads so a push after the cloud
@@ -2531,34 +2540,38 @@ class AppDatabase extends _$AppDatabase {
 
         if (await hasColumn('activity_logs', 'order_id')) {
           await customStatement(
-              'DROP TRIGGER IF EXISTS activity_logs_immutable');
+            'DROP TRIGGER IF EXISTS activity_logs_immutable',
+          );
           await customStatement(
-              'DROP TRIGGER IF EXISTS activity_logs_no_delete');
-          await m.alterTable(TableMigration(
-            activityLogs,
-            columnTransformer: {
-              activityLogs.entityType: const CustomExpression<String>(
-                "CASE "
-                "WHEN order_id IS NOT NULL THEN 'order' "
-                "WHEN product_id IS NOT NULL THEN 'product' "
-                "WHEN customer_id IS NOT NULL THEN 'customer' "
-                "WHEN expense_id IS NOT NULL THEN 'expense' "
-                "WHEN delivery_id IS NOT NULL THEN 'delivery' "
-                "WHEN wallet_txn_id IS NOT NULL THEN 'wallet_transaction' "
-                "END",
-              ),
-              activityLogs.entityId: const CustomExpression<String>(
-                "COALESCE(order_id, product_id, customer_id, expense_id, "
-                "delivery_id, wallet_txn_id)",
-              ),
-            },
-            newColumns: [
-              activityLogs.entityType,
-              activityLogs.entityId,
-              activityLogs.beforeJson,
-              activityLogs.afterJson,
-            ],
-          ));
+            'DROP TRIGGER IF EXISTS activity_logs_no_delete',
+          );
+          await m.alterTable(
+            TableMigration(
+              activityLogs,
+              columnTransformer: {
+                activityLogs.entityType: const CustomExpression<String>(
+                  "CASE "
+                  "WHEN order_id IS NOT NULL THEN 'order' "
+                  "WHEN product_id IS NOT NULL THEN 'product' "
+                  "WHEN customer_id IS NOT NULL THEN 'customer' "
+                  "WHEN expense_id IS NOT NULL THEN 'expense' "
+                  "WHEN delivery_id IS NOT NULL THEN 'delivery' "
+                  "WHEN wallet_txn_id IS NOT NULL THEN 'wallet_transaction' "
+                  "END",
+                ),
+                activityLogs.entityId: const CustomExpression<String>(
+                  "COALESCE(order_id, product_id, customer_id, expense_id, "
+                  "delivery_id, wallet_txn_id)",
+                ),
+              },
+              newColumns: [
+                activityLogs.entityType,
+                activityLogs.entityId,
+                activityLogs.beforeJson,
+                activityLogs.afterJson,
+              ],
+            ),
+          );
           for (final stmt in _ledgerTriggerStatements(
             _ledgerTables.firstWhere((l) => l.table == 'activity_logs'),
           )) {
@@ -2567,10 +2580,9 @@ class AppDatabase extends _$AppDatabase {
         }
         // notifications: add severity (default 'info') + its CHECK via rebuild.
         if (!await hasColumn('notifications', 'severity')) {
-          await m.alterTable(TableMigration(
-            notifications,
-            newColumns: [notifications.severity],
-          ));
+          await m.alterTable(
+            TableMigration(notifications, newColumns: [notifications.severity]),
+          );
         }
       }
       if (from < 26) {
@@ -2629,9 +2641,13 @@ class AppDatabase extends _$AppDatabase {
           await customStatement('DROP TABLE IF EXISTS customer_crate_balances');
           await m.createTable(customerCrateBalances);
         }
-        if (await hasCol('manufacturer_crate_balances', 'crate_size_group_id')) {
+        if (await hasCol(
+          'manufacturer_crate_balances',
+          'crate_size_group_id',
+        )) {
           await customStatement(
-              'DROP TABLE IF EXISTS manufacturer_crate_balances');
+            'DROP TABLE IF EXISTS manufacturer_crate_balances',
+          );
           await m.createTable(manufacturerCrateBalances);
         }
 
@@ -2669,44 +2685,50 @@ class AppDatabase extends _$AppDatabase {
         // re-creates table triggers from sqlite_master), rebuild, then recreate
         // the LUA + owner-group indexes, the bump trigger, and the ledger
         // triggers from the (unchanged) _ledgerTables immutable column set.
-        final cgInfo = (await customSelect('PRAGMA table_info(crate_ledger)')
-                .get())
-            .where((r) => r.read<String>('name') == 'crate_size_group_id')
-            .toList();
+        final cgInfo =
+            (await customSelect('PRAGMA table_info(crate_ledger)').get())
+                .where((r) => r.read<String>('name') == 'crate_size_group_id')
+                .toList();
         final cgIsNotNull =
             cgInfo.isNotEmpty && cgInfo.first.read<int>('notnull') == 1;
         if (cgIsNotNull) {
-          await customStatement('DROP TRIGGER IF EXISTS crate_ledger_immutable');
-          await customStatement('DROP TRIGGER IF EXISTS crate_ledger_no_delete');
+          await customStatement(
+            'DROP TRIGGER IF EXISTS crate_ledger_immutable',
+          );
+          await customStatement(
+            'DROP TRIGGER IF EXISTS crate_ledger_no_delete',
+          );
           // `store_id` was added to crate_ledger later (v44, guarded ALTER) but
           // the live table object already carries it, so the rebuild must treat
           // it as a NEW column (populated NULL) rather than copying it from the
           // pre-v44 table — otherwise the copy SELECTs a column that doesn't yet
           // exist. The v44 guarded ALTER then sees it present and skips. Without
           // this, a ≤v28→v29 upgrade crashes ("no such column store_id").
-          await m.alterTable(TableMigration(
-            crateLedger,
-            newColumns: [crateLedger.storeId],
-          ));
+          await m.alterTable(
+            TableMigration(crateLedger, newColumns: [crateLedger.storeId]),
+          );
           // drift's alterTable re-applies the rebuilt table's existing indexes
           // (with their OLD definitions), so DROP-then-CREATE here: it makes the
           // CREATEs idempotent AND swaps idx_crate_ledger_owner_group to its new
           // shape (without crate_size_group_id). Triggers are NOT re-applied by
           // alterTable, but DROP IF EXISTS keeps a partial re-run safe.
           await customStatement(
-              'DROP INDEX IF EXISTS idx_crate_ledger_business_lua');
+            'DROP INDEX IF EXISTS idx_crate_ledger_business_lua',
+          );
           await customStatement(
             'CREATE INDEX idx_crate_ledger_business_lua '
             'ON crate_ledger (business_id, last_updated_at)',
           );
           await customStatement(
-              'DROP INDEX IF EXISTS idx_crate_ledger_owner_group');
+            'DROP INDEX IF EXISTS idx_crate_ledger_owner_group',
+          );
           await customStatement(
             'CREATE INDEX idx_crate_ledger_owner_group '
             'ON crate_ledger (business_id, customer_id, manufacturer_id, created_at)',
           );
           await customStatement(
-              'DROP TRIGGER IF EXISTS bump_crate_ledger_last_updated_at');
+            'DROP TRIGGER IF EXISTS bump_crate_ledger_last_updated_at',
+          );
           await customStatement(
             'CREATE TRIGGER bump_crate_ledger_last_updated_at '
             'AFTER UPDATE ON crate_ledger '
@@ -2716,8 +2738,12 @@ class AppDatabase extends _$AppDatabase {
             "UPDATE crate_ledger SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
             'END',
           );
-          await customStatement('DROP TRIGGER IF EXISTS crate_ledger_immutable');
-          await customStatement('DROP TRIGGER IF EXISTS crate_ledger_no_delete');
+          await customStatement(
+            'DROP TRIGGER IF EXISTS crate_ledger_immutable',
+          );
+          await customStatement(
+            'DROP TRIGGER IF EXISTS crate_ledger_no_delete',
+          );
           for (final stmt in _ledgerTriggerStatements(
             _ledgerTables.firstWhere((l) => l.table == 'crate_ledger'),
           )) {
@@ -2797,22 +2823,23 @@ class AppDatabase extends _$AppDatabase {
         // (alterTable does not re-apply triggers). Backfill the new
         // expense_date from the existing created_at.
         if (!await hasCol('expenses', 'status')) {
-          await m.alterTable(TableMigration(
-            expenses,
-            newColumns: [
-              expenses.status,
-              expenses.rejectionReason,
-              expenses.approvedBy,
-              expenses.approvedAt,
-              expenses.expenseDate,
-              expenses.receiptPath,
-            ],
-            columnTransformer: {
-              expenses.expenseDate: expenses.createdAt,
-            },
-          ));
+          await m.alterTable(
+            TableMigration(
+              expenses,
+              newColumns: [
+                expenses.status,
+                expenses.rejectionReason,
+                expenses.approvedBy,
+                expenses.approvedAt,
+                expenses.expenseDate,
+                expenses.receiptPath,
+              ],
+              columnTransformer: {expenses.expenseDate: expenses.createdAt},
+            ),
+          );
           await customStatement(
-              'DROP TRIGGER IF EXISTS bump_expenses_last_updated_at');
+            'DROP TRIGGER IF EXISTS bump_expenses_last_updated_at',
+          );
           await customStatement(
             'CREATE TRIGGER bump_expenses_last_updated_at '
             'AFTER UPDATE ON expenses '
@@ -2954,11 +2981,12 @@ class AppDatabase extends _$AppDatabase {
         // Rebuild via alterTable (no columns dropped, so the bump trigger
         // re-creates cleanly from sqlite_master). Idempotent: only rebuild
         // while product_id is still NOT NULL.
-        final info =
-            await customSelect('PRAGMA table_info(order_items)').get();
-        final pidNotNull = info.any((r) =>
-            r.read<String>('name') == 'product_id' &&
-            r.read<int>('notnull') == 1);
+        final info = await customSelect('PRAGMA table_info(order_items)').get();
+        final pidNotNull = info.any(
+          (r) =>
+              r.read<String>('name') == 'product_id' &&
+              r.read<int>('notnull') == 1,
+        );
         if (pidNotNull) {
           await m.alterTable(TableMigration(orderItems));
         }
@@ -2994,7 +3022,8 @@ class AppDatabase extends _$AppDatabase {
         if (expHasFunds.isNotEmpty) {
           await m.alterTable(TableMigration(expenses));
           await customStatement(
-              'DROP TRIGGER IF EXISTS bump_expenses_last_updated_at');
+            'DROP TRIGGER IF EXISTS bump_expenses_last_updated_at',
+          );
           await customStatement(
             'CREATE TRIGGER bump_expenses_last_updated_at '
             'AFTER UPDATE ON expenses '
@@ -3083,21 +3112,26 @@ class AppDatabase extends _$AppDatabase {
           "AND name='wallet_transactions'",
         ).getSingleOrNull();
         final wtWidened =
-            wtSql != null && wtSql.read<String>('sql').contains('crate_deposit');
+            wtSql != null &&
+            wtSql.read<String>('sql').contains('crate_deposit');
         if (!wtWidened) {
           await customStatement(
-              'DROP TRIGGER IF EXISTS wallet_transactions_immutable');
+            'DROP TRIGGER IF EXISTS wallet_transactions_immutable',
+          );
           await customStatement(
-              'DROP TRIGGER IF EXISTS wallet_transactions_no_delete');
+            'DROP TRIGGER IF EXISTS wallet_transactions_no_delete',
+          );
           await m.alterTable(TableMigration(walletTransactions));
           await customStatement(
-              'DROP INDEX IF EXISTS idx_wallet_transactions_business_lua');
+            'DROP INDEX IF EXISTS idx_wallet_transactions_business_lua',
+          );
           await customStatement(
             'CREATE INDEX idx_wallet_transactions_business_lua '
             'ON wallet_transactions (business_id, last_updated_at)',
           );
           await customStatement(
-              'DROP TRIGGER IF EXISTS bump_wallet_transactions_last_updated_at');
+            'DROP TRIGGER IF EXISTS bump_wallet_transactions_last_updated_at',
+          );
           await customStatement(
             'CREATE TRIGGER bump_wallet_transactions_last_updated_at '
             'AFTER UPDATE ON wallet_transactions '
@@ -3108,9 +3142,11 @@ class AppDatabase extends _$AppDatabase {
             'END',
           );
           await customStatement(
-              'DROP TRIGGER IF EXISTS wallet_transactions_immutable');
+            'DROP TRIGGER IF EXISTS wallet_transactions_immutable',
+          );
           await customStatement(
-              'DROP TRIGGER IF EXISTS wallet_transactions_no_delete');
+            'DROP TRIGGER IF EXISTS wallet_transactions_no_delete',
+          );
           for (final stmt in _ledgerTriggerStatements(
             _ledgerTables.firstWhere((l) => l.table == 'wallet_transactions'),
           )) {
@@ -3206,9 +3242,7 @@ class AppDatabase extends _$AppDatabase {
             "SELECT 1 FROM pragma_table_info('suppliers') WHERE name = '$col'",
           ).get();
           if (has.isEmpty) {
-            await customStatement(
-              'ALTER TABLE suppliers ADD COLUMN $col TEXT',
-            );
+            await customStatement('ALTER TABLE suppliers ADD COLUMN $col TEXT');
           }
         }
 
@@ -3444,9 +3478,7 @@ class AppDatabase extends _$AppDatabase {
           'DROP TRIGGER IF EXISTS supplier_ledger_entries_no_delete',
         );
         for (final stmt in _ledgerTriggerStatements(
-          _ledgerTables.firstWhere(
-            (l) => l.table == 'supplier_ledger_entries',
-          ),
+          _ledgerTables.firstWhere((l) => l.table == 'supplier_ledger_entries'),
         )) {
           await customStatement(stmt);
         }
@@ -3482,7 +3514,22 @@ class AppDatabase extends _$AppDatabase {
           await customStatement(
             'ALTER TABLE users DROP COLUMN last_notification_sent_at',
           );
-        } catch (_) {/* already gone */}
+        } catch (_) {
+          /* already gone */
+        }
+      }
+      if (from < 50) {
+        // v50: add owner_id to businesses — mirrors the cloud's existing
+        // owner_id column. Nullable so existing rows survive the upgrade;
+        // they are backfilled from the cloud on the next pull, and new
+        // onboarding writes it explicitly.
+        try {
+          await customStatement(
+            'ALTER TABLE businesses ADD COLUMN owner_id TEXT',
+          );
+        } catch (_) {
+          /* already present (idempotency guard) */
+        }
       }
     },
     beforeOpen: (details) async {
@@ -3513,8 +3560,10 @@ class AppDatabase extends _$AppDatabase {
     final triggers = await customSelect(
       "SELECT name, sql FROM sqlite_master WHERE type = 'trigger'",
     ).get();
-    final deleteGuardRe =
-        RegExp(r'(BEFORE|AFTER|INSTEAD\s+OF)\s+DELETE\s+ON', caseSensitive: false);
+    final deleteGuardRe = RegExp(
+      r'(BEFORE|AFTER|INSTEAD\s+OF)\s+DELETE\s+ON',
+      caseSensitive: false,
+    );
     final deleteGuards = triggers.where((r) {
       final sql = r.read<String?>('sql') ?? '';
       return deleteGuardRe.hasMatch(sql);
@@ -3732,7 +3781,11 @@ const List<String> _v13HotPathIndexStatements = [
 const List<List<String>> _defaultPermissionRows = [
   // Stores — rendered first on the role page (§10.2). CEO-only by default.
   ['stores.manage', 'Add, edit, and remove stores', 'Stores'],
-  ['stores.receive_transfer', 'Confirm receipt of incoming stock transfers', 'Stores'],
+  [
+    'stores.receive_transfer',
+    'Confirm receipt of incoming stock transfers',
+    'Stores',
+  ],
   // Sales
   ['sales.make', 'Make a sale', 'Sales'],
   ['sales.cancel', 'Cancel a sale', 'Sales'],
@@ -3792,7 +3845,8 @@ const List<List<String>> _defaultPermissionRows = [
 // (fresh installs) and the v13 upgrade block.
 final List<String> _permissionsSeedStatements = _defaultPermissionRows
     .map(
-      (row) => "INSERT INTO permissions (key, description, category) "
+      (row) =>
+          "INSERT INTO permissions (key, description, category) "
           "VALUES ('${_sqlEscape(row[0])}', '${_sqlEscape(row[1])}', '${_sqlEscape(row[2])}')",
     )
     .toList(growable: false);
@@ -3839,17 +3893,17 @@ List<String> _ledgerTriggerStatements(_LedgerImmutability ledger) {
       .join(' OR ');
   return [
     'CREATE TRIGGER ${ledger.table}_immutable '
-    'BEFORE UPDATE ON ${ledger.table} '
-    'FOR EACH ROW '
-    'WHEN $whenClause '
-    'BEGIN '
-    "SELECT RAISE(ABORT, 'append-only: only voided_at/voided_by/void_reason may change'); "
-    'END',
+        'BEFORE UPDATE ON ${ledger.table} '
+        'FOR EACH ROW '
+        'WHEN $whenClause '
+        'BEGIN '
+        "SELECT RAISE(ABORT, 'append-only: only voided_at/voided_by/void_reason may change'); "
+        'END',
     'CREATE TRIGGER ${ledger.table}_no_delete '
-    'BEFORE DELETE ON ${ledger.table} '
-    'BEGIN '
-    "SELECT RAISE(ABORT, 'append-only: deletion not permitted'); "
-    'END',
+        'BEFORE DELETE ON ${ledger.table} '
+        'BEGIN '
+        "SELECT RAISE(ABORT, 'append-only: deletion not permitted'); "
+        'END',
   ];
 }
 

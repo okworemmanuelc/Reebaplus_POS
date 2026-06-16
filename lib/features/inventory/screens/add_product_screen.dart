@@ -79,8 +79,9 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
 
   /// Whether the current role may see / set the buying price (master plan
   /// §16.5 / §16.7). Reads (not watches) so it is safe to call from `_save`.
-  bool get _canEditBuying =>
-      ref.read(currentUserPermissionsProvider).contains('products.edit_buying_price');
+  bool get _canEditBuying => ref
+      .read(currentUserPermissionsProvider)
+      .contains('products.edit_buying_price');
 
   @override
   void initState() {
@@ -231,10 +232,11 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   void _selectProduct(ProductData product) {
     _nameCtrl.text = product.name;
     _subtitleCtrl.text = product.subtitle ?? '';
-    _retailPriceCtrl.text =
-        (product.retailerPriceKobo / 100).toStringAsFixed(2);
-    _wholesalePriceCtrl.text =
-        (product.wholesalerPriceKobo / 100).toStringAsFixed(2);
+    _retailPriceCtrl.text = (product.retailerPriceKobo / 100).toStringAsFixed(
+      2,
+    );
+    _wholesalePriceCtrl.text = (product.wholesalerPriceKobo / 100)
+        .toStringAsFixed(2);
     _buyingPriceCtrl.text = (product.buyingPriceKobo / 100).toStringAsFixed(2);
     _emptyCrateValueCtrl.text = product.emptyCrateValueKobo > 0
         ? (product.emptyCrateValueKobo / 100).toStringAsFixed(2)
@@ -581,8 +583,9 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
 
     final retailPrice = parseCurrency(_retailPriceCtrl.text);
     final wholesalePrice = parseCurrency(_wholesalePriceCtrl.text);
-    final buyingPrice =
-        canEditBuying ? parseCurrency(_buyingPriceCtrl.text) : 0.0;
+    final buyingPrice = canEditBuying
+        ? parseCurrency(_buyingPriceCtrl.text)
+        : 0.0;
 
     if (canEditBuying && buyingPrice > retailPrice) {
       AppNotification.showError(
@@ -994,8 +997,12 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                   style: TextStyle(fontSize: 11, color: subtext),
                 ),
                 const SizedBox(height: 8),
-                _expiryField(card: card, border: border, subtext: subtext,
-                    textColor: textColor),
+                _expiryField(
+                  card: card,
+                  border: border,
+                  subtext: subtext,
+                  textColor: textColor,
+                ),
                 const SizedBox(height: 16),
 
                 // ── CRATE SIZE ─────────────────────────────────────────
@@ -1141,9 +1148,8 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                           textColor: Theme.of(context).colorScheme.primary,
                           card: card,
                           border: border,
-                          onTap: () => _createNewSupplier(
-                            _supplierCtrl.text.trim(),
-                          ),
+                          onTap: () =>
+                              _createNewSupplier(_supplierCtrl.text.trim()),
                         ),
                     ],
                     card: card,
@@ -1199,7 +1205,12 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         ),
       ),
       bottomNavigationBar: Padding(
-        padding: EdgeInsets.fromLTRB(20, 8, 20, 12 + context.deviceBottomPadding),
+        padding: EdgeInsets.fromLTRB(
+          20,
+          8,
+          20,
+          12 + context.deviceBottomPadding,
+        ),
         child: AppButton(
           text: isExisting ? 'Add Stock' : 'Add Product',
           variant: AppButtonVariant.primary,

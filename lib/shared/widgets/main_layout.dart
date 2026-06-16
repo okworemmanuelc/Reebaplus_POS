@@ -30,7 +30,7 @@ class MainLayout extends ConsumerStatefulWidget {
 }
 
 class _MainLayoutState extends ConsumerState<MainLayout>
-    with WidgetsBindingObserver, SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin {
   static void _voidOnCustomerChanged(dynamic _) {}
 
   // 11 tabs = 11 Navigators (Funds Register removed, §23).
@@ -62,10 +62,7 @@ class _MainLayoutState extends ConsumerState<MainLayout>
     const PaymentsScreen(), // 5
     const ExpensesScreen(), // 6
     const StoresScreen(), // 7
-    const CartScreen(
-      cart: [],
-      onCustomerChanged: _voidOnCustomerChanged,
-    ), // 8
+    const CartScreen(cart: [], onCustomerChanged: _voidOnCustomerChanged), // 8
     const DeliveriesScreen(), // 9
     const ActivityLogScreen(), // 10
   ];
@@ -82,14 +79,14 @@ class _MainLayoutState extends ConsumerState<MainLayout>
   void initState() {
     super.initState();
 
-    // Register BEFORE any Navigator so we get the back event first.
-    WidgetsBinding.instance.addObserver(this);
-
     // Link shared keys
     _nav = ref.read(navigationProvider);
     _nav.tabNavigatorKeys = _navigatorKeys;
 
-    _observers = List.generate(11, (i) => _TabPopObserver(tabIndex: i, nav: _nav));
+    _observers = List.generate(
+      11,
+      (i) => _TabPopObserver(tabIndex: i, nav: _nav),
+    );
 
     // Only pre-load the landing tab
     _initializedTabs.add(_nav.currentIndex.value);
@@ -121,9 +118,9 @@ class _MainLayoutState extends ConsumerState<MainLayout>
         if (!mounted) return;
         final scaffoldCtx = _nav.mainScaffoldKey.currentContext;
         if (scaffoldCtx != null && scaffoldCtx.mounted) {
-          Navigator.of(scaffoldCtx).push(
-            MaterialPageRoute(builder: (_) => const AddProductScreen()),
-          );
+          Navigator.of(
+            scaffoldCtx,
+          ).push(MaterialPageRoute(builder: (_) => const AddProductScreen()));
         }
       });
     }
@@ -131,7 +128,6 @@ class _MainLayoutState extends ConsumerState<MainLayout>
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     _nav.currentIndex.removeListener(_onTabIndexChanged);
     _tabSwitchController.dispose();
     _pendingOrdersSub?.cancel();
@@ -143,14 +139,6 @@ class _MainLayoutState extends ConsumerState<MainLayout>
     if (newIndex == _previousTabIndex) return;
     _previousTabIndex = newIndex;
     _tabSwitchController.forward(from: 0);
-  }
-
-  /// Intercepts the system back button at the highest level, before any
-  /// nested Navigator (TabNavigator) can consume it.
-  @override
-  Future<bool> didPopRoute() async {
-    _nav.handleBackPress(context);
-    return true; // Always consume — we handle everything ourselves.
   }
 
   @override
@@ -184,7 +172,13 @@ class _MainLayoutState extends ConsumerState<MainLayout>
       builder: (context, currentIndex, _) {
         _initializedTabs.add(currentIndex); // mark as visited
 
-        return Scaffold(
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) {
+            if (didPop) return;
+            _nav.handleBackPress(context);
+          },
+          child: Scaffold(
           key: nav.mainScaffoldKey,
 
           // Offstage keeps the widget alive and mounted for streams/scroll,
@@ -232,111 +226,122 @@ class _MainLayoutState extends ConsumerState<MainLayout>
                 if (showPos) 8,
               ];
               final bool isNavTab = tabOrder.contains(currentIndex);
-              final int navIndex =
-                  isNavTab ? tabOrder.indexOf(currentIndex) : 0;
+              final int navIndex = isNavTab
+                  ? tabOrder.indexOf(currentIndex)
+                  : 0;
 
               return ValueListenableBuilder<bool>(
                 valueListenable: nav.currentTabCanPop,
                 builder: (context, canPop, _) {
                   if (!isNavTab || canPop) return const SizedBox.shrink();
                   return BottomNavigationBar(
-                currentIndex: navIndex,
-                selectedItemColor: isNavTab ? t.colorScheme.primary : iconColor,
-                unselectedItemColor: iconColor,
-                onTap: (index) {
-                  // tabOrder maps a bottom-bar slot to its underlying tab index,
-                  // so it stays correct whether or not the Stock tab is present.
-                  final indexToSet = tabOrder[index];
+                    currentIndex: navIndex,
+                    selectedItemColor: isNavTab
+                        ? t.colorScheme.primary
+                        : iconColor,
+                    unselectedItemColor: iconColor,
+                    onTap: (index) {
+                      // tabOrder maps a bottom-bar slot to its underlying tab index,
+                      // so it stays correct whether or not the Stock tab is present.
+                      final indexToSet = tabOrder[index];
 
-                  if (currentIndex == indexToSet) {
-                    // Tap current tab: pop all detail screens to root
-                    _navigatorKeys[indexToSet].currentState?.popUntil(
-                      (r) => r.isFirst,
-                    );
-                  } else {
-                    nav.setIndex(indexToSet);
-                  }
-                },
-                type: BottomNavigationBarType.fixed,
-                items: [
-                  BottomNavigationBarItem(
-                    icon: const Icon(Icons.dashboard_outlined),
-                    activeIcon: Icon(
-                      isNavTab ? Icons.dashboard : Icons.dashboard_outlined,
-                    ),
-                    label: 'Home',
-                  ),
-                  if (showStock)
-                    BottomNavigationBarItem(
-                      icon: const Icon(Icons.inventory_2_outlined),
-                      activeIcon: Icon(
-                        isNavTab
-                            ? Icons.inventory_2
-                            : Icons.inventory_2_outlined,
-                      ),
-                      label: 'Stock',
-                    ),
-                  if (showPos)
-                    BottomNavigationBarItem(
-                      icon: const Icon(Icons.point_of_sale_outlined),
-                      activeIcon: Icon(
-                        isNavTab
-                            ? Icons.point_of_sale
-                            : Icons.point_of_sale_outlined,
-                      ),
-                      label: 'POS',
-                    ),
-                  BottomNavigationBarItem(
-                    icon: Badge(
-                      label: Text(_pendingOrderCount.toString()),
-                      isLabelVisible: _pendingOrderCount > 0,
-                      backgroundColor: t.colorScheme.error,
-                      child: const Icon(Icons.receipt_long_outlined),
-                    ),
-                    activeIcon: Badge(
-                      label: Text(_pendingOrderCount.toString()),
-                      isLabelVisible: _pendingOrderCount > 0,
-                      backgroundColor: t.colorScheme.error,
-                      child: Icon(
-                        isNavTab
-                            ? Icons.receipt_long
-                            : Icons.receipt_long_outlined,
-                      ),
-                    ),
-                    label: 'Orders',
-                  ),
-                  if (showPos)
-                    BottomNavigationBarItem(
-                      icon: ValueListenableBuilder<List<Map<String, dynamic>>>(
-                        valueListenable: ref.read(cartProvider),
-                        builder: (_, cart, __) => Badge(
-                          label: Text(cart.length.toString()),
-                          isLabelVisible: cart.isNotEmpty,
-                          backgroundColor: t.colorScheme.error,
-                          child: const Icon(Icons.shopping_cart_outlined),
+                      if (currentIndex == indexToSet) {
+                        // Tap current tab: pop all detail screens to root
+                        _navigatorKeys[indexToSet].currentState?.popUntil(
+                          (r) => r.isFirst,
+                        );
+                      } else {
+                        nav.setIndex(indexToSet);
+                      }
+                    },
+                    type: BottomNavigationBarType.fixed,
+                    items: [
+                      BottomNavigationBarItem(
+                        icon: const Icon(Icons.dashboard_outlined),
+                        activeIcon: Icon(
+                          isNavTab ? Icons.dashboard : Icons.dashboard_outlined,
                         ),
+                        label: 'Home',
                       ),
-                      activeIcon:
-                          ValueListenableBuilder<List<Map<String, dynamic>>>(
-                            valueListenable: ref.read(cartProvider),
-                            builder: (_, cart, __) => Badge(
-                              label: Text(cart.length.toString()),
-                              isLabelVisible: cart.isNotEmpty,
-                              backgroundColor: t.colorScheme.error,
-                              child: Icon(
-                                isNavTab
-                                    ? Icons.shopping_cart
-                                    : Icons.shopping_cart_outlined,
-                              ),
-                            ),
+                      if (showStock)
+                        BottomNavigationBarItem(
+                          icon: const Icon(Icons.inventory_2_outlined),
+                          activeIcon: Icon(
+                            isNavTab
+                                ? Icons.inventory_2
+                                : Icons.inventory_2_outlined,
                           ),
-                      label: 'Cart',
-                    ),
-                ],
-              );
+                          label: 'Stock',
+                        ),
+                      if (showPos)
+                        BottomNavigationBarItem(
+                          icon: const Icon(Icons.point_of_sale_outlined),
+                          activeIcon: Icon(
+                            isNavTab
+                                ? Icons.point_of_sale
+                                : Icons.point_of_sale_outlined,
+                          ),
+                          label: 'POS',
+                        ),
+                      BottomNavigationBarItem(
+                        icon: Badge(
+                          label: Text(_pendingOrderCount.toString()),
+                          isLabelVisible: _pendingOrderCount > 0,
+                          backgroundColor: t.colorScheme.error,
+                          child: const Icon(Icons.receipt_long_outlined),
+                        ),
+                        activeIcon: Badge(
+                          label: Text(_pendingOrderCount.toString()),
+                          isLabelVisible: _pendingOrderCount > 0,
+                          backgroundColor: t.colorScheme.error,
+                          child: Icon(
+                            isNavTab
+                                ? Icons.receipt_long
+                                : Icons.receipt_long_outlined,
+                          ),
+                        ),
+                        label: 'Orders',
+                      ),
+                      if (showPos)
+                        BottomNavigationBarItem(
+                          icon:
+                              ValueListenableBuilder<
+                                List<Map<String, dynamic>>
+                              >(
+                                valueListenable: ref.read(cartProvider),
+                                builder: (_, cart, __) => Badge(
+                                  label: Text(cart.length.toString()),
+                                  isLabelVisible: cart.isNotEmpty,
+                                  backgroundColor: t.colorScheme.error,
+                                  child: const Icon(
+                                    Icons.shopping_cart_outlined,
+                                  ),
+                                ),
+                              ),
+                          activeIcon:
+                              ValueListenableBuilder<
+                                List<Map<String, dynamic>>
+                              >(
+                                valueListenable: ref.read(cartProvider),
+                                builder: (_, cart, __) => Badge(
+                                  label: Text(cart.length.toString()),
+                                  isLabelVisible: cart.isNotEmpty,
+                                  backgroundColor: t.colorScheme.error,
+                                  child: Icon(
+                                    isNavTab
+                                        ? Icons.shopping_cart
+                                        : Icons.shopping_cart_outlined,
+                                  ),
+                                ),
+                              ),
+                          label: 'Cart',
+                        ),
+                    ],
+                  );
                 },
               );
             },
+          ),
           ),
         );
       },

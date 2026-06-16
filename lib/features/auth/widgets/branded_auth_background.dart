@@ -26,21 +26,25 @@ class BrandedAuthBackground extends StatelessWidget {
     // there; dark mode keeps its subtler accent wash. Stops run the full
     // radius (0 → 1) for a smooth falloff with no visible ring/seam.
     final glowAlpha = isDark ? 0.30 : 0.50;
-    final dotColor = (isDark ? Colors.white : Colors.black)
-        .withValues(alpha: isDark ? 0.03 : 0.04);
+    final dotColor = (isDark ? Colors.white : Colors.black).withValues(
+      alpha: isDark ? 0.03 : 0.04,
+    );
 
     Widget cornerGlow(Alignment center) => Positioned.fill(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: RadialGradient(
-                center: center,
-                radius: 1.3,
-                colors: [accent.withValues(alpha: glowAlpha), Colors.transparent],
-                stops: const [0.0, 1.0],
-              ),
-            ),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: RadialGradient(
+            center: center,
+            radius: 1.3,
+            colors: [
+              accent.withValues(alpha: glowAlpha),
+              Colors.transparent,
+            ],
+            stops: const [0.0, 1.0],
           ),
-        );
+        ),
+      ),
+    );
 
     return DecoratedBox(
       decoration: BoxDecoration(color: base),

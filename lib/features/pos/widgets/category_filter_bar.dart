@@ -9,7 +9,8 @@ class CategoryFilterBar extends StatelessWidget {
   final Color borderCol;
 
   const CategoryFilterBar({
-    super.key,    required this.categories,
+    super.key,
+    required this.categories,
     required this.selectedCategory,
     required this.onCategorySelected,
     required this.textCol,
@@ -28,7 +29,8 @@ class CategoryFilterBar extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         padding: EdgeInsets.symmetric(horizontal: context.getRSize(16)),
         itemCount: categories.length,
-        separatorBuilder: (context, index) => SizedBox(width: context.getRSize(10)),
+        separatorBuilder: (context, index) =>
+            SizedBox(width: context.getRSize(10)),
         itemBuilder: (context, index) {
           final category = categories[index];
           final isSelected = category == selectedCategory;

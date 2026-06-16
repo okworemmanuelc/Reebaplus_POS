@@ -107,7 +107,7 @@ class _TransferList extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              FontAwesomeIcons.rightLeft,
+              FontAwesomeIcons.rightLeft.data,
               size: 40,
               color: Theme.of(context).hintColor,
             ),
@@ -179,7 +179,10 @@ class _TransferCardState extends ConsumerState<_TransferCard> {
           .stockTransferDao
           .receiveTransfer(transferId: widget.transfer.id, receivedBy: userId);
       if (!mounted) return;
-      AppNotification.showSuccess(context, 'Transfer received — stock updated.');
+      AppNotification.showSuccess(
+        context,
+        'Transfer received — stock updated.',
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() => _busy = false);
@@ -189,9 +192,7 @@ class _TransferCardState extends ConsumerState<_TransferCard> {
 
   Future<void> _cancel() async {
     // Layer 3 (write-boundary re-check).
-    if (!ref
-        .read(currentUserPermissionsProvider)
-        .contains('stores.manage')) {
+    if (!ref.read(currentUserPermissionsProvider).contains('stores.manage')) {
       return;
     }
     final userId = ref.read(authProvider).currentUser?.id;
@@ -201,9 +202,7 @@ class _TransferCardState extends ConsumerState<_TransferCard> {
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Cancel Transfer?'),
-        content: const Text(
-          'Stock will be restored to the source store.',
-        ),
+        content: const Text('Stock will be restored to the source store.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -226,10 +225,7 @@ class _TransferCardState extends ConsumerState<_TransferCard> {
       await ref
           .read(databaseProvider)
           .stockTransferDao
-          .cancelTransfer(
-            transferId: widget.transfer.id,
-            cancelledBy: userId,
-          );
+          .cancelTransfer(transferId: widget.transfer.id, cancelledBy: userId);
       if (!mounted) return;
       AppNotification.showSuccess(
         context,
@@ -264,9 +260,7 @@ class _TransferCardState extends ConsumerState<_TransferCard> {
       decoration: BoxDecoration(
         color: context.surfaceColor,
         borderRadius: BorderRadius.circular(context.radiusL),
-        border: Border.all(
-          color: statusColor.withValues(alpha: 0.25),
-        ),
+        border: Border.all(color: statusColor.withValues(alpha: 0.25)),
       ),
       padding: EdgeInsets.all(context.spacingM),
       child: Column(
@@ -317,9 +311,7 @@ class _TransferCardState extends ConsumerState<_TransferCard> {
                       onPressed: _busy ? null : _confirm,
                     ),
                   ),
-                if (widget.mode == _Mode.incoming &&
-                    canReceive &&
-                    canManage)
+                if (widget.mode == _Mode.incoming && canReceive && canManage)
                   SizedBox(width: context.spacingS),
                 if (canManage)
                   Expanded(

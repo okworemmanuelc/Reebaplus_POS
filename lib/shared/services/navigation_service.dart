@@ -31,6 +31,7 @@ class NavigationService {
   void requestAutoShowAddProductSheet() {
     _autoShowAddProductPending = true;
   }
+
   bool consumeAutoShowAddProductSheet() {
     final v = _autoShowAddProductPending;
     _autoShowAddProductPending = false;
@@ -149,11 +150,18 @@ class NavigationService {
       return;
     }
 
-    // Step 3: go to home tab (dashboard) if not already there
+    // Step 3: Try to go back to the previous tab using history
+    if (popIndex()) {
+      debugPrint(
+        '[NavigationService] Popped tab from history to ${currentIndex.value}',
+      );
+      return;
+    }
+    // Step 3.5: Fall back to home tab (dashboard) if not already there
     const homeTab = 0;
     if (currentIndex.value != homeTab) {
       debugPrint(
-        '[NavigationService] Not on home tab ($homeTab). Redirecting...',
+        '[NavigationService] History empty. Redirecting to home tab ($homeTab)...',
       );
       setIndex(homeTab);
       return;

@@ -312,10 +312,8 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
 
   /// Sum of all per-line discounts (kobo) — drives the "Saved: ₦X" row and the
   /// order-level discount persisted at checkout (§13.3).
-  int get discountTotalKobo => value.fold(
-    0,
-    (sum, item) => sum + ((item['discountKobo'] as int?) ?? 0),
-  );
+  int get discountTotalKobo =>
+      value.fold(0, (sum, item) => sum + ((item['discountKobo'] as int?) ?? 0));
 
   double get subtotal => value.fold(
     0,

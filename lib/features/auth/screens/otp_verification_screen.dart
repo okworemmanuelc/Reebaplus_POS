@@ -214,8 +214,10 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
       Navigator.of(context).pushReplacement(
         SmoothRoute(
           page: switch (route) {
-            ExistingAccountRoute(:final account) =>
-              ExistingAccountScreen(email: widget.email, account: account),
+            ExistingAccountRoute(:final account) => ExistingAccountScreen(
+              email: widget.email,
+              account: account,
+            ),
             NoAccountFoundRoute() => NoAccountFoundScreen(email: widget.email),
             LoginRoute(:final user) => LoginScreen(presetUser: user),
             CreatePinRoute(:final user) => CreatePinScreen(user: user),
@@ -285,8 +287,7 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
               Align(
                 alignment: Alignment.topLeft,
                 child: IconButton(
-                  icon: Icon(Icons.arrow_back_ios,
-                      color: textColor, size: 20),
+                  icon: Icon(Icons.arrow_back_ios, color: textColor, size: 20),
                   onPressed: () => Navigator.of(context).pop(),
                 ),
               ),
@@ -352,8 +353,9 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
                             ),
                           )
                         : TextButton(
-                            onPressed:
-                                (_loading || _isLockedOut) ? null : _resend,
+                            onPressed: (_loading || _isLockedOut)
+                                ? null
+                                : _resend,
                             child: const Text('Resend code'),
                           ),
                   ),

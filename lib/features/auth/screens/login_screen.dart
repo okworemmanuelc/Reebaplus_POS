@@ -162,13 +162,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       // pinHash != null also gates out a post-Log-Out owner whose PIN was reset
       // to setup-required (clearUserPin), until they re-establish a PIN.
       final deviceUserId = await ref.read(authProvider).getDeviceUserId();
-      final isDeviceOwner = _identifiedUser != null &&
+      final isDeviceOwner =
+          _identifiedUser != null &&
           deviceUserId != null &&
           _identifiedUser!.id == deviceUserId &&
           _identifiedUser!.pinHash != null;
       if (mounted) {
-        setState(() =>
-            _biometricsAvailable = available && isEnabled && isDeviceOwner);
+        setState(
+          () => _biometricsAvailable = available && isEnabled && isDeviceOwner,
+        );
       }
     } catch (_) {}
   }
@@ -552,8 +554,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     final identified = _identifiedUser;
     bool showSwitch = false;
     if (!_loginSuccess && identified != null) {
-      final staff =
-          ref.watch(activeStaffProvider(identified.businessId)).valueOrNull;
+      final staff = ref
+          .watch(activeStaffProvider(identified.businessId))
+          .valueOrNull;
       showSwitch =
           staff != null && staff.any((e) => e.user.id != identified.id);
     }
@@ -804,162 +807,158 @@ class _PinPad extends StatelessWidget {
                 ),
               ),
               style: TextButton.styleFrom(
-                padding: context.rPaddingSymmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
+                padding: context.rPaddingSymmetric(horizontal: 12, vertical: 8),
               ),
             ),
           ),
         Center(
-      child: SingleChildScrollView(
-        padding: context.rPaddingSymmetric(horizontal: 32, vertical: 16),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // ── Header/Avatar ──────────────────────────────────────────
-            if (identifiedUser != null) ...[
-              CircleAvatar(
-                radius: context.getRSize(32),
-                backgroundColor: _hexColor(
-                  context,
-                  identifiedUser!.avatarColor,
-                ).withValues(alpha: 0.2),
-                child: Text(
-                  identifiedUser!.name.isNotEmpty
-                      ? identifiedUser!.name[0].toUpperCase()
-                      : '?',
+          child: SingleChildScrollView(
+            padding: context.rPaddingSymmetric(horizontal: 32, vertical: 16),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // ── Header/Avatar ──────────────────────────────────────────
+                if (identifiedUser != null) ...[
+                  CircleAvatar(
+                    radius: context.getRSize(32),
+                    backgroundColor: _hexColor(
+                      context,
+                      identifiedUser!.avatarColor,
+                    ).withValues(alpha: 0.2),
+                    child: Text(
+                      identifiedUser!.name.isNotEmpty
+                          ? identifiedUser!.name[0].toUpperCase()
+                          : '?',
+                      style: TextStyle(
+                        fontSize: context.getRFontSize(26),
+                        fontWeight: FontWeight.bold,
+                        color: _hexColor(context, identifiedUser!.avatarColor),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: context.getRSize(12)),
+                  Text(
+                    'Welcome back, ${identifiedUser!.name.split(' ').first}',
+                    style: TextStyle(
+                      fontSize: context.getRFontSize(20),
+                      fontWeight: FontWeight.w700,
+                      color: textColor,
+                    ),
+                  ),
+                ] else ...[
+                  Image.asset(
+                    'assets/images/reebaplus_logo.png',
+                    height: context.getRSize(60),
+                  ),
+                  SizedBox(height: context.getRSize(12)),
+                ],
+
+                SizedBox(height: context.getRSize(16)),
+                // ── Email Input ──────────────────────────────────────────
+                Padding(
+                  padding: EdgeInsets.only(bottom: context.getRSize(16)),
+                  child: TextFormField(
+                    controller: emailController,
+                    // When we already know who's signing in (returning device user
+                    // or a picker-selected staff member), the email is fixed — it
+                    // scopes the PIN check, so editing it would let it drift away
+                    // from the identified user. Switch accounts via the link below.
+                    readOnly: identifiedUser != null,
+                    style: TextStyle(color: textColor),
+                    decoration: AppDecorations.authInputDecoration(
+                      context,
+                      label: 'Email Address',
+                      prefixIcon: Icons.email_outlined,
+                    ),
+                    keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.next,
+                  ),
+                ),
+                Text(
+                  'Enter your 6-digit PIN to continue',
                   style: TextStyle(
-                    fontSize: context.getRFontSize(26),
-                    fontWeight: FontWeight.bold,
-                    color: _hexColor(context, identifiedUser!.avatarColor),
+                    fontSize: context.getRFontSize(14),
+                    color: subtextColor,
                   ),
+                  textAlign: TextAlign.center,
                 ),
-              ),
-              SizedBox(height: context.getRSize(12)),
-              Text(
-                'Welcome back, ${identifiedUser!.name.split(' ').first}',
-                style: TextStyle(
-                  fontSize: context.getRFontSize(20),
-                  fontWeight: FontWeight.w700,
-                  color: textColor,
-                ),
-              ),
-            ] else ...[
-              Image.asset(
-                'assets/images/reebaplus_logo.png',
-                height: context.getRSize(60),
-              ),
-              SizedBox(height: context.getRSize(12)),
-            ],
+                SizedBox(height: context.getRSize(20)),
 
-            SizedBox(height: context.getRSize(16)),
-            // ── Email Input ──────────────────────────────────────────
-            Padding(
-              padding: EdgeInsets.only(bottom: context.getRSize(16)),
-              child: TextFormField(
-                controller: emailController,
-                // When we already know who's signing in (returning device user
-                // or a picker-selected staff member), the email is fixed — it
-                // scopes the PIN check, so editing it would let it drift away
-                // from the identified user. Switch accounts via the link below.
-                readOnly: identifiedUser != null,
-                style: TextStyle(color: textColor),
-                decoration: AppDecorations.authInputDecoration(
-                  context,
-                  label: 'Email Address',
-                  prefixIcon: Icons.email_outlined,
-                ),
-                keyboardType: TextInputType.emailAddress,
-                textInputAction: TextInputAction.next,
-              ),
-            ),
-            Text(
-              'Enter your 6-digit PIN to continue',
-              style: TextStyle(
-                fontSize: context.getRFontSize(14),
-                color: subtextColor,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            SizedBox(height: context.getRSize(20)),
+                ...[
+                  // ── Six dots ────────────────────────────────────────────────
+                  ValueListenableBuilder<String>(
+                    valueListenable: pinNotifier,
+                    builder: (context, currentPin, _) =>
+                        PinDots(filled: currentPin.length),
+                  ),
 
-            ...[
-              // ── Six dots ────────────────────────────────────────────────
-              ValueListenableBuilder<String>(
-                valueListenable: pinNotifier,
-                builder: (context, currentPin, _) =>
-                    PinDots(filled: currentPin.length),
-              ),
+                  // ── Warning Message ────────────────────────────────────────────
+                  SizedBox(
+                    height: context.getRSize(24),
+                    child: warningText != null
+                        ? Center(
+                            child: Text(
+                              warningText!,
+                              style: TextStyle(
+                                color: Colors.orangeAccent,
+                                fontSize: context.getRFontSize(13),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          )
+                        : const SizedBox.shrink(),
+                  ),
 
-              // ── Warning Message ────────────────────────────────────────────
-              SizedBox(
-                height: context.getRSize(24),
-                child: warningText != null
-                    ? Center(
-                        child: Text(
-                          warningText!,
-                          style: TextStyle(
-                            color: Colors.orangeAccent,
-                            fontSize: context.getRFontSize(13),
-                            fontWeight: FontWeight.w600,
-                          ),
+                  // ── Numeric keypad (biometric fills the bottom-left slot) ─────
+                  PinKeypad(
+                    onDigit: onDigit,
+                    onBackspace: onBackspace,
+                    leadingKey: biometricsAvailable && onBiometrics != null
+                        ? PinKey(
+                            icon: Icons.fingerprint_rounded,
+                            onTap: onBiometrics!,
+                          )
+                        : null,
+                  ),
+
+                  SizedBox(height: context.getRSize(20)),
+
+                  // ── Switch-account / Not You link ──────────────────────────────
+                  if (onSwitchToEmail != null)
+                    TextButton(
+                      onPressed: onSwitchToEmail,
+                      child: Text(
+                        identifiedUser != null
+                            ? 'Not ${identifiedUser!.name.split(' ').first}? Switch account'
+                            : 'Login with a different account',
+                        style: TextStyle(
+                          color: textColor.withValues(alpha: 0.65),
+                          fontSize: context.getRFontSize(14),
+                          decoration: TextDecoration.underline,
                         ),
-                      )
-                    : const SizedBox.shrink(),
-              ),
-
-              // ── Numeric keypad (biometric fills the bottom-left slot) ─────
-              PinKeypad(
-                onDigit: onDigit,
-                onBackspace: onBackspace,
-                leadingKey: biometricsAvailable && onBiometrics != null
-                    ? PinKey(
-                        icon: Icons.fingerprint_rounded,
-                        onTap: onBiometrics!,
-                      )
-                    : null,
-              ),
-
-              SizedBox(height: context.getRSize(20)),
-
-              // ── Switch-account / Not You link ──────────────────────────────
-              if (onSwitchToEmail != null)
-                TextButton(
-                  onPressed: onSwitchToEmail,
-                  child: Text(
-                    identifiedUser != null
-                        ? 'Not ${identifiedUser!.name.split(' ').first}? Switch account'
-                        : 'Login with a different account',
-                    style: TextStyle(
-                      color: textColor.withValues(alpha: 0.65),
-                      fontSize: context.getRFontSize(14),
-                      decoration: TextDecoration.underline,
+                      ),
                     ),
-                  ),
-                ),
 
-              // ── Forgot PIN link ──────────────────────────────────────────
-              if (identifiedUser != null && onForgotPin != null)
-                TextButton(
-                  onPressed: onForgotPin,
-                  child: Text(
-                    'Forgot PIN?',
-                    style: TextStyle(
-                      color: textColor.withValues(alpha: 0.5),
-                      fontSize: context.getRFontSize(13),
+                  // ── Forgot PIN link ──────────────────────────────────────────
+                  if (identifiedUser != null && onForgotPin != null)
+                    TextButton(
+                      onPressed: onForgotPin,
+                      child: Text(
+                        'Forgot PIN?',
+                        style: TextStyle(
+                          color: textColor.withValues(alpha: 0.5),
+                          fontSize: context.getRFontSize(13),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-            ],
-          ],
-        ),
-      ),
+                ],
+              ],
+            ),
+          ),
         ),
       ],
     );
   }
-
 }
 
 // ── Bottom sheet when multiple users share the same PIN ────────────────────

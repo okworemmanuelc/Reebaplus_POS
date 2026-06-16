@@ -36,11 +36,7 @@ class AppBarHeader extends StatelessWidget {
               ),
             ],
           ),
-          child: Icon(
-            icon,
-            color: Colors.white,
-            size: context.getRSize(16),
-          ),
+          child: Icon(icon, color: Colors.white, size: context.getRSize(16)),
         ),
         SizedBox(width: context.getRSize(12)),
         Expanded(

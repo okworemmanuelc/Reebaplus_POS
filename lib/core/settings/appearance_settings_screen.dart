@@ -17,7 +17,7 @@ class AppearanceSettingsScreen extends ConsumerWidget {
   const AppearanceSettingsScreen({super.key});
 
   static const List<({String label, DesignSystem ds, List<Color> swatch})>
-      _options = [
+  _options = [
     (
       label: 'Amber',
       ds: DesignSystem.amber,
@@ -50,7 +50,8 @@ class AppearanceSettingsScreen extends ConsumerWidget {
     final t = Theme.of(context);
     final canManage = hasPermission(ref, 'settings.manage');
     // Synced value when set; otherwise reflect what this device is showing.
-    final current = ref.watch(businessDesignSystemProvider).valueOrNull ??
+    final current =
+        ref.watch(businessDesignSystemProvider).valueOrNull ??
         themeController.designSystem;
 
     return Scaffold(
@@ -69,7 +70,11 @@ class AppearanceSettingsScreen extends ConsumerWidget {
           : SettingsFadeIn(
               child: ListView(
                 padding: EdgeInsets.fromLTRB(
-                    24, 24, 24, 24 + context.deviceBottomPadding),
+                  24,
+                  24,
+                  24,
+                  24 + context.deviceBottomPadding,
+                ),
                 children: [
                   Text(
                     'Pick the colour for the whole business. It applies to every '
@@ -115,11 +120,16 @@ class AppearanceSettingsScreen extends ConsumerWidget {
   }
 
   Future<void> _select(
-      BuildContext context, WidgetRef ref, DesignSystem ds) async {
+    BuildContext context,
+    WidgetRef ref,
+    DesignSystem ds,
+  ) async {
     // Callback re-check (ref.read), matching the other settings sub-pages.
     if (!ref.read(currentUserPermissionsProvider).contains('settings.manage')) {
       AppNotification.showError(
-          context, 'You don\'t have permission to do that.');
+        context,
+        'You don\'t have permission to do that.',
+      );
       return;
     }
     themeController.setDesignSystem(ds); // immediate, this device
@@ -197,7 +207,11 @@ class _AccentCard extends StatelessWidget {
                       color: activeColor,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.check, size: 14, color: Colors.black),
+                    child: const Icon(
+                      Icons.check,
+                      size: 14,
+                      color: Colors.black,
+                    ),
                   ),
               ],
             ),

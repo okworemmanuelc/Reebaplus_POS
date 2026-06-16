@@ -181,7 +181,10 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     } catch (e, st) {
       CrashReporter.record(e, st, context: 'expenses.update');
       if (!mounted) return;
-      AppNotification.showError(context, 'Could not update expense. Please try again.');
+      AppNotification.showError(
+        context,
+        'Could not update expense. Please try again.',
+      );
     }
   }
 
@@ -198,7 +201,9 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     final isOthers = category.toLowerCase() == 'others';
     if (isOthers && desc.isEmpty) {
       AppNotification.showError(
-          context, 'Description is required for "Others" category.');
+        context,
+        'Description is required for "Others" category.',
+      );
       return;
     }
 
@@ -258,7 +263,12 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       }
     } catch (e, st) {
       CrashReporter.record(e, st, context: 'expenses.add');
-      if (mounted) AppNotification.showError(context, 'Could not record expense. Please try again.');
+      if (mounted) {
+        AppNotification.showError(
+          context,
+          'Could not record expense. Please try again.',
+        );
+      }
     }
   }
 
@@ -289,8 +299,11 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       ),
       child: Row(
         children: [
-          Icon(FontAwesomeIcons.store,
-              size: context.getRSize(13), color: primary),
+          Icon(
+            FontAwesomeIcons.store.data,
+            size: context.getRSize(13),
+            color: primary,
+          ),
           SizedBox(width: context.getRSize(8)),
           Expanded(
             child: Text.rich(
@@ -339,12 +352,13 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     // Searchable category suggestions: seed defaults ∪ existing categories.
     final allCategories = <String>{..._kSeedCategories, ...catNames.values};
     final query = _categoryCtrl.text.trim().toLowerCase();
-    final suggestions = allCategories
-        .where((c) => query.isEmpty || c.toLowerCase().contains(query))
-        .where((c) => c.toLowerCase() != query) // hide exact match
-        .take(6)
-        .toList()
-      ..sort();
+    final suggestions =
+        allCategories
+            .where((c) => query.isEmpty || c.toLowerCase().contains(query))
+            .where((c) => c.toLowerCase() != query) // hide exact match
+            .take(6)
+            .toList()
+          ..sort();
 
     // §20.8 — when more than one store is selectable, show which store this
     // expense will be recorded against (the active store). Store is immutable on
@@ -380,15 +394,16 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
-                    color:
-                        Theme.of(context).colorScheme.error.withValues(alpha: 0.3),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.error.withValues(alpha: 0.3),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
                 ],
               ),
               child: Icon(
-                FontAwesomeIcons.fileInvoiceDollar,
+                FontAwesomeIcons.fileInvoiceDollar.data,
                 color: Colors.white,
                 size: context.getRSize(16),
               ),
@@ -449,7 +464,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                     controller: _categoryCtrl,
                     hintText: 'Search or type a new category',
                     suffixIcon: Icon(
-                      FontAwesomeIcons.magnifyingGlass,
+                      FontAwesomeIcons.magnifyingGlass.data,
                       size: context.getRSize(14),
                       color: _subtext,
                     ),
@@ -479,8 +494,9 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                             ),
                             onPressed: () {
                               _categoryCtrl.text = cat;
-                              _categoryCtrl.selection =
-                                  TextSelection.collapsed(offset: cat.length);
+                              _categoryCtrl.selection = TextSelection.collapsed(
+                                offset: cat.length,
+                              );
                               setState(() {});
                             },
                           );
@@ -506,8 +522,9 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                   if (_isEditing)
                     Padding(
                       padding: EdgeInsets.only(
-                          top: context.getRSize(4),
-                          left: context.getRSize(4)),
+                        top: context.getRSize(4),
+                        left: context.getRSize(4),
+                      ),
                       child: Text(
                         'Amount and payment method can\'t be edited. '
                         'To change them, delete and record again.',
@@ -533,10 +550,12 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                       labelText: 'Payment Method',
                       value: _paymentMethodCode,
                       items: _kPaymentMethods
-                          .map((m) => DropdownMenuItem(
-                                value: m.code,
-                                child: Text(m.label),
-                              ))
+                          .map(
+                            (m) => DropdownMenuItem(
+                              value: m.code,
+                              child: Text(m.label),
+                            ),
+                          )
                           .toList(),
                       onChanged: (val) {
                         if (val != null) {
@@ -556,7 +575,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                       text: DateFormat('MMM d, y').format(_selectedDate),
                     ),
                     suffixIcon: Icon(
-                      FontAwesomeIcons.calendar,
+                      FontAwesomeIcons.calendar.data,
                       size: context.getRSize(16),
                       color: _subtext,
                     ),
@@ -600,12 +619,12 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                           color: _cardBg,
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(
-                            color: (_receiptFile == null &&
+                            color:
+                                (_receiptFile == null &&
                                     _existingReceiptPath == null)
-                                ? Theme.of(context)
-                                    .colorScheme
-                                    .error
-                                    .withValues(alpha: 0.5)
+                                ? Theme.of(
+                                    context,
+                                  ).colorScheme.error.withValues(alpha: 0.5)
                                 : success,
                             width: 1,
                           ),
@@ -615,10 +634,11 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                             Icon(
                               (_receiptFile == null &&
                                       _existingReceiptPath == null)
-                                  ? FontAwesomeIcons.fileArrowUp
-                                  : FontAwesomeIcons.fileCircleCheck,
+                                  ? FontAwesomeIcons.fileArrowUp.data
+                                  : FontAwesomeIcons.fileCircleCheck.data,
                               size: context.getRSize(18),
-                              color: (_receiptFile == null &&
+                              color:
+                                  (_receiptFile == null &&
                                       _existingReceiptPath == null)
                                   ? danger
                                   : success,
@@ -633,7 +653,8 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
                                 style: TextStyle(
                                   fontSize: context.getRFontSize(14),
                                   fontWeight: FontWeight.bold,
-                                  color: (_receiptFile == null &&
+                                  color:
+                                      (_receiptFile == null &&
                                           _existingReceiptPath == null)
                                       ? _subtext
                                       : _text,

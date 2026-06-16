@@ -104,10 +104,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final filtered = q.isEmpty
         ? _entries
         : _entries
-            .where((e) =>
-                e.title.toLowerCase().contains(q) ||
-                e.subtitle.toLowerCase().contains(q))
-            .toList();
+              .where(
+                (e) =>
+                    e.title.toLowerCase().contains(q) ||
+                    e.subtitle.toLowerCase().contains(q),
+              )
+              .toList();
 
     return Scaffold(
       backgroundColor: t.scaffoldBackgroundColor,
@@ -125,7 +127,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           : SettingsFadeIn(
               child: ListView(
                 padding: EdgeInsets.fromLTRB(
-                    24, 24, 24, 24 + context.deviceBottomPadding),
+                  24,
+                  24,
+                  24,
+                  24 + context.deviceBottomPadding,
+                ),
                 children: [
                   TextField(
                     controller: _searchCtrl,
@@ -158,8 +164,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         child: Text(
                           'No settings match "${_query.trim()}".',
                           style: TextStyle(
-                            color:
-                                t.colorScheme.onSurface.withValues(alpha: 0.6),
+                            color: t.colorScheme.onSurface.withValues(
+                              alpha: 0.6,
+                            ),
                           ),
                         ),
                       ),
@@ -179,7 +186,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   // CEO holds it). Surfaces for an empty search or one that
                   // matches its keywords.
                   if (hasPermission(ref, 'settings.delete_business') &&
-                      (q.isEmpty || 'danger zone delete business account'.contains(q)))
+                      (q.isEmpty ||
+                          'danger zone delete business account'.contains(q)))
                     _buildDangerZone(context),
                 ],
               ),
@@ -237,15 +245,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           'Permanently delete this business and your account',
                           style: TextStyle(
                             fontSize: 12.5,
-                            color: t.colorScheme.onSurface
-                                .withValues(alpha: 0.6),
+                            color: t.colorScheme.onSurface.withValues(
+                              alpha: 0.6,
+                            ),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  Icon(Icons.chevron_right,
-                      color: error.withValues(alpha: 0.6)),
+                  Icon(
+                    Icons.chevron_right,
+                    color: error.withValues(alpha: 0.6),
+                  ),
                 ],
               ),
             ),
@@ -256,9 +267,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Widget _chevron(BuildContext context) => Icon(
-        Icons.chevron_right,
-        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4),
-      );
+    Icons.chevron_right,
+    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4),
+  );
 
   void _open(BuildContext context, Widget screen) {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));

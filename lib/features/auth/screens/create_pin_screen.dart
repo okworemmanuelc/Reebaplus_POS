@@ -27,15 +27,12 @@ class CreatePinScreen extends ConsumerStatefulWidget {
   final UserData? user;
   final bool isNewBusinessSetup;
 
-  const CreatePinScreen({
-    super.key,
-    this.user,
-    this.isNewBusinessSetup = false,
-  }) : assert(
-          user != null || isNewBusinessSetup,
-          'CreatePinScreen needs either a user (reset/setup) or '
-          'isNewBusinessSetup=true (wizard, draft-driven)',
-        );
+  const CreatePinScreen({super.key, this.user, this.isNewBusinessSetup = false})
+    : assert(
+        user != null || isNewBusinessSetup,
+        'CreatePinScreen needs either a user (reset/setup) or '
+        'isNewBusinessSetup=true (wizard, draft-driven)',
+      );
 
   @override
   ConsumerState<CreatePinScreen> createState() => _CreatePinScreenState();
@@ -163,7 +160,9 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
       }
 
       step = 'setUserPin';
-      debugPrint('[CreatePinScreen] calling auth.setUserPin(${persistedUser.id})');
+      debugPrint(
+        '[CreatePinScreen] calling auth.setUserPin(${persistedUser.id})',
+      );
       await auth.setUserPin(persistedUser.id, _pin);
       debugPrint('[CreatePinScreen] setUserPin ok');
 
@@ -400,5 +399,4 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
       ],
     );
   }
-
 }

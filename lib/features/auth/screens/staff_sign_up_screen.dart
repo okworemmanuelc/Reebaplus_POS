@@ -352,7 +352,9 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
         final prefs = await SharedPreferences.getInstance();
         final lockoutTime = DateTime.now().add(const Duration(minutes: 30));
         await prefs.setString(
-            'otp_lockout_until', lockoutTime.toIso8601String());
+          'otp_lockout_until',
+          lockoutTime.toIso8601String(),
+        );
         if (!mounted) return;
         setState(() {
           _otpVerifying = false;
@@ -395,8 +397,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
         t.cancel();
         return;
       }
-      if (_lockoutEndTime != null &&
-          DateTime.now().isAfter(_lockoutEndTime!)) {
+      if (_lockoutEndTime != null && DateTime.now().isAfter(_lockoutEndTime!)) {
         setState(() {
           _otpLockedOut = false;
           _otpFailedAttempts = 0;
@@ -561,7 +562,9 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
       // sync-exempt: §5 #7 — staff-sign-up local mirror after the redeem RPC.
       final now = DateTime.now();
       await db.transaction(() async {
-        await db.into(db.users).insertOnConflictUpdate(
+        await db
+            .into(db.users)
+            .insertOnConflictUpdate(
               UsersCompanion.insert(
                 id: Value(userId),
                 businessId: businessId,
@@ -578,12 +581,11 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
           // Find-or-create the membership locally. UNIQUE (user_id,
           // business_id) — reuse an existing local row's id if the pull
           // already restored it.
-          final existingMembership =
-              await db.userBusinessesDao.getForUserInBusiness(
-            userId,
-            businessId,
-          );
-          await db.into(db.userBusinesses).insertOnConflictUpdate(
+          final existingMembership = await db.userBusinessesDao
+              .getForUserInBusiness(userId, businessId);
+          await db
+              .into(db.userBusinesses)
+              .insertOnConflictUpdate(
                 UserBusinessesCompanion.insert(
                   id: Value(existingMembership?.id ?? UuidV7.generate()),
                   businessId: businessId,
@@ -597,8 +599,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
 
         if (storeId != null) {
           // UNIQUE (user_id, store_id) — reuse the pulled row's id if present.
-          final existingStores =
-              await db.userStoresDao.getForUser(userId);
+          final existingStores = await db.userStoresDao.getForUser(userId);
           String? existingStoreRowId;
           for (final s in existingStores) {
             if (s.storeId == storeId) {
@@ -606,7 +607,9 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
               break;
             }
           }
-          await db.into(db.userStores).insertOnConflictUpdate(
+          await db
+              .into(db.userStores)
+              .insertOnConflictUpdate(
                 UserStoresCompanion.insert(
                   id: Value(existingStoreRowId ?? UuidV7.generate()),
                   businessId: businessId,
@@ -622,9 +625,9 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
         // carry it (it's no longer "active"), so this is best-effort.
         final localInvite = await db.inviteCodesDao.getByCode(code);
         if (localInvite != null) {
-          await (db.update(db.inviteCodes)
-                ..where((t) => t.id.equals(localInvite.id)))
-              .write(
+          await (db.update(
+            db.inviteCodes,
+          )..where((t) => t.id.equals(localInvite.id))).write(
             InviteCodesCompanion(
               usedByUserId: Value(userId),
               usedAt: Value(localInvite.usedAt ?? now),
@@ -667,9 +670,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
           }
         }
       } catch (e2, stack2) {
-        debugPrint(
-          '[StaffSignUp] cloud-hydrate fallback FAILED: $e2\n$stack2',
-        );
+        debugPrint('[StaffSignUp] cloud-hydrate fallback FAILED: $e2\n$stack2');
       }
       if (mounted) {
         setState(() {
@@ -723,8 +724,11 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
                 Opacity(
                   opacity: showBack ? 1 : 0,
                   child: IconButton(
-                    icon: Icon(Icons.arrow_back_ios,
-                        color: authTextPrimary(context), size: 20),
+                    icon: Icon(
+                      Icons.arrow_back_ios,
+                      color: authTextPrimary(context),
+                      size: 20,
+                    ),
                     onPressed: showBack ? _back : null,
                   ),
                 ),
@@ -840,80 +844,79 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
   Widget _buildOtpStep() {
     return AuthCenteredScroll(
       children: [
-          Text(
-            'Check your email',
+        Text(
+          'Check your email',
+          style: TextStyle(
+            fontSize: 26,
+            fontWeight: FontWeight.w800,
+            color: authTextPrimary(context),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Enter the 6-digit code sent to\n${_draft.email}',
+          style: TextStyle(
+            fontSize: 15,
+            height: 1.4,
+            color: authTextPrimary(context).withValues(alpha: 0.65),
+          ),
+        ),
+        const SizedBox(height: 28),
+        ShakeWidget(
+          key: _otpShakeKey,
+          child: OtpBoxRow(
+            controller: _otpCtrl,
+            hasError: _otpError != null,
+            ignorePointers: _otpLockedOut,
+            readOnly: _otpVerifying,
+            textColor: authTextPrimary(context),
+            onSubmit: () {
+              if (_otpCtrl.text.trim().length == 6) _verifyOtp();
+            },
+          ),
+        ),
+        const SizedBox(height: 12),
+        Center(
+          child: Text(
+            'Code expires in 5 minutes',
             style: TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.w800,
-              color: authTextPrimary(context),
+              color: authTextPrimary(context).withValues(alpha: 0.5),
+              fontSize: 13,
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            'Enter the 6-digit code sent to\n${_draft.email}',
-            style: TextStyle(
-              fontSize: 15,
-              height: 1.4,
-              color: authTextPrimary(context).withValues(alpha: 0.65),
-            ),
+        ),
+        const SizedBox(height: 8),
+        Center(child: AuthErrorText(_otpError)),
+        const SizedBox(height: 8),
+        if (_otpVerified)
+          const AppButton(
+            text: 'Verified  ✓',
+            variant: AppButtonVariant.success,
+            onPressed: null,
+          )
+        else
+          AppButton(
+            text: 'Verify',
+            isLoading: _otpVerifying,
+            onPressed: _otpCtrl.text.trim().length == 6 && !_otpLockedOut
+                ? _verifyOtp
+                : null,
           ),
-          const SizedBox(height: 28),
-          ShakeWidget(
-            key: _otpShakeKey,
-            child: OtpBoxRow(
-              controller: _otpCtrl,
-              hasError: _otpError != null,
-              ignorePointers: _otpLockedOut,
-              readOnly: _otpVerifying,
-              textColor: authTextPrimary(context),
-              onSubmit: () {
-                if (_otpCtrl.text.trim().length == 6) _verifyOtp();
-              },
-            ),
-          ),
-          const SizedBox(height: 12),
-          Center(
-            child: Text(
-              'Code expires in 5 minutes',
-              style: TextStyle(
-                color: authTextPrimary(context).withValues(alpha: 0.5),
-                fontSize: 13,
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Center(child: AuthErrorText(_otpError)),
-          const SizedBox(height: 8),
-          if (_otpVerified)
-            const AppButton(
-              text: 'Verified  ✓',
-              variant: AppButtonVariant.success,
-              onPressed: null,
-            )
-          else
-            AppButton(
-              text: 'Verify',
-              isLoading: _otpVerifying,
-              onPressed: _otpCtrl.text.trim().length == 6 && !_otpLockedOut
-                  ? _verifyOtp
-                  : null,
-            ),
-          const SizedBox(height: 16),
-          Center(
-            child: _resendCountdown > 0
-                ? Text(
-                    'Resend code in 0:${_resendCountdown.toString().padLeft(2, '0')}',
-                    style: TextStyle(
-                      color: authTextPrimary(context).withValues(alpha: 0.5),
-                      fontSize: 13,
-                    ),
-                  )
-                : TextButton(
-                    onPressed:
-                        (_sendingOtp || _otpLockedOut) ? null : _resendOtp,
-                    child: const Text('Resend code'),
+        const SizedBox(height: 16),
+        Center(
+          child: _resendCountdown > 0
+              ? Text(
+                  'Resend code in 0:${_resendCountdown.toString().padLeft(2, '0')}',
+                  style: TextStyle(
+                    color: authTextPrimary(context).withValues(alpha: 0.5),
+                    fontSize: 13,
                   ),
-          ),
+                )
+              : TextButton(
+                  onPressed: (_sendingOtp || _otpLockedOut) ? null : _resendOtp,
+                  child: const Text('Resend code'),
+                ),
+        ),
       ],
     );
   }
@@ -944,10 +947,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
         const SizedBox(height: 4),
         AuthErrorText(_nameError),
         const SizedBox(height: 12),
-        AppButton(
-          text: 'Continue',
-          onPressed: _submitName,
-        ),
+        AppButton(text: 'Continue', onPressed: _submitName),
       ],
     );
   }
@@ -1002,8 +1002,14 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
         children: [
           CircleAvatar(
             radius: 44,
-            backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
-            child: Icon(Icons.check_rounded, size: 48, color: Theme.of(context).colorScheme.primary),
+            backgroundColor: Theme.of(
+              context,
+            ).colorScheme.primary.withValues(alpha: 0.12),
+            child: Icon(
+              Icons.check_rounded,
+              size: 48,
+              color: Theme.of(context).colorScheme.primary,
+            ),
           ),
           const SizedBox(height: 24),
           Text(
@@ -1037,8 +1043,11 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
                 color: Colors.greenAccent.withValues(alpha: 0.15),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.check_circle_rounded,
-                  color: Colors.greenAccent, size: 80),
+              child: const Icon(
+                Icons.check_circle_rounded,
+                color: Colors.greenAccent,
+                size: 80,
+              ),
             ),
             const SizedBox(height: 32),
             Text(

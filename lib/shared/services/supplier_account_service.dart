@@ -137,8 +137,11 @@ class SupplierAccountService {
     required String entryId,
     required String voidedBy,
     required String reason,
-  }) =>
-      _ledgerDao.voidEntry(entryId: entryId, voidedBy: voidedBy, reason: reason);
+  }) => _ledgerDao.voidEntry(
+    entryId: entryId,
+    voidedBy: voidedBy,
+    reason: reason,
+  );
 
   static String? _clean(String? s) {
     final t = s?.trim();

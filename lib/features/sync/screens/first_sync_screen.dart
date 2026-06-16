@@ -15,10 +15,7 @@ import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 class FirstSyncScreen extends ConsumerStatefulWidget {
   final String businessId;
 
-  const FirstSyncScreen({
-    super.key,
-    required this.businessId,
-  });
+  const FirstSyncScreen({super.key, required this.businessId});
 
   @override
   ConsumerState<FirstSyncScreen> createState() => _FirstSyncScreenState();
@@ -49,7 +46,8 @@ class _FirstSyncScreenState extends ConsumerState<FirstSyncScreen> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = e is PartialPullException ||
+          _errorMessage =
+              e is PartialPullException ||
                   e.toString().contains('SocketException') ||
                   e.toString().contains('Failed host lookup') ||
                   e.toString().contains('TimeoutException')
@@ -89,7 +87,8 @@ class _FirstSyncScreenState extends ConsumerState<FirstSyncScreen> {
                       tween: Tween<double>(begin: 0.9, end: 1.1),
                       duration: const Duration(seconds: 2),
                       curve: Curves.easeInOut,
-                      onEnd: () {}, // Handled by continuous cycle below if stateful, but Tween handles it neatly
+                      onEnd:
+                          () {}, // Handled by continuous cycle below if stateful, but Tween handles it neatly
                       builder: (context, scale, child) {
                         return Container(
                           width: 140 * scale,
@@ -119,7 +118,7 @@ class _FirstSyncScreenState extends ConsumerState<FirstSyncScreen> {
                     ),
                     // Icon core
                     Icon(
-                      FontAwesomeIcons.cloudArrowDown,
+                      FontAwesomeIcons.cloudArrowDown.data,
                       size: 36,
                       color: primaryColor,
                     ),
@@ -186,7 +185,10 @@ class _FirstSyncScreenState extends ConsumerState<FirstSyncScreen> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        icon: const Icon(FontAwesomeIcons.arrowsRotate, size: 14),
+                        icon: Icon(
+                          FontAwesomeIcons.arrowsRotate.data,
+                          size: 14,
+                        ),
                         label: const Text('Retry Synchronization'),
                       ),
                     ],

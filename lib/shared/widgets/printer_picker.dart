@@ -123,9 +123,15 @@ class _PrinterPickerState extends ConsumerState<PrinterPicker> {
                 itemBuilder: (context, index) {
                   final device = _devices[index];
                   return ListTile(
-                    leading: Icon(Icons.print, color: Theme.of(context).primaryColor),
+                    leading: Icon(
+                      Icons.print,
+                      color: Theme.of(context).primaryColor,
+                    ),
                     title: Text(device.name, style: TextStyle(color: text)),
-                    subtitle: Text(device.macAdress, style: TextStyle(color: subtext)),
+                    subtitle: Text(
+                      device.macAdress,
+                      style: TextStyle(color: subtext),
+                    ),
                     onTap: () => widget.onSelected(device),
                   );
                 },

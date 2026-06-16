@@ -46,8 +46,10 @@ class _ThankYouSubscriptionScreenState
       vsync: this,
       duration: const Duration(milliseconds: 700),
     );
-    _iconScale =
-        CurvedAnimation(parent: _iconController, curve: Curves.elasticOut);
+    _iconScale = CurvedAnimation(
+      parent: _iconController,
+      curve: Curves.elasticOut,
+    );
     _iconOpacity = CurvedAnimation(
       parent: _iconController,
       curve: const Interval(0.0, 0.4, curve: Curves.easeIn),
@@ -57,14 +59,14 @@ class _ThankYouSubscriptionScreenState
       vsync: this,
       duration: const Duration(milliseconds: 700),
     );
-    _contentOpacity =
-        CurvedAnimation(parent: _contentController, curve: Curves.easeOut);
-    _contentSlide = Tween<Offset>(
-      begin: const Offset(0, 0.12),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(parent: _contentController, curve: Curves.easeOut),
+    _contentOpacity = CurvedAnimation(
+      parent: _contentController,
+      curve: Curves.easeOut,
     );
+    _contentSlide =
+        Tween<Offset>(begin: const Offset(0, 0.12), end: Offset.zero).animate(
+          CurvedAnimation(parent: _contentController, curve: Curves.easeOut),
+        );
 
     _pulseController = AnimationController(
       vsync: this,
@@ -106,7 +108,8 @@ class _ThankYouSubscriptionScreenState
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : Colors.black;
-    final successColor = theme.extension<AppSemanticColors>()?.success ??
+    final successColor =
+        theme.extension<AppSemanticColors>()?.success ??
         const Color(0xFF30D158);
 
     final periodEnd = widget.business.currentPeriodEnd;
@@ -119,11 +122,11 @@ class _ThankYouSubscriptionScreenState
         child: LayoutBuilder(
           builder: (context, constraints) {
             return SingleChildScrollView(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
               child: ConstrainedBox(
-                constraints:
-                    BoxConstraints(minHeight: constraints.maxHeight - 64),
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight - 64,
+                ),
                 child: IntrinsicHeight(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -187,8 +190,9 @@ class _ThankYouSubscriptionScreenState
   }
 
   Widget _planChip(ThemeData theme, Color successColor, String? renewsLine) {
-    final textColor =
-        theme.brightness == Brightness.dark ? Colors.white : Colors.black;
+    final textColor = theme.brightness == Brightness.dark
+        ? Colors.white
+        : Colors.black;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(

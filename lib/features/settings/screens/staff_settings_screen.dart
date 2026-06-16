@@ -60,8 +60,12 @@ class StaffSettingsScreen extends ConsumerWidget {
 
     return SettingsFadeIn(
       child: ListView(
-        padding:
-            EdgeInsets.fromLTRB(24, 24, 24, 24 + context.deviceBottomPadding),
+        padding: EdgeInsets.fromLTRB(
+          24,
+          24,
+          24,
+          24 + context.deviceBottomPadding,
+        ),
         children: [
           SettingsTile(
             icon: Icons.person_rounded,
@@ -101,7 +105,7 @@ class StaffSettingsScreen extends ConsumerWidget {
   }
 
   Widget _chevron(BuildContext context) => Icon(
-        Icons.chevron_right,
-        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4),
-      );
+    Icons.chevron_right,
+    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4),
+  );
 }

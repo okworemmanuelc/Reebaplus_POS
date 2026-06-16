@@ -57,8 +57,9 @@ class OrderService {
       throw ArgumentError('cart is empty');
     }
     final orderId = UuidV7.generate();
-    final orderNumber =
-        await _ordersDao.generateOrderNumber(await _orderDeviceTag());
+    final orderNumber = await _ordersDao.generateOrderNumber(
+      await _orderDeviceTag(),
+    );
 
     final dbPaymentType = _resolvePaymentType(
       paymentSubType: paymentSubType,
@@ -150,10 +151,12 @@ class OrderService {
     // §12.3 / §26.4: a Quick Sale is an off-inventory line. Once the sale is
     // accepted (a server-rejected sale rethrows above and never reaches here),
     // record it in the activity log and alert CEO + Manager for audit.
-    final quickLines = cart.where((c) {
-      final id = c['id'] as String?;
-      return id == null || id.isEmpty;
-    }).toList(growable: false);
+    final quickLines = cart
+        .where((c) {
+          final id = c['id'] as String?;
+          return id == null || id.isEmpty;
+        })
+        .toList(growable: false);
     if (quickLines.isNotEmpty) {
       await _auditQuickSale(
         orderId: orderId,
@@ -179,11 +182,13 @@ class OrderService {
     required List<Map<String, dynamic>> quickLines,
   }) async {
     try {
-      final summary = quickLines.map((c) {
-        final name = (c['name'] as String?)?.trim();
-        final qty = (c['qty'] as num?)?.toString() ?? '1';
-        return '$qty× ${name == null || name.isEmpty ? 'Quick Sale' : name}';
-      }).join(', ');
+      final summary = quickLines
+          .map((c) {
+            final name = (c['name'] as String?)?.trim();
+            final qty = (c['qty'] as num?)?.toString() ?? '1';
+            return '$qty× ${name == null || name.isEmpty ? 'Quick Sale' : name}';
+          })
+          .join(', ');
 
       await _db.activityLogDao.log(
         action: 'quick_sale',
@@ -193,8 +198,10 @@ class OrderService {
         orderId: orderId,
       );
 
-      final recipients = await _db.userBusinessesDao
-          .getUserIdsForRoleSlugs(['ceo', 'manager']);
+      final recipients = await _db.userBusinessesDao.getUserIdsForRoleSlugs([
+        'ceo',
+        'manager',
+      ]);
       for (final uid in (recipients.isEmpty ? [staffId] : recipients)) {
         await _db.notificationsDao.fireNotification(
           type: 'quick_sale_used',
@@ -224,14 +231,14 @@ class OrderService {
     // already rolled back (insufficient_stock etc.); nothing to push.
     await _db.transaction(() async {
       // 1. Mark order cancelled.
-      await (_db.update(_db.orders)
-            ..where((t) => t.id.equals(orderId)))
-          .write(OrdersCompanion(
-        status: const Value('cancelled'),
-        cancellationReason: const Value('rejected_by_server'),
-        cancelledAt: Value(DateTime.now().toUtc()),
-        lastUpdatedAt: Value(DateTime.now()),
-      ));
+      await (_db.update(_db.orders)..where((t) => t.id.equals(orderId))).write(
+        OrdersCompanion(
+          status: const Value('cancelled'),
+          cancellationReason: const Value('rejected_by_server'),
+          cancelledAt: Value(DateTime.now().toUtc()),
+          lastUpdatedAt: Value(DateTime.now()),
+        ),
+      );
 
       // 2. Refund inventory cache. Each item's optimistic deduction is
       // undone by adding the quantity back. The corresponding
@@ -389,11 +396,7 @@ class OrderService {
 
   /// Refund/cancel an order (§19.7): reverses stock, payments, and the wallet
   /// legs so the customer's wallet returns to its pre-sale balance.
-  Future<void> markAsCancelled(
-    String orderId,
-    String reason,
-    String staffId,
-  ) {
+  Future<void> markAsCancelled(String orderId, String reason, String staffId) {
     return _ordersDao.markCancelled(orderId, reason, staffId);
   }
 

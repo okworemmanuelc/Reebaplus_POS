@@ -76,7 +76,7 @@ void showSupplierActivityChooser(
             ),
             SizedBox(height: ctx.getRSize(20)),
             _ChooserTile(
-              icon: FontAwesomeIcons.fileInvoiceDollar,
+              icon: FontAwesomeIcons.fileInvoiceDollar.data,
               color: danger,
               title: 'Invoice Total',
               subtitle: 'Goods received — increases what you owe',
@@ -91,7 +91,7 @@ void showSupplierActivityChooser(
             ),
             SizedBox(height: ctx.getRSize(12)),
             _ChooserTile(
-              icon: FontAwesomeIcons.moneyBillTransfer,
+              icon: FontAwesomeIcons.moneyBillTransfer.data,
               color: success,
               title: 'Record Payment',
               subtitle: 'Money paid — reduces what you owe',
@@ -129,7 +129,8 @@ class _ChooserTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).colorScheme.onSurface;
-    final subtext = Theme.of(context).textTheme.bodySmall?.color ??
+    final subtext =
+        Theme.of(context).textTheme.bodySmall?.color ??
         Theme.of(context).iconTheme.color!;
     final border = Theme.of(context).dividerColor;
     return InkWell(
@@ -177,7 +178,11 @@ class _ChooserTile extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(Icons.chevron_right, color: subtext, size: context.getRSize(20)),
+            Icon(
+              Icons.chevron_right,
+              color: subtext,
+              size: context.getRSize(20),
+            ),
           ],
         ),
       ),
@@ -209,10 +214,12 @@ Future<DateTime?> _pickDate(BuildContext context, DateTime initial) {
           colorScheme: isDark
               ? ColorScheme.dark(
                   primary: Theme.of(context).colorScheme.primary,
-                  surface: dSurface)
+                  surface: dSurface,
+                )
               : ColorScheme.light(
                   primary: Theme.of(context).colorScheme.primary,
-                  surface: lSurface),
+                  surface: lSurface,
+                ),
         ),
         child: child!,
       );
@@ -221,15 +228,15 @@ Future<DateTime?> _pickDate(BuildContext context, DateTime initial) {
 }
 
 Widget _sheetHandle(BuildContext context, Color border) => Center(
-      child: Container(
-        width: context.getRSize(40),
-        height: context.getRSize(4),
-        decoration: BoxDecoration(
-          color: border,
-          borderRadius: BorderRadius.circular(2),
-        ),
-      ),
-    );
+  child: Container(
+    width: context.getRSize(40),
+    height: context.getRSize(4),
+    decoration: BoxDecoration(
+      color: border,
+      borderRadius: BorderRadius.circular(2),
+    ),
+  ),
+);
 
 // ── Invoice Total ────────────────────────────────────────────────────────────
 
@@ -280,18 +287,36 @@ class _RecordInvoiceSheetState extends ConsumerState<RecordInvoiceSheet>
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate() || _saving) return;
-    if (!ref.read(currentUserPermissionsProvider).contains('suppliers.manage')) {
+    if (!ref
+        .read(currentUserPermissionsProvider)
+        .contains('suppliers.manage')) {
       Navigator.pop(context);
       return;
     }
     final amountKobo = (parseCurrency(_amountCtrl.text) * 100).round();
-    if (amountKobo <= 0) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter an amount greater than 0'))); return; }
+    if (amountKobo <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter an amount greater than 0')),
+      );
+      return;
+    }
     final staffId = ref.read(authProvider).currentUser?.id;
-    if (staffId == null) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cannot record: account not fully loaded yet. Try again in a moment.'))); return; }
+    if (staffId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Cannot record: account not fully loaded yet. Try again in a moment.',
+          ),
+        ),
+      );
+      return;
+    }
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _saving = true);
     try {
-      await ref.read(supplierAccountServiceProvider).recordInvoice(
+      await ref
+          .read(supplierAccountServiceProvider)
+          .recordInvoice(
             supplierId: widget.supplierId,
             amountKobo: amountKobo,
             dateReceived: _dateReceived,
@@ -300,10 +325,14 @@ class _RecordInvoiceSheetState extends ConsumerState<RecordInvoiceSheet>
             note: _noteCtrl.text,
           );
       if (mounted) Navigator.pop(context);
-      messenger.showSnackBar(SnackBar(
-        content: Text('Invoice of ${formatCurrency(amountKobo / 100)} recorded'),
-        backgroundColor: danger,
-      ));
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Invoice of ${formatCurrency(amountKobo / 100)} recorded',
+          ),
+          backgroundColor: danger,
+        ),
+      );
     } catch (_) {
       if (mounted) setState(() => _saving = false);
       messenger.showSnackBar(
@@ -332,23 +361,28 @@ class _RecordInvoiceSheetState extends ConsumerState<RecordInvoiceSheet>
             child: Container(
               decoration: BoxDecoration(
                 color: sSurface,
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(28)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(28),
+                ),
               ),
               child: Form(
                 key: _formKey,
                 child: Column(
                   children: [
                     Padding(
-                      padding: EdgeInsets.fromLTRB(context.getRSize(20),
-                          context.getRSize(12), context.getRSize(20), 0),
+                      padding: EdgeInsets.fromLTRB(
+                        context.getRSize(20),
+                        context.getRSize(12),
+                        context.getRSize(20),
+                        0,
+                      ),
                       child: Column(
                         children: [
                           _sheetHandle(context, sBorder),
                           SizedBox(height: context.getRSize(16)),
                           _formHeader(
                             context,
-                            icon: FontAwesomeIcons.fileInvoiceDollar,
+                            icon: FontAwesomeIcons.fileInvoiceDollar.data,
                             color: danger,
                             title: 'Invoice Total',
                             subtitle: widget.supplierName,
@@ -367,13 +401,16 @@ class _RecordInvoiceSheetState extends ConsumerState<RecordInvoiceSheet>
                         ),
                         children: [
                           _recordStoreBanner(
-                              context, _resolveRecordStore(ref).label),
+                            context,
+                            _resolveRecordStore(ref).label,
+                          ),
                           SizedBox(height: context.getRSize(16)),
                           AppInput(
                             labelText: 'Invoice Amount',
                             controller: _amountCtrl,
                             keyboardType: const TextInputType.numberWithOptions(
-                                decimal: true),
+                              decimal: true,
+                            ),
                             inputFormatters: [CurrencyInputFormatter()],
                             hintText: '0.00',
                             validator: (v) => (v == null || v.trim().isEmpty)
@@ -389,10 +426,15 @@ class _RecordInvoiceSheetState extends ConsumerState<RecordInvoiceSheet>
                               if (d != null) setState(() => _dateReceived = d);
                             },
                             controller: TextEditingController(
-                              text: DateFormat('MMM d, y').format(_dateReceived),
+                              text: DateFormat(
+                                'MMM d, y',
+                              ).format(_dateReceived),
                             ),
-                            suffixIcon: Icon(FontAwesomeIcons.calendar,
-                                size: context.getRSize(16), color: sSubtext),
+                            suffixIcon: Icon(
+                              FontAwesomeIcons.calendar.data,
+                              size: context.getRSize(16),
+                              color: sSubtext,
+                            ),
                           ),
                           SizedBox(height: context.getRSize(16)),
                           AppInput(
@@ -481,8 +523,7 @@ class _RecordPaymentSheetState extends ConsumerState<RecordPaymentSheet>
     super.dispose();
   }
 
-  bool get _hasProof =>
-      _receipt != null || _refCtrl.text.trim().isNotEmpty;
+  bool get _hasProof => _receipt != null || _refCtrl.text.trim().isNotEmpty;
 
   Future<void> _pickReceipt() async {
     AutoLockWrapper.suppressNextResume = true;
@@ -501,22 +542,33 @@ class _RecordPaymentSheetState extends ConsumerState<RecordPaymentSheet>
     if (supplierId == null) return;
     final messenger = ScaffoldMessenger.of(context);
     if (!_hasProof) {
-      messenger.showSnackBar(const SnackBar(
-        content: Text('Attach a receipt or enter a reference / explanation'),
-      ));
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Attach a receipt or enter a reference / explanation'),
+        ),
+      );
       return;
     }
-    if (!ref.read(currentUserPermissionsProvider).contains('suppliers.manage')) {
+    if (!ref
+        .read(currentUserPermissionsProvider)
+        .contains('suppliers.manage')) {
       Navigator.pop(context);
       return;
     }
     final amountKobo = (parseCurrency(_amountCtrl.text) * 100).round();
-    if (amountKobo <= 0) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter an amount greater than 0'))); return; }
+    if (amountKobo <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter an amount greater than 0')),
+      );
+      return;
+    }
     final staffId = ref.read(authProvider).currentUser?.id;
     if (staffId == null) return;
     setState(() => _saving = true);
     try {
-      await ref.read(supplierAccountServiceProvider).recordPayment(
+      await ref
+          .read(supplierAccountServiceProvider)
+          .recordPayment(
             supplierId: supplierId,
             amountKobo: amountKobo,
             method: _method,
@@ -527,10 +579,14 @@ class _RecordPaymentSheetState extends ConsumerState<RecordPaymentSheet>
             referenceNote: _refCtrl.text,
           );
       if (mounted) Navigator.pop(context);
-      messenger.showSnackBar(SnackBar(
-        content: Text('Payment of ${formatCurrency(amountKobo / 100)} recorded'),
-        backgroundColor: success,
-      ));
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Payment of ${formatCurrency(amountKobo / 100)} recorded',
+          ),
+          backgroundColor: success,
+        ),
+      );
     } catch (_) {
       if (mounted) setState(() => _saving = false);
       messenger.showSnackBar(
@@ -560,26 +616,32 @@ class _RecordPaymentSheetState extends ConsumerState<RecordPaymentSheet>
             child: Container(
               decoration: BoxDecoration(
                 color: sSurface,
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(28)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(28),
+                ),
               ),
               child: Form(
                 key: _formKey,
                 child: Column(
                   children: [
                     Padding(
-                      padding: EdgeInsets.fromLTRB(context.getRSize(20),
-                          context.getRSize(12), context.getRSize(20), 0),
+                      padding: EdgeInsets.fromLTRB(
+                        context.getRSize(20),
+                        context.getRSize(12),
+                        context.getRSize(20),
+                        0,
+                      ),
                       child: Column(
                         children: [
                           _sheetHandle(context, sBorder),
                           SizedBox(height: context.getRSize(16)),
                           _formHeader(
                             context,
-                            icon: FontAwesomeIcons.moneyBillTransfer,
+                            icon: FontAwesomeIcons.moneyBillTransfer.data,
                             color: success,
                             title: 'Record Payment',
-                            subtitle: widget.supplierName ?? 'Log outgoing funds',
+                            subtitle:
+                                widget.supplierName ?? 'Log outgoing funds',
                             text: sText,
                           ),
                           SizedBox(height: context.getRSize(10)),
@@ -595,7 +657,9 @@ class _RecordPaymentSheetState extends ConsumerState<RecordPaymentSheet>
                         ),
                         children: [
                           _recordStoreBanner(
-                              context, _resolveRecordStore(ref).label),
+                            context,
+                            _resolveRecordStore(ref).label,
+                          ),
                           SizedBox(height: context.getRSize(16)),
                           if (widget.supplierId == null) ...[
                             AppDropdown<String>(
@@ -603,10 +667,12 @@ class _RecordPaymentSheetState extends ConsumerState<RecordPaymentSheet>
                               value: _selectedSupplierId,
                               hintText: 'Select supplier',
                               items: suppliers
-                                  .map((s) => DropdownMenuItem(
-                                        value: s.id,
-                                        child: Text(s.name),
-                                      ))
+                                  .map(
+                                    (s) => DropdownMenuItem(
+                                      value: s.id,
+                                      child: Text(s.name),
+                                    ),
+                                  )
                                   .toList(),
                               onChanged: (v) =>
                                   setState(() => _selectedSupplierId = v),
@@ -619,7 +685,8 @@ class _RecordPaymentSheetState extends ConsumerState<RecordPaymentSheet>
                             labelText: 'Amount',
                             controller: _amountCtrl,
                             keyboardType: const TextInputType.numberWithOptions(
-                                decimal: true),
+                              decimal: true,
+                            ),
                             inputFormatters: [CurrencyInputFormatter()],
                             hintText: '0.00',
                             validator: (v) => (v == null || v.trim().isEmpty)
@@ -632,13 +699,21 @@ class _RecordPaymentSheetState extends ConsumerState<RecordPaymentSheet>
                             value: _method,
                             items: const [
                               DropdownMenuItem(
-                                  value: 'cash', child: Text('Cash')),
+                                value: 'cash',
+                                child: Text('Cash'),
+                              ),
                               DropdownMenuItem(
-                                  value: 'transfer', child: Text('Bank Transfer')),
+                                value: 'transfer',
+                                child: Text('Bank Transfer'),
+                              ),
                               DropdownMenuItem(
-                                  value: 'pos', child: Text('POS Card')),
+                                value: 'pos',
+                                child: Text('POS Card'),
+                              ),
                               DropdownMenuItem(
-                                  value: 'other', child: Text('Other')),
+                                value: 'other',
+                                child: Text('Other'),
+                              ),
                             ],
                             onChanged: (v) {
                               if (v != null) setState(() => _method = v);
@@ -655,8 +730,11 @@ class _RecordPaymentSheetState extends ConsumerState<RecordPaymentSheet>
                             controller: TextEditingController(
                               text: DateFormat('MMM d, y').format(_paidOn),
                             ),
-                            suffixIcon: Icon(FontAwesomeIcons.calendar,
-                                size: context.getRSize(16), color: sSubtext),
+                            suffixIcon: Icon(
+                              FontAwesomeIcons.calendar.data,
+                              size: context.getRSize(16),
+                              color: sSubtext,
+                            ),
                           ),
                           SizedBox(height: context.getRSize(20)),
                           _buildProofSection(context),
@@ -714,10 +792,7 @@ class _RecordPaymentSheetState extends ConsumerState<RecordPaymentSheet>
         Text(
           'Attach a receipt, or enter a reference / explanation below (e.g. a '
           'bank-transfer reference, cheque number, or why there is no receipt).',
-          style: TextStyle(
-            fontSize: context.getRFontSize(12),
-            color: sSubtext,
-          ),
+          style: TextStyle(fontSize: context.getRFontSize(12), color: sSubtext),
         ),
         SizedBox(height: context.getRSize(12)),
         InkWell(
@@ -734,8 +809,8 @@ class _RecordPaymentSheetState extends ConsumerState<RecordPaymentSheet>
               children: [
                 Icon(
                   _receipt == null
-                      ? FontAwesomeIcons.paperclip
-                      : FontAwesomeIcons.solidFileLines,
+                      ? FontAwesomeIcons.paperclip.data
+                      : FontAwesomeIcons.solidFileLines.data,
                   size: context.getRSize(16),
                   color: _receipt == null
                       ? sSubtext
@@ -757,8 +832,11 @@ class _RecordPaymentSheetState extends ConsumerState<RecordPaymentSheet>
                 if (_receipt != null)
                   GestureDetector(
                     onTap: () => setState(() => _receipt = null),
-                    child: Icon(Icons.close,
-                        size: context.getRSize(18), color: sSubtext),
+                    child: Icon(
+                      Icons.close,
+                      size: context.getRSize(18),
+                      color: sSubtext,
+                    ),
                   ),
               ],
             ),
@@ -783,7 +861,8 @@ class _RecordPaymentSheetState extends ConsumerState<RecordPaymentSheet>
 ({String? id, String label}) _resolveRecordStore(WidgetRef ref) {
   final locked = ref.read(lockedStoreProvider).value;
   final selectable = ref.read(selectableStoresProvider);
-  final id = locked ??
+  final id =
+      locked ??
       (selectable.isNotEmpty
           ? selectable.first.id
           : ref.read(authProvider).currentUser?.storeId);
@@ -801,7 +880,8 @@ class _RecordPaymentSheetState extends ConsumerState<RecordPaymentSheet>
 /// Read-only "Recording for: <store>" banner shown in the Record Activity sheets
 /// (§21.11) so the target store is explicit. Switch stores via the menu picker.
 Widget _recordStoreBanner(BuildContext context, String label) {
-  final subtext = Theme.of(context).textTheme.bodySmall?.color ??
+  final subtext =
+      Theme.of(context).textTheme.bodySmall?.color ??
       Theme.of(context).iconTheme.color!;
   final border = Theme.of(context).dividerColor;
   final primary = Theme.of(context).colorScheme.primary;
@@ -817,7 +897,11 @@ Widget _recordStoreBanner(BuildContext context, String label) {
     ),
     child: Row(
       children: [
-        Icon(FontAwesomeIcons.store, size: context.getRSize(13), color: primary),
+        Icon(
+          FontAwesomeIcons.store.data,
+          size: context.getRSize(13),
+          color: primary,
+        ),
         SizedBox(width: context.getRSize(8)),
         Expanded(
           child: Text.rich(

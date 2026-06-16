@@ -81,7 +81,9 @@ class _InviteStaffSheetState extends ConsumerState<InviteStaffSheet> {
     // invite so a revoked per-user override is honored at the action too.
     if (!ref.read(currentUserPermissionsProvider).contains('staff.invite')) {
       AppNotification.showError(
-          context, 'You don\'t have permission to do that.');
+        context,
+        'You don\'t have permission to do that.',
+      );
       return;
     }
     if (_roleId == null || _storeId == null) {
@@ -101,11 +103,15 @@ class _InviteStaffSheetState extends ConsumerState<InviteStaffSheet> {
 
     // Duplicate guard: an email already belonging to an active staff member
     // of this business can't be invited again (master plan §9.4).
-    final existing =
-        await db.storesDao.getUserByEmail(email, preferredBusinessId: businessId);
+    final existing = await db.storesDao.getUserByEmail(
+      email,
+      preferredBusinessId: businessId,
+    );
     if (existing != null) {
-      final membership = await db.userBusinessesDao
-          .getForUserInBusiness(existing.id, businessId);
+      final membership = await db.userBusinessesDao.getForUserInBusiness(
+        existing.id,
+        businessId,
+      );
       if (membership != null && membership.status == 'active') {
         if (!mounted) return;
         AppNotification.showError(
@@ -121,7 +127,8 @@ class _InviteStaffSheetState extends ConsumerState<InviteStaffSheet> {
       // Resolved before any await so a mid-write dispose can't invalidate the
       // ref reads. Drives the §26.4 invite-generated notification below.
       final actorIsCeo = ref.read(currentUserRoleProvider)?.slug == 'ceo';
-      final roles = ref.read(allRolesProvider).valueOrNull ?? const <RoleData>[];
+      final roles =
+          ref.read(allRolesProvider).valueOrNull ?? const <RoleData>[];
       var invitedRoleName = 'staff';
       for (final r in roles) {
         if (r.id == _roleId) {
@@ -151,7 +158,9 @@ class _InviteStaffSheetState extends ConsumerState<InviteStaffSheet> {
       // §26.4 Staff — "New staff invite generated (fires to CEO)". Fires only
       // when a non-CEO (a Manager) generated it; the CEO is never self-notified.
       if (!actorIsCeo) {
-        final ceoIds = await db.userBusinessesDao.getUserIdsForRoleSlugs(['ceo']);
+        final ceoIds = await db.userBusinessesDao.getUserIdsForRoleSlugs([
+          'ceo',
+        ]);
         for (final ceoId in ceoIds) {
           if (ceoId == currentUser.id) continue;
           await db.notificationsDao.fireNotification(
@@ -188,9 +197,7 @@ class _InviteStaffSheetState extends ConsumerState<InviteStaffSheet> {
   }
 
   Future<void> _shareSms() async {
-    final uri = Uri.parse(
-      'sms:?body=${Uri.encodeComponent(_shareMessage)}',
-    );
+    final uri = Uri.parse('sms:?body=${Uri.encodeComponent(_shareMessage)}');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
     } else if (mounted) {
@@ -290,7 +297,7 @@ class _InviteStaffSheetState extends ConsumerState<InviteStaffSheet> {
             labelText: 'Email',
             hintText: 'name@example.com',
             keyboardType: TextInputType.emailAddress,
-            prefixIcon: const Icon(FontAwesomeIcons.envelope, size: 16),
+            prefixIcon: Icon(FontAwesomeIcons.envelope.data, size: 16),
             validator: (v) {
               final s = (v ?? '').trim();
               if (s.isEmpty) return 'Enter an email';
@@ -323,7 +330,7 @@ class _InviteStaffSheetState extends ConsumerState<InviteStaffSheet> {
           SizedBox(height: context.getRSize(24)),
           AppButton(
             text: 'Generate code',
-            icon: FontAwesomeIcons.ticket,
+            icon: FontAwesomeIcons.ticket.data,
             isLoading: _generating,
             onPressed: _generating ? null : _generate,
           ),
@@ -375,7 +382,7 @@ class _InviteStaffSheetState extends ConsumerState<InviteStaffSheet> {
             Expanded(
               child: AppButton(
                 text: 'Copy',
-                icon: FontAwesomeIcons.copy,
+                icon: FontAwesomeIcons.copy.data,
                 variant: AppButtonVariant.secondary,
                 onPressed: _copyCode,
               ),
@@ -384,7 +391,7 @@ class _InviteStaffSheetState extends ConsumerState<InviteStaffSheet> {
             Expanded(
               child: AppButton(
                 text: 'SMS',
-                icon: FontAwesomeIcons.commentSms,
+                icon: FontAwesomeIcons.commentSms.data,
                 variant: AppButtonVariant.outline,
                 onPressed: _shareSms,
               ),
@@ -393,7 +400,7 @@ class _InviteStaffSheetState extends ConsumerState<InviteStaffSheet> {
             Expanded(
               child: AppButton(
                 text: 'WhatsApp',
-                icon: FontAwesomeIcons.whatsapp,
+                icon: FontAwesomeIcons.whatsapp.data,
                 variant: AppButtonVariant.outline,
                 onPressed: _shareWhatsApp,
               ),

@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -28,7 +27,8 @@ List<int> allocateLegacyDeposit(int totalDeposit, List<int> weights) {
   var allocated = 0;
   for (var i = 0; i < n; i++) {
     out[i] = i == n - 1
-        ? totalDeposit - allocated // remainder → last brand, exact sum
+        ? totalDeposit -
+              allocated // remainder → last brand, exact sum
         : (totalDeposit * w[i]) ~/ totalWeight;
     allocated += out[i];
   }
@@ -106,8 +106,9 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
     // It tells us each brand's track (no-deposit / part / full). Walk-ins and
     // pre-v37 orders have no lines → fall back to grouping the order's bottle
     // items by manufacturer (stock-only return, treated as no-deposit).
-    final lines =
-        await db.orderCrateLinesDao.getForOrder(widget.orderWithItems.order.id);
+    final lines = await db.orderCrateLinesDao.getForOrder(
+      widget.orderWithItems.order.id,
+    );
 
     final List<_ManufacturerRow> rows;
     if (lines.isNotEmpty) {
@@ -118,7 +119,8 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
         final isPart = l.depositPaidKobo > 0 && l.depositPaidKobo < fullKobo;
         return _ManufacturerRow(
           manufacturerId: l.manufacturerId,
-          name: mfrNames[l.manufacturerId] ?? 'Manufacturer ${l.manufacturerId}',
+          name:
+              mfrNames[l.manufacturerId] ?? 'Manufacturer ${l.manufacturerId}',
           expectedQty: l.cratesTaken,
           rateKobo: l.depositRateKobo,
           paidKobo: l.depositPaidKobo,
@@ -141,7 +143,9 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
       final Map<String, _ManufacturerAccum> accum = {};
       for (final ri in widget.orderWithItems.items) {
         final product = ri.product;
-        if (product == null) continue; // Quick Sale line — never a crate product
+        if (product == null) {
+          continue; // Quick Sale line — never a crate product
+        }
         if (product.unit.toLowerCase() != 'bottle') continue;
         if (!product.trackEmpties) continue;
         final mfId = product.manufacturerId ?? '';
@@ -163,7 +167,9 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
       // shares EXACTLY to the recorded total — the held deposit then resolves to
       // 0 with nothing left over.
       final totalDeposit = widget.orderWithItems.order.crateDepositPaidKobo;
-      var weights = brands.map((b) => (mfrRates[b.id] ?? 0) * b.totalQty).toList();
+      var weights = brands
+          .map((b) => (mfrRates[b.id] ?? 0) * b.totalQty)
+          .toList();
       if (weights.every((w) => w == 0)) {
         weights = brands.map((b) => b.totalQty).toList();
       }
@@ -285,7 +291,10 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) {
-        AppNotification.showError(context, 'Could not record crate returns: $e');
+        AppNotification.showError(
+          context,
+          'Could not record crate returns: $e',
+        );
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -295,7 +304,12 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
   /// §13.4 Ring 5 — choose where a money-track deposit refund goes: back to the
   /// customer's wallet (spendable credit) or out of the till as cash.
   Widget _buildRefundModeToggle() {
-    Widget chip(String label, IconData icon, bool selected, VoidCallback onTap) {
+    Widget chip(
+      String label,
+      IconData icon,
+      bool selected,
+      VoidCallback onTap,
+    ) {
       final primary = Theme.of(context).colorScheme.primary;
       return Expanded(
         child: GestureDetector(
@@ -314,9 +328,11 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(icon,
-                    size: context.getRSize(14),
-                    color: selected ? primary : _subtext),
+                Icon(
+                  icon,
+                  size: context.getRSize(14),
+                  color: selected ? primary : _subtext,
+                ),
                 SizedBox(width: context.getRSize(8)),
                 Text(
                   label,
@@ -354,11 +370,19 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
           SizedBox(height: context.getRSize(8)),
           Row(
             children: [
-              chip('Wallet', FontAwesomeIcons.wallet, !_refundAsCash,
-                  () => setState(() => _refundAsCash = false)),
+              chip(
+                'Wallet',
+                FontAwesomeIcons.wallet.data,
+                !_refundAsCash,
+                () => setState(() => _refundAsCash = false),
+              ),
               SizedBox(width: context.getRSize(10)),
-              chip('Cash', FontAwesomeIcons.moneyBill, _refundAsCash,
-                  () => setState(() => _refundAsCash = true)),
+              chip(
+                'Cash',
+                FontAwesomeIcons.moneyBill.data,
+                _refundAsCash,
+                () => setState(() => _refundAsCash = true),
+              ),
             ],
           ),
         ],
@@ -410,7 +434,7 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
             child: Row(
               children: [
                 Icon(
-                  FontAwesomeIcons.boxOpen,
+                  FontAwesomeIcons.boxOpen.data,
                   color: Colors.orange,
                   size: context.getRSize(18),
                 ),
@@ -492,7 +516,7 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
                   flex: 2,
                   child: AppButton(
                     text: _saving ? 'Saving...' : 'Confirm',
-                    icon: FontAwesomeIcons.check,
+                    icon: FontAwesomeIcons.check.data,
                     variant: AppButtonVariant.primary,
                     isLoading: _saving,
                     onPressed: _saving ? null : _confirm,
@@ -543,7 +567,7 @@ class _ManufacturerReturnTile extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
-              FontAwesomeIcons.industry,
+              FontAwesomeIcons.industry.data,
               size: context.getRSize(16),
               color: const Color(0xFFF5A623),
             ),
@@ -634,8 +658,5 @@ class _ManufacturerAccum {
   final String name;
   int totalQty = 0;
 
-  _ManufacturerAccum({
-    required this.id,
-    required this.name,
-  });
+  _ManufacturerAccum({required this.id, required this.name});
 }

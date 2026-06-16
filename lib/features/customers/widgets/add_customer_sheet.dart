@@ -18,7 +18,10 @@ class AddCustomerSheet extends ConsumerStatefulWidget {
 
   const AddCustomerSheet({super.key, this.onCustomerAdded});
 
-  static void show(BuildContext context, {void Function(Customer)? onCustomerAdded}) {
+  static void show(
+    BuildContext context, {
+    void Function(Customer)? onCustomerAdded,
+  }) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -51,6 +54,7 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
       if (mounted) setState(() => _stores = wh);
     });
   }
+
   Color get _surface => Theme.of(context).colorScheme.surface;
   Color get _text => Theme.of(context).colorScheme.onSurface;
   Color get _border => Theme.of(context).dividerColor;
@@ -64,7 +68,6 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
     super.dispose();
   }
 
-
   Widget _groupDropdown() {
     return Column(
       children: [
@@ -72,8 +75,14 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
           labelText: 'Price Tier',
           value: _selectedGroup,
           items: const [
-            DropdownMenuItem(value: PriceTier.retailer, child: Text('Retailer')),
-            DropdownMenuItem(value: PriceTier.wholesaler, child: Text('Wholesaler')),
+            DropdownMenuItem(
+              value: PriceTier.retailer,
+              child: Text('Retailer'),
+            ),
+            DropdownMenuItem(
+              value: PriceTier.wholesaler,
+              child: Text('Wholesaler'),
+            ),
           ],
           onChanged: (val) {
             if (val != null) setState(() => _selectedGroup = val);
@@ -83,7 +92,6 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
       ],
     );
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -136,21 +144,28 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
                                 height: context.getRSize(44),
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
-                                    colors: [Theme.of(context).colorScheme.primary.withValues(alpha: 0.7), Theme.of(context).colorScheme.primary],
+                                    colors: [
+                                      Theme.of(context).colorScheme.primary
+                                          .withValues(alpha: 0.7),
+                                      Theme.of(context).colorScheme.primary,
+                                    ],
                                     begin: Alignment.topLeft,
                                     end: Alignment.bottomRight,
                                   ),
                                   borderRadius: BorderRadius.circular(12),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .primary
+                                          .withValues(alpha: 0.3),
                                       blurRadius: 8,
                                       offset: const Offset(0, 2),
                                     ),
                                   ],
                                 ),
                                 child: Icon(
-                                  FontAwesomeIcons.userPlus,
+                                  FontAwesomeIcons.userPlus.data,
                                   color: Colors.white,
                                   size: context.getRSize(20),
                                 ),
@@ -171,7 +186,9 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
                                     'Client Details & Contact',
                                     style: TextStyle(
                                       fontSize: context.getRFontSize(13),
-                                      color: Theme.of(context).colorScheme.primary,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.primary,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
@@ -199,7 +216,9 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
                             labelText: 'Customer Name',
                             controller: _nameCtrl,
                             hintText: 'e.g. John Doe',
-                            validator: (v) => (v == null || v.trim().isEmpty) ? 'This field is required' : null,
+                            validator: (v) => (v == null || v.trim().isEmpty)
+                                ? 'This field is required'
+                                : null,
                           ),
                           _groupDropdown(),
                           AppDropdown<String>(
@@ -212,21 +231,27 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
                                 child: Text(wh.name),
                               );
                             }).toList(),
-                            onChanged: (val) => setState(() => _selectedStoreId = val),
-                            validator: (v) => v == null ? 'Please select a store' : null,
+                            onChanged: (val) =>
+                                setState(() => _selectedStoreId = val),
+                            validator: (v) =>
+                                v == null ? 'Please select a store' : null,
                           ),
                           SizedBox(height: context.getRSize(16)),
                           AppInput(
                             labelText: 'Address',
                             controller: _addressCtrl,
                             hintText: 'e.g. 123 Main Street',
-                            validator: (v) => (v == null || v.trim().isEmpty) ? 'This field is required' : null,
+                            validator: (v) => (v == null || v.trim().isEmpty)
+                                ? 'This field is required'
+                                : null,
                           ),
                           AppInput(
                             labelText: 'Google Maps Location',
                             controller: _locationCtrl,
                             hintText: 'e.g. Plus Code or Link',
-                            validator: (v) => (v == null || v.trim().isEmpty) ? 'This field is required' : null,
+                            validator: (v) => (v == null || v.trim().isEmpty)
+                                ? 'This field is required'
+                                : null,
                           ),
                           AppInput(
                             labelText: 'Phone Number',
@@ -246,12 +271,12 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
 
                     // Button
                     Padding(
-                        padding: EdgeInsets.fromLTRB(
-                          context.getRSize(20),
-                          context.getRSize(16),
-                          context.getRSize(20),
-                          context.deviceBottomPadding + context.getRSize(16),
-                        ),
+                      padding: EdgeInsets.fromLTRB(
+                        context.getRSize(20),
+                        context.getRSize(16),
+                        context.getRSize(20),
+                        context.deviceBottomPadding + context.getRSize(16),
+                      ),
                       child: AppButton(
                         text: 'Save Customer',
                         variant: AppButtonVariant.primary,
@@ -271,13 +296,16 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
                             // belongs to — a NULL business_id will fail the cloud RLS check
                             // (`business_id = get_user_business_id()`) and the row would be
                             // unsyncable forever.
-                            final businessId =
-                                ref.read(authProvider).currentUser?.businessId;
+                            final businessId = ref
+                                .read(authProvider)
+                                .currentUser
+                                ?.businessId;
                             if (businessId == null) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
                                   content: Text(
-                                      'Cannot save: account not fully loaded yet. Try again in a moment.'),
+                                    'Cannot save: account not fully loaded yet. Try again in a moment.',
+                                  ),
                                 ),
                               );
                               return;
@@ -299,24 +327,30 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
                               storeId: storeId,
                             );
                             try {
-                              final saved = await ref.read(customerServiceProvider).addCustomer(
-                                newCustomer,
-                                businessId: businessId,
-                              );
+                              final saved = await ref
+                                  .read(customerServiceProvider)
+                                  .addCustomer(
+                                    newCustomer,
+                                    businessId: businessId,
+                                  );
                               if (!context.mounted) return;
                               Navigator.pop(context);
                               if (saved == null) {
                                 if (context.mounted) {
-                                  AppNotification.showError(context,
-                                      'Customer saved but could not be loaded. Pull to refresh.');
+                                  AppNotification.showError(
+                                    context,
+                                    'Customer saved but could not be loaded. Pull to refresh.',
+                                  );
                                 }
                                 return;
                               }
                               widget.onCustomerAdded?.call(saved);
                             } catch (e) {
                               if (!context.mounted) return;
-                              AppNotification.showError(context,
-                                  'Could not save customer. Please try again.');
+                              AppNotification.showError(
+                                context,
+                                'Could not save customer. Please try again.',
+                              );
                             }
                           }
                         },
@@ -332,5 +366,3 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
     );
   }
 }
-
-

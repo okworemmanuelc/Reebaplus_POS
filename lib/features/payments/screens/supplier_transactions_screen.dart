@@ -48,7 +48,7 @@ class _SupplierTransactionsScreenState
 
     final entries =
         ref.watch(supplierAllHistoryProvider).valueOrNull ??
-            const <SupplierLedgerEntryData>[];
+        const <SupplierLedgerEntryData>[];
     final suppliers =
         ref.watch(allSuppliersProvider).valueOrNull ?? const <SupplierData>[];
     final nameById = {for (final s in suppliers) s.id: s.name};
@@ -62,8 +62,9 @@ class _SupplierTransactionsScreenState
     final storeNameById = {for (final s in stores) s.id: s.name};
 
     final window = datePeriodFromLabel(_effectivePeriod);
-    final filtered =
-        entries.where((e) => window.includes(e.activityDate)).toList();
+    final filtered = entries
+        .where((e) => window.includes(e.activityDate))
+        .toList();
 
     return Scaffold(
       backgroundColor: _bg,
@@ -123,7 +124,9 @@ class _SupplierTransactionsScreenState
                         width: context.getRSize(140),
                         items: _periodOptions.map((val) {
                           return DropdownMenuItem<String>(
-                              value: val, child: Text(val));
+                            value: val,
+                            child: Text(val),
+                          );
                         }).toList(),
                         onChanged: (val) {
                           if (val != null) {
@@ -141,7 +144,7 @@ class _SupplierTransactionsScreenState
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Icon(
-                                FontAwesomeIcons.receipt,
+                                FontAwesomeIcons.receipt.data,
                                 size: context.getRSize(48),
                                 color: _border,
                               ),
@@ -173,7 +176,9 @@ class _SupplierTransactionsScreenState
                                   nameById[e.supplierId] ?? 'Unknown supplier',
                               storeName: isAllStores
                                   ? (storeNameById[e.storeId] ??
-                                      (e.storeId == null ? 'Unassigned' : null))
+                                        (e.storeId == null
+                                            ? 'Unassigned'
+                                            : null))
                                   : null,
                             );
                           },

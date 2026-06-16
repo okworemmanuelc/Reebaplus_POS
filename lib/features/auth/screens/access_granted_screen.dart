@@ -15,7 +15,8 @@ class AccessGrantedScreen extends ConsumerStatefulWidget {
   const AccessGrantedScreen({super.key, required this.user});
 
   @override
-  ConsumerState<AccessGrantedScreen> createState() => _AccessGrantedScreenState();
+  ConsumerState<AccessGrantedScreen> createState() =>
+      _AccessGrantedScreenState();
 }
 
 class _AccessGrantedScreenState extends ConsumerState<AccessGrantedScreen>
@@ -70,35 +71,35 @@ class _AccessGrantedScreenState extends ConsumerState<AccessGrantedScreen>
       parent: _contentController,
       curve: const Interval(0.0, 0.4, curve: Curves.easeOut),
     );
-    _headerSlide = Tween<Offset>(
-      begin: const Offset(0, 0.15),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _contentController,
-      curve: const Interval(0.0, 0.4, curve: Curves.easeOut),
-    ));
+    _headerSlide = Tween<Offset>(begin: const Offset(0, 0.15), end: Offset.zero)
+        .animate(
+          CurvedAnimation(
+            parent: _contentController,
+            curve: const Interval(0.0, 0.4, curve: Curves.easeOut),
+          ),
+        );
     _cardsOpacity = CurvedAnimation(
       parent: _contentController,
       curve: const Interval(0.25, 0.65, curve: Curves.easeOut),
     );
-    _cardsSlide = Tween<Offset>(
-      begin: const Offset(0, 0.15),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _contentController,
-      curve: const Interval(0.25, 0.65, curve: Curves.easeOut),
-    ));
+    _cardsSlide = Tween<Offset>(begin: const Offset(0, 0.15), end: Offset.zero)
+        .animate(
+          CurvedAnimation(
+            parent: _contentController,
+            curve: const Interval(0.25, 0.65, curve: Curves.easeOut),
+          ),
+        );
     _buttonOpacity = CurvedAnimation(
       parent: _contentController,
       curve: const Interval(0.55, 1.0, curve: Curves.easeOut),
     );
-    _buttonSlide = Tween<Offset>(
-      begin: const Offset(0, 0.15),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _contentController,
-      curve: const Interval(0.55, 1.0, curve: Curves.easeOut),
-    ));
+    _buttonSlide = Tween<Offset>(begin: const Offset(0, 0.15), end: Offset.zero)
+        .animate(
+          CurvedAnimation(
+            parent: _contentController,
+            curve: const Interval(0.55, 1.0, curve: Curves.easeOut),
+          ),
+        );
 
     // Continuous pulsing glow ring
     _pulseController = AnimationController(
@@ -153,7 +154,8 @@ class _AccessGrantedScreenState extends ConsumerState<AccessGrantedScreen>
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : Colors.black;
-    final successColor = theme.extension<AppSemanticColors>()?.success ??
+    final successColor =
+        theme.extension<AppSemanticColors>()?.success ??
         const Color(0xFF30D158);
 
     return AuthBackground(
@@ -230,12 +232,16 @@ class _AccessGrantedScreenState extends ConsumerState<AccessGrantedScreen>
                               opacity: _cardsOpacity,
                               child: Container(
                                 height: 2,
-                                margin: const EdgeInsets.symmetric(horizontal: 40),
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 40,
+                                ),
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
                                     colors: [
                                       Colors.transparent,
-                                      theme.colorScheme.primary.withValues(alpha: 0.6),
+                                      theme.colorScheme.primary.withValues(
+                                        alpha: 0.6,
+                                      ),
                                       Colors.transparent,
                                     ],
                                   ),
@@ -405,11 +411,7 @@ class _AccessGrantedScreenState extends ConsumerState<AccessGrantedScreen>
                   color: theme.colorScheme.primary.withValues(alpha: 0.12),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(
-                  icon,
-                  color: theme.colorScheme.primary,
-                  size: 22,
-                ),
+                child: Icon(icon, color: theme.colorScheme.primary, size: 22),
               ),
               const SizedBox(width: 16),
               Expanded(

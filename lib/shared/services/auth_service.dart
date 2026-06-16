@@ -43,7 +43,7 @@ class AuthService extends ValueNotifier<UserData?> {
   final SupabaseClient _supabase;
 
   AuthService(this._db, this._nav, this._secure, this._sync, this._supabase)
-      : super(null) {
+    : super(null) {
     // Hand the database a thin closure over `value` so DAOs that mix in
     // BusinessScopedDao always read the current session's businessId
     // (auto-tracks login/logout through the ValueNotifier).
@@ -159,16 +159,15 @@ class AuthService extends ValueNotifier<UserData?> {
     );
     const iterations = PinHasher.defaultIterations;
 
-    final usersUpdated = await (_db.update(_db.users)
-          ..where((u) => u.id.equals(userId)))
-        .write(
-      UsersCompanion(
-        pin: const Value('__HASHED__'),
-        pinHash: Value(hash),
-        pinSalt: Value(salt),
-        pinIterations: const Value(iterations),
-      ),
-    );
+    final usersUpdated =
+        await (_db.update(_db.users)..where((u) => u.id.equals(userId))).write(
+          UsersCompanion(
+            pin: const Value('__HASHED__'),
+            pinHash: Value(hash),
+            pinSalt: Value(salt),
+            pinIterations: const Value(iterations),
+          ),
+        );
     debugPrint(
       '[AuthService] setUserPin: users.pin* updated '
       '(rows affected: $usersUpdated)',
@@ -365,15 +364,15 @@ class AuthService extends ValueNotifier<UserData?> {
     final email = authUser.email!;
 
     if (businessId == null) return null;
-    final existing = await getUserByEmail(email, preferredBusinessId: businessId);
+    final existing = await getUserByEmail(
+      email,
+      preferredBusinessId: businessId,
+    );
     if (existing != null) {
       await (_db.update(
         _db.users,
       )..where((u) => u.id.equals(existing.id))).write(
-        UsersCompanion(
-          name: Value(name),
-          businessId: Value(businessId),
-        ),
+        UsersCompanion(name: Value(name), businessId: Value(businessId)),
       );
       return (_db.select(
         _db.users,
@@ -470,9 +469,9 @@ class AuthService extends ValueNotifier<UserData?> {
       return SessionRefreshResult.alreadyValid;
     }
     try {
-      final response = await _supabase.auth
-          .refreshSession()
-          .timeout(const Duration(seconds: 8));
+      final response = await _supabase.auth.refreshSession().timeout(
+        const Duration(seconds: 8),
+      );
       return response.session != null
           ? SessionRefreshResult.refreshed
           : SessionRefreshResult.failedAuth;
@@ -520,14 +519,19 @@ class AuthService extends ValueNotifier<UserData?> {
   }
 
   /// Looks up a user in the local database by email.
-  Future<UserData?> getUserByEmail(String email, {String? preferredBusinessId}) {
+  Future<UserData?> getUserByEmail(
+    String email, {
+    String? preferredBusinessId,
+  }) {
     debugPrint('[AuthService] Querying local user for $email...');
     return _db.storesDao
         .getUserByEmail(email, preferredBusinessId: preferredBusinessId)
         .then((u) {
-      debugPrint('[AuthService] Query done for $email. Found: ${u != null}');
-      return u;
-    });
+          debugPrint(
+            '[AuthService] Query done for $email. Found: ${u != null}',
+          );
+          return u;
+        });
   }
 
   // ── Session management ─────────────────────────────────────────────────────
@@ -577,10 +581,11 @@ class AuthService extends ValueNotifier<UserData?> {
       unawaited(
         _db.userBusinessesDao
             .touchLastLogin(user.id, user.businessId)
-            .catchError((Object e) =>
-                debugPrint('[AuthService] touchLastLogin error: $e')),
+            .catchError(
+              (Object e) =>
+                  debugPrint('[AuthService] touchLastLogin error: $e'),
+            ),
       );
-
 
       // Record a session row for this login. Fire-and-forget — local DB write
       // shouldn't block the post-login UI; failures are logged.
@@ -692,7 +697,9 @@ class AuthService extends ValueNotifier<UserData?> {
     try {
       await _db.clearAllData();
     } catch (e) {
-      debugPrint('[AuthService] wipeOrphanedLocalBusiness clearAllData error: $e');
+      debugPrint(
+        '[AuthService] wipeOrphanedLocalBusiness clearAllData error: $e',
+      );
     }
     return true;
   }
@@ -750,7 +757,6 @@ class AuthService extends ValueNotifier<UserData?> {
       debugPrint('[AuthService] verifyLocalSessionStillActive error: $e');
     }
   }
-
 
   /// If true, the LoginScreen will skip automatically prompting for Biometrics
   /// so that users who explicitly pressed "Log Out" aren't immediately logged back in.
@@ -866,9 +872,7 @@ class AuthService extends ValueNotifier<UserData?> {
   // hard delete; the local `clearAllData()` wipe mirrors a business the server
   // has already destroyed, so there is nothing to enqueue (same shape as the
   // onboarding mirrors). No raw synced-table write happens in this method.
-  Future<void> deleteBusinessAndAccount({
-    required String businessId,
-  }) async {
+  Future<void> deleteBusinessAndAccount({required String businessId}) async {
     // Block offline up front — account deletion must be server-confirmed before
     // anything local is destroyed (§10.3), so never queue it blindly.
     if (!_sync.isOnline.value) {
@@ -879,11 +883,14 @@ class AuthService extends ValueNotifier<UserData?> {
     }
 
     try {
-      await _supabase.rpc('delete_business', params: {
-        'p_business_id': businessId,
-      });
+      await _supabase.rpc(
+        'delete_business',
+        params: {'p_business_id': businessId},
+      );
     } on PostgrestException catch (e) {
-      debugPrint('[AuthService] delete_business RPC failed: ${e.code} ${e.message}');
+      debugPrint(
+        '[AuthService] delete_business RPC failed: ${e.code} ${e.message}',
+      );
       throw DeleteBusinessException(_deleteBusinessMessage(e));
     } catch (e) {
       debugPrint('[AuthService] delete_business network error: $e');
@@ -969,8 +976,12 @@ class AuthService extends ValueNotifier<UserData?> {
     _sync.stopRealtimeSync();
     await _secure.clearAll();
     deviceUserIdNotifier.value = null;
-    _supabase.auth.signOut(scope: SignOutScope.local).catchError((e) =>
-        debugPrint('[AuthService] logOutCurrentUser signOut error: $e'));
+    _supabase.auth
+        .signOut(scope: SignOutScope.local)
+        .catchError(
+          (e) =>
+              debugPrint('[AuthService] logOutCurrentUser signOut error: $e'),
+        );
     try {
       await GoogleSignIn().signOut();
     } catch (e) {
@@ -1054,6 +1065,7 @@ class AuthService extends ValueNotifier<UserData?> {
               id: Value(businessId),
               name: name,
               onboardingComplete: const Value(false),
+              ownerId: Value(authUserId),
               lastUpdatedAt: Value(now),
             ),
           );
@@ -1159,9 +1171,9 @@ class AuthService extends ValueNotifier<UserData?> {
     // wrote canonical state, and AuthService isn't bound yet (resolver null).
     try {
       await _db.transaction(() async {
-        await (_db.delete(_db.users)
-              ..where((u) => u.email.equals(draft.email)))
-            .go();
+        await (_db.delete(
+          _db.users,
+        )..where((u) => u.email.equals(draft.email))).go();
 
         await _db
             .into(_db.businesses)
@@ -1173,6 +1185,7 @@ class AuthService extends ValueNotifier<UserData?> {
                 phone: Value(draft.businessPhone),
                 email: Value(draft.businessEmail),
                 onboardingComplete: const Value(true),
+                ownerId: Value(_supabase.auth.currentUser!.id),
                 lastUpdatedAt: Value(now),
               ),
             );
@@ -1189,7 +1202,9 @@ class AuthService extends ValueNotifier<UserData?> {
               ),
             );
 
-        await _db.into(_db.users).insert(
+        await _db
+            .into(_db.users)
+            .insert(
               UsersCompanion.insert(
                 id: Value(draft.userId),
                 businessId: draft.businessId,
@@ -1223,9 +1238,9 @@ class AuthService extends ValueNotifier<UserData?> {
         // timezone 'Africa/Lagos') cover that.
       });
 
-      return (_db.select(_db.users)
-            ..where((u) => u.id.equals(draft.userId)))
-          .getSingle();
+      return (_db.select(
+        _db.users,
+      )..where((u) => u.id.equals(draft.userId))).getSingle();
     } catch (e, stack) {
       // 3. Mirror failed. Cloud has the truth. Hydrate from there —
       //    upsertLocalUserFromProfile + pullChanges both go through the
@@ -1293,8 +1308,9 @@ class AuthService extends ValueNotifier<UserData?> {
         // Offline / DNS errors during refresh surface here; swallow so the
         // OAuth flow keeps waiting for the real signedIn event instead of
         // crashing on an uncaught stream error.
-        onError: (e) =>
-            debugPrint('[AuthService] onAuthStateChange error during OAuth: $e'),
+        onError: (e) => debugPrint(
+          '[AuthService] onAuthStateChange error during OAuth: $e',
+        ),
       );
 
       // Timeout after 2 minutes if the user doesn't complete the flow.

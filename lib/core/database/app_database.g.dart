@@ -117,6 +117,17 @@ class $BusinessesTable extends Businesses
         requiredDuringInsert: false,
         defaultValue: currentDateAndTime,
       );
+  static const VerificationMeta _ownerIdMeta = const VerificationMeta(
+    'ownerId',
+  );
+  @override
+  late final GeneratedColumn<String> ownerId = GeneratedColumn<String>(
+    'owner_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _subscriptionStatusMeta =
       const VerificationMeta('subscriptionStatus');
   @override
@@ -175,6 +186,7 @@ class $BusinessesTable extends Businesses
     onboardingComplete,
     createdAt,
     lastUpdatedAt,
+    ownerId,
     subscriptionStatus,
     subscriptionPlan,
     trialEndsAt,
@@ -255,6 +267,12 @@ class $BusinessesTable extends Businesses
           data['last_updated_at']!,
           _lastUpdatedAtMeta,
         ),
+      );
+    }
+    if (data.containsKey('owner_id')) {
+      context.handle(
+        _ownerIdMeta,
+        ownerId.isAcceptableOrUnknown(data['owner_id']!, _ownerIdMeta),
       );
     }
     if (data.containsKey('subscription_status')) {
@@ -342,6 +360,10 @@ class $BusinessesTable extends Businesses
         DriftSqlType.dateTime,
         data['${effectivePrefix}last_updated_at'],
       )!,
+      ownerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}owner_id'],
+      ),
       subscriptionStatus: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}subscription_status'],
@@ -378,6 +400,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
   final bool onboardingComplete;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
+  final String? ownerId;
   final String subscriptionStatus;
   final String? subscriptionPlan;
   final DateTime? trialEndsAt;
@@ -393,6 +416,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
     required this.onboardingComplete,
     required this.createdAt,
     required this.lastUpdatedAt,
+    this.ownerId,
     required this.subscriptionStatus,
     this.subscriptionPlan,
     this.trialEndsAt,
@@ -419,6 +443,9 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
     map['onboarding_complete'] = Variable<bool>(onboardingComplete);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
+    if (!nullToAbsent || ownerId != null) {
+      map['owner_id'] = Variable<String>(ownerId);
+    }
     map['subscription_status'] = Variable<String>(subscriptionStatus);
     if (!nullToAbsent || subscriptionPlan != null) {
       map['subscription_plan'] = Variable<String>(subscriptionPlan);
@@ -450,6 +477,9 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
       onboardingComplete: Value(onboardingComplete),
       createdAt: Value(createdAt),
       lastUpdatedAt: Value(lastUpdatedAt),
+      ownerId: ownerId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(ownerId),
       subscriptionStatus: Value(subscriptionStatus),
       subscriptionPlan: subscriptionPlan == null && nullToAbsent
           ? const Value.absent()
@@ -479,6 +509,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
       onboardingComplete: serializer.fromJson<bool>(json['onboardingComplete']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
+      ownerId: serializer.fromJson<String?>(json['ownerId']),
       subscriptionStatus: serializer.fromJson<String>(
         json['subscriptionStatus'],
       ),
@@ -503,6 +534,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
       'onboardingComplete': serializer.toJson<bool>(onboardingComplete),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
+      'ownerId': serializer.toJson<String?>(ownerId),
       'subscriptionStatus': serializer.toJson<String>(subscriptionStatus),
       'subscriptionPlan': serializer.toJson<String?>(subscriptionPlan),
       'trialEndsAt': serializer.toJson<DateTime?>(trialEndsAt),
@@ -521,6 +553,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
     bool? onboardingComplete,
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
+    Value<String?> ownerId = const Value.absent(),
     String? subscriptionStatus,
     Value<String?> subscriptionPlan = const Value.absent(),
     Value<DateTime?> trialEndsAt = const Value.absent(),
@@ -536,6 +569,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
     onboardingComplete: onboardingComplete ?? this.onboardingComplete,
     createdAt: createdAt ?? this.createdAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+    ownerId: ownerId.present ? ownerId.value : this.ownerId,
     subscriptionStatus: subscriptionStatus ?? this.subscriptionStatus,
     subscriptionPlan: subscriptionPlan.present
         ? subscriptionPlan.value
@@ -561,6 +595,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
       lastUpdatedAt: data.lastUpdatedAt.present
           ? data.lastUpdatedAt.value
           : this.lastUpdatedAt,
+      ownerId: data.ownerId.present ? data.ownerId.value : this.ownerId,
       subscriptionStatus: data.subscriptionStatus.present
           ? data.subscriptionStatus.value
           : this.subscriptionStatus,
@@ -589,6 +624,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
           ..write('onboardingComplete: $onboardingComplete, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('ownerId: $ownerId, ')
           ..write('subscriptionStatus: $subscriptionStatus, ')
           ..write('subscriptionPlan: $subscriptionPlan, ')
           ..write('trialEndsAt: $trialEndsAt, ')
@@ -609,6 +645,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
     onboardingComplete,
     createdAt,
     lastUpdatedAt,
+    ownerId,
     subscriptionStatus,
     subscriptionPlan,
     trialEndsAt,
@@ -628,6 +665,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
           other.onboardingComplete == this.onboardingComplete &&
           other.createdAt == this.createdAt &&
           other.lastUpdatedAt == this.lastUpdatedAt &&
+          other.ownerId == this.ownerId &&
           other.subscriptionStatus == this.subscriptionStatus &&
           other.subscriptionPlan == this.subscriptionPlan &&
           other.trialEndsAt == this.trialEndsAt &&
@@ -645,6 +683,7 @@ class BusinessesCompanion extends UpdateCompanion<BusinessData> {
   final Value<bool> onboardingComplete;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
+  final Value<String?> ownerId;
   final Value<String> subscriptionStatus;
   final Value<String?> subscriptionPlan;
   final Value<DateTime?> trialEndsAt;
@@ -661,6 +700,7 @@ class BusinessesCompanion extends UpdateCompanion<BusinessData> {
     this.onboardingComplete = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
+    this.ownerId = const Value.absent(),
     this.subscriptionStatus = const Value.absent(),
     this.subscriptionPlan = const Value.absent(),
     this.trialEndsAt = const Value.absent(),
@@ -678,6 +718,7 @@ class BusinessesCompanion extends UpdateCompanion<BusinessData> {
     this.onboardingComplete = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
+    this.ownerId = const Value.absent(),
     this.subscriptionStatus = const Value.absent(),
     this.subscriptionPlan = const Value.absent(),
     this.trialEndsAt = const Value.absent(),
@@ -695,6 +736,7 @@ class BusinessesCompanion extends UpdateCompanion<BusinessData> {
     Expression<bool>? onboardingComplete,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
+    Expression<String>? ownerId,
     Expression<String>? subscriptionStatus,
     Expression<String>? subscriptionPlan,
     Expression<DateTime>? trialEndsAt,
@@ -712,6 +754,7 @@ class BusinessesCompanion extends UpdateCompanion<BusinessData> {
       if (onboardingComplete != null) 'onboarding_complete': onboardingComplete,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
+      if (ownerId != null) 'owner_id': ownerId,
       if (subscriptionStatus != null) 'subscription_status': subscriptionStatus,
       if (subscriptionPlan != null) 'subscription_plan': subscriptionPlan,
       if (trialEndsAt != null) 'trial_ends_at': trialEndsAt,
@@ -731,6 +774,7 @@ class BusinessesCompanion extends UpdateCompanion<BusinessData> {
     Value<bool>? onboardingComplete,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
+    Value<String?>? ownerId,
     Value<String>? subscriptionStatus,
     Value<String?>? subscriptionPlan,
     Value<DateTime?>? trialEndsAt,
@@ -748,6 +792,7 @@ class BusinessesCompanion extends UpdateCompanion<BusinessData> {
       onboardingComplete: onboardingComplete ?? this.onboardingComplete,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      ownerId: ownerId ?? this.ownerId,
       subscriptionStatus: subscriptionStatus ?? this.subscriptionStatus,
       subscriptionPlan: subscriptionPlan ?? this.subscriptionPlan,
       trialEndsAt: trialEndsAt ?? this.trialEndsAt,
@@ -789,6 +834,9 @@ class BusinessesCompanion extends UpdateCompanion<BusinessData> {
     if (lastUpdatedAt.present) {
       map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
     }
+    if (ownerId.present) {
+      map['owner_id'] = Variable<String>(ownerId.value);
+    }
     if (subscriptionStatus.present) {
       map['subscription_status'] = Variable<String>(subscriptionStatus.value);
     }
@@ -820,6 +868,7 @@ class BusinessesCompanion extends UpdateCompanion<BusinessData> {
           ..write('onboardingComplete: $onboardingComplete, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('ownerId: $ownerId, ')
           ..write('subscriptionStatus: $subscriptionStatus, ')
           ..write('subscriptionPlan: $subscriptionPlan, ')
           ..write('trialEndsAt: $trialEndsAt, ')
@@ -36727,6 +36776,7 @@ typedef $$BusinessesTableCreateCompanionBuilder =
       Value<bool> onboardingComplete,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
+      Value<String?> ownerId,
       Value<String> subscriptionStatus,
       Value<String?> subscriptionPlan,
       Value<DateTime?> trialEndsAt,
@@ -36745,6 +36795,7 @@ typedef $$BusinessesTableUpdateCompanionBuilder =
       Value<bool> onboardingComplete,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
+      Value<String?> ownerId,
       Value<String> subscriptionStatus,
       Value<String?> subscriptionPlan,
       Value<DateTime?> trialEndsAt,
@@ -37901,6 +37952,11 @@ class $$BusinessesTableFilterComposer
 
   ColumnFilters<DateTime> get lastUpdatedAt => $composableBuilder(
     column: $table.lastUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get ownerId => $composableBuilder(
+    column: $table.ownerId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -39240,6 +39296,11 @@ class $$BusinessesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get ownerId => $composableBuilder(
+    column: $table.ownerId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get subscriptionStatus => $composableBuilder(
     column: $table.subscriptionStatus,
     builder: (column) => ColumnOrderings(column),
@@ -39303,6 +39364,9 @@ class $$BusinessesTableAnnotationComposer
     column: $table.lastUpdatedAt,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get ownerId =>
+      $composableBuilder(column: $table.ownerId, builder: (column) => column);
 
   GeneratedColumn<String> get subscriptionStatus => $composableBuilder(
     column: $table.subscriptionStatus,
@@ -40680,6 +40744,7 @@ class $$BusinessesTableTableManager
                 Value<bool> onboardingComplete = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<String?> ownerId = const Value.absent(),
                 Value<String> subscriptionStatus = const Value.absent(),
                 Value<String?> subscriptionPlan = const Value.absent(),
                 Value<DateTime?> trialEndsAt = const Value.absent(),
@@ -40696,6 +40761,7 @@ class $$BusinessesTableTableManager
                 onboardingComplete: onboardingComplete,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
+                ownerId: ownerId,
                 subscriptionStatus: subscriptionStatus,
                 subscriptionPlan: subscriptionPlan,
                 trialEndsAt: trialEndsAt,
@@ -40714,6 +40780,7 @@ class $$BusinessesTableTableManager
                 Value<bool> onboardingComplete = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<String?> ownerId = const Value.absent(),
                 Value<String> subscriptionStatus = const Value.absent(),
                 Value<String?> subscriptionPlan = const Value.absent(),
                 Value<DateTime?> trialEndsAt = const Value.absent(),
@@ -40730,6 +40797,7 @@ class $$BusinessesTableTableManager
                 onboardingComplete: onboardingComplete,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
+                ownerId: ownerId,
                 subscriptionStatus: subscriptionStatus,
                 subscriptionPlan: subscriptionPlan,
                 trialEndsAt: trialEndsAt,

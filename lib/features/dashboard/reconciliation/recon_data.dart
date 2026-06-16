@@ -20,19 +20,19 @@ enum ReconGrouping { day, week, month, year }
 
 extension ReconGroupingX on ReconGrouping {
   String get label => switch (this) {
-        ReconGrouping.day => 'Day',
-        ReconGrouping.week => 'Week',
-        ReconGrouping.month => 'Month',
-        ReconGrouping.year => 'Year',
-      };
+    ReconGrouping.day => 'Day',
+    ReconGrouping.week => 'Week',
+    ReconGrouping.month => 'Month',
+    ReconGrouping.year => 'Year',
+  };
 
   /// The next-finer grouping the drill-down descends into (null at Day, the leaf).
   ReconGrouping? get finer => switch (this) {
-        ReconGrouping.year => ReconGrouping.month,
-        ReconGrouping.month => ReconGrouping.week,
-        ReconGrouping.week => ReconGrouping.day,
-        ReconGrouping.day => null,
-      };
+    ReconGrouping.year => ReconGrouping.month,
+    ReconGrouping.month => ReconGrouping.week,
+    ReconGrouping.week => ReconGrouping.day,
+    ReconGrouping.day => null,
+  };
 
   /// Inclusive start of the bucket [d] falls in. Weeks start Sunday (matches
   /// `date_period.dart` / §30.11).
@@ -85,8 +85,10 @@ extension ReconGroupingX on ReconGrouping {
 /// active store (a concrete store), else the viewer's full selectable set
 /// ("All Stores" for an all-stores viewer; a confined Manager's assigned stores).
 bool Function(String?) reconStoreFilter(WidgetRef ref) {
-  final selectableIds =
-      ref.watch(selectableStoresProvider).map((s) => s.id).toSet();
+  final selectableIds = ref
+      .watch(selectableStoresProvider)
+      .map((s) => s.id)
+      .toSet();
   final canAll = ref.watch(canViewAllStoresProvider);
   final active = ref.watch(lockedStoreProvider).value;
   return (storeId) {
@@ -158,7 +160,9 @@ List<ReconBucket> buildReconBuckets(
   _BucketAccum bucketOf(DateTime d) {
     final s = grouping.startOf(d);
     return byBucket.putIfAbsent(
-        s.millisecondsSinceEpoch, () => _BucketAccum(s, grouping.endOf(s)));
+      s.millisecondsSinceEpoch,
+      () => _BucketAccum(s, grouping.endOf(s)),
+    );
   }
 
   for (final o in orders) {
@@ -173,7 +177,8 @@ List<ReconBucket> buildReconBuckets(
 
   // Collapse re-saved counts to the latest session per (store, date) so a
   // shortage corrected in a later count of the same day stops flagging.
-  final sorted = [...counts]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  final sorted = [...counts]
+    ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   final seen = <String>{};
   for (final c in sorted) {
     if (!inScope(c.storeId)) continue;
@@ -185,14 +190,16 @@ List<ReconBucket> buildReconBuckets(
   }
 
   return byBucket.values
-      .map((a) => ReconBucket(
-            start: a.start,
-            endExclusive: a.end,
-            grouping: grouping,
-            label: grouping.labelFor(a.start),
-            itemsSold: a.itemsSold,
-            hasShortage: a.hasShortage,
-          ))
+      .map(
+        (a) => ReconBucket(
+          start: a.start,
+          endExclusive: a.end,
+          grouping: grouping,
+          label: grouping.labelFor(a.start),
+          itemsSold: a.itemsSold,
+          hasShortage: a.hasShortage,
+        ),
+      )
       .toList()
     ..sort((a, b) => b.start.compareTo(a.start));
 }
@@ -200,11 +207,12 @@ List<ReconBucket> buildReconBuckets(
 // ── Full roll-up (detail screen) ─────────────────────────────────────────────
 
 class ReconShortLine {
-  ReconShortLine(
-      {required this.name,
-      required this.system,
-      required this.actual,
-      required this.diff});
+  ReconShortLine({
+    required this.name,
+    required this.system,
+    required this.actual,
+    required this.diff,
+  });
   final String name;
   final int system;
   final int actual;
@@ -312,7 +320,8 @@ ReconData computeReconData(
   final counts = ref.watch(allStockCountsProvider).valueOrNull ?? const [];
   final productsWS =
       ref.watch(productsWithStockProvider(null)).valueOrNull ?? const [];
-  final balances = ref.watch(walletBalancesKoboProvider).valueOrNull ?? const {};
+  final balances =
+      ref.watch(walletBalancesKoboProvider).valueOrNull ?? const {};
   final manufacturers =
       ref.watch(allManufacturersProvider).valueOrNull ?? const [];
   final crateCounts =
@@ -359,13 +368,18 @@ ReconData computeReconData(
         cogsKobo += i.item.quantity * i.item.buyingPriceKobo;
         skuSet.add(product.id);
         final cur = byProduct[product.id];
-        byProduct[product.id] =
-            (name: product.name, qty: (cur?.qty ?? 0) + i.item.quantity);
+        byProduct[product.id] = (
+          name: product.name,
+          qty: (cur?.qty ?? 0) + i.item.quantity,
+        );
       }
     }
     if (orderRevenue > 0) {
-      byStaff.update(o.order.staffId, (v) => v + orderRevenue,
-          ifAbsent: () => orderRevenue);
+      byStaff.update(
+        o.order.staffId,
+        (v) => v + orderRevenue,
+        ifAbsent: () => orderRevenue,
+      );
     }
   }
   String? bestStaff;
@@ -373,8 +387,9 @@ ReconData computeReconData(
   byStaff.forEach((staffId, v) {
     if (v > bestStaffKobo) {
       bestStaffKobo = v;
-      bestStaff =
-          staffId == null ? 'Unassigned' : (users[staffId]?.name ?? 'Staff');
+      bestStaff = staffId == null
+          ? 'Unassigned'
+          : (users[staffId]?.name ?? 'Staff');
     }
   });
   String? topItem;
@@ -411,12 +426,15 @@ ReconData computeReconData(
   }
 
   // ── Stock audit + shortage value (latest count per store/date in span) ───
-  final dayCounts = counts
-      .where((c) =>
-          inScope(c.storeId) &&
-          inSpan(DateTime.tryParse(c.businessDate) ?? DateTime(0)))
-      .toList()
-    ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  final dayCounts =
+      counts
+          .where(
+            (c) =>
+                inScope(c.storeId) &&
+                inSpan(DateTime.tryParse(c.businessDate) ?? DateTime(0)),
+          )
+          .toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   final seenCount = <String>{};
   var hasStockCount = false;
   var productsCounted = 0;
@@ -435,19 +453,22 @@ ReconData computeReconData(
     shortageUnits += c.shortageUnits;
     surplusCount += c.surplusCount;
     surplusUnits += c.surplusUnits;
-    for (final l in (jsonDecode(c.linesJson) as List).cast<Map<String, dynamic>>()) {
+    for (final l
+        in (jsonDecode(c.linesJson) as List).cast<Map<String, dynamic>>()) {
       final diff = (l['d'] as num).toInt();
       if (diff >= 0) continue;
       final units = -diff;
       final p = productById[l['p'] as String?];
       shortageCostKobo += units * (p?.buyingPriceKobo ?? 0);
       shortageRetailKobo += units * (p?.retailerPriceKobo ?? 0);
-      shortages.add(ReconShortLine(
-        name: l['n'] as String? ?? 'Product',
-        system: (l['s'] as num).toInt(),
-        actual: (l['a'] as num).toInt(),
-        diff: diff,
-      ));
+      shortages.add(
+        ReconShortLine(
+          name: l['n'] as String? ?? 'Product',
+          system: (l['s'] as num).toInt(),
+          actual: (l['a'] as num).toInt(),
+          diff: diff,
+        ),
+      );
     }
   }
 
@@ -469,8 +490,9 @@ ReconData computeReconData(
   }
 
   // ── Outstanding customer debt (business-wide — wallets aren't per store) ──
-  final totalOwedKobo =
-      balances.values.where((b) => b < 0).fold<int>(0, (s, b) => s - b);
+  final totalOwedKobo = balances.values
+      .where((b) => b < 0)
+      .fold<int>(0, (s, b) => s - b);
 
   // ── Empty crates held (Bar / Beer Distributor only; point-in-time) ───────
   final bizId = ref.watch(databaseProvider).currentBusinessId;
@@ -485,7 +507,9 @@ ReconData computeReconData(
   var crateUnits = 0;
   var crateDepositKobo = 0;
   if (showCrates) {
-    final depositById = {for (final m in manufacturers) m.id: m.depositAmountKobo};
+    final depositById = {
+      for (final m in manufacturers) m.id: m.depositAmountKobo,
+    };
     crateCounts.forEach((mfrId, count) {
       if (count > 0) {
         crateUnits += count;

@@ -95,7 +95,7 @@ class _SuccessDashboardEntryScreenState
                 ),
               ),
               const SizedBox(height: 48),
-              
+
               SizedBox(
                 width: 24,
                 height: 24,
@@ -103,7 +103,7 @@ class _SuccessDashboardEntryScreenState
                   strokeWidth: 2.5,
                   color: theme.colorScheme.primary,
                 ),
-              )
+              ),
             ],
           ),
         ),

@@ -90,16 +90,18 @@ class _SalesDetailScreenState extends ConsumerState<SalesDetailScreen> {
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not export: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not export: $e')));
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
+    ref.watch(
+      currencySymbolProvider,
+    ); // rebuild money displays when currency changes
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;
@@ -156,8 +158,11 @@ class _SalesDetailScreenState extends ConsumerState<SalesDetailScreen> {
         actions: [
           IconButton(
             tooltip: 'Export CSV',
-            icon: Icon(FontAwesomeIcons.fileCsv,
-                size: 18, color: colorScheme.onSurface),
+            icon: Icon(
+              FontAwesomeIcons.fileCsv.data,
+              size: 18,
+              color: colorScheme.onSurface,
+            ),
             onPressed: rows.isEmpty ? null : _exportCsv,
           ),
         ],
@@ -188,7 +193,9 @@ class _SalesDetailScreenState extends ConsumerState<SalesDetailScreen> {
                 // ── Rows ─────────────────────────────────────────────────
                 Expanded(
                   child: ListView.separated(
-                    padding: EdgeInsets.only(bottom: context.deviceBottomPadding),
+                    padding: EdgeInsets.only(
+                      bottom: context.deviceBottomPadding,
+                    ),
                     itemCount: rows.length,
                     separatorBuilder: (_, __) =>
                         Divider(height: 1, color: theme.dividerColor),
@@ -211,7 +218,7 @@ class _SalesDetailScreenState extends ConsumerState<SalesDetailScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            FontAwesomeIcons.chartLine,
+            FontAwesomeIcons.chartLine.data,
             size: 48,
             color: Theme.of(
               context,
@@ -258,8 +265,8 @@ class _SalesDetailScreenState extends ConsumerState<SalesDetailScreen> {
             children: [
               Icon(
                 isProfitMode
-                    ? FontAwesomeIcons.chartLine
-                    : FontAwesomeIcons.nairaSign,
+                    ? FontAwesomeIcons.chartLine.data
+                    : FontAwesomeIcons.nairaSign.data,
                 color: color,
                 size: context.getRSize(18),
               ),

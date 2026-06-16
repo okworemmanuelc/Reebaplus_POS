@@ -37,37 +37,41 @@ class ActivityLogsAccessScreen extends ConsumerWidget {
       body: !canManage
           ? const SettingsNoAccess()
           : roles.when(
-        loading: () => const SizedBox.shrink(),
-        error: (_, __) => Center(
-          child: Text(
-            'Couldn\'t load roles.',
-            style: TextStyle(
-              color: t.colorScheme.onSurface.withValues(alpha: 0.6),
-            ),
-          ),
-        ),
-        data: (list) => SettingsFadeIn(
-          child: ListView(
-            padding: EdgeInsets.fromLTRB(
-                24, 24, 24, 24 + context.deviceBottomPadding),
-            children: [
-              Text(
-                'Choose which roles can open Activity Logs. The CEO always has access.',
-                style: TextStyle(
-                  fontSize: 13,
-                  height: 1.4,
-                  color: t.colorScheme.onSurface.withValues(alpha: 0.6),
+              loading: () => const SizedBox.shrink(),
+              error: (_, __) => Center(
+                child: Text(
+                  'Couldn\'t load roles.',
+                  style: TextStyle(
+                    color: t.colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
                 ),
               ),
-              const SizedBox(height: 20),
-              for (final role in list) ...[
-                _RoleToggle(role: role),
-                const SizedBox(height: 16),
-              ],
-            ],
-          ),
-        ),
-      ),
+              data: (list) => SettingsFadeIn(
+                child: ListView(
+                  padding: EdgeInsets.fromLTRB(
+                    24,
+                    24,
+                    24,
+                    24 + context.deviceBottomPadding,
+                  ),
+                  children: [
+                    Text(
+                      'Choose which roles can open Activity Logs. The CEO always has access.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        height: 1.4,
+                        color: t.colorScheme.onSurface.withValues(alpha: 0.6),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    for (final role in list) ...[
+                      _RoleToggle(role: role),
+                      const SizedBox(height: 16),
+                    ],
+                  ],
+                ),
+              ),
+            ),
     );
   }
 }
@@ -80,7 +84,8 @@ class _RoleToggle extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = Theme.of(context);
     final isCeo = role.slug == 'ceo';
-    final grants = ref.watch(rolePermissionsProvider(role.id)).valueOrNull ?? [];
+    final grants =
+        ref.watch(rolePermissionsProvider(role.id)).valueOrNull ?? [];
     final hasView = grants.any((g) => g.permissionKey == _kActivityLogsView);
 
     return SettingsTile(
@@ -99,7 +104,10 @@ class _RoleToggle extends ConsumerWidget {
   Future<void> _toggle(BuildContext context, WidgetRef ref, bool enable) async {
     // ref.read (not hasPermission/watch) — callback, matches staff_detail_screen.
     if (!ref.read(currentUserPermissionsProvider).contains('settings.manage')) {
-      AppNotification.showError(context, 'You don\'t have permission to do that.');
+      AppNotification.showError(
+        context,
+        'You don\'t have permission to do that.',
+      );
       return;
     }
     final db = ref.read(databaseProvider);

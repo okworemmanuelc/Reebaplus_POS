@@ -31,9 +31,11 @@ class SupplierService extends ValueNotifier<List<Supplier>> {
       id: d.id,
       name: d.name,
       crateGroup: _matchCrateGroupEnum(cgName),
-      contactDetails: [d.phone, d.email, d.address]
-          .where((s) => s != null && s.isNotEmpty)
-          .join(', '),
+      contactDetails: [
+        d.phone,
+        d.email,
+        d.address,
+      ].where((s) => s != null && s.isNotEmpty).join(', '),
     );
   }
 
@@ -69,4 +71,3 @@ class SupplierService extends ValueNotifier<List<Supplier>> {
     }
   }
 }
-

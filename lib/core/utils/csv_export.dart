@@ -43,8 +43,7 @@ Future<void> shareCsv({
   final tempDir = await getTemporaryDirectory();
   final file = File('${tempDir.path}/$fileName.csv');
   await file.writeAsString(csv);
-  await Share.shareXFiles(
-    [XFile(file.path, mimeType: 'text/csv')],
-    subject: subject,
-  );
+  await Share.shareXFiles([
+    XFile(file.path, mimeType: 'text/csv'),
+  ], subject: subject);
 }

@@ -31,7 +31,7 @@ class SyncDiagnostic {
   final SupabaseClient _supabase;
 
   SyncDiagnostic(this._db, {SupabaseClient? client})
-      : _supabase = client ?? Supabase.instance.client;
+    : _supabase = client ?? Supabase.instance.client;
 
   /// Canonical tenant-table list. Mirrors the syncOrder used by
   /// SupabaseSyncService.pullInitialData. `businesses` is excluded because
@@ -128,10 +128,12 @@ class SyncDiagnostic {
   }
 
   Future<int> _localCount(String table, String businessId) async {
-    final row = await _db.customSelect(
-      'SELECT COUNT(*) AS c FROM $table WHERE business_id = ?',
-      variables: [Variable.withString(businessId)],
-    ).getSingle();
+    final row = await _db
+        .customSelect(
+          'SELECT COUNT(*) AS c FROM $table WHERE business_id = ?',
+          variables: [Variable.withString(businessId)],
+        )
+        .getSingle();
     return row.read<int>('c');
   }
 
@@ -143,7 +145,10 @@ class SyncDiagnostic {
     // .select('id') is light enough — we count length client-side. Using
     // a HEAD-only count via .count(CountOption.exact) would be cheaper but
     // the v2 API surface for it varies; this works on every supported version.
-    final rows = await client.from(table).select('id').eq('business_id', businessId);
+    final rows = await client
+        .from(table)
+        .select('id')
+        .eq('business_id', businessId);
     return (rows as List).length;
   }
 }

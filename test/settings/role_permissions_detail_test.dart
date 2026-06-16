@@ -155,7 +155,7 @@ void main() {
 
     final switches =
         tester.widgetList<SwitchListTile>(find.byType(SwitchListTile)).toList();
-    expect(switches.length, 33, reason: 'all 33 permissions shown');
+    expect(switches.length, 32, reason: 'all 32 permissions shown');
     expect(
       switches.every((s) => s.onChanged == null && s.value == true),
       isTrue,
@@ -170,7 +170,7 @@ void main() {
       (tester) async {
     await pumpDetail(tester, cashierRole);
 
-    await tester.tap(find.widgetWithText(SwitchListTile, 'Edit product prices'));
+    await tester.tap(find.widgetWithText(SwitchListTile, 'Edit product'));
     await tester.pumpAndSettle();
 
     expect(await grantCount(cashierRoleId, 'products.edit_price'), 1);
@@ -185,7 +185,7 @@ void main() {
       (tester) async {
     await pumpDetail(tester, cashierRole);
 
-    final tile = find.widgetWithText(SwitchListTile, 'View stock levels');
+    final tile = find.widgetWithText(SwitchListTile, 'View Inventory');
     expect(tester.widget<SwitchListTile>(tile).value, isTrue,
         reason: 'seeded grant starts on');
     await tester.tap(tile);
@@ -216,7 +216,7 @@ void main() {
     await pumpDetail(tester, cashierRole);
     expect(await grantCount(cashierRoleId, 'stock.add'), 1);
 
-    await tester.tap(find.widgetWithText(SwitchListTile, 'View stock levels'));
+    await tester.tap(find.widgetWithText(SwitchListTile, 'View Inventory'));
     await tester.pumpAndSettle();
 
     // The parent and both dependents are revoked.
@@ -242,10 +242,10 @@ void main() {
         find.widgetWithText(SwitchListTile, 'Add stock to existing products');
     expect(tester.widget<SwitchListTile>(child).onChanged, isNull,
         reason: 'stock.add is locked while stock.view is off');
-    expect(find.text('Requires "View stock levels"'), findsWidgets);
+    expect(find.text('Requires "View Inventory"'), findsWidgets);
 
     // The parent itself has no parent, so it stays interactive.
-    final parent = find.widgetWithText(SwitchListTile, 'View stock levels');
+    final parent = find.widgetWithText(SwitchListTile, 'View Inventory');
     expect(tester.widget<SwitchListTile>(parent).onChanged, isNotNull);
   });
 

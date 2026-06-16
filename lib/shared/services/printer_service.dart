@@ -117,7 +117,9 @@ class PrinterService {
         final paired = await getPairedDevices();
         final match = paired.where((d) => d.macAdress == savedMac).toList();
         if (match.isNotEmpty) {
-          AppLogger.info('Auto-connecting to saved printer ${match.first.name}');
+          AppLogger.info(
+            'Auto-connecting to saved printer ${match.first.name}',
+          );
           if (await connect(savedMac)) return true;
         }
       }
@@ -174,4 +176,3 @@ class PrinterService {
     }
   }
 }
-

@@ -49,16 +49,18 @@ class CrateDepositsReportScreen extends ConsumerWidget {
       );
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not export: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not export: $e')));
       }
     }
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    ref.watch(currencySymbolProvider); // rebuild money displays on currency change
+    ref.watch(
+      currencySymbolProvider,
+    ); // rebuild money displays on currency change
     final summaryAsync = ref.watch(crateDepositSummaryProvider);
     final heldByCustomer =
         ref.watch(depositsHeldByCustomerProvider).valueOrNull ?? const {};
@@ -90,8 +92,11 @@ class CrateDepositsReportScreen extends ConsumerWidget {
           if (summary != null)
             IconButton(
               tooltip: 'Export CSV',
-              icon: Icon(FontAwesomeIcons.fileExport,
-                  size: 18, color: context.primaryColor),
+              icon: Icon(
+                FontAwesomeIcons.fileExport.data,
+                size: 18,
+                color: context.primaryColor,
+              ),
               onPressed: () => _exportCsv(context, summary, held, nameOf),
             ),
         ],
@@ -100,9 +105,9 @@ class CrateDepositsReportScreen extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Could not load: $e')),
         data: (s) => ListView(
-          padding: EdgeInsets.all(context.spacingM).copyWith(
-            bottom: context.spacingM + context.deviceBottomPadding,
-          ),
+          padding: EdgeInsets.all(
+            context.spacingM,
+          ).copyWith(bottom: context.spacingM + context.deviceBottomPadding),
           children: [
             _heldCard(context, s),
             SizedBox(height: context.spacingM),
@@ -116,7 +121,9 @@ class CrateDepositsReportScreen extends ConsumerWidget {
             if (held.isEmpty)
               _emptyHint(context)
             else
-              ...held.map((e) => _customerTile(context, nameOf(e.key), e.value)),
+              ...held.map(
+                (e) => _customerTile(context, nameOf(e.key), e.value),
+              ),
           ],
         ),
       ),
@@ -138,8 +145,11 @@ class CrateDepositsReportScreen extends ConsumerWidget {
         children: [
           Row(
             children: [
-              Icon(FontAwesomeIcons.beerMugEmpty,
-                  size: 16, color: context.primaryColor),
+              Icon(
+                FontAwesomeIcons.beerMugEmpty.data,
+                size: 16,
+                color: context.primaryColor,
+              ),
               const SizedBox(width: 8),
               Text(
                 'Deposits held now',
@@ -161,8 +171,9 @@ class CrateDepositsReportScreen extends ConsumerWidget {
           const SizedBox(height: 4),
           Text(
             'Refundable money you are holding for customers.',
-            style: context.bodySmall
-                .copyWith(color: Theme.of(context).hintColor),
+            style: context.bodySmall.copyWith(
+              color: Theme.of(context).hintColor,
+            ),
           ),
         ],
       ),
@@ -176,20 +187,36 @@ class CrateDepositsReportScreen extends ConsumerWidget {
       decoration: BoxDecoration(
         color: context.surfaceColor,
         borderRadius: BorderRadius.circular(context.radiusL),
-        border: Border.all(
-          color: Theme.of(context).dividerColor,
-        ),
+        border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Column(
         children: [
           _row(context, 'Deposits taken', s.takenKobo, null),
-          _row(context, 'Refunded', s.refundedKobo, Colors.orange,
-              prefix: '− '),
-          _row(context, 'Kept (income)', s.keptKobo, Colors.green,
-              prefix: '− '),
-          Divider(height: context.spacingL, color: Theme.of(context).dividerColor),
-          _row(context, 'Held now', s.heldKobo, context.primaryColor,
-              bold: true),
+          _row(
+            context,
+            'Refunded',
+            s.refundedKobo,
+            Colors.orange,
+            prefix: '− ',
+          ),
+          _row(
+            context,
+            'Kept (income)',
+            s.keptKobo,
+            Colors.green,
+            prefix: '− ',
+          ),
+          Divider(
+            height: context.spacingL,
+            color: Theme.of(context).dividerColor,
+          ),
+          _row(
+            context,
+            'Held now',
+            s.heldKobo,
+            context.primaryColor,
+            bold: true,
+          ),
           const SizedBox(height: 6),
           Text(
             'Held = Taken − Refunded − Kept',
@@ -279,13 +306,17 @@ class CrateDepositsReportScreen extends ConsumerWidget {
       ),
       child: Column(
         children: [
-          Icon(FontAwesomeIcons.boxOpen,
-              size: 28, color: Theme.of(context).hintColor),
+          Icon(
+            FontAwesomeIcons.boxOpen.data,
+            size: 28,
+            color: Theme.of(context).hintColor,
+          ),
           const SizedBox(height: 10),
           Text(
             'No deposits are being held right now.',
-            style: context.bodySmall
-                .copyWith(color: Theme.of(context).hintColor),
+            style: context.bodySmall.copyWith(
+              color: Theme.of(context).hintColor,
+            ),
           ),
         ],
       ),

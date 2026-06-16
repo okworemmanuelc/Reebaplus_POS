@@ -28,31 +28,36 @@ class _UserTipsModalState extends State<UserTipsModal> {
   final List<Map<String, dynamic>> _tips = [
     {
       'title': 'Quick Sale ⚡',
-      'description': 'Need to sell something not in your inventory? Use the Quick Sale button on the POS screen to manually enter an item name and price.',
+      'description':
+          'Need to sell something not in your inventory? Use the Quick Sale button on the POS screen to manually enter an item name and price.',
       'icon': FontAwesomeIcons.bolt,
       'color': blueMain,
     },
     {
       'title': 'Pricing Tiers 🏷️',
-      'description': 'Easily switch between Retail, Bulk, and Distributor prices using the dropdown at the top of the POS screen. Prices update automatically!',
+      'description':
+          'Easily switch between Retail, Bulk, and Distributor prices using the dropdown at the top of the POS screen. Prices update automatically!',
       'icon': FontAwesomeIcons.tag,
       'color': success,
     },
     {
       'title': 'Crate Management 🍺',
-      'description': 'Track empty crates returned by customers. Total crate availability is shown in the Inventory tab to help you manage supplier returns.',
+      'description':
+          'Track empty crates returned by customers. Total crate availability is shown in the Inventory tab to help you manage supplier returns.',
       'icon': FontAwesomeIcons.beerMugEmpty,
       'color': const Color(0xFFF59E0B),
     },
     {
       'title': 'Theme Toggle 🌓',
-      'description': 'Working late? Switch to Dark Mode from the Sidebar or sync with your system theme for a more comfortable experience.',
+      'description':
+          'Working late? Switch to Dark Mode from the Sidebar or sync with your system theme for a more comfortable experience.',
       'icon': FontAwesomeIcons.moon,
       'color': const Color(0xFF6366F1),
     },
-     {
+    {
       'title': 'Low Stock Alerts ⚠️',
-      'description': 'Keep an eye on the Notification Bell! It will alert you when products drop below their threshold so you never run out of stock.',
+      'description':
+          'Keep an eye on the Notification Bell! It will alert you when products drop below their threshold so you never run out of stock.',
       'icon': FontAwesomeIcons.triangleExclamation,
       'color': danger,
     },
@@ -88,7 +93,7 @@ class _UserTipsModalState extends State<UserTipsModal> {
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-            
+
             Padding(
               padding: EdgeInsets.symmetric(
                 horizontal: context.getRSize(24),
@@ -108,9 +113,17 @@ class _UserTipsModalState extends State<UserTipsModal> {
                   const Spacer(),
                   IconButton(
                     onPressed: () => Navigator.pop(context),
-                    icon: Icon(Icons.close, color: Theme.of(context).textTheme.bodySmall?.color ?? Theme.of(context).iconTheme.color!, size: context.getRSize(18)),
+                    icon: Icon(
+                      Icons.close,
+                      color:
+                          Theme.of(context).textTheme.bodySmall?.color ??
+                          Theme.of(context).iconTheme.color!,
+                      size: context.getRSize(18),
+                    ),
                     style: IconButton.styleFrom(
-                      backgroundColor: Theme.of(context).dividerColor.withValues(alpha: 0.1),
+                      backgroundColor: Theme.of(
+                        context,
+                      ).dividerColor.withValues(alpha: 0.1),
                       padding: EdgeInsets.all(context.getRSize(6)),
                     ),
                   ),
@@ -158,7 +171,11 @@ class _UserTipsModalState extends State<UserTipsModal> {
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: context.getRFontSize(14),
-                              color: Theme.of(context).textTheme.bodySmall?.color ?? Theme.of(context).iconTheme.color!,
+                              color:
+                                  Theme.of(
+                                    context,
+                                  ).textTheme.bodySmall?.color ??
+                                  Theme.of(context).iconTheme.color!,
                               height: 1.4,
                               fontWeight: FontWeight.w500,
                             ),
@@ -179,11 +196,17 @@ class _UserTipsModalState extends State<UserTipsModal> {
                   _tips.length,
                   (index) => AnimatedContainer(
                     duration: const Duration(milliseconds: 300),
-                    margin: EdgeInsets.symmetric(horizontal: context.getRSize(4)),
-                    width: _currentPage == index ? context.getRSize(24) : context.getRSize(8),
+                    margin: EdgeInsets.symmetric(
+                      horizontal: context.getRSize(4),
+                    ),
+                    width: _currentPage == index
+                        ? context.getRSize(24)
+                        : context.getRSize(8),
                     height: context.getRSize(8),
                     decoration: BoxDecoration(
-                      color: _currentPage == index ? blueMain : Theme.of(context).dividerColor,
+                      color: _currentPage == index
+                          ? blueMain
+                          : Theme.of(context).dividerColor,
                       borderRadius: BorderRadius.circular(context.getRSize(4)),
                     ),
                   ),
@@ -214,7 +237,9 @@ class _UserTipsModalState extends State<UserTipsModal> {
                   if (_currentPage > 0) SizedBox(width: context.getRSize(16)),
                   Expanded(
                     child: AppButton(
-                      text: _currentPage < _tips.length - 1 ? 'Next Tip' : 'Got it!',
+                      text: _currentPage < _tips.length - 1
+                          ? 'Next Tip'
+                          : 'Got it!',
                       variant: AppButtonVariant.primary,
                       onPressed: () {
                         if (_currentPage < _tips.length - 1) {
@@ -237,8 +262,3 @@ class _UserTipsModalState extends State<UserTipsModal> {
     );
   }
 }
-
-
-
-
-

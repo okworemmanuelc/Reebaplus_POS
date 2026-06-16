@@ -48,8 +48,9 @@ class CurrencyInputFormatter extends TextInputFormatter {
       formattedWhole = whole.replaceFirst(RegExp(r'^0+(?=\d)'), '');
     }
 
-    final newText =
-        fraction == null ? formattedWhole : '$formattedWhole.$fraction';
+    final newText = fraction == null
+        ? formattedWhole
+        : '$formattedWhole.$fraction';
 
     return newValue.copyWith(
       text: newText,

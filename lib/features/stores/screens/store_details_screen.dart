@@ -16,12 +16,10 @@ class StoreDetailsScreen extends ConsumerStatefulWidget {
   const StoreDetailsScreen({super.key, required this.store});
 
   @override
-  ConsumerState<StoreDetailsScreen> createState() =>
-      _StoreDetailsScreenState();
+  ConsumerState<StoreDetailsScreen> createState() => _StoreDetailsScreenState();
 }
 
-class _StoreDetailsScreenState
-    extends ConsumerState<StoreDetailsScreen> {
+class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
   StoreData? _liveStore;
   List<ProductDataWithStock> _inventory = [];
   List<CustomerData> _customers = [];
@@ -54,9 +52,7 @@ class _StoreDetailsScreenState
         .listen((list) {
           if (mounted) setState(() => _inventory = list);
         });
-    _customersSub = db.customersDao.watchCustomersByStore(id).listen((
-      list,
-    ) {
+    _customersSub = db.customersDao.watchCustomersByStore(id).listen((list) {
       if (mounted) setState(() => _customers = list);
     });
   }
@@ -96,7 +92,7 @@ class _StoreDetailsScreenState
           onPressed: () => Navigator.pop(context),
         ),
         title: AppBarHeader(
-          icon: FontAwesomeIcons.store,
+          icon: FontAwesomeIcons.store.data,
           title: _store.name,
           subtitle: _store.location ?? 'Main Storage',
         ),
@@ -111,12 +107,7 @@ class _StoreDetailsScreenState
             children: [
               _buildMetricOverview(totalStock, totalValue),
               SizedBox(height: rSize(context, 20)),
-              _buildStatsGrid(
-                isWide,
-                activeProducts,
-                lowStock,
-                customersCount,
-              ),
+              _buildStatsGrid(isWide, activeProducts, lowStock, customersCount),
               SizedBox(height: rSize(context, 24)),
               _buildInventoryList(),
               SizedBox(height: rSize(context, 16)),
@@ -227,13 +218,13 @@ class _StoreDetailsScreenState
         _buildStatCard(
           'Products',
           activeProducts.toString(),
-          FontAwesomeIcons.boxesStacked,
+          FontAwesomeIcons.boxesStacked.data,
           AppColors.success,
         ),
         _buildStatCard(
           'Low Stock',
           lowStock.toString(),
-          FontAwesomeIcons.triangleExclamation,
+          FontAwesomeIcons.triangleExclamation.data,
           AppColors.danger,
         ),
         GestureDetector(
@@ -249,7 +240,7 @@ class _StoreDetailsScreenState
           child: _buildStatCard(
             'Customers',
             customersCount.toString(),
-            FontAwesomeIcons.users,
+            FontAwesomeIcons.users.data,
             const Color(0xFF06B6D4),
           ),
         ),
@@ -334,7 +325,7 @@ class _StoreDetailsScreenState
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
-              FontAwesomeIcons.boxesStacked,
+              FontAwesomeIcons.boxesStacked.data,
               color: AppColors.success,
               size: rSize(context, 14),
             ),
@@ -455,7 +446,7 @@ class _StoreDetailsScreenState
         _actionTile(
           'View Inventory',
           'Check and manage stock',
-          FontAwesomeIcons.boxesStacked,
+          FontAwesomeIcons.boxesStacked.data,
           Theme.of(context).colorScheme.primary,
           () {
             // §12.1: focus the app-wide active store on this store, then open

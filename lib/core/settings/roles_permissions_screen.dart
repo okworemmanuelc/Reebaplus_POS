@@ -46,7 +46,11 @@ class RolesPermissionsScreen extends ConsumerWidget {
               data: (list) => SettingsFadeIn(
                 child: ListView(
                   padding: EdgeInsets.fromLTRB(
-                      24, 24, 24, 24 + context.deviceBottomPadding),
+                    24,
+                    24,
+                    24,
+                    24 + context.deviceBottomPadding,
+                  ),
                   children: [
                     Text(
                       'Tap a role to set what it can do.',
@@ -80,10 +84,11 @@ class _RoleCard extends ConsumerWidget {
     final isCeo = role.slug == 'ceo';
     // Exclude hidden keys (e.g. give-discount) from both tallies so the count
     // matches the toggles actually shown on the detail screen.
-    final count = (ref.watch(rolePermissionsProvider(role.id)).valueOrNull ??
-            const <RolePermissionData>[])
-        .where((g) => !kHiddenPermissionKeys.contains(g.permissionKey))
-        .length;
+    final count =
+        (ref.watch(rolePermissionsProvider(role.id)).valueOrNull ??
+                const <RolePermissionData>[])
+            .where((g) => !kHiddenPermissionKeys.contains(g.permissionKey))
+            .length;
     // Derive the denominator from the global catalogue so it never goes stale
     // if permission keys are added. Falls back to the seed count (30 minus the
     // hidden keys) until the catalogue resolves locally.
@@ -92,8 +97,9 @@ class _RoleCard extends ConsumerWidget {
         ? 30 - kHiddenPermissionKeys.length
         : allPerms.where((p) => !kHiddenPermissionKeys.contains(p.key)).length;
     // CEO is locked all-on; show the full count regardless of sync state.
-    final subtitle =
-        isCeo ? 'All $total permissions' : '$count of $total permissions';
+    final subtitle = isCeo
+        ? 'All $total permissions'
+        : '$count of $total permissions';
 
     return Material(
       color: Colors.transparent,

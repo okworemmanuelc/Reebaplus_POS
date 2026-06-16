@@ -62,7 +62,7 @@ class AppDropdown<T> extends StatelessWidget {
             fontWeight: FontWeight.w600,
           ),
           icon: Icon(
-            FontAwesomeIcons.chevronDown,
+            FontAwesomeIcons.chevronDown.data,
             size: 13,
             color: subtextColor,
           ),
@@ -88,7 +88,9 @@ class AppDropdown<T> extends StatelessWidget {
             prefixIcon: prefixIcon,
             filled: true,
             fillColor: fillColor,
-            contentPadding: contentPadding ?? const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            contentPadding:
+                contentPadding ??
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
               borderSide: BorderSide.none,

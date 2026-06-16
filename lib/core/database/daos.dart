@@ -20,9 +20,7 @@ part 'daos.g.dart';
 /// untouched.
 const Object _unset = Object();
 
-@DriftAccessor(
-  tables: [Suppliers, Products, Categories, Stores, Manufacturers],
-)
+@DriftAccessor(tables: [Suppliers, Products, Categories, Stores, Manufacturers])
 class CatalogDao extends DatabaseAccessor<AppDatabase>
     with _$CatalogDaoMixin, BusinessScopedDao<AppDatabase> {
   CatalogDao(super.db);
@@ -67,12 +65,12 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
   Future<void> updateSupplier(SuppliersCompanion companion) async {
     final id = companion.id.value;
     final comp = companion.copyWith(lastUpdatedAt: Value(DateTime.now()));
-    await (update(suppliers)
-          ..where((t) => t.id.equals(id) & whereBusiness(t)))
-        .write(comp);
-    final row = await (select(suppliers)
-          ..where((t) => t.id.equals(id) & whereBusiness(t)))
-        .getSingleOrNull();
+    await (update(
+      suppliers,
+    )..where((t) => t.id.equals(id) & whereBusiness(t))).write(comp);
+    final row = await (select(
+      suppliers,
+    )..where((t) => t.id.equals(id) & whereBusiness(t))).getSingleOrNull();
     if (row != null) {
       await db.syncDao.enqueueUpsert('suppliers', row.toCompanion(true));
     }
@@ -82,15 +80,17 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
   /// §21.7). Routed through enqueueUpsert so the tombstone syncs.
   Future<void> softDeleteSupplier(String id) async {
     final now = DateTime.now();
-    await (update(suppliers)
-          ..where((t) => t.id.equals(id) & whereBusiness(t)))
-        .write(SuppliersCompanion(
-      isDeleted: const Value(true),
-      lastUpdatedAt: Value(now),
-    ));
-    final row = await (select(suppliers)
-          ..where((t) => t.id.equals(id) & whereBusiness(t)))
-        .getSingleOrNull();
+    await (update(
+      suppliers,
+    )..where((t) => t.id.equals(id) & whereBusiness(t))).write(
+      SuppliersCompanion(
+        isDeleted: const Value(true),
+        lastUpdatedAt: Value(now),
+      ),
+    );
+    final row = await (select(
+      suppliers,
+    )..where((t) => t.id.equals(id) & whereBusiness(t))).getSingleOrNull();
     if (row != null) {
       await db.syncDao.enqueueUpsert('suppliers', row.toCompanion(true));
     }
@@ -125,8 +125,9 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
       lastUpdatedAt: Value(DateTime.now()),
     );
 
-    final flagValue =
-        await db.systemConfigDao.get('feature.domain_rpcs_v2.create_product');
+    final flagValue = await db.systemConfigDao.get(
+      'feature.domain_rpcs_v2.create_product',
+    );
     final useDomainRpc = flagValue == 'true' || flagValue == '"true"';
     final hasInitialStock =
         initialStock != null && initialStock > 0 && storeId != null;
@@ -194,8 +195,7 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
           if (productJson.containsKey('track_empties'))
             'p_track_empties': productJson['track_empties'],
           if (productJson.containsKey('allow_fractional_sales'))
-            'p_allow_fractional_sales':
-                productJson['allow_fractional_sales'],
+            'p_allow_fractional_sales': productJson['allow_fractional_sales'],
           if (productJson.containsKey('image_path'))
             'p_image_path': productJson['image_path'],
           if (productJson.containsKey('expiry_date'))
@@ -206,8 +206,10 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
               'quantity': initialStock,
             },
         };
-        await db.syncDao
-            .enqueue('domain:pos_create_product_v2', jsonEncode(payload));
+        await db.syncDao.enqueue(
+          'domain:pos_create_product_v2',
+          jsonEncode(payload),
+        );
         return;
       }
 
@@ -258,12 +260,14 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
           ],
           updates: {db.inventory},
         );
-        final invRow = await (db.select(db.inventory)
-              ..where((t) =>
-                  t.productId.equals(id) &
-                  t.storeId.equals(storeId) &
-                  t.businessId.equals(requireBusinessId())))
-            .getSingle();
+        final invRow =
+            await (db.select(db.inventory)..where(
+                  (t) =>
+                      t.productId.equals(id) &
+                      t.storeId.equals(storeId) &
+                      t.businessId.equals(requireBusinessId()),
+                ))
+                .getSingle();
         await db.syncDao.enqueueUpsert('inventory', invRow);
       }
     });
@@ -446,9 +450,9 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
   /// upsert omits the NOT NULL `name`, which the cloud rejects (23502). Reading
   /// the row back and enqueuing every column keeps the cloud insert valid.
   Future<void> _enqueueFullManufacturer(String id) async {
-    final row = await (select(manufacturers)
-          ..where((t) => t.id.equals(id) & whereBusiness(t)))
-        .getSingleOrNull();
+    final row = await (select(
+      manufacturers,
+    )..where((t) => t.id.equals(id) & whereBusiness(t))).getSingleOrNull();
     if (row != null) {
       await db.syncDao.enqueueUpsert('manufacturers', row.toCompanion(true));
     }
@@ -458,9 +462,9 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
   /// soft-delete build a partial companion; a partial `products` upsert omits the
   /// NOT NULL `name`, which the cloud rejects (23502). Re-read + enqueue all cols.
   Future<void> _enqueueFullProduct(String id) async {
-    final row = await (select(products)
-          ..where((t) => t.id.equals(id) & whereBusiness(t)))
-        .getSingleOrNull();
+    final row = await (select(
+      products,
+    )..where((t) => t.id.equals(id) & whereBusiness(t))).getSingleOrNull();
     if (row != null) {
       await db.syncDao.enqueueUpsert('products', row.toCompanion(true));
     }
@@ -554,9 +558,9 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
   /// upsert omits the NOT NULL `name`, which the cloud rejects (23502), so the
   /// per-column updates below read the row back and enqueue every column.
   Future<void> _enqueueFullManufacturer(String id) async {
-    final row = await (select(manufacturers)
-          ..where((t) => t.id.equals(id) & whereBusiness(t)))
-        .getSingleOrNull();
+    final row = await (select(
+      manufacturers,
+    )..where((t) => t.id.equals(id) & whereBusiness(t))).getSingleOrNull();
     if (row != null) {
       await db.syncDao.enqueueUpsert('manufacturers', row.toCompanion(true));
     }
@@ -586,17 +590,17 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
       );
 
       // Bump business total by the same delta.
-      final mfr = await (select(manufacturers)
-            ..where((t) => t.id.equals(id) & whereBusiness(t)))
-          .getSingle();
+      final mfr = await (select(
+        manufacturers,
+      )..where((t) => t.id.equals(id) & whereBusiness(t))).getSingle();
       final comp = ManufacturersCompanion(
         id: Value(id),
         emptyCrateStock: Value(mfr.emptyCrateStock + delta),
         lastUpdatedAt: Value(now),
       );
-      await (update(manufacturers)
-            ..where((t) => t.id.equals(id) & whereBusiness(t)))
-          .write(comp);
+      await (update(
+        manufacturers,
+      )..where((t) => t.id.equals(id) & whereBusiness(t))).write(comp);
     } else {
       // Legacy path (no store dimension): absolute set on business total.
       final comp = ManufacturersCompanion(
@@ -604,9 +608,9 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
         emptyCrateStock: Value(newStock),
         lastUpdatedAt: Value(now),
       );
-      await (update(manufacturers)
-            ..where((t) => t.id.equals(id) & whereBusiness(t)))
-          .write(comp);
+      await (update(
+        manufacturers,
+      )..where((t) => t.id.equals(id) & whereBusiness(t))).write(comp);
     }
     await _enqueueFullManufacturer(id);
   }
@@ -692,17 +696,17 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
     String? categoryId,
   ) => _watchProductsWithStock(categoryId: categoryId);
 
-  Stream<List<ProductDataWithStock>> watchProductsByStore(
-    String storeId,
-  ) => _watchProductsWithStock(storeId: storeId);
+  Stream<List<ProductDataWithStock>> watchProductsByStore(String storeId) =>
+      _watchProductsWithStock(storeId: storeId);
 
   Stream<List<ProductDataWithStock>> watchAllProductDatasWithStock() =>
       _watchProductsWithStock();
 
   /// Live products-with-stock for a store scope where null = All Stores. Lets
   /// the Product Details screen refresh in real time across either scope (§5).
-  Stream<List<ProductDataWithStock>> watchProductsWithStock({String? storeId}) =>
-      _watchProductsWithStock(storeId: storeId);
+  Stream<List<ProductDataWithStock>> watchProductsWithStock({
+    String? storeId,
+  }) => _watchProductsWithStock(storeId: storeId);
 
   Stream<List<ProductDataWithStock>> watchLowStockProductDatas() =>
       _watchProductsWithStock(lowStockOnly: true);
@@ -742,8 +746,9 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
       // (`gen_random_uuid()`) and returns them via `_applyDomainResponse`,
       // which is the sole writer of those rows locally so ids match
       // cloud exactly.
-      final flagValue = await db.systemConfigDao
-          .get('feature.domain_rpcs_v2.inventory_delta');
+      final flagValue = await db.systemConfigDao.get(
+        'feature.domain_rpcs_v2.inventory_delta',
+      );
       final useDomainRpc = flagValue == 'true' || flagValue == '"true"';
 
       // Inventory cache always updates locally for immediate UI feedback;
@@ -812,8 +817,10 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
           'p_actor_id': staffId,
           'p_movements': [movement],
         };
-        await db.syncDao
-            .enqueue('domain:pos_inventory_delta_v2', jsonEncode(bundle));
+        await db.syncDao.enqueue(
+          'domain:pos_inventory_delta_v2',
+          jsonEncode(bundle),
+        );
         return;
       }
 
@@ -821,8 +828,8 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
       // Transfer legs: write a stock_transactions row referencing the
       // transfer (no stock_adjustments row — transfers are not adjustments).
       final txId = UuidV7.generate();
-      final isTransfer = movementType == 'transfer_out' ||
-          movementType == 'transfer_in';
+      final isTransfer =
+          movementType == 'transfer_out' || movementType == 'transfer_in';
       StockTransactionsCompanion txComp;
       if (isTransfer && refId != null) {
         txComp = StockTransactionsCompanion.insert(
@@ -920,12 +927,14 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
       crateSizeGroups,
     )..where((t) => t.id.equals(groupId) & whereBusiness(t))).write(comp);
     // Full-row enqueue: a partial crate_size_groups upsert omits NOT NULL name.
-    final fullGroup = await (select(crateSizeGroups)
-          ..where((t) => t.id.equals(groupId) & whereBusiness(t)))
-        .getSingleOrNull();
+    final fullGroup = await (select(
+      crateSizeGroups,
+    )..where((t) => t.id.equals(groupId) & whereBusiness(t))).getSingleOrNull();
     if (fullGroup != null) {
-      await db.syncDao
-          .enqueueUpsert('crate_size_groups', fullGroup.toCompanion(true));
+      await db.syncDao.enqueueUpsert(
+        'crate_size_groups',
+        fullGroup.toCompanion(true),
+      );
     }
   }
 
@@ -1213,9 +1222,9 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
   /// partial companion; a partial `orders` upsert omits NOT NULL columns
   /// (order_number, total_amount_kobo, …) and the cloud rejects it (23502).
   Future<void> _enqueueFullOrder(String id) async {
-    final row = await (select(orders)
-          ..where((o) => o.id.equals(id) & whereBusiness(o)))
-        .getSingleOrNull();
+    final row = await (select(
+      orders,
+    )..where((o) => o.id.equals(id) & whereBusiness(o))).getSingleOrNull();
     if (row != null) {
       await db.syncDao.enqueueUpsert('orders', row.toCompanion(true));
     }
@@ -1228,9 +1237,9 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       riderName: Value(riderName),
       lastUpdatedAt: Value(now),
     );
-    await (update(orders)
-          ..where((o) => o.id.equals(orderId) & whereBusiness(o)))
-        .write(comp);
+    await (update(
+      orders,
+    )..where((o) => o.id.equals(orderId) & whereBusiness(o))).write(comp);
     await _enqueueFullOrder(orderId);
   }
 
@@ -1258,8 +1267,9 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     return db.transaction(() async {
       final orderId = order.id.present ? order.id.value : UuidV7.generate();
 
-      final flagValue =
-          await db.systemConfigDao.get('feature.domain_rpcs_v2.record_sale');
+      final flagValue = await db.systemConfigDao.get(
+        'feature.domain_rpcs_v2.record_sale',
+      );
       final useDomainRpc = flagValue == 'true' || flagValue == '"true"';
 
       // Order header gets written locally on both paths so the UI flips
@@ -1326,19 +1336,21 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       // even if a non-crate business somehow has a bottle+trackEmpties product
       // (the product-creation toggle now blocks new ones, but legacy/edge rows
       // may exist), it must NOT accrue crate ledger / order_crate_lines rows.
-      final crateBiz = await (select(businesses)
-            ..where((b) => b.id.equals(requireBusinessId()))
-            ..limit(1))
-          .getSingleOrNull();
+      final crateBiz =
+          await (select(businesses)
+                ..where((b) => b.id.equals(requireBusinessId()))
+                ..limit(1))
+              .getSingleOrNull();
       if (customerId != null && isCrateBusiness(crateBiz?.type)) {
         final cratesByManufacturer = <String, int>{};
         for (final item in items) {
           final productId = item.productId.value;
           if (productId == null) continue; // quick-sale line: no product
-          final product = await (select(products)
-                ..where((p) => p.id.equals(productId) & whereBusiness(p))
-                ..limit(1))
-              .getSingleOrNull();
+          final product =
+              await (select(products)
+                    ..where((p) => p.id.equals(productId) & whereBusiness(p))
+                    ..limit(1))
+                  .getSingleOrNull();
           if (product == null) continue;
           final mfrId = product.manufacturerId;
           if (mfrId == null) continue;
@@ -1354,10 +1366,11 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         for (final entry in cratesByManufacturer.entries) {
           final mfrId = entry.key;
           final crates = entry.value;
-          final mfr = await (select(manufacturers)
-                ..where((m) => m.id.equals(mfrId) & whereBusiness(m))
-                ..limit(1))
-              .getSingleOrNull();
+          final mfr =
+              await (select(manufacturers)
+                    ..where((m) => m.id.equals(mfrId) & whereBusiness(m))
+                    ..limit(1))
+                  .getSingleOrNull();
           final rateKobo = mfr?.depositAmountKobo ?? 0;
           final depositPaid = crateDepositPaidByManufacturer[mfrId] ?? 0;
 
@@ -1409,8 +1422,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         // Resolve the sale-level store: explicit arg wins, otherwise
         // fall back to the first item's. The v2 RPC requires a single
         // store for both the order header and the stock movements.
-        final saleStoreId =
-            storeId ?? items.first.storeId.value;
+        final saleStoreId = storeId ?? items.first.storeId.value;
 
         final payload = <String, dynamic>{
           'p_business_id': requireBusinessId(),
@@ -1420,8 +1432,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
           'p_store_id': saleStoreId,
           'p_payment_type': orderJson['payment_type'],
           'p_items': thinItems,
-          if (orderJson.containsKey('status'))
-            'p_status': orderJson['status'],
+          if (orderJson.containsKey('status')) 'p_status': orderJson['status'],
           if (customerId != null) 'p_customer_id': customerId,
           if (orderJson.containsKey('discount_kobo'))
             'p_discount_kobo': orderJson['discount_kobo'],
@@ -1435,8 +1446,10 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
           if (amountPaidKobo > 0) 'p_payment_method': paymentMethod,
           if (walletDebitKobo > 0) 'p_wallet_amount_kobo': walletDebitKobo,
         };
-        await db.syncDao
-            .enqueue('domain:pos_record_sale_v2', jsonEncode(payload));
+        await db.syncDao.enqueue(
+          'domain:pos_record_sale_v2',
+          jsonEncode(payload),
+        );
         return orderId;
       }
 
@@ -1547,7 +1560,10 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
             .fold<int>(0, (s, v) => s + v)
             .clamp(0, totalAmountKobo);
         final goodsDebitKobo = totalAmountKobo - depositHeldKobo;
-        final goodsCreditKobo = (amountPaidKobo - depositHeldKobo).clamp(0, amountPaidKobo);
+        final goodsCreditKobo = (amountPaidKobo - depositHeldKobo).clamp(
+          0,
+          amountPaidKobo,
+        );
         //
         // Leg 1 — debit the goods total (the purchase leaves the wallet).
         final debitComp = WalletTransactionsCompanion.insert(
@@ -1579,8 +1595,9 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
             type: 'credit',
             amountKobo: goodsCreditKobo,
             signedAmountKobo: goodsCreditKobo,
-            referenceType:
-                paymentMethod == 'cash' ? 'topup_cash' : 'topup_transfer',
+            referenceType: paymentMethod == 'cash'
+                ? 'topup_cash'
+                : 'topup_transfer',
             orderId: Value(orderId),
             performedBy: Value(staffId),
             createdAt: Value(legTime),
@@ -1666,24 +1683,28 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     final kept = takenCrates - returnedCrates < 0
         ? 0
         : (takenCrates - returnedCrates > takenCrates
-            ? takenCrates
-            : takenCrates - returnedCrates);
+              ? takenCrates
+              : takenCrates - returnedCrates);
     final forfeitValue = kept * rateKobo;
     final forfeitRecorded = forfeitValue < paidKobo ? forfeitValue : paidKobo;
     final refundAmount = paidKobo - forfeitRecorded;
     final extraDebt = forfeitValue > paidKobo ? forfeitValue - paidKobo : 0;
 
     await transaction(() async {
-      final wallet = await (select(customerWallets)
-            ..where((w) =>
-                whereBusiness(w) &
-                w.customerId.equals(customerId) &
-                w.isDeleted.not())
-            ..limit(1))
-          .getSingleOrNull();
+      final wallet =
+          await (select(customerWallets)
+                ..where(
+                  (w) =>
+                      whereBusiness(w) &
+                      w.customerId.equals(customerId) &
+                      w.isDeleted.not(),
+                )
+                ..limit(1))
+              .getSingleOrNull();
       if (wallet == null) {
         throw StateError(
-            'Customer $customerId has no wallet — cannot settle crate deposit');
+          'Customer $customerId has no wallet — cannot settle crate deposit',
+        );
       }
       final legTime = DateTime.now();
 
@@ -1784,8 +1805,9 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     String reason,
     String staffId,
   ) async {
-    final flagValue =
-        await db.systemConfigDao.get('feature.domain_rpcs_v2.cancel_order');
+    final flagValue = await db.systemConfigDao.get(
+      'feature.domain_rpcs_v2.cancel_order',
+    );
     final useDomainRpc = flagValue == 'true' || flagValue == '"true"';
 
     return db.transaction(() async {
@@ -1820,8 +1842,10 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
           // R2: until pos_cancel_order mints the wallet payment-leg reversal,
           // don't enable feature.domain_rpcs_v2.cancel_order.
         };
-        await db.syncDao
-            .enqueue('domain:pos_cancel_order', jsonEncode(payload));
+        await db.syncDao.enqueue(
+          'domain:pos_cancel_order',
+          jsonEncode(payload),
+        );
         return;
       }
 
@@ -1960,24 +1984,28 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
   /// order land on the next pull. Both sales survive. Returns the new number, or
   /// null if the order is gone or already carries this device's tag (idempotent).
   Future<String?> renumberForCollisionHeal(
-      String orderId, String deviceTag) async {
-    final order = await (select(orders)
-          ..where((t) => t.id.equals(orderId) & whereBusiness(t)))
-        .getSingleOrNull();
+    String orderId,
+    String deviceTag,
+  ) async {
+    final order = await (select(
+      orders,
+    )..where((t) => t.id.equals(orderId) & whereBusiness(t))).getSingleOrNull();
     if (order == null) return null;
     // Idempotency: don't double-append if a prior heal already tagged it.
     if (order.orderNumber.endsWith('-$deviceTag')) return null;
     final newNumber = '${order.orderNumber}-$deviceTag';
-    await (update(orders)
-          ..where((t) => t.id.equals(orderId) & whereBusiness(t)))
-        .write(OrdersCompanion(
-      orderNumber: Value(newNumber),
-      lastUpdatedAt: Value(DateTime.now()),
-    ));
+    await (update(
+      orders,
+    )..where((t) => t.id.equals(orderId) & whereBusiness(t))).write(
+      OrdersCompanion(
+        orderNumber: Value(newNumber),
+        lastUpdatedAt: Value(DateTime.now()),
+      ),
+    );
     // Re-enqueue a FULL row so the cloud upsert carries every NOT NULL column.
-    final updated = await (select(orders)
-          ..where((t) => t.id.equals(orderId) & whereBusiness(t)))
-        .getSingle();
+    final updated = await (select(
+      orders,
+    )..where((t) => t.id.equals(orderId) & whereBusiness(t))).getSingle();
     await db.syncDao.enqueueUpsert('orders', updated.toCompanion(true));
     return newNumber;
   }
@@ -2151,14 +2179,14 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
   /// — e.g. when the Recall list is opened.
   Future<void> deleteExpiredCarts() async {
     final cutoff = DateTime.now();
-    final expired = await (select(savedCarts)
-          ..where(
-            (c) =>
-                whereBusiness(c) &
-                c.expiresAt.isNotNull() &
-                c.expiresAt.isSmallerOrEqualValue(cutoff),
-          ))
-        .get();
+    final expired =
+        await (select(savedCarts)..where(
+              (c) =>
+                  whereBusiness(c) &
+                  c.expiresAt.isNotNull() &
+                  c.expiresAt.isSmallerOrEqualValue(cutoff),
+            ))
+            .get();
     for (final row in expired) {
       await deleteSavedCart(row.id);
     }
@@ -2363,8 +2391,7 @@ class CustomersDao extends DatabaseAccessor<AppDatabase>
       (rows) => rows
           .map(
             (r) => CrateBalanceEntry(
-              manufacturerId:
-                  r.readTable(customerCrateBalances).manufacturerId,
+              manufacturerId: r.readTable(customerCrateBalances).manufacturerId,
               manufacturerName: r.readTable(manufacturers).name,
               balance: r.readTable(customerCrateBalances).balance,
             ),
@@ -2377,8 +2404,9 @@ class CustomersDao extends DatabaseAccessor<AppDatabase>
     final customerId = UuidV7.generate();
     final walletId = UuidV7.generate();
 
-    final flagValue =
-        await db.systemConfigDao.get('feature.domain_rpcs_v2.create_customer');
+    final flagValue = await db.systemConfigDao.get(
+      'feature.domain_rpcs_v2.create_customer',
+    );
     final useDomainRpc = flagValue == 'true' || flagValue == '"true"';
 
     await transaction(() async {
@@ -2412,11 +2440,12 @@ class CustomersDao extends DatabaseAccessor<AppDatabase>
             'p_price_tier': custComp.priceTier.value,
           if (custComp.walletLimitKobo.present)
             'p_wallet_limit_kobo': custComp.walletLimitKobo.value,
-          if (custComp.storeId.present)
-            'p_store_id': custComp.storeId.value,
+          if (custComp.storeId.present) 'p_store_id': custComp.storeId.value,
         };
-        await db.syncDao
-            .enqueue('domain:pos_create_customer', jsonEncode(payload));
+        await db.syncDao.enqueue(
+          'domain:pos_create_customer',
+          jsonEncode(payload),
+        );
       } else {
         await db.syncDao.enqueueUpsert('customers', custComp);
         await db.syncDao.enqueueUpsert('customer_wallets', walletComp);
@@ -2430,15 +2459,14 @@ class CustomersDao extends DatabaseAccessor<AppDatabase>
   /// FK-reference the customer). Full-row enqueue: a partial customers upsert
   /// omits the NOT NULL name → 23502 and would never sync.
   Future<void> softDeleteCustomer(String customerId) async {
-    await (update(customers)..where(
-          (t) => t.id.equals(customerId) & whereBusiness(t),
-        ))
-        .write(
-          CustomersCompanion(
-            isDeleted: const Value(true),
-            lastUpdatedAt: Value(DateTime.now()),
-          ),
-        );
+    await (update(
+      customers,
+    )..where((t) => t.id.equals(customerId) & whereBusiness(t))).write(
+      CustomersCompanion(
+        isDeleted: const Value(true),
+        lastUpdatedAt: Value(DateTime.now()),
+      ),
+    );
     await _enqueueFullCustomer(customerId);
   }
 
@@ -2467,20 +2495,19 @@ class CustomersDao extends DatabaseAccessor<AppDatabase>
     required String priceTier,
     String? storeId,
   }) async {
-    await (update(customers)..where(
-          (t) => t.id.equals(customerId) & whereBusiness(t),
-        ))
-        .write(
-          CustomersCompanion(
-            name: Value(name),
-            phone: Value(phone),
-            address: Value(address),
-            googleMapsLocation: Value(googleMapsLocation),
-            priceTier: Value(priceTier),
-            storeId: Value(storeId),
-            lastUpdatedAt: Value(DateTime.now()),
-          ),
-        );
+    await (update(
+      customers,
+    )..where((t) => t.id.equals(customerId) & whereBusiness(t))).write(
+      CustomersCompanion(
+        name: Value(name),
+        phone: Value(phone),
+        address: Value(address),
+        googleMapsLocation: Value(googleMapsLocation),
+        priceTier: Value(priceTier),
+        storeId: Value(storeId),
+        lastUpdatedAt: Value(DateTime.now()),
+      ),
+    );
     await _enqueueFullCustomer(customerId);
   }
 
@@ -2509,13 +2536,15 @@ class CustomersDao extends DatabaseAccessor<AppDatabase>
   /// §13.4 — crate deposit held for the customer (separate from the spendable
   /// balance above). Shown as its own line on the wallet screen.
   Stream<int> watchWalletDepositsHeldKobo(String customerId) {
-    return attachedDatabase.walletTransactionsDao
-        .watchDepositsHeldKobo(customerId);
+    return attachedDatabase.walletTransactionsDao.watchDepositsHeldKobo(
+      customerId,
+    );
   }
 
   Future<int> getWalletDepositsHeldKobo(String customerId) {
-    return attachedDatabase.walletTransactionsDao
-        .getDepositsHeldKobo(customerId);
+    return attachedDatabase.walletTransactionsDao.getDepositsHeldKobo(
+      customerId,
+    );
   }
 
   Future<void> updateWalletLimit(String customerId, int limitKobo) {
@@ -2611,12 +2640,7 @@ class LastShipmentInfo {
 }
 
 @DriftAccessor(
-  tables: [
-    Expenses,
-    ExpenseCategories,
-    ActivityLogs,
-    PaymentTransactions,
-  ],
+  tables: [Expenses, ExpenseCategories, ActivityLogs, PaymentTransactions],
 )
 class ExpensesDao extends DatabaseAccessor<AppDatabase>
     with _$ExpensesDaoMixin, BusinessScopedDao<AppDatabase> {
@@ -2693,8 +2717,9 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
     String? receiptPath,
     String status = 'approved',
   }) async {
-    final flagValue = await db.systemConfigDao
-        .get('feature.domain_rpcs_v2.record_expense');
+    final flagValue = await db.systemConfigDao.get(
+      'feature.domain_rpcs_v2.record_expense',
+    );
     final useDomainRpc = flagValue == 'true' || flagValue == '"true"';
 
     // Match v1's existing behavior: a payment_transactions row is always
@@ -2776,8 +2801,10 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
           if (storeId != null) 'p_store_id': storeId,
           if (receiptPath != null) 'p_receipt_path': receiptPath,
         };
-        await db.syncDao
-            .enqueue('domain:pos_record_expense', jsonEncode(payload));
+        await db.syncDao.enqueue(
+          'domain:pos_record_expense',
+          jsonEncode(payload),
+        );
       } else {
         await db.syncDao.enqueueUpsert('expenses', expComp);
         await db.syncDao.enqueueUpsert('activity_logs', activityComp);
@@ -2789,8 +2816,9 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
       // §20.1 "pending approval" badge). Fired inside the txn so it rolls back
       // with the insert.
       if (!approved) {
-        final ceoIds =
-            await db.userBusinessesDao.getUserIdsForRoleSlugs(['ceo']);
+        final ceoIds = await db.userBusinessesDao.getUserIdsForRoleSlugs([
+          'ceo',
+        ]);
         for (final uid in ceoIds) {
           await db.notificationsDao.fireNotification(
             type: 'expense.pending_approval',
@@ -2809,12 +2837,14 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
   Stream<int> watchPendingCount() {
     final query = selectOnly(expenses)
       ..addColumns([expenses.id.count()])
-      ..where(whereBusiness(expenses) &
-          expenses.isDeleted.not() &
-          expenses.status.equals('pending'));
-    return query
-        .watchSingleOrNull()
-        .map((row) => row?.read(expenses.id.count()) ?? 0);
+      ..where(
+        whereBusiness(expenses) &
+            expenses.isDeleted.not() &
+            expenses.status.equals('pending'),
+      );
+    return query.watchSingleOrNull().map(
+      (row) => row?.read(expenses.id.count()) ?? 0,
+    );
   }
 
   /// CEO approves a pending expense (§20.4). Sets status + approver and notifies
@@ -2833,30 +2863,35 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
     var didApprove = false;
 
     await transaction(() async {
-      final exp = await (select(expenses)
-            ..where((t) => t.id.equals(expenseId) & whereBusiness(t)))
-          .getSingleOrNull();
+      final exp =
+          await (select(expenses)
+                ..where((t) => t.id.equals(expenseId) & whereBusiness(t)))
+              .getSingleOrNull();
       if (exp == null || exp.status != 'pending') return;
       final now = DateTime.now();
-      final affected = await (update(expenses)
-            ..where((t) =>
-                t.id.equals(expenseId) &
-                whereBusiness(t) &
-                t.status.equals('pending')))
-          .write(ExpensesCompanion(
-        status: const Value('approved'),
-        approvedBy: Value(approverId),
-        approvedAt: Value(now),
-        lastUpdatedAt: Value(now),
-      ));
+      final affected =
+          await (update(expenses)..where(
+                (t) =>
+                    t.id.equals(expenseId) &
+                    whereBusiness(t) &
+                    t.status.equals('pending'),
+              ))
+              .write(
+                ExpensesCompanion(
+                  status: const Value('approved'),
+                  approvedBy: Value(approverId),
+                  approvedAt: Value(now),
+                  lastUpdatedAt: Value(now),
+                ),
+              );
       if (affected == 0) return; // lost the race — already approved
       didApprove = true;
       recordedBy = exp.recordedBy;
       description = exp.description;
 
-      final row = await (select(expenses)
-            ..where((t) => t.id.equals(expenseId) & whereBusiness(t)))
-          .getSingle();
+      final row = await (select(
+        expenses,
+      )..where((t) => t.id.equals(expenseId) & whereBusiness(t))).getSingle();
       await db.syncDao.enqueueUpsert('expenses', row.toCompanion(true));
 
       await db.activityLogDao.log(
@@ -2893,31 +2928,36 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
     var didReject = false;
 
     await transaction(() async {
-      final exp = await (select(expenses)
-            ..where((t) => t.id.equals(expenseId) & whereBusiness(t)))
-          .getSingleOrNull();
+      final exp =
+          await (select(expenses)
+                ..where((t) => t.id.equals(expenseId) & whereBusiness(t)))
+              .getSingleOrNull();
       if (exp == null || exp.status != 'pending') return;
       final now = DateTime.now();
-      final affected = await (update(expenses)
-            ..where((t) =>
-                t.id.equals(expenseId) &
-                whereBusiness(t) &
-                t.status.equals('pending')))
-          .write(ExpensesCompanion(
-        status: const Value('rejected'),
-        rejectionReason: Value(reason),
-        approvedBy: Value(approverId),
-        approvedAt: Value(now),
-        lastUpdatedAt: Value(now),
-      ));
+      final affected =
+          await (update(expenses)..where(
+                (t) =>
+                    t.id.equals(expenseId) &
+                    whereBusiness(t) &
+                    t.status.equals('pending'),
+              ))
+              .write(
+                ExpensesCompanion(
+                  status: const Value('rejected'),
+                  rejectionReason: Value(reason),
+                  approvedBy: Value(approverId),
+                  approvedAt: Value(now),
+                  lastUpdatedAt: Value(now),
+                ),
+              );
       if (affected == 0) return;
       didReject = true;
       recordedBy = exp.recordedBy;
       description = exp.description;
 
-      final row = await (select(expenses)
-            ..where((t) => t.id.equals(expenseId) & whereBusiness(t)))
-          .getSingle();
+      final row = await (select(
+        expenses,
+      )..where((t) => t.id.equals(expenseId) & whereBusiness(t))).getSingle();
       await db.syncDao.enqueueUpsert('expenses', row.toCompanion(true));
 
       await db.activityLogDao.log(
@@ -2954,19 +2994,23 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
   }) async {
     final categoryId = await resolveCategoryId(categoryName);
     final now = DateTime.now();
-    await (update(expenses)
-          ..where((t) => t.id.equals(expenseId) & whereBusiness(t)))
-        .write(ExpensesCompanion(
-      categoryId: Value(categoryId),
-      description: Value(description),
-      reference: Value(reference),
-      expenseDate: expenseDate != null ? Value(expenseDate) : const Value.absent(),
-      receiptPath: Value(receiptPath),
-      lastUpdatedAt: Value(now),
-    ));
-    final row = await (select(expenses)
-          ..where((t) => t.id.equals(expenseId) & whereBusiness(t)))
-        .getSingle();
+    await (update(
+      expenses,
+    )..where((t) => t.id.equals(expenseId) & whereBusiness(t))).write(
+      ExpensesCompanion(
+        categoryId: Value(categoryId),
+        description: Value(description),
+        reference: Value(reference),
+        expenseDate: expenseDate != null
+            ? Value(expenseDate)
+            : const Value.absent(),
+        receiptPath: Value(receiptPath),
+        lastUpdatedAt: Value(now),
+      ),
+    );
+    final row = await (select(
+      expenses,
+    )..where((t) => t.id.equals(expenseId) & whereBusiness(t))).getSingle();
     await db.syncDao.enqueueUpsert('expenses', row.toCompanion(true));
 
     await db.activityLogDao.log(
@@ -2993,28 +3037,33 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
     var didDelete = false;
 
     await transaction(() async {
-      final exp = await (select(expenses)
-            ..where((t) => t.id.equals(expenseId) & whereBusiness(t)))
-          .getSingleOrNull();
+      final exp =
+          await (select(expenses)
+                ..where((t) => t.id.equals(expenseId) & whereBusiness(t)))
+              .getSingleOrNull();
       if (exp == null || exp.isDeleted) return;
       final now = DateTime.now();
-      final affected = await (update(expenses)
-            ..where((t) =>
-                t.id.equals(expenseId) &
-                whereBusiness(t) &
-                t.isDeleted.equals(false)))
-          .write(ExpensesCompanion(
-        isDeleted: const Value(true),
-        lastUpdatedAt: Value(now),
-      ));
+      final affected =
+          await (update(expenses)..where(
+                (t) =>
+                    t.id.equals(expenseId) &
+                    whereBusiness(t) &
+                    t.isDeleted.equals(false),
+              ))
+              .write(
+                ExpensesCompanion(
+                  isDeleted: const Value(true),
+                  lastUpdatedAt: Value(now),
+                ),
+              );
       if (affected == 0) return; // lost the race — already deleted
       didDelete = true;
       description = exp.description;
       storeIdForLog = exp.storeId;
 
-      final row = await (select(expenses)
-            ..where((t) => t.id.equals(expenseId) & whereBusiness(t)))
-          .getSingle();
+      final row = await (select(
+        expenses,
+      )..where((t) => t.id.equals(expenseId) & whereBusiness(t))).getSingle();
       await db.syncDao.enqueueUpsert('expenses', row.toCompanion(true));
     });
 
@@ -3069,9 +3118,9 @@ class ExpenseBudgetsDao extends DatabaseAccessor<AppDatabase>
   /// All live budgets for the business (the business-wide row has null
   /// store_id). The provider layer resolves the goal for a given store scope.
   Stream<List<ExpenseBudgetData>> watchAll() {
-    return (select(expenseBudgets)
-          ..where((t) => whereBusiness(t) & t.isDeleted.not()))
-        .watch();
+    return (select(
+      expenseBudgets,
+    )..where((t) => whereBusiness(t) & t.isDeleted.not())).watch();
   }
 
   /// Sets the monthly goal for (business, [storeId]-or-null). storeId null sets
@@ -3079,26 +3128,29 @@ class ExpenseBudgetsDao extends DatabaseAccessor<AppDatabase>
   /// inserts a fresh one — one live row per scope (the partial unique indexes
   /// guard against races). enqueueUpsert syncs it (§5).
   Future<void> setBudget({String? storeId, required int amountKobo}) async {
-    final existing = await (select(expenseBudgets)
-          ..where((t) {
-            final base = whereBusiness(t) & t.isDeleted.not();
-            return storeId == null
-                ? base & t.storeId.isNull()
-                : base & t.storeId.equals(storeId);
-          })
-          ..limit(1))
-        .getSingleOrNull();
+    final existing =
+        await (select(expenseBudgets)
+              ..where((t) {
+                final base = whereBusiness(t) & t.isDeleted.not();
+                return storeId == null
+                    ? base & t.storeId.isNull()
+                    : base & t.storeId.equals(storeId);
+              })
+              ..limit(1))
+            .getSingleOrNull();
     final now = DateTime.now();
     if (existing != null) {
-      await (update(expenseBudgets)
-            ..where((t) => t.id.equals(existing.id) & whereBusiness(t)))
-          .write(ExpenseBudgetsCompanion(
-        amountKobo: Value(amountKobo),
-        lastUpdatedAt: Value(now),
-      ));
-      final row = await (select(expenseBudgets)
-            ..where((t) => t.id.equals(existing.id) & whereBusiness(t)))
-          .getSingle();
+      await (update(
+        expenseBudgets,
+      )..where((t) => t.id.equals(existing.id) & whereBusiness(t))).write(
+        ExpenseBudgetsCompanion(
+          amountKobo: Value(amountKobo),
+          lastUpdatedAt: Value(now),
+        ),
+      );
+      final row = await (select(
+        expenseBudgets,
+      )..where((t) => t.id.equals(existing.id) & whereBusiness(t))).getSingle();
       await db.syncDao.enqueueUpsert('expense_budgets', row.toCompanion(true));
     } else {
       final comp = ExpenseBudgetsCompanion.insert(
@@ -3224,8 +3276,9 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
       // delete the queue row so it stops counting against pending
       // metrics. Operator-visible surface for genuine permanent
       // failures.
-      final reason =
-          deferredOverflow ? 'fk_deferred_cap_reached: $error' : error;
+      final reason = deferredOverflow
+          ? 'fk_deferred_cap_reached: $error'
+          : error;
       debugPrint(
         '[SyncDao] orphan ${existing.actionType} attempts=$attempts '
         'reason=$reason',
@@ -3316,10 +3369,12 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
   /// ago, and the only signal is the bare "Pending in queue: N" counter.
   Stream<List<SyncQueueData>> watchPendingItems({int limit = 100}) {
     return (select(syncQueue)
-          ..where((t) =>
-              t.status.equals('pending') &
-              t.isSynced.not() &
-              whereBusiness(t))
+          ..where(
+            (t) =>
+                t.status.equals('pending') &
+                t.isSynced.not() &
+                whereBusiness(t),
+          )
           ..orderBy([(t) => OrderingTerm.asc(t.createdAt)])
           ..limit(limit))
         .watch();
@@ -3385,10 +3440,7 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
       "WHERE action_type = ?1 AND status = 'pending' "
       "  AND json_extract(payload, '\$.id') = ?2 "
       "LIMIT 1",
-      variables: [
-        Variable.withString(actionType),
-        Variable.withString(rowId),
-      ],
+      variables: [Variable.withString(actionType), Variable.withString(rowId)],
       readsFrom: {syncQueue},
     ).getSingleOrNull();
     return result?.read<String>('id');
@@ -3425,8 +3477,7 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
   }
 
   Future<SyncQueueData?> getQueueItem(String id) {
-    return (select(syncQueue)..where((t) => t.id.equals(id)))
-        .getSingleOrNull();
+    return (select(syncQueue)..where((t) => t.id.equals(id))).getSingleOrNull();
   }
 
   /// Looks up a row in `sync_queue_orphans` by its ORIGINAL queue id —
@@ -3435,9 +3486,9 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
   /// terminal failure to the foreground checkout flow even though
   /// `getQueueItem` would now return null.
   Future<SyncQueueOrphanData?> findOrphanByOriginalId(String originalId) {
-    return (select(syncQueueOrphans)
-          ..where((t) => t.originalId.equals(originalId)))
-        .getSingleOrNull();
+    return (select(
+      syncQueueOrphans,
+    )..where((t) => t.originalId.equals(originalId))).getSingleOrNull();
   }
 
   // ── Orphan surfacing & recovery ────────────────────────────────────────────
@@ -3469,9 +3520,9 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
   /// ledger will just orphan it again.
   Future<void> retryOrphan(String orphanId) async {
     await transaction(() async {
-      final orphan = await (select(syncQueueOrphans)
-            ..where((t) => t.id.equals(orphanId)))
-          .getSingleOrNull();
+      final orphan = await (select(
+        syncQueueOrphans,
+      )..where((t) => t.id.equals(orphanId))).getSingleOrNull();
       if (orphan == null) return;
 
       // sync_queue_orphans has no business_id column; recover it from the
@@ -3481,7 +3532,8 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
       String? bid;
       try {
         final decoded = jsonDecode(orphan.payload) as Map<String, dynamic>;
-        bid = decoded['business_id'] as String? ??
+        bid =
+            decoded['business_id'] as String? ??
             decoded['p_business_id'] as String?;
       } catch (_) {
         // undecodable payload — fall through to resolver
@@ -3507,7 +3559,9 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
           authUserId: Value(db.currentAuthUserId),
         ),
       );
-      await (delete(syncQueueOrphans)..where((t) => t.id.equals(orphanId))).go();
+      await (delete(
+        syncQueueOrphans,
+      )..where((t) => t.id.equals(orphanId))).go();
     });
   }
 
@@ -3534,8 +3588,8 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
     // the session resolver for normal post-login writes. If neither yields
     // a value there's no tenant context at all; refuse to enqueue rather
     // than insert a poison row that push would later reject.
-    final resolvedBid = (payloadMap['business_id'] as String?) ??
-        db.businessIdResolver.call();
+    final resolvedBid =
+        (payloadMap['business_id'] as String?) ?? db.businessIdResolver.call();
     if (resolvedBid == null) {
       throw StateError(
         'enqueueUpsert($tableName): no business_id in payload and no '
@@ -3569,15 +3623,16 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
         // signed in now. If user A enqueued an upsert, logged out, and
         // user B then edits the same row, the coalesced row pushes
         // under user B (the JWT that will sign the request anyway).
-        await (update(syncQueue)..where((t) => t.id.equals(existingId)))
-            .write(SyncQueueCompanion(
-          payload: Value(payloadJson),
-          createdAt: Value(DateTime.now()),
-          attempts: const Value(0),
-          nextAttemptAt: const Value(null),
-          errorMessage: const Value(null),
-          authUserId: Value(db.currentAuthUserId),
-        ));
+        await (update(syncQueue)..where((t) => t.id.equals(existingId))).write(
+          SyncQueueCompanion(
+            payload: Value(payloadJson),
+            createdAt: Value(DateTime.now()),
+            attempts: const Value(0),
+            nextAttemptAt: const Value(null),
+            errorMessage: const Value(null),
+            authUserId: Value(db.currentAuthUserId),
+          ),
+        );
       } else {
         await into(syncQueue).insert(
           SyncQueueCompanion.insert(
@@ -3649,31 +3704,41 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
     // in an inconsistent state. Mark any pending upsert as completed (so it
     // doesn't push), then coalesce against an existing pending delete.
     await transaction(() async {
-      final pendingUpsertId =
-          await _findPendingDuplicateId(upsertActionType, rowId);
+      final pendingUpsertId = await _findPendingDuplicateId(
+        upsertActionType,
+        rowId,
+      );
       if (pendingUpsertId != null) {
-        await (update(syncQueue)..where((t) => t.id.equals(pendingUpsertId)))
-            .write(const SyncQueueCompanion(
-          isSynced: Value(true),
-          status: Value('completed'),
-          nextAttemptAt: Value(null),
-        ));
+        await (update(
+          syncQueue,
+        )..where((t) => t.id.equals(pendingUpsertId))).write(
+          const SyncQueueCompanion(
+            isSynced: Value(true),
+            status: Value('completed'),
+            nextAttemptAt: Value(null),
+          ),
+        );
       }
 
-      final existingDeleteId =
-          await _findPendingDuplicateId(deleteActionType, rowId);
+      final existingDeleteId = await _findPendingDuplicateId(
+        deleteActionType,
+        rowId,
+      );
       if (existingDeleteId != null) {
         // Coalesced delete retags to current user — same rationale as
         // the upsert coalesce branch above.
-        await (update(syncQueue)..where((t) => t.id.equals(existingDeleteId)))
-            .write(SyncQueueCompanion(
-          payload: Value(payloadJson),
-          createdAt: Value(DateTime.now()),
-          attempts: const Value(0),
-          nextAttemptAt: const Value(null),
-          errorMessage: const Value(null),
-          authUserId: Value(db.currentAuthUserId),
-        ));
+        await (update(
+          syncQueue,
+        )..where((t) => t.id.equals(existingDeleteId))).write(
+          SyncQueueCompanion(
+            payload: Value(payloadJson),
+            createdAt: Value(DateTime.now()),
+            attempts: const Value(0),
+            nextAttemptAt: const Value(null),
+            errorMessage: const Value(null),
+            authUserId: Value(db.currentAuthUserId),
+          ),
+        );
       } else {
         await into(syncQueue).insert(
           SyncQueueCompanion.insert(
@@ -3697,9 +3762,9 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
   /// payload into the queue — fixing the bug doesn't repair existing rows
   /// because the payload is frozen at enqueue time.
   Future<int> purgeAttemptedPending() async {
-    return (delete(syncQueue)
-          ..where((t) =>
-              t.status.equals('pending') & t.attempts.isBiggerThanValue(0)))
+    return (delete(syncQueue)..where(
+          (t) => t.status.equals('pending') & t.attempts.isBiggerThanValue(0),
+        ))
         .go();
   }
 }
@@ -3742,8 +3807,9 @@ class ErrorLogDao extends DatabaseAccessor<AppDatabase>
         context: Value(context),
         errorType: errorType,
         message: _truncate(message, _maxMessage),
-        stackTrace:
-            Value(stackTrace == null ? null : _truncate(stackTrace, _maxStack)),
+        stackTrace: Value(
+          stackTrace == null ? null : _truncate(stackTrace, _maxStack),
+        ),
         isFatal: Value(isFatal),
         appVersion: Value(appVersion),
         platform: Value(platform),
@@ -4018,8 +4084,9 @@ class StoresDao extends DatabaseAccessor<AppDatabase>
     String? name,
     String? location,
   }) async {
-    await (update(stores)..where((t) => t.id.equals(id) & whereBusiness(t)))
-        .write(
+    await (update(
+      stores,
+    )..where((t) => t.id.equals(id) & whereBusiness(t))).write(
       StoresCompanion(
         name: name == null ? const Value.absent() : Value(name),
         location: location == null
@@ -4028,8 +4095,9 @@ class StoresDao extends DatabaseAccessor<AppDatabase>
         lastUpdatedAt: Value(DateTime.now()),
       ),
     );
-    final row =
-        await (select(stores)..where((t) => t.id.equals(id))).getSingle();
+    final row = await (select(
+      stores,
+    )..where((t) => t.id.equals(id))).getSingle();
     await db.syncDao.enqueueUpsert('stores', row);
   }
 
@@ -4045,13 +4113,15 @@ class StoresDao extends DatabaseAccessor<AppDatabase>
     await (update(users)..where((t) => t.id.equals(id))).write(
       UsersCompanion(
         name: name == null ? const Value.absent() : Value(name),
-        avatarColor:
-            avatarColor == null ? const Value.absent() : Value(avatarColor),
+        avatarColor: avatarColor == null
+            ? const Value.absent()
+            : Value(avatarColor),
         lastUpdatedAt: Value(DateTime.now()),
       ),
     );
-    final row =
-        await (select(users)..where((t) => t.id.equals(id))).getSingle();
+    final row = await (select(
+      users,
+    )..where((t) => t.id.equals(id))).getSingle();
     await db.syncDao.enqueueUpsert('users', row);
   }
 
@@ -4060,15 +4130,19 @@ class StoresDao extends DatabaseAccessor<AppDatabase>
     return (select(users)..where((t) => t.id.equals(id))).getSingleOrNull();
   }
 
-  Future<UserData?> getUserByEmail(String email, {String? preferredBusinessId}) async {
+  Future<UserData?> getUserByEmail(
+    String email, {
+    String? preferredBusinessId,
+  }) async {
     // Deliberately NOT businessId-scoped — login happens before a session
     // exists. Users has UNIQUE(business_id, email), so a single email can hold
     // one local row PER business (multi-business account / staff re-invite).
     // Tolerate >1 row instead of crashing (getSingleOrNull throws on multi-row,
     // which would kill the sign-in / upsertLocalUserFromProfile rebuild): prefer
     // the row for the active/cloud business, else the most-recently-updated.
-    final rows =
-        await (select(users)..where((t) => t.email.equals(email))).get();
+    final rows = await (select(
+      users,
+    )..where((t) => t.email.equals(email))).get();
     if (rows.isEmpty) return null;
     if (rows.length == 1) return rows.first;
     if (preferredBusinessId != null) {
@@ -4186,9 +4260,9 @@ class NotificationsDao extends DatabaseAccessor<AppDatabase>
         ))
         .write(comp);
     // Full-row enqueue: a partial notifications upsert omits NOT NULL type/message.
-    final row = await (select(notifications)
-          ..where((t) => t.id.equals(id) & whereBusiness(t)))
-        .getSingleOrNull();
+    final row = await (select(
+      notifications,
+    )..where((t) => t.id.equals(id) & whereBusiness(t))).getSingleOrNull();
     if (row != null) {
       await db.syncDao.enqueueUpsert('notifications', row.toCompanion(true));
     }
@@ -4196,34 +4270,33 @@ class NotificationsDao extends DatabaseAccessor<AppDatabase>
 
   Future<void> markAllRead() async {
     final now = DateTime.now();
-    final unread = await (select(notifications)..where(
-          (t) =>
-              whereBusiness(t) &
-              _whereForCurrentUser(t) &
-              t.isRead.equals(false),
-        ))
-        .get();
+    final unread =
+        await (select(notifications)..where(
+              (t) =>
+                  whereBusiness(t) &
+                  _whereForCurrentUser(t) &
+                  t.isRead.equals(false),
+            ))
+            .get();
     if (unread.isEmpty) return;
 
-    await (update(notifications)..where(
-          (t) => whereBusiness(t) & _whereForCurrentUser(t),
-        ))
-        .write(
-          NotificationsCompanion(
-            isRead: const Value(true),
-            lastUpdatedAt: Value(now),
-          ),
-        );
+    await (update(
+      notifications,
+    )..where((t) => whereBusiness(t) & _whereForCurrentUser(t))).write(
+      NotificationsCompanion(
+        isRead: const Value(true),
+        lastUpdatedAt: Value(now),
+      ),
+    );
 
     for (final notif in unread) {
       // Full row (with the read flag applied) so the cloud upsert's INSERT has
       // the NOT NULL type/message columns; a partial upsert would 23502.
       await db.syncDao.enqueueUpsert(
         'notifications',
-        notif.toCompanion(true).copyWith(
-              isRead: const Value(true),
-              lastUpdatedAt: Value(now),
-            ),
+        notif
+            .toCompanion(true)
+            .copyWith(isRead: const Value(true), lastUpdatedAt: Value(now)),
       );
     }
   }
@@ -4237,23 +4310,19 @@ class NotificationsDao extends DatabaseAccessor<AppDatabase>
   }
 
   Future<void> clearAll() async {
-    final allNotifs = await (select(notifications)..where(
-          (t) => whereBusiness(t) & _whereForCurrentUser(t),
-        ))
-        .get();
-    await (delete(notifications)..where(
-          (t) => whereBusiness(t) & _whereForCurrentUser(t),
-        ))
-        .go();
+    final allNotifs = await (select(
+      notifications,
+    )..where((t) => whereBusiness(t) & _whereForCurrentUser(t))).get();
+    await (delete(
+      notifications,
+    )..where((t) => whereBusiness(t) & _whereForCurrentUser(t))).go();
     for (final n in allNotifs) {
       await db.syncDao.enqueueDelete('notifications', n.id);
     }
   }
 }
 
-@DriftAccessor(
-  tables: [StockTransactions, Products, Users, Stores, Inventory],
-)
+@DriftAccessor(tables: [StockTransactions, Products, Users, Stores, Inventory])
 class StockLedgerDao extends DatabaseAccessor<AppDatabase>
     with _$StockLedgerDaoMixin, BusinessScopedDao<AppDatabase> {
   StockLedgerDao(super.db);
@@ -4318,10 +4387,7 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
     final query = select(stockTransactions).join([
       innerJoin(products, products.id.equalsExp(stockTransactions.productId)),
       innerJoin(users, users.id.equalsExp(stockTransactions.performedBy)),
-      leftOuterJoin(
-        stores,
-        stores.id.equalsExp(stockTransactions.locationId),
-      ),
+      leftOuterJoin(stores, stores.id.equalsExp(stockTransactions.locationId)),
     ]);
     query.where(
       whereBusiness(stockTransactions) & stockTransactions.voidedAt.isNull(),
@@ -4488,11 +4554,9 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
     final expectedClosing = openingStock + stockIn - stockOut;
 
     // Get current actual stock from inventory table
-    final invRows =
-        await (select(inventory)..where(
-              (i) => whereBusiness(i) & i.storeId.equals(storeId),
-            ))
-            .get();
+    final invRows = await (select(
+      inventory,
+    )..where((i) => whereBusiness(i) & i.storeId.equals(storeId))).get();
     final actualClosing = invRows.fold<int>(0, (s, r) => s + r.quantity);
 
     return PeriodReconciliation(
@@ -4738,11 +4802,14 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
     );
 
     // 4. Notify destination (CEO + all users assigned to the dest store).
-    final ceoIds =
-        await db.userBusinessesDao.getUserIdsForRoleSlugs(['ceo']);
-    final destUserIds =
-        (await db.userStoresDao.getUserIdsForStore(toStoreId)).toSet();
-    for (final uid in <String>{...ceoIds, ...destUserIds}..remove(initiatedBy)) {
+    final ceoIds = await db.userBusinessesDao.getUserIdsForRoleSlugs(['ceo']);
+    final destUserIds = (await db.userStoresDao.getUserIdsForStore(
+      toStoreId,
+    )).toSet();
+    for (final uid in <String>{
+      ...ceoIds,
+      ...destUserIds,
+    }..remove(initiatedBy)) {
       await db.notificationsDao.fireNotification(
         type: 'stock_transfer.dispatched',
         message: 'Incoming transfer: $quantity unit(s) arriving at your store.',
@@ -4772,11 +4839,8 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
 
     await transaction(() async {
       final transfer =
-          await (select(stockTransfers)..where(
-                (t) =>
-                    t.id.equals(transferId) &
-                    whereBusiness(t),
-              ))
+          await (select(stockTransfers)
+                ..where((t) => t.id.equals(transferId) & whereBusiness(t)))
               .getSingleOrNull();
 
       if (transfer == null) {
@@ -4807,21 +4871,20 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
       );
 
       // 2. Flip header → received.
-      final updated = transfer.toCompanion(true).copyWith(
-        status: const Value('received'),
-        receivedBy: Value(receivedBy),
-        receivedAt: Value(now),
-        lastUpdatedAt: Value(now),
-      );
-      await (update(stockTransfers)..where(
-            (t) => t.id.equals(transferId) & whereBusiness(t),
-          ))
+      final updated = transfer
+          .toCompanion(true)
+          .copyWith(
+            status: const Value('received'),
+            receivedBy: Value(receivedBy),
+            receivedAt: Value(now),
+            lastUpdatedAt: Value(now),
+          );
+      await (update(stockTransfers)
+            ..where((t) => t.id.equals(transferId) & whereBusiness(t)))
           .write(updated);
-      final row =
-          await (select(stockTransfers)..where(
-                (t) => t.id.equals(transferId) & whereBusiness(t),
-              ))
-              .getSingle();
+      final row = await (select(
+        stockTransfers,
+      )..where((t) => t.id.equals(transferId) & whereBusiness(t))).getSingle();
       await db.syncDao.enqueueUpsert('stock_transfers', row.toCompanion(true));
     });
 
@@ -4838,15 +4901,13 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
 
     // 4. Notify sender.
     final transfer =
-        await (select(stockTransfers)..where(
-              (t) => t.id.equals(transferId) & whereBusiness(t),
-            ))
+        await (select(stockTransfers)
+              ..where((t) => t.id.equals(transferId) & whereBusiness(t)))
             .getSingleOrNull();
     if (transfer != null) {
       await db.notificationsDao.fireNotification(
         type: 'stock_transfer.received',
-        message:
-            'Your transfer of $quantity unit(s) was confirmed received.',
+        message: 'Your transfer of $quantity unit(s) was confirmed received.',
         severity: 'info',
         linkedRecordId: transferId,
         recipientUserId: transfer.initiatedBy,
@@ -4865,11 +4926,8 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
   }) async {
     await transaction(() async {
       final transfer =
-          await (select(stockTransfers)..where(
-                (t) =>
-                    t.id.equals(transferId) &
-                    whereBusiness(t),
-              ))
+          await (select(stockTransfers)
+                ..where((t) => t.id.equals(transferId) & whereBusiness(t)))
               .getSingleOrNull();
 
       if (transfer == null) {
@@ -4895,19 +4953,18 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
 
       // 2. Flip header → cancelled.
       final now = DateTime.now();
-      final updated = transfer.toCompanion(true).copyWith(
-        status: const Value('cancelled'),
-        lastUpdatedAt: Value(now),
-      );
-      await (update(stockTransfers)..where(
-            (t) => t.id.equals(transferId) & whereBusiness(t),
-          ))
+      final updated = transfer
+          .toCompanion(true)
+          .copyWith(
+            status: const Value('cancelled'),
+            lastUpdatedAt: Value(now),
+          );
+      await (update(stockTransfers)
+            ..where((t) => t.id.equals(transferId) & whereBusiness(t)))
           .write(updated);
-      final row =
-          await (select(stockTransfers)..where(
-                (t) => t.id.equals(transferId) & whereBusiness(t),
-              ))
-              .getSingle();
+      final row = await (select(
+        stockTransfers,
+      )..where((t) => t.id.equals(transferId) & whereBusiness(t))).getSingle();
       await db.syncDao.enqueueUpsert('stock_transfers', row.toCompanion(true));
     });
 
@@ -4949,8 +5006,15 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
         '   quantity_delta, movement_type, performed_by, created_at, last_updated_at) '
         'VALUES (?,?,?,?,?,?,?,?,?)',
         [
-          outLedgerId, bizId, manufacturerId, fromStoreId,
-          -quantity, 'transferred_out', performedBy, nowSec, nowSec,
+          outLedgerId,
+          bizId,
+          manufacturerId,
+          fromStoreId,
+          -quantity,
+          'transferred_out',
+          performedBy,
+          nowSec,
+          nowSec,
         ],
       );
       await customStatement(
@@ -4959,8 +5023,15 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
         '   quantity_delta, movement_type, performed_by, created_at, last_updated_at) '
         'VALUES (?,?,?,?,?,?,?,?,?)',
         [
-          inLedgerId, bizId, manufacturerId, toStoreId,
-          quantity, 'transferred_in', performedBy, nowSec, nowSec,
+          inLedgerId,
+          bizId,
+          manufacturerId,
+          toStoreId,
+          quantity,
+          'transferred_in',
+          performedBy,
+          nowSec,
+          nowSec,
         ],
       );
 
@@ -4973,7 +5044,14 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
         'ON CONFLICT(business_id, store_id, manufacturer_id) DO UPDATE SET '
         '  balance = balance + excluded.balance, '
         '  last_updated_at = excluded.last_updated_at',
-        [UuidV7.generate(), bizId, fromStoreId, manufacturerId, -quantity, nowSec],
+        [
+          UuidV7.generate(),
+          bizId,
+          fromStoreId,
+          manufacturerId,
+          -quantity,
+          nowSec,
+        ],
       );
       await customStatement(
         'INSERT INTO store_crate_balances '
@@ -5016,8 +5094,10 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
                 t.status.equals('in_transit'),
           )
           ..orderBy([
-            (t) =>
-                OrderingTerm(expression: t.initiatedAt, mode: OrderingMode.desc),
+            (t) => OrderingTerm(
+              expression: t.initiatedAt,
+              mode: OrderingMode.desc,
+            ),
           ]))
         .watch();
   }
@@ -5032,8 +5112,10 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
                 t.status.equals('in_transit'),
           )
           ..orderBy([
-            (t) =>
-                OrderingTerm(expression: t.initiatedAt, mode: OrderingMode.desc),
+            (t) => OrderingTerm(
+              expression: t.initiatedAt,
+              mode: OrderingMode.desc,
+            ),
           ]))
         .watch();
   }
@@ -5042,9 +5124,7 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
   Stream<List<StockTransferData>> watchHistory() {
     return (select(stockTransfers)
           ..where(
-            (t) =>
-                whereBusiness(t) &
-                t.status.isIn(['received', 'cancelled']),
+            (t) => whereBusiness(t) & t.status.isIn(['received', 'cancelled']),
           )
           ..orderBy([
             (t) => OrderingTerm(
@@ -5069,8 +5149,10 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
                 t.status.equals('in_transit'),
           )
           ..orderBy([
-            (t) =>
-                OrderingTerm(expression: t.initiatedAt, mode: OrderingMode.desc),
+            (t) => OrderingTerm(
+              expression: t.initiatedAt,
+              mode: OrderingMode.desc,
+            ),
           ]))
         .watch();
   }
@@ -5088,8 +5170,10 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
                 t.status.equals('in_transit'),
           )
           ..orderBy([
-            (t) =>
-                OrderingTerm(expression: t.initiatedAt, mode: OrderingMode.desc),
+            (t) => OrderingTerm(
+              expression: t.initiatedAt,
+              mode: OrderingMode.desc,
+            ),
           ]))
         .watch();
   }
@@ -5099,12 +5183,12 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
   /// in memory so CEO vs store-user scoping never requires re-querying.
   Stream<List<StockTransferData>> watchAllInTransit() {
     return (select(stockTransfers)
-          ..where(
-            (t) => whereBusiness(t) & t.status.equals('in_transit'),
-          )
+          ..where((t) => whereBusiness(t) & t.status.equals('in_transit'))
           ..orderBy([
-            (t) =>
-                OrderingTerm(expression: t.initiatedAt, mode: OrderingMode.desc),
+            (t) => OrderingTerm(
+              expression: t.initiatedAt,
+              mode: OrderingMode.desc,
+            ),
           ]))
         .watch();
   }
@@ -5119,15 +5203,15 @@ class OrderCrateLinesDao extends DatabaseAccessor<AppDatabase>
   /// Returns modal — crates taken, deposit rate snapshot, and deposit paid
   /// (which decides full / part / no-deposit per brand, §13.4).
   Future<List<OrderCrateLineData>> getForOrder(String orderId) {
-    return (select(orderCrateLines)
-          ..where((t) => whereBusiness(t) & t.orderId.equals(orderId)))
-        .get();
+    return (select(
+      orderCrateLines,
+    )..where((t) => whereBusiness(t) & t.orderId.equals(orderId))).get();
   }
 
   Stream<List<OrderCrateLineData>> watchForOrder(String orderId) {
-    return (select(orderCrateLines)
-          ..where((t) => whereBusiness(t) & t.orderId.equals(orderId)))
-        .watch();
+    return (select(
+      orderCrateLines,
+    )..where((t) => whereBusiness(t) & t.orderId.equals(orderId))).watch();
   }
 
   /// Record one (order, brand) crate line at sale (§13.4) and enqueue it for
@@ -5205,10 +5289,12 @@ class StockAdjustmentRequestsDao extends DatabaseAccessor<AppDatabase>
 
     // Approval audience: CEO (never store-assigned) + Manager(s) of this store.
     final ceoIds = await db.userBusinessesDao.getUserIdsForRoleSlugs(['ceo']);
-    final managerIds =
-        await db.userBusinessesDao.getUserIdsForRoleSlugs(['manager']);
-    final storeUserIds =
-        (await db.userStoresDao.getUserIdsForStore(storeId)).toSet();
+    final managerIds = await db.userBusinessesDao.getUserIdsForRoleSlugs([
+      'manager',
+    ]);
+    final storeUserIds = (await db.userStoresDao.getUserIdsForStore(
+      storeId,
+    )).toSet();
     final storeManagerIds = managerIds.where(storeUserIds.contains);
     final isRemove = quantityDiff < 0;
     for (final uid in <String>{...ceoIds, ...storeManagerIds}) {
@@ -5236,9 +5322,10 @@ class StockAdjustmentRequestsDao extends DatabaseAccessor<AppDatabase>
     var didApprove = false;
 
     await transaction(() async {
-      final req = await (select(stockAdjustmentRequests)
-            ..where((t) => t.id.equals(requestId) & whereBusiness(t)))
-          .getSingleOrNull();
+      final req =
+          await (select(stockAdjustmentRequests)
+                ..where((t) => t.id.equals(requestId) & whereBusiness(t)))
+              .getSingleOrNull();
       if (req == null || req.status != 'pending') return;
 
       // Apply the actual stock movement (atomic via pos_inventory_delta_v2).
@@ -5251,27 +5338,33 @@ class StockAdjustmentRequestsDao extends DatabaseAccessor<AppDatabase>
       );
 
       final now = DateTime.now();
-      final affected = await (update(stockAdjustmentRequests)
-            ..where((t) =>
-                t.id.equals(requestId) &
-                whereBusiness(t) &
-                t.status.equals('pending')))
-          .write(StockAdjustmentRequestsCompanion(
-        status: const Value('approved'),
-        approvedBy: Value(approverId),
-        approvedAt: Value(now),
-        lastUpdatedAt: Value(now),
-      ));
+      final affected =
+          await (update(stockAdjustmentRequests)..where(
+                (t) =>
+                    t.id.equals(requestId) &
+                    whereBusiness(t) &
+                    t.status.equals('pending'),
+              ))
+              .write(
+                StockAdjustmentRequestsCompanion(
+                  status: const Value('approved'),
+                  approvedBy: Value(approverId),
+                  approvedAt: Value(now),
+                  lastUpdatedAt: Value(now),
+                ),
+              );
       if (affected == 0) return; // lost the race
       didApprove = true;
       requestedBy = req.requestedBy;
       summary = req.summary;
 
-      final updated = await (select(stockAdjustmentRequests)
-            ..where((t) => t.id.equals(requestId) & whereBusiness(t)))
-          .getSingle();
-      await db.syncDao
-          .enqueueUpsert('stock_adjustment_requests', updated.toCompanion(true));
+      final updated = await (select(
+        stockAdjustmentRequests,
+      )..where((t) => t.id.equals(requestId) & whereBusiness(t))).getSingle();
+      await db.syncDao.enqueueUpsert(
+        'stock_adjustment_requests',
+        updated.toCompanion(true),
+      );
 
       await db.activityLogDao.log(
         action: 'stock_adjustment_approved',
@@ -5307,35 +5400,43 @@ class StockAdjustmentRequestsDao extends DatabaseAccessor<AppDatabase>
     var didReject = false;
 
     await transaction(() async {
-      final req = await (select(stockAdjustmentRequests)
-            ..where((t) => t.id.equals(requestId) & whereBusiness(t)))
-          .getSingleOrNull();
+      final req =
+          await (select(stockAdjustmentRequests)
+                ..where((t) => t.id.equals(requestId) & whereBusiness(t)))
+              .getSingleOrNull();
       if (req == null || req.status != 'pending') return;
       final now = DateTime.now();
-      final affected = await (update(stockAdjustmentRequests)
-            ..where((t) =>
-                t.id.equals(requestId) &
-                whereBusiness(t) &
-                t.status.equals('pending')))
-          .write(StockAdjustmentRequestsCompanion(
-        status: const Value('rejected'),
-        approvedBy: Value(approverId),
-        approvedAt: Value(now),
-        lastUpdatedAt: Value(now),
-      ));
+      final affected =
+          await (update(stockAdjustmentRequests)..where(
+                (t) =>
+                    t.id.equals(requestId) &
+                    whereBusiness(t) &
+                    t.status.equals('pending'),
+              ))
+              .write(
+                StockAdjustmentRequestsCompanion(
+                  status: const Value('rejected'),
+                  approvedBy: Value(approverId),
+                  approvedAt: Value(now),
+                  lastUpdatedAt: Value(now),
+                ),
+              );
       if (affected == 0) return;
       didReject = true;
       requestedBy = req.requestedBy;
 
-      final updated = await (select(stockAdjustmentRequests)
-            ..where((t) => t.id.equals(requestId) & whereBusiness(t)))
-          .getSingle();
-      await db.syncDao
-          .enqueueUpsert('stock_adjustment_requests', updated.toCompanion(true));
+      final updated = await (select(
+        stockAdjustmentRequests,
+      )..where((t) => t.id.equals(requestId) & whereBusiness(t))).getSingle();
+      await db.syncDao.enqueueUpsert(
+        'stock_adjustment_requests',
+        updated.toCompanion(true),
+      );
 
       await db.activityLogDao.log(
         action: 'stock_adjustment_rejected',
-        description: 'Rejected stock change: ${req.summary}'
+        description:
+            'Rejected stock change: ${req.summary}'
             '${hasReason ? ' — Reason: $trimmedReason' : ''}',
         staffId: approverId,
         storeId: req.storeId,
@@ -5346,7 +5447,8 @@ class StockAdjustmentRequestsDao extends DatabaseAccessor<AppDatabase>
     if (didReject && requestedBy != null) {
       await db.notificationsDao.fireNotification(
         type: 'stock_approval.rejected',
-        message: 'Your stock request was rejected'
+        message:
+            'Your stock request was rejected'
             '${hasReason ? ' — $trimmedReason' : '.'}',
         severity: 'warning',
         linkedRecordId: requestId,
@@ -5379,9 +5481,9 @@ class QuickSaleRequestsDao extends DatabaseAccessor<AppDatabase>
   /// realtime/pull sync path on the cashier's device). Emits null if the row
   /// doesn't exist locally yet.
   Stream<QuickSaleRequestData?> watchRequest(String id) {
-    return (select(quickSaleRequests)
-          ..where((t) => t.id.equals(id) & whereBusiness(t)))
-        .watchSingleOrNull();
+    return (select(
+      quickSaleRequests,
+    )..where((t) => t.id.equals(id) & whereBusiness(t))).watchSingleOrNull();
   }
 
   /// §12.3.1 — a cashier (role below Manager) submits a Quick Sale for approval.
@@ -5421,10 +5523,12 @@ class QuickSaleRequestsDao extends DatabaseAccessor<AppDatabase>
 
     // Approval audience: CEO (never store-assigned) + Manager(s) of this store.
     final ceoIds = await db.userBusinessesDao.getUserIdsForRoleSlugs(['ceo']);
-    final managerIds =
-        await db.userBusinessesDao.getUserIdsForRoleSlugs(['manager']);
-    final storeUserIds =
-        (await db.userStoresDao.getUserIdsForStore(storeId)).toSet();
+    final managerIds = await db.userBusinessesDao.getUserIdsForRoleSlugs([
+      'manager',
+    ]);
+    final storeUserIds = (await db.userStoresDao.getUserIdsForStore(
+      storeId,
+    )).toSet();
     final storeManagerIds = managerIds.where(storeUserIds.contains);
     for (final uid in <String>{...ceoIds, ...storeManagerIds}) {
       await db.notificationsDao.fireNotification(
@@ -5451,33 +5555,40 @@ class QuickSaleRequestsDao extends DatabaseAccessor<AppDatabase>
     var didApprove = false;
 
     await transaction(() async {
-      final req = await (select(quickSaleRequests)
-            ..where((t) => t.id.equals(requestId) & whereBusiness(t)))
-          .getSingleOrNull();
+      final req =
+          await (select(quickSaleRequests)
+                ..where((t) => t.id.equals(requestId) & whereBusiness(t)))
+              .getSingleOrNull();
       if (req == null || req.status != 'pending') return;
 
       final now = DateTime.now();
-      final affected = await (update(quickSaleRequests)
-            ..where((t) =>
-                t.id.equals(requestId) &
-                whereBusiness(t) &
-                t.status.equals('pending')))
-          .write(QuickSaleRequestsCompanion(
-        status: const Value('approved'),
-        approvedBy: Value(approverId),
-        approvedAt: Value(now),
-        lastUpdatedAt: Value(now),
-      ));
+      final affected =
+          await (update(quickSaleRequests)..where(
+                (t) =>
+                    t.id.equals(requestId) &
+                    whereBusiness(t) &
+                    t.status.equals('pending'),
+              ))
+              .write(
+                QuickSaleRequestsCompanion(
+                  status: const Value('approved'),
+                  approvedBy: Value(approverId),
+                  approvedAt: Value(now),
+                  lastUpdatedAt: Value(now),
+                ),
+              );
       if (affected == 0) return; // lost the race
       didApprove = true;
       requestedBy = req.requestedBy;
       summary = req.summary;
 
-      final updated = await (select(quickSaleRequests)
-            ..where((t) => t.id.equals(requestId) & whereBusiness(t)))
-          .getSingle();
-      await db.syncDao
-          .enqueueUpsert('quick_sale_requests', updated.toCompanion(true));
+      final updated = await (select(
+        quickSaleRequests,
+      )..where((t) => t.id.equals(requestId) & whereBusiness(t))).getSingle();
+      await db.syncDao.enqueueUpsert(
+        'quick_sale_requests',
+        updated.toCompanion(true),
+      );
 
       await db.activityLogDao.log(
         action: 'quick_sale_request_approved',
@@ -5512,35 +5623,43 @@ class QuickSaleRequestsDao extends DatabaseAccessor<AppDatabase>
     var didReject = false;
 
     await transaction(() async {
-      final req = await (select(quickSaleRequests)
-            ..where((t) => t.id.equals(requestId) & whereBusiness(t)))
-          .getSingleOrNull();
+      final req =
+          await (select(quickSaleRequests)
+                ..where((t) => t.id.equals(requestId) & whereBusiness(t)))
+              .getSingleOrNull();
       if (req == null || req.status != 'pending') return;
       final now = DateTime.now();
-      final affected = await (update(quickSaleRequests)
-            ..where((t) =>
-                t.id.equals(requestId) &
-                whereBusiness(t) &
-                t.status.equals('pending')))
-          .write(QuickSaleRequestsCompanion(
-        status: const Value('rejected'),
-        approvedBy: Value(approverId),
-        approvedAt: Value(now),
-        lastUpdatedAt: Value(now),
-      ));
+      final affected =
+          await (update(quickSaleRequests)..where(
+                (t) =>
+                    t.id.equals(requestId) &
+                    whereBusiness(t) &
+                    t.status.equals('pending'),
+              ))
+              .write(
+                QuickSaleRequestsCompanion(
+                  status: const Value('rejected'),
+                  approvedBy: Value(approverId),
+                  approvedAt: Value(now),
+                  lastUpdatedAt: Value(now),
+                ),
+              );
       if (affected == 0) return;
       didReject = true;
       requestedBy = req.requestedBy;
 
-      final updated = await (select(quickSaleRequests)
-            ..where((t) => t.id.equals(requestId) & whereBusiness(t)))
-          .getSingle();
-      await db.syncDao
-          .enqueueUpsert('quick_sale_requests', updated.toCompanion(true));
+      final updated = await (select(
+        quickSaleRequests,
+      )..where((t) => t.id.equals(requestId) & whereBusiness(t))).getSingle();
+      await db.syncDao.enqueueUpsert(
+        'quick_sale_requests',
+        updated.toCompanion(true),
+      );
 
       await db.activityLogDao.log(
         action: 'quick_sale_request_rejected',
-        description: 'Rejected Quick Sale: ${req.summary}'
+        description:
+            'Rejected Quick Sale: ${req.summary}'
             '${hasReason ? ' — Reason: $trimmedReason' : ''}',
         staffId: approverId,
         storeId: req.storeId,
@@ -5550,7 +5669,8 @@ class QuickSaleRequestsDao extends DatabaseAccessor<AppDatabase>
     if (didReject && requestedBy != null) {
       await db.notificationsDao.fireNotification(
         type: 'quick_sale_approval.rejected',
-        message: 'Your Quick Sale was rejected'
+        message:
+            'Your Quick Sale was rejected'
             '${hasReason ? ' — $trimmedReason' : '.'}',
         severity: 'warning',
         linkedRecordId: requestId,
@@ -5564,27 +5684,34 @@ class QuickSaleRequestsDao extends DatabaseAccessor<AppDatabase>
   /// longer be approved into the cart. No notification — the cashier acted.
   Future<void> cancelRequest({required String requestId}) async {
     await transaction(() async {
-      final req = await (select(quickSaleRequests)
-            ..where((t) => t.id.equals(requestId) & whereBusiness(t)))
-          .getSingleOrNull();
+      final req =
+          await (select(quickSaleRequests)
+                ..where((t) => t.id.equals(requestId) & whereBusiness(t)))
+              .getSingleOrNull();
       if (req == null || req.status != 'pending') return;
       final now = DateTime.now();
-      final affected = await (update(quickSaleRequests)
-            ..where((t) =>
-                t.id.equals(requestId) &
-                whereBusiness(t) &
-                t.status.equals('pending')))
-          .write(QuickSaleRequestsCompanion(
-        status: const Value('cancelled'),
-        lastUpdatedAt: Value(now),
-      ));
+      final affected =
+          await (update(quickSaleRequests)..where(
+                (t) =>
+                    t.id.equals(requestId) &
+                    whereBusiness(t) &
+                    t.status.equals('pending'),
+              ))
+              .write(
+                QuickSaleRequestsCompanion(
+                  status: const Value('cancelled'),
+                  lastUpdatedAt: Value(now),
+                ),
+              );
       if (affected == 0) return;
 
-      final updated = await (select(quickSaleRequests)
-            ..where((t) => t.id.equals(requestId) & whereBusiness(t)))
-          .getSingle();
-      await db.syncDao
-          .enqueueUpsert('quick_sale_requests', updated.toCompanion(true));
+      final updated = await (select(
+        quickSaleRequests,
+      )..where((t) => t.id.equals(requestId) & whereBusiness(t))).getSingle();
+      await db.syncDao.enqueueUpsert(
+        'quick_sale_requests',
+        updated.toCompanion(true),
+      );
 
       await db.activityLogDao.log(
         action: 'quick_sale_request_cancelled',
@@ -5643,12 +5770,14 @@ class PendingCrateReturnsDao extends DatabaseAccessor<AppDatabase>
     )..where((t) => t.id.equals(id) & whereBusiness(t))).write(comp);
     // Full-row enqueue: a partial pending_crate_returns upsert omits NOT NULL
     // customer_id / crate_size_group_id / quantity / submitted_by.
-    final row = await (select(pendingCrateReturns)
-          ..where((t) => t.id.equals(id) & whereBusiness(t)))
-        .getSingleOrNull();
+    final row = await (select(
+      pendingCrateReturns,
+    )..where((t) => t.id.equals(id) & whereBusiness(t))).getSingleOrNull();
     if (row != null) {
-      await db.syncDao
-          .enqueueUpsert('pending_crate_returns', row.toCompanion(true));
+      await db.syncDao.enqueueUpsert(
+        'pending_crate_returns',
+        row.toCompanion(true),
+      );
     }
   }
 }
@@ -5703,9 +5832,10 @@ class SessionsDao extends DatabaseAccessor<AppDatabase>
       sessions,
     )..where((t) => t.id.equals(sessionId) & whereBusiness(t))).write(comp);
     // Full-row enqueue: a partial sessions upsert omits NOT NULL user_id/expires_at.
-    final row = await (select(sessions)
-          ..where((t) => t.id.equals(sessionId) & whereBusiness(t)))
-        .getSingleOrNull();
+    final row =
+        await (select(sessions)
+              ..where((t) => t.id.equals(sessionId) & whereBusiness(t)))
+            .getSingleOrNull();
     if (row != null) {
       await db.syncDao.enqueueUpsert('sessions', row.toCompanion(true));
     }
@@ -5738,10 +5868,9 @@ class SessionsDao extends DatabaseAccessor<AppDatabase>
     for (final s in active) {
       await db.syncDao.enqueueUpsert(
         'sessions',
-        s.toCompanion(true).copyWith(
-              revokedAt: Value(now),
-              lastUpdatedAt: Value(now),
-            ),
+        s
+            .toCompanion(true)
+            .copyWith(revokedAt: Value(now), lastUpdatedAt: Value(now)),
       );
     }
   }
@@ -5789,9 +5918,10 @@ class CustomerWalletsDao extends DatabaseAccessor<AppDatabase>
       attachedDatabase.customers,
     )..where((t) => t.id.equals(customerId) & whereBusiness(t))).write(comp);
     // Full-row enqueue: a partial customers upsert omits the NOT NULL name.
-    final row = await (attachedDatabase.select(attachedDatabase.customers)
-          ..where((t) => t.id.equals(customerId) & whereBusiness(t)))
-        .getSingleOrNull();
+    final row =
+        await (attachedDatabase.select(attachedDatabase.customers)
+              ..where((t) => t.id.equals(customerId) & whereBusiness(t)))
+            .getSingleOrNull();
     if (row != null) {
       await db.syncDao.enqueueUpsert('customers', row.toCompanion(true));
     }
@@ -5834,8 +5964,9 @@ class WalletTransactionsDao extends DatabaseAccessor<AppDatabase>
       ..where(
         whereBusiness(walletTransactions) &
             walletTransactions.customerId.equals(customerId) &
-            walletTransactions.referenceType
-                .isNotIn(kCrateDepositReferenceTypes),
+            walletTransactions.referenceType.isNotIn(
+              kCrateDepositReferenceTypes,
+            ),
       );
     final row = await query.getSingleOrNull();
     return row?.read(sumExpr) ?? 0;
@@ -5848,8 +5979,9 @@ class WalletTransactionsDao extends DatabaseAccessor<AppDatabase>
       ..where(
         whereBusiness(walletTransactions) &
             walletTransactions.customerId.equals(customerId) &
-            walletTransactions.referenceType
-                .isNotIn(kCrateDepositReferenceTypes),
+            walletTransactions.referenceType.isNotIn(
+              kCrateDepositReferenceTypes,
+            ),
       );
     return query.watchSingleOrNull().map((row) => row?.read(sumExpr) ?? 0);
   }
@@ -5860,8 +5992,9 @@ class WalletTransactionsDao extends DatabaseAccessor<AppDatabase>
       ..addColumns([walletTransactions.customerId, sumExpr])
       ..where(
         whereBusiness(walletTransactions) &
-            walletTransactions.referenceType
-                .isNotIn(kCrateDepositReferenceTypes),
+            walletTransactions.referenceType.isNotIn(
+              kCrateDepositReferenceTypes,
+            ),
       )
       ..groupBy([walletTransactions.customerId]);
     return query.watch().map((rows) {
@@ -5981,11 +6114,11 @@ class WalletTransactionsDao extends DatabaseAccessor<AppDatabase>
             // under ASC), not a bare boolean — the boolean form was unreliable
             // in ORDER BY (see the signed-amount note below).
             (t) => OrderingTerm(
-                  expression: const CustomExpression<int>(
-                    "CASE WHEN reference_type = 'crate_refund' THEN 0 ELSE 1 END",
-                  ),
-                  mode: OrderingMode.asc,
-                ),
+              expression: const CustomExpression<int>(
+                "CASE WHEN reference_type = 'crate_refund' THEN 0 ELSE 1 END",
+              ),
+              mode: OrderingMode.asc,
+            ),
             // §14.3 (bug #3) — newest activity first. A sale's two legs share
             // the same second (created_at is second-resolution + createOrder
             // stamps both legs the same instant), so this tiebreak decides their
@@ -5996,9 +6129,9 @@ class WalletTransactionsDao extends DatabaseAccessor<AppDatabase>
             // ORDER BY → fell back to rowid order, which differed in-memory vs
             // the on-device file DB) or the random-tailed UuidV7 id.
             (t) => OrderingTerm(
-                  expression: t.signedAmountKobo,
-                  mode: OrderingMode.asc,
-                ),
+              expression: t.signedAmountKobo,
+              mode: OrderingMode.asc,
+            ),
           ]))
         .watch();
   }
@@ -6010,8 +6143,9 @@ class WalletTransactionsDao extends DatabaseAccessor<AppDatabase>
     required String voidedBy,
     required String reason,
   }) async {
-    final flagValue =
-        await db.systemConfigDao.get('feature.domain_rpcs_v2.void_wallet_txn');
+    final flagValue = await db.systemConfigDao.get(
+      'feature.domain_rpcs_v2.void_wallet_txn',
+    );
     final useDomainRpc = flagValue == 'true' || flagValue == '"true"';
 
     await transaction(() async {
@@ -6063,13 +6197,16 @@ class WalletTransactionsDao extends DatabaseAccessor<AppDatabase>
           'p_compensating_id': compId,
           'p_void_reason': reason,
         };
-        await db.syncDao
-            .enqueue('domain:pos_void_wallet_txn', jsonEncode(payload));
+        await db.syncDao.enqueue(
+          'domain:pos_void_wallet_txn',
+          jsonEncode(payload),
+        );
       } else {
-        final updatedOrig = await (select(walletTransactions)
-              ..where((t) => t.id.equals(transactionId))
-              ..limit(1))
-            .getSingle();
+        final updatedOrig =
+            await (select(walletTransactions)
+                  ..where((t) => t.id.equals(transactionId))
+                  ..limit(1))
+                .getSingle();
         await db.syncDao.enqueueUpsert('wallet_transactions', updatedOrig);
         await db.syncDao.enqueueUpsert('wallet_transactions', compComp);
       }
@@ -6103,8 +6240,7 @@ class SupplierLedgerDao extends DatabaseAccessor<AppDatabase>
     final query = selectOnly(supplierLedgerEntries)
       ..addColumns([sumExpr])
       ..where(
-        _scope(storeId) &
-            supplierLedgerEntries.supplierId.equals(supplierId),
+        _scope(storeId) & supplierLedgerEntries.supplierId.equals(supplierId),
       );
     final row = await query.getSingleOrNull();
     return row?.read(sumExpr) ?? 0;
@@ -6115,8 +6251,7 @@ class SupplierLedgerDao extends DatabaseAccessor<AppDatabase>
     final query = selectOnly(supplierLedgerEntries)
       ..addColumns([sumExpr])
       ..where(
-        _scope(storeId) &
-            supplierLedgerEntries.supplierId.equals(supplierId),
+        _scope(storeId) & supplierLedgerEntries.supplierId.equals(supplierId),
       );
     return query.watchSingleOrNull().map((row) => row?.read(sumExpr) ?? 0);
   }
@@ -6144,18 +6279,19 @@ class SupplierLedgerDao extends DatabaseAccessor<AppDatabase>
   /// as the wallet: createdAt DESC, then signedAmountKobo ASC (invoice debit
   /// above payment credit when posted the same second). [storeId] scopes per
   /// store (§21.11); null = business-wide.
-  Stream<List<SupplierLedgerEntryData>> watchHistory(String supplierId,
-      {String? storeId}) {
+  Stream<List<SupplierLedgerEntryData>> watchHistory(
+    String supplierId, {
+    String? storeId,
+  }) {
     return (select(supplierLedgerEntries)
-          ..where((t) =>
-              _scope(storeId) & t.supplierId.equals(supplierId))
+          ..where((t) => _scope(storeId) & t.supplierId.equals(supplierId))
           ..orderBy([
             (t) =>
                 OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc),
             (t) => OrderingTerm(
-                  expression: t.signedAmountKobo,
-                  mode: OrderingMode.asc,
-                ),
+              expression: t.signedAmountKobo,
+              mode: OrderingMode.asc,
+            ),
           ]))
         .watch();
   }
@@ -6170,9 +6306,9 @@ class SupplierLedgerDao extends DatabaseAccessor<AppDatabase>
             (t) =>
                 OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc),
             (t) => OrderingTerm(
-                  expression: t.signedAmountKobo,
-                  mode: OrderingMode.asc,
-                ),
+              expression: t.signedAmountKobo,
+              mode: OrderingMode.asc,
+            ),
           ]))
         .watch();
   }
@@ -6186,22 +6322,25 @@ class SupplierLedgerDao extends DatabaseAccessor<AppDatabase>
     required String reason,
   }) async {
     await transaction(() async {
-      final original = await (select(supplierLedgerEntries)
-            ..where((t) => t.id.equals(entryId))
-            ..limit(1))
-          .getSingleOrNull();
+      final original =
+          await (select(supplierLedgerEntries)
+                ..where((t) => t.id.equals(entryId))
+                ..limit(1))
+              .getSingleOrNull();
       if (original == null) return;
       if (original.voidedAt != null) return; // Already voided
 
       final now = DateTime.now();
-      await (update(supplierLedgerEntries)
-            ..where((t) => t.id.equals(entryId)))
-          .write(SupplierLedgerEntriesCompanion(
-        voidedAt: Value(now),
-        voidedBy: Value(voidedBy),
-        voidReason: Value(reason),
-        lastUpdatedAt: Value(now),
-      ));
+      await (update(
+        supplierLedgerEntries,
+      )..where((t) => t.id.equals(entryId))).write(
+        SupplierLedgerEntriesCompanion(
+          voidedAt: Value(now),
+          voidedBy: Value(voidedBy),
+          voidReason: Value(reason),
+          lastUpdatedAt: Value(now),
+        ),
+      );
 
       final compId = UuidV7.generate();
       final compComp = SupplierLedgerEntriesCompanion.insert(
@@ -6222,10 +6361,11 @@ class SupplierLedgerDao extends DatabaseAccessor<AppDatabase>
       );
       await into(supplierLedgerEntries).insert(compComp);
 
-      final updatedOrig = await (select(supplierLedgerEntries)
-            ..where((t) => t.id.equals(entryId))
-            ..limit(1))
-          .getSingle();
+      final updatedOrig =
+          await (select(supplierLedgerEntries)
+                ..where((t) => t.id.equals(entryId))
+                ..limit(1))
+              .getSingle();
       await db.syncDao.enqueueUpsert('supplier_ledger_entries', updatedOrig);
       await db.syncDao.enqueueUpsert('supplier_ledger_entries', compComp);
     });
@@ -6358,15 +6498,11 @@ class StockCountsDao extends DatabaseAccessor<AppDatabase>
   }
 
   /// Saved counts for a given store + day (the report's per-day drill-down).
-  Future<List<StockCountData>> getForDay(
-    String? storeId,
-    String businessDate,
-  ) {
-    return (select(stockCounts)
-          ..where((t) {
-            final base = whereBusiness(t) & t.businessDate.equals(businessDate);
-            return storeId == null ? base : base & t.storeId.equals(storeId);
-          }))
+  Future<List<StockCountData>> getForDay(String? storeId, String businessDate) {
+    return (select(stockCounts)..where((t) {
+          final base = whereBusiness(t) & t.businessDate.equals(businessDate);
+          return storeId == null ? base : base & t.storeId.equals(storeId);
+        }))
         .get();
   }
 }
@@ -6380,9 +6516,9 @@ class ManufacturerCrateBalancesDao extends DatabaseAccessor<AppDatabase>
   Stream<List<ManufacturerCrateBalance>> watchByManufacturer(
     String manufacturerId,
   ) {
-    return (select(manufacturerCrateBalances)
-          ..where((t) =>
-              whereBusiness(t) & t.manufacturerId.equals(manufacturerId)))
+    return (select(manufacturerCrateBalances)..where(
+          (t) => whereBusiness(t) & t.manufacturerId.equals(manufacturerId),
+        ))
         .watch();
   }
 }
@@ -6397,24 +6533,22 @@ class StoreCrateBalancesDao extends DatabaseAccessor<AppDatabase>
     required String storeId,
     required String manufacturerId,
   }) async {
-    final row = await (select(storeCrateBalances)
-          ..where(
-            (t) =>
-                whereBusiness(t) &
-                t.storeId.equals(storeId) &
-                t.manufacturerId.equals(manufacturerId),
-          ))
-        .getSingleOrNull();
+    final row =
+        await (select(storeCrateBalances)..where(
+              (t) =>
+                  whereBusiness(t) &
+                  t.storeId.equals(storeId) &
+                  t.manufacturerId.equals(manufacturerId),
+            ))
+            .getSingleOrNull();
     return row?.balance ?? 0;
   }
 
   /// Per-store crate balance for a manufacturer (§16.8.1).
   Stream<List<StoreCrateBalanceData>> watchForStore(String storeId) {
-    return (select(storeCrateBalances)
-          ..where(
-            (t) => whereBusiness(t) & t.storeId.equals(storeId),
-          ))
-        .watch();
+    return (select(
+      storeCrateBalances,
+    )..where((t) => whereBusiness(t) & t.storeId.equals(storeId))).watch();
   }
 
   /// UPSERT a store's crate balance for [manufacturerId] by [delta].
@@ -6433,23 +6567,17 @@ class StoreCrateBalancesDao extends DatabaseAccessor<AppDatabase>
       'ON CONFLICT(business_id, store_id, manufacturer_id) DO UPDATE SET '
       '  balance = balance + excluded.balance, '
       "  last_updated_at = CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)",
-      [
-        UuidV7.generate(),
-        requireBusinessId(),
-        storeId,
-        manufacturerId,
-        delta,
-      ],
+      [UuidV7.generate(), requireBusinessId(), storeId, manufacturerId, delta],
     );
     // Enqueue the updated cache row for cloud push.
-    final row = await (select(storeCrateBalances)
-          ..where(
-            (t) =>
-                whereBusiness(t) &
-                t.storeId.equals(storeId) &
-                t.manufacturerId.equals(manufacturerId),
-          ))
-        .getSingleOrNull();
+    final row =
+        await (select(storeCrateBalances)..where(
+              (t) =>
+                  whereBusiness(t) &
+                  t.storeId.equals(storeId) &
+                  t.manufacturerId.equals(manufacturerId),
+            ))
+            .getSingleOrNull();
     if (row != null) {
       await db.syncDao.enqueueUpsert(
         'store_crate_balances',
@@ -6479,14 +6607,14 @@ class StoreCrateBalancesDao extends DatabaseAccessor<AppDatabase>
         newBalance,
       ],
     );
-    final row = await (select(storeCrateBalances)
-          ..where(
-            (t) =>
-                whereBusiness(t) &
-                t.storeId.equals(storeId) &
-                t.manufacturerId.equals(manufacturerId),
-          ))
-        .getSingleOrNull();
+    final row =
+        await (select(storeCrateBalances)..where(
+              (t) =>
+                  whereBusiness(t) &
+                  t.storeId.equals(storeId) &
+                  t.manufacturerId.equals(manufacturerId),
+            ))
+            .getSingleOrNull();
     if (row != null) {
       await db.syncDao.enqueueUpsert(
         'store_crate_balances',
@@ -6511,8 +6639,9 @@ class CrateLedgerDao extends DatabaseAccessor<AppDatabase>
   }) async {
     final delta = -quantity; // returning empties reduces our balance
 
-    final flagValue = await db.systemConfigDao
-        .get('feature.domain_rpcs_v2.record_crate_return');
+    final flagValue = await db.systemConfigDao.get(
+      'feature.domain_rpcs_v2.record_crate_return',
+    );
     final useDomainRpc = flagValue == 'true' || flagValue == '"true"';
 
     await transaction(() async {
@@ -6539,12 +6668,7 @@ class CrateLedgerDao extends DatabaseAccessor<AppDatabase>
         'ON CONFLICT(business_id, manufacturer_id) DO UPDATE SET '
         'balance = balance + excluded.balance, '
         'last_updated_at = CAST(strftime(\'%s\', CURRENT_TIMESTAMP) AS INTEGER)',
-        [
-          UuidV7.generate(),
-          requireBusinessId(),
-          manufacturerId,
-          delta,
-        ],
+        [UuidV7.generate(), requireBusinessId(), manufacturerId, delta],
       );
 
       // 2b. Update per-store cache if a storeId is provided (§16.8.1).
@@ -6567,8 +6691,10 @@ class CrateLedgerDao extends DatabaseAccessor<AppDatabase>
           'p_quantity_delta': delta,
           'p_movement_type': 'returned',
         };
-        await db.syncDao
-            .enqueue('domain:pos_record_crate_return', jsonEncode(payload));
+        await db.syncDao.enqueue(
+          'domain:pos_record_crate_return',
+          jsonEncode(payload),
+        );
       } else {
         await db.syncDao.enqueueUpsert('crate_ledger', ledgerComp);
         final updatedBalance =
@@ -6597,8 +6723,9 @@ class CrateLedgerDao extends DatabaseAccessor<AppDatabase>
   }) async {
     final delta = -quantity; // customer returning reduces balance
 
-    final flagValue = await db.systemConfigDao
-        .get('feature.domain_rpcs_v2.record_crate_return');
+    final flagValue = await db.systemConfigDao.get(
+      'feature.domain_rpcs_v2.record_crate_return',
+    );
     final useDomainRpc = flagValue == 'true' || flagValue == '"true"';
 
     await transaction(() async {
@@ -6646,8 +6773,10 @@ class CrateLedgerDao extends DatabaseAccessor<AppDatabase>
           'p_movement_type': 'returned',
           if (orderId != null) 'p_reference_order_id': orderId,
         };
-        await db.syncDao
-            .enqueue('domain:pos_record_crate_return', jsonEncode(payload));
+        await db.syncDao.enqueue(
+          'domain:pos_record_crate_return',
+          jsonEncode(payload),
+        );
       } else {
         await db.syncDao.enqueueUpsert('crate_ledger', ledgerComp);
         final updatedBalance =
@@ -6660,8 +6789,10 @@ class CrateLedgerDao extends DatabaseAccessor<AppDatabase>
                   )
                   ..limit(1))
                 .getSingle();
-        await db.syncDao
-            .enqueueUpsert('customer_crate_balances', updatedBalance);
+        await db.syncDao.enqueueUpsert(
+          'customer_crate_balances',
+          updatedBalance,
+        );
       }
     });
   }
@@ -6719,17 +6850,17 @@ class CrateLedgerDao extends DatabaseAccessor<AppDatabase>
     );
 
     await db.syncDao.enqueueUpsert('crate_ledger', ledgerComp);
-    final updatedBalance = await (select(customerCrateBalances)
-          ..where(
-            (t) =>
-                whereBusiness(t) &
-                t.customerId.equals(customerId) &
-                t.manufacturerId.equals(manufacturerId),
-          )
-          ..limit(1))
-        .getSingle();
-    await db.syncDao
-        .enqueueUpsert('customer_crate_balances', updatedBalance);
+    final updatedBalance =
+        await (select(customerCrateBalances)
+              ..where(
+                (t) =>
+                    whereBusiness(t) &
+                    t.customerId.equals(customerId) &
+                    t.manufacturerId.equals(manufacturerId),
+              )
+              ..limit(1))
+            .getSingle();
+    await db.syncDao.enqueueUpsert('customer_crate_balances', updatedBalance);
   }
 
   /// Verification logic to ensure cache tables match ledger sums.
@@ -6800,9 +6931,7 @@ class CrateLedgerDao extends DatabaseAccessor<AppDatabase>
 
       final cache =
           await (select(manufacturerCrateBalances)..where(
-                (t) =>
-                    whereBusiness(t) &
-                    t.manufacturerId.equals(mfrId),
+                (t) => whereBusiness(t) & t.manufacturerId.equals(mfrId),
               ))
               .getSingleOrNull();
 
@@ -6928,8 +7057,9 @@ class BusinessesDao extends DatabaseAccessor<AppDatabase>
         lastUpdatedAt: Value(DateTime.now()),
       ),
     );
-    final row =
-        await (select(businesses)..where((t) => t.id.equals(id))).getSingle();
+    final row = await (select(
+      businesses,
+    )..where((t) => t.id.equals(id))).getSingle();
     await db.syncDao.enqueueUpsert('businesses', row);
   }
 }
@@ -6970,26 +7100,25 @@ class PermissionsDao extends DatabaseAccessor<AppDatabase>
   PermissionsDao(super.db);
 
   Future<List<PermissionData>> getAll() {
-    return (select(permissions)
-          ..orderBy([
-            (t) => OrderingTerm.asc(t.category),
-            (t) => OrderingTerm.asc(t.key),
-          ]))
+    return (select(permissions)..orderBy([
+          (t) => OrderingTerm.asc(t.category),
+          (t) => OrderingTerm.asc(t.key),
+        ]))
         .get();
   }
 
   Stream<List<PermissionData>> watchAll() {
-    return (select(permissions)
-          ..orderBy([
-            (t) => OrderingTerm.asc(t.category),
-            (t) => OrderingTerm.asc(t.key),
-          ]))
+    return (select(permissions)..orderBy([
+          (t) => OrderingTerm.asc(t.category),
+          (t) => OrderingTerm.asc(t.key),
+        ]))
         .watch();
   }
 
   Future<PermissionData?> getByKey(String key) {
-    return (select(permissions)..where((t) => t.key.equals(key)))
-        .getSingleOrNull();
+    return (select(
+      permissions,
+    )..where((t) => t.key.equals(key))).getSingleOrNull();
   }
 }
 
@@ -7075,8 +7204,9 @@ class RolePermissionsDao extends DatabaseAccessor<AppDatabase>
         await (selectOnly(rolePermissions)
               ..addColumns([rolePermissions.id.count()])
               ..where(
-                  whereBusiness(rolePermissions) &
-                      rolePermissions.roleId.equals(roleId)))
+                whereBusiness(rolePermissions) &
+                    rolePermissions.roleId.equals(roleId),
+              ))
             .getSingle();
     return row.read(rolePermissions.id.count()) ?? 0;
   }
@@ -7088,13 +7218,16 @@ class RolePermissionsDao extends DatabaseAccessor<AppDatabase>
   /// the pair already exists — e.g. a stale toggle, or a row that arrived from
   /// the cloud since the UI last built.
   Future<void> grant(String roleId, String permissionKey) async {
-    final existing = await (select(rolePermissions)
-          ..where((t) =>
-              whereBusiness(t) &
-              t.roleId.equals(roleId) &
-              t.permissionKey.equals(permissionKey))
-          ..limit(1))
-        .getSingleOrNull();
+    final existing =
+        await (select(rolePermissions)
+              ..where(
+                (t) =>
+                    whereBusiness(t) &
+                    t.roleId.equals(roleId) &
+                    t.permissionKey.equals(permissionKey),
+              )
+              ..limit(1))
+            .getSingleOrNull();
     if (existing != null) return; // already granted — nothing to do
     final row = RolePermissionsCompanion.insert(
       id: Value(UuidV7.generate()),
@@ -7111,16 +7244,20 @@ class RolePermissionsDao extends DatabaseAccessor<AppDatabase>
   /// tombstone — `role_permissions` is not an append-only ledger, so
   /// hard-delete via `enqueueDelete` is the right path here.
   Future<void> revoke(String roleId, String permissionKey) async {
-    final existing = await (select(rolePermissions)
-          ..where((t) =>
-              whereBusiness(t) &
-              t.roleId.equals(roleId) &
-              t.permissionKey.equals(permissionKey))
-          ..limit(1))
-        .getSingleOrNull();
+    final existing =
+        await (select(rolePermissions)
+              ..where(
+                (t) =>
+                    whereBusiness(t) &
+                    t.roleId.equals(roleId) &
+                    t.permissionKey.equals(permissionKey),
+              )
+              ..limit(1))
+            .getSingleOrNull();
     if (existing == null) return;
-    await (delete(rolePermissions)..where((t) => t.id.equals(existing.id)))
-        .go();
+    await (delete(
+      rolePermissions,
+    )..where((t) => t.id.equals(existing.id))).go();
     await db.syncDao.enqueueDelete('role_permissions', existing.id);
   }
 }
@@ -7155,22 +7292,25 @@ class UserPermissionOverridesDao extends DatabaseAccessor<AppDatabase>
     String permissionKey,
     bool? value,
   ) async {
-    final existing = await (select(userPermissionOverrides)
-          ..where((t) =>
-              whereBusiness(t) &
-              t.userId.equals(userId) &
-              t.permissionKey.equals(permissionKey))
-          ..limit(1))
-        .getSingleOrNull();
+    final existing =
+        await (select(userPermissionOverrides)
+              ..where(
+                (t) =>
+                    whereBusiness(t) &
+                    t.userId.equals(userId) &
+                    t.permissionKey.equals(permissionKey),
+              )
+              ..limit(1))
+            .getSingleOrNull();
 
     if (value == null) {
       // Inherit — remove the override row and tombstone it cloud-side.
       // `user_permission_overrides` is not an append-only ledger, so
       // hard-delete via `enqueueDelete` is the right path here.
       if (existing == null) return;
-      await (delete(userPermissionOverrides)
-            ..where((t) => t.id.equals(existing.id)))
-          .go();
+      await (delete(
+        userPermissionOverrides,
+      )..where((t) => t.id.equals(existing.id))).go();
       await db.syncDao.enqueueDelete('user_permission_overrides', existing.id);
       return;
     }
@@ -7185,9 +7325,9 @@ class UserPermissionOverridesDao extends DatabaseAccessor<AppDatabase>
         isGranted: Value(value),
         lastUpdatedAt: Value(DateTime.now()),
       );
-      await (update(userPermissionOverrides)
-            ..where((t) => t.id.equals(existing.id)))
-          .write(row);
+      await (update(
+        userPermissionOverrides,
+      )..where((t) => t.id.equals(existing.id))).write(row);
       await db.syncDao.enqueueUpsert('user_permission_overrides', row);
       return;
     }
@@ -7211,8 +7351,9 @@ class UserPermissionOverridesDao extends DatabaseAccessor<AppDatabase>
   Future<int> clearAllForUser(String userId) async {
     final rows = await getForUser(userId);
     for (final r in rows) {
-      await (delete(userPermissionOverrides)..where((t) => t.id.equals(r.id)))
-          .go();
+      await (delete(
+        userPermissionOverrides,
+      )..where((t) => t.id.equals(r.id))).go();
       await db.syncDao.enqueueDelete('user_permission_overrides', r.id);
     }
     return rows.length;
@@ -7225,23 +7366,28 @@ class StoreRolePermissionsDao extends DatabaseAccessor<AppDatabase>
   StoreRolePermissionsDao(super.db);
 
   Stream<List<StoreRolePermissionData>> watchFor(
-      String storeId, String roleId) {
+    String storeId,
+    String roleId,
+  ) {
     return (select(storeRolePermissions)
-          ..where((t) =>
-              whereBusiness(t) &
-              t.storeId.equals(storeId) &
-              t.roleId.equals(roleId))
+          ..where(
+            (t) =>
+                whereBusiness(t) &
+                t.storeId.equals(storeId) &
+                t.roleId.equals(roleId),
+          )
           ..orderBy([(t) => OrderingTerm.asc(t.permissionKey)]))
         .watch();
   }
 
-  Future<List<StoreRolePermissionData>> getFor(
-      String storeId, String roleId) {
+  Future<List<StoreRolePermissionData>> getFor(String storeId, String roleId) {
     return (select(storeRolePermissions)
-          ..where((t) =>
-              whereBusiness(t) &
-              t.storeId.equals(storeId) &
-              t.roleId.equals(roleId))
+          ..where(
+            (t) =>
+                whereBusiness(t) &
+                t.storeId.equals(storeId) &
+                t.roleId.equals(roleId),
+          )
           ..orderBy([(t) => OrderingTerm.asc(t.permissionKey)]))
         .get();
   }
@@ -7259,23 +7405,26 @@ class StoreRolePermissionsDao extends DatabaseAccessor<AppDatabase>
     String permissionKey,
     bool? value,
   ) async {
-    final existing = await (select(storeRolePermissions)
-          ..where((t) =>
-              whereBusiness(t) &
-              t.storeId.equals(storeId) &
-              t.roleId.equals(roleId) &
-              t.permissionKey.equals(permissionKey))
-          ..limit(1))
-        .getSingleOrNull();
+    final existing =
+        await (select(storeRolePermissions)
+              ..where(
+                (t) =>
+                    whereBusiness(t) &
+                    t.storeId.equals(storeId) &
+                    t.roleId.equals(roleId) &
+                    t.permissionKey.equals(permissionKey),
+              )
+              ..limit(1))
+            .getSingleOrNull();
 
     if (value == null) {
       // Inherit — remove the override row and tombstone it cloud-side.
       // `store_role_permissions` is not an append-only ledger, so hard-delete
       // via `enqueueDelete` is the right path here.
       if (existing == null) return;
-      await (delete(storeRolePermissions)
-            ..where((t) => t.id.equals(existing.id)))
-          .go();
+      await (delete(
+        storeRolePermissions,
+      )..where((t) => t.id.equals(existing.id))).go();
       await db.syncDao.enqueueDelete('store_role_permissions', existing.id);
       return;
     }
@@ -7291,9 +7440,9 @@ class StoreRolePermissionsDao extends DatabaseAccessor<AppDatabase>
         isGranted: Value(value),
         lastUpdatedAt: Value(DateTime.now()),
       );
-      await (update(storeRolePermissions)
-            ..where((t) => t.id.equals(existing.id)))
-          .write(row);
+      await (update(
+        storeRolePermissions,
+      )..where((t) => t.id.equals(existing.id))).write(row);
       await db.syncDao.enqueueUpsert('store_role_permissions', row);
       return;
     }
@@ -7318,8 +7467,9 @@ class StoreRolePermissionsDao extends DatabaseAccessor<AppDatabase>
   Future<int> clearAllForStoreRole(String storeId, String roleId) async {
     final rows = await getFor(storeId, roleId);
     for (final r in rows) {
-      await (delete(storeRolePermissions)..where((t) => t.id.equals(r.id)))
-          .go();
+      await (delete(
+        storeRolePermissions,
+      )..where((t) => t.id.equals(r.id))).go();
       await db.syncDao.enqueueDelete('store_role_permissions', r.id);
     }
     return rows.length;
@@ -7346,37 +7496,44 @@ class RoleSettingsDao extends DatabaseAccessor<AppDatabase>
   }
 
   Future<String?> getValue(String roleId, String settingKey) async {
-    final row = await (select(roleSettings)
-          ..where((t) =>
-              whereBusiness(t) &
-              t.roleId.equals(roleId) &
-              t.settingKey.equals(settingKey))
-          ..limit(1))
-        .getSingleOrNull();
+    final row =
+        await (select(roleSettings)
+              ..where(
+                (t) =>
+                    whereBusiness(t) &
+                    t.roleId.equals(roleId) &
+                    t.settingKey.equals(settingKey),
+              )
+              ..limit(1))
+            .getSingleOrNull();
     return row?.settingValue;
   }
 
   /// Set a setting value. Upserts on (role_id, setting_key).
   Future<void> set(String roleId, String settingKey, String? value) async {
-    final existing = await (select(roleSettings)
-          ..where((t) =>
-              whereBusiness(t) &
-              t.roleId.equals(roleId) &
-              t.settingKey.equals(settingKey))
-          ..limit(1))
-        .getSingleOrNull();
+    final existing =
+        await (select(roleSettings)
+              ..where(
+                (t) =>
+                    whereBusiness(t) &
+                    t.roleId.equals(roleId) &
+                    t.settingKey.equals(settingKey),
+              )
+              ..limit(1))
+            .getSingleOrNull();
     if (existing != null) {
       final comp = RoleSettingsCompanion(
         id: Value(existing.id),
         settingValue: Value(value),
         lastUpdatedAt: Value(DateTime.now()),
       );
-      await (update(roleSettings)..where((t) => t.id.equals(existing.id)))
-          .write(comp);
+      await (update(
+        roleSettings,
+      )..where((t) => t.id.equals(existing.id))).write(comp);
       // Refresh full row for enqueue (payload carries businessId etc.)
-      final refreshed = await (select(roleSettings)
-            ..where((t) => t.id.equals(existing.id)))
-          .getSingle();
+      final refreshed = await (select(
+        roleSettings,
+      )..where((t) => t.id.equals(existing.id))).getSingle();
       await db.syncDao.enqueueUpsert('role_settings', refreshed);
     } else {
       final comp = RoleSettingsCompanion.insert(
@@ -7412,13 +7569,16 @@ class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
   Future<String?> getCeoUserId() async {
     final ceoRole = await db.rolesDao.getBySlug('ceo');
     if (ceoRole == null) return null;
-    final row = await (select(userBusinesses)
-          ..where((t) =>
-              whereBusiness(t) &
-              t.roleId.equals(ceoRole.id) &
-              t.status.equals('active'))
-          ..limit(1))
-        .getSingleOrNull();
+    final row =
+        await (select(userBusinesses)
+              ..where(
+                (t) =>
+                    whereBusiness(t) &
+                    t.roleId.equals(ceoRole.id) &
+                    t.status.equals('active'),
+              )
+              ..limit(1))
+            .getSingleOrNull();
     return row?.userId;
   }
 
@@ -7427,13 +7587,14 @@ class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
   /// closed" fires to CEO + Manager). Empty if none resolve locally.
   Future<List<String>> getUserIdsForRoleSlugs(List<String> slugs) async {
     if (slugs.isEmpty) return const [];
-    final query = select(userBusinesses).join([
-      innerJoin(roles, roles.id.equalsExp(userBusinesses.roleId)),
-    ])..where(
-        whereBusiness(userBusinesses) &
-            userBusinesses.status.equals('active') &
-            roles.slug.isIn(slugs),
-      );
+    final query =
+        select(userBusinesses).join([
+          innerJoin(roles, roles.id.equalsExp(userBusinesses.roleId)),
+        ])..where(
+          whereBusiness(userBusinesses) &
+              userBusinesses.status.equals('active') &
+              roles.slug.isIn(slugs),
+        );
     final rows = await query.get();
     return rows.map((r) => r.readTable(userBusinesses).userId).toList();
   }
@@ -7457,23 +7618,26 @@ class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
   Stream<List<WhoIsWorkingEntry>> watchActiveStaffForBusiness(
     String businessId,
   ) {
-    final query = select(userBusinesses).join([
-      innerJoin(users, users.id.equalsExp(userBusinesses.userId)),
-      leftOuterJoin(roles, roles.id.equalsExp(userBusinesses.roleId)),
-    ])
-      ..where(
-        userBusinesses.businessId.equals(businessId) &
-            userBusinesses.status.equals('active'),
-      )
-      ..orderBy([OrderingTerm.asc(users.name)]);
+    final query =
+        select(userBusinesses).join([
+            innerJoin(users, users.id.equalsExp(userBusinesses.userId)),
+            leftOuterJoin(roles, roles.id.equalsExp(userBusinesses.roleId)),
+          ])
+          ..where(
+            userBusinesses.businessId.equals(businessId) &
+                userBusinesses.status.equals('active'),
+          )
+          ..orderBy([OrderingTerm.asc(users.name)]);
     return query.watch().map(
-          (rows) => rows
-              .map((row) => WhoIsWorkingEntry(
-                    user: row.readTable(users),
-                    role: row.readTableOrNull(roles),
-                  ))
-              .toList(),
-        );
+      (rows) => rows
+          .map(
+            (row) => WhoIsWorkingEntry(
+              user: row.readTable(users),
+              role: row.readTableOrNull(roles),
+            ),
+          )
+          .toList(),
+    );
   }
 
   /// One-shot count of active staff for [businessId]. Drives cold-start
@@ -7482,11 +7646,14 @@ class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
   /// session-scoped (runs before sign-in), same as [watchActiveStaffForBusiness].
   Future<int> countActiveStaffForBusiness(String businessId) async {
     final countExp = userBusinesses.id.count();
-    final row = await (selectOnly(userBusinesses)
-          ..addColumns([countExp])
-          ..where(userBusinesses.businessId.equals(businessId) &
-              userBusinesses.status.equals('active')))
-        .getSingle();
+    final row =
+        await (selectOnly(userBusinesses)
+              ..addColumns([countExp])
+              ..where(
+                userBusinesses.businessId.equals(businessId) &
+                    userBusinesses.status.equals('active'),
+              ))
+            .getSingle();
     return row.read(countExp) ?? 0;
   }
 
@@ -7494,8 +7661,9 @@ class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
   /// at most one row, but the query supports the Phase 2 multi-
   /// business model without a schema change.
   Future<List<UserBusinessData>> getForUser(String userId) {
-    return (select(userBusinesses)..where((t) => t.userId.equals(userId)))
-        .get();
+    return (select(
+      userBusinesses,
+    )..where((t) => t.userId.equals(userId))).get();
   }
 
   /// Reactive memberships for a specific user, NOT scoped to the current
@@ -7503,8 +7671,9 @@ class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
   /// before login binds a business (the shared-PIN picker). Drives
   /// `userRoleProvider`.
   Stream<List<UserBusinessData>> watchForUser(String userId) {
-    return (select(userBusinesses)..where((t) => t.userId.equals(userId)))
-        .watch();
+    return (select(
+      userBusinesses,
+    )..where((t) => t.userId.equals(userId))).watch();
   }
 
   Future<UserBusinessData?> getForUserInBusiness(
@@ -7512,8 +7681,9 @@ class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
     String businessId,
   ) {
     return (select(userBusinesses)
-          ..where((t) =>
-              t.userId.equals(userId) & t.businessId.equals(businessId))
+          ..where(
+            (t) => t.userId.equals(userId) & t.businessId.equals(businessId),
+          )
           ..limit(1))
         .getSingleOrNull();
   }
@@ -7527,33 +7697,35 @@ class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
   /// `'suspended'` (matches the CHECK constraint). Enqueues the updated
   /// row for sync.
   Future<void> setStatus(String membershipId, String status) async {
-    await (update(userBusinesses)..where((t) => t.id.equals(membershipId)))
-        .write(
+    await (update(
+      userBusinesses,
+    )..where((t) => t.id.equals(membershipId))).write(
       UserBusinessesCompanion(
         status: Value(status),
         lastUpdatedAt: Value(DateTime.now()),
       ),
     );
     // Re-read the full row so the enqueue payload carries businessId etc.
-    final refreshed = await (select(userBusinesses)
-          ..where((t) => t.id.equals(membershipId)))
-        .getSingle();
+    final refreshed = await (select(
+      userBusinesses,
+    )..where((t) => t.id.equals(membershipId))).getSingle();
     await db.syncDao.enqueueUpsert('user_businesses', refreshed);
   }
 
   /// Change the role on a membership. Enqueues the updated row for sync.
   Future<void> setRole(String membershipId, String roleId) async {
-    await (update(userBusinesses)..where((t) => t.id.equals(membershipId)))
-        .write(
+    await (update(
+      userBusinesses,
+    )..where((t) => t.id.equals(membershipId))).write(
       UserBusinessesCompanion(
         roleId: Value(roleId),
         lastUpdatedAt: Value(DateTime.now()),
       ),
     );
     // Re-read the full row so the enqueue payload carries businessId etc.
-    final refreshed = await (select(userBusinesses)
-          ..where((t) => t.id.equals(membershipId)))
-        .getSingle();
+    final refreshed = await (select(
+      userBusinesses,
+    )..where((t) => t.id.equals(membershipId))).getSingle();
     await db.syncDao.enqueueUpsert('user_businesses', refreshed);
   }
 
@@ -7561,15 +7733,15 @@ class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
   /// for sync. No-op if the user has no membership in [businessId].
   Future<void> touchLastLogin(String userId, String businessId) async {
     final now = DateTime.now();
-    await (update(userBusinesses)
-          ..where((t) =>
-              t.userId.equals(userId) & t.businessId.equals(businessId)))
+    await (update(userBusinesses)..where(
+          (t) => t.userId.equals(userId) & t.businessId.equals(businessId),
+        ))
         .write(
-      UserBusinessesCompanion(
-        lastLoginAt: Value(now),
-        lastUpdatedAt: Value(now),
-      ),
-    );
+          UserBusinessesCompanion(
+            lastLoginAt: Value(now),
+            lastUpdatedAt: Value(now),
+          ),
+        );
     // Re-read the full row so the enqueue payload carries businessId etc.
     final refreshed = await getForUserInBusiness(userId, businessId);
     if (refreshed != null) {
@@ -7588,12 +7760,14 @@ class InviteCodesDao extends DatabaseAccessor<AppDatabase>
   Stream<List<InviteCodeData>> watchActive() {
     final now = DateTime.now();
     return (select(inviteCodes)
-          ..where((t) =>
-              whereBusiness(t) &
-              t.isDeleted.not() &
-              t.usedAt.isNull() &
-              t.revokedAt.isNull() &
-              t.expiresAt.isBiggerThanValue(now))
+          ..where(
+            (t) =>
+                whereBusiness(t) &
+                t.isDeleted.not() &
+                t.usedAt.isNull() &
+                t.revokedAt.isNull() &
+                t.expiresAt.isBiggerThanValue(now),
+          )
           ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
         .watch();
   }
@@ -7617,14 +7791,12 @@ class InviteCodesDao extends DatabaseAccessor<AppDatabase>
   Future<void> revoke(String id) async {
     final now = DateTime.now();
     await (update(inviteCodes)..where((t) => t.id.equals(id))).write(
-      InviteCodesCompanion(
-        revokedAt: Value(now),
-        lastUpdatedAt: Value(now),
-      ),
+      InviteCodesCompanion(revokedAt: Value(now), lastUpdatedAt: Value(now)),
     );
     // Re-read the full row so the enqueue payload carries businessId etc.
-    final refreshed =
-        await (select(inviteCodes)..where((t) => t.id.equals(id))).getSingle();
+    final refreshed = await (select(
+      inviteCodes,
+    )..where((t) => t.id.equals(id))).getSingle();
     await db.syncDao.enqueueUpsert('invite_codes', refreshed);
   }
 }
@@ -7647,9 +7819,9 @@ class UserStoresDao extends DatabaseAccessor<AppDatabase>
   /// (intersected with the Manager audience by the caller). Business-scoped so
   /// it never leaks across businesses held on the same device.
   Future<List<String>> getUserIdsForStore(String storeId) async {
-    final rows = await (select(userStores)
-          ..where((t) => whereBusiness(t) & t.storeId.equals(storeId)))
-        .get();
+    final rows = await (select(
+      userStores,
+    )..where((t) => whereBusiness(t) & t.storeId.equals(storeId))).get();
     return rows.map((r) => r.userId).toList();
   }
 
@@ -7659,13 +7831,16 @@ class UserStoresDao extends DatabaseAccessor<AppDatabase>
   /// `id` so the cloud echo can't mint a different one and collide on the
   /// natural key (SqliteException 2067). Synced via enqueueUpsert.
   Future<void> assign(String userId, String storeId) async {
-    final existing = await (select(userStores)
-          ..where((t) =>
-              whereBusiness(t) &
-              t.userId.equals(userId) &
-              t.storeId.equals(storeId))
-          ..limit(1))
-        .getSingleOrNull();
+    final existing =
+        await (select(userStores)
+              ..where(
+                (t) =>
+                    whereBusiness(t) &
+                    t.userId.equals(userId) &
+                    t.storeId.equals(storeId),
+              )
+              ..limit(1))
+            .getSingleOrNull();
     if (existing != null) return; // already assigned — nothing to do
     final row = UserStoresCompanion.insert(
       id: Value(UuidV7.generate()),
@@ -7683,13 +7858,16 @@ class UserStoresDao extends DatabaseAccessor<AppDatabase>
   /// append-only ledger, so hard-delete via `enqueueDelete` is the right path
   /// here (same pattern as RolePermissionsDao.revoke).
   Future<void> unassign(String userId, String storeId) async {
-    final existing = await (select(userStores)
-          ..where((t) =>
-              whereBusiness(t) &
-              t.userId.equals(userId) &
-              t.storeId.equals(storeId))
-          ..limit(1))
-        .getSingleOrNull();
+    final existing =
+        await (select(userStores)
+              ..where(
+                (t) =>
+                    whereBusiness(t) &
+                    t.userId.equals(userId) &
+                    t.storeId.equals(storeId),
+              )
+              ..limit(1))
+            .getSingleOrNull();
     if (existing == null) return;
     await (delete(userStores)..where((t) => t.id.equals(existing.id))).go();
     await db.syncDao.enqueueDelete('user_stores', existing.id);

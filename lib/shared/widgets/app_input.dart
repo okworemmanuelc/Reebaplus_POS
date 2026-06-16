@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 /// [AppInput] is the standard input field for the application.
-/// 
-/// DESIGN RULE: All new input fields MUST use this widget instead of raw 
+///
+/// DESIGN RULE: All new input fields MUST use this widget instead of raw
 /// [TextField] or [TextFormField] to maintain design consistency.
 class AppInput extends StatelessWidget {
   final TextEditingController? controller;
@@ -103,11 +103,13 @@ class AppInput extends StatelessWidget {
           readOnly: readOnly,
           onTap: onTap,
           textAlign: textAlign,
-          style: style ?? TextStyle(
-            color: t.colorScheme.onSurface,
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-          ),
+          style:
+              style ??
+              TextStyle(
+                color: t.colorScheme.onSurface,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
           decoration: InputDecoration(
             hintText: hintText,
             prefixIcon: prefixIcon,

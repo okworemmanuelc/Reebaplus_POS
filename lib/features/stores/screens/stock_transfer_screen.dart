@@ -192,18 +192,21 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
     final sourceId = _sourceStore?.id;
     final products = sourceId != null
         ? (ref.watch(productsByStoreProvider(sourceId)).valueOrNull ??
-              const <ProductDataWithStock>[])
+                  const <ProductDataWithStock>[])
               .where((p) => p.totalStock > 0)
               .toList()
         : const <ProductDataWithStock>[];
 
     final businessId = ref.read(authProvider).currentUser?.businessId;
-    final businessType = ref.watch(localBusinessesProvider).valueOrNull
+    final businessType = ref
+        .watch(localBusinessesProvider)
+        .valueOrNull
         ?.where((b) => b.id == businessId)
         .map((b) => b.type)
         .firstOrNull;
     final showCrates =
-        isCrateBusiness(businessType) && _selectedProduct?.product.manufacturerId != null;
+        isCrateBusiness(businessType) &&
+        _selectedProduct?.product.manufacturerId != null;
 
     return Scaffold(
       resizeToAvoidBottomInset: false,
@@ -250,7 +253,7 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
             ),
             child: AppButton(
               text: _submitting ? 'Dispatching…' : 'Dispatch Transfer',
-              icon: FontAwesomeIcons.rightLeft,
+              icon: FontAwesomeIcons.rightLeft.data,
               onPressed: _submitting ? null : _submit,
             ),
           ),
@@ -420,9 +423,7 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
                                     vertical: 2,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .primary
+                                    color: Theme.of(context).colorScheme.primary
                                         .withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(8),
                                   ),

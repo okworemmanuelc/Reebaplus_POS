@@ -163,27 +163,21 @@ class SchemaErrorScreen extends StatelessWidget {
   }
 
   Widget _kv(String k, String v) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 130,
-              child: Text(
-                k,
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: Colors.white70,
-                ),
-              ),
-            ),
-            Expanded(
-              child: SelectableText(
-                v,
-                style: const TextStyle(fontSize: 13),
-              ),
-            ),
-          ],
+    padding: const EdgeInsets.symmetric(vertical: 2),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 130,
+          child: Text(
+            k,
+            style: const TextStyle(fontSize: 13, color: Colors.white70),
+          ),
         ),
-      );
+        Expanded(
+          child: SelectableText(v, style: const TextStyle(fontSize: 13)),
+        ),
+      ],
+    ),
+  );
 }

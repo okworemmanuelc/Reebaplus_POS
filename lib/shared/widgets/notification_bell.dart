@@ -28,7 +28,7 @@ class NotificationBell extends ConsumerWidget {
                 Container(
                   padding: EdgeInsets.all(context.getRSize(8)),
                   child: Icon(
-                    FontAwesomeIcons.bell,
+                    FontAwesomeIcons.bell.data,
                     size: context.getRSize(20),
                     color: t.colorScheme.primary,
                   ),

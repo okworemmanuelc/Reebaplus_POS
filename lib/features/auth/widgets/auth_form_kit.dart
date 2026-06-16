@@ -14,11 +14,8 @@ TextStyle authTitleStyle(BuildContext context) => TextStyle(
   color: authTextPrimary(context),
 );
 
-TextStyle authSubtitleStyle(BuildContext context) => TextStyle(
-  fontSize: 15,
-  height: 1.4,
-  color: authTextMuted(context),
-);
+TextStyle authSubtitleStyle(BuildContext context) =>
+    TextStyle(fontSize: 15, height: 1.4, color: authTextMuted(context));
 
 /// Vertically-centred, scroll-when-tall content area for auth screens that
 /// don't use [AuthFormShell] (custom step/content screens). Centres [children]
@@ -39,7 +36,8 @@ class AuthCenteredScroll extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pad = padding ??
+    final pad =
+        padding ??
         EdgeInsets.fromLTRB(
           28,
           12,

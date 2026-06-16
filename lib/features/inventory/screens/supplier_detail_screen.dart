@@ -35,9 +35,8 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
   List<String> get _periodOptions =>
       datePeriodLabelsForRole(managerUp: isManagerOrAbove(ref));
 
-  String get _effectivePeriod => _periodOptions.contains(_timeFilter)
-      ? _timeFilter
-      : _periodOptions.last;
+  String get _effectivePeriod =>
+      _periodOptions.contains(_timeFilter) ? _timeFilter : _periodOptions.last;
 
   Color get _bg => Theme.of(context).scaffoldBackgroundColor;
   Color get _surface => Theme.of(context).colorScheme.surface;
@@ -51,8 +50,9 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
   @override
   Widget build(BuildContext context) {
     ref.watch(currencySymbolProvider);
-    final canManage =
-        ref.watch(currentUserPermissionsProvider).contains('suppliers.manage');
+    final canManage = ref
+        .watch(currentUserPermissionsProvider)
+        .contains('suppliers.manage');
     final isCeo = ref.watch(currentUserRoleProvider)?.slug == 'ceo';
     final supplierAsync = ref.watch(supplierByIdProvider(widget.supplierId));
     final supplier = supplierAsync.valueOrNull;
@@ -78,15 +78,22 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
           // Edit is CEO only (§21.7).
           if (isCeo && supplier != null)
             IconButton(
-              icon: Icon(FontAwesomeIcons.penToSquare,
-                  color: _text, size: context.getRSize(16)),
+              icon: Icon(
+                FontAwesomeIcons.penToSquare.data,
+                color: _text,
+                size: context.getRSize(16),
+              ),
               tooltip: 'Edit supplier',
-              onPressed: () => SupplierFormSheet.show(context, existing: supplier),
+              onPressed: () =>
+                  SupplierFormSheet.show(context, existing: supplier),
             ),
           if (isCeo && supplier != null)
             IconButton(
-              icon: Icon(FontAwesomeIcons.trashCan,
-                  color: danger, size: context.getRSize(16)),
+              icon: Icon(
+                FontAwesomeIcons.trashCan.data,
+                color: danger,
+                size: context.getRSize(16),
+              ),
               tooltip: 'Delete supplier',
               onPressed: () => _confirmDelete(supplier),
             ),
@@ -100,12 +107,15 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
               ),
             )
           : supplier == null
-              ? (supplierAsync.isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : Center(
-                      child: Text('Supplier not found',
-                          style: TextStyle(color: _subtext))))
-              : _buildBody(context, supplier),
+          ? (supplierAsync.isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : Center(
+                    child: Text(
+                      'Supplier not found',
+                      style: TextStyle(color: _subtext),
+                    ),
+                  ))
+          : _buildBody(context, supplier),
       floatingActionButton: (canManage && supplier != null)
           ? AppFAB(
               heroTag: 'supplier_record_fab',
@@ -114,7 +124,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
                 supplierId: supplier.id,
                 supplierName: supplier.name,
               ),
-              icon: FontAwesomeIcons.plus,
+              icon: FontAwesomeIcons.plus.data,
               label: 'Record Activity',
             )
           : null,
@@ -123,10 +133,12 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
 
   Widget _buildBody(BuildContext context, SupplierData supplier) {
     final balanceAsync = ref.watch(supplierBalanceProvider(widget.supplierId));
-    final historyAsync =
-        ref.watch(supplierLedgerHistoryProvider(widget.supplierId));
+    final historyAsync = ref.watch(
+      supplierLedgerHistoryProvider(widget.supplierId),
+    );
     final balanceKobo = balanceAsync.valueOrNull ?? 0;
-    final history = historyAsync.valueOrNull ?? const <SupplierLedgerEntryData>[];
+    final history =
+        historyAsync.valueOrNull ?? const <SupplierLedgerEntryData>[];
 
     // §21.11 — active-store scope. On "All Stores" the rows can span stores, so
     // show which store recorded each one.
@@ -137,14 +149,15 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
     final storeNameById = {for (final s in stores) s.id: s.name};
 
     final window = datePeriodFromLabel(_effectivePeriod);
-    final filtered =
-        history.where((e) => window.includes(e.activityDate)).toList();
+    final filtered = history
+        .where((e) => window.includes(e.activityDate))
+        .toList();
 
     return ListView(
       // Extra bottom space so the Record Activity FAB doesn't cover the last row.
-      padding: EdgeInsets.all(context.getRSize(20)).copyWith(
-        bottom: context.getRSize(96) + context.deviceBottomPadding,
-      ),
+      padding: EdgeInsets.all(
+        context.getRSize(20),
+      ).copyWith(bottom: context.getRSize(96) + context.deviceBottomPadding),
       children: [
         _buildHeader(context, supplier),
         SizedBox(height: context.getRSize(24)),
@@ -205,7 +218,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
             shape: BoxShape.circle,
           ),
           child: Icon(
-            FontAwesomeIcons.buildingColumns,
+            FontAwesomeIcons.buildingColumns.data,
             color: Theme.of(context).colorScheme.primary,
             size: context.getRSize(32),
           ),
@@ -260,7 +273,10 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
   }
 
   Widget _buildBalanceCard(
-      BuildContext context, int balanceKobo, String scopeLabel) {
+    BuildContext context,
+    int balanceKobo,
+    String scopeLabel,
+  ) {
     // Negative balance = we owe the supplier (red). Positive = credit (green).
     final owed = balanceKobo < 0;
     final color = owed ? danger : (balanceKobo > 0 ? success : _text);
@@ -334,7 +350,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
             storeName: storeNameById == null
                 ? null
                 : (storeNameById[e.storeId] ??
-                    (e.storeId == null ? 'Unassigned' : null)),
+                      (e.storeId == null ? 'Unassigned' : null)),
           ),
       ],
     );
@@ -345,8 +361,10 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: _surface,
-        title: Text('Delete supplier?',
-            style: TextStyle(color: _text, fontWeight: FontWeight.bold)),
+        title: Text(
+          'Delete supplier?',
+          style: TextStyle(color: _text, fontWeight: FontWeight.bold),
+        ),
         content: Text(
           'Remove ${supplier.name}? Their ledger history is kept, but they will '
           'no longer appear in the suppliers list.',
@@ -367,7 +385,9 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
       ),
     );
     if (confirm != true) return;
-    if (!ref.read(currentUserPermissionsProvider).contains('suppliers.manage')) {
+    if (!ref
+        .read(currentUserPermissionsProvider)
+        .contains('suppliers.manage')) {
       return;
     }
     final db = ref.read(databaseProvider);
@@ -384,7 +404,9 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
     } catch (_) {
       if (!mounted) return;
       AppNotification.showError(
-          context, 'Could not delete supplier. Please try again.');
+        context,
+        'Could not delete supplier. Please try again.',
+      );
     }
   }
 }

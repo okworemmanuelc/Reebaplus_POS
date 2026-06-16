@@ -39,99 +39,103 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
 
   @override
   Widget build(BuildContext context) {
-        ref.watch(currencySymbolProvider); // rebuild money displays when currency changes
-        final bgCol = Theme.of(context).scaffoldBackgroundColor;
-        final surfaceCol = Theme.of(context).colorScheme.surface;
-        final textCol = Theme.of(context).colorScheme.onSurface;
-        final subtextCol =
-            Theme.of(context).textTheme.bodySmall?.color ??
-            Theme.of(context).iconTheme.color!;
-        final borderCol = Theme.of(context).dividerColor;
-        final cardCol = Theme.of(context).cardColor;
-        // §12.1: the store filter comes from the nav-drawer store picker
-        // (null = "All Stores"); no per-screen store dropdown.
-        final storeFilter = ref.watch(lockedStoreProvider).value;
+    ref.watch(
+      currencySymbolProvider,
+    ); // rebuild money displays when currency changes
+    final bgCol = Theme.of(context).scaffoldBackgroundColor;
+    final surfaceCol = Theme.of(context).colorScheme.surface;
+    final textCol = Theme.of(context).colorScheme.onSurface;
+    final subtextCol =
+        Theme.of(context).textTheme.bodySmall?.color ??
+        Theme.of(context).iconTheme.color!;
+    final borderCol = Theme.of(context).dividerColor;
+    final cardCol = Theme.of(context).cardColor;
+    // §12.1: the store filter comes from the nav-drawer store picker
+    // (null = "All Stores"); no per-screen store dropdown.
+    final storeFilter = ref.watch(lockedStoreProvider).value;
 
-        return Scaffold(
-          backgroundColor: bgCol,
-          appBar: _buildAppBar(context, surfaceCol, textCol, borderCol),
-          drawer: const AppDrawer(activeRoute: 'customers'),
-          body: Column(
-            children: [
-              Expanded(
-                child: Builder(
-                  builder: (context) {
-                    final customers = ref.watch(customerServiceProvider).value;
-                    final balances = ref
-                            .watch(walletBalancesKoboProvider)
-                            .valueOrNull ??
-                        const <String, int>{};
-                    if (_isFirstLoad) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
+    return Scaffold(
+      backgroundColor: bgCol,
+      appBar: _buildAppBar(context, surfaceCol, textCol, borderCol),
+      drawer: const AppDrawer(activeRoute: 'customers'),
+      body: Column(
+        children: [
+          Expanded(
+            child: Builder(
+              builder: (context) {
+                final customers = ref.watch(customerServiceProvider).value;
+                final balances =
+                    ref.watch(walletBalancesKoboProvider).valueOrNull ??
+                    const <String, int>{};
+                if (_isFirstLoad) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-                    List<Customer> filtered;
+                List<Customer> filtered;
 
-                    if (storeFilter == null) {
-                      // "All Stores" selected
-                      filtered = customers;
-                    } else {
-                      // A specific store selected
-                      filtered = customers
-                          .where((c) => c.storeId == storeFilter)
-                          .toList();
-                    }
+                if (storeFilter == null) {
+                  // "All Stores" selected
+                  filtered = customers;
+                } else {
+                  // A specific store selected
+                  filtered = customers
+                      .where((c) => c.storeId == storeFilter)
+                      .toList();
+                }
 
-                    if (filtered.isEmpty) {
-                      return const AppRefreshWrapper(
-                        child: CustomScrollView(
-                          slivers: [
-                            SliverFillRemaining(
-                              hasScrollBody: false,
-                              child: Center(child: Text('No customers found.')),
-                            ),
-                          ],
+                if (filtered.isEmpty) {
+                  return const AppRefreshWrapper(
+                    child: CustomScrollView(
+                      slivers: [
+                        SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: Center(child: Text('No customers found.')),
                         ),
+                      ],
+                    ),
+                  );
+                }
+                return AppRefreshWrapper(
+                  child: ListView.separated(
+                    padding: context
+                        .rPadding(16)
+                        .copyWith(
+                          bottom:
+                              context.getRSize(100) +
+                              context.deviceBottomPadding,
+                        ),
+                    itemCount: filtered.length,
+                    separatorBuilder: (context, index) =>
+                        SizedBox(height: context.getRSize(12)),
+                    itemBuilder: (context, index) {
+                      final c = filtered[index];
+                      return _buildCustomerCard(
+                        context,
+                        c,
+                        balances[c.id] ?? 0,
+                        cardCol,
+                        surfaceCol,
+                        textCol,
+                        subtextCol,
+                        borderCol,
                       );
-                    }
-                    return AppRefreshWrapper(
-                      child: ListView.separated(
-                        padding: context.rPadding(16).copyWith(
-                              bottom: context.getRSize(100) +
-                                  context.deviceBottomPadding,
-                            ),
-                        itemCount: filtered.length,
-                        separatorBuilder: (context, index) =>
-                            SizedBox(height: context.getRSize(12)),
-                        itemBuilder: (context, index) {
-                          final c = filtered[index];
-                          return _buildCustomerCard(
-                            context,
-                            c,
-                            balances[c.id] ?? 0,
-                            cardCol,
-                            surfaceCol,
-                            textCol,
-                            subtextCol,
-                            borderCol,
-                          );
-                        },
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
+                    },
+                  ),
+                );
+              },
+            ),
           ),
-          floatingActionButton: hasPermission(ref, 'customers.add')
-              ? AppFAB(
-                  heroTag: 'customers_fab',
-                  onPressed: () => AddCustomerSheet.show(context),
-                  icon: FontAwesomeIcons.userPlus,
-                  label: 'Add Customer',
-                )
-              : null,
-        );
+        ],
+      ),
+      floatingActionButton: hasPermission(ref, 'customers.add')
+          ? AppFAB(
+              heroTag: 'customers_fab',
+              onPressed: () => AddCustomerSheet.show(context),
+              icon: FontAwesomeIcons.userPlus.data,
+              label: 'Add Customer',
+            )
+          : null,
+    );
   }
 
   PreferredSizeWidget _buildAppBar(
@@ -209,7 +213,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
               ],
             ),
             child: Icon(
-              FontAwesomeIcons.users,
+              FontAwesomeIcons.users.data,
               color: Colors.white,
               size: context.getRSize(16),
             ),

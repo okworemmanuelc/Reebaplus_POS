@@ -13,10 +13,7 @@ class ThemeSettingsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Display'),
-        centerTitle: false,
-      ),
+      appBar: AppBar(title: const Text('Display'), centerTitle: false),
       body: ListenableBuilder(
         listenable: themeController,
         builder: (_, __) {
@@ -43,21 +40,21 @@ class ThemeSettingsScreen extends StatelessWidget {
               ),
               SizedBox(height: context.getRSize(12)),
               _ModeTile(
-                icon: FontAwesomeIcons.sun,
+                icon: FontAwesomeIcons.sun.data,
                 label: 'Light',
                 isActive: themeController.themeMode == ThemeMode.light,
                 onTap: () => themeController.setTheme(ThemeMode.light),
               ),
               SizedBox(height: context.getRSize(8)),
               _ModeTile(
-                icon: FontAwesomeIcons.moon,
+                icon: FontAwesomeIcons.moon.data,
                 label: 'Dark',
                 isActive: themeController.themeMode == ThemeMode.dark,
                 onTap: () => themeController.setTheme(ThemeMode.dark),
               ),
               SizedBox(height: context.getRSize(8)),
               _ModeTile(
-                icon: FontAwesomeIcons.desktop,
+                icon: FontAwesomeIcons.desktop.data,
                 label: 'System',
                 isActive: themeController.themeMode == ThemeMode.system,
                 onTap: () => themeController.setTheme(ThemeMode.system),

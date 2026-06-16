@@ -24,9 +24,12 @@ class SubscriptionBadge extends ConsumerWidget {
     final isPro = access == SubscriptionAccess.active;
     // PRO rides the business accent; FREE TRIAL uses a warm amber so the two
     // read as distinct at a glance.
-    final color =
-        isPro ? Theme.of(context).colorScheme.primary : const Color(0xFFF59E0B);
-    final icon = isPro ? Icons.workspace_premium_rounded : Icons.schedule_rounded;
+    final color = isPro
+        ? Theme.of(context).colorScheme.primary
+        : const Color(0xFFF59E0B);
+    final icon = isPro
+        ? Icons.workspace_premium_rounded
+        : Icons.schedule_rounded;
 
     return Container(
       padding: EdgeInsets.symmetric(

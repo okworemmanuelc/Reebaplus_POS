@@ -60,8 +60,8 @@ class ProfileHeaderCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final surface = _surfaceOf(context);
     final text = _textOf(context);
-    final avatarColor = parseHexColor(avatarColorHex) ??
-        Theme.of(context).colorScheme.primary;
+    final avatarColor =
+        parseHexColor(avatarColorHex) ?? Theme.of(context).colorScheme.primary;
 
     return Container(
       padding: EdgeInsets.all(context.getRSize(24)),
@@ -125,8 +125,12 @@ class ProfileHeaderCard extends StatelessWidget {
     );
   }
 
-  Widget _chip(BuildContext context, String label, Color color,
-      {bool ring = false}) {
+  Widget _chip(
+    BuildContext context,
+    String label,
+    Color color, {
+    bool ring = false,
+  }) {
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: context.getRSize(12),
@@ -229,8 +233,11 @@ class ProfileStatCard extends StatelessWidget {
               color: stat.color.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(stat.icon,
-                color: stat.color, size: context.getRSize(16)),
+            child: Icon(
+              stat.icon,
+              color: stat.color,
+              size: context.getRSize(16),
+            ),
           ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -293,10 +300,7 @@ class ProfileInfoCard extends StatelessWidget {
           for (var i = 0; i < rows.length; i++) ...[
             rows[i],
             if (i < rows.length - 1)
-              Divider(
-                height: context.getRSize(20),
-                color: _borderOf(context),
-              ),
+              Divider(height: context.getRSize(20), color: _borderOf(context)),
           ],
         ],
       ),
@@ -353,8 +357,7 @@ class ProfileInfoRow extends StatelessWidget {
         ),
         if (onTap != null) ...[
           SizedBox(width: context.getRSize(4)),
-          Icon(Icons.chevron_right,
-              size: context.getRSize(18), color: subtext),
+          Icon(Icons.chevron_right, size: context.getRSize(18), color: subtext),
         ],
       ],
     );

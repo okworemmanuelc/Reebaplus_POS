@@ -40,7 +40,9 @@ class ComingSoonScreen extends StatelessWidget {
               Icon(
                 Icons.hourglass_empty_rounded,
                 size: 56,
-                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.8),
+                color: Theme.of(
+                  context,
+                ).colorScheme.primary.withValues(alpha: 0.8),
               ),
               const SizedBox(height: 20),
               Text(

@@ -47,8 +47,12 @@ DateTime localDateUtc(int year, int month, int day, String tzName) {
 Duration untilNextBusinessDay(DateTime instant, String tzName) {
   final loc = resolveLocation(tzName);
   final l = TZDateTime.from(instant, loc);
-  final nextMidnight =
-      TZDateTime(loc, l.year, l.month, l.day).add(const Duration(days: 1));
+  final nextMidnight = TZDateTime(
+    loc,
+    l.year,
+    l.month,
+    l.day,
+  ).add(const Duration(days: 1));
   return nextMidnight.difference(l);
 }
 

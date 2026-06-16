@@ -43,9 +43,9 @@ class _DailyReconciliationListScreenState
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not export: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not export: $e')));
       }
     }
   }
@@ -74,29 +74,42 @@ class _DailyReconciliationListScreenState
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Daily Reconciliation',
-                style: context.h3.copyWith(fontWeight: FontWeight.bold)),
-            Text(scopeLabel,
-                style: context.bodySmall.copyWith(color: theme.hintColor)),
+            Text(
+              'Daily Reconciliation',
+              style: context.h3.copyWith(fontWeight: FontWeight.bold),
+            ),
+            Text(
+              scopeLabel,
+              style: context.bodySmall.copyWith(color: theme.hintColor),
+            ),
           ],
         ),
         actions: [
           IconButton(
             tooltip: 'Export CSV',
-            icon: Icon(FontAwesomeIcons.fileCsv,
-                size: 18, color: context.primaryColor),
-            onPressed:
-                buckets.isEmpty ? null : () => _exportCsv(buckets, scopeLabel),
+            icon: Icon(
+              FontAwesomeIcons.fileCsv.data,
+              size: 18,
+              color: context.primaryColor,
+            ),
+            onPressed: buckets.isEmpty
+                ? null
+                : () => _exportCsv(buckets, scopeLabel),
           ),
           SizedBox(
             width: 96,
             child: AppDropdown<ReconGrouping>(
               value: _grouping,
               items: groupings
-                  .map((g) => DropdownMenuItem(
+                  .map(
+                    (g) => DropdownMenuItem(
                       value: g,
-                      child: Text(g.label,
-                          style: const TextStyle(fontSize: 12))))
+                      child: Text(
+                        g.label,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  )
                   .toList(),
               onChanged: (v) =>
                   setState(() => _grouping = v ?? ReconGrouping.day),
@@ -123,11 +136,16 @@ class _DailyReconciliationListScreenState
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(FontAwesomeIcons.clipboardCheck,
-              size: 40, color: theme.hintColor.withValues(alpha: 0.5)),
+          Icon(
+            FontAwesomeIcons.clipboardCheck.data,
+            size: 40,
+            color: theme.hintColor.withValues(alpha: 0.5),
+          ),
           SizedBox(height: context.spacingM),
-          Text('No data for this period.',
-              style: context.bodyMedium.copyWith(color: theme.hintColor)),
+          Text(
+            'No data for this period.',
+            style: context.bodyMedium.copyWith(color: theme.hintColor),
+          ),
         ],
       ),
     );
@@ -141,12 +159,14 @@ class _DailyReconciliationListScreenState
         borderRadius: BorderRadius.circular(context.radiusL),
         onTap: () => Navigator.push(
           context,
-          slideDownRoute(DailyReconciliationDetailScreen(
-            start: b.start,
-            endExclusive: b.endExclusive,
-            grouping: b.grouping,
-            title: b.label,
-          )),
+          slideDownRoute(
+            DailyReconciliationDetailScreen(
+              start: b.start,
+              endExclusive: b.endExclusive,
+              grouping: b.grouping,
+              title: b.label,
+            ),
+          ),
         ),
         child: Container(
           padding: EdgeInsets.all(context.spacingM),
@@ -165,28 +185,37 @@ class _DailyReconciliationListScreenState
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(b.label,
-                        style: context.bodyMedium
-                            .copyWith(fontWeight: FontWeight.bold)),
+                    Text(
+                      b.label,
+                      style: context.bodyMedium.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     const SizedBox(height: 4),
-                    Text('${fmtNumber(b.itemsSold)} items sold',
-                        style:
-                            context.bodySmall.copyWith(color: theme.hintColor)),
+                    Text(
+                      '${fmtNumber(b.itemsSold)} items sold',
+                      style: context.bodySmall.copyWith(color: theme.hintColor),
+                    ),
                   ],
                 ),
               ),
               if (mismatch)
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: theme.colorScheme.error.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: Text('Mismatch',
-                      style: context.bodySmall.copyWith(
-                          color: theme.colorScheme.error,
-                          fontWeight: FontWeight.w700)),
+                  child: Text(
+                    'Mismatch',
+                    style: context.bodySmall.copyWith(
+                      color: theme.colorScheme.error,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ),
               const SizedBox(width: 8),
               Icon(Icons.chevron_right_rounded, color: theme.hintColor),

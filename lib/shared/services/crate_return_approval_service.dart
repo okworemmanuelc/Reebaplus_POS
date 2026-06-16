@@ -10,9 +10,9 @@ class CrateReturnApprovalService {
   CrateReturnApprovalService(this.db);
 
   Future<List<PendingCrateReturnData>> listPending(String businessId) {
-    return (db.select(db.pendingCrateReturns)
-          ..where((t) =>
-              t.businessId.equals(businessId) & t.status.equals('pending')))
+    return (db.select(db.pendingCrateReturns)..where(
+          (t) => t.businessId.equals(businessId) & t.status.equals('pending'),
+        ))
         .get();
   }
 
@@ -23,8 +23,9 @@ class CrateReturnApprovalService {
       throw Exception('Return is already ${pending.status}');
     }
 
-    final flagValue = await db.systemConfigDao
-        .get('feature.domain_rpcs_v2.approve_crate_return');
+    final flagValue = await db.systemConfigDao.get(
+      'feature.domain_rpcs_v2.approve_crate_return',
+    );
     final useDomainRpc = flagValue == 'true' || flagValue == '"true"';
 
     await db.transaction(() async {
@@ -41,9 +42,9 @@ class CrateReturnApprovalService {
         approvedAt: Value(now),
         lastUpdatedAt: Value(now),
       );
-      await (db.update(db.pendingCrateReturns)
-            ..where((t) => t.id.equals(returnId)))
-          .write(pcrComp);
+      await (db.update(
+        db.pendingCrateReturns,
+      )..where((t) => t.id.equals(returnId))).write(pcrComp);
 
       // v29: a customer crate row sets both customer_id (owner) and
       // manufacturer_id (whose crates); keyed by manufacturer.
@@ -71,7 +72,7 @@ class CrateReturnApprovalService {
           pending.businessId,
           pending.customerId,
           pending.manufacturerId,
-          delta
+          delta,
         ],
       );
 
@@ -82,14 +83,18 @@ class CrateReturnApprovalService {
           'p_pending_return_id': returnId,
           'p_ledger_id': ledgerId,
         };
-        await db.syncDao
-            .enqueue('domain:pos_approve_crate_return', jsonEncode(payload));
+        await db.syncDao.enqueue(
+          'domain:pos_approve_crate_return',
+          jsonEncode(payload),
+        );
       } else {
         // Full-row enqueue: a partial pending_crate_returns upsert omits NOT NULL
         // customer_id / manufacturer_id / quantity / submitted_by → 23502.
         await db.syncDao.enqueueUpsert(
           'pending_crate_returns',
-          pending.toCompanion(true).copyWith(
+          pending
+              .toCompanion(true)
+              .copyWith(
                 status: const Value('approved'),
                 approvedBy: Value(approvedBy),
                 approvedAt: Value(now),
@@ -97,12 +102,14 @@ class CrateReturnApprovalService {
               ),
         );
         await db.syncDao.enqueueUpsert('crate_ledger', ledgerComp);
-        final balRow = await (db.select(db.customerCrateBalances)
-              ..where((t) =>
-                  t.businessId.equals(pending.businessId) &
-                  t.customerId.equals(pending.customerId) &
-                  t.manufacturerId.equals(pending.manufacturerId)))
-            .getSingle();
+        final balRow =
+            await (db.select(db.customerCrateBalances)..where(
+                  (t) =>
+                      t.businessId.equals(pending.businessId) &
+                      t.customerId.equals(pending.customerId) &
+                      t.manufacturerId.equals(pending.manufacturerId),
+                ))
+                .getSingle();
         await db.syncDao.enqueueUpsert('customer_crate_balances', balRow);
       }
     });
@@ -130,13 +137,15 @@ class CrateReturnApprovalService {
         rejectionReason: Value(rejectionReason),
         lastUpdatedAt: Value(now),
       );
-      await (db.update(db.pendingCrateReturns)
-            ..where((t) => t.id.equals(returnId)))
-          .write(pcrComp);
+      await (db.update(
+        db.pendingCrateReturns,
+      )..where((t) => t.id.equals(returnId))).write(pcrComp);
       // Full-row enqueue (see approve): a partial upsert would 23502.
       await db.syncDao.enqueueUpsert(
         'pending_crate_returns',
-        pending.toCompanion(true).copyWith(
+        pending
+            .toCompanion(true)
+            .copyWith(
               status: const Value('rejected'),
               rejectionReason: Value(rejectionReason),
               lastUpdatedAt: Value(now),

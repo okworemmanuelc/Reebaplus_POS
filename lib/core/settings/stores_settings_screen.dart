@@ -56,10 +56,10 @@ class _StoresSettingsScreenState extends ConsumerState<StoresSettingsScreen> {
     setState(() {
       _stores = stores;
       for (final store in stores) {
-        _nameControllers[store.id] =
-            TextEditingController(text: store.name);
-        _addressControllers[store.id] =
-            TextEditingController(text: store.location?.trim() ?? '');
+        _nameControllers[store.id] = TextEditingController(text: store.name);
+        _addressControllers[store.id] = TextEditingController(
+          text: store.location?.trim() ?? '',
+        );
       }
       _loading = false;
     });
@@ -70,7 +70,10 @@ class _StoresSettingsScreenState extends ConsumerState<StoresSettingsScreen> {
     // write site re-checks too. ref.read (not hasPermission/watch) — this is a
     // callback, matching staff_detail_screen.dart.
     if (!ref.read(currentUserPermissionsProvider).contains('stores.manage')) {
-      AppNotification.showError(context, 'You don\'t have permission to do that.');
+      AppNotification.showError(
+        context,
+        'You don\'t have permission to do that.',
+      );
       return;
     }
     final name = _nameControllers[store.id]!.text.trim();
@@ -133,13 +136,16 @@ class _StoresSettingsScreenState extends ConsumerState<StoresSettingsScreen> {
           : SettingsFadeIn(
               child: ListView(
                 padding: EdgeInsets.fromLTRB(
-                    24, 24, 24, 24 + context.deviceBottomPadding),
+                  24,
+                  24,
+                  24,
+                  24 + context.deviceBottomPadding,
+                ),
                 children: [
                   for (final store in _stores) ...[
                     Container(
                       padding: const EdgeInsets.all(16),
-                      decoration:
-                          AppDecorations.glassCard(context, radius: 16),
+                      decoration: AppDecorations.glassCard(context, radius: 16),
                       child: Column(
                         children: [
                           TextField(

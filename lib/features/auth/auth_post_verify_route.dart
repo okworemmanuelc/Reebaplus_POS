@@ -80,7 +80,8 @@ Future<PostVerifyRoute> resolvePostVerifyRoute(
     // Returning device — sync silently and refresh the local row.
     await auth.syncOnLogin(account.businessId);
     await auth.upsertLocalUserFromProfile();
-    localUser = await auth.getUserByEmail(
+    localUser =
+        await auth.getUserByEmail(
           email,
           preferredBusinessId: account.businessId,
         ) ??

@@ -67,23 +67,25 @@ class _SubscriptionLockedScreenState
         ? 'Your free trial ended on ${DateFormat('d MMM yyyy').format(trialEnded)}.'
         : null;
 
-    final title = _isTrial ? 'Your free trial has ended' : 'Subscription inactive';
+    final title = _isTrial
+        ? 'Your free trial has ended'
+        : 'Subscription inactive';
     final body = _isTrial
         ? 'Subscribe to the Reebaplus monthly plan to keep using the app. '
-            'All your data is safe and will be here when you return.'
+              'All your data is safe and will be here when you return.'
         : 'This business\'s subscription is currently inactive. Renew to '
-            'continue — your data is safe and waiting.';
+              'continue — your data is safe and waiting.';
 
     return AuthBackground(
       child: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
             return SingleChildScrollView(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
               child: ConstrainedBox(
-                constraints:
-                    BoxConstraints(minHeight: constraints.maxHeight - 64),
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight - 64,
+                ),
                 child: IntrinsicHeight(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -96,11 +98,15 @@ class _SubscriptionLockedScreenState
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: lockColor.withValues(alpha: 0.12),
-                            border:
-                                Border.all(color: lockColor.withValues(alpha: 0.3)),
+                            border: Border.all(
+                              color: lockColor.withValues(alpha: 0.3),
+                            ),
                           ),
-                          child: Icon(Icons.lock_rounded,
-                              color: lockColor, size: 46),
+                          child: Icon(
+                            Icons.lock_rounded,
+                            color: lockColor,
+                            size: 46,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 28),

@@ -37,6 +37,7 @@ class OnboardingDraft {
 
   String? locationName;
   String? streetAddress;
+  String? lgaDistrict;
   String? cityState;
   String? country;
 
@@ -49,16 +50,17 @@ class OnboardingDraft {
     String? businessId,
     String? storeId,
     String? userId,
-  })  : businessId = businessId ?? UuidV7.generate(),
-        storeId = storeId ?? UuidV7.generate(),
-        userId = userId ?? UuidV7.generate();
+  }) : businessId = businessId ?? UuidV7.generate(),
+       storeId = storeId ?? UuidV7.generate(),
+       userId = userId ?? UuidV7.generate();
 
   /// Combines the structured location parts into `stores.location`
-  /// ("street, city, country") — the shape existing UI that reads this field
+  /// ("street, LGA/District, city, country") — the shape existing UI that reads this field
   /// expects.
   String? get locationCombined {
     final parts = [
       streetAddress?.trim(),
+      lgaDistrict?.trim(),
       cityState?.trim(),
       country?.trim(),
     ].where((p) => p != null && p.isNotEmpty).toList();
@@ -120,5 +122,5 @@ class OnboardingDraftNotifier extends StateNotifier<OnboardingDraft?> {
 ///     cloud commit + local mirror succeed.
 final onboardingDraftProvider =
     StateNotifierProvider<OnboardingDraftNotifier, OnboardingDraft?>(
-  (ref) => OnboardingDraftNotifier(),
-);
+      (ref) => OnboardingDraftNotifier(),
+    );

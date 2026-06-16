@@ -30,8 +30,9 @@ class WalletService {
       throw StateError('Customer $customerId has no wallet');
     }
 
-    final flagValue =
-        await _db.systemConfigDao.get('feature.domain_rpcs_v2.wallet_topup');
+    final flagValue = await _db.systemConfigDao.get(
+      'feature.domain_rpcs_v2.wallet_topup',
+    );
     final useDomainRpc = flagValue == 'true' || flagValue == '"true"';
 
     final referenceType = method == 'cash' ? 'topup_cash' : 'topup_transfer';
@@ -80,8 +81,10 @@ class WalletService {
           'p_method': method,
           'p_reference_type': referenceType,
         };
-        await _db.syncDao
-            .enqueue('domain:pos_wallet_topup', jsonEncode(payload));
+        await _db.syncDao.enqueue(
+          'domain:pos_wallet_topup',
+          jsonEncode(payload),
+        );
       } else {
         await _db.syncDao.enqueueUpsert('wallet_transactions', walletComp);
         await _db.syncDao.enqueueUpsert('payment_transactions', paymentComp);
@@ -90,7 +93,7 @@ class WalletService {
   }
 
   /// Refunds any wallet debit associated with an order.
-  /// 
+  ///
   /// Appends a new credit transaction. The original debit remains untouched.
   Future<void> refundOrderWalletDebit({
     required String orderId,
@@ -99,15 +102,16 @@ class WalletService {
     final businessId = _walletTxDao.requireBusinessId();
 
     // Find the original wallet debit for this order
-    final originalDebit = await (_db.select(_db.walletTransactions)
-          ..where(
-            (t) =>
-                t.businessId.equals(businessId) &
-                t.orderId.equals(orderId) &
-                t.type.equals('debit'),
-          )
-          ..limit(1))
-        .getSingleOrNull();
+    final originalDebit =
+        await (_db.select(_db.walletTransactions)
+              ..where(
+                (t) =>
+                    t.businessId.equals(businessId) &
+                    t.orderId.equals(orderId) &
+                    t.type.equals('debit'),
+              )
+              ..limit(1))
+            .getSingleOrNull();
 
     if (originalDebit == null) return;
 
@@ -175,8 +179,9 @@ class WalletService {
 
     final refundKobo = amountKobo > available ? available : amountKobo;
     // Drain the held deposit first, then spendable credit.
-    final depositPortion =
-        refundKobo > depositAvailable ? depositAvailable : refundKobo;
+    final depositPortion = refundKobo > depositAvailable
+        ? depositAvailable
+        : refundKobo;
     final creditPortion = refundKobo - depositPortion;
 
     await _db.transaction(() async {
@@ -219,8 +224,10 @@ class WalletService {
 
       // Deposit portion always drops "held" via a crate_deposit_refunded debit.
       if (depositPortion > 0) {
-        final refundedId =
-            await postWalletLeg(-depositPortion, 'crate_deposit_refunded');
+        final refundedId = await postWalletLeg(
+          -depositPortion,
+          'crate_deposit_refunded',
+        );
         if (inDebt) {
           // To wallet: a spendable crate_refund credit reduces the debt. No cash.
           await postWalletLeg(depositPortion, 'crate_refund');
@@ -239,7 +246,8 @@ class WalletService {
       // §24 money movement / §26.4 refund issued — audit + notify CEO/Manager.
       final dest = inDebt ? 'to wallet (reduces debt)' : 'cash';
       final parts = <String>[
-        if (depositPortion > 0) 'deposit ${formatCurrency(depositPortion / 100)}',
+        if (depositPortion > 0)
+          'deposit ${formatCurrency(depositPortion / 100)}',
         if (creditPortion > 0) 'credit ${formatCurrency(creditPortion / 100)}',
       ];
       await _db.activityLogDao.logActivity(
@@ -266,10 +274,12 @@ class WalletService {
   }
 
   /// Calculates the current balance for a customer.
-  Future<int> getBalanceKobo(String customerId) => _walletTxDao.getBalanceKobo(customerId);
+  Future<int> getBalanceKobo(String customerId) =>
+      _walletTxDao.getBalanceKobo(customerId);
 
   /// Watches the current balance for a customer.
-  Stream<int> watchBalanceKobo(String customerId) => _walletTxDao.watchBalanceKobo(customerId);
+  Stream<int> watchBalanceKobo(String customerId) =>
+      _walletTxDao.watchBalanceKobo(customerId);
 
   /// Voids a wallet transaction using a compensating entry.
   Future<void> voidTransaction({

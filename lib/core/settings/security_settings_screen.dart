@@ -48,8 +48,9 @@ class _SecuritySettingsScreenState
     setState(() {
       // Snap any legacy/non-preset value (or unset) to the default so the UI
       // and the chips stay consistent; a tap then persists a real preset.
-      _autoLockSeconds =
-          (stored != null && _presets.contains(stored)) ? stored : _defaultSeconds;
+      _autoLockSeconds = (stored != null && _presets.contains(stored))
+          ? stored
+          : _defaultSeconds;
       _biometricsEnabled = prefs.getBool('biometrics_enabled') ?? false;
       _loading = false;
     });
@@ -58,13 +59,19 @@ class _SecuritySettingsScreenState
   Future<void> _saveAutoLock(int seconds) async {
     // ref.read (not hasPermission/watch) — callback, matches staff_detail_screen.
     if (!ref.read(currentUserPermissionsProvider).contains('settings.manage')) {
-      AppNotification.showError(context, 'You don\'t have permission to do that.');
+      AppNotification.showError(
+        context,
+        'You don\'t have permission to do that.',
+      );
       return;
     }
     setState(() => _autoLockSeconds = seconds);
     final db = ref.read(databaseProvider);
     try {
-      await db.settingsDao.set('auto_lock_interval_seconds', seconds.toString());
+      await db.settingsDao.set(
+        'auto_lock_interval_seconds',
+        seconds.toString(),
+      );
       await db.activityLogDao.log(
         action: 'settings.security.auto_lock',
         description: 'Set auto-lock to ${seconds ~/ 60} min',
@@ -147,7 +154,11 @@ class _SecuritySettingsScreenState
           : SettingsFadeIn(
               child: ListView(
                 padding: EdgeInsets.fromLTRB(
-                    24, 24, 24, 24 + context.deviceBottomPadding),
+                  24,
+                  24,
+                  24,
+                  24 + context.deviceBottomPadding,
+                ),
                 children: [
                   _autoLockCard(context),
                   const SizedBox(height: 16),

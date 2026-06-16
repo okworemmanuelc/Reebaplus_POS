@@ -61,4 +61,3 @@ class ThemeController extends ChangeNotifier {
 
 /// Global singleton — initialised in main().
 final themeController = ThemeController();
-

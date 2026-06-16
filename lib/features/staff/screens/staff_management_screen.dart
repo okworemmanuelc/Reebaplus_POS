@@ -130,7 +130,7 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen>
           return AppFAB(
             heroTag: 'staff_fab',
             onPressed: () => InviteStaffSheet.show(context),
-            icon: FontAwesomeIcons.userPlus,
+            icon: FontAwesomeIcons.userPlus.data,
             label: 'Invite new staff',
           );
         },
@@ -162,9 +162,12 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen>
           fontWeight: FontWeight.bold,
           fontSize: context.getRFontSize(14),
         ),
-        tabs: const [
-          Tab(icon: Icon(FontAwesomeIcons.users, size: 16), text: 'Staff'),
-          Tab(icon: Icon(FontAwesomeIcons.ticket, size: 16), text: 'Invites'),
+        tabs: [
+          Tab(icon: Icon(FontAwesomeIcons.users.data, size: 16), text: 'Staff'),
+          Tab(
+            icon: Icon(FontAwesomeIcons.ticket.data, size: 16),
+            text: 'Invites',
+          ),
         ],
       ),
     );
@@ -194,12 +197,17 @@ class _SearchField extends StatelessWidget {
         decoration: InputDecoration(
           hintText: hint,
           hintStyle: TextStyle(color: subtext, fontSize: 14),
-          prefixIcon: Icon(FontAwesomeIcons.magnifyingGlass,
-              size: 14, color: subtext),
+          prefixIcon: Icon(
+            FontAwesomeIcons.magnifyingGlass.data,
+            size: 14,
+            color: subtext,
+          ),
           filled: true,
           fillColor: t.cardColor,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 12,
+          ),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
             borderSide: BorderSide.none,
@@ -250,10 +258,18 @@ class _StaffTabState extends ConsumerState<_StaffTab> {
       // Manager can't manage CEO or other Managers — those render faded and
       // read-only (§9.2 / §9.7). You can never manage your own row either
       // (can't suspend/demote yourself), but it must not be faded.
-      final manageable = !isSelf &&
+      final manageable =
+          !isSelf &&
           (!isManager || (role?.slug != 'ceo' && role?.slug != 'manager'));
-      rows.add(_StaffRow(membership: m, user: user, role: role,
-          manageable: manageable, isSelf: isSelf));
+      rows.add(
+        _StaffRow(
+          membership: m,
+          user: user,
+          role: role,
+          manageable: manageable,
+          isSelf: isSelf,
+        ),
+      );
     }
 
     // Arrange staff by role (CEO → Manager → Cashier → Stock keeper), then
@@ -289,9 +305,10 @@ class _StaffTabState extends ConsumerState<_StaffTab> {
               children: rows.isEmpty
                   ? [
                       SizedBox(height: context.getRSize(120)),
-                      const _EmptyState(
-                          icon: FontAwesomeIcons.users,
-                          label: 'No staff found'),
+                      _EmptyState(
+                        icon: FontAwesomeIcons.users.data,
+                        label: 'No staff found',
+                      ),
                     ]
                   : [
                       ...active.map((r) => _StaffCard(row: r)),
@@ -386,9 +403,7 @@ class _StaffCard extends StatelessWidget {
               radius: context.getRSize(22),
               backgroundColor: _avatarColor(),
               child: Text(
-                row.user.name.isNotEmpty
-                    ? row.user.name[0].toUpperCase()
-                    : '?',
+                row.user.name.isNotEmpty ? row.user.name[0].toUpperCase() : '?',
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
@@ -418,9 +433,13 @@ class _StaffCard extends StatelessWidget {
                         SizedBox(width: context.getRSize(8)),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 2),
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
-                            color: t.colorScheme.primary.withValues(alpha: 0.15),
+                            color: t.colorScheme.primary.withValues(
+                              alpha: 0.15,
+                            ),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
@@ -437,7 +456,9 @@ class _StaffCard extends StatelessWidget {
                         SizedBox(width: context.getRSize(8)),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 2),
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: subtext.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(8),
@@ -466,8 +487,11 @@ class _StaffCard extends StatelessWidget {
               ),
             ),
             if (row.manageable || row.isSelf)
-              Icon(FontAwesomeIcons.chevronRight,
-                  size: context.getRSize(13), color: subtext),
+              Icon(
+                FontAwesomeIcons.chevronRight.data,
+                size: context.getRSize(13),
+                color: subtext,
+              ),
           ],
         ),
       ),
@@ -552,7 +576,8 @@ class _InvitesTabState extends ConsumerState<_InvitesTab> {
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(
-                foregroundColor: Theme.of(ctx).colorScheme.error),
+              foregroundColor: Theme.of(ctx).colorScheme.error,
+            ),
             child: const Text('Revoke'),
           ),
         ],
@@ -574,7 +599,10 @@ class _InvitesTabState extends ConsumerState<_InvitesTab> {
       AppNotification.showSuccess(context, 'Invite revoked.');
     } catch (e) {
       if (!mounted) return;
-      AppNotification.showError(context, 'Could not revoke invite. Please try again.');
+      AppNotification.showError(
+        context,
+        'Could not revoke invite. Please try again.',
+      );
     }
   }
 
@@ -590,10 +618,12 @@ class _InvitesTabState extends ConsumerState<_InvitesTab> {
     final filtered = q.isEmpty
         ? invites
         : invites
-            .where((i) =>
-                i.code.toLowerCase().contains(q) ||
-                i.email.toLowerCase().contains(q))
-            .toList();
+              .where(
+                (i) =>
+                    i.code.toLowerCase().contains(q) ||
+                    i.email.toLowerCase().contains(q),
+              )
+              .toList();
 
     return Column(
       children: [
@@ -612,15 +642,17 @@ class _InvitesTabState extends ConsumerState<_InvitesTab> {
                     physics: const AlwaysScrollableScrollPhysics(),
                     children: [
                       SizedBox(height: context.getRSize(120)),
-                      const _EmptyState(
-                          icon: FontAwesomeIcons.ticket,
-                          label: 'No pending invites'),
+                      _EmptyState(
+                        icon: FontAwesomeIcons.ticket.data,
+                        label: 'No pending invites',
+                      ),
                     ],
                   )
                 : ListView.builder(
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: EdgeInsets.only(
-                      bottom: context.getRSize(100) + context.deviceBottomPadding,
+                      bottom:
+                          context.getRSize(100) + context.deviceBottomPadding,
                     ),
                     itemCount: filtered.length,
                     itemBuilder: (context, i) {
@@ -694,24 +726,32 @@ class _InviteCard extends StatelessWidget {
               ],
             ),
             SizedBox(height: context.getRSize(8)),
-            _InviteMeta(icon: FontAwesomeIcons.envelope, text: invite.email),
+            _InviteMeta(
+              icon: FontAwesomeIcons.envelope.data,
+              text: invite.email,
+            ),
             SizedBox(height: context.getRSize(4)),
             _InviteMeta(
-              icon: FontAwesomeIcons.userPen,
+              icon: FontAwesomeIcons.userPen.data,
               text:
                   '${generatedBy ?? 'Unknown'} • ${DateFormat('MMM d, y').format(invite.createdAt)}',
             ),
             SizedBox(height: context.getRSize(4)),
-            _InviteMeta(icon: FontAwesomeIcons.clock, text: daysLabel),
+            _InviteMeta(icon: FontAwesomeIcons.clock.data, text: daysLabel),
             SizedBox(height: context.getRSize(12)),
             Align(
               alignment: Alignment.centerRight,
               child: TextButton.icon(
                 onPressed: onRevoke,
-                icon: Icon(FontAwesomeIcons.ban,
-                    size: 13, color: t.colorScheme.error),
-                label: Text('Revoke',
-                    style: TextStyle(color: t.colorScheme.error)),
+                icon: Icon(
+                  FontAwesomeIcons.ban.data,
+                  size: 13,
+                  color: t.colorScheme.error,
+                ),
+                label: Text(
+                  'Revoke',
+                  style: TextStyle(color: t.colorScheme.error),
+                ),
               ),
             ),
           ],
@@ -728,7 +768,8 @@ class _InviteMeta extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final subtext = Theme.of(context).textTheme.bodySmall?.color ??
+    final subtext =
+        Theme.of(context).textTheme.bodySmall?.color ??
         Theme.of(context).iconTheme.color!;
     return Row(
       children: [
@@ -738,7 +779,9 @@ class _InviteMeta extends StatelessWidget {
           child: Text(
             text,
             style: TextStyle(
-                color: subtext, fontSize: context.getRFontSize(12)),
+              color: subtext,
+              fontSize: context.getRFontSize(12),
+            ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -755,7 +798,8 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final subtext = Theme.of(context).textTheme.bodySmall?.color ??
+    final subtext =
+        Theme.of(context).textTheme.bodySmall?.color ??
         Theme.of(context).iconTheme.color!;
     final border = Theme.of(context).dividerColor;
     return Center(
