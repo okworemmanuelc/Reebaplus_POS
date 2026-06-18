@@ -93,6 +93,12 @@ class _AutoLockWrapperState extends ConsumerState<AutoLockWrapper>
       final subBizId = _auth.currentUser?.businessId;
       if (subBizId != null) {
         unawaited(_sync.refreshBusinessRow(subBizId));
+        // The realtime websocket is suspended by the OS while the app is
+        // backgrounded (Doze / screen-off) on a physical device, and the SDK's
+        // channel rejoin is not guaranteed after a long suspension — without
+        // this, "live" sync silently stays dead after the app comes back even
+        // though refreshBusinessRow above does a one-shot catch-up.
+        _sync.restartRealtimeSync(subBizId);
       }
 
       final pausedMs = prefs.getInt(_pausedTimeKey);

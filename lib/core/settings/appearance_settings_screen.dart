@@ -8,6 +8,7 @@ import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/core/theme/theme_notifier.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
 
 /// CEO Settings > Appearance (§10.1). The CEO picks the **business** accent
 /// colour — synced via the `business_design_system` setting and applied to
@@ -54,17 +55,8 @@ class AppearanceSettingsScreen extends ConsumerWidget {
         ref.watch(businessDesignSystemProvider).valueOrNull ??
         themeController.designSystem;
 
-    return Scaffold(
-      backgroundColor: t.scaffoldBackgroundColor,
-      appBar: AppBar(
-        title: const Text(
-          'Appearance',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-      ),
+    return GlassyScaffold(
+      title: 'Appearance',
       body: !canManage
           ? const SettingsNoAccess()
           : SettingsFadeIn(

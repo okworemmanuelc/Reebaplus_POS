@@ -12,6 +12,9 @@ import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
+import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
+import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 const _kMaxDiscount = 'max_discount_percent';
@@ -268,22 +271,8 @@ class _RolePermissionsDetailScreenState
     final t = Theme.of(context);
     final canManage = hasPermission(ref, 'settings.manage');
 
-    return Scaffold(
-      // Body padding is nav-only (deviceBottomPadding): this screen is under
-      // MainLayout, whose Scaffold already resizes the body for the keyboard, so
-      // the inset must not re-add it. resizeToAvoidBottomInset:false is a harmless
-      // no-op here (the screen sees viewInsets 0 under MainLayout).
-      resizeToAvoidBottomInset: false,
-      backgroundColor: t.scaffoldBackgroundColor,
-      appBar: AppBar(
-        title: Text(
-          role.name,
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-      ),
+    return GlassyScaffold(
+      title: role.name,
       body: !canManage
           ? const SettingsNoAccess()
           : ref
@@ -415,9 +404,9 @@ class _RolePermissionsDetailScreenState
   /// Permission scope selector (§10.2.1). Business is the real, default scope
   /// (the toggles below apply to every store); Store is a Phase-1 placeholder.
   Widget _scopeSelector(ThemeData t) {
-    return Container(
+    return GlassyCard(
       padding: const EdgeInsets.all(4),
-      decoration: AppDecorations.glassCard(context, radius: 14),
+      radius: 14,
       child: Row(
         children: [
           _scopeSegment(
@@ -591,9 +580,9 @@ class _RolePermissionsDetailScreenState
   /// A simple glass note for the Store scope when there's nothing to edit
   /// (CEO role, or no stores yet).
   Widget _storeScopeNote(ThemeData t, String message) {
-    return Container(
+    return GlassyCard(
       padding: const EdgeInsets.all(24),
-      decoration: AppDecorations.glassCard(context, radius: 16),
+      radius: 16,
       child: Column(
         children: [
           Icon(
@@ -618,9 +607,9 @@ class _RolePermissionsDetailScreenState
 
   /// Store picker for the Store scope — choose which store's overrides to edit.
   Widget _storePicker(ThemeData t, List<StoreData> stores, String selectedId) {
-    return Container(
+    return GlassyCard(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      decoration: AppDecorations.glassCard(context, radius: 14),
+      radius: 14,
       child: Row(
         children: [
           Icon(
@@ -639,27 +628,24 @@ class _RolePermissionsDetailScreenState
           ),
           const Spacer(),
           Flexible(
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: selectedId,
-                isExpanded: true,
-                alignment: Alignment.centerRight,
-                borderRadius: BorderRadius.circular(12),
-                items: [
-                  for (final s in stores)
-                    DropdownMenuItem(
-                      value: s.id,
-                      child: Text(
-                        s.name,
-                        textAlign: TextAlign.right,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+            child: AppDropdown<String>(
+              value: selectedId,
+              isExpanded: true,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              items: [
+                for (final s in stores)
+                  DropdownMenuItem(
+                    value: s.id,
+                    child: Text(
+                      s.name,
+                      textAlign: TextAlign.right,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                ],
-                onChanged: (v) {
-                  if (v != null) setState(() => _selectedStoreId = v);
-                },
-              ),
+                  ),
+              ],
+              onChanged: (v) {
+                if (v != null) setState(() => _selectedStoreId = v);
+              },
             ),
           ),
         ],
@@ -805,8 +791,8 @@ class _RolePermissionsDetailScreenState
     Map<String, StoreRolePermissionData> overrideByKey,
     Map<String, PermissionData> byKey,
   ) {
-    return Container(
-      decoration: AppDecorations.glassCard(context, radius: 16),
+    return GlassyCard(
+      radius: 16,
       child: Material(
         type: MaterialType.transparency,
         child: Column(
@@ -927,8 +913,8 @@ class _RolePermissionsDetailScreenState
   /// Manager-only toggle: unlock the Home store picker so a Manager can view
   /// other stores and request restock when running low (§11.2 / §10.2).
   Widget _viewAllStoresCard(ThemeData t) {
-    return Container(
-      decoration: AppDecorations.glassCard(context, radius: 16),
+    return GlassyCard(
+      radius: 16,
       child: Material(
         type: MaterialType.transparency,
         child: SwitchListTile(
@@ -960,9 +946,9 @@ class _RolePermissionsDetailScreenState
   /// Per-role discount limit (§10.2). Shown under the Sales section — it's the
   /// sole discount control now that the give-discount toggle is removed.
   Widget _discountCard(ThemeData t) {
-    return Container(
+    return GlassyCard(
       padding: const EdgeInsets.all(16),
-      decoration: AppDecorations.glassCard(context, radius: 16),
+      radius: 16,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1006,9 +992,9 @@ class _RolePermissionsDetailScreenState
 
   /// Per-role expense-approval limit (§10.2). Shown under the Expenses section.
   Widget _expenseCard(ThemeData t) {
-    return Container(
+    return GlassyCard(
       padding: const EdgeInsets.all(16),
-      decoration: AppDecorations.glassCard(context, radius: 16),
+      radius: 16,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

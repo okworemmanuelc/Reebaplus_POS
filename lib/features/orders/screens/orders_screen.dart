@@ -26,12 +26,17 @@ import 'package:reebaplus_pos/features/deliveries/data/models/delivery_receipt.d
     as model;
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/menu_button.dart';
+import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
+import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
 import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
 
 import 'package:reebaplus_pos/features/pos/services/receipt_builder.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/features/orders/widgets/crate_return_modal.dart';
+import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
+import 'package:reebaplus_pos/features/customers/screens/customer_detail_screen.dart';
+import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 import 'package:reebaplus_pos/shared/widgets/printer_picker.dart';
 
 class OrdersScreen extends ConsumerStatefulWidget {
@@ -62,7 +67,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
   Color get subtextCol =>
       Theme.of(context).textTheme.bodySmall?.color ??
       Theme.of(context).iconTheme.color!;
-  Color get borderCol => Theme.of(context).dividerColor;
+  Color get borderCol => Theme.of(context).colorScheme.primary.withValues(alpha: 0.05);
 
   @override
   void initState() {
@@ -216,6 +221,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       color: surfaceCol,
       child: TabBar(
         controller: _tabController,
+        dividerColor: Colors.transparent,
         labelColor: Theme.of(context).colorScheme.primary,
         unselectedLabelColor: subtextCol,
         indicatorColor: Theme.of(context).colorScheme.primary,
@@ -346,77 +352,24 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     required List<String> options,
     required ValueChanged<String> onSelect,
   }) {
-    return PopupMenuButton<String>(
-      onSelected: onSelect,
-      color: surfaceCol,
-      elevation: 3,
-      position: PopupMenuPosition.under,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: borderCol),
-      ),
-      itemBuilder: (ctx) => [
-        for (final o in options)
-          PopupMenuItem<String>(
-            value: o,
-            child: Row(
-              children: [
-                Icon(
-                  FontAwesomeIcons.check.data,
-                  size: context.getRSize(11),
-                  color: o == selected
-                      ? Theme.of(context).colorScheme.primary
-                      : Colors.transparent,
-                ),
-                SizedBox(width: context.getRSize(8)),
-                Text(
-                  o,
-                  style: TextStyle(
-                    color: textCol,
-                    fontSize: context.getRFontSize(13),
-                    fontWeight: o == selected
-                        ? FontWeight.w700
-                        : FontWeight.normal,
-                  ),
-                ),
-              ],
-            ),
-          ),
-      ],
-      child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: context.getRSize(14),
-          vertical: context.getRSize(12),
+    return SizedBox(
+      width: context.getRSize(140),
+      child: AppDropdown<String>(
+        value: selected,
+        items: options
+            .map((p) => DropdownMenuItem(value: p, child: Text(p)))
+            .toList(),
+        onChanged: (v) {
+          if (v != null) onSelect(v);
+        },
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: context.getRSize(12),
+          vertical: context.getRSize(10),
         ),
-        decoration: BoxDecoration(
-          color: _bg,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: borderCol),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              FontAwesomeIcons.calendarDay.data,
-              size: context.getRSize(13),
-              color: subtextCol,
-            ),
-            SizedBox(width: context.getRSize(8)),
-            Text(
-              selected,
-              style: TextStyle(
-                color: textCol,
-                fontSize: context.getRFontSize(13),
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            SizedBox(width: context.getRSize(6)),
-            Icon(
-              FontAwesomeIcons.chevronDown.data,
-              size: context.getRSize(10),
-              color: subtextCol,
-            ),
-          ],
+        prefixIcon: Icon(
+          FontAwesomeIcons.calendarDay.data,
+          size: context.getRSize(13),
+          color: subtextCol,
         ),
       ),
     );
@@ -1331,7 +1284,6 @@ class _OrderCard extends ConsumerWidget {
         Theme.of(context).textTheme.bodySmall?.color ??
         Theme.of(context).iconTheme.color!;
     final borderCol = Theme.of(context).dividerColor;
-    final cardCol = Theme.of(context).cardColor;
     final surfaceCol = Theme.of(context).colorScheme.surface;
     final primary = Theme.of(context).colorScheme.primary;
 
@@ -1399,84 +1351,115 @@ class _OrderCard extends ConsumerWidget {
     final displayItems = items.length > 2 ? items.sublist(0, 2) : items;
     final extraCount = items.length - displayItems.length;
 
-    return Container(
+    return GlassyCard(
       margin: EdgeInsets.only(bottom: context.getRSize(16)),
-      decoration: BoxDecoration(
-        color: cardCol,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderCol),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+      padding: EdgeInsets.zero,
+      radius: 16.0,
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
           onTap: onViewReceipt,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(15),
-            child: IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Left accent stripe
-                  Container(width: 4, color: accentColor),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Left accent stripe
+                Container(
+                  width: 4, 
+                  decoration: BoxDecoration(
+                    color: accentColor,
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(16),
+                      bottomLeft: Radius.circular(16),
+                    ),
+                  ),
+                ),
 
-                  // Card content
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
+                // Card content
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                         // ── Header: Customer + badges ──────────────────────
                         Padding(
                           padding: EdgeInsets.all(context.getRSize(14)),
                           child: Row(
                             children: [
-                              // Avatar
-                              Container(
-                                padding: EdgeInsets.all(context.getRSize(9)),
-                                decoration: BoxDecoration(
-                                  color: primary.withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Icon(
-                                  FontAwesomeIcons.user.data,
-                                  size: context.getRSize(15),
-                                  color: primary,
-                                ),
-                              ),
-                              SizedBox(width: context.getRSize(10)),
-
-                              // Name + address
+                              // Customer profile (avatar + name/address). For a
+                              // named customer this taps through to their detail
+                              // screen; a null onTap (walk-in) lets the tap fall
+                              // through to the card's onViewReceipt.
                               Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      customer?.name ?? 'Walk-in Customer',
-                                      style: TextStyle(
-                                        color: textCol,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: context.getRFontSize(14),
-                                      ),
-                                    ),
-                                    if (customer?.addressText != null &&
-                                        customer!.addressText != 'N/A')
-                                      Text(
-                                        customer.addressText,
-                                        style: TextStyle(
-                                          color: subtextCol,
-                                          fontSize: context.getRFontSize(12),
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(10),
+                                  onTap: customer == null
+                                      ? null
+                                      : () => Navigator.of(context).push(
+                                          slideDownRoute(
+                                            CustomerDetailScreen(
+                                              customer: Customer.fromDb(
+                                                customer,
+                                              ),
+                                            ),
+                                          ),
                                         ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
+                                  child: Row(
+                                    children: [
+                                      // Avatar
+                                      Container(
+                                        padding: EdgeInsets.all(
+                                          context.getRSize(9),
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: primary.withValues(alpha: 0.1),
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
+                                        ),
+                                        child: Icon(
+                                          FontAwesomeIcons.user.data,
+                                          size: context.getRSize(15),
+                                          color: primary,
+                                        ),
                                       ),
-                                  ],
+                                      SizedBox(width: context.getRSize(10)),
+
+                                      // Name + address
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              customer?.name ??
+                                                  'Walk-in Customer',
+                                              style: TextStyle(
+                                                color: textCol,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: context.getRFontSize(
+                                                  14,
+                                                ),
+                                              ),
+                                            ),
+                                            if (customer?.addressText != null &&
+                                                customer!.addressText != 'N/A')
+                                              Text(
+                                                customer.addressText,
+                                                style: TextStyle(
+                                                  color: subtextCol,
+                                                  fontSize: context.getRFontSize(
+                                                    12,
+                                                  ),
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                               SizedBox(width: context.getRSize(8)),
@@ -1840,9 +1823,8 @@ class _OrderCard extends ConsumerWidget {
             ),
           ),
         ),
-      ),
-    );
-  }
+      );
+    }
 }
 
 // ═══════════════════════════ HELPER WIDGETS ══════════════════════════════════
@@ -1882,7 +1864,7 @@ class _StatusBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
+        border: Border.all(color: color.withValues(alpha: 0.1)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1918,7 +1900,7 @@ class _PaymentBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
+        border: Border.all(color: color.withValues(alpha: 0.1)),
       ),
       child: Text(
         label,
@@ -1973,7 +1955,7 @@ class _WalletDebtBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: danger.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: danger.withValues(alpha: 0.2)),
+        border: Border.all(color: danger.withValues(alpha: 0.1)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

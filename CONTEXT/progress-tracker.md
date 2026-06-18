@@ -8,8 +8,8 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
-Phase 1 — In progress. Session 148 complete (2026-06-16).
-148 sessions logged. Codebase is live and being verified on-device.
+Phase 1 — In progress. Session 149 complete (2026-06-16).
+149 sessions logged. Codebase is live and being verified on-device.
 
 ---
 
@@ -23,9 +23,199 @@ phone + LGA fields), and verification of the permission gating screen rendering.
 
 ## Completed
 
+### Sync Issues — collapse `sessions:upsert` churn (2026-06-18)
+- Diagnosed a Sync Issues queue full of pending `sessions:upsert` / a couple
+  `user_businesses:upsert` rows (attempts → 15). Errors were network-rooted:
+  errno-7 `Failed host lookup` (DNS down, on the auth token-refresh URI) and
+  15s `TimeoutException` — device-side outage, not sync logic; Failed/Orphaned
+  were 0, so the queue was retrying correctly and drains on reconnect.
+- Real fix: `SessionsDao.createSession` minted a fresh id on every re-auth,
+  defeating `enqueueUpsert`'s coalescing (keyed on `payload.id`) → one outbox
+  row per login. Now it reuses the existing active session for the same
+  `device_id`+`user_id` (bumps `expires_at`, re-enqueues same id), so re-auth
+  pushes collapse into one coalesced row. Revoked/expired sessions still mint
+  fresh. `AuthService._kickOtherDevices` cloud session `insert`→`upsert` so a
+  reused id can't 23505. `flutter analyze` clean; on-device pass pending.
+  See BUILD_LOG.
+
+### Supplier Accounts §21 — verification-list gaps closed (2026-06-18)
+- Closed the four remaining gaps against the 130-check Phase-1 verification list
+  (the core ledger was already built & store-scoped):
+  - **§4 confirmation gate** (user-confirmed): Invoice Total and Payment now
+    confirm (type/supplier/amount/date/method/store + permanence warning) before
+    writing — `confirmSupplierActivity` in `record_supplier_activity.dart`.
+  - **§10 CEO void/reversal**: ledger rows tappable on Supplier Details
+    (`SupplierLedgerEntryTile.onTap`) → action sheet → confirm → compensating
+    row keeps original `store_id`. `SupplierLedgerDao.voidEntry` returns `bool`
+    (double-void no-op, 10.11); `SupplierAccountService.voidEntry` logs a
+    `supplier.void` Activity row (10.12). CEO-only render-gate + write-boundary.
+  - **§15 Supplier Accounts Report**: new `SupplierAccountsReportScreen` + Reports
+    hub card gated on `suppliers.manage` (CEO default / Manager toggle / hidden
+    for Cashier+Stock keeper). Per-supplier balance/paid/received, store-scoped;
+    gross excludes voids, balance nets them. No schema/DAO change.
+  - **§3.13 Available Empty Crates**: display-only placeholder on Supplier
+    Details for crate businesses (real wiring deferred).
+- `test/suppliers/supplier_ledger_test.dart` added (4 green). `flutter analyze
+  lib` clean for touched files. On-device pass still pending. See BUILD_LOG.
+
+### Release "session has expired" — investigation + diagnostic breadcrumbs (2026-06-18)
+- Investigated a release-build report of being signed out with "session has
+  expired". Identified two distinct forced-logout paths: the remote *kick*
+  (single-active-device → `fullLogout`, "signed in on another device") vs. the
+  *session-expired* gate (`main.dart` `_SessionExpiredScreen`, shown when a local
+  user is set but `_supabaseHasSession == false`). The latter flips only on a real
+  Supabase `signedOut` event (transient refresh failures are swallowed on
+  `onError`), so it means the refresh token was genuinely revoked server-side.
+- **Google verdict:** Google sign-in cannot end the signing-in device's own
+  session — `_kickOtherDevices` uses `signOut(scope: SignOutScope.others)`, which
+  always preserves the requesting session. Google and email/OTP funnel through the
+  identical `resolvePostVerifyRoute`; the kick fires from one place
+  (`biometric_setup_screen.dart:101`) on a *fresh* sign-up by both providers. A
+  release device expiring = the single-active-device policy revoking it because
+  the same account signed in elsewhere.
+- **Added (no behaviour change):** `auth.session_lost` and
+  `auth.session_expired_gate` breadcrumbs to the synced `error_logs` table
+  (release-visible in the Supabase console; the latter tags the stored auth method
+  so reports can be attributed by provider). Documented the previously-undocumented
+  "Single active session per identity" policy in `architecture.md`. `flutter
+  analyze lib/main.dart` clean. See BUILD_LOG 2026-06-18.
+- **Follow-up fix (same day):** the breadcrumbs weren't actually reaching the
+  cloud — verified the live `error_logs` table had 34 rows (generic crashes,
+  incl. today) but **zero `auth.*`**. Cause: they fire when the JWT is gone, and
+  on the kick path *after* `AuthService.value` is nulled, so `ErrorLogDao.logError`
+  resolved `bid == null` and kept the row local-only (never enqueued). Fixed by
+  threading an explicit `businessId`/`userId` through `CrashReporter.record` →
+  `logError` and scoping each breadcrumb to the in-hand local user, so it's
+  durably enqueued and flushes on the next authenticated push (the gate's own OTP
+  re-auth). Migration 0108 (`error_logs`) confirmed deployed. `flutter test
+  test/sync/` 119/119 green. See BUILD_LOG 2026-06-18.
+
+### Cold-start sync warm-up — false `timeout` on first push after login (2026-06-18)
+- Symptom: a `user_businesses:upsert` row failed with a 5s `TimeoutException`
+  in Sync Issues right after login, then healed on retry.
+- Cause: the first push of a session gets a fail-fast 5s budget, but the first
+  authenticated request is cold (DNS+TLS+radio wake+session settling) and
+  exceeds it; the first-enqueued row (`user_businesses` after login) eats it.
+- Fix (`supabase_sync_service.dart`): `_warmUpConnection` fires one cheap
+  `businesses` select before the first drain (pays the cold cost on a throwaway
+  request), gated by `_didWarmUpThisSession` (reset on sign-in/out); first-drain
+  per-chunk timeout floored at 10s as a backstop. Later drains fail fast as
+  before. Sync suite green (119); analyzer clean. See BUILD_LOG 2026-06-18.
+
+### Empty Crates tab — per-store accuracy (Phase 2 active, §16.8.1) (2026-06-18)
+- **Reverses the locked Phase-1 business-wide decision below.** The inventory
+  Empty Crates tab now shows **per-store** empties when a store is locked, and
+  the business-wide total only in "All Stores" mode (`lockedStoreId == null`).
+- Data layer: `watchFullCratesByManufacturer({storeId})` gained an optional
+  store filter (joins `inventory↔products` on `manufacturer_id`, filters
+  `inventory.store_id`); `fullCratesByManufacturerProvider` is store-scoped via
+  `lockedStoreProvider`. Empties read from `store_crate_balances` (per store) or
+  `manufacturers.empty_crate_stock` (All Stores) — the
+  `emptyCrateStock = Σ store_crate_balances` invariant holds.
+- Attribution: a **manual** crate return from Customer Profile is credited to
+  the store the customer's most recent crate-bearing order was created from
+  (`OrderCrateLinesDao.resolveStoreForCustomerManufacturer`), falling back to
+  the active store. Receive-Delivery already hard-requires a store;
+  crate-return modal already passes `order.storeId` — no leak there.
+- UI: Crates tab refactored to reactive `ref.watch` (store can change on any
+  tab); removed the redundant imperative crate stream subscriptions.
+- Tests: per-store filter + resolver coverage added to
+  `test/crates/crate_logic_test.dart` (15 tests green). No schema migration
+  (0104 `store_crate_balances` already shipped). See BUILD_LOG 2026-06-18.
+
+### Crates tab "Full" always showed zero — ID-vs-name lookup (2026-06-17)
+- Bug: in the inventory Empty Crates tab, every manufacturer card's **Full**
+  stat read 0. `_manufacturerCrateStats` is keyed by manufacturer **ID** (the
+  watch streams emit ID-keyed maps), but `_buildCratesTab` matched
+  `s.manufacturer == mfr.name`, so it never matched and fell to `orElse`
+  (`totalBottles: 0`).
+- Fix: match by `mfr.id` in `inventory_screen.dart`. No data-layer change — Full
+  already streams live from `inventory.quantity` joined on `manufacturer_id`, and
+  all writes are stream-tracked (`updates:{inventory}` on the sale decrement,
+  `updates:{manufacturers}` on `addEmptyCrates`), so Full depletes on sale and
+  empties (returns + pending-order-confirmation deliveries) increment live.
+- Test: `watchFullCratesByManufacturer is ID-keyed and depletes on sale` added
+  to `test/crates/crate_logic_test.dart` (12 tests green). See BUILD_LOG.
+
+### Revenue recognized at checkout, not at Confirm (2026-06-17)
+- Locked model: revenue is recognized when **checkout** completes (order written
+  `pending` — wallet legs booked, inventory deducted). **Confirm**
+  (`markCompleted` → `completed`) is ceremonial: it records receipt of goods and
+  returned empty crates; it creates no revenue.
+- Bug: every money/sales aggregation filtered on `status == 'completed'`, hiding
+  checked-out-but-unconfirmed sales from all revenue figures until confirmation.
+- Fix: canonical `orderCountsAsSale` / `orderRevenueStatuses = {'pending',
+  'completed'}` in `lib/shared/models/order_status.dart`; routed Daily
+  Reconciliation (`recon_data.dart`), dashboard (`home_screen.dart`), Profit
+  Report, Profile Sales Volume, staff sales (`staff_detail_screen.dart`), and
+  `getSalesSummaryForProduct` through it. Cancelled/refunded stay excluded. No
+  schema change. Analyzer clean; order/wallet tests green. See BUILD_LOG.
+
+### Empty crates — live-refresh fix + business-wide Phase 1 (2026-06-17)
+- **Bug fixed:** crate return from Customer Profile didn't update the Crates tab.
+  Root cause: balance caches were upserted via raw `customStatement`, invisible
+  to Drift's stream tracker. Routed all 5 upserts through `customInsert(...,
+  updates: {table})` (`recordCrateReturnByCustomer`, `recordCrateIssueByCustomer`,
+  `recordCrateReturnByManufacturer`, `StoreCrateBalancesDao.applyDelta`/`setBalance`).
+- **Phase scope decision (SUPERSEDED 2026-06-18 — see Phase 2 entry above):**
+  ~~Phase 1 empty-crate counts are BUSINESS-WIDE (checklist §8.7), NOT per-store.
+  `store_crate_balances` / `storeCrateBalancesProvider` stay as Phase-2
+  scaffolding (rows still written) but no Phase-1 UI reads them. Inventory Empty
+  Crates tab now always reads `manufacturers.empty_crate_stock`.~~ The tab now
+  reads per-store balances when a store is locked.
+- Manual crate return writes an Activity Log row (§7.8); an owed-crate sale
+  fires a CEO+Manager `customer_crate_debt` notification (§12.1/§12.2) via a
+  best-effort post-sale hook in `OrderService._notifyCrateDebt`.
+- Cart "Empty Crates" section hidden for walk-in customers (§3.13).
+- Tests: 2 watch-stream regression tests + 3 crate-debt notification tests.
+  No schema migration needed (existing tables). See BUILD_LOG 2026-06-17.
+
+### Dashboard debt/credit now business-wide, not store-scoped (2026-06-17)
+- Fixed multi-store dashboard inaccuracy: a customer's single business-wide
+  wallet balance was being attributed to their assigned home store
+  (over/under-counting cross-store customers). `totalCredit`/`totalDebt` now
+  fold over all customers regardless of the active store; sales/inventory/
+  expenses stay store-scoped. Product decision: a wallet is business-wide.
+  Analyzer clean. See BUILD_LOG 2026-06-17.
+- Investigation: the accompanying `order_items`/`wallet_transactions` 23503 FK
+  violations were transient on the v1 per-table push path (parent `orders`
+  chunk times out → loop cascades into child pushes that FK-fail → retry +
+  orphan auto-recovery self-heal). Cloud verified: no data lost.
+
+### Push cascade guard — abort cycle on degraded link (2026-06-17)
+- Fixed the FK-violation storm at the source: `pushPending` now stops the push
+  cycle when a group hits a timeout / transient network error (parents likely
+  didn't land) instead of cascading into child groups that are guaranteed to
+  23503. Per-row FK-deferred / permanent errors keep their own backoff. Domain
+  envelopes + the 200-row re-drain are also skipped while degraded. Analyzer
+  clean; 119/119 sync tests pass. See BUILD_LOG 2026-06-17.
+
+### Sync retry hardening — backoff cap + auto orphan recovery (2026-06-17)
+- §6.8: capped the transient-retry backoff ceiling in `SyncDao.markFailed`
+  (5 min normal / 15 min FK-deferred) so a many-times-failed row can no longer
+  drift ~4 h into the future and stay stuck on a continuously-online device.
+- §6.8.1: automatic orphan recovery. A periodic (30 s drain tick) +
+  connectivity-recovery sweep (`autoRecoverDueOrphans`) re-enqueues orphans whose
+  cause now self-heals — `fk_deferred_cap_reached*` (parent may have landed) and
+  `*created_at is immutable*` (ledger scrub at push, S134). New device-local
+  `auto_retry_count` on `sync_queue` + `sync_queue_orphans` (Drift v52) survives
+  re-orphaning so the per-orphan cap (3) holds; then the row is parked for manual
+  review. Terminal reasons (dup order number, RLS, bad-parameter) stay
+  manual-only. Conservative allowlist chosen by product decision. Manual
+  `retryOrphan` resets the counter. 4 new tests; full suite + migration test
+  green. Local-only schema change — no cloud migration. See BUILD_LOG 2026-06-17.
+
+### Realtime resubscribe on resume / reconnect (2026-06-17)
+- Fixed: live (realtime) sync silently dying on a physical device after the app
+  is backgrounded or the network switches — `startRealtimeSync` only ran once at
+  sign-in and never re-subscribed dead channels. Added
+  `SupabaseSyncService.restartRealtimeSync`, called on app-resume
+  (`auto_lock_wrapper`) and connectivity recovery. Analyzer clean; awaiting
+  on-device confirmation. See BUILD_LOG 2026-06-17.
+
 ### Foundation
-- Database schema rebuild — Drift schema v13 (Session 2). Now at **v49** after
-  141 sessions of incremental migrations.
+- Database schema rebuild — Drift schema v13 (Session 2). Now at **v51** after
+  142 sessions of incremental migrations.
 - Role + permission seeding for new businesses (Session 2). 30 permission keys,
   4 default roles (CEO / Manager / Cashier / Stock keeper) seeded on business
   creation.
@@ -36,6 +226,11 @@ phone + LGA fields), and verification of the permission gating screen rendering.
 - CEO sign-up flow §5 — new-email path (Session 7). Existing-email /
   multi-business branch deferred to Phase 2.
 - Staff sign-up via invite code §6 (Session 10).
+  - Session 149: 9-step flow with phone (step 4) and address (step 5)
+    matching CEO store-details. `AutocompleteField` extracted to
+    `auth_form_kit.dart` (shared). Drift schema v51 adds `phone`/`address`
+    to `users`; SQL migration 0116 adds cloud columns + recreates
+    `redeem_invite_code` with `p_phone`/`p_address`. Sync whitelist updated.
 - Login + Forgot PIN §7.1–7.4 (Session 8). Multi-business confirm-PIN
   deferred to Phase 2.
 - Who Is Working picker §8.1–8.5 (Session 11). "Active now" dot deferred.
@@ -140,6 +335,15 @@ phone + LGA fields), and verification of the permission gating screen rendering.
   never a false-positive wipe. New test:
   `test/auth/post_verify_route_orphan_business_test.dart`.
 - Fixed ListTile debug assertion crashes in tests and UI (Session 145): SwitchListTile widgets wrapped inside decorated containers (such as AppDecorations.glassCard) triggered a debug assertion failure on newer Flutter versions ("ListTile background color or ink splashes may be invisible"). Wrapped the inner columns/list-tiles in transparent Material widgets: in `_permissionGroupCard` and `_viewAllStoresCard` in `role_permissions_detail_screen.dart`, and `_permissionGroupCard` in `staff_permissions_screen.dart`. Ran `dart format lib/` to clean formatting, verified `flutter analyze lib` is 100% clean, and ran the entire test suite ensuring 429/429 tests pass.
+- New-store stock-figure leak fixed (2026-06-17): a newly created store showed
+  another store's "Total Units" / "Products" on the Stores list while its detail
+  screen was correctly empty. Cause: `_StoreCard` in `stores_screen.dart` was a
+  keyless `ListView.builder` child that subscribed to its store's inventory
+  stream only in `initState`; stores order by name, so inserting one shifts
+  positions and Flutter recycled the position-matched state, which kept
+  streaming the previous store's inventory. Fix: `ValueKey(store.id)` on each
+  card + `didUpdateWidget`/`_subscribeInventory()` re-targeting. A new store now
+  starts at 0 until inventory is assigned. `flutter analyze` clean.
 - Declarative back interception + tab history traversal (Session 146): Migrated `MainLayout` from `WidgetsBindingObserver.didPopRoute` to `PopScope(canPop: false, onPopInvokedWithResult: ...)` — the modern Flutter back-interception API. Removed `WidgetsBindingObserver` mixin, `addObserver`/`removeObserver` calls, and the `didPopRoute` override. Updated `NavigationService.handleBackPress` Step 3: tries `popIndex()` first (returns the user to the previous tab in history), then falls back to navigating to the home tab (Step 3.5). Both files analyze clean.
 - Owner role protection (Session 148): Drift schema **v49 → v50** — added
   `ownerId` (nullable TEXT) column to `Businesses` table, mirroring the cloud's
@@ -167,8 +371,10 @@ phone + LGA fields), and verification of the permission gating screen rendering.
   flow, GPS capture, Add-Funds payment method.
 - **Daily Stock Count §17** — Ring 3 Daily Reconciliation data wiring still
   pending. On-device pass also pending.
-- **Supplier Accounts §21** — core ledger built and store-scoped. On-device
-  verification pending.
+- **Supplier Accounts §21** — full feature built: ledger, store scope §21.11,
+  §4 confirmation gate, §10 CEO void, §14 reconciliation, §15 accounts report,
+  §16 payment notifications, §3.13 crates placeholder. On-device verification
+  against the 130-check list still pending.
 - **Theme consistency** — only four areas swept in Session 140. Other screens
   may carry hardcoded `blueMain` / `blueLight` / raw `Colors.*` values.
 
@@ -194,6 +400,19 @@ phone + LGA fields), and verification of the permission gating screen rendering.
 ---
 
 ## Open Questions
+
+- **Empty crates — walk-in crate semantics (§3.14–3.16).** The checklist says a
+  walk-in sale should still adjust empty-crate inventory automatically and that
+  walk-ins must return crates equal to receipt at the same time (no deferred
+  balance). Current `createOrder` gates the entire crate block on
+  `customerId != null`, so walk-ins accrue no crate rows at all. Define the
+  intended walk-in crate-inventory behaviour before implementing — do NOT invent.
+
+- **Empty crates — §5/§9/§10/§11/§13 on-device verification pending.** The
+  pending-order Crate Return modal, refund flow (`crate_refund`), order
+  cancellation reversal, reconciliation crate section, and role-access gating
+  are all built; they need on-device (emulator) confirmation against the
+  checklist rather than further code changes.
 
 - **Receipt §15 refund button** — deferred multiple times. Confirm the exact
   UX (who triggers it, from which screen, what it writes to the ledger) before
@@ -297,10 +516,10 @@ Read this file first, then `CLAUDE.md`, then the master plan section relevant
 to the unit being picked up.
 
 **Repository state:**
-- Drift client schema: **v49**.
-- Cloud migrations deployed through: **0114** (0115 written, not yet pushed).
+- Drift client schema: **v51**.
+- Cloud migrations deployed through: **0114** (0115 and 0116 written, not yet pushed).
 - `flutter test test/sync/` — **115 pass** (Session 141 baseline).
-- Full suite last confirmed: 429 pass (Session 145).
+- Full suite last confirmed: 429 pass (Session 149).
 - `flutter analyze lib` — clean. 18 pre-existing `avoid_print` infos in
   `test/database/roles_v13_report.dart` only; not regressions.
 - iOS build enabled; free Apple ID cert expires after 7 days — re-run

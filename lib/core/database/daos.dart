@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:rxdart/rxdart.dart';
@@ -988,16 +989,24 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
 
   /// Stream the per-manufacturer count of full bottles in stock, derived
   /// from inventory rows joined with products on `manufacturer_id`.
-  Stream<Map<String, int>> watchFullCratesByManufacturer() {
+  ///
+  /// When [storeId] is non-null the count is confined to that store's inventory
+  /// (§16.8.1 Phase 2 — the Empty Crates tab shows per-store figures when a
+  /// store is active). When null it sums every store (business-wide / "All
+  /// Stores").
+  Stream<Map<String, int>> watchFullCratesByManufacturer({String? storeId}) {
+    var predicate =
+        whereBusiness(inventory) &
+        whereBusiness(products) &
+        products.manufacturerId.isNotNull() &
+        products.isDeleted.not();
+    if (storeId != null) {
+      predicate = predicate & inventory.storeId.equals(storeId);
+    }
     final query =
         select(inventory).join([
           innerJoin(products, products.id.equalsExp(inventory.productId)),
-        ])..where(
-          whereBusiness(inventory) &
-              whereBusiness(products) &
-              products.manufacturerId.isNotNull() &
-              products.isDeleted.not(),
-        );
+        ])..where(predicate);
     return query.watch().map((rows) {
       final out = <String, int>{};
       for (final row in rows) {
@@ -2048,7 +2057,9 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
           innerJoin(orders, orders.id.equalsExp(orderItems.orderId)),
         ])..where(
           orderItems.productId.equals(productId) &
-              orders.status.equals('completed') &
+              // Revenue is recognized at checkout ('pending'), not at the
+              // ceremonial Confirm ('completed'). Count any non-reversed sale.
+              orders.status.isIn(const ['pending', 'completed']) &
               whereBusiness(orders),
         );
 
@@ -3290,6 +3301,10 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
             actionType: existing.actionType,
             payload: existing.payload,
             reason: reason,
+            // Carry the queue row's auto-retry count forward (§6.8.1) so the
+            // automatic-recovery cap holds across re-orphan cycles instead of
+            // resetting to 0 every time a recovered row fails again.
+            autoRetryCount: Value(existing.autoRetryCount),
           ),
         );
         await (delete(syncQueue)..where((t) => t.id.equals(id))).go();
@@ -3299,9 +3314,16 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
 
     // Transient retry. FK-deferred uses a 10-minute base so the next
     // pull (typical cadence: minutes) lands in between attempts;
-    // regular transients keep the original 30-second base.
+    // regular transients keep the original 30-second base. The delay is
+    // capped at a ceiling (§6.8: 5 min normal / 15 min FK-deferred) so a row
+    // that has failed many times can't drift hours into the future — the
+    // 1<<(attempts%10) growth otherwise reaches ~4 h before wrapping, leaving
+    // a row stuck long after a continuously-online device's transient cause
+    // (cloud blip, lagging parent) has cleared.
     final base = fkDeferred ? 600 : 30;
-    final delay = Duration(seconds: (1 << (attempts % 10)) * base);
+    final ceilingSeconds = fkDeferred ? 900 : 300;
+    final rawSeconds = (1 << (attempts % 10)) * base;
+    final delay = Duration(seconds: math.min(rawSeconds, ceilingSeconds));
     final next = now.add(delay);
 
     debugPrint(
@@ -3517,52 +3539,118 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
   /// it from the orphans table. The original action_type and payload are
   /// preserved verbatim. Caller must ensure the underlying cause has been
   /// addressed — a blind retry of a phantom-conflict on an append-only
-  /// ledger will just orphan it again.
+  /// ledger will just orphan it again. Manual retry (the Sync Issues screen
+  /// button) resets the auto-retry counter to 0: the operator is explicitly
+  /// taking ownership, so it should get the full automatic-recovery budget
+  /// again if it re-orphans.
   Future<void> retryOrphan(String orphanId) async {
     await transaction(() async {
       final orphan = await (select(
         syncQueueOrphans,
       )..where((t) => t.id.equals(orphanId))).getSingleOrNull();
       if (orphan == null) return;
-
-      // sync_queue_orphans has no business_id column; recover it from the
-      // payload. For table upserts the JSON has `business_id`; for domain
-      // envelopes it sits at `p_business_id`. Fall back to the session
-      // resolver only if neither is present (legacy orphans).
-      String? bid;
-      try {
-        final decoded = jsonDecode(orphan.payload) as Map<String, dynamic>;
-        bid =
-            decoded['business_id'] as String? ??
-            decoded['p_business_id'] as String?;
-      } catch (_) {
-        // undecodable payload — fall through to resolver
-      }
-      bid ??= db.businessIdResolver.call();
-      if (bid == null) {
-        throw StateError(
-          'cannot retry orphan ${orphan.id}: no business_id in payload and '
-          'no current session',
-        );
-      }
-
-      await into(syncQueue).insert(
-        SyncQueueCompanion.insert(
-          id: Value(UuidV7.generate()),
-          businessId: bid,
-          actionType: orphan.actionType,
-          payload: orphan.payload,
-          // Retry re-tags to whoever is signed in now. The orphans table
-          // does not carry an auth_user_id (orphans pre-date L5), and the
-          // user pressing Retry on the Sync Issues screen is explicitly
-          // taking ownership of the push.
-          authUserId: Value(db.currentAuthUserId),
-        ),
-      );
-      await (delete(
-        syncQueueOrphans,
-      )..where((t) => t.id.equals(orphanId))).go();
+      await _reenqueueOrphan(orphan, newAutoRetryCount: 0);
     });
+  }
+
+  /// Reason-prefix allowlist for [autoRecoverDueOrphans] (§6.8.1). Only causes
+  /// that are now known to be self-healing are auto-retried — re-pushing the
+  /// row, not editing it, lets the existing push-side heals run again:
+  ///   - `fk_deferred_cap_reached…` — the parent row was missing when the cap
+  ///     was hit; it may have since arrived via a pull, so the child can now
+  ///     insert.
+  ///   - `…created_at is immutable…` (P0001) — the push boundary now scrubs
+  ///     `created_at` for ledger voids (`_ledgerCreatedAtScrubTables`, S134),
+  ///     so a re-push no longer trips the immutable-column trigger.
+  /// Everything else (duplicate order number 23505, RLS / insufficient
+  /// privilege, invalid_parameter_value) stays manual-only — a blind retry
+  /// would just re-orphan and churn the cloud.
+  static bool _isAutoRecoverableReason(String reason) {
+    return reason.startsWith('fk_deferred_cap_reached') ||
+        reason.contains('created_at is immutable');
+  }
+
+  /// Per-orphan auto-recovery cap. After this many automatic re-enqueues a
+  /// still-failing orphan is parked for manual review so it can't loop on the
+  /// sweep forever. Survives re-orphaning via [SyncQueue.autoRetryCount].
+  static const autoRecoverCap = 3;
+
+  /// Automatic orphan recovery sweep (§6.8.1). Re-enqueues every orphan whose
+  /// cause is on the self-healing allowlist and whose auto-retry budget is not
+  /// yet spent. Returns the number re-enqueued so the caller can decide whether
+  /// to kick a push. Driven by the periodic drain tick and connectivity
+  /// recovery — never blind-retries terminal failures.
+  Future<int> autoRecoverDueOrphans({int limit = 50}) async {
+    final candidates =
+        await (select(syncQueueOrphans)
+              ..where((t) => t.autoRetryCount.isSmallerThanValue(autoRecoverCap))
+              ..orderBy([(t) => OrderingTerm.asc(t.movedAt)])
+              ..limit(limit))
+            .get();
+    var recovered = 0;
+    for (final orphan in candidates) {
+      if (!_isAutoRecoverableReason(orphan.reason)) continue;
+      try {
+        await transaction(() async {
+          await _reenqueueOrphan(
+            orphan,
+            newAutoRetryCount: orphan.autoRetryCount + 1,
+          );
+        });
+        recovered++;
+      } catch (e) {
+        // A single undecodable/sessionless orphan must not abort the sweep —
+        // skip it (it stays for manual review) and continue.
+        debugPrint('[SyncDao] auto-recover skipped orphan ${orphan.id}: $e');
+      }
+    }
+    return recovered;
+  }
+
+  /// Shared re-enqueue core for [retryOrphan] and [autoRecoverDueOrphans].
+  /// MUST be called inside a transaction. Recovers the businessId from the
+  /// payload (table upserts carry `business_id`; domain envelopes carry
+  /// `p_business_id`), inserts a fresh sync_queue row, and deletes the orphan.
+  Future<void> _reenqueueOrphan(
+    SyncQueueOrphanData orphan, {
+    required int newAutoRetryCount,
+  }) async {
+    // sync_queue_orphans has no business_id column; recover it from the
+    // payload. Fall back to the session resolver only if neither key is
+    // present (legacy orphans).
+    String? bid;
+    try {
+      final decoded = jsonDecode(orphan.payload) as Map<String, dynamic>;
+      bid =
+          decoded['business_id'] as String? ??
+          decoded['p_business_id'] as String?;
+    } catch (_) {
+      // undecodable payload — fall through to resolver
+    }
+    bid ??= db.businessIdResolver.call();
+    if (bid == null) {
+      throw StateError(
+        'cannot retry orphan ${orphan.id}: no business_id in payload and '
+        'no current session',
+      );
+    }
+
+    await into(syncQueue).insert(
+      SyncQueueCompanion.insert(
+        id: Value(UuidV7.generate()),
+        businessId: bid,
+        actionType: orphan.actionType,
+        payload: orphan.payload,
+        // Re-tags to whoever is signed in now. The orphans table does not
+        // carry an auth_user_id; the re-push takes ownership under the
+        // current session.
+        authUserId: Value(db.currentAuthUserId),
+        autoRetryCount: Value(newAutoRetryCount),
+      ),
+    );
+    await (delete(
+      syncQueueOrphans,
+    )..where((t) => t.id.equals(orphan.id))).go();
   }
 
   Future<void> discardOrphan(String orphanId) async {
@@ -3795,14 +3883,25 @@ class ErrorLogDao extends DatabaseAccessor<AppDatabase>
     bool isFatal = false,
     String? appVersion,
     String? platform,
+    String? businessId,
+    String? userId,
   }) async {
     try {
-      // Nullable — null before a business is bound (pre-login crash).
-      final bid = currentBusinessId;
+      // Prefer an explicitly-supplied tenant/user over the live resolver.
+      // Session-teardown diagnostics (the `auth.session_lost` /
+      // `auth.session_expired_gate` breadcrumbs) fire at the moment the JWT is
+      // gone — and on the kick path AFTER `AuthService.value` is nulled — so the
+      // resolver returns null there, which would silently keep the row
+      // local-only (no enqueue → never release-visible, the exact failure these
+      // breadcrumbs exist to avoid). Passing the in-hand local user's tenant
+      // keeps the row scoped and durably queued; it flushes on the next
+      // authenticated push (e.g. the OTP re-auth the gate itself performs).
+      // Nullable still — null before a business is bound (pre-login crash).
+      final bid = businessId ?? currentBusinessId;
       final row = ErrorLogsCompanion.insert(
         id: Value(UuidV7.generate()),
         businessId: Value(bid),
-        userId: Value(currentUserId),
+        userId: Value(userId ?? currentUserId),
         role: Value(role),
         context: Value(context),
         errorType: errorType,
@@ -5214,6 +5313,39 @@ class OrderCrateLinesDao extends DatabaseAccessor<AppDatabase>
     )..where((t) => whereBusiness(t) & t.orderId.equals(orderId))).watch();
   }
 
+  /// Resolve the store a manual crate return should be credited to (§16.8.1):
+  /// the store of the customer's most recent order that carried crates for
+  /// [manufacturerId]. Empties are credited to "the store the order was created
+  /// from" so per-store balances stay accurate regardless of the active store.
+  /// Returns null when the customer has no store-stamped order for that brand
+  /// (caller falls back to the active store).
+  Future<String?> resolveStoreForCustomerManufacturer({
+    required String customerId,
+    required String manufacturerId,
+  }) async {
+    final lineOrderIds =
+        await (select(orderCrateLines)..where(
+              (t) =>
+                  whereBusiness(t) & t.manufacturerId.equals(manufacturerId),
+            ))
+            .map((r) => r.orderId)
+            .get();
+    if (lineOrderIds.isEmpty) return null;
+    final order =
+        await (db.select(db.orders)
+              ..where(
+                (o) =>
+                    o.businessId.equals(requireBusinessId()) &
+                    o.customerId.equals(customerId) &
+                    o.id.isIn(lineOrderIds) &
+                    o.storeId.isNotNull(),
+              )
+              ..orderBy([(o) => OrderingTerm.desc(o.createdAt)])
+              ..limit(1))
+            .getSingleOrNull();
+    return order?.storeId;
+  }
+
   /// Record one (order, brand) crate line at sale (§13.4) and enqueue it for
   /// sync. Routed through the DAO so the write reaches the cloud (CLAUDE.md §5).
   /// Stamps business_id + last_updated_at like the other synced-table writers.
@@ -5799,8 +5931,62 @@ class SessionsDao extends DatabaseAccessor<AppDatabase>
     String? deviceId,
   }) async {
     final businessId = requireBusinessId();
-    final id = UuidV7.generate();
     final now = DateTime.now();
+
+    // Reuse the existing active session for this device+user instead of minting
+    // a fresh row on every re-auth (biometric unlock, PIN re-entry, Switch
+    // User, app resume). Each `sessions` row is an idempotent, low-value
+    // single-active-session record that must still sync; on a device that
+    // re-auths while offline, minting a new id each time produces a *separate*
+    // outbox row per login (different payload.id → enqueueUpsert can't coalesce
+    // them), so they pile up in Sync Issues and burn retries for sessions that
+    // no longer matter. Reusing the id collapses every re-auth push into the
+    // one coalesced pending row for this device+user, and bumping the expiry
+    // gives the session a sliding TTL window across active days.
+    //
+    // A revoked (kicked / logged-out) or expired session is NOT reused — a real
+    // re-login after a kick legitimately starts a new session. Without a
+    // deviceId we can't identify the device, so fall back to minting.
+    if (deviceId != null) {
+      final existing =
+          await (select(sessions)
+                ..where(
+                  (t) =>
+                      t.userId.equals(userId) &
+                      t.deviceId.equals(deviceId) &
+                      whereBusiness(t) &
+                      t.revokedAt.isNull() &
+                      t.expiresAt.isBiggerThanValue(now),
+                )
+                ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
+                ..limit(1))
+              .getSingleOrNull();
+      if (existing != null) {
+        await (update(sessions)..where((t) => t.id.equals(existing.id))).write(
+          SessionsCompanion(
+            expiresAt: Value(now.add(ttl)),
+            lastUpdatedAt: Value(now),
+          ),
+        );
+        // Full-row re-enqueue (same id) so the refreshed expiry reaches the
+        // cloud. enqueueUpsert coalesces by (action_type, payload.id), so this
+        // collapses into any still-pending push for this row rather than adding
+        // another. Mirrors revokeSession's update-then-full-row-enqueue.
+        final refreshed =
+            await (select(sessions)
+                  ..where((t) => t.id.equals(existing.id)))
+                .getSingleOrNull();
+        if (refreshed != null) {
+          await db.syncDao.enqueueUpsert(
+            'sessions',
+            refreshed.toCompanion(true),
+          );
+        }
+        return existing.id;
+      }
+    }
+
+    final id = UuidV7.generate();
     // createdAt is set explicitly (not left to the column's SQL default) so the
     // enqueued companion carries it into the cloud push. Otherwise the pushed
     // payload omits created_at and the cloud's NOT NULL constraint rejects the
@@ -6316,19 +6502,21 @@ class SupplierLedgerDao extends DatabaseAccessor<AppDatabase>
   /// Voids an entry by marking the original voided AND appending an opposite-sign
   /// `void` compensating entry (append-only — §21.7, CEO only at the UI). Plain
   /// enqueue path (no domain RPC in Phase 1).
-  Future<void> voidEntry({
+  /// Returns true when a void was actually applied; false when the entry was
+  /// missing or already voided (Section 10.11 — double-void is a no-op).
+  Future<bool> voidEntry({
     required String entryId,
     required String voidedBy,
     required String reason,
   }) async {
-    await transaction(() async {
+    return transaction(() async {
       final original =
           await (select(supplierLedgerEntries)
                 ..where((t) => t.id.equals(entryId))
                 ..limit(1))
               .getSingleOrNull();
-      if (original == null) return;
-      if (original.voidedAt != null) return; // Already voided
+      if (original == null) return false;
+      if (original.voidedAt != null) return false; // Already voided
 
       final now = DateTime.now();
       await (update(
@@ -6368,6 +6556,7 @@ class SupplierLedgerDao extends DatabaseAccessor<AppDatabase>
               .getSingle();
       await db.syncDao.enqueueUpsert('supplier_ledger_entries', updatedOrig);
       await db.syncDao.enqueueUpsert('supplier_ledger_entries', compComp);
+      return true;
     });
   }
 }
@@ -6560,14 +6749,21 @@ class StoreCrateBalancesDao extends DatabaseAccessor<AppDatabase>
     required String manufacturerId,
     required int delta,
   }) async {
-    await customStatement(
+    await customInsert(
       'INSERT INTO store_crate_balances '
       '  (id, business_id, store_id, manufacturer_id, balance) '
       'VALUES (?, ?, ?, ?, ?) '
       'ON CONFLICT(business_id, store_id, manufacturer_id) DO UPDATE SET '
       '  balance = balance + excluded.balance, '
       "  last_updated_at = CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)",
-      [UuidV7.generate(), requireBusinessId(), storeId, manufacturerId, delta],
+      variables: [
+        Variable(UuidV7.generate()),
+        Variable(requireBusinessId()),
+        Variable(storeId),
+        Variable(manufacturerId),
+        Variable(delta),
+      ],
+      updates: {storeCrateBalances},
     );
     // Enqueue the updated cache row for cloud push.
     final row =
@@ -6592,20 +6788,21 @@ class StoreCrateBalancesDao extends DatabaseAccessor<AppDatabase>
     required String manufacturerId,
     required int newBalance,
   }) async {
-    await customStatement(
+    await customInsert(
       'INSERT INTO store_crate_balances '
       '  (id, business_id, store_id, manufacturer_id, balance) '
       'VALUES (?, ?, ?, ?, ?) '
       'ON CONFLICT(business_id, store_id, manufacturer_id) DO UPDATE SET '
       '  balance = excluded.balance, '
       "  last_updated_at = CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)",
-      [
-        UuidV7.generate(),
-        requireBusinessId(),
-        storeId,
-        manufacturerId,
-        newBalance,
+      variables: [
+        Variable(UuidV7.generate()),
+        Variable(requireBusinessId()),
+        Variable(storeId),
+        Variable(manufacturerId),
+        Variable(newBalance),
       ],
+      updates: {storeCrateBalances},
     );
     final row =
         await (select(storeCrateBalances)..where(
@@ -6661,14 +6858,23 @@ class CrateLedgerDao extends DatabaseAccessor<AppDatabase>
       );
       await into(crateLedger).insert(ledgerComp);
 
-      // 2. Update manufacturer_crate_balances cache (always — UI reads this)
-      await customStatement(
+      // 2. Update manufacturer_crate_balances cache (always — UI reads this).
+      // customInsert (not customStatement) so Drift invalidates the watching
+      // streams on commit — a raw customStatement write is invisible to the
+      // stream tracker, which left the Crates tab stale after a return.
+      await customInsert(
         'INSERT INTO manufacturer_crate_balances (id, business_id, manufacturer_id, balance) '
         'VALUES (?, ?, ?, ?) '
         'ON CONFLICT(business_id, manufacturer_id) DO UPDATE SET '
         'balance = balance + excluded.balance, '
         'last_updated_at = CAST(strftime(\'%s\', CURRENT_TIMESTAMP) AS INTEGER)',
-        [UuidV7.generate(), requireBusinessId(), manufacturerId, delta],
+        variables: [
+          Variable(UuidV7.generate()),
+          Variable(requireBusinessId()),
+          Variable(manufacturerId),
+          Variable(delta),
+        ],
+        updates: {manufacturerCrateBalances},
       );
 
       // 2b. Update per-store cache if a storeId is provided (§16.8.1).
@@ -6746,19 +6952,21 @@ class CrateLedgerDao extends DatabaseAccessor<AppDatabase>
       );
       await into(crateLedger).insert(ledgerComp);
 
-      await customStatement(
+      // customInsert (not customStatement) so the watching streams refresh.
+      await customInsert(
         'INSERT INTO customer_crate_balances (id, business_id, customer_id, manufacturer_id, balance) '
         'VALUES (?, ?, ?, ?, ?) '
         'ON CONFLICT(business_id, customer_id, manufacturer_id) DO UPDATE SET '
         'balance = balance + excluded.balance, '
         'last_updated_at = CAST(strftime(\'%s\', CURRENT_TIMESTAMP) AS INTEGER)',
-        [
-          UuidV7.generate(),
-          requireBusinessId(),
-          customerId,
-          manufacturerId,
-          delta,
+        variables: [
+          Variable(UuidV7.generate()),
+          Variable(requireBusinessId()),
+          Variable(customerId),
+          Variable(manufacturerId),
+          Variable(delta),
         ],
+        updates: {customerCrateBalances},
       );
 
       if (useDomainRpc) {
@@ -6834,19 +7042,21 @@ class CrateLedgerDao extends DatabaseAccessor<AppDatabase>
     );
     await into(crateLedger).insert(ledgerComp);
 
-    await customStatement(
+    // customInsert (not customStatement) so the watching streams refresh.
+    await customInsert(
       'INSERT INTO customer_crate_balances (id, business_id, customer_id, manufacturer_id, balance) '
       'VALUES (?, ?, ?, ?, ?) '
       'ON CONFLICT(business_id, customer_id, manufacturer_id) DO UPDATE SET '
       'balance = balance + excluded.balance, '
       'last_updated_at = CAST(strftime(\'%s\', CURRENT_TIMESTAMP) AS INTEGER)',
-      [
-        UuidV7.generate(),
-        requireBusinessId(),
-        customerId,
-        manufacturerId,
-        delta,
+      variables: [
+        Variable(UuidV7.generate()),
+        Variable(requireBusinessId()),
+        Variable(customerId),
+        Variable(manufacturerId),
+        Variable(delta),
       ],
+      updates: {customerCrateBalances},
     );
 
     await db.syncDao.enqueueUpsert('crate_ledger', ledgerComp);

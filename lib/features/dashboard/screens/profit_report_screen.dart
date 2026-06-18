@@ -8,6 +8,7 @@ import 'package:reebaplus_pos/core/utils/csv_export.dart';
 import 'package:reebaplus_pos/core/utils/date_period.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/shared/models/order_status.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 
@@ -20,18 +21,18 @@ import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 /// shows this card to a role holding `reports.see_profit`, which by default is
 /// the CEO alone.
 class ProfitReportScreen extends ConsumerStatefulWidget {
-  const ProfitReportScreen({super.key, required this.initialPeriod});
+  const ProfitReportScreen({super.key, this.initialPeriod});
 
-  /// The hub's global period, used as this screen's starting filter (§25.5).
-  /// The screen can override it locally (§25.6).
-  final String initialPeriod;
+  /// Optional starting filter. Defaults to the canonical first period (Today)
+  /// when not supplied; the screen owns its own period dropdown (§25.5/§25.6).
+  final String? initialPeriod;
 
   @override
   ConsumerState<ProfitReportScreen> createState() => _ProfitReportScreenState();
 }
 
 class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
-  late String _period = widget.initialPeriod;
+  late String _period = widget.initialPeriod ?? kDatePeriodLabels.first;
 
   /// Aggregate completed orders in [period] into headline totals + per-product
   /// rows (sorted by gross profit, descending). Lines whose captured buying
@@ -50,7 +51,9 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
     var uncostedItems = 0;
 
     for (final o in orders) {
-      if (o.order.status != 'completed') continue;
+      // Recognized at checkout ('pending'), not at the ceremonial Confirm
+      // ('completed'). Count any non-reversed sale.
+      if (!orderCountsAsSale(o.order.status)) continue;
       if (!window.includes(o.order.createdAt)) continue;
       for (final i in o.items) {
         final product = i.product;

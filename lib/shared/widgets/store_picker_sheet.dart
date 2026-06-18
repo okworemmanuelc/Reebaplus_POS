@@ -16,10 +16,12 @@ Future<void> showStorePickerSheet(
   BuildContext context,
   WidgetRef ref, {
   VoidCallback? onSelected,
+  bool isDismissible = true,
 }) {
   final selectable = ref.read(selectableStoresProvider);
   final canViewAll = ref.read(canViewAllStoresProvider);
   final activeId = ref.read(lockedStoreProvider).value;
+  final inventoryCounts = ref.watch(storeInventoryCountsProvider).valueOrNull ?? {};
 
   final t = Theme.of(context);
   final primary = t.colorScheme.primary;
@@ -33,6 +35,8 @@ Future<void> showStorePickerSheet(
 
   return showModalBottomSheet<void>(
     context: context,
+    isDismissible: isDismissible,
+    enableDrag: isDismissible,
     backgroundColor: t.colorScheme.surface,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -95,17 +99,32 @@ Future<void> showStorePickerSheet(
                       ),
                       SizedBox(width: context.getRSize(14)),
                       Expanded(
-                        child: Text(
-                          o.name,
-                          style: TextStyle(
-                            fontWeight: selected
-                                ? FontWeight.bold
-                                : FontWeight.w600,
-                            fontSize: context.getRFontSize(14.5),
-                            color: selected ? primary : textColor,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              o.name,
+                              style: TextStyle(
+                                fontWeight: selected
+                                    ? FontWeight.bold
+                                    : FontWeight.w600,
+                                fontSize: context.getRFontSize(14.5),
+                                color: selected ? primary : textColor,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (o.id != null && inventoryCounts[o.id] != null) ...[
+                              SizedBox(height: context.getRSize(2)),
+                              Text(
+                                '${inventoryCounts[o.id]!.skuCount} SKUs (${inventoryCounts[o.id]!.totalQuantity} items)',
+                                style: TextStyle(
+                                  fontSize: context.getRFontSize(12),
+                                  color: subtextColor,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                       if (selected)

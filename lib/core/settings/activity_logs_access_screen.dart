@@ -7,6 +7,7 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
 
 const _kActivityLogsView = 'activity_logs.view';
 
@@ -23,17 +24,8 @@ class ActivityLogsAccessScreen extends ConsumerWidget {
     final canManage = hasPermission(ref, 'settings.manage');
     final roles = ref.watch(allRolesProvider);
 
-    return Scaffold(
-      backgroundColor: t.scaffoldBackgroundColor,
-      appBar: AppBar(
-        title: const Text(
-          'Activity Logs access',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-      ),
+    return GlassyScaffold(
+      title: 'Activity Logs access',
       body: !canManage
           ? const SettingsNoAccess()
           : roles.when(

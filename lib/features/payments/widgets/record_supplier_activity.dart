@@ -312,6 +312,19 @@ class _RecordInvoiceSheetState extends ConsumerState<RecordInvoiceSheet>
       return;
     }
     final messenger = ScaffoldMessenger.of(context);
+    final store = _resolveRecordStore(ref);
+    // Section 4 — confirmation gate before the entry is written.
+    final confirmed = await confirmSupplierActivity(
+      context,
+      title: 'Confirm Invoice Total',
+      accent: danger,
+      entryType: 'Invoice Total',
+      supplierName: widget.supplierName,
+      amountKobo: amountKobo,
+      date: _dateReceived,
+      storeLabel: store.label,
+    );
+    if (confirmed != true || !mounted) return;
     setState(() => _saving = true);
     try {
       await ref
@@ -321,7 +334,7 @@ class _RecordInvoiceSheetState extends ConsumerState<RecordInvoiceSheet>
             amountKobo: amountKobo,
             dateReceived: _dateReceived,
             staffId: staffId,
-            storeId: _resolveRecordStore(ref).id,
+            storeId: store.id,
             note: _noteCtrl.text,
           );
       if (mounted) Navigator.pop(context);
@@ -564,6 +577,27 @@ class _RecordPaymentSheetState extends ConsumerState<RecordPaymentSheet>
     }
     final staffId = ref.read(authProvider).currentUser?.id;
     if (staffId == null) return;
+    final store = _resolveRecordStore(ref);
+    final supplierLabel =
+        widget.supplierName ??
+        (ref.read(allSuppliersProvider).valueOrNull ?? const <SupplierData>[])
+            .where((s) => s.id == supplierId)
+            .map((s) => s.name)
+            .firstOrNull ??
+        'Supplier';
+    // Section 4 — confirmation gate before the entry is written.
+    final confirmed = await confirmSupplierActivity(
+      context,
+      title: 'Confirm Payment',
+      accent: success,
+      entryType: 'Payment',
+      supplierName: supplierLabel,
+      amountKobo: amountKobo,
+      date: _paidOn,
+      storeLabel: store.label,
+      paymentMethod: _methodLabel(_method),
+    );
+    if (confirmed != true || !mounted) return;
     setState(() => _saving = true);
     try {
       await ref
@@ -574,7 +608,7 @@ class _RecordPaymentSheetState extends ConsumerState<RecordPaymentSheet>
             method: _method,
             paidOn: _paidOn,
             staffId: staffId,
-            storeId: _resolveRecordStore(ref).id,
+            storeId: store.id,
             receiptPath: _receipt?.path,
             referenceNote: _refCtrl.text,
           );
@@ -926,6 +960,150 @@ Widget _recordStoreBanner(BuildContext context, String label) {
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+/// Maps a payment-method code to its display label (matches the dropdown).
+String _methodLabel(String method) {
+  switch (method) {
+    case 'cash':
+      return 'Cash';
+    case 'transfer':
+      return 'Bank Transfer';
+    case 'pos':
+      return 'POS Card';
+    case 'other':
+      return 'Other';
+    default:
+      return method;
+  }
+}
+
+/// Section 4 (user-confirmed) — the confirmation gate shown after the form is
+/// submitted but BEFORE the ledger entry is written. Spells out the supplier,
+/// amount, date, target store, entry type (and payment method) and warns that
+/// the entry is permanent and reversible only by a CEO void (§21.7). Returns
+/// true only when the user taps Confirm; Cancel returns them to the form with
+/// data intact.
+Future<bool?> confirmSupplierActivity(
+  BuildContext context, {
+  required String title,
+  required Color accent,
+  required String entryType,
+  required String supplierName,
+  required int amountKobo,
+  required DateTime date,
+  required String storeLabel,
+  String? paymentMethod,
+}) {
+  final surface = Theme.of(context).colorScheme.surface;
+  final text = Theme.of(context).colorScheme.onSurface;
+  final subtext =
+      Theme.of(context).textTheme.bodySmall?.color ??
+      Theme.of(context).iconTheme.color!;
+
+  return showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+      ),
+      title: Text(
+        title,
+        style: TextStyle(
+          color: text,
+          fontWeight: FontWeight.w800,
+          fontSize: ctx.getRFontSize(18),
+        ),
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _confirmRow(ctx, 'Type', entryType, text, subtext),
+          _confirmRow(ctx, 'Supplier', supplierName, text, subtext),
+          _confirmRow(
+            ctx,
+            'Amount',
+            formatCurrency(amountKobo / 100),
+            accent,
+            subtext,
+            bold: true,
+          ),
+          _confirmRow(
+            ctx,
+            'Date',
+            DateFormat('MMM d, y').format(date),
+            text,
+            subtext,
+          ),
+          if (paymentMethod != null)
+            _confirmRow(ctx, 'Method', paymentMethod, text, subtext),
+          _confirmRow(ctx, 'Store', storeLabel, text, subtext),
+          SizedBox(height: ctx.getRSize(12)),
+          Text(
+            'This entry is permanent. It can only be reversed by a CEO void.',
+            style: TextStyle(
+              color: danger,
+              fontSize: ctx.getRFontSize(12),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        AppButton(
+          text: 'Cancel',
+          variant: AppButtonVariant.ghost,
+          size: AppButtonSize.small,
+          onPressed: () => Navigator.pop(ctx, false),
+        ),
+        AppButton(
+          text: 'Confirm',
+          size: AppButtonSize.small,
+          onPressed: () => Navigator.pop(ctx, true),
+        ),
+      ],
+    ),
+  );
+}
+
+Widget _confirmRow(
+  BuildContext context,
+  String label,
+  String value,
+  Color valueColor,
+  Color labelColor, {
+  bool bold = false,
+}) {
+  return Padding(
+    padding: EdgeInsets.symmetric(vertical: context.getRSize(4)),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: context.getRSize(76),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: labelColor,
+              fontSize: context.getRFontSize(13),
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(
+              color: valueColor,
+              fontSize: context.getRFontSize(13),
+              fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
+            ),
           ),
         ),
       ],

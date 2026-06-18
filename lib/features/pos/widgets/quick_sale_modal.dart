@@ -11,6 +11,7 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 
@@ -232,15 +233,40 @@ class _QuickSaleModalState extends ConsumerState<QuickSaleModal>
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop && waiting) _withdrawAndClose();
       },
-      child: AlertDialog(
-        backgroundColor: widget.surfaceCol,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Text(
-          waiting ? 'Awaiting Approval' : 'Quick Sale ⚡',
-          style: TextStyle(color: widget.textCol, fontWeight: FontWeight.bold),
+      child: Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        insetPadding: EdgeInsets.all(context.getRSize(20)),
+        child: GlassyCard(
+          radius: 24.0,
+          padding: EdgeInsets.all(context.getRSize(24)),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                waiting ? 'Awaiting Approval' : 'Quick Sale ⚡',
+                style: TextStyle(
+                  color: widget.textCol,
+                  fontWeight: FontWeight.bold,
+                  fontSize: context.getRFontSize(20),
+                ),
+              ),
+              SizedBox(height: context.getRSize(24)),
+              Flexible(child: waiting ? _buildWaiting() : _buildForm()),
+              SizedBox(height: context.getRSize(24)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: (waiting ? _waitingActions() : _formActions())
+                    .map((w) => Padding(
+                          padding: EdgeInsets.only(left: context.getRSize(8)),
+                          child: w,
+                        ))
+                    .toList(),
+              ),
+            ],
+          ),
         ),
-        content: waiting ? _buildWaiting() : _buildForm(),
-        actions: waiting ? _waitingActions() : _formActions(),
       ),
     );
   }

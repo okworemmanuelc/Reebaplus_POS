@@ -6,12 +6,12 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
-import 'package:reebaplus_pos/core/utils/date_period.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/profit_report_screen.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/daily_reconciliation_list_screen.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/stock_approvals_screen.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/crate_deposits_report_screen.dart';
+import 'package:reebaplus_pos/features/dashboard/screens/supplier_accounts_report_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 
 class ReportsHubScreen extends ConsumerStatefulWidget {
@@ -22,9 +22,6 @@ class ReportsHubScreen extends ConsumerStatefulWidget {
 }
 
 class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
-  String _selectedPeriod = kDatePeriodLabels.first; // Today (§30.11)
-  final List<String> _periods = kDatePeriodLabels;
-
   @override
   Widget build(BuildContext context) {
     // §25.3 role gating — the Reports hub is CEO + Manager only (§11.3). Each
@@ -100,6 +97,23 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
             slideDownRoute(const CrateDepositsReportScreen()),
           ),
         ),
+      // §25.2 Supplier Accounts Report — outstanding balance, total paid and
+      // total received per supplier, store-scoped. Gated on suppliers.manage so
+      // it tracks Supplier Accounts access: CEO by default, Manager only when the
+      // CEO toggles it on; hidden for Cashier / Stock keeper (Reports hub itself
+      // is Manager-up only).
+      if (isMgrUp && hasPermission(ref, 'suppliers.manage'))
+        _buildReportCard(
+          context,
+          title: 'Supplier Accounts',
+          subtitle: 'Balances · Paid · Received',
+          icon: FontAwesomeIcons.buildingColumns.data,
+          color: Colors.brown,
+          onTap: () => Navigator.push(
+            context,
+            slideDownRoute(const SupplierAccountsReportScreen()),
+          ),
+        ),
       // Profit Report — CEO only (§25.2/§25.3); reports.see_profit is granted to
       // the CEO alone by default.
       if (isMgrUp && hasPermission(ref, 'reports.see_profit'))
@@ -111,7 +125,7 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
           color: Colors.green,
           onTap: () => Navigator.push(
             context,
-            slideDownRoute(ProfitReportScreen(initialPeriod: _selectedPeriod)),
+            slideDownRoute(const ProfitReportScreen()),
           ),
         ),
     ];
@@ -138,89 +152,19 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
             ],
           ),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildPeriodBar(context),
-            Expanded(
-              child: GridView.count(
-                crossAxisCount: 2,
-                padding: EdgeInsets.fromLTRB(
-                  context.spacingM,
-                  context.spacingS,
-                  context.spacingM,
-                  context.spacingM + context.deviceBottomPadding,
-                ),
-                mainAxisSpacing: context.spacingM,
-                crossAxisSpacing: context.spacingM,
-                children: cards,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // §25.1 / §30.11 — global period filter as the canonical horizontal chip set.
-  // Relocated out of the AppBar (where the cramped dropdown looked wrong) into a
-  // full-width bar above the report grid; the choice drives every report's
-  // initial period (each detail screen can still override, §25.5 / §25.6).
-  Widget _buildPeriodBar(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        context.spacingM,
-        context.spacingM,
-        context.spacingM,
-        context.spacingS,
-      ),
-      child: Row(
-        children: [
-          Icon(
-            FontAwesomeIcons.calendarDay.data,
-            size: context.getRSize(14),
-            color: Theme.of(context).hintColor,
+        // Each report owns its own period filter where its data lives; the hub
+        // is just the menu of cards (no duplicate hub-level period bar).
+        child: GridView.count(
+          crossAxisCount: 2,
+          padding: EdgeInsets.fromLTRB(
+            context.spacingM,
+            context.spacingM,
+            context.spacingM,
+            context.spacingM + context.deviceBottomPadding,
           ),
-          SizedBox(width: context.spacingS),
-          Expanded(
-            child: SizedBox(
-              height: context.getRSize(38),
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                padding: EdgeInsets.zero,
-                itemCount: _periods.length,
-                separatorBuilder: (_, __) => SizedBox(width: context.spacingS),
-                itemBuilder: (context, i) => _buildPeriodChip(_periods[i]),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPeriodChip(String period) {
-    final selected = period == _selectedPeriod;
-    final color = context.primaryColor;
-    return GestureDetector(
-      onTap: () => setState(() => _selectedPeriod = period),
-      child: AnimatedContainer(
-        duration: AppAnimations.fast,
-        alignment: Alignment.center,
-        padding: EdgeInsets.symmetric(horizontal: context.spacingM),
-        decoration: BoxDecoration(
-          color: selected ? color : context.surfaceColor,
-          borderRadius: BorderRadius.circular(context.radiusL),
-          border: Border.all(
-            color: selected ? color : color.withValues(alpha: 0.18),
-          ),
-        ),
-        child: Text(
-          period,
-          style: context.bodySmall.copyWith(
-            color: selected ? Colors.white : Theme.of(context).hintColor,
-            fontWeight: FontWeight.w700,
-          ),
+          mainAxisSpacing: context.spacingM,
+          crossAxisSpacing: context.spacingM,
+          children: cards,
         ),
       ),
     );

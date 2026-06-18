@@ -1,7 +1,10 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:intl/intl.dart';
 
+import 'package:reebaplus_pos/core/data/business_types.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -31,6 +34,7 @@ class SupplierDetailScreen extends ConsumerStatefulWidget {
 
 class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
   String _timeFilter = 'This Month'; // §30.6/§30.11 default
+  bool _isScrolled = false;
 
   List<String> get _periodOptions =>
       datePeriodLabelsForRole(managerUp: isManagerOrAbove(ref));
@@ -40,12 +44,10 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
 
   Color get _bg => Theme.of(context).scaffoldBackgroundColor;
   Color get _surface => Theme.of(context).colorScheme.surface;
-  Color get _cardBg => Theme.of(context).cardColor;
   Color get _text => Theme.of(context).colorScheme.onSurface;
   Color get _subtext =>
       Theme.of(context).textTheme.bodySmall?.color ??
       Theme.of(context).iconTheme.color!;
-  Color get _border => Theme.of(context).dividerColor;
 
   @override
   Widget build(BuildContext context) {
@@ -57,65 +59,89 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
     final supplierAsync = ref.watch(supplierByIdProvider(widget.supplierId));
     final supplier = supplierAsync.valueOrNull;
 
-    return Scaffold(
-      backgroundColor: _bg,
-      appBar: AppBar(
-        backgroundColor: _surface,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new, color: _text, size: 20),
-          onPressed: () => Navigator.pop(context),
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            _bg,
+            Theme.of(context).colorScheme.primary.withValues(alpha: 0.05),
+            Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+          ],
         ),
-        title: Text(
-          'Supplier Details',
-          style: TextStyle(
-            color: _text,
-            fontSize: context.getRFontSize(18),
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        actions: [
-          // Edit is CEO only (§21.7).
-          if (isCeo && supplier != null)
-            IconButton(
-              icon: Icon(
-                FontAwesomeIcons.penToSquare.data,
-                color: _text,
-                size: context.getRSize(16),
-              ),
-              tooltip: 'Edit supplier',
-              onPressed: () =>
-                  SupplierFormSheet.show(context, existing: supplier),
-            ),
-          if (isCeo && supplier != null)
-            IconButton(
-              icon: Icon(
-                FontAwesomeIcons.trashCan.data,
-                color: danger,
-                size: context.getRSize(16),
-              ),
-              tooltip: 'Delete supplier',
-              onPressed: () => _confirmDelete(supplier),
-            ),
-        ],
       ),
-      body: !canManage
-          ? Center(
-              child: Text(
-                'You don’t have access to Supplier Accounts.',
-                style: TextStyle(color: _subtext),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          backgroundColor: _isScrolled
+              ? _surface.withValues(alpha: 0.8)
+              : Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+            icon: Icon(Icons.arrow_back_ios_new, color: _text, size: 20),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: Text(
+            'Supplier Details',
+            style: TextStyle(
+              color: _text,
+              fontSize: context.getRFontSize(18),
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          actions: [
+            // Edit is CEO only (§21.7).
+            if (isCeo && supplier != null)
+              IconButton(
+                icon: Icon(
+                  FontAwesomeIcons.penToSquare.data,
+                  color: _text,
+                  size: context.getRSize(16),
+                ),
+                tooltip: 'Edit supplier',
+                onPressed: () =>
+                    SupplierFormSheet.show(context, existing: supplier),
               ),
-            )
-          : supplier == null
-          ? (supplierAsync.isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : Center(
-                    child: Text(
-                      'Supplier not found',
-                      style: TextStyle(color: _subtext),
-                    ),
-                  ))
-          : _buildBody(context, supplier),
+            if (isCeo && supplier != null)
+              IconButton(
+                icon: Icon(
+                  FontAwesomeIcons.trashCan.data,
+                  color: danger,
+                  size: context.getRSize(16),
+                ),
+                tooltip: 'Delete supplier',
+                onPressed: () => _confirmDelete(supplier),
+              ),
+          ],
+        ),
+        body: NotificationListener<ScrollUpdateNotification>(
+          onNotification: (notif) {
+            if (notif.metrics.pixels > 10 && !_isScrolled) {
+              setState(() => _isScrolled = true);
+            } else if (notif.metrics.pixels <= 10 && _isScrolled) {
+              setState(() => _isScrolled = false);
+            }
+            return false;
+          },
+          child: !canManage
+              ? Center(
+                  child: Text(
+                    'You don’t have access to Supplier Accounts.',
+                    style: TextStyle(color: _subtext),
+                  ),
+                )
+              : supplier == null
+              ? (supplierAsync.isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : Center(
+                        child: Text(
+                          'Supplier not found',
+                          style: TextStyle(color: _subtext),
+                        ),
+                      ))
+              : _buildBody(context, supplier),
+        ),
       floatingActionButton: (canManage && supplier != null)
           ? AppFAB(
               heroTag: 'supplier_record_fab',
@@ -128,6 +154,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
               label: 'Record Activity',
             )
           : null,
+      ),
     );
   }
 
@@ -162,6 +189,12 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
         _buildHeader(context, supplier),
         SizedBox(height: context.getRSize(24)),
         _buildBalanceCard(context, balanceKobo, scopeLabel),
+        // §3.13 — Available Empty Crates section (Bar / Beverage distributor
+        // only). Display-only in Phase 1; real-data wiring is deferred.
+        if (isCrateBusiness(ref.watch(currentBusinessProvider)?.type)) ...[
+          SizedBox(height: context.getRSize(24)),
+          _buildEmptyCratesSection(context),
+        ],
         SizedBox(height: context.getRSize(24)),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -190,6 +223,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
         _buildHistory(
           context,
           filtered,
+          supplier: supplier,
           storeNameById: isAllStores ? storeNameById : null,
         ),
       ],
@@ -284,43 +318,111 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
         ? 'Amount owed to supplier'
         : (balanceKobo > 0 ? 'Credit balance' : 'Settled');
 
-    return Container(
-      padding: EdgeInsets.all(context.getRSize(20)),
-      decoration: BoxDecoration(
-        color: _cardBg,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _border),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          padding: EdgeInsets.all(context.getRSize(20)),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.05),
+            ),
+          ),
+          child: Material(
+            type: MaterialType.transparency,
+            child: Column(
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: context.getRFontSize(14),
+                    color: _subtext,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                SizedBox(height: context.getRSize(8)),
+                Text(
+                  formatCurrency(balanceKobo.abs() / 100),
+                  style: TextStyle(
+                    fontSize: context.getRFontSize(28),
+                    color: color,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                SizedBox(height: context.getRSize(4)),
+                // §21.11 — which store this balance is scoped to.
+                Text(
+                  scopeLabel,
+                  style: TextStyle(
+                    fontSize: context.getRFontSize(12),
+                    color: _subtext,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
-      child: Column(
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: context.getRFontSize(14),
-              color: _subtext,
-              fontWeight: FontWeight.w600,
+    );
+  }
+
+  /// §3.13 — display-only "Available Empty Crates" card for crate businesses.
+  /// Real per-supplier crate-stock wiring is deferred to a later phase; this is
+  /// a placeholder so the section is present as specified.
+  Widget _buildEmptyCratesSection(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          padding: EdgeInsets.all(context.getRSize(16)),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.05),
             ),
           ),
-          SizedBox(height: context.getRSize(8)),
-          Text(
-            formatCurrency(balanceKobo.abs() / 100),
-            style: TextStyle(
-              fontSize: context.getRFontSize(28),
-              color: color,
-              fontWeight: FontWeight.w800,
+          child: Material(
+            type: MaterialType.transparency,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      FontAwesomeIcons.boxesStacked.data,
+                      size: context.getRSize(16),
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    SizedBox(width: context.getRSize(10)),
+                    Text(
+                      'Available Empty Crates',
+                      style: TextStyle(
+                        fontSize: context.getRFontSize(15),
+                        fontWeight: FontWeight.w800,
+                        color: _text,
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: context.getRSize(10)),
+                Text(
+                  'Empty-crate tracking per supplier is coming soon. This section is a '
+                  'preview — crate balances are not yet recorded against suppliers.',
+                  style: TextStyle(
+                    fontSize: context.getRFontSize(12),
+                    color: _subtext,
+                  ),
+                ),
+              ],
             ),
           ),
-          SizedBox(height: context.getRSize(4)),
-          // §21.11 — which store this balance is scoped to.
-          Text(
-            scopeLabel,
-            style: TextStyle(
-              fontSize: context.getRFontSize(12),
-              color: _subtext,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -328,6 +430,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
   Widget _buildHistory(
     BuildContext context,
     List<SupplierLedgerEntryData> entries, {
+    required SupplierData supplier,
     Map<String, String>? storeNameById,
   }) {
     if (entries.isEmpty) {
@@ -341,12 +444,16 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
         ),
       );
     }
+    // §21.7 — only a CEO can void an entry. The reversal compensating row itself
+    // (and already-voided originals) is not voidable.
+    final isCeo = ref.watch(currentUserRoleProvider)?.slug == 'ceo';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         for (final e in entries)
           SupplierLedgerEntryTile(
             entry: e,
+            onTap: isCeo ? () => _showEntryActions(supplier, e) : null,
             storeName: storeNameById == null
                 ? null
                 : (storeNameById[e.storeId] ??
@@ -354,6 +461,134 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
           ),
       ],
     );
+  }
+
+  /// §21.7 — CEO taps a ledger row → an action sheet offering Void / reversal.
+  /// A `void` compensating row and an already-voided original are not voidable.
+  void _showEntryActions(SupplierData supplier, SupplierLedgerEntryData entry) {
+    final isVoidable =
+        entry.referenceType != 'void' && entry.voidedAt == null;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: _surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            ctx.getRSize(20),
+            ctx.getRSize(16),
+            ctx.getRSize(20),
+            ctx.getRSize(16) + ctx.deviceBottomPadding,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Entry options',
+                style: TextStyle(
+                  color: _text,
+                  fontWeight: FontWeight.w800,
+                  fontSize: ctx.getRFontSize(16),
+                ),
+              ),
+              SizedBox(height: ctx.getRSize(4)),
+              Text(
+                '${formatCurrency(entry.amountKobo / 100)} • '
+                '${DateFormat('MMM d, y').format(entry.activityDate)}',
+                style: TextStyle(color: _subtext, fontSize: ctx.getRFontSize(13)),
+              ),
+              SizedBox(height: ctx.getRSize(20)),
+              if (isVoidable)
+                AppButton(
+                  text: 'Void / reverse this entry',
+                  variant: AppButtonVariant.danger,
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _confirmVoid(supplier, entry);
+                  },
+                )
+              else
+                Text(
+                  entry.referenceType == 'void'
+                      ? 'This is a reversal entry and cannot be voided.'
+                      : 'This entry has already been voided.',
+                  style: TextStyle(
+                    color: _subtext,
+                    fontSize: ctx.getRFontSize(13),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmVoid(
+    SupplierData supplier,
+    SupplierLedgerEntryData entry,
+  ) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: _surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: Text(
+          'Void this entry?',
+          style: TextStyle(color: _text, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          'A compensating reversal of ${formatCurrency(entry.amountKobo / 100)} '
+          'will be appended to ${supplier.name}’s ledger. The original entry '
+          'is kept for the record. This cannot be undone.',
+          style: TextStyle(color: _subtext),
+        ),
+        actions: [
+          AppButton(
+            text: 'Cancel',
+            variant: AppButtonVariant.ghost,
+            size: AppButtonSize.small,
+            onPressed: () => Navigator.pop(ctx, false),
+          ),
+          AppButton(
+            text: 'Void',
+            variant: AppButtonVariant.danger,
+            size: AppButtonSize.small,
+            onPressed: () => Navigator.pop(ctx, true),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    // Write-boundary re-check — void is CEO only (§21.7).
+    if (ref.read(currentUserRoleProvider)?.slug != 'ceo') return;
+    final voidedBy = ref.read(authProvider).currentUser?.id;
+    if (voidedBy == null) return;
+    try {
+      await ref
+          .read(supplierAccountServiceProvider)
+          .voidEntry(
+            entryId: entry.id,
+            supplierId: supplier.id,
+            voidedBy: voidedBy,
+            reason: 'Voided by CEO',
+          );
+      if (mounted) {
+        AppNotification.showSuccess(context, 'Entry voided');
+      }
+    } catch (_) {
+      if (mounted) {
+        AppNotification.showError(
+          context,
+          'Could not void the entry. Please try again.',
+        );
+      }
+    }
   }
 
   Future<void> _confirmDelete(SupplierData supplier) async {

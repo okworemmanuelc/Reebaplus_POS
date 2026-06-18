@@ -16,6 +16,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
+import 'package:reebaplus_pos/shared/models/order_status.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/sales_detail_screen.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/reports_hub_screen.dart';
@@ -24,6 +25,7 @@ import 'package:reebaplus_pos/features/expenses/screens/expenses_screen.dart';
 import 'package:reebaplus_pos/features/orders/screens/orders_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
+import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -38,6 +40,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   // Store filter (null = All). Follows the §12.1 nav-drawer store picker via
   // `lockedStoreProvider`; no per-screen store dropdown.
   String? _selectedStoreId;
+
+  // Scroll reactivity state
+  bool _isScrolled = false;
 
   // Total SKUs card expand state (§11.5 — Cashier/Stock keeper).
   bool _skusExpanded = false;
@@ -59,8 +64,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   StreamSubscription? _expensesSub;
   StreamSubscription? _customersSub;
   StreamSubscription? _inventorySub;
-  Color get _bg => Theme.of(context).scaffoldBackgroundColor;
-  Color get _surface => Theme.of(context).colorScheme.surface;
   Color get _text => Theme.of(context).colorScheme.onSurface;
   Color get _subtext =>
       Theme.of(context).textTheme.bodySmall?.color ??
@@ -222,7 +225,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         .where(
           (o) =>
               _isDateInPeriod(o.order.createdAt, _selectedPeriod) &&
-              o.order.status == 'completed' &&
+              // Revenue is recognized at checkout ('pending'), not at the
+              // ceremonial Confirm ('completed'). Count any non-reversed sale.
+              orderCountsAsSale(o.order.status) &&
               (_selectedStoreId == null || o.order.storeId == _selectedStoreId),
         )
         .toList();
@@ -238,10 +243,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         )
         .toList();
 
-    // Filter customers by store for credit/debt metrics
-    final filteredCustomers = _selectedStoreId == null
-        ? _customers
-        : _customers.where((c) => c.storeId == _selectedStoreId).toList();
+    // Debt/credit is intentionally NOT store-scoped: a customer has a single
+    // business-wide wallet (one balance, not one per store), and they can buy
+    // across multiple stores. Scoping by the customer's assigned home store
+    // double-counted a cross-store customer's full balance under their home
+    // store and hid it entirely under the others. Sales/inventory/expenses
+    // stay store-scoped above; the wallet total is always business-wide.
 
     // Metrics. Cashier sees own sales only (§11.4); other roles see the
     // store/period-scoped total.
@@ -289,11 +296,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     final balances =
         ref.watch(walletBalancesKoboProvider).valueOrNull ?? const <int, int>{};
-    final totalCredit = filteredCustomers.fold<double>(0, (sum, c) {
+    final totalCredit = _customers.fold<double>(0, (sum, c) {
       final b = balances[c.id] ?? 0;
       return sum + (b > 0 ? b / 100.0 : 0);
     });
-    final totalDebt = filteredCustomers.fold<double>(0, (sum, c) {
+    final totalDebt = _customers.fold<double>(0, (sum, c) {
       final b = balances[c.id] ?? 0;
       return sum + (b < 0 ? b.abs() / 100.0 : 0);
     });
@@ -310,31 +317,57 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final staffSalesList = staffSalesMap.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
-    return SharedScaffold(
-      activeRoute: 'dashboard',
-      backgroundColor: _bg,
-      appBar: AppBar(
-        backgroundColor: _surface,
-        elevation: 0,
-        leading: const MenuButton(),
-        title: AppBarHeader(
-          icon: FontAwesomeIcons.chartLine.data,
-          title: bizName.isNotEmpty ? bizName : 'Reebaplus POS',
-          subtitle: subtitle,
+    final theme = Theme.of(context);
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            theme.scaffoldBackgroundColor,
+            theme.colorScheme.primary.withValues(alpha: 0.05),
+            theme.colorScheme.primary.withValues(alpha: 0.12),
+          ],
         ),
-        actions: [
-          const NotificationBell(),
-          SizedBox(width: context.getRSize(8)),
-        ],
       ),
-      body: AppRefreshWrapper(
-        child: ListView(
-          padding: EdgeInsets.all(
-            context.spacingM,
-          ).copyWith(bottom: context.spacingM + context.bottomInset),
-          children: [
-            _buildPeriodHeader(showReports: isCeo || isManager),
-            SizedBox(height: context.spacingM),
+      child: SharedScaffold(
+        activeRoute: 'dashboard',
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          backgroundColor: _isScrolled ? theme.colorScheme.surface.withValues(alpha: 0.8) : Colors.transparent,
+          elevation: 0,
+          leading: const MenuButton(),
+          title: AppBarHeader(
+            icon: FontAwesomeIcons.chartLine.data,
+            title: bizName.isNotEmpty ? bizName : 'Reebaplus POS',
+            subtitle: subtitle,
+          ),
+          actions: [
+            const NotificationBell(),
+            SizedBox(width: context.getRSize(8)),
+          ],
+        ),
+        body: NotificationListener<ScrollUpdateNotification>(
+          onNotification: (notif) {
+            if (notif.metrics.pixels > 10 && !_isScrolled) {
+              setState(() => _isScrolled = true);
+            } else if (notif.metrics.pixels <= 10 && _isScrolled) {
+              setState(() => _isScrolled = false);
+            }
+            return false;
+          },
+          child: AppRefreshWrapper(
+            child: ListView(
+              padding: EdgeInsets.all(
+                context.spacingM,
+              ).copyWith(
+                top: context.getRSize(24),
+                bottom: context.spacingM + context.bottomInset,
+              ),
+              children: [
+                _buildPeriodHeader(showReports: isCeo || isManager),
+                SizedBox(height: context.getRSize(24)),
             _buildMetricsList(
               sales: totalSales,
               pending: pendingOrdersCount,
@@ -355,6 +388,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             SizedBox(height: context.spacingL),
           ],
+        ),
+      ),
         ),
       ),
     );
@@ -600,20 +635,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       add(_buildTotalSkusCard());
     }
     if (showWallet && !_customersLoading) {
-      add(
-        _robustMetricCard(
-          label: 'Customer Wallet',
-          value: 'Cr: ${formatCurrency(credit)}',
-          subtitle: 'Debt: ${formatCurrency(debt)}',
-          icon: FontAwesomeIcons.wallet.data,
-          color: Theme.of(context).colorScheme.primary,
-          trend: debt > 0 ? 'Pending Recov.' : 'Healthy',
-          isPositive: debt == 0,
-          onTap: () {
-            Navigator.of(context).push(slideLeftRoute(const CustomersScreen()));
-          },
-        ),
-      );
+      add(_buildWalletCard(credit, debt));
     }
 
     return Column(
@@ -644,20 +666,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ..sort((a, b) => b.value.compareTo(a.value));
 
     final color = Theme.of(context).colorScheme.primary;
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: _surface,
-        borderRadius: BorderRadius.circular(context.radiusL),
-        border: Border.all(color: _border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+    return GlassyCard(
+      radius: context.radiusL,
+      padding: EdgeInsets.zero,
       child: Column(
         children: [
           Material(
@@ -735,7 +746,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
           ),
           if (_skusExpanded) ...[
-            Divider(height: 1, color: _border),
+            Divider(height: 1, color: _border.withValues(alpha: 0.05)),
             if (grouped.isEmpty)
               Padding(
                 padding: EdgeInsets.all(context.spacingM),
@@ -749,7 +760,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               )
             else
               for (int i = 0; i < grouped.length; i++) ...[
-                if (i > 0) Divider(height: 1, color: _border),
+                if (i > 0) Divider(height: 1, color: _border.withValues(alpha: 0.05)),
                 Padding(
                   padding: EdgeInsets.symmetric(
                     horizontal: context.spacingM,
@@ -807,13 +818,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ),
         SizedBox(height: context.spacingS),
-        Container(
-          width: double.infinity,
-          decoration: BoxDecoration(
-            color: _surface,
-            borderRadius: BorderRadius.circular(context.radiusL),
-            border: Border.all(color: _border),
-          ),
+        GlassyCard(
+          radius: context.radiusL,
+          padding: EdgeInsets.zero,
           child: staffSalesList.isEmpty
               ? Padding(
                   padding: EdgeInsets.all(context.spacingM),
@@ -828,7 +835,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               : Column(
                   children: [
                     for (int i = 0; i < staffSalesList.length; i++) ...[
-                      if (i > 0) Divider(height: 1, color: _border),
+                      if (i > 0) Divider(height: 1, color: _border.withValues(alpha: 0.05)),
                       _buildStaffRow(staffSalesList[i], nameMap),
                     ],
                   ],
@@ -910,23 +917,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ? FontAwesomeIcons.arrowUp.data
               : FontAwesomeIcons.arrowDown.data);
 
-    final card = Container(
-      width: double.infinity,
+    final innerContent = Padding(
       padding: EdgeInsets.all(context.spacingM),
-      decoration: BoxDecoration(
-        color: _surface,
-        borderRadius: BorderRadius.circular(context.radiusL),
-        border: Border.all(
-          color: onTap != null ? color.withValues(alpha: 0.4) : _border,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
       child: Row(
         children: [
           Container(
@@ -1007,15 +999,138 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ),
     );
 
-    if (onTap == null) return card;
+    return GlassyCard(
+      radius: context.radiusL,
+      padding: EdgeInsets.zero,
+      child: onTap != null
+          ? InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(context.radiusL),
+              child: innerContent,
+            )
+          : innerContent,
+    );
+  }
 
-    return Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(context.radiusL),
+  Widget _buildWalletCard(double credit, double debt) {
+    final theme = Theme.of(context);
+    final color = theme.colorScheme.primary;
+
+    final innerContent = Padding(
+      padding: EdgeInsets.all(context.spacingM),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: context.getRSize(40),
+                height: context.getRSize(40),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      color.withValues(alpha: 0.1),
+                      color.withValues(alpha: 0.05),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(FontAwesomeIcons.wallet.data, color: color, size: context.getRSize(18)),
+              ),
+              SizedBox(width: context.spacingM),
+              Text(
+                'Customer Wallet',
+                style: TextStyle(
+                  fontSize: context.getRFontSize(14),
+                  color: _text,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const Spacer(),
+              Icon(Icons.chevron_right, color: _subtext, size: 20),
+            ],
+          ),
+          SizedBox(height: context.spacingM),
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: EdgeInsets.all(context.spacingS),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Credit',
+                        style: TextStyle(
+                          fontSize: context.getRFontSize(12),
+                          color: _subtext,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        formatCurrency(credit),
+                        style: TextStyle(
+                          fontSize: context.getRFontSize(16),
+                          fontWeight: FontWeight.bold,
+                          color: _text,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              SizedBox(width: context.spacingM),
+              Expanded(
+                child: Container(
+                  padding: EdgeInsets.all(context.spacingS),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.error.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Debt',
+                        style: TextStyle(
+                          fontSize: context.getRFontSize(12),
+                          color: _subtext,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        formatCurrency(debt),
+                        style: TextStyle(
+                          fontSize: context.getRFontSize(16),
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.error,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    return GlassyCard(
+      radius: context.radiusL,
+      padding: EdgeInsets.zero,
       child: InkWell(
-        onTap: onTap,
+        onTap: () {
+          Navigator.of(context).push(slideLeftRoute(const CustomersScreen()));
+        },
         borderRadius: BorderRadius.circular(context.radiusL),
-        child: card,
+        child: innerContent,
       ),
     );
   }

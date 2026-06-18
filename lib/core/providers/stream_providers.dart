@@ -6,6 +6,7 @@ library;
 
 import 'dart:async';
 
+import 'package:drift/drift.dart' show Variable;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/data/currencies.dart';
@@ -24,6 +25,29 @@ final allOrdersProvider = StreamProvider<List<OrderWithItems>>((ref) {
 // ── Stores ──────────────────────────────────────────────────────────────────
 final allStoresProvider = StreamProvider<List<StoreData>>((ref) {
   return ref.watch(databaseProvider).storesDao.watchActiveStores();
+});
+
+final storeInventoryCountsProvider = StreamProvider<Map<String, ({int skuCount, int totalQuantity})>>((ref) {
+  final db = ref.watch(databaseProvider);
+  final businessId = db.currentBusinessId;
+  if (businessId == null) return Stream.value({});
+  return db.customSelect(
+    'SELECT store_id, SUM(quantity) as qty, COUNT(DISTINCT product_id) as sku_count FROM inventory WHERE business_id = ? GROUP BY store_id',
+    variables: [Variable(businessId)],
+    readsFrom: {db.inventory},
+  ).watch().map((rows) {
+    final map = <String, ({int skuCount, int totalQuantity})>{};
+    for (final row in rows) {
+      final storeId = row.readNullable<String>('store_id');
+      if (storeId != null) {
+        map[storeId] = (
+          skuCount: row.readNullable<num>('sku_count')?.toInt() ?? 0,
+          totalQuantity: row.readNullable<num>('qty')?.toInt() ?? 0,
+        );
+      }
+    }
+    return map;
+  });
 });
 
 // ── Expenses ───────────────────────────────────────────────────────────────
@@ -890,6 +914,18 @@ final storeCrateBalancesProvider = StreamProvider<List<StoreCrateBalanceData>>((
       .watch(databaseProvider)
       .storeCrateBalancesDao
       .watchForStore(storeId);
+});
+
+/// Full bottles in stock per manufacturer, scoped to the active store (§16.8.1
+/// Phase 2). When a store is locked it counts only that store's inventory; in
+/// "All Stores" it sums every store. Keyed by manufacturer id. Drives the
+/// "Full" figures on the inventory Empty Crates tab.
+final fullCratesByManufacturerProvider = StreamProvider<Map<String, int>>((ref) {
+  final storeId = ref.watch(lockedStoreProvider).value;
+  return ref
+      .watch(databaseProvider)
+      .inventoryDao
+      .watchFullCratesByManufacturer(storeId: storeId);
 });
 
 // ── Daily Stock Count (master plan §17) ──────────────────────────────────────

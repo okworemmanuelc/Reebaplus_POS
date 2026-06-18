@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:drift/drift.dart' show innerJoin;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -44,6 +45,7 @@ class CustomerDetailScreen extends ConsumerStatefulWidget {
 
 class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
   bool _contentReady = false;
+  bool _isScrolled = false;
   final ScreenshotController _screenshotCtrl = ScreenshotController();
 
   CustomerData? _customerData;
@@ -1206,11 +1208,23 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
 
     return DefaultTabController(
       length: showCrates ? 3 : 2,
-      child: Scaffold(
-        backgroundColor: theme.scaffoldBackgroundColor,
-        appBar: AppBar(
-          backgroundColor: theme.colorScheme.surface,
-          elevation: 0,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              theme.scaffoldBackgroundColor,
+              theme.colorScheme.primary.withValues(alpha: 0.05),
+              theme.colorScheme.primary.withValues(alpha: 0.12),
+            ],
+          ),
+        ),
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          appBar: AppBar(
+            backgroundColor: _isScrolled ? theme.colorScheme.surface.withValues(alpha: 0.8) : Colors.transparent,
+            elevation: 0,
           leading: IconButton(
             icon: Icon(
               Icons.arrow_back_ios_new,
@@ -1282,15 +1296,29 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
             SizedBox(width: context.getRSize(8)),
           ],
         ),
-        body: RefreshIndicator(
-          onRefresh: () async {
-            _loadData();
-            await Future.delayed(const Duration(milliseconds: 500));
+        body: NotificationListener<ScrollUpdateNotification>(
+          onNotification: (notif) {
+            if (notif.metrics.axis == Axis.vertical) {
+              final scrolled = notif.metrics.pixels > 10;
+              if (scrolled != _isScrolled) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) setState(() => _isScrolled = scrolled);
+                });
+              }
+            }
+            return false;
           },
-          color: theme.colorScheme.primary,
-          child: _contentReady
-              ? _buildContent(theme, showCrates)
-              : const Center(child: CircularProgressIndicator()),
+          child: RefreshIndicator(
+            onRefresh: () async {
+              _loadData();
+              await Future.delayed(const Duration(milliseconds: 500));
+            },
+            color: theme.colorScheme.primary,
+            child: _contentReady
+                ? _buildContent(theme, showCrates)
+                : const Center(child: CircularProgressIndicator()),
+          ),
+        ),
         ),
       ),
     );
@@ -1306,7 +1334,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
             pinned: true,
             delegate: _SliverTabBarDelegate(
               child: Container(
-                color: theme.scaffoldBackgroundColor,
+                color: Colors.transparent,
                 padding: EdgeInsets.symmetric(horizontal: context.getRSize(20)),
                 child: _buildTabBar(theme, showCrates),
               ),
@@ -1328,15 +1356,17 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
 
   Widget _buildHeader(ThemeData theme) {
     final isWholesaler = _groupName == 'wholesaler';
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
+    return _GlassyCard(
+      margin: EdgeInsets.fromLTRB(
         context.getRSize(20),
-        context.getRSize(4),
+        context.getRSize(24),
         context.getRSize(20),
         context.getRSize(16),
       ),
+      padding: EdgeInsets.all(context.getRSize(16)),
+      radius: 20,
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Container(
             width: context.getRSize(60),
@@ -1348,7 +1378,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                 style: TextStyle(
                   fontSize: context.getRFontSize(22),
                   fontWeight: FontWeight.w900,
-                  color: theme.colorScheme.onPrimary,
+                  color: Colors.white,
                 ),
               ),
             ),
@@ -1357,56 +1387,46 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Row(
                   children: [
-                    // Name + edit pen on the left; tier badge pinned right.
                     Expanded(
-                      child: Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              _name,
-                              style: TextStyle(
-                                fontSize: context.getRFontSize(18),
-                                fontWeight: FontWeight.w800,
-                                color: theme.colorScheme.onSurface,
-                              ),
-                            ),
-                          ),
-                          // §18 — edit pen, CEO/Manager only (customers.update).
-                          // Never for the synthetic walk-in.
-                          if (_customerId != null &&
-                              _customerId != Customer.walkInId &&
-                              hasPermission(ref, 'customers.update')) ...[
-                            SizedBox(width: context.getRSize(6)),
-                            InkWell(
-                              onTap: _openEditSheet,
-                              borderRadius: BorderRadius.circular(20),
-                              child: Padding(
-                                padding: EdgeInsets.all(context.getRSize(4)),
-                                child: Icon(
-                                  FontAwesomeIcons.penToSquare.data,
-                                  size: context.getRSize(15),
-                                  color: theme.colorScheme.primary,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
+                      child: Text(
+                        _name,
+                        style: TextStyle(
+                          fontSize: context.getRFontSize(18),
+                          fontWeight: FontWeight.w800,
+                          color: theme.colorScheme.onSurface,
+                        ),
                       ),
                     ),
-                    SizedBox(width: context.getRSize(8)),
-                    StatusBadge(
-                      label: isWholesaler ? 'Wholesaler' : 'Retailer',
-                      variant: isWholesaler
-                          ? BadgeVariant.green
-                          : BadgeVariant.amber,
-                    ),
+                    if (_customerId != null &&
+                        _customerId != Customer.walkInId &&
+                        hasPermission(ref, 'customers.update')) ...[
+                      SizedBox(width: context.getRSize(6)),
+                      InkWell(
+                        onTap: _openEditSheet,
+                        borderRadius: BorderRadius.circular(20),
+                        child: Padding(
+                          padding: EdgeInsets.all(context.getRSize(4)),
+                          child: Icon(
+                            FontAwesomeIcons.penToSquare.data,
+                            size: context.getRSize(15),
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
+                SizedBox(height: context.getRSize(4)),
+                StatusBadge(
+                  label: isWholesaler ? 'Wholesaler' : 'Retailer',
+                  variant: isWholesaler ? BadgeVariant.green : BadgeVariant.amber,
+                ),
                 if (_phone.isNotEmpty) ...[
-                  SizedBox(height: context.getRSize(6)),
+                  SizedBox(height: context.getRSize(8)),
                   _InfoRow(
                     icon: FontAwesomeIcons.phone.data,
                     text: _phone,
@@ -1441,220 +1461,264 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     final balance = _walletBalance / 100.0;
     final limit = _limitKobo / 100.0;
 
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: context.getRSize(20)),
-      child: Container(
-        padding: EdgeInsets.all(context.getRSize(18)),
-        decoration: AppDecorations.surfaceCard(context, radius: 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  FontAwesomeIcons.wallet.data,
-                  size: context.getRSize(14),
-                  color: theme.colorScheme.primary,
+    return _GlassyCard(
+      margin: EdgeInsets.symmetric(horizontal: context.getRSize(20)),
+      padding: EdgeInsets.all(context.getRSize(18)),
+      radius: 20,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          FontAwesomeIcons.wallet.data,
+                          size: context.getRSize(14),
+                          color: theme.colorScheme.primary,
+                        ),
+                        SizedBox(width: context.getRSize(8)),
+                        Text(
+                          'Wallet Balance',
+                          style: TextStyle(
+                            fontSize: context.getRFontSize(12),
+                            fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.onSurface.withAlpha(128),
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: context.getRSize(6)),
+                    Text(
+                      formatCurrency(balance),
+                      style: TextStyle(
+                        fontSize: context.getRFontSize(28),
+                        fontWeight: FontWeight.w900,
+                        color: balance >= 0 ? theme.colorScheme.onSurface : danger,
+                        letterSpacing: -1,
+                      ),
+                    ),
+                  ],
                 ),
-                SizedBox(width: context.getRSize(8)),
-                Text(
-                  'Wallet Balance',
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(12),
-                    fontWeight: FontWeight.w600,
-                    color: theme.colorScheme.onSurface.withAlpha(128),
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: context.getRSize(6)),
-            Text(
-              formatCurrency(balance),
-              style: TextStyle(
-                fontSize: context.getRFontSize(28),
-                fontWeight: FontWeight.w900,
-                color: balance >= 0 ? theme.colorScheme.onSurface : danger,
-                letterSpacing: -1,
               ),
-            ),
-            SizedBox(height: context.getRSize(4)),
-            Row(
-              children: [
-                Icon(
-                  FontAwesomeIcons.creditCard.data,
-                  size: context.getRSize(12),
-                  color: theme.colorScheme.onSurface.withAlpha(102),
-                ),
-                SizedBox(width: context.getRSize(6)),
-                Text(
-                  limit > 0
-                      ? 'Debt limit: ${formatCurrency(limit)}'
-                      : 'No debt limit set',
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(12),
-                    color: theme.colorScheme.onSurface.withAlpha(128),
-                  ),
-                ),
-              ],
-            ),
-            // §13.4 decision 14 — the refundable crate deposit, shown as its own
-            // line so it's never mistaken for spendable balance. The figure
-            // above (Wallet Balance) already excludes it.
-            if (_depositsHeld != 0) ...[
-              SizedBox(height: context.getRSize(4)),
-              Row(
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Icon(
-                    FontAwesomeIcons.boxOpen.data,
-                    size: context.getRSize(12),
-                    color: theme.colorScheme.primary.withAlpha(178),
-                  ),
-                  SizedBox(width: context.getRSize(6)),
                   Text(
-                    'Crate deposit held: ${formatCurrency(_depositsHeld / 100.0)}',
+                    'Period:',
                     style: TextStyle(
-                      fontSize: context.getRFontSize(12),
+                      fontSize: context.getRFontSize(10),
                       fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.primary,
+                      color: theme.colorScheme.onSurface.withAlpha(128),
+                    ),
+                  ),
+                  SizedBox(height: context.getRSize(4)),
+                  SizedBox(
+                    width: 120, // To give it a nice fixed width
+                    child: AppDropdown<String>(
+                      value: _effectivePeriod,
+                      isExpanded: false,
+                      contentPadding: EdgeInsets.symmetric(horizontal: context.getRSize(8), vertical: context.getRSize(6)),
+                      items: _periodOptions
+                          .map((p) => DropdownMenuItem(value: p, child: Text(p)))
+                          .toList(),
+                      onChanged: (v) =>
+                          setState(() => _selectedPeriod = v ?? 'To Date'),
                     ),
                   ),
                 ],
               ),
             ],
-            SizedBox(height: context.getRSize(14)),
-            Row(
-              children: [
-                Text(
-                  'Period:',
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(12),
-                    fontWeight: FontWeight.w600,
-                    color: theme.colorScheme.onSurface.withAlpha(128),
+          ),
+          SizedBox(height: context.getRSize(16)),
+          // Grid-like layout for Secondary Stats (Debt Limit & Crate Deposits)
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: EdgeInsets.all(context.getRSize(12)),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surface.withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: theme.dividerColor),
                   ),
-                ),
-                SizedBox(width: context.getRSize(8)),
-                Expanded(
-                  child: DropdownButton<String>(
-                    value: _effectivePeriod,
-                    isExpanded: true,
-                    underline: const SizedBox.shrink(),
-                    isDense: true,
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(13),
-                      fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.onSurface,
-                    ),
-                    dropdownColor: theme.colorScheme.surface,
-                    icon: Icon(
-                      FontAwesomeIcons.chevronDown.data,
-                      size: context.getRSize(11),
-                      color: theme.colorScheme.onSurface.withAlpha(128),
-                    ),
-                    items: _periodOptions
-                        .map((p) => DropdownMenuItem(value: p, child: Text(p)))
-                        .toList(),
-                    onChanged: (v) =>
-                        setState(() => _selectedPeriod = v ?? 'To Date'),
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: context.getRSize(14)),
-            Builder(
-              builder: (context) {
-                // §18.4 — Add Funds: CEO/Manager/Cashier (customers.wallet.update).
-                // Set debt limit: CEO/Manager only (customers.set_debt_limit).
-                // Refund Cash: CEO/Manager only (customers.wallet.withdraw).
-                final canAddFunds = hasPermission(
-                  ref,
-                  'customers.wallet.update',
-                );
-                final canSetLimit = hasPermission(
-                  ref,
-                  'customers.set_debt_limit',
-                );
-                final canRefund = hasPermission(
-                  ref,
-                  'customers.wallet.withdraw',
-                );
-                return Column(
-                  children: [
-                    Row(
-                      children: [
-                        if (canAddFunds)
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            FontAwesomeIcons.creditCard.data,
+                            size: context.getRSize(12),
+                            color: theme.colorScheme.onSurface.withAlpha(102),
+                          ),
+                          SizedBox(width: context.getRSize(6)),
                           Expanded(
-                            child: AmberButton(
-                              label: 'Add Funds',
-                              icon: FontAwesomeIcons.plus.data,
-                              height: 42,
-                              onPressed: _showAddFundsSheet,
-                            ),
-                          ),
-                        if (canAddFunds && canSetLimit)
-                          SizedBox(width: context.getRSize(10)),
-                        if (canSetLimit)
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: _showSetLimitSheet,
-                              icon: Icon(
-                                FontAwesomeIcons.penToSquare.data,
-                                size: 14,
-                                color: theme.colorScheme.onSurface,
+                            child: Text(
+                              'Debt Limit',
+                              style: TextStyle(
+                                fontSize: context.getRFontSize(11),
+                                color: theme.colorScheme.onSurface.withAlpha(128),
                               ),
-                              label: Text(
-                                'Set Limit',
-                                style: TextStyle(
-                                  fontSize: context.getRFontSize(14),
-                                  fontWeight: FontWeight.w600,
-                                  color: theme.colorScheme.onSurface,
-                                ),
-                              ),
-                              style: OutlinedButton.styleFrom(
-                                minimumSize: Size(0, context.getRSize(42)),
-                                side: BorderSide(color: theme.dividerColor),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                      ],
-                    ),
-                    if (canRefund) ...[
-                      SizedBox(height: context.getRSize(10)),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: _showRefundCashSheet,
-                          icon: Icon(
-                            FontAwesomeIcons.moneyBillTransfer.data,
-                            size: 14,
-                            color: theme.colorScheme.onSurface,
-                          ),
-                          label: Text(
-                            'Refund Cash',
-                            style: TextStyle(
-                              fontSize: context.getRFontSize(14),
-                              fontWeight: FontWeight.w600,
-                              color: theme.colorScheme.onSurface,
-                            ),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: Size(0, context.getRSize(42)),
-                            side: BorderSide(color: theme.dividerColor),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
+                        ],
+                      ),
+                      SizedBox(height: context.getRSize(4)),
+                      Text(
+                        limit > 0 ? formatCurrency(limit) : 'No limit',
+                        style: TextStyle(
+                          fontSize: context.getRFontSize(14),
+                          fontWeight: FontWeight.w700,
+                          color: theme.colorScheme.onSurface,
                         ),
                       ),
                     ],
+                  ),
+                ),
+              ),
+              if (_depositsHeld != 0) ...[
+                SizedBox(width: context.getRSize(12)),
+                Expanded(
+                  child: Container(
+                    padding: EdgeInsets.all(context.getRSize(12)),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.2)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              FontAwesomeIcons.boxOpen.data,
+                              size: context.getRSize(12),
+                              color: theme.colorScheme.primary.withAlpha(178),
+                            ),
+                            SizedBox(width: context.getRSize(6)),
+                            Expanded(
+                              child: Text(
+                                'Deposit Held',
+                                style: TextStyle(
+                                  fontSize: context.getRFontSize(11),
+                                  color: theme.colorScheme.primary,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: context.getRSize(4)),
+                        Text(
+                          formatCurrency(_depositsHeld / 100.0),
+                          style: TextStyle(
+                            fontSize: context.getRFontSize(14),
+                            fontWeight: FontWeight.w700,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          SizedBox(height: context.getRSize(16)),
+          // Buttons
+          Builder(
+            builder: (context) {
+              final canAddFunds = hasPermission(ref, 'customers.wallet.update');
+              final canSetLimit = hasPermission(ref, 'customers.set_debt_limit');
+              final canRefund = hasPermission(ref, 'customers.wallet.withdraw');
+              return Column(
+                children: [
+                  Row(
+                    children: [
+                      if (canAddFunds)
+                        Expanded(
+                          child: AmberButton(
+                            label: 'Add Funds',
+                            icon: FontAwesomeIcons.plus.data,
+                            height: 42,
+                            onPressed: _showAddFundsSheet,
+                          ),
+                        ),
+                      if (canAddFunds && canSetLimit)
+                        SizedBox(width: context.getRSize(10)),
+                      if (canSetLimit)
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _showSetLimitSheet,
+                            icon: Icon(
+                              FontAwesomeIcons.penToSquare.data,
+                              size: 14,
+                              color: theme.colorScheme.onSurface,
+                            ),
+                            label: Text(
+                              'Set Limit',
+                              style: TextStyle(
+                                fontSize: context.getRFontSize(14),
+                                fontWeight: FontWeight.w600,
+                                color: theme.colorScheme.onSurface,
+                              ),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: Size(0, context.getRSize(42)),
+                              side: BorderSide(color: theme.dividerColor),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  if (canRefund) ...[
+                    SizedBox(height: context.getRSize(10)),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _showRefundCashSheet,
+                        icon: Icon(
+                          FontAwesomeIcons.moneyBillTransfer.data,
+                          size: 14,
+                          color: theme.colorScheme.onSurface,
+                        ),
+                        label: Text(
+                          'Refund Cash',
+                          style: TextStyle(
+                            fontSize: context.getRFontSize(14),
+                            fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: Size(0, context.getRSize(42)),
+                          side: BorderSide(color: theme.dividerColor),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
-                );
-              },
-            ),
-          ],
-        ),
+                ],
+              );
+            },
+          ),
+        ],
       ),
     );
   }
@@ -1666,6 +1730,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
       labelColor: theme.colorScheme.primary,
       unselectedLabelColor: theme.colorScheme.onSurface.withAlpha(115),
       indicatorColor: theme.colorScheme.primary,
+      dividerColor: Colors.transparent,
       indicatorSize: TabBarIndicatorSize.tab,
       labelStyle: TextStyle(
         fontSize: context.getRFontSize(13),
@@ -1697,12 +1762,12 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     double amount,
     Color color,
   ) {
-    return Container(
+    return _GlassyCard(
       padding: EdgeInsets.symmetric(
         horizontal: context.getRSize(14),
         vertical: context.getRSize(10),
       ),
-      decoration: AppDecorations.surfaceCard(context, radius: 12),
+      radius: 12,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1816,9 +1881,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                     final color = isCredit ? success : danger;
                     return Padding(
                       padding: EdgeInsets.only(bottom: ctx.getRSize(10)),
-                      child: Container(
+                      child: _GlassyCard(
                         padding: EdgeInsets.all(ctx.getRSize(14)),
-                        decoration: AppDecorations.surfaceCard(ctx, radius: 12),
+                        radius: 12,
                         child: Row(
                           children: [
                             Container(
@@ -1907,9 +1972,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
           child: InkWell(
             onTap: () => _showReceipt(order),
             borderRadius: BorderRadius.circular(12),
-            child: Container(
+            child: _GlassyCard(
               padding: EdgeInsets.all(ctx.getRSize(14)),
-              decoration: AppDecorations.surfaceCard(ctx, radius: 12),
+              radius: 12,
               child: Row(
                 children: [
                   Container(
@@ -2022,13 +2087,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     return InkWell(
       onTap: _showRecordCrateReturnSheet,
       borderRadius: BorderRadius.circular(12),
-      child: Container(
+      child: _GlassyCard(
         padding: EdgeInsets.all(context.getRSize(14)),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.primary.withAlpha(20),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: theme.colorScheme.primary.withAlpha(60)),
-        ),
+        radius: 12,
         child: Row(
           children: [
             Container(
@@ -2096,9 +2157,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
         : '${bal.abs()} crates credit';
     return Padding(
       padding: EdgeInsets.only(bottom: context.getRSize(10)),
-      child: Container(
+      child: _GlassyCard(
         padding: EdgeInsets.all(context.getRSize(14)),
-        decoration: AppDecorations.surfaceCard(context, radius: 12),
+        radius: 12,
         child: Row(
           children: [
             Container(
@@ -2261,16 +2322,40 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                     }
                     Navigator.pop(ctx);
                     try {
+                      // §16.8.1: credit the empties to the store the customer's
+                      // order(s) for this brand were created from, so per-store
+                      // balances stay accurate regardless of the active store.
+                      // Fall back to the locked store when the customer has no
+                      // store-stamped order for the brand.
+                      final creditStoreId =
+                          await db.orderCrateLinesDao
+                              .resolveStoreForCustomerManufacturer(
+                                customerId: id,
+                                manufacturerId: mfrId,
+                              ) ??
+                          ref.read(lockedStoreProvider).value;
                       await db.inventoryDao.addEmptyCrates(
                         mfrId,
                         qty,
-                        storeId: ref.read(lockedStoreProvider).value,
+                        storeId: creditStoreId,
                       );
                       await db.crateLedgerDao.recordCrateReturnByCustomer(
                         customerId: id,
                         manufacturerId: mfrId,
                         quantity: qty,
                         performedBy: staffId,
+                      );
+                      // §7.8 — audit the manual crate return (who/when/brand/
+                      // count) so it appears in Activity Logs.
+                      await db.activityLogDao.logActivity(
+                        action: 'crate_return',
+                        description:
+                            '$qty crate${qty == 1 ? '' : 's'} returned for '
+                            '$mfrName',
+                        staffId: staffId,
+                        storeId: ref.read(lockedStoreProvider).value,
+                        entityType: 'customer',
+                        entityId: id,
                       );
                       messenger.showSnackBar(
                         SnackBar(
@@ -2292,6 +2377,60 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                 ),
                 SizedBox(height: ctx.deviceBottomPadding + ctx.getRSize(16)),
               ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GlassyCard extends StatelessWidget {
+  final Widget child;
+  final EdgeInsetsGeometry? padding;
+  final EdgeInsetsGeometry? margin;
+  final double radius;
+
+  const _GlassyCard({
+    required this.child,
+    this.padding,
+    this.margin,
+    this.radius = 16.0,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    return Container(
+      margin: margin,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            padding: padding ?? EdgeInsets.all(context.getRSize(16)),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? theme.colorScheme.surface.withValues(alpha: 0.25)
+                  : theme.colorScheme.surface.withValues(alpha: 0.6),
+              borderRadius: BorderRadius.circular(radius),
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.05)
+                    : theme.colorScheme.primary.withValues(alpha: 0.05),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 10,
+                  spreadRadius: 0,
+                )
+              ],
+            ),
+            child: Material(
+              type: MaterialType.transparency,
+              child: child,
             ),
           ),
         ),

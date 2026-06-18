@@ -634,7 +634,11 @@ class AuthService extends ValueNotifier<UserData?> {
         .toIso8601String();
 
     try {
-      await supabase.from('sessions').insert({
+      // Upsert (not insert): SessionsDao.createSession now reuses an existing
+      // active session id for this device+user, so on a fresh sign-in that
+      // reuses a row already pushed to the cloud a plain insert would hit a
+      // 23505 unique violation. Upsert-by-id is idempotent and equivalent.
+      await supabase.from('sessions').upsert({
         'id': sessionId,
         'business_id': user.businessId,
         'user_id': user.id,
@@ -643,7 +647,7 @@ class AuthService extends ValueNotifier<UserData?> {
         'last_updated_at': now,
       });
     } catch (e) {
-      debugPrint('[AuthService] kick: cloud session insert error: $e');
+      debugPrint('[AuthService] kick: cloud session upsert error: $e');
     }
 
     try {

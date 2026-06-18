@@ -10,6 +10,9 @@ import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
+import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
+import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
 
 /// CEO Settings > Business Info (§10.1). Edits the business name, type, and
 /// currency. Name/type persist to the `businesses` row via [BusinessesDao];
@@ -125,21 +128,11 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context);
     // Screen-level gate (hard rule #6) + keeps the permission chain warm for
     // the save-site guard.
     final canManage = hasPermission(ref, 'settings.manage');
-    return Scaffold(
-      backgroundColor: t.scaffoldBackgroundColor,
-      appBar: AppBar(
-        title: const Text(
-          'Business Info',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-      ),
+    return GlassyScaffold(
+      title: 'Business Info',
       body: !canManage
           ? const SettingsNoAccess()
           : _loading
@@ -155,9 +148,9 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
                 children: [
                   const SettingsSectionTitle('Business'),
                   const SizedBox(height: 16),
-                  Container(
+                  GlassyCard(
                     padding: const EdgeInsets.all(16),
-                    decoration: AppDecorations.glassCard(context, radius: 16),
+                    radius: 16,
                     child: Column(
                       children: [
                         TextField(
@@ -183,14 +176,11 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        DropdownButtonFormField<String>(
-                          initialValue: _type,
+                        AppDropdown<String>(
+                          value: _type,
                           isExpanded: true,
-                          decoration: AppDecorations.authInputDecoration(
-                            context,
-                            label: 'Business type',
-                            prefixIcon: Icons.category_rounded,
-                          ),
+                          labelText: 'Business type',
+                          prefixIcon: const Icon(Icons.category_rounded, size: 20),
                           items: [
                             for (final type in kBusinessTypes)
                               DropdownMenuItem(value: type, child: Text(type)),
@@ -198,14 +188,11 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
                           onChanged: (v) => setState(() => _type = v),
                         ),
                         const SizedBox(height: 16),
-                        DropdownButtonFormField<String>(
-                          initialValue: _currency,
+                        AppDropdown<String>(
+                          value: _currency,
                           isExpanded: true,
-                          decoration: AppDecorations.authInputDecoration(
-                            context,
-                            label: 'Currency',
-                            prefixIcon: Icons.payments_rounded,
-                          ),
+                          labelText: 'Currency',
+                          prefixIcon: const Icon(Icons.payments_rounded, size: 20),
                           items: [
                             for (final code in _currencyCodes)
                               DropdownMenuItem(value: code, child: Text(code)),

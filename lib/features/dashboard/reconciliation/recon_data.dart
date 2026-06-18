@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:reebaplus_pos/core/data/business_types.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/shared/models/order_status.dart';
 
 /// Shared aggregation engine for the Daily Reconciliation (§25.9).
 ///
@@ -166,7 +167,11 @@ List<ReconBucket> buildReconBuckets(
   }
 
   for (final o in orders) {
-    if (o.order.status != 'completed' || !inSpan(o.order.createdAt)) continue;
+    // Revenue is recognized at checkout (status 'pending'), not at the
+    // ceremonial Confirm ('completed'). Count any non-reversed sale.
+    if (!orderCountsAsSale(o.order.status) || !inSpan(o.order.createdAt)) {
+      continue;
+    }
     _BucketAccum? acc;
     for (final i in o.items) {
       if (!inScope(i.item.storeId)) continue;
@@ -352,7 +357,10 @@ ReconData computeReconData(
       }
       continue;
     }
-    if (o.order.status != 'completed' || !inSpan(o.order.createdAt)) continue;
+    // Recognized at checkout ('pending'), not at Confirm ('completed').
+    if (!orderCountsAsSale(o.order.status) || !inSpan(o.order.createdAt)) {
+      continue;
+    }
     var orderRevenue = 0;
     for (final i in o.items) {
       if (!inScope(i.item.storeId)) continue;

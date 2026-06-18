@@ -55,6 +55,8 @@ class CrashReporter {
     String? context,
     String? role,
     bool isFatal = false,
+    String? businessId,
+    String? userId,
   }) {
     try {
       unawaited(
@@ -67,6 +69,10 @@ class CrashReporter {
           isFatal: isFatal,
           appVersion: kAppVersion,
           platform: defaultTargetPlatform.name,
+          // Explicit tenant for session-teardown breadcrumbs, whose business
+          // resolver is already cleared when they fire. See [logError].
+          businessId: businessId,
+          userId: userId,
         ),
       );
     } catch (_) {

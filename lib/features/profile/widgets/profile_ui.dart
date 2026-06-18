@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/utils/avatar_helpers.dart';
+import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
 
 /// Shared profile UI building blocks (§10.5 / §27.1 / §9.5). One modern card set
 /// used by both the Profile screen and the Staff Detail screen so the two look
@@ -73,7 +74,14 @@ class ProfileHeaderCard extends StatelessWidget {
           stops: const [0.0, 0.55],
         ),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: _borderOf(context)),
+        border: Border.all(color: _borderOf(context).withValues(alpha: 0.2)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         children: [
@@ -216,13 +224,8 @@ class ProfileStatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return GlassyCard(
       padding: EdgeInsets.all(context.getRSize(16)),
-      decoration: BoxDecoration(
-        color: _surfaceOf(context),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _borderOf(context)),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -278,13 +281,8 @@ class ProfileInfoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return GlassyCard(
       padding: EdgeInsets.all(context.getRSize(20)),
-      decoration: BoxDecoration(
-        color: _surfaceOf(context),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _borderOf(context)),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

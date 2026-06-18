@@ -1,7 +1,9 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -13,6 +15,8 @@ import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart
 import 'package:reebaplus_pos/features/auth/screens/login_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/otp_verification_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/welcome_screen.dart';
+import 'package:reebaplus_pos/shared/widgets/view_selector_sheet.dart';
+import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
 
 /// The shared-till "Who's working?" picker (master plan §8). Shown all day
 /// when staff switch shifts or return after auto-lock — distinct from Login,
@@ -204,7 +208,7 @@ class _WhoIsWorkingScreenState extends ConsumerState<WhoIsWorkingScreen> {
 }
 
 /// Header (business name + date) + scrollable staff cards (§8.1).
-class _PickerList extends ConsumerWidget {
+class _PickerList extends ConsumerStatefulWidget {
   final String businessId;
   final List<WhoIsWorkingEntry> staff;
   final ValueChanged<WhoIsWorkingEntry> onTap;
@@ -216,19 +220,105 @@ class _PickerList extends ConsumerWidget {
     required this.onTap,
   });
 
+  @override
+  ConsumerState<_PickerList> createState() => _PickerListState();
+}
+
+class _PickerListState extends ConsumerState<_PickerList> {
+  bool _isListView = true;
+  int _gridColumns = 3;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPreferences();
+  }
+
+  Future<void> _loadPreferences() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _isListView = prefs.getBool('auth_is_list_view') ?? true;
+      _gridColumns = prefs.getInt('auth_grid_columns') ?? 3;
+    });
+  }
+
+  Future<void> _updatePreferences({required bool isList, required int columns}) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('auth_is_list_view', isList);
+    await prefs.setInt('auth_grid_columns', columns);
+    if (!mounted) return;
+    setState(() {
+      _isListView = isList;
+      _gridColumns = columns;
+    });
+  }
+
+  void _showViewSelectorModal() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => ViewSelectorSheet(
+        currentIsList: _isListView,
+        currentColumns: _gridColumns,
+        onSelect: (isList, columns) async {
+          _updatePreferences(isList: isList, columns: columns);
+          Navigator.pop(context);
+        },
+      ),
+    );
+  }
+
   String _businessName(WidgetRef ref) {
-    final businesses =
-        ref.watch(localBusinessesProvider).valueOrNull ?? const [];
+    final businesses = ref.watch(localBusinessesProvider).valueOrNull ?? const [];
     for (final b in businesses) {
-      if (b.id == businessId) return b.name;
+      if (b.id == widget.businessId) return b.name;
     }
     return businesses.isNotEmpty ? businesses.first.name : '';
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final dateStr = DateFormat('EEEE, MMMM d').format(DateTime.now());
     final businessName = _businessName(ref);
+    final screenWidth = MediaQuery.of(context).size.width;
+
+    Widget staffList;
+    if (_isListView) {
+      staffList = ListView.builder(
+        padding: EdgeInsets.only(bottom: context.getRSize(12)),
+        itemCount: widget.staff.length,
+        itemBuilder: (context, i) =>
+            _StaffPickerCard(entry: widget.staff[i], isListView: true, onTap: () => widget.onTap(widget.staff[i])),
+      );
+    } else {
+      int effectiveColumns = _gridColumns;
+      if (screenWidth < 380 && effectiveColumns > 2) {
+        effectiveColumns = 2;
+      } else if (screenWidth > 600) {
+        final dynamicColumns = (screenWidth / 180).floor();
+        effectiveColumns = max(effectiveColumns, dynamicColumns);
+      }
+
+      final totalPadding = context.getRSize(48); // 24 on each side
+      final totalSpacing = context.getRSize(16) * (effectiveColumns - 1);
+      final cellWidth = (screenWidth - totalPadding - totalSpacing) / effectiveColumns;
+      final aspect = cellWidth / context.getRSize(160);
+
+      staffList = GridView.builder(
+        padding: context.rPaddingSymmetric(horizontal: 24),
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: effectiveColumns,
+          childAspectRatio: aspect,
+          crossAxisSpacing: context.getRSize(16),
+          mainAxisSpacing: context.getRSize(16),
+        ),
+        itemCount: widget.staff.length,
+        itemBuilder: (context, i) =>
+            _StaffPickerCard(entry: widget.staff[i], isListView: false, onTap: () => widget.onTap(widget.staff[i])),
+      );
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -248,12 +338,27 @@ class _PickerList extends ConsumerWidget {
                   ),
                 ),
               SizedBox(height: context.getRSize(2)),
-              Text(
-                dateStr,
-                style: TextStyle(
-                  color: authTextPrimary(context).withValues(alpha: 0.5),
-                  fontSize: context.getRFontSize(12),
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    dateStr,
+                    style: TextStyle(
+                      color: authTextPrimary(context).withValues(alpha: 0.5),
+                      fontSize: context.getRFontSize(12),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: _showViewSelectorModal,
+                    icon: Icon(
+                      Icons.tune_rounded,
+                      size: context.getRSize(18),
+                      color: authTextPrimary(context).withValues(alpha: 0.7),
+                    ),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
               ),
               SizedBox(height: context.getRSize(16)),
               Text(
@@ -267,14 +372,7 @@ class _PickerList extends ConsumerWidget {
             ],
           ),
         ),
-        Expanded(
-          child: ListView.builder(
-            padding: EdgeInsets.only(bottom: context.getRSize(12)),
-            itemCount: staff.length,
-            itemBuilder: (context, i) =>
-                _StaffPickerCard(entry: staff[i], onTap: () => onTap(staff[i])),
-          ),
-        ),
+        Expanded(child: staffList),
         // ── Escape hatch: account not in the list → back to Welcome (§4) so a
         // new staff member can sign in or join with an invite code. ──────────
         Padding(
@@ -282,6 +380,7 @@ class _PickerList extends ConsumerWidget {
             left: context.getRSize(16),
             right: context.getRSize(16),
             bottom: context.getRSize(12),
+            top: context.getRSize(16),
           ),
           child: Center(
             child: TextButton.icon(
@@ -310,12 +409,13 @@ class _PickerList extends ConsumerWidget {
 }
 
 /// A tappable staff card (§8.2): avatar initials over the user's avatar
-/// colour, name, and role colour tag. No "active now" dot (deferred).
+/// colour, name, and role colour tag.
 class _StaffPickerCard extends StatelessWidget {
   final WhoIsWorkingEntry entry;
+  final bool isListView;
   final VoidCallback onTap;
 
-  const _StaffPickerCard({required this.entry, required this.onTap});
+  const _StaffPickerCard({required this.entry, required this.isListView, required this.onTap});
 
   Color _avatarColor() {
     final hex = entry.user.avatarColor.replaceFirst('#', '');
@@ -329,84 +429,159 @@ class _StaffPickerCard extends StatelessWidget {
     final tagColor = roleTagColor(role?.slug);
     final name = entry.user.name;
 
-    return Padding(
-      padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(16),
-        vertical: context.getRSize(6),
-      ),
-      child: Material(
-        color: Theme.of(context).colorScheme.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: Theme.of(context).dividerColor),
+    if (isListView) {
+      return Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: context.getRSize(24),
+          vertical: context.getRSize(6),
         ),
+        child: GlassyCard(
+          padding: EdgeInsets.zero,
+          margin: EdgeInsets.zero,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: onTap,
+            child: Padding(
+              padding: EdgeInsets.all(context.getRSize(14)),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: context.getRSize(24),
+                    backgroundColor: _avatarColor(),
+                    child: Text(
+                      name.isNotEmpty ? name[0].toUpperCase() : '?',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: context.getRFontSize(18),
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: context.getRSize(14)),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          name,
+                          style: TextStyle(
+                            color: authTextPrimary(context),
+                            fontWeight: FontWeight.bold,
+                            fontSize: context.getRFontSize(16),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        SizedBox(height: context.getRSize(6)),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: tagColor.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            role?.name ?? 'Unknown',
+                            style: TextStyle(
+                              color: tagColor,
+                              fontSize: context.getRFontSize(11),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    Icons.chevron_right,
+                    color: authTextPrimary(context).withValues(alpha: 0.4),
+                    size: context.getRSize(20),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    } else {
+      return GlassyCard(
+        padding: EdgeInsets.zero,
+        margin: EdgeInsets.zero,
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
           onTap: onTap,
-          child: Padding(
-            padding: EdgeInsets.all(context.getRSize(14)),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: context.getRSize(24),
-                  backgroundColor: _avatarColor(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: _avatarColor(),
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(16),
+                    ),
+                  ),
+                  alignment: Alignment.center,
                   child: Text(
                     name.isNotEmpty ? name[0].toUpperCase() : '?',
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
-                      fontSize: context.getRFontSize(18),
+                      fontSize: context.getRFontSize(32),
                     ),
                   ),
                 ),
-                SizedBox(width: context.getRSize(14)),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        name,
+              ),
+              Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: context.getRSize(12),
+                  vertical: context.getRSize(12),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      name,
+                      style: TextStyle(
+                        color: authTextPrimary(context),
+                        fontWeight: FontWeight.bold,
+                        fontSize: context.getRFontSize(14),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                    ),
+                    SizedBox(height: context.getRSize(4)),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: tagColor.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        role?.name ?? 'Unknown',
                         style: TextStyle(
-                          color: authTextPrimary(context),
+                          color: tagColor,
+                          fontSize: context.getRFontSize(11),
                           fontWeight: FontWeight.bold,
-                          fontSize: context.getRFontSize(16),
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      SizedBox(height: context.getRSize(6)),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: tagColor.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          role?.name ?? 'Unknown',
-                          style: TextStyle(
-                            color: tagColor,
-                            fontSize: context.getRFontSize(11),
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-                Icon(
-                  Icons.chevron_right,
-                  color: authTextPrimary(context).withValues(alpha: 0.4),
-                  size: context.getRSize(20),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
-      ),
-    );
+      );
+    }
   }
 }
 

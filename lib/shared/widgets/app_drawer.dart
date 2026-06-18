@@ -369,6 +369,24 @@ class AppDrawer extends ConsumerWidget {
             active: activeRoute == 'customers',
             onTap: () => _navigateTo(context, ref, 'customers'),
           ),
+        // Gated to roles that can invite staff (CEO + Manager). Hidden
+        // entirely for Cashier / Stock keeper (hard rule #7 — hide, don't
+        // grey out). Routes to a pushed screen, like CEO Settings below.
+        if (hasPermission(ref, 'staff.invite'))
+          _navItem(
+            context,
+            FontAwesomeIcons.userGroup.data,
+            'Staff Management',
+            active: false,
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const StaffManagementScreen(),
+                ),
+              );
+            },
+          ),
         // Supplier Accounts — CEO always; Manager only if the CEO granted
         // suppliers.manage ("if toggled", §27.3); hidden for Cashier/Stock keeper.
         if (hasPermission(ref, 'suppliers.manage'))
@@ -418,24 +436,6 @@ class AppDrawer extends ConsumerWidget {
           ),
         // Deliveries (Phase 3) and Cart (bottom nav only) removed from the
         // sidebar per master plan §27.5.
-        // Gated to roles that can invite staff (CEO + Manager). Hidden
-        // entirely for Cashier / Stock keeper (hard rule #7 — hide, don't
-        // grey out). Routes to a pushed screen, like CEO Settings below.
-        if (hasPermission(ref, 'staff.invite'))
-          _navItem(
-            context,
-            FontAwesomeIcons.userGroup.data,
-            'Staff Management',
-            active: false,
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const StaffManagementScreen(),
-                ),
-              );
-            },
-          ),
         // Gated to CEO (settings.manage is CEO-only by default; migration
         // 0043). Hidden entirely for other roles (hard rule #7 — hide, don't
         // grey out), mirroring the Staff Management gate above.

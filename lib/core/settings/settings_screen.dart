@@ -13,6 +13,7 @@ import 'package:reebaplus_pos/core/settings/stores_settings_screen.dart';
 import 'package:reebaplus_pos/core/settings/subscription_screen.dart';
 import 'package:reebaplus_pos/core/settings/sync_issues_access_screen.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
 
 /// One row in the CEO Settings menu.
 typedef _SettingEntry = ({
@@ -111,17 +112,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               )
               .toList();
 
-    return Scaffold(
-      backgroundColor: t.scaffoldBackgroundColor,
-      appBar: AppBar(
-        title: const Text(
-          'CEO Settings',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-      ),
+    return GlassyScaffold(
+      title: 'CEO Settings',
       body: !canManage
           ? const SettingsNoAccess()
           : SettingsFadeIn(

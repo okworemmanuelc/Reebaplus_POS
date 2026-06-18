@@ -147,3 +147,85 @@ class AuthErrorText extends StatelessWidget {
     );
   }
 }
+
+/// Searchable text field backed by Flutter's native [Autocomplete]. Used for
+/// country, state, and LGA fields on auth/onboarding screens. Accepts free
+/// text — options are suggestions, not a hard constraint.
+class AutocompleteField extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final String initial;
+  final List<String> options;
+  final ValueChanged<String> onChanged;
+
+  const AutocompleteField({
+    super.key,
+    required this.label,
+    required this.icon,
+    required this.initial,
+    required this.options,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Autocomplete<String>(
+      initialValue: TextEditingValue(text: initial),
+      optionsBuilder: (value) {
+        final q = value.text.trim().toLowerCase();
+        if (q.isEmpty) return options;
+        return options.where((o) => o.toLowerCase().contains(q));
+      },
+      onSelected: onChanged,
+      fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+        return TextField(
+          controller: controller,
+          focusNode: focusNode,
+          textCapitalization: TextCapitalization.words,
+          onChanged: onChanged,
+          onSubmitted: (_) => onFieldSubmitted(),
+          style: TextStyle(color: authTextPrimary(context)),
+          decoration: AppDecorations.authInputDecoration(
+            context,
+            label: label,
+            prefixIcon: icon,
+          ),
+        );
+      },
+      optionsViewBuilder: (context, onSelected, opts) {
+        return Align(
+          alignment: Alignment.topLeft,
+          child: Material(
+            color: Theme.of(context).colorScheme.surface,
+            elevation: 4,
+            borderRadius: BorderRadius.circular(10),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 220, maxWidth: 320),
+              child: ListView(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                children: opts
+                    .map(
+                      (o) => InkWell(
+                        onTap: () => onSelected(o),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          child: Text(
+                            o,
+                            style: TextStyle(color: authTextPrimary(context)),
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}

@@ -173,4 +173,106 @@ void main() {
       }
     });
   });
+
+  group('SyncDao.autoRecoverDueOrphans (§6.8.1 automatic orphan recovery)', () {
+    test('re-enqueues an fk_deferred_cap_reached orphan and bumps the '
+        'auto-retry count', () async {
+      final boot = await bootstrapTestDb();
+      try {
+        final id = await seedQueueRow(boot.db);
+        // Drive it past the FK-deferred cap → orphaned with the recoverable
+        // 'fk_deferred_cap_reached' reason.
+        for (var i = 0; i < 3; i++) {
+          await boot.db.syncDao
+              .markFailed(id, '23503: parent missing', fkDeferred: true);
+        }
+        expect(await boot.db.select(boot.db.syncQueueOrphans).get(),
+            hasLength(1));
+
+        final recovered = await boot.db.syncDao.autoRecoverDueOrphans();
+        expect(recovered, 1);
+
+        // Orphan gone, a fresh pending queue row took its place with
+        // autoRetryCount incremented to 1.
+        expect(await boot.db.select(boot.db.syncQueueOrphans).get(), isEmpty);
+        final queue = await boot.db.select(boot.db.syncQueue).get();
+        expect(queue, hasLength(1));
+        expect(queue.first.status, 'pending');
+        expect(queue.first.autoRetryCount, 1);
+      } finally {
+        await boot.db.close();
+      }
+    });
+
+    test('leaves a terminal orphan (duplicate key / RLS) untouched', () async {
+      final boot = await bootstrapTestDb();
+      try {
+        final id = await seedQueueRow(boot.db);
+        await boot.db.syncDao.markFailed(
+          id,
+          '23505: duplicate key value violates unique constraint',
+          permanent: true,
+        );
+
+        final recovered = await boot.db.syncDao.autoRecoverDueOrphans();
+        expect(recovered, 0, reason: 'terminal reasons stay manual-only');
+        expect(await boot.db.select(boot.db.syncQueueOrphans).get(),
+            hasLength(1));
+        expect(await boot.db.select(boot.db.syncQueue).get(), isEmpty);
+      } finally {
+        await boot.db.close();
+      }
+    });
+
+    test('recovers a created_at-immutable orphan (now scrubbed at push)',
+        () async {
+      final boot = await bootstrapTestDb();
+      try {
+        final id = await seedQueueRow(boot.db);
+        await boot.db.syncDao.markFailed(
+          id,
+          'PostgrestException(P0001): column created_at is immutable',
+          permanent: true,
+        );
+
+        final recovered = await boot.db.syncDao.autoRecoverDueOrphans();
+        expect(recovered, 1);
+        expect(await boot.db.select(boot.db.syncQueueOrphans).get(), isEmpty);
+      } finally {
+        await boot.db.close();
+      }
+    });
+
+    test('stops after the per-orphan cap — count survives re-orphaning',
+        () async {
+      final boot = await bootstrapTestDb();
+      try {
+        final id = await seedQueueRow(boot.db);
+        await boot.db.syncDao
+            .markFailed(id, 'fk_deferred_cap_reached: 23503', permanent: true);
+
+        // Each cycle: recover (count+1 onto the queue row) → it fails
+        // permanently again → re-orphans carrying the same count forward.
+        for (var cycle = 1; cycle <= SyncDao.autoRecoverCap; cycle++) {
+          final recovered = await boot.db.syncDao.autoRecoverDueOrphans();
+          expect(recovered, 1, reason: 'cycle $cycle should still recover');
+          final queued = await boot.db.select(boot.db.syncQueue).get();
+          expect(queued.single.autoRetryCount, cycle);
+          await boot.db.syncDao.markFailed(
+            queued.single.id,
+            'fk_deferred_cap_reached: 23503',
+            permanent: true,
+          );
+        }
+
+        // Cap reached — the next sweep parks it for manual review.
+        final afterCap = await boot.db.syncDao.autoRecoverDueOrphans();
+        expect(afterCap, 0, reason: 'auto-recovery must stop at the cap');
+        expect(await boot.db.select(boot.db.syncQueueOrphans).get(),
+            hasLength(1));
+      } finally {
+        await boot.db.close();
+      }
+    });
+  });
 }

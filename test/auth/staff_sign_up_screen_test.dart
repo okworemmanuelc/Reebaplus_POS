@@ -20,15 +20,15 @@ void main() {
     expect(find.text('Continue'), findsOneWidget);
   });
 
-  testWidgets('renders seven step-progress dots (§6 full-name step)',
+  testWidgets('renders nine step-progress dots (§6 phone+address steps)',
       (tester) async {
     await pumpScreen(tester);
 
-    // _StepDots renders one AnimatedContainer per step. The §6 full-name step
-    // (inserted after OTP) bumps the flow from 6 → 7 dots. No other widget on
+    // _StepDots renders one AnimatedContainer per step. Adding phone (step 4)
+    // and address (step 5) bumps the flow from 7 → 9 dots. No other widget on
     // the invite-code step uses an AnimatedContainer, so this count is exact
     // and guards against the renumbering regressing _totalSteps.
-    expect(find.byType(AnimatedContainer), findsNWidgets(7));
+    expect(find.byType(AnimatedContainer), findsNWidgets(9));
   });
 
   testWidgets('shows an inline error when the code is malformed',

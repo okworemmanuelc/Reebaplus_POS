@@ -1349,7 +1349,13 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                       ),
                                     ],
                                     SizedBox(height: context.getRSize(8)),
-                                    if (hasBottles) ...[
+                                    // §3.13 — the Empty Crates section is
+                                    // hidden for walk-in customers (no profile
+                                    // = no crate balance/deposit to defer); it
+                                    // shows only for a registered customer,
+                                    // matching checkout's _depositApplies gate.
+                                    if (hasBottles &&
+                                        _activeCustomer != null) ...[
                                       // ── Empty Crates section ──
                                       Container(
                                         width: double.infinity,

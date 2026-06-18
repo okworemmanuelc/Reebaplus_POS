@@ -201,6 +201,28 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
         if (!mounted) return;
         final next = state.session != null;
         if (next != _supabaseHasSession) {
+          // Diagnostic breadcrumb (release-visible via the synced `error_logs`
+          // table): a session that disappears while a local user is still
+          // active is exactly the condition that renders _SessionExpiredScreen.
+          // Recording the AuthChangeEvent here lets us tell a genuine
+          // server-side revocation (signedOut — single-active-device kick,
+          // token-reuse detection, admin revoke) apart from a benign
+          // initialSession/signedIn restore, without an attached debugger.
+          if (!next) {
+            // Capture the local user before any teardown nulls it, and scope
+            // the row to its tenant so it survives a full-logout clear and
+            // flushes on the next authenticated push (the resolver is cleared
+            // on the kick path, which would otherwise drop it local-only).
+            final lostUser = _auth.currentUser;
+            CrashReporter.record(
+              'auth session lost (event=${state.event.name}, '
+                  'hadLocalUser=${lostUser != null})',
+              StackTrace.current,
+              context: 'auth.session_lost',
+              businessId: lostUser?.businessId,
+              userId: lostUser?.id,
+            );
+          }
           setState(() => _supabaseHasSession = next);
         }
       },
@@ -484,6 +506,45 @@ class _SessionExpiredScreen extends ConsumerStatefulWidget {
 
 class _SessionExpiredScreenState extends ConsumerState<_SessionExpiredScreen> {
   bool _sending = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Diagnostic breadcrumb (release-visible via the synced `error_logs`
+    // table): record that the session-expired gate actually rendered, tagged
+    // with the stored auth method so the Supabase console shows whether expired
+    // sessions correlate with Google vs email/OTP logins. This is the read-out
+    // for the "did Google end the session?" investigation — the device-kick
+    // (signOut(scope: others)) can never revoke the current device's own
+    // session, so any correlation here is the single-active-device policy
+    // revoking THIS device because the same account signed in elsewhere.
+    final auth = ref.read(authProvider);
+    // The JWT is gone by definition on this screen, so the row can't push until
+    // the OTP re-auth below restores it. Scope it to the in-hand local user so
+    // it's durably enqueued now and flushes on that re-auth, rather than being
+    // dropped local-only by the (cleared) business resolver. See [logError].
+    final bid = widget.user.businessId;
+    final uid = widget.user.id;
+    unawaited(
+      auth.getAuthMethod().then((method) {
+        CrashReporter.record(
+          'session-expired gate rendered (authMethod=${method ?? 'unknown'})',
+          StackTrace.current,
+          context: 'auth.session_expired_gate',
+          businessId: bid,
+          userId: uid,
+        );
+      }).catchError((Object _) {
+        CrashReporter.record(
+          'session-expired gate rendered (authMethod lookup failed)',
+          StackTrace.current,
+          context: 'auth.session_expired_gate',
+          businessId: bid,
+          userId: uid,
+        );
+      }),
+    );
+  }
 
   Future<void> _resendOtp() async {
     final email = widget.user.email;

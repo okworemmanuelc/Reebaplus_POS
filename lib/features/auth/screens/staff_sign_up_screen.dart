@@ -3,9 +3,13 @@ import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:reebaplus_pos/core/data/countries.dart';
+import 'package:reebaplus_pos/core/data/nigerian_lgas.dart';
+import 'package:reebaplus_pos/core/data/nigerian_states.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -19,18 +23,16 @@ import 'package:reebaplus_pos/features/auth/widgets/shake_widget.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 
-/// Master plan §6 — Staff Sign Up. One screen, content fades between 7 steps
-/// (invite code → email → OTP → full name → create PIN → confirm PIN →
-/// "Welcome to {business}"). A small dots indicator sits at the top. State
-/// lives in a
-/// lightweight [StaffSignUpDraft]; the redemption (`redeem_invite_code` RPC +
-/// local mirror) runs after Confirm PIN, then straight to Home.
+/// Master plan §6 — Staff Sign Up. One screen, content fades between 9 steps
+/// (invite code → email → OTP → full name → phone → address → create PIN →
+/// confirm PIN → "Welcome to {business}"). A small dots indicator sits at the
+/// top. State lives in [StaffSignUpDraft]; the redemption
+/// (`redeem_invite_code` RPC + local mirror) runs after Confirm PIN, then
+/// straight to Home.
 ///
 /// The §6.2 "email already linked to another business → confirm existing PIN"
-/// branch is deferred to Phase 2 (consistent with the §5.2 / §7.2 deferrals).
-/// This Phase 1 flow handles a fresh device PIN setup. §6.2 also notes the
-/// full-name step is skipped for an already-linked email (the name already
-/// exists) — also Phase 2; Phase 1 always shows it.
+/// branch is deferred to Phase 2. This Phase 1 flow handles a fresh device
+/// PIN setup.
 class StaffSignUpScreen extends ConsumerStatefulWidget {
   const StaffSignUpScreen({super.key});
 
@@ -38,8 +40,7 @@ class StaffSignUpScreen extends ConsumerStatefulWidget {
   ConsumerState<StaffSignUpScreen> createState() => _StaffSignUpScreenState();
 }
 
-/// Carries Staff Sign Up state across the step navigation. Deliberately small
-/// — staff sign-up writes far less than the full CEO `OnboardingDraft`.
+/// Carries Staff Sign Up state across the step navigation.
 class StaffSignUpDraft {
   String code = '';
   String email = '';
@@ -53,12 +54,32 @@ class StaffSignUpDraft {
   String? storeId;
 
   String pin = '';
+
+  // Collected in steps 4 & 5.
+  String? phone;
+  String? streetAddress;
+  String? lgaDistrict;
+  String? cityState;
+  String? country;
+
+  /// Combines the structured location parts into a single address string
+  /// matching the format used by [OnboardingDraft.locationCombined].
+  String? get locationCombined {
+    final parts = [
+      streetAddress?.trim(),
+      lgaDistrict?.trim(),
+      cityState?.trim(),
+      country?.trim(),
+    ].where((p) => p != null && p.isNotEmpty).toList();
+    if (parts.isEmpty) return null;
+    return parts.join(', ');
+  }
 }
 
 class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
-  // Seven dots — staff always do all seven steps in Phase 1 (master plan §6.1;
-  // the §6.2 name-step skip for already-linked emails is deferred to Phase 2).
-  static const int _totalSteps = 7;
+  // Nine dots — invite code → email → OTP → full name → phone → address →
+  // create PIN → confirm PIN → welcome (master plan §6.1).
+  static const int _totalSteps = 9;
 
   // Obvious PINs to block (master plan §6.1). Mirrors ceo_sign_up_screen.dart.
   static const Set<String> _blockedPins = {
@@ -104,8 +125,21 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
   DateTime? _lockoutEndTime;
   Timer? _lockoutTimer;
 
-  // Steps 4 & 5 — PIN. Distinct shake keys: the create (step 4) and confirm
-  // (step 5) PIN bodies are both produced by _buildPinStep() and stay mounted
+  // Step 4 — phone.
+  final _phoneCtrl = TextEditingController();
+  String? _phoneError;
+
+  // Step 5 — address. Mirrors the CEO store-details step exactly.
+  final _streetCtrl = TextEditingController();
+  final _statePlainCtrl = TextEditingController();
+  final _lgaPlainCtrl = TextEditingController();
+  String _stateValue = '';
+  String _lgaValue = '';
+  String _countryValue = kDefaultCountry;
+  String? _addressError;
+
+  // Steps 6 & 7 — PIN. Distinct shake keys: the create (step 6) and confirm
+  // (step 7) PIN bodies are both produced by _buildPinStep() and stay mounted
   // together during the AnimatedSwitcher cross-fade — one shared GlobalKey
   // across two live widgets crashes. One key per sub-step avoids the collision.
   String _pin = '';
@@ -120,6 +154,8 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
   void initState() {
     super.initState();
     _otpCtrl.addListener(_onOtpChanged);
+    // Pre-populate the phone prefix for the default country (Nigeria).
+    _phoneCtrl.text = kCountryDialCodes[kDefaultCountry] ?? '';
   }
 
   @override
@@ -128,9 +164,34 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
     _emailDisplayCtrl.dispose();
     _otpCtrl.dispose();
     _nameCtrl.dispose();
+    _phoneCtrl.dispose();
+    _streetCtrl.dispose();
+    _statePlainCtrl.dispose();
+    _lgaPlainCtrl.dispose();
     _resendTimer?.cancel();
     _lockoutTimer?.cancel();
     super.dispose();
+  }
+
+  // ── Phone formatting ─────────────────────────────────────────────────────
+
+  /// Mirrors [_CeoSignUpScreenState.formatPhoneNumber] exactly.
+  String _formatPhoneNumber(String rawNumber, String dialCode) {
+    var cleaned = rawNumber.trim().replaceAll(RegExp(r'[\s\-()]+'), '');
+    if (cleaned.isEmpty) return '';
+    if (cleaned.startsWith('00')) cleaned = '+${cleaned.substring(2)}';
+    final hasPlus = cleaned.startsWith('+');
+    final digitsOnly = hasPlus ? cleaned.substring(1) : cleaned;
+    final dialDigits = dialCode.replaceAll('+', '');
+    if (digitsOnly.startsWith(dialDigits)) {
+      var local = digitsOnly.substring(dialDigits.length);
+      if (local.startsWith('0')) local = local.substring(1);
+      return '$dialCode$local';
+    } else {
+      var local = digitsOnly;
+      if (local.startsWith('0')) local = local.substring(1);
+      return '$dialCode$local';
+    }
   }
 
   // ── Connectivity ─────────────────────────────────────────────────────────
@@ -165,23 +226,23 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
   // ── Navigation ─────────────────────────────────────────────────────────
 
   void _back() {
-    if (_committing || _step == 6) return;
+    if (_committing || _step == 8) return;
     if (_step == 0) {
       Navigator.of(context).maybePop();
       return;
     }
     setState(() {
       switch (_step) {
-        case 5:
+        case 7:
           _pin = '';
           _firstPin = '';
           _pinError = null;
-          _step = 4;
+          _step = 6;
           break;
-        case 4:
+        case 6:
           _pin = '';
           _pinError = null;
-          _step = 3;
+          _step = 5;
           break;
         case 2:
           _otpCtrl.clear();
@@ -424,7 +485,54 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
     });
   }
 
-  // ── Steps 4 & 5: PIN ─────────────────────────────────────────────────────
+  // ── Step 4: phone ────────────────────────────────────────────────────────
+
+  void _submitPhone() {
+    final dialCode = kCountryDialCodes[_countryValue.trim()] ?? '';
+    final formatted = _formatPhoneNumber(_phoneCtrl.text, dialCode);
+    final digits = formatted.replaceAll(RegExp(r'\D'), '');
+    if (digits.length < 8) {
+      setState(
+        () => _phoneError = 'Enter a valid phone number (at least 8 digits).',
+      );
+      return;
+    }
+    _phoneCtrl.text = formatted;
+    _draft.phone = formatted;
+    setState(() {
+      _phoneError = null;
+      _step = 5;
+    });
+  }
+
+  // ── Step 5: address ──────────────────────────────────────────────────────
+
+  void _submitAddress() {
+    final street = _streetCtrl.text.trim();
+    if (street.isEmpty) {
+      setState(() => _addressError = 'Enter your street address.');
+      return;
+    }
+    if (_stateValue.trim().isEmpty) {
+      setState(() => _addressError = 'Enter the State / Region.');
+      return;
+    }
+    if (_lgaValue.trim().isEmpty) {
+      setState(() => _addressError = 'Enter the Local Government / District.');
+      return;
+    }
+    _draft
+      ..streetAddress = street
+      ..lgaDistrict = _lgaValue.trim()
+      ..cityState = _stateValue.trim()
+      ..country = _countryValue.trim();
+    setState(() {
+      _addressError = null;
+      _step = 6;
+    });
+  }
+
+  // ── Steps 6 & 7: PIN ─────────────────────────────────────────────────────
 
   void _onPinDigit(String digit) {
     if (_committing || _pin.length >= 6) return;
@@ -446,32 +554,32 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
   }
 
   void _onPinComplete() {
-    if (_step == 4) {
+    if (_step == 6) {
       if (_blockedPins.contains(_pin)) {
         setState(() {
           _pinError = 'Please choose a stronger PIN.';
           _pin = '';
         });
-        // Stay on step 4 — the create body is mounted, shake synchronously.
+        // Stay on step 6 — the create body is mounted, shake synchronously.
         _createPinShakeKey.currentState?.shake();
         return;
       }
       setState(() {
         _firstPin = _pin;
         _pin = '';
-        _step = 5;
+        _step = 7;
       });
       return;
     }
-    // Confirm phase (step 5).
+    // Confirm phase (step 7).
     if (_pin != _firstPin) {
       setState(() {
         _pin = '';
         _firstPin = '';
         _pinError = "PINs don't match. Try again.";
-        _step = 4;
+        _step = 6;
       });
-      // We just switched back to step 4; the create body isn't mounted yet at
+      // We just switched back to step 6; the create body isn't mounted yet at
       // this synchronous point, so shake it after the frame lands.
       WidgetsBinding.instance.addPostFrameCallback(
         (_) => _createPinShakeKey.currentState?.shake(),
@@ -503,7 +611,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
             _committing = false;
             _pin = '';
             _firstPin = '';
-            _step = 4;
+            _step = 6;
           });
         }
         return;
@@ -519,9 +627,9 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
         params: {
           'p_code': code,
           'p_user_id': mintedUserId,
-          // §6 full-name step: send the captured name. The RPC only falls back
-          // to the email when p_name is null.
           'p_name': _nameCtrl.text.trim(),
+          'p_phone': _draft.phone,
+          'p_address': _draft.locationCombined,
         },
       );
 
@@ -535,6 +643,8 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
       final authUserId = row['auth_user_id'] as String?;
       final name = row['name'] as String? ?? '';
       final email = row['email'] as String? ?? _draft.email;
+      final phone = row['phone'] as String?;
+      final address = row['address'] as String?;
       final storeId = row['store_id'] as String?;
       final roleId = row['role_id'] as String?;
 
@@ -571,6 +681,8 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
                 authUserId: Value(authUserId),
                 name: name,
                 email: Value(email),
+                phone: Value(phone),
+                address: Value(address),
                 pin: AuthService.setupRequiredPin,
                 storeId: Value(storeId),
                 lastUpdatedAt: Value(now),
@@ -646,7 +758,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
       }
 
       if (!mounted) return;
-      setState(() => _step = 6);
+      setState(() => _step = 8);
 
       // Let the user read "Welcome to {business}" before landing on Home.
       await Future.delayed(const Duration(seconds: 3));
@@ -663,7 +775,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
           final refreshed = await db.storesDao.getUserById(hydrated.id);
           if (refreshed != null) {
             if (!mounted) return;
-            setState(() => _step = 6);
+            setState(() => _step = 8);
             await Future.delayed(const Duration(seconds: 3));
             auth.setCurrentUser(refreshed);
             return;
@@ -678,7 +790,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
           _pin = '';
           _firstPin = '';
           _pinError = 'Something went wrong. Please re-enter your PIN.';
-          _step = 4;
+          _step = 6;
         });
       }
     }
@@ -712,7 +824,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
   }
 
   Widget _buildTopBar() {
-    final showBack = _step != 6 && !_committing;
+    final showBack = _step != 8 && !_committing;
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
       child: Column(
@@ -753,9 +865,13 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
       case 3:
         return _buildNameStep();
       case 4:
+        return _buildPhoneStep();
       case 5:
-        return _buildPinStep();
+        return _buildAddressStep();
       case 6:
+      case 7:
+        return _buildPinStep();
+      case 8:
         return _buildSuccessStep();
       default:
         return const SizedBox.shrink();
@@ -952,8 +1068,146 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
     );
   }
 
+  Widget _buildPhoneStep() {
+    return AuthFormShell(
+      title: 'Your phone number',
+      subtitle: 'Enter the number your manager can reach you on.',
+      children: [
+        AuthInputCard(
+          child: TextField(
+            controller: _phoneCtrl,
+            keyboardType: TextInputType.phone,
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'[0-9+]')),
+            ],
+            textInputAction: TextInputAction.done,
+            autofocus: true,
+            onChanged: (_) {
+              if (_phoneError != null) setState(() => _phoneError = null);
+            },
+            onSubmitted: (_) => _submitPhone(),
+            style: TextStyle(color: authTextPrimary(context)),
+            decoration: AppDecorations.authInputDecoration(
+              context,
+              label: 'Phone number',
+              prefixIcon: Icons.phone_outlined,
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        AuthErrorText(_phoneError),
+        const SizedBox(height: 12),
+        AppButton(text: 'Continue', onPressed: _submitPhone),
+      ],
+    );
+  }
+
+  Widget _buildAddressStep() {
+    final isNigeria = _countryValue.trim().toLowerCase() == 'nigeria';
+    final lgaOptions = isNigeria
+        ? (kNigerianLgas[_stateValue] ?? <String>[])
+        : <String>[];
+    return AuthFormShell(
+      title: 'Your address',
+      subtitle: 'Where are you based?',
+      children: [
+        AuthInputCard(
+          child: TextField(
+            controller: _streetCtrl,
+            textCapitalization: TextCapitalization.words,
+            autofocus: true,
+            onChanged: (_) {
+              if (_addressError != null) setState(() => _addressError = null);
+            },
+            style: TextStyle(color: authTextPrimary(context)),
+            decoration: AppDecorations.authInputDecoration(
+              context,
+              label: 'Street address',
+              prefixIcon: Icons.location_on_outlined,
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        AuthInputCard(
+          child: AutocompleteField(
+            label: 'Country',
+            icon: Icons.public_outlined,
+            initial: _countryValue,
+            options: kCountries,
+            onChanged: (v) => setState(() {
+              _countryValue = v;
+              _stateValue = '';
+              _lgaValue = '';
+              _statePlainCtrl.clear();
+              _lgaPlainCtrl.clear();
+              final dialCode = kCountryDialCodes[v] ?? '';
+              if (dialCode.isNotEmpty) _phoneCtrl.text = dialCode;
+            }),
+          ),
+        ),
+        const SizedBox(height: 12),
+        AuthInputCard(
+          child: isNigeria
+              ? AutocompleteField(
+                  key: const ValueKey('state_ng'),
+                  label: 'State / Region',
+                  icon: Icons.map_outlined,
+                  initial: _stateValue,
+                  options: kNigerianStates,
+                  onChanged: (v) => setState(() {
+                    _stateValue = v;
+                    _lgaValue = '';
+                    _lgaPlainCtrl.clear();
+                  }),
+                )
+              : TextField(
+                  controller: _statePlainCtrl,
+                  textCapitalization: TextCapitalization.words,
+                  style: TextStyle(color: authTextPrimary(context)),
+                  onChanged: (v) => setState(() {
+                    _stateValue = v;
+                    _lgaValue = '';
+                  }),
+                  decoration: AppDecorations.authInputDecoration(
+                    context,
+                    label: 'State / Region',
+                    prefixIcon: Icons.map_outlined,
+                  ),
+                ),
+        ),
+        const SizedBox(height: 12),
+        AuthInputCard(
+          child: isNigeria
+              ? AutocompleteField(
+                  key: ValueKey('lga_$_stateValue'),
+                  label: 'Local Government / District',
+                  icon: Icons.account_balance_outlined,
+                  initial: _lgaValue,
+                  options: lgaOptions,
+                  onChanged: (v) => _lgaValue = v,
+                )
+              : TextField(
+                  controller: _lgaPlainCtrl,
+                  textCapitalization: TextCapitalization.words,
+                  style: TextStyle(color: authTextPrimary(context)),
+                  onChanged: (v) => _lgaValue = v,
+                  decoration: AppDecorations.authInputDecoration(
+                    context,
+                    label: 'District (optional)',
+                    prefixIcon: Icons.account_balance_outlined,
+                  ),
+                ),
+        ),
+        const SizedBox(height: 4),
+        AuthErrorText(_addressError),
+        const SizedBox(height: 12),
+        AppButton(text: 'Continue', onPressed: _submitAddress),
+      ],
+    );
+  }
+
   Widget _buildPinStep() {
-    final confirming = _step == 5;
+    final confirming = _step == 7;
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(28, 12, 28, 24),
       child: Column(
@@ -1079,7 +1333,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
 
 // ── Small private widgets ────────────────────────────────────────────────
 
-/// Seven small dots indicating progress (master plan §6: "small dots progress
+/// Nine small dots indicating progress (master plan §6: "small dots progress
 /// indicator", fading between steps). Mirrors the CEO sign-up indicator.
 class _StepDots extends StatelessWidget {
   final int current;

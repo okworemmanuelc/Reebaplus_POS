@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
 
 /// Shared building blocks for the CEO Settings menu (§10.1) and its sub-pages.
 /// Kept tiny and local to the settings feature — no speculative design-system.
@@ -49,9 +50,9 @@ class SettingsTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = Theme.of(context);
 
-    final card = Container(
+    final card = GlassyCard(
       padding: const EdgeInsets.all(16),
-      decoration: AppDecorations.glassCard(context, radius: 16),
+      radius: 16,
       child: Row(
         children: [
           Container(

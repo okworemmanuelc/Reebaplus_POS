@@ -2502,6 +2502,26 @@ class $UsersTable extends Users with TableInfo<$UsersTable, UserData> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _phoneMeta = const VerificationMeta('phone');
+  @override
+  late final GeneratedColumn<String> phone = GeneratedColumn<String>(
+    'phone',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _addressMeta = const VerificationMeta(
+    'address',
+  );
+  @override
+  late final GeneratedColumn<String> address = GeneratedColumn<String>(
+    'address',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _passwordHashMeta = const VerificationMeta(
     'passwordHash',
   );
@@ -2628,6 +2648,8 @@ class $UsersTable extends Users with TableInfo<$UsersTable, UserData> {
     authUserId,
     name,
     email,
+    phone,
+    address,
     passwordHash,
     pin,
     pinHash,
@@ -2683,6 +2705,18 @@ class $UsersTable extends Users with TableInfo<$UsersTable, UserData> {
       context.handle(
         _emailMeta,
         email.isAcceptableOrUnknown(data['email']!, _emailMeta),
+      );
+    }
+    if (data.containsKey('phone')) {
+      context.handle(
+        _phoneMeta,
+        phone.isAcceptableOrUnknown(data['phone']!, _phoneMeta),
+      );
+    }
+    if (data.containsKey('address')) {
+      context.handle(
+        _addressMeta,
+        address.isAcceptableOrUnknown(data['address']!, _addressMeta),
       );
     }
     if (data.containsKey('password_hash')) {
@@ -2791,6 +2825,14 @@ class $UsersTable extends Users with TableInfo<$UsersTable, UserData> {
         DriftSqlType.string,
         data['${effectivePrefix}email'],
       ),
+      phone: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}phone'],
+      ),
+      address: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}address'],
+      ),
       passwordHash: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}password_hash'],
@@ -2846,6 +2888,8 @@ class UserData extends DataClass implements Insertable<UserData> {
   final String? authUserId;
   final String name;
   final String? email;
+  final String? phone;
+  final String? address;
   final String? passwordHash;
   final String pin;
   final String? pinHash;
@@ -2862,6 +2906,8 @@ class UserData extends DataClass implements Insertable<UserData> {
     this.authUserId,
     required this.name,
     this.email,
+    this.phone,
+    this.address,
     this.passwordHash,
     required this.pin,
     this.pinHash,
@@ -2884,6 +2930,12 @@ class UserData extends DataClass implements Insertable<UserData> {
     map['name'] = Variable<String>(name);
     if (!nullToAbsent || email != null) {
       map['email'] = Variable<String>(email);
+    }
+    if (!nullToAbsent || phone != null) {
+      map['phone'] = Variable<String>(phone);
+    }
+    if (!nullToAbsent || address != null) {
+      map['address'] = Variable<String>(address);
     }
     if (!nullToAbsent || passwordHash != null) {
       map['password_hash'] = Variable<String>(passwordHash);
@@ -2919,6 +2971,12 @@ class UserData extends DataClass implements Insertable<UserData> {
       email: email == null && nullToAbsent
           ? const Value.absent()
           : Value(email),
+      phone: phone == null && nullToAbsent
+          ? const Value.absent()
+          : Value(phone),
+      address: address == null && nullToAbsent
+          ? const Value.absent()
+          : Value(address),
       passwordHash: passwordHash == null && nullToAbsent
           ? const Value.absent()
           : Value(passwordHash),
@@ -2953,6 +3011,8 @@ class UserData extends DataClass implements Insertable<UserData> {
       authUserId: serializer.fromJson<String?>(json['authUserId']),
       name: serializer.fromJson<String>(json['name']),
       email: serializer.fromJson<String?>(json['email']),
+      phone: serializer.fromJson<String?>(json['phone']),
+      address: serializer.fromJson<String?>(json['address']),
       passwordHash: serializer.fromJson<String?>(json['passwordHash']),
       pin: serializer.fromJson<String>(json['pin']),
       pinHash: serializer.fromJson<String?>(json['pinHash']),
@@ -2974,6 +3034,8 @@ class UserData extends DataClass implements Insertable<UserData> {
       'authUserId': serializer.toJson<String?>(authUserId),
       'name': serializer.toJson<String>(name),
       'email': serializer.toJson<String?>(email),
+      'phone': serializer.toJson<String?>(phone),
+      'address': serializer.toJson<String?>(address),
       'passwordHash': serializer.toJson<String?>(passwordHash),
       'pin': serializer.toJson<String>(pin),
       'pinHash': serializer.toJson<String?>(pinHash),
@@ -2993,6 +3055,8 @@ class UserData extends DataClass implements Insertable<UserData> {
     Value<String?> authUserId = const Value.absent(),
     String? name,
     Value<String?> email = const Value.absent(),
+    Value<String?> phone = const Value.absent(),
+    Value<String?> address = const Value.absent(),
     Value<String?> passwordHash = const Value.absent(),
     String? pin,
     Value<String?> pinHash = const Value.absent(),
@@ -3009,6 +3073,8 @@ class UserData extends DataClass implements Insertable<UserData> {
     authUserId: authUserId.present ? authUserId.value : this.authUserId,
     name: name ?? this.name,
     email: email.present ? email.value : this.email,
+    phone: phone.present ? phone.value : this.phone,
+    address: address.present ? address.value : this.address,
     passwordHash: passwordHash.present ? passwordHash.value : this.passwordHash,
     pin: pin ?? this.pin,
     pinHash: pinHash.present ? pinHash.value : this.pinHash,
@@ -3033,6 +3099,8 @@ class UserData extends DataClass implements Insertable<UserData> {
           : this.authUserId,
       name: data.name.present ? data.name.value : this.name,
       email: data.email.present ? data.email.value : this.email,
+      phone: data.phone.present ? data.phone.value : this.phone,
+      address: data.address.present ? data.address.value : this.address,
       passwordHash: data.passwordHash.present
           ? data.passwordHash.value
           : this.passwordHash,
@@ -3064,6 +3132,8 @@ class UserData extends DataClass implements Insertable<UserData> {
           ..write('authUserId: $authUserId, ')
           ..write('name: $name, ')
           ..write('email: $email, ')
+          ..write('phone: $phone, ')
+          ..write('address: $address, ')
           ..write('passwordHash: $passwordHash, ')
           ..write('pin: $pin, ')
           ..write('pinHash: $pinHash, ')
@@ -3085,6 +3155,8 @@ class UserData extends DataClass implements Insertable<UserData> {
     authUserId,
     name,
     email,
+    phone,
+    address,
     passwordHash,
     pin,
     pinHash,
@@ -3105,6 +3177,8 @@ class UserData extends DataClass implements Insertable<UserData> {
           other.authUserId == this.authUserId &&
           other.name == this.name &&
           other.email == this.email &&
+          other.phone == this.phone &&
+          other.address == this.address &&
           other.passwordHash == this.passwordHash &&
           other.pin == this.pin &&
           other.pinHash == this.pinHash &&
@@ -3123,6 +3197,8 @@ class UsersCompanion extends UpdateCompanion<UserData> {
   final Value<String?> authUserId;
   final Value<String> name;
   final Value<String?> email;
+  final Value<String?> phone;
+  final Value<String?> address;
   final Value<String?> passwordHash;
   final Value<String> pin;
   final Value<String?> pinHash;
@@ -3140,6 +3216,8 @@ class UsersCompanion extends UpdateCompanion<UserData> {
     this.authUserId = const Value.absent(),
     this.name = const Value.absent(),
     this.email = const Value.absent(),
+    this.phone = const Value.absent(),
+    this.address = const Value.absent(),
     this.passwordHash = const Value.absent(),
     this.pin = const Value.absent(),
     this.pinHash = const Value.absent(),
@@ -3158,6 +3236,8 @@ class UsersCompanion extends UpdateCompanion<UserData> {
     this.authUserId = const Value.absent(),
     required String name,
     this.email = const Value.absent(),
+    this.phone = const Value.absent(),
+    this.address = const Value.absent(),
     this.passwordHash = const Value.absent(),
     required String pin,
     this.pinHash = const Value.absent(),
@@ -3178,6 +3258,8 @@ class UsersCompanion extends UpdateCompanion<UserData> {
     Expression<String>? authUserId,
     Expression<String>? name,
     Expression<String>? email,
+    Expression<String>? phone,
+    Expression<String>? address,
     Expression<String>? passwordHash,
     Expression<String>? pin,
     Expression<String>? pinHash,
@@ -3196,6 +3278,8 @@ class UsersCompanion extends UpdateCompanion<UserData> {
       if (authUserId != null) 'auth_user_id': authUserId,
       if (name != null) 'name': name,
       if (email != null) 'email': email,
+      if (phone != null) 'phone': phone,
+      if (address != null) 'address': address,
       if (passwordHash != null) 'password_hash': passwordHash,
       if (pin != null) 'pin': pin,
       if (pinHash != null) 'pin_hash': pinHash,
@@ -3216,6 +3300,8 @@ class UsersCompanion extends UpdateCompanion<UserData> {
     Value<String?>? authUserId,
     Value<String>? name,
     Value<String?>? email,
+    Value<String?>? phone,
+    Value<String?>? address,
     Value<String?>? passwordHash,
     Value<String>? pin,
     Value<String?>? pinHash,
@@ -3234,6 +3320,8 @@ class UsersCompanion extends UpdateCompanion<UserData> {
       authUserId: authUserId ?? this.authUserId,
       name: name ?? this.name,
       email: email ?? this.email,
+      phone: phone ?? this.phone,
+      address: address ?? this.address,
       passwordHash: passwordHash ?? this.passwordHash,
       pin: pin ?? this.pin,
       pinHash: pinHash ?? this.pinHash,
@@ -3265,6 +3353,12 @@ class UsersCompanion extends UpdateCompanion<UserData> {
     }
     if (email.present) {
       map['email'] = Variable<String>(email.value);
+    }
+    if (phone.present) {
+      map['phone'] = Variable<String>(phone.value);
+    }
+    if (address.present) {
+      map['address'] = Variable<String>(address.value);
     }
     if (passwordHash.present) {
       map['password_hash'] = Variable<String>(passwordHash.value);
@@ -3310,6 +3404,8 @@ class UsersCompanion extends UpdateCompanion<UserData> {
           ..write('authUserId: $authUserId, ')
           ..write('name: $name, ')
           ..write('email: $email, ')
+          ..write('phone: $phone, ')
+          ..write('address: $address, ')
           ..write('passwordHash: $passwordHash, ')
           ..write('pin: $pin, ')
           ..write('pinHash: $pinHash, ')
@@ -35114,6 +35210,18 @@ class $SyncQueueTable extends SyncQueue
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _autoRetryCountMeta = const VerificationMeta(
+    'autoRetryCount',
+  );
+  @override
+  late final GeneratedColumn<int> autoRetryCount = GeneratedColumn<int>(
+    'auto_retry_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -35127,6 +35235,7 @@ class $SyncQueueTable extends SyncQueue
     nextAttemptAt,
     createdAt,
     authUserId,
+    autoRetryCount,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -35218,6 +35327,15 @@ class $SyncQueueTable extends SyncQueue
         ),
       );
     }
+    if (data.containsKey('auto_retry_count')) {
+      context.handle(
+        _autoRetryCountMeta,
+        autoRetryCount.isAcceptableOrUnknown(
+          data['auto_retry_count']!,
+          _autoRetryCountMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -35271,6 +35389,10 @@ class $SyncQueueTable extends SyncQueue
         DriftSqlType.string,
         data['${effectivePrefix}auth_user_id'],
       ),
+      autoRetryCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}auto_retry_count'],
+      )!,
     );
   }
 
@@ -35292,6 +35414,7 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
   final DateTime? nextAttemptAt;
   final DateTime createdAt;
   final String? authUserId;
+  final int autoRetryCount;
   const SyncQueueData({
     required this.id,
     required this.businessId,
@@ -35304,6 +35427,7 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
     this.nextAttemptAt,
     required this.createdAt,
     this.authUserId,
+    required this.autoRetryCount,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -35325,6 +35449,7 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
     if (!nullToAbsent || authUserId != null) {
       map['auth_user_id'] = Variable<String>(authUserId);
     }
+    map['auto_retry_count'] = Variable<int>(autoRetryCount);
     return map;
   }
 
@@ -35347,6 +35472,7 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
       authUserId: authUserId == null && nullToAbsent
           ? const Value.absent()
           : Value(authUserId),
+      autoRetryCount: Value(autoRetryCount),
     );
   }
 
@@ -35367,6 +35493,7 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
       nextAttemptAt: serializer.fromJson<DateTime?>(json['nextAttemptAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       authUserId: serializer.fromJson<String?>(json['authUserId']),
+      autoRetryCount: serializer.fromJson<int>(json['autoRetryCount']),
     );
   }
   @override
@@ -35384,6 +35511,7 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
       'nextAttemptAt': serializer.toJson<DateTime?>(nextAttemptAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'authUserId': serializer.toJson<String?>(authUserId),
+      'autoRetryCount': serializer.toJson<int>(autoRetryCount),
     };
   }
 
@@ -35399,6 +35527,7 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
     Value<DateTime?> nextAttemptAt = const Value.absent(),
     DateTime? createdAt,
     Value<String?> authUserId = const Value.absent(),
+    int? autoRetryCount,
   }) => SyncQueueData(
     id: id ?? this.id,
     businessId: businessId ?? this.businessId,
@@ -35413,6 +35542,7 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
         : this.nextAttemptAt,
     createdAt: createdAt ?? this.createdAt,
     authUserId: authUserId.present ? authUserId.value : this.authUserId,
+    autoRetryCount: autoRetryCount ?? this.autoRetryCount,
   );
   SyncQueueData copyWithCompanion(SyncQueueCompanion data) {
     return SyncQueueData(
@@ -35437,6 +35567,9 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
       authUserId: data.authUserId.present
           ? data.authUserId.value
           : this.authUserId,
+      autoRetryCount: data.autoRetryCount.present
+          ? data.autoRetryCount.value
+          : this.autoRetryCount,
     );
   }
 
@@ -35453,7 +35586,8 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
           ..write('attempts: $attempts, ')
           ..write('nextAttemptAt: $nextAttemptAt, ')
           ..write('createdAt: $createdAt, ')
-          ..write('authUserId: $authUserId')
+          ..write('authUserId: $authUserId, ')
+          ..write('autoRetryCount: $autoRetryCount')
           ..write(')'))
         .toString();
   }
@@ -35471,6 +35605,7 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
     nextAttemptAt,
     createdAt,
     authUserId,
+    autoRetryCount,
   );
   @override
   bool operator ==(Object other) =>
@@ -35486,7 +35621,8 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
           other.attempts == this.attempts &&
           other.nextAttemptAt == this.nextAttemptAt &&
           other.createdAt == this.createdAt &&
-          other.authUserId == this.authUserId);
+          other.authUserId == this.authUserId &&
+          other.autoRetryCount == this.autoRetryCount);
 }
 
 class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
@@ -35501,6 +35637,7 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
   final Value<DateTime?> nextAttemptAt;
   final Value<DateTime> createdAt;
   final Value<String?> authUserId;
+  final Value<int> autoRetryCount;
   final Value<int> rowid;
   const SyncQueueCompanion({
     this.id = const Value.absent(),
@@ -35514,6 +35651,7 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
     this.nextAttemptAt = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.authUserId = const Value.absent(),
+    this.autoRetryCount = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   SyncQueueCompanion.insert({
@@ -35528,6 +35666,7 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
     this.nextAttemptAt = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.authUserId = const Value.absent(),
+    this.autoRetryCount = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : businessId = Value(businessId),
        actionType = Value(actionType),
@@ -35544,6 +35683,7 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
     Expression<DateTime>? nextAttemptAt,
     Expression<DateTime>? createdAt,
     Expression<String>? authUserId,
+    Expression<int>? autoRetryCount,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -35558,6 +35698,7 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
       if (nextAttemptAt != null) 'next_attempt_at': nextAttemptAt,
       if (createdAt != null) 'created_at': createdAt,
       if (authUserId != null) 'auth_user_id': authUserId,
+      if (autoRetryCount != null) 'auto_retry_count': autoRetryCount,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -35574,6 +35715,7 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
     Value<DateTime?>? nextAttemptAt,
     Value<DateTime>? createdAt,
     Value<String?>? authUserId,
+    Value<int>? autoRetryCount,
     Value<int>? rowid,
   }) {
     return SyncQueueCompanion(
@@ -35588,6 +35730,7 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
       nextAttemptAt: nextAttemptAt ?? this.nextAttemptAt,
       createdAt: createdAt ?? this.createdAt,
       authUserId: authUserId ?? this.authUserId,
+      autoRetryCount: autoRetryCount ?? this.autoRetryCount,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -35628,6 +35771,9 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
     if (authUserId.present) {
       map['auth_user_id'] = Variable<String>(authUserId.value);
     }
+    if (autoRetryCount.present) {
+      map['auto_retry_count'] = Variable<int>(autoRetryCount.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -35648,6 +35794,7 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
           ..write('nextAttemptAt: $nextAttemptAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('authUserId: $authUserId, ')
+          ..write('autoRetryCount: $autoRetryCount, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -35736,6 +35883,18 @@ class $SyncQueueOrphansTable extends SyncQueueOrphans
     requiredDuringInsert: false,
     defaultValue: currentDateAndTime,
   );
+  static const VerificationMeta _autoRetryCountMeta = const VerificationMeta(
+    'autoRetryCount',
+  );
+  @override
+  late final GeneratedColumn<int> autoRetryCount = GeneratedColumn<int>(
+    'auto_retry_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -35745,6 +35904,7 @@ class $SyncQueueOrphansTable extends SyncQueueOrphans
     reason,
     createdAt,
     movedAt,
+    autoRetryCount,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -35805,6 +35965,15 @@ class $SyncQueueOrphansTable extends SyncQueueOrphans
         movedAt.isAcceptableOrUnknown(data['moved_at']!, _movedAtMeta),
       );
     }
+    if (data.containsKey('auto_retry_count')) {
+      context.handle(
+        _autoRetryCountMeta,
+        autoRetryCount.isAcceptableOrUnknown(
+          data['auto_retry_count']!,
+          _autoRetryCountMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -35842,6 +36011,10 @@ class $SyncQueueOrphansTable extends SyncQueueOrphans
         DriftSqlType.dateTime,
         data['${effectivePrefix}moved_at'],
       )!,
+      autoRetryCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}auto_retry_count'],
+      )!,
     );
   }
 
@@ -35860,6 +36033,7 @@ class SyncQueueOrphanData extends DataClass
   final String reason;
   final DateTime createdAt;
   final DateTime movedAt;
+  final int autoRetryCount;
   const SyncQueueOrphanData({
     required this.id,
     required this.originalId,
@@ -35868,6 +36042,7 @@ class SyncQueueOrphanData extends DataClass
     required this.reason,
     required this.createdAt,
     required this.movedAt,
+    required this.autoRetryCount,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -35879,6 +36054,7 @@ class SyncQueueOrphanData extends DataClass
     map['reason'] = Variable<String>(reason);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['moved_at'] = Variable<DateTime>(movedAt);
+    map['auto_retry_count'] = Variable<int>(autoRetryCount);
     return map;
   }
 
@@ -35891,6 +36067,7 @@ class SyncQueueOrphanData extends DataClass
       reason: Value(reason),
       createdAt: Value(createdAt),
       movedAt: Value(movedAt),
+      autoRetryCount: Value(autoRetryCount),
     );
   }
 
@@ -35907,6 +36084,7 @@ class SyncQueueOrphanData extends DataClass
       reason: serializer.fromJson<String>(json['reason']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       movedAt: serializer.fromJson<DateTime>(json['movedAt']),
+      autoRetryCount: serializer.fromJson<int>(json['autoRetryCount']),
     );
   }
   @override
@@ -35920,6 +36098,7 @@ class SyncQueueOrphanData extends DataClass
       'reason': serializer.toJson<String>(reason),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'movedAt': serializer.toJson<DateTime>(movedAt),
+      'autoRetryCount': serializer.toJson<int>(autoRetryCount),
     };
   }
 
@@ -35931,6 +36110,7 @@ class SyncQueueOrphanData extends DataClass
     String? reason,
     DateTime? createdAt,
     DateTime? movedAt,
+    int? autoRetryCount,
   }) => SyncQueueOrphanData(
     id: id ?? this.id,
     originalId: originalId ?? this.originalId,
@@ -35939,6 +36119,7 @@ class SyncQueueOrphanData extends DataClass
     reason: reason ?? this.reason,
     createdAt: createdAt ?? this.createdAt,
     movedAt: movedAt ?? this.movedAt,
+    autoRetryCount: autoRetryCount ?? this.autoRetryCount,
   );
   SyncQueueOrphanData copyWithCompanion(SyncQueueOrphansCompanion data) {
     return SyncQueueOrphanData(
@@ -35953,6 +36134,9 @@ class SyncQueueOrphanData extends DataClass
       reason: data.reason.present ? data.reason.value : this.reason,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       movedAt: data.movedAt.present ? data.movedAt.value : this.movedAt,
+      autoRetryCount: data.autoRetryCount.present
+          ? data.autoRetryCount.value
+          : this.autoRetryCount,
     );
   }
 
@@ -35965,7 +36149,8 @@ class SyncQueueOrphanData extends DataClass
           ..write('payload: $payload, ')
           ..write('reason: $reason, ')
           ..write('createdAt: $createdAt, ')
-          ..write('movedAt: $movedAt')
+          ..write('movedAt: $movedAt, ')
+          ..write('autoRetryCount: $autoRetryCount')
           ..write(')'))
         .toString();
   }
@@ -35979,6 +36164,7 @@ class SyncQueueOrphanData extends DataClass
     reason,
     createdAt,
     movedAt,
+    autoRetryCount,
   );
   @override
   bool operator ==(Object other) =>
@@ -35990,7 +36176,8 @@ class SyncQueueOrphanData extends DataClass
           other.payload == this.payload &&
           other.reason == this.reason &&
           other.createdAt == this.createdAt &&
-          other.movedAt == this.movedAt);
+          other.movedAt == this.movedAt &&
+          other.autoRetryCount == this.autoRetryCount);
 }
 
 class SyncQueueOrphansCompanion extends UpdateCompanion<SyncQueueOrphanData> {
@@ -36001,6 +36188,7 @@ class SyncQueueOrphansCompanion extends UpdateCompanion<SyncQueueOrphanData> {
   final Value<String> reason;
   final Value<DateTime> createdAt;
   final Value<DateTime> movedAt;
+  final Value<int> autoRetryCount;
   final Value<int> rowid;
   const SyncQueueOrphansCompanion({
     this.id = const Value.absent(),
@@ -36010,6 +36198,7 @@ class SyncQueueOrphansCompanion extends UpdateCompanion<SyncQueueOrphanData> {
     this.reason = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.movedAt = const Value.absent(),
+    this.autoRetryCount = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   SyncQueueOrphansCompanion.insert({
@@ -36020,6 +36209,7 @@ class SyncQueueOrphansCompanion extends UpdateCompanion<SyncQueueOrphanData> {
     required String reason,
     this.createdAt = const Value.absent(),
     this.movedAt = const Value.absent(),
+    this.autoRetryCount = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : originalId = Value(originalId),
        actionType = Value(actionType),
@@ -36033,6 +36223,7 @@ class SyncQueueOrphansCompanion extends UpdateCompanion<SyncQueueOrphanData> {
     Expression<String>? reason,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? movedAt,
+    Expression<int>? autoRetryCount,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -36043,6 +36234,7 @@ class SyncQueueOrphansCompanion extends UpdateCompanion<SyncQueueOrphanData> {
       if (reason != null) 'reason': reason,
       if (createdAt != null) 'created_at': createdAt,
       if (movedAt != null) 'moved_at': movedAt,
+      if (autoRetryCount != null) 'auto_retry_count': autoRetryCount,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -36055,6 +36247,7 @@ class SyncQueueOrphansCompanion extends UpdateCompanion<SyncQueueOrphanData> {
     Value<String>? reason,
     Value<DateTime>? createdAt,
     Value<DateTime>? movedAt,
+    Value<int>? autoRetryCount,
     Value<int>? rowid,
   }) {
     return SyncQueueOrphansCompanion(
@@ -36065,6 +36258,7 @@ class SyncQueueOrphansCompanion extends UpdateCompanion<SyncQueueOrphanData> {
       reason: reason ?? this.reason,
       createdAt: createdAt ?? this.createdAt,
       movedAt: movedAt ?? this.movedAt,
+      autoRetryCount: autoRetryCount ?? this.autoRetryCount,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -36093,6 +36287,9 @@ class SyncQueueOrphansCompanion extends UpdateCompanion<SyncQueueOrphanData> {
     if (movedAt.present) {
       map['moved_at'] = Variable<DateTime>(movedAt.value);
     }
+    if (autoRetryCount.present) {
+      map['auto_retry_count'] = Variable<int>(autoRetryCount.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -36109,6 +36306,7 @@ class SyncQueueOrphansCompanion extends UpdateCompanion<SyncQueueOrphanData> {
           ..write('reason: $reason, ')
           ..write('createdAt: $createdAt, ')
           ..write('movedAt: $movedAt, ')
+          ..write('autoRetryCount: $autoRetryCount, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -46066,6 +46264,8 @@ typedef $$UsersTableCreateCompanionBuilder =
       Value<String?> authUserId,
       required String name,
       Value<String?> email,
+      Value<String?> phone,
+      Value<String?> address,
       Value<String?> passwordHash,
       required String pin,
       Value<String?> pinHash,
@@ -46085,6 +46285,8 @@ typedef $$UsersTableUpdateCompanionBuilder =
       Value<String?> authUserId,
       Value<String> name,
       Value<String?> email,
+      Value<String?> phone,
+      Value<String?> address,
       Value<String?> passwordHash,
       Value<String> pin,
       Value<String?> pinHash,
@@ -46344,6 +46546,16 @@ class $$UsersTableFilterComposer extends Composer<_$AppDatabase, $UsersTable> {
 
   ColumnFilters<String> get email => $composableBuilder(
     column: $table.email,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get phone => $composableBuilder(
+    column: $table.phone,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get address => $composableBuilder(
+    column: $table.address,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -46694,6 +46906,16 @@ class $$UsersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get phone => $composableBuilder(
+    column: $table.phone,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get address => $composableBuilder(
+    column: $table.address,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get passwordHash => $composableBuilder(
     column: $table.passwordHash,
     builder: (column) => ColumnOrderings(column),
@@ -46808,6 +47030,12 @@ class $$UsersTableAnnotationComposer
 
   GeneratedColumn<String> get email =>
       $composableBuilder(column: $table.email, builder: (column) => column);
+
+  GeneratedColumn<String> get phone =>
+      $composableBuilder(column: $table.phone, builder: (column) => column);
+
+  GeneratedColumn<String> get address =>
+      $composableBuilder(column: $table.address, builder: (column) => column);
 
   GeneratedColumn<String> get passwordHash => $composableBuilder(
     column: $table.passwordHash,
@@ -47165,6 +47393,8 @@ class $$UsersTableTableManager
                 Value<String?> authUserId = const Value.absent(),
                 Value<String> name = const Value.absent(),
                 Value<String?> email = const Value.absent(),
+                Value<String?> phone = const Value.absent(),
+                Value<String?> address = const Value.absent(),
                 Value<String?> passwordHash = const Value.absent(),
                 Value<String> pin = const Value.absent(),
                 Value<String?> pinHash = const Value.absent(),
@@ -47182,6 +47412,8 @@ class $$UsersTableTableManager
                 authUserId: authUserId,
                 name: name,
                 email: email,
+                phone: phone,
+                address: address,
                 passwordHash: passwordHash,
                 pin: pin,
                 pinHash: pinHash,
@@ -47201,6 +47433,8 @@ class $$UsersTableTableManager
                 Value<String?> authUserId = const Value.absent(),
                 required String name,
                 Value<String?> email = const Value.absent(),
+                Value<String?> phone = const Value.absent(),
+                Value<String?> address = const Value.absent(),
                 Value<String?> passwordHash = const Value.absent(),
                 required String pin,
                 Value<String?> pinHash = const Value.absent(),
@@ -47218,6 +47452,8 @@ class $$UsersTableTableManager
                 authUserId: authUserId,
                 name: name,
                 email: email,
+                phone: phone,
+                address: address,
                 passwordHash: passwordHash,
                 pin: pin,
                 pinHash: pinHash,
@@ -82554,6 +82790,7 @@ typedef $$SyncQueueTableCreateCompanionBuilder =
       Value<DateTime?> nextAttemptAt,
       Value<DateTime> createdAt,
       Value<String?> authUserId,
+      Value<int> autoRetryCount,
       Value<int> rowid,
     });
 typedef $$SyncQueueTableUpdateCompanionBuilder =
@@ -82569,6 +82806,7 @@ typedef $$SyncQueueTableUpdateCompanionBuilder =
       Value<DateTime?> nextAttemptAt,
       Value<DateTime> createdAt,
       Value<String?> authUserId,
+      Value<int> autoRetryCount,
       Value<int> rowid,
     });
 
@@ -82655,6 +82893,11 @@ class $$SyncQueueTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<int> get autoRetryCount => $composableBuilder(
+    column: $table.autoRetryCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
   $$BusinessesTableFilterComposer get businessId {
     final $$BusinessesTableFilterComposer composer = $composerBuilder(
       composer: this,
@@ -82738,6 +82981,11 @@ class $$SyncQueueTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get autoRetryCount => $composableBuilder(
+    column: $table.autoRetryCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$BusinessesTableOrderingComposer get businessId {
     final $$BusinessesTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -82809,6 +83057,11 @@ class $$SyncQueueTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<int> get autoRetryCount => $composableBuilder(
+    column: $table.autoRetryCount,
+    builder: (column) => column,
+  );
+
   $$BusinessesTableAnnotationComposer get businessId {
     final $$BusinessesTableAnnotationComposer composer = $composerBuilder(
       composer: this,
@@ -82872,6 +83125,7 @@ class $$SyncQueueTableTableManager
                 Value<DateTime?> nextAttemptAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<String?> authUserId = const Value.absent(),
+                Value<int> autoRetryCount = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SyncQueueCompanion(
                 id: id,
@@ -82885,6 +83139,7 @@ class $$SyncQueueTableTableManager
                 nextAttemptAt: nextAttemptAt,
                 createdAt: createdAt,
                 authUserId: authUserId,
+                autoRetryCount: autoRetryCount,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -82900,6 +83155,7 @@ class $$SyncQueueTableTableManager
                 Value<DateTime?> nextAttemptAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<String?> authUserId = const Value.absent(),
+                Value<int> autoRetryCount = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SyncQueueCompanion.insert(
                 id: id,
@@ -82913,6 +83169,7 @@ class $$SyncQueueTableTableManager
                 nextAttemptAt: nextAttemptAt,
                 createdAt: createdAt,
                 authUserId: authUserId,
+                autoRetryCount: autoRetryCount,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -82991,6 +83248,7 @@ typedef $$SyncQueueOrphansTableCreateCompanionBuilder =
       required String reason,
       Value<DateTime> createdAt,
       Value<DateTime> movedAt,
+      Value<int> autoRetryCount,
       Value<int> rowid,
     });
 typedef $$SyncQueueOrphansTableUpdateCompanionBuilder =
@@ -83002,6 +83260,7 @@ typedef $$SyncQueueOrphansTableUpdateCompanionBuilder =
       Value<String> reason,
       Value<DateTime> createdAt,
       Value<DateTime> movedAt,
+      Value<int> autoRetryCount,
       Value<int> rowid,
     });
 
@@ -83046,6 +83305,11 @@ class $$SyncQueueOrphansTableFilterComposer
 
   ColumnFilters<DateTime> get movedAt => $composableBuilder(
     column: $table.movedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get autoRetryCount => $composableBuilder(
+    column: $table.autoRetryCount,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -83093,6 +83357,11 @@ class $$SyncQueueOrphansTableOrderingComposer
     column: $table.movedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get autoRetryCount => $composableBuilder(
+    column: $table.autoRetryCount,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$SyncQueueOrphansTableAnnotationComposer
@@ -83128,6 +83397,11 @@ class $$SyncQueueOrphansTableAnnotationComposer
 
   GeneratedColumn<DateTime> get movedAt =>
       $composableBuilder(column: $table.movedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get autoRetryCount => $composableBuilder(
+    column: $table.autoRetryCount,
+    builder: (column) => column,
+  );
 }
 
 class $$SyncQueueOrphansTableTableManager
@@ -83174,6 +83448,7 @@ class $$SyncQueueOrphansTableTableManager
                 Value<String> reason = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> movedAt = const Value.absent(),
+                Value<int> autoRetryCount = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SyncQueueOrphansCompanion(
                 id: id,
@@ -83183,6 +83458,7 @@ class $$SyncQueueOrphansTableTableManager
                 reason: reason,
                 createdAt: createdAt,
                 movedAt: movedAt,
+                autoRetryCount: autoRetryCount,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -83194,6 +83470,7 @@ class $$SyncQueueOrphansTableTableManager
                 required String reason,
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> movedAt = const Value.absent(),
+                Value<int> autoRetryCount = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SyncQueueOrphansCompanion.insert(
                 id: id,
@@ -83203,6 +83480,7 @@ class $$SyncQueueOrphansTableTableManager
                 reason: reason,
                 createdAt: createdAt,
                 movedAt: movedAt,
+                autoRetryCount: autoRetryCount,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

@@ -89,24 +89,32 @@ try {
 
 ### Widget rules
 
-- Every UI component is a `StatelessWidget` subclass with a named class. Helper methods that return `Widget` are not allowed — extract a new named widget class instead.
+- Prefer extracting reusable UI into named widget classes (`StatelessWidget` /
+  `ConsumerWidget`). Private `_build…` helper methods that return `Widget` are
+  tolerated for small, screen-local fragments, but a fragment that is reused or
+  grows non-trivial should become its own named class.
 
 ```dart
-// Correct
+// Preferred — reusable, testable
 class CartLineItem extends StatelessWidget {
   const CartLineItem({super.key, required this.item});
   final CartItem item;
   @override Widget build(BuildContext context) { ... }
 }
 
-// Wrong — anonymous private method
+// Tolerated for small screen-local fragments
 Widget _buildCartLineItem(CartItem item) { ... }
 ```
 
 - A widget's `build` method contains only layout and composition. It does not compute values, call repositories, or contain business logic. Move any computation to a provider or view model.
 - Pass only the data a widget needs. Do not pass a full model to a widget that uses one field. Derive and pass the field.
 - Use `const` constructors wherever all fields are compile-time constants. Mark widgets `const` at call sites when possible.
-- Never call `setState` — there is no `StatefulWidget` in this codebase. All mutable state lives in Riverpod providers.
+- Keep business, sync, and shared state in Riverpod providers — never in widget
+  state. `StatefulWidget` / `ConsumerStatefulWidget` is permitted for **local,
+  ephemeral UI state only** (text/scroll/animation controllers, focus nodes,
+  multi-step form or page state); it is used throughout `lib/features/`. Reach
+  for `ConsumerWidget` first; only add `setState` when the state is genuinely
+  widget-local and disposable.
 
 ### ConsumerWidget and providers
 

@@ -38,33 +38,61 @@ class StaffDetailScreen extends ConsumerStatefulWidget {
 class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
   int? _totalSalesKobo;
   int _ordersCount = 0;
+  int _stockTransactionsCount = 0;
+  int _quickSalesCount = 0;
+  int _totalExpensesKobo = 0;
 
   @override
   void initState() {
     super.initState();
-    _loadSales();
+    _loadMetrics();
   }
 
-  Future<void> _loadSales() async {
-    // Total sales made + count (§9.5) — cheap aggregate over completed orders
-    // the member rang up (orders.staff_id). A one-shot read, not a synced write.
+  Future<void> _loadMetrics() async {
     final db = ref.read(databaseProvider);
     final memberships = await db.userBusinessesDao
         .watchForCurrentBusiness()
         .first;
     final m = memberships.where((r) => r.id == widget.membershipId).firstOrNull;
     if (m == null) return;
-    final result = await db
+    
+    final salesResult = await db
         .customSelect(
           "SELECT COALESCE(SUM(net_amount_kobo), 0) AS total, COUNT(*) AS cnt "
-          "FROM orders WHERE staff_id = ?1 AND status = 'completed'",
+          "FROM orders WHERE staff_id = ?1 "
+          "AND status IN ('pending', 'completed')",
           variables: [Variable<String>(m.userId)],
         )
         .getSingleOrNull();
+
+    final stockResult = await db
+        .customSelect(
+          "SELECT COUNT(*) AS cnt FROM stock_transactions WHERE performed_by = ?1",
+          variables: [Variable<String>(m.userId)],
+        )
+        .getSingleOrNull();
+
+    final quickSalesResult = await db
+        .customSelect(
+          "SELECT COUNT(*) AS cnt FROM quick_sale_requests WHERE requested_by = ?1",
+          variables: [Variable<String>(m.userId)],
+        )
+        .getSingleOrNull();
+
+    final expensesResult = await db
+        .customSelect(
+          "SELECT COALESCE(SUM(amount_kobo), 0) AS total FROM expenses WHERE recorded_by = ?1 AND is_deleted = 0",
+          variables: [Variable<String>(m.userId)],
+        )
+        .getSingleOrNull();
+
     if (!mounted) return;
     setState(() {
-      _totalSalesKobo = result?.read<int>('total') ?? 0;
-      _ordersCount = result?.read<int>('cnt') ?? 0;
+      _totalSalesKobo = salesResult?.read<int>('total') ?? 0;
+      _ordersCount = salesResult?.read<int>('cnt') ?? 0;
+      _stockTransactionsCount = stockResult?.read<int>('cnt') ?? 0;
+      _quickSalesCount = quickSalesResult?.read<int>('cnt') ?? 0;
+      _totalExpensesKobo = expensesResult?.read<int>('total') ?? 0;
     });
   }
 
@@ -129,6 +157,10 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
         title: const Text('Confirm role change'),
         content: Text(
           'Change role from ${currentRole?.name ?? 'Unknown'} to '
@@ -212,10 +244,30 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
     if (!ref.read(currentUserPermissionsProvider).contains('staff.suspend')) {
       return;
     }
+    // Owner protection: the original business creator cannot be suspended by
+    // anyone — including an appointed CEO.
+    final targetUser =
+        ref.read(usersByBusinessProvider).valueOrNull?[membership.userId];
+    final ownerId = ref.read(currentBusinessProvider)?.ownerId;
+    if (ownerId != null &&
+        targetUser?.authUserId != null &&
+        targetUser!.authUserId == ownerId) {
+      if (mounted) {
+        AppNotification.showError(
+          context,
+          "You cannot suspend the business owner.",
+        );
+      }
+      return;
+    }
     final suspending = membership.status == 'active';
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
         title: Text(suspending ? 'Suspend staff?' : 'Reactivate staff?'),
         content: Text(
           suspending
@@ -553,6 +605,30 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                       icon: FontAwesomeIcons.sackDollar.data,
                       color: const Color(0xFFA855F7),
                     ),
+                    ProfileStat(
+                      label: 'Stock Txns',
+                      value: _totalSalesKobo == null
+                          ? '…'
+                          : _stockTransactionsCount.toString(),
+                      icon: FontAwesomeIcons.boxesStacked.data,
+                      color: const Color(0xFFF59E0B),
+                    ),
+                    ProfileStat(
+                      label: 'Quick Sales',
+                      value: _totalSalesKobo == null
+                          ? '…'
+                          : _quickSalesCount.toString(),
+                      icon: FontAwesomeIcons.bolt.data,
+                      color: const Color(0xFF10B981),
+                    ),
+                    ProfileStat(
+                      label: 'Expenses',
+                      value: _totalSalesKobo == null
+                          ? '…'
+                          : formatCurrency(_totalExpensesKobo / 100.0),
+                      icon: FontAwesomeIcons.moneyBillTrendUp.data,
+                      color: const Color(0xFFEF4444),
+                    ),
                   ],
                 ),
                 SizedBox(height: context.getRSize(24)),
@@ -576,7 +652,8 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                 if (!widget.readOnly &&
                     ((hasPermission(ref, 'staff.change_role') &&
                             !isTargetOwner) ||
-                        hasPermission(ref, 'staff.suspend'))) ...[
+                        (hasPermission(ref, 'staff.suspend') &&
+                            !isTargetOwner))) ...[
                   SizedBox(height: context.getRSize(24)),
                   if (hasPermission(ref, 'staff.change_role') &&
                       !isTargetOwner) ...[
@@ -589,7 +666,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                     ),
                     SizedBox(height: context.getRSize(12)),
                   ],
-                  if (hasPermission(ref, 'staff.suspend'))
+                  if (hasPermission(ref, 'staff.suspend') && !isTargetOwner)
                     AppButton(
                       text: suspended ? 'Reactivate' : 'Suspend',
                       icon: suspended

@@ -132,16 +132,32 @@ class SupplierAccountService {
   Future<int> getBalanceKobo(String supplierId) =>
       _ledgerDao.getBalanceKobo(supplierId);
 
-  /// Void a ledger entry (CEO only — gated at the UI; §21.7).
-  Future<void> voidEntry({
+  /// Void a ledger entry (CEO only — gated at the UI; §21.7). Appends an
+  /// opposite-sign compensating row (never deletes), then writes an Activity Log
+  /// entry recording who voided what (§21.7 / Section 10.12). A double-void is a
+  /// no-op and logs nothing.
+  Future<bool> voidEntry({
     required String entryId,
+    required String supplierId,
     required String voidedBy,
     required String reason,
-  }) => _ledgerDao.voidEntry(
-    entryId: entryId,
-    voidedBy: voidedBy,
-    reason: reason,
-  );
+  }) async {
+    final didVoid = await _ledgerDao.voidEntry(
+      entryId: entryId,
+      voidedBy: voidedBy,
+      reason: reason,
+    );
+    if (didVoid) {
+      await _db.activityLogDao.logActivity(
+        action: 'supplier.void',
+        description: 'Voided a supplier ledger entry — $reason',
+        staffId: voidedBy,
+        entityType: 'supplier',
+        entityId: supplierId,
+      );
+    }
+    return didVoid;
+  }
 
   static String? _clean(String? s) {
     final t = s?.trim();

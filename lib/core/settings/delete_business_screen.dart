@@ -7,6 +7,7 @@ import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/pin_dialog.dart';
 
 /// CEO-only "Delete Business & Account" confirmation (master plan §10.3 — the
@@ -82,27 +83,14 @@ class _DeleteBusinessScreenState extends ConsumerState<DeleteBusinessScreen> {
     final business = ref.watch(currentBusinessProvider);
 
     if (!canDelete || business == null) {
-      return Scaffold(
-        appBar: AppBar(
-          title: const Text('Delete Business'),
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-        ),
-        body: const SettingsNoAccess(),
+      return const GlassyScaffold(
+        title: 'Delete Business',
+        body: SettingsNoAccess(),
       );
     }
 
-    return Scaffold(
-      backgroundColor: t.scaffoldBackgroundColor,
-      appBar: AppBar(
-        title: const Text(
-          'Delete Business',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-      ),
+    return GlassyScaffold(
+      title: 'Delete Business',
       body: SettingsFadeIn(
         child: ListView(
           padding: EdgeInsets.fromLTRB(

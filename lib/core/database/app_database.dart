@@ -128,6 +128,8 @@ class Users extends Table {
   TextColumn get authUserId => text().nullable()();
   TextColumn get name => text()();
   TextColumn get email => text().nullable()();
+  TextColumn get phone => text().nullable()();
+  TextColumn get address => text().nullable()();
   // pin / passwordHash / pinSalt / pinIterations are local-only auth fields;
   // not present in Supabase. Sync layer (PR 3) will exclude them from payloads.
   // TODO(PR 4g): drop unused passwordHash column or wire when password login lands.
@@ -1508,6 +1510,12 @@ class SyncQueue extends Table {
   // session-restore — null is treated as "trust the current user" by
   // dispatch, preserving today's behavior for those legacy rows.
   TextColumn get authUserId => text().nullable()();
+  // §6.8.1 automatic orphan recovery: how many times this row was re-enqueued
+  // by the auto-recovery sweep. Rides the queue row so the per-orphan auto-
+  // retry cap survives a re-orphan — `markFailed` copies it onto the new
+  // orphan row, and the sweep stamps `count + 1` when it re-enqueues. 0 for a
+  // normal first-time write.
+  IntColumn get autoRetryCount => integer().withDefault(const Constant(0))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -1527,6 +1535,11 @@ class SyncQueueOrphans extends Table {
   TextColumn get reason => text()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get movedAt => dateTime().withDefault(currentDateAndTime)();
+  // §6.8.1: how many times the automatic recovery sweep has already
+  // re-enqueued this orphan. Carried forward from the queue row when
+  // `markFailed` re-orphans, so the allowlist cap holds across re-orphan
+  // cycles instead of resetting to 0 each time.
+  IntColumn get autoRetryCount => integer().withDefault(const Constant(0))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -1682,7 +1695,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 50;
+  int get schemaVersion => 52;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3526,6 +3539,49 @@ class AppDatabase extends _$AppDatabase {
         try {
           await customStatement(
             'ALTER TABLE businesses ADD COLUMN owner_id TEXT',
+          );
+        } catch (_) {
+          /* already present (idempotency guard) */
+        }
+      }
+      if (from < 51) {
+        // v51: add phone and address to users — collected during staff
+        // sign-up (§6) and synced to the cloud. Nullable; existing rows
+        // are left as NULL and may be filled by a future pull.
+        // try/catch guards the revert-then-re-upgrade test pattern: the
+        // migration test creates a v51 DB (with both columns), reverts the
+        // user_version, then re-runs onUpgrade — the columns already exist.
+        try {
+          await customStatement('ALTER TABLE users ADD COLUMN phone TEXT');
+        } catch (_) {
+          /* already present (idempotency guard) */
+        }
+        try {
+          await customStatement('ALTER TABLE users ADD COLUMN address TEXT');
+        } catch (_) {
+          /* already present (idempotency guard) */
+        }
+      }
+      if (from < 52) {
+        // v52 (§6.8.1 automatic orphan recovery): add auto_retry_count to the
+        // device-local outbox tables. Tracks how many times the auto-recovery
+        // sweep has re-enqueued a row so the per-orphan retry cap survives a
+        // re-orphan. Local-only — sync_queue / sync_queue_orphans are never
+        // pushed (they ARE the outbox), so there is no cloud migration. NOT
+        // NULL DEFAULT 0 so existing rows read as "never auto-retried".
+        // try/catch guards the revert-then-re-upgrade test pattern.
+        try {
+          await customStatement(
+            'ALTER TABLE sync_queue ADD COLUMN auto_retry_count '
+            'INTEGER NOT NULL DEFAULT 0',
+          );
+        } catch (_) {
+          /* already present (idempotency guard) */
+        }
+        try {
+          await customStatement(
+            'ALTER TABLE sync_queue_orphans ADD COLUMN auto_retry_count '
+            'INTEGER NOT NULL DEFAULT 0',
           );
         } catch (_) {
           /* already present (idempotency guard) */

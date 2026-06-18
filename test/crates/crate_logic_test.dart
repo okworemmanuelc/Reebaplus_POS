@@ -96,6 +96,209 @@ void main() {
     });
   });
 
+  // Regression for the "crate return doesn't show in the Crates tab" bug:
+  // the balance cache was upserted with a raw customStatement, which Drift's
+  // stream tracker does not observe, so watchCrateBalancesWithGroups never
+  // re-emitted live. The fix routes the upsert through customInsert with an
+  // explicit `updates: {customerCrateBalances}` set. This asserts the stream
+  // emits the new balance after a return without re-subscribing.
+  group('Crates tab live refresh (watch-stream regression)', () {
+    test('watchCrateBalancesWithGroups emits the new balance after a return',
+        () async {
+      final emissions = <List<int>>[];
+      final sub = db.customersDao
+          .watchCrateBalancesWithGroups(customerId)
+          .map((rows) => rows.map((e) => e.balance).toList())
+          .listen(emissions.add);
+
+      await pumpEventQueue();
+      expect(emissions.last, isEmpty, reason: 'no crate activity yet');
+
+      await db.crateLedgerDao.recordCrateReturnByCustomer(
+        customerId: customerId,
+        manufacturerId: manufacturerId,
+        quantity: 4,
+        performedBy: userId,
+      );
+      await pumpEventQueue();
+
+      expect(emissions.last, [-4],
+          reason: 'stream must re-emit live with the credited balance');
+
+      await sub.cancel();
+    });
+
+    test('watchEmptyCratesByManufacturer emits after addEmptyCrates', () async {
+      final emissions = <int>[];
+      final sub = db.inventoryDao
+          .watchEmptyCratesByManufacturer()
+          .map((m) => m[manufacturerId] ?? 0)
+          .listen(emissions.add);
+
+      await pumpEventQueue();
+      expect(emissions.last, 0);
+
+      await db.inventoryDao.addEmptyCrates(manufacturerId, 6);
+      await pumpEventQueue();
+
+      expect(emissions.last, 6);
+      await sub.cancel();
+    });
+
+    // Regression for "Full says zero" in the inventory Crates tab: the full
+    // count must be keyed by manufacturer ID (the screen looks it up by
+    // mfr.id), and it must deplete live as inventory is sold down. The stream
+    // joins inventory↔products on manufacturer_id and reads inventory.quantity.
+    test('watchFullCratesByManufacturer is ID-keyed and depletes on sale',
+        () async {
+      final storeId = UuidV7.generate();
+      await db.into(db.stores).insert(StoresCompanion.insert(
+          id: Value(storeId), businessId: businessId, name: 'Main'));
+      final productId = UuidV7.generate();
+      await db.into(db.products).insert(ProductsCompanion.insert(
+          id: Value(productId),
+          businessId: businessId,
+          name: 'Star Bottle',
+          manufacturerId: const Value(manufacturerId)));
+      await db.into(db.inventory).insert(InventoryCompanion.insert(
+          businessId: businessId,
+          productId: productId,
+          storeId: storeId,
+          quantity: const Value(24)));
+
+      final emissions = <int>[];
+      final sub = db.inventoryDao
+          .watchFullCratesByManufacturer()
+          .map((m) => m[manufacturerId] ?? 0)
+          .listen(emissions.add);
+
+      await pumpEventQueue();
+      expect(emissions.last, 24, reason: 'keyed by manufacturer ID, not name');
+
+      // Sale-style decrement (same tracked write the order flow uses).
+      await db.customUpdate(
+        'UPDATE inventory SET quantity = quantity - ? '
+        'WHERE business_id = ? AND product_id = ? AND store_id = ?',
+        variables: [
+          const Variable(5),
+          const Variable(businessId),
+          Variable(productId),
+          Variable(storeId),
+        ],
+        updates: {db.inventory},
+      );
+      await pumpEventQueue();
+
+      expect(emissions.last, 19, reason: 'full count must deplete live on sale');
+      await sub.cancel();
+    });
+  });
+
+  // §16.8.1 Phase 2 — per-store empty-crate accuracy. The Crates tab shows a
+  // single store's empties when a store is locked, and credits manual returns
+  // to the store the customer's order was created from.
+  group('per-store crate accuracy (§16.8.1)', () {
+    test('watchFullCratesByManufacturer(storeId:) confines to one store',
+        () async {
+      final storeA = UuidV7.generate();
+      final storeB = UuidV7.generate();
+      await db.into(db.stores).insert(StoresCompanion.insert(
+          id: Value(storeA), businessId: businessId, name: 'Store A'));
+      await db.into(db.stores).insert(StoresCompanion.insert(
+          id: Value(storeB), businessId: businessId, name: 'Store B'));
+
+      final productId = UuidV7.generate();
+      await db.into(db.products).insert(ProductsCompanion.insert(
+          id: Value(productId),
+          businessId: businessId,
+          name: 'Star Bottle',
+          manufacturerId: const Value(manufacturerId)));
+
+      // Same brand stocked in both stores: 10 in A, 7 in B.
+      await db.into(db.inventory).insert(InventoryCompanion.insert(
+          businessId: businessId,
+          productId: productId,
+          storeId: storeA,
+          quantity: const Value(10)));
+      await db.into(db.inventory).insert(InventoryCompanion.insert(
+          businessId: businessId,
+          productId: productId,
+          storeId: storeB,
+          quantity: const Value(7)));
+
+      // All-stores view sums both.
+      final allStores = await db.inventoryDao
+          .watchFullCratesByManufacturer()
+          .first;
+      expect(allStores[manufacturerId], 17);
+
+      // Store-scoped views confine to a single store.
+      final aOnly = await db.inventoryDao
+          .watchFullCratesByManufacturer(storeId: storeA)
+          .first;
+      expect(aOnly[manufacturerId], 10);
+
+      final bOnly = await db.inventoryDao
+          .watchFullCratesByManufacturer(storeId: storeB)
+          .first;
+      expect(bOnly[manufacturerId], 7);
+    });
+
+    test(
+        'resolveStoreForCustomerManufacturer returns the most-recent order store',
+        () async {
+      final storeOld = UuidV7.generate();
+      final storeNew = UuidV7.generate();
+      await db.into(db.stores).insert(StoresCompanion.insert(
+          id: Value(storeOld), businessId: businessId, name: 'Old Store'));
+      await db.into(db.stores).insert(StoresCompanion.insert(
+          id: Value(storeNew), businessId: businessId, name: 'New Store'));
+
+      Future<void> seedOrder(String storeId, DateTime created) async {
+        final orderId = UuidV7.generate();
+        await db.into(db.orders).insert(OrdersCompanion.insert(
+              id: Value(orderId),
+              businessId: businessId,
+              orderNumber: 'ORD-$storeId',
+              customerId: const Value(customerId),
+              totalAmountKobo: 0,
+              netAmountKobo: 0,
+              paymentType: 'cash',
+              status: 'completed',
+              storeId: Value(storeId),
+              createdAt: Value(created),
+            ));
+        await db.into(db.orderCrateLines).insert(OrderCrateLinesCompanion.insert(
+              id: Value(UuidV7.generate()),
+              businessId: businessId,
+              orderId: orderId,
+              manufacturerId: manufacturerId,
+              cratesTaken: 2,
+            ));
+      }
+
+      await seedOrder(storeOld, DateTime(2026, 1, 1));
+      await seedOrder(storeNew, DateTime(2026, 6, 1));
+
+      final resolved = await db.orderCrateLinesDao
+          .resolveStoreForCustomerManufacturer(
+        customerId: customerId,
+        manufacturerId: manufacturerId,
+      );
+      expect(resolved, storeNew, reason: 'credit the most recent order store');
+    });
+
+    test('resolveStoreForCustomerManufacturer returns null with no orders',
+        () async {
+      final resolved = await db.orderCrateLinesDao
+          .resolveStoreForCustomerManufacturer(
+        customerId: customerId,
+        manufacturerId: manufacturerId,
+      );
+      expect(resolved, isNull, reason: 'caller falls back to the active store');
+    });
+  });
+
   group('CrateReturnApprovalService', () {
     test(
         'approve() appends ledger row and updates cache with explicit field assertions',

@@ -8,6 +8,8 @@ import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
+import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
 
 /// CEO Settings > Stores (§10.1). Edits the business's store(s) — name +
 /// single `location` address. Name/address persist to the `stores` row via
@@ -113,22 +115,9 @@ class _StoresSettingsScreenState extends ConsumerState<StoresSettingsScreen> {
     // the save-site guard.
     final canManage = hasPermission(ref, 'stores.manage');
 
-    return Scaffold(
-      // Body padding is nav-only (deviceBottomPadding): this screen is under
-      // MainLayout, whose Scaffold already resizes the body for the keyboard, so
-      // the inset must not re-add it. resizeToAvoidBottomInset:false is a harmless
-      // no-op here (the screen sees viewInsets 0 under MainLayout).
-      resizeToAvoidBottomInset: false,
-      backgroundColor: t.scaffoldBackgroundColor,
-      appBar: AppBar(
-        title: const Text(
-          'Stores',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-      ),
+    // Scaffold wrapper handles body resizing under MainLayout correctly.
+    return GlassyScaffold(
+      title: 'Stores',
       body: !canManage
           ? const SettingsNoAccess()
           : _loading
@@ -143,9 +132,9 @@ class _StoresSettingsScreenState extends ConsumerState<StoresSettingsScreen> {
                 ),
                 children: [
                   for (final store in _stores) ...[
-                    Container(
+                    GlassyCard(
                       padding: const EdgeInsets.all(16),
-                      decoration: AppDecorations.glassCard(context, radius: 16),
+                      radius: 16,
                       child: Column(
                         children: [
                           TextField(

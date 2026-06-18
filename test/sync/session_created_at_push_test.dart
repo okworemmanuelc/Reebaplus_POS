@@ -51,4 +51,91 @@ void main() {
       await boot.db.close();
     }
   });
+
+  // Regression for the Sync Issues `sessions:upsert` churn: re-auth on the same
+  // device used to mint a fresh session id each time, defeating enqueueUpsert's
+  // coalescing (keyed on payload.id) and piling up one outbox row per login.
+  // createSession now reuses the existing active session for the same
+  // device+user, so repeat calls collapse to a single row + single queue entry.
+  test('createSession reuses the active session for the same device+user '
+      '(one row, one coalesced queue entry)', () async {
+    final boot = await bootstrapTestDb();
+    try {
+      final userId = UuidV7.generate();
+      await boot.db.into(boot.db.users).insert(
+            UsersCompanion.insert(
+              id: Value(userId),
+              businessId: boot.businessId,
+              name: 'Till User',
+              pin: '0000',
+            ),
+          );
+
+      const deviceId = 'device-abc';
+      final firstId = await boot.db.sessionsDao.createSession(
+        userId: userId,
+        ttl: const Duration(days: 30),
+        deviceId: deviceId,
+      );
+      final secondId = await boot.db.sessionsDao.createSession(
+        userId: userId,
+        ttl: const Duration(days: 30),
+        deviceId: deviceId,
+      );
+
+      expect(secondId, firstId,
+          reason: 'a re-auth on the same device must reuse the session id');
+
+      final rows = await boot.db.select(boot.db.sessions).get();
+      expect(rows.length, 1,
+          reason: 'reuse must not create a second sessions row');
+
+      final pending = await getPendingQueue(boot.db);
+      final sessionPushes =
+          pending.where((r) => r.actionType == 'sessions:upsert').toList();
+      expect(sessionPushes.length, 1,
+          reason: 'the re-enqueue must coalesce into one pending push');
+    } finally {
+      await boot.db.close();
+    }
+  });
+
+  // A revoked (kicked / logged-out) session must NOT be reused — a real
+  // re-login after a kick legitimately starts a fresh session.
+  test('createSession mints a fresh session when the prior one is revoked',
+      () async {
+    final boot = await bootstrapTestDb();
+    try {
+      final userId = UuidV7.generate();
+      await boot.db.into(boot.db.users).insert(
+            UsersCompanion.insert(
+              id: Value(userId),
+              businessId: boot.businessId,
+              name: 'Till User',
+              pin: '0000',
+            ),
+          );
+
+      const deviceId = 'device-abc';
+      final firstId = await boot.db.sessionsDao.createSession(
+        userId: userId,
+        ttl: const Duration(days: 30),
+        deviceId: deviceId,
+      );
+      await boot.db.sessionsDao.revokeSession(firstId);
+
+      final secondId = await boot.db.sessionsDao.createSession(
+        userId: userId,
+        ttl: const Duration(days: 30),
+        deviceId: deviceId,
+      );
+
+      expect(secondId, isNot(firstId),
+          reason: 'a revoked session must not be reused');
+      final rows = await boot.db.select(boot.db.sessions).get();
+      expect(rows.length, 2, reason: 'the fresh login is a new session row');
+    } finally {
+      await boot.db.close();
+    }
+  });
 }

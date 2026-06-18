@@ -14,6 +14,8 @@ import 'package:reebaplus_pos/core/widgets/app_fab.dart';
 import 'package:reebaplus_pos/features/staff/screens/staff_detail_screen.dart';
 import 'package:reebaplus_pos/features/staff/widgets/invite_staff_sheet.dart';
 import 'package:reebaplus_pos/shared/utils/role_display.dart';
+import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
+import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
 
 /// One-shot, read-only pull of the current business so newly-joined members'
 /// users / user_businesses rows reach this device. The CEO's roster can be
@@ -230,6 +232,7 @@ class _StaffTab extends ConsumerStatefulWidget {
 
 class _StaffTabState extends ConsumerState<_StaffTab> {
   late String _query = widget.query;
+  String? _storeFilter;
 
   @override
   Widget build(BuildContext context) {
@@ -241,8 +244,9 @@ class _StaffTabState extends ConsumerState<_StaffTab> {
     final mySlug = ref.watch(currentUserRoleProvider)?.slug;
     final isManager = mySlug == 'manager';
     final currentUserId = ref.read(authProvider).currentUser?.id;
+    final allStores = ref.watch(allStoresProvider).valueOrNull ?? const [];
 
-    // Build display rows, filtered by the search query (name/email).
+    // Build display rows, filtered by the search query (name/email) and store filter.
     final q = _query.trim().toLowerCase();
     final rows = <_StaffRow>[];
     for (final m in memberships) {
@@ -253,6 +257,13 @@ class _StaffTabState extends ConsumerState<_StaffTab> {
           !(user.email ?? '').toLowerCase().contains(q)) {
         continue;
       }
+      
+      if (_storeFilter != null) {
+        final assignedStores = ref.watch(myUserStoresProvider(user.id)).valueOrNull ?? [];
+        final isAssigned = assignedStores.any((s) => s.storeId == _storeFilter);
+        if (!isAssigned) continue;
+      }
+
       final role = rolesById[m.roleId];
       final isSelf = m.userId == currentUserId;
       // Manager can't manage CEO or other Managers — those render faded and
@@ -287,12 +298,45 @@ class _StaffTabState extends ConsumerState<_StaffTab> {
 
     return Column(
       children: [
-        _SearchField(
-          hint: 'Search staff',
-          onChanged: (v) {
-            setState(() => _query = v);
-            widget.onSearch(v);
-          },
+        Row(
+          children: [
+            Expanded(
+              child: _SearchField(
+                hint: 'Search staff',
+                onChanged: (v) {
+                  setState(() => _query = v);
+                  widget.onSearch(v);
+                },
+              ),
+            ),
+            if (allStores.isNotEmpty)
+              Padding(
+                padding: EdgeInsets.only(right: context.getRSize(16)),
+                child: SizedBox(
+                  width: context.getRSize(140),
+                  child: AppDropdown<String?>(
+                    value: _storeFilter,
+                    hintText: 'All Stores',
+                    items: [
+                      const DropdownMenuItem(
+                        value: null,
+                        child: Text('All Stores', maxLines: 1, overflow: TextOverflow.ellipsis),
+                      ),
+                      for (final s in allStores)
+                        DropdownMenuItem(
+                          value: s.id,
+                          child: Text(s.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                        ),
+                    ],
+                    onChanged: (val) {
+                      setState(() {
+                        _storeFilter = val;
+                      });
+                    },
+                  ),
+                ),
+              ),
+          ],
         ),
         Expanded(
           child: RefreshIndicator(
@@ -385,19 +429,13 @@ class _StaffCard extends StatelessWidget {
         ? 'Never logged in'
         : 'Last login ${DateFormat('MMM d, h:mm a').format(lastLogin)}';
 
-    final card = Container(
+    final card = GlassyCard(
       margin: EdgeInsets.symmetric(
         horizontal: context.getRSize(16),
         vertical: context.getRSize(6),
       ),
-      decoration: BoxDecoration(
-        color: t.cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: t.dividerColor),
-      ),
-      child: Padding(
-        padding: EdgeInsets.all(context.getRSize(14)),
-        child: Row(
+      padding: EdgeInsets.all(context.getRSize(14)),
+      child: Row(
           children: [
             CircleAvatar(
               radius: context.getRSize(22),
@@ -494,7 +532,6 @@ class _StaffCard extends StatelessWidget {
               ),
           ],
         ),
-      ),
     );
 
     final wrapped = faded ? Opacity(opacity: 0.55, child: card) : card;
@@ -694,19 +731,13 @@ class _InviteCard extends StatelessWidget {
         ? 'Expires today'
         : '$daysLeft day${daysLeft == 1 ? '' : 's'} left';
 
-    return Container(
+    return GlassyCard(
       margin: EdgeInsets.symmetric(
         horizontal: context.getRSize(16),
         vertical: context.getRSize(6),
       ),
-      decoration: BoxDecoration(
-        color: t.cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: t.dividerColor),
-      ),
-      child: Padding(
-        padding: EdgeInsets.all(context.getRSize(16)),
-        child: Column(
+      padding: EdgeInsets.all(context.getRSize(16)),
+      child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
@@ -756,7 +787,6 @@ class _InviteCard extends StatelessWidget {
             ),
           ],
         ),
-      ),
     );
   }
 }

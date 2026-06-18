@@ -167,7 +167,73 @@ class OrderService {
       );
     }
 
+    // §12.1 / §26.4: a sale that leaves a registered customer OWING crates
+    // (the no-deposit "crate-track" path) alerts CEO + Manager. Best-effort —
+    // the sale is already recorded; a failure here must never fail checkout.
+    await _notifyCrateDebt(
+      orderId: orderId,
+      orderNumber: orderNumber,
+      customerId: customerId,
+      staffId: staffId,
+    );
+
     return orderNumber;
+  }
+
+  /// §12.1 / §26.4: notify CEO + Manager when a sale leaves the customer owing
+  /// empty crates. Owing arises only on the no-deposit ("crate-track") path —
+  /// `order_crate_lines` with `depositPaidKobo == 0` — where `createOrder`
+  /// issued crates against the customer's balance. We read the post-sale
+  /// per-manufacturer balance and fire only for brands the customer now owes
+  /// (balance > 0); a settled or credit balance (≤ 0) fires nothing (§12.2).
+  Future<void> _notifyCrateDebt({
+    required String orderId,
+    required String orderNumber,
+    required String? customerId,
+    required String staffId,
+  }) async {
+    if (customerId == null || customerId.isEmpty) return;
+    try {
+      final lines = await _db.orderCrateLinesDao.getForOrder(orderId);
+      final owedMfrIds = lines
+          .where((l) => l.depositPaidKobo == 0 && l.cratesTaken > 0)
+          .map((l) => l.manufacturerId)
+          .toSet();
+      if (owedMfrIds.isEmpty) return;
+
+      final balances = await _db.customersDao
+          .watchCrateBalancesWithGroups(customerId)
+          .first;
+      final owing = balances
+          .where((b) => owedMfrIds.contains(b.manufacturerId) && b.balance > 0)
+          .toList();
+      if (owing.isEmpty) return;
+
+      final customer = await _db.customersDao.findById(customerId);
+      final who = (customer?.name.trim().isNotEmpty ?? false)
+          ? customer!.name.trim()
+          : 'Customer';
+      final summary = owing
+          .map((b) => '${b.balance} ${b.manufacturerName}')
+          .join(', ');
+      final message = '$who now owes crates after $orderNumber: $summary';
+
+      final recipients = await _db.userBusinessesDao.getUserIdsForRoleSlugs([
+        'ceo',
+        'manager',
+      ]);
+      for (final uid in (recipients.isEmpty ? [staffId] : recipients)) {
+        await _db.notificationsDao.fireNotification(
+          type: 'customer_crate_debt',
+          message: message,
+          severity: 'warning',
+          linkedRecordId: orderId,
+          recipientUserId: uid,
+        );
+      }
+    } catch (e) {
+      debugPrint('[OrderService] crate-debt notify failed (non-fatal): $e');
+    }
   }
 
   /// §12.3 / §26.4: audit a Quick Sale — write an activity-log entry and fire a

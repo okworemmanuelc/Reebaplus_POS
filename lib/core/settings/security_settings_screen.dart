@@ -6,9 +6,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
-import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
+import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
 
 /// CEO Settings > Security (§10.1). Auto-lock interval (synced, business-wide)
 /// + biometric login (device-local).
@@ -136,17 +137,8 @@ class _SecuritySettingsScreenState
     // Screen-level gate (hard rule #6) + keeps the permission chain warm for
     // the save-site guard.
     final canManage = hasPermission(ref, 'settings.manage');
-    return Scaffold(
-      backgroundColor: t.scaffoldBackgroundColor,
-      appBar: AppBar(
-        title: const Text(
-          'Security',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-      ),
+    return GlassyScaffold(
+      title: 'Security',
       body: !canManage
           ? const SettingsNoAccess()
           : _loading
@@ -180,9 +172,9 @@ class _SecuritySettingsScreenState
 
   Widget _autoLockCard(BuildContext context) {
     final t = Theme.of(context);
-    return Container(
+    return GlassyCard(
       padding: const EdgeInsets.all(16),
-      decoration: AppDecorations.glassCard(context, radius: 16),
+      radius: 16,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

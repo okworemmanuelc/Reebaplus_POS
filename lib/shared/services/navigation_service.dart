@@ -150,26 +150,16 @@ class NavigationService {
       return;
     }
 
-    // Step 3: Try to go back to the previous tab using history
-    if (popIndex()) {
-      debugPrint(
-        '[NavigationService] Popped tab from history to ${currentIndex.value}',
-      );
-      return;
-    }
-    // Step 3.5: Fall back to home tab (dashboard) if not already there
-    const homeTab = 0;
-    if (currentIndex.value != homeTab) {
-      debugPrint(
-        '[NavigationService] History empty. Redirecting to home tab ($homeTab)...',
-      );
-      setIndex(homeTab);
+    // Step 3: At the root of a tab. If not POS (index 1), jump to POS.
+    if (currentIndex.value != 1) {
+      debugPrint('[NavigationService] At root of tab != POS. Switching to POS tab.');
+      setIndex(1);
       return;
     }
 
-    // Step 4: already on home — double-back-to-exit
+    // Step 4: At the root of the POS tab — double-back-to-exit
     debugPrint(
-      '[NavigationService] Already on home tab. Checking double-back exit...',
+      '[NavigationService] At root of POS tab. Checking double-back exit...',
     );
     if (_lastBackPress == null ||
         now.difference(_lastBackPress!) > const Duration(seconds: 2)) {
@@ -179,7 +169,7 @@ class NavigationService {
         ..clearSnackBars()
         ..showSnackBar(
           const SnackBar(
-            content: Text('Press back again to exit'),
+            content: Text('press back again to close the app'),
             duration: Duration(seconds: 2),
           ),
         );

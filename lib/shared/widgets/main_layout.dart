@@ -42,10 +42,11 @@ class _MainLayoutState extends ConsumerState<MainLayout>
   // One pop-observer per tab; created in initState once `nav` is available.
   late final List<_TabPopObserver> _observers;
 
-  // Captured at initState — the tab-index listener and the WidgetsBindingObserver
-  // didPopRoute callback both fire across navigator-key regeneration windows
-  // (AuthService.setCurrentUser → nav.setIndex(...) → fires listener; back-press
-  // → didPopRoute) where this State could already be element-unmounted. Touching
+  // Captured at initState — the tab-index listener and the PopScope
+  // onPopInvokedWithResult callback both fire across navigator-key regeneration
+  // windows (AuthService.setCurrentUser → nav.setIndex(...) → fires listener;
+  // back-press → onPopInvokedWithResult) where this State could already be
+  // element-unmounted. Touching
   // `ref` from those callbacks would race the riverpod invalidation, so capture
   // the providers up front. See plan §"Bug fix" Pattern 2.
   late final NavigationService _nav;
@@ -167,25 +168,25 @@ class _MainLayoutState extends ConsumerState<MainLayout>
       }
     }
 
-    return ValueListenableBuilder<int>(
-      valueListenable: nav.currentIndex,
-      builder: (context, currentIndex, _) {
-        _initializedTabs.add(currentIndex); // mark as visited
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _nav.handleBackPress(context);
+      },
+      child: ValueListenableBuilder<int>(
+        valueListenable: nav.currentIndex,
+        builder: (context, currentIndex, _) {
+          _initializedTabs.add(currentIndex); // mark as visited
 
-        return PopScope(
-          canPop: false,
-          onPopInvokedWithResult: (didPop, _) {
-            if (didPop) return;
-            _nav.handleBackPress(context);
-          },
-          child: Scaffold(
-          key: nav.mainScaffoldKey,
+          return Scaffold(
+            key: nav.mainScaffoldKey,
 
-          // Offstage keeps the widget alive and mounted for streams/scroll,
-          // while `_initializedTabs` ensures exactly zero unused tabs are mounted initially.
-          body: Stack(
-            children: List.generate(12, (i) {
-              if (!_initializedTabs.contains(i)) {
+            // Offstage keeps the widget alive and mounted for streams/scroll,
+            // while `_initializedTabs` ensures exactly zero unused tabs are mounted initially.
+            body: Stack(
+              children: List.generate(_tabWidgets.length, (i) {
+                if (!_initializedTabs.contains(i)) {
                 // Not yet visited — render nothing
                 return const SizedBox.shrink();
               }
@@ -342,9 +343,9 @@ class _MainLayoutState extends ConsumerState<MainLayout>
               );
             },
           ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }

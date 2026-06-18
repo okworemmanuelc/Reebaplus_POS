@@ -220,6 +220,20 @@ match `AppButton`'s success gradient.
 
 ---
 
+## Glassy & Modernistic UI Standard (New Global Standard)
+
+The app is actively migrating to a modern, premium "Glassy" design language. When building or upgrading screens, strictly adhere to these visual principles:
+
+1. **Gradient Backgrounds**: Replaces flat `Scaffold` backgrounds. Wrap the screen's body or the `Scaffold` in a `Container` with a `LinearGradient`:
+   `theme.scaffoldBackgroundColor` → `primary.withValues(alpha: 0.05)` → `primary.withValues(alpha: 0.12)`. Set the inner `Scaffold` to `backgroundColor: Colors.transparent`.
+2. **Scroll-Reactive AppBars**: `AppBar`s must start transparent and dynamically darken/dim when scrolling. Use a `NotificationListener<ScrollUpdateNotification>` to track scroll offset (`pixels > 10`) and update the `AppBar`'s `backgroundColor` to `theme.colorScheme.surface.withValues(alpha: 0.8)`. Always use `elevation: 0`.
+3. **Glassy Cards**: Replace standard flat cards and `AppDecorations.surfaceCard` with a frosted-glass widget (e.g., `_GlassyCard`) leveraging `ClipRRect`, `BackdropFilter(sigmaX: 12, sigmaY: 12)`, and faint borders (`primary.withValues(alpha: 0.05)`). Wrap inner content with `Material(type: MaterialType.transparency)` to preserve `InkWell` ripples.
+4. **Subtle Outlines & Dividers**: Minimise harsh dividing lines. Set `TabBar`'s `dividerColor: Colors.transparent` and keep card borders ultra-faint.
+5. **Grid-Like Stats Layouts**: Avoid vertical lists for secondary stats. Refactor into side-by-side expanded grids using `Row` to maximise space efficiency inside Glassy containers.
+6. **Generous Spacing**: Ensure generous gaps between major components using `context.getRSize()` (e.g., a top margin of `getRSize(24)` below the AppBar).
+
+---
+
 ## Layout patterns
 
 ### `MainLayout` (`lib/shared/widgets/main_layout.dart`)

@@ -75,10 +75,10 @@ class _CategoryChip extends StatelessWidget {
           vertical: context.getRSize(6),
         ),
         decoration: BoxDecoration(
-          color: isSelected ? scheme.primary : Colors.transparent,
+          color: isSelected ? scheme.primary : scheme.primary.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(25),
           border: Border.all(
-            color: isSelected ? scheme.primary : borderCol,
+            color: isSelected ? scheme.primary : Colors.transparent,
             width: 1.5,
           ),
           boxShadow: isSelected

@@ -912,13 +912,13 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     if (_isWalkIn) {
       // Walk-ins have no wallet (hard rule 14): Cash / Transfer only, paid in
       // full — any shortfall has nowhere to go. An empty amount means "paid the
-      // full total" (one-tap), so only a positive entry BELOW the total is a
-      // genuine underpayment to block.
+      // full total" (one-tap), so only a positive entry NOT EQUAL TO the total is a
+      // genuine over/underpayment to block.
       if (_mode != PayMode.cashTransfer ||
-          (paidKobo > 0 && paidKobo < _totalKobo)) {
+          (paidKobo > 0 && paidKobo != _totalKobo)) {
         AppNotification.showError(
           context,
-          'Walk-in customers must pay in full',
+          'Walk-in customers must pay exactly the cart total.',
         );
         return;
       }
@@ -1593,6 +1593,14 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   /// Cash / Transfer: the amount-paid field plus the live resulting-balance
   /// preview (registered) or a pay-in-full reminder (walk-in).
   Widget _buildCashTransferInput() {
+    int suggestedKobo = _totalKobo;
+    if (!_isWalkIn && _currentCustomerWalletKobo > 0) {
+      suggestedKobo = _totalKobo - _currentCustomerWalletKobo;
+      if (suggestedKobo < _depositTotalKobo) {
+        suggestedKobo = _depositTotalKobo;
+      }
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1604,6 +1612,28 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           inputFormatters: [CurrencyInputFormatter()],
           onChanged: (v) => setState(() {}),
+          suffixIcon: TextButton(
+            style: TextButton.styleFrom(
+              padding: EdgeInsets.symmetric(horizontal: context.getRSize(12)),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            onPressed: () {
+              final val = suggestedKobo / 100.0;
+              _cashReceivedCtrl.text = val == val.roundToDouble()
+                  ? val.toInt().toString()
+                  : val.toStringAsFixed(2);
+              setState(() {});
+            },
+            child: Text(
+              'Auto-fill ${formatCurrency(suggestedKobo / 100.0)}',
+              style: TextStyle(
+                fontSize: context.getRFontSize(12),
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+          ),
         ),
         if (_isWalkIn) ...[
           SizedBox(height: context.getRSize(8)),

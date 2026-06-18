@@ -23,6 +23,7 @@ class SupplierTransactionsScreen extends ConsumerStatefulWidget {
 class _SupplierTransactionsScreenState
     extends ConsumerState<SupplierTransactionsScreen> {
   String _periodFilter = 'This Month'; // §30.6/§30.11 default
+  bool _isScrolled = false;
 
   List<String> get _periodOptions =>
       datePeriodLabelsForRole(managerUp: isManagerOrAbove(ref));
@@ -66,25 +67,48 @@ class _SupplierTransactionsScreenState
         .where((e) => window.includes(e.activityDate))
         .toList();
 
-    return Scaffold(
-      backgroundColor: _bg,
-      appBar: AppBar(
-        backgroundColor: _surface,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new, color: _text, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(
-          'Transaction History',
-          style: TextStyle(
-            color: _text,
-            fontSize: context.getRFontSize(18),
-            fontWeight: FontWeight.w800,
-          ),
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            _bg,
+            Theme.of(context).colorScheme.primary.withValues(alpha: 0.05),
+            Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+          ],
         ),
       ),
-      body: !canManage
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          backgroundColor: _isScrolled
+              ? _surface.withValues(alpha: 0.8)
+              : Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+            icon: Icon(Icons.arrow_back_ios_new, color: _text, size: 20),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: Text(
+            'Transaction History',
+            style: TextStyle(
+              color: _text,
+              fontSize: context.getRFontSize(18),
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        body: NotificationListener<ScrollUpdateNotification>(
+          onNotification: (notif) {
+            if (notif.metrics.pixels > 10 && !_isScrolled) {
+              setState(() => _isScrolled = true);
+            } else if (notif.metrics.pixels <= 10 && _isScrolled) {
+              setState(() => _isScrolled = false);
+            }
+            return false;
+          },
+          child: !canManage
           ? Center(
               child: perms.isEmpty
                   ? const CircularProgressIndicator()
@@ -186,6 +210,8 @@ class _SupplierTransactionsScreenState
                 ),
               ],
             ),
+        ),
+      ),
     );
   }
 }

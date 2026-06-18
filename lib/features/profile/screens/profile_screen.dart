@@ -8,6 +8,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
+import 'package:reebaplus_pos/shared/models/order_status.dart';
 import 'package:reebaplus_pos/shared/utils/role_display.dart';
 import 'package:reebaplus_pos/features/profile/widgets/edit_profile_sheet.dart';
 import 'package:reebaplus_pos/features/profile/widgets/profile_ui.dart';
@@ -197,10 +198,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   List<ProfileStat> _buildStats() {
     final orders = _staffOrders;
     final completed = orders.where((o) => o.status == 'completed').toList();
-    final totalSales = completed.fold<double>(
-      0.0,
-      (sum, o) => sum + (o.netAmountKobo / 100.0),
-    );
+    // Sales volume is recognized at checkout ('pending'), not at the ceremonial
+    // Confirm ('completed'). Count any non-reversed sale; the "Completed" stat
+    // below stays a true lifecycle count.
+    final totalSales = orders
+        .where((o) => orderCountsAsSale(o.status))
+        .fold<double>(0.0, (sum, o) => sum + (o.netAmountKobo / 100.0));
     return [
       ProfileStat(
         label: 'Total Orders',

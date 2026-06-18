@@ -687,6 +687,11 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
   // ── Store card ─────────────────────────────────────────────────────────
   Widget _buildStoreCard(BuildContext context, StoreData store) {
     return _StoreCard(
+      // Key by store id so Flutter matches card state to the store, not the
+      // list position. Stores are ordered by name, so inserting a new store
+      // shifts positions; without this key the position-matched state keeps
+      // streaming the previous store's inventory and shows its stock.
+      key: ValueKey(store.id),
       store: store,
       onEdit: () => _showEditSheet(context, store),
       onDelete: () => _confirmDelete(context, store),
@@ -701,6 +706,7 @@ class _StoreCard extends ConsumerStatefulWidget {
   final VoidCallback onDelete;
 
   const _StoreCard({
+    super.key,
     required this.store,
     required this.onEdit,
     required this.onDelete,
@@ -727,13 +733,29 @@ class _StoreCardState extends ConsumerState<_StoreCard> {
   @override
   void initState() {
     super.initState();
+    _subscribeInventory();
+  }
+
+  @override
+  void didUpdateWidget(_StoreCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // If this card's state is reused for a different store, re-target the
+    // inventory stream and clear the stale figures so we never show another
+    // store's stock.
+    if (oldWidget.store.id != widget.store.id) {
+      _inventory = [];
+      _subscribeInventory();
+    }
+  }
+
+  void _subscribeInventory() {
+    _invSub?.cancel();
     final db = ref.read(databaseProvider);
-    final id = widget.store.id;
-    _invSub = db.inventoryDao.watchProductDatasWithStockByStore(id).listen((
-      list,
-    ) {
-      if (mounted) setState(() => _inventory = list);
-    });
+    _invSub = db.inventoryDao
+        .watchProductDatasWithStockByStore(widget.store.id)
+        .listen((list) {
+          if (mounted) setState(() => _inventory = list);
+        });
   }
 
   @override

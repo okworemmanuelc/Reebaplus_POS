@@ -8,6 +8,8 @@ import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/utils/role_display.dart';
+import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
+import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
 
 /// CEO Settings > Roles & Permissions (§10.1/§10.2). Lists the four system
 /// roles; tap one to edit its permissions and limits.
@@ -20,17 +22,8 @@ class RolesPermissionsScreen extends ConsumerWidget {
     final canManage = hasPermission(ref, 'settings.manage');
     final roles = ref.watch(allRolesProvider);
 
-    return Scaffold(
-      backgroundColor: t.scaffoldBackgroundColor,
-      appBar: AppBar(
-        title: const Text(
-          'Roles & Permissions',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-      ),
+    return GlassyScaffold(
+      title: 'Roles & Permissions',
       body: !canManage
           ? const SettingsNoAccess()
           : roles.when(
@@ -110,9 +103,9 @@ class _RoleCard extends ConsumerWidget {
             builder: (_) => RolePermissionsDetailScreen(role: role),
           ),
         ),
-        child: Container(
+        child: GlassyCard(
           padding: const EdgeInsets.all(16),
-          decoration: AppDecorations.glassCard(context, radius: 16),
+          radius: 16,
           child: Row(
             children: [
               Container(

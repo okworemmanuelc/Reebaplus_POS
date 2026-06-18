@@ -9,7 +9,6 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
-import 'package:reebaplus_pos/core/utils/product_name.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/pos/controllers/pos_controller.dart';
@@ -24,6 +23,8 @@ class ProductGrid extends StatelessWidget {
   final Color subtextCol;
   final Color borderCol;
   final PosController controller;
+  final bool isListView;
+  final int gridColumns;
 
   const ProductGrid({
     super.key,
@@ -34,6 +35,8 @@ class ProductGrid extends StatelessWidget {
     required this.subtextCol,
     required this.borderCol,
     required this.controller,
+    this.isListView = false,
+    this.gridColumns = 3,
   });
 
   @override
@@ -62,14 +65,50 @@ class ProductGrid extends StatelessWidget {
       );
     }
 
+    if (isListView) {
+      return ListView.separated(
+        padding: EdgeInsets.all(context.getRSize(16)),
+        itemCount: products.length,
+        separatorBuilder: (_, __) => SizedBox(height: context.getRSize(16)),
+        itemBuilder: (context, index) {
+          final item = products[index];
+          return _ProductCard(
+            item: item,
+            onTap: () => onProductTap(item),
+            cardCol: cardCol,
+            textCol: textCol,
+            subtextCol: subtextCol,
+            borderCol: borderCol,
+            controller: controller,
+            isListView: true,
+          );
+        },
+      );
+    }
+
     final screenWidth = MediaQuery.of(context).size.width;
-    final crossAxisCount = screenWidth < 360 ? 2 : (screenWidth > 500 ? 4 : 3);
-    final aspect = screenWidth < 360 ? 0.65 : (screenWidth > 500 ? 0.58 : 0.58);
+    int effectiveColumns = gridColumns;
+
+    if (screenWidth < 380) {
+      // Small phone: maximum 2 columns
+      if (effectiveColumns > 2) effectiveColumns = 2;
+    } else if (screenWidth > 600) {
+      // Tablet: dynamically increase contents per row
+      final dynamicColumns = (screenWidth / 180).floor();
+      effectiveColumns = max(effectiveColumns, dynamicColumns);
+    }
+
+    // Calculate aspect ratio dynamically to guarantee a minimum height and avoid overflow
+    final totalPadding = context.getRSize(32); // 16 padding on each side
+    final totalSpacing = context.getRSize(16) * (effectiveColumns - 1);
+    final cellWidth = (screenWidth - totalPadding - totalSpacing) / effectiveColumns;
+    // We need roughly 250px (scaled) of height for the image, name, price, stock
+    final aspect = cellWidth / context.getRSize(250);
 
     return GridView.builder(
       padding: EdgeInsets.all(context.getRSize(16)),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: crossAxisCount,
+        crossAxisCount: effectiveColumns,
         childAspectRatio: aspect,
         crossAxisSpacing: context.getRSize(16),
         mainAxisSpacing: context.getRSize(16),
@@ -85,6 +124,7 @@ class ProductGrid extends StatelessWidget {
           subtextCol: subtextCol,
           borderCol: borderCol,
           controller: controller,
+          isListView: false,
         );
       },
     );
@@ -99,6 +139,7 @@ class _ProductCard extends ConsumerStatefulWidget {
   final Color subtextCol;
   final Color borderCol;
   final PosController controller;
+  final bool isListView;
 
   const _ProductCard({
     required this.item,
@@ -108,6 +149,7 @@ class _ProductCard extends ConsumerStatefulWidget {
     required this.subtextCol,
     required this.borderCol,
     required this.controller,
+    this.isListView = false,
   });
 
   @override
@@ -297,156 +339,24 @@ class _ProductCardState extends ConsumerState<_ProductCard>
                       color: widget.cardCol,
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: isOutOfStock
-                            ? widget.borderCol
-                            : (inCart ? blueMain : widget.borderCol),
+                        color: inCart && !isOutOfStock 
+                            ? Theme.of(context).colorScheme.primary 
+                            : Colors.transparent, // Toned down outline
                         width: inCart && !isOutOfStock ? 2.0 : 1.0,
                       ),
                       boxShadow: [
                         BoxShadow(
                           color: inCart && !isOutOfStock
-                              ? Theme.of(
-                                  context,
-                                ).colorScheme.primary.withValues(alpha: 0.15)
+                              ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.15)
                               : Colors.black.withValues(alpha: 0.02),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
                       ],
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Stack(
-                            children: [
-                              Container(
-                                width: double.infinity,
-                                decoration: BoxDecoration(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.primary.withValues(alpha: 0.05),
-                                  borderRadius: const BorderRadius.vertical(
-                                    top: Radius.circular(16),
-                                  ),
-                                ),
-                                child: Center(
-                                  child: product.imagePath != null
-                                      ? Image.file(
-                                          File(product.imagePath!),
-                                          width: double.infinity,
-                                          height: double.infinity,
-                                          fit: BoxFit.cover,
-                                          errorBuilder: (ctx, _, __) => Icon(
-                                            FontAwesomeIcons.beerMugEmpty.data,
-                                            size: context.getRSize(32),
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .primary
-                                                .withValues(alpha: 0.4),
-                                          ),
-                                        )
-                                      : Icon(
-                                          FontAwesomeIcons.beerMugEmpty.data,
-                                          size: context.getRSize(32),
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .primary
-                                              .withValues(alpha: 0.4),
-                                        ),
-                                ),
-                              ),
-                              if (isOutOfStock)
-                                Positioned.fill(
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.black.withValues(
-                                        alpha: 0.35,
-                                      ),
-                                      borderRadius: const BorderRadius.vertical(
-                                        top: Radius.circular(16),
-                                      ),
-                                    ),
-                                    child: Center(
-                                      child: Text(
-                                        'Out of\nStock',
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: context.getRFontSize(10),
-                                          fontWeight: FontWeight.w800,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                        Padding(
-                          padding: EdgeInsets.all(context.getRSize(12)),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                productDisplayName(
-                                  product.name,
-                                  product.size,
-                                  unit: product.unit,
-                                ),
-                                style: TextStyle(
-                                  fontSize: context.getRFontSize(12),
-                                  fontWeight: FontWeight.w700,
-                                  color: widget.textCol,
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              SizedBox(height: context.getRSize(4)),
-                              Text(
-                                formatCurrency(price),
-                                style: TextStyle(
-                                  fontSize: context.getRFontSize(13),
-                                  fontWeight: FontWeight.w800,
-                                  color: Theme.of(context).colorScheme.primary,
-                                ),
-                              ),
-                              SizedBox(height: context.getRSize(8)),
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    isOutOfStock
-                                        ? 'No stock'
-                                        : 'Stock: ${widget.item.totalStock}',
-                                    style: TextStyle(
-                                      fontSize: context.getRFontSize(10),
-                                      color: isOutOfStock
-                                          ? danger
-                                          : (isLowStock
-                                                ? danger
-                                                : widget.subtextCol),
-                                      fontWeight: (isOutOfStock || isLowStock)
-                                          ? FontWeight.bold
-                                          : FontWeight.w500,
-                                    ),
-                                  ),
-                                  if (isLowStock)
-                                    Icon(
-                                      FontAwesomeIcons.triangleExclamation.data,
-                                      size: context.getRSize(10),
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.error,
-                                    ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
+                    child: widget.isListView
+                        ? _buildListLayout(context, product, price, isOutOfStock, isLowStock, inCart)
+                        : _buildGridLayout(context, product, price, isOutOfStock, isLowStock, inCart),
                   ),
                 ),
               ),
@@ -491,6 +401,265 @@ class _ProductCardState extends ConsumerState<_ProductCard>
           ],
         );
       },
+    );
+  }
+
+  Widget _buildGridLayout(BuildContext context, dynamic product, double price, bool isOutOfStock, bool isLowStock, bool inCart) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Stack(
+            children: [
+              Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.05),
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                ),
+                child: Center(
+                  child: product.imagePath != null
+                      ? Image.file(
+                          File(product.imagePath!),
+                          width: double.infinity,
+                          height: double.infinity,
+                          fit: BoxFit.cover,
+                          errorBuilder: (ctx, _, __) => Icon(
+                            FontAwesomeIcons.beerMugEmpty.data,
+                            size: context.getRSize(32),
+                            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.4),
+                          ),
+                        )
+                      : Icon(
+                          FontAwesomeIcons.beerMugEmpty.data,
+                          size: context.getRSize(32),
+                          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.4),
+                        ),
+                ),
+              ),
+              if (isOutOfStock)
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.35),
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                    ),
+                    child: Center(
+                      child: Text(
+                        'Out of\nStock',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: context.getRFontSize(10),
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: EdgeInsets.all(context.getRSize(12)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                product.name,
+                style: TextStyle(
+                  fontSize: context.getRFontSize(14),
+                  fontWeight: FontWeight.w800,
+                  color: widget.textCol,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              SizedBox(height: context.getRSize(2)),
+              Text(
+                '${product.size != null && product.size.toString() != 'null' ? '${product.size} ' : ''}${product.unit ?? ''}'.trim(),
+                style: TextStyle(
+                  fontSize: context.getRFontSize(11),
+                  color: widget.subtextCol,
+                  fontWeight: FontWeight.w500,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              SizedBox(height: context.getRSize(6)),
+              Text(
+                formatCurrency(price),
+                style: TextStyle(
+                  fontSize: context.getRFontSize(14),
+                  fontWeight: FontWeight.w900,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+              SizedBox(height: context.getRSize(8)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    isOutOfStock
+                        ? 'No stock'
+                        : 'Stock: ${widget.item.totalStock}',
+                    style: TextStyle(
+                      fontSize: context.getRFontSize(11),
+                      color: isOutOfStock
+                          ? danger
+                          : (isLowStock ? danger : widget.subtextCol),
+                      fontWeight: (isOutOfStock || isLowStock)
+                          ? FontWeight.bold
+                          : FontWeight.w500,
+                    ),
+                  ),
+                  if (isLowStock)
+                    Icon(
+                      FontAwesomeIcons.triangleExclamation.data,
+                      size: context.getRSize(12),
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildListLayout(BuildContext context, dynamic product, double price, bool isOutOfStock, bool isLowStock, bool inCart) {
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            width: context.getRSize(100),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.05),
+              borderRadius: const BorderRadius.horizontal(left: Radius.circular(16)),
+            ),
+            child: Stack(
+              children: [
+                Center(
+                  child: product.imagePath != null
+                      ? ClipRRect(
+                          borderRadius: const BorderRadius.horizontal(left: Radius.circular(16)),
+                          child: Image.file(
+                            File(product.imagePath!),
+                            width: double.infinity,
+                            height: double.infinity,
+                            fit: BoxFit.cover,
+                            errorBuilder: (ctx, _, __) => Icon(
+                              FontAwesomeIcons.beerMugEmpty.data,
+                              size: context.getRSize(24),
+                              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.4),
+                            ),
+                          ),
+                        )
+                      : Icon(
+                          FontAwesomeIcons.beerMugEmpty.data,
+                          size: context.getRSize(24),
+                          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.4),
+                        ),
+                ),
+                if (isOutOfStock)
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.35),
+                        borderRadius: const BorderRadius.horizontal(left: Radius.circular(16)),
+                      ),
+                      child: Center(
+                        child: Text(
+                          'Out of\nStock',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: context.getRFontSize(10),
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.all(context.getRSize(16)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    product.name,
+                    style: TextStyle(
+                      fontSize: context.getRFontSize(16),
+                      fontWeight: FontWeight.w800,
+                      color: widget.textCol,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  SizedBox(height: context.getRSize(4)),
+                  Text(
+                    '${product.size != null && product.size.toString() != 'null' ? '${product.size} ' : ''}${product.unit ?? ''}'.trim(),
+                    style: TextStyle(
+                      fontSize: context.getRFontSize(13),
+                      color: widget.subtextCol,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  SizedBox(height: context.getRSize(12)),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        formatCurrency(price),
+                        style: TextStyle(
+                          fontSize: context.getRFontSize(16),
+                          fontWeight: FontWeight.w900,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          if (isLowStock) ...[
+                            Icon(
+                              FontAwesomeIcons.triangleExclamation.data,
+                              size: context.getRSize(12),
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                            SizedBox(width: context.getRSize(4)),
+                          ],
+                          Text(
+                            isOutOfStock
+                                ? 'No stock'
+                                : 'Stock: ${widget.item.totalStock}',
+                            style: TextStyle(
+                              fontSize: context.getRFontSize(12),
+                              color: isOutOfStock
+                                  ? danger
+                                  : (isLowStock ? danger : widget.subtextCol),
+                              fontWeight: (isOutOfStock || isLowStock)
+                                  ? FontWeight.bold
+                                  : FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

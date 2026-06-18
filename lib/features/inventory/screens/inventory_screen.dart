@@ -67,8 +67,6 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   bool _showSearch = false;
   String _searchQuery = '';
   final _searchCtrl = TextEditingController();
-  Map<String, int> _fullCratesByMfr = {};
-  Map<String, int> _emptyCratesByMfr = {};
   int _totalCrateAssetsSum = 0;
   List<CrateSizeGroupData> _dbCrateSizeGroups = [];
 
@@ -77,8 +75,6 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   StreamSubscription<List<ManufacturerData>>? _manufacturersSub;
   StreamSubscription<List<CategoryData>>? _categoriesSub;
   StreamSubscription<List<CrateSizeGroupData>>? _crateSizeGroupsSub;
-  StreamSubscription<Map<String, int>>? _bottlesSub;
-  StreamSubscription<Map<String, int>>? _emptyCratesSub;
   StreamSubscription<int>? _emptyCratesSumSub;
   Color get _bg => Theme.of(context).scaffoldBackgroundColor;
   Color get _surface => Theme.of(context).colorScheme.surface;
@@ -225,16 +221,10 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         if (mounted) setState(() => _dbCategories = data);
       }, onError: (e) => debugPrint('Error watching categories: $e'));
 
-      _bottlesSub = db.inventoryDao.watchFullCratesByManufacturer().listen((
-        data,
-      ) {
-        if (mounted) setState(() => _fullCratesByMfr = data);
-      });
-      _emptyCratesSub = db.inventoryDao.watchEmptyCratesByManufacturer().listen(
-        (data) {
-          if (mounted) setState(() => _emptyCratesByMfr = data);
-        },
-      );
+      // Per-manufacturer full/empty crate figures are read reactively in the
+      // Crates tab via fullCratesByManufacturerProvider /
+      // storeCrateBalancesProvider so they re-scope to the active store
+      // (§16.8.1 Phase 2) without re-plumbing imperative subscriptions.
 
       _crateSizeGroupsSub = db.inventoryDao.watchAllCrateSizeGroups().listen((
         data,
@@ -250,8 +240,6 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     _manufacturersSub?.cancel();
     _categoriesSub?.cancel();
     _crateSizeGroupsSub?.cancel();
-    _bottlesSub?.cancel();
-    _emptyCratesSub?.cancel();
     _emptyCratesSumSub?.cancel();
     _searchCtrl.dispose();
     _tabController.dispose();
@@ -809,13 +797,18 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     );
   }
 
-  List<ManufacturerCrateStats> get _manufacturerCrateStats {
-    final allMfrs = {..._fullCratesByMfr.keys, ..._emptyCratesByMfr.keys};
+  /// Build the per-manufacturer crate stats (keyed by manufacturer id) from the
+  /// active-store full/empty maps resolved in [_buildCratesTab].
+  List<ManufacturerCrateStats> _computeCrateStats(
+    Map<String, int> fullByMfr,
+    Map<String, int> emptyByMfr,
+  ) {
+    final allMfrs = {...fullByMfr.keys, ...emptyByMfr.keys};
     return allMfrs.map((mfr) {
       return ManufacturerCrateStats(
         manufacturer: mfr,
-        totalBottles: _fullCratesByMfr[mfr] ?? 0,
-        emptyCrates: _emptyCratesByMfr[mfr] ?? 0,
+        totalBottles: fullByMfr[mfr] ?? 0,
+        emptyCrates: emptyByMfr[mfr] ?? 0,
         totalValueKobo: 0,
       );
     }).toList()..sort((a, b) => a.manufacturer.compareTo(b.manufacturer));
@@ -1214,22 +1207,30 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
 
   // ── CRATES TAB REDESIGNED ──────────────────────────────────────────────────
   Widget _buildCratesTab(BuildContext context) {
-    // Per-store crate balances (§16.8.1 Phase 2). Non-empty only when a store
-    // is locked; falls back to the business total (mfr.emptyCrateStock) when
-    // no store is locked (CEO browsing all stores).
-    final storeCrateBalances =
-        ref.watch(storeCrateBalancesProvider).valueOrNull ?? const [];
-    final isStoreLocked = ref.read(lockedStoreProvider).value != null;
-    final storeBalByMfr = {
-      for (final b in storeCrateBalances) b.manufacturerId: b.balance,
-    };
+    // §16.8.1 Phase 2: crate figures are PER-STORE when a store is active and
+    // business-wide in "All Stores". Full bottles come from the active store's
+    // inventory (fullCratesByManufacturerProvider); empties come from that
+    // store's store_crate_balances, falling back to the business-wide
+    // manufacturers.empty_crate_stock when no store is locked.
+    final lockedStoreId = ref.watch(lockedStoreProvider).value;
+    final fullByMfr =
+        ref.watch(fullCratesByManufacturerProvider).valueOrNull ??
+        const <String, int>{};
+    final Map<String, int> emptyByMfr;
+    if (lockedStoreId == null) {
+      emptyByMfr = {for (final m in _dbManufacturers) m.id: m.emptyCrateStock};
+    } else {
+      final balances =
+          ref.watch(storeCrateBalancesProvider).valueOrNull ??
+          const <StoreCrateBalanceData>[];
+      emptyByMfr = {for (final b in balances) b.manufacturerId: b.balance};
+    }
 
-    int emptyForMfr(ManufacturerData mfr) =>
-        isStoreLocked ? (storeBalByMfr[mfr.id] ?? 0) : mfr.emptyCrateStock;
+    final stats = _computeCrateStats(fullByMfr, emptyByMfr);
+    int emptyForMfr(ManufacturerData mfr) => emptyByMfr[mfr.id] ?? 0;
 
-    final totalEmpty = isStoreLocked
-        ? storeBalByMfr.values.fold(0, (s, v) => s + v)
-        : _dbManufacturers.fold<int>(0, (s, m) => s + m.emptyCrateStock);
+    final totalEmpty = emptyByMfr.values.fold<int>(0, (s, v) => s + v);
+    final totalFull = stats.fold<int>(0, (s, e) => s + e.fullCratesEquiv);
 
     return ListView(
       padding: EdgeInsets.fromLTRB(
@@ -1240,7 +1241,11 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       ),
       children: [
         // 1. Stats Overview
-        _buildCrateStatsRow(context, totalEmpty: totalEmpty),
+        _buildCrateStatsRow(
+          context,
+          totalEmpty: totalEmpty,
+          totalFull: totalFull,
+        ),
 
         SizedBox(height: context.getRSize(24)),
 
@@ -1277,12 +1282,14 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
           )
         else
           ..._dbManufacturers.map((mfr) {
-            final stat = _manufacturerCrateStats.firstWhere(
-              (s) => s.manufacturer == mfr.name,
+            // stats is keyed by manufacturer ID, so match on mfr.id — matching
+            // on mfr.name never hits and forced every card's "Full" to 0.
+            final stat = stats.firstWhere(
+              (s) => s.manufacturer == mfr.id,
               orElse: () => ManufacturerCrateStats(
-                manufacturer: mfr.name,
+                manufacturer: mfr.id,
                 totalBottles: 0,
-                emptyCrates: mfr.emptyCrateStock,
+                emptyCrates: emptyForMfr(mfr),
                 totalValueKobo: 0,
               ),
             );
@@ -1302,12 +1309,11 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     );
   }
 
-  Widget _buildCrateStatsRow(BuildContext context, {required int totalEmpty}) {
-    final totalFull = _manufacturerCrateStats.fold<int>(
-      0,
-      (sum, s) => sum + s.fullCratesEquiv,
-    );
-
+  Widget _buildCrateStatsRow(
+    BuildContext context, {
+    required int totalEmpty,
+    required int totalFull,
+  }) {
     return Row(
       children: [
         Expanded(

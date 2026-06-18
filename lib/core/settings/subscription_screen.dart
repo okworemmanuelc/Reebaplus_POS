@@ -9,6 +9,8 @@ import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
+import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
 
 /// CEO Settings → Subscription (master plan §32). A READ-ONLY view of the
 /// business's plan, status, and trial-countdown / renewal date. Status is
@@ -27,17 +29,8 @@ class SubscriptionScreen extends ConsumerWidget {
     final t = Theme.of(context);
     final canManage = hasPermission(ref, 'settings.manage');
 
-    return Scaffold(
-      backgroundColor: t.scaffoldBackgroundColor,
-      appBar: AppBar(
-        title: const Text(
-          'Subscription',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-      ),
+    return GlassyScaffold(
+      title: 'Subscription',
       body: !canManage
           ? const SettingsNoAccess()
           : SettingsFadeIn(
@@ -81,9 +74,9 @@ class SubscriptionScreen extends ConsumerWidget {
     final access = ref.watch(currentBusinessSubscriptionProvider);
 
     if (business == null) {
-      return Container(
+      return GlassyCard(
         padding: const EdgeInsets.all(16),
-        decoration: AppDecorations.glassCard(context, radius: 16),
+        radius: 16,
         child: Text(
           'Subscription details will appear once your business has synced.',
           style: TextStyle(
@@ -95,9 +88,9 @@ class SubscriptionScreen extends ConsumerWidget {
 
     final (statusLabel, statusColor) = _statusChip(access);
 
-    return Container(
+    return GlassyCard(
       padding: const EdgeInsets.all(20),
-      decoration: AppDecorations.glassCard(context, radius: 16),
+      radius: 16,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

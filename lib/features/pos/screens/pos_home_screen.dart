@@ -12,6 +12,7 @@ import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
 import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
+import 'package:reebaplus_pos/shared/widgets/view_selector_sheet.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/pos/controllers/pos_controller.dart';
 import 'package:reebaplus_pos/features/pos/widgets/product_grid.dart';
@@ -19,9 +20,10 @@ import 'package:reebaplus_pos/features/pos/widgets/category_filter_bar.dart';
 import 'package:reebaplus_pos/features/pos/widgets/quick_sale_modal.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
-import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+
 import 'package:reebaplus_pos/shared/widgets/store_picker_sheet.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class PosHomeScreen extends ConsumerStatefulWidget {
   const PosHomeScreen({super.key});
@@ -33,10 +35,14 @@ class PosHomeScreen extends ConsumerStatefulWidget {
 class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
   PosController? _controller;
   final TextEditingController _searchController = TextEditingController();
+  bool _hasAutoShownPicker = false;
+  bool _isListView = false;
+  int _gridColumns = 3;
 
   @override
   void initState() {
     super.initState();
+    _loadViewPreferences();
     Future.microtask(() {
       if (!mounted) return;
       setState(() {
@@ -54,6 +60,44 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
     _controller?.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadViewPreferences() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() {
+        _isListView = prefs.getBool('pos_is_list_view') ?? false;
+        _gridColumns = prefs.getInt('pos_grid_columns') ?? 3;
+      });
+    }
+  }
+
+  Future<void> _updateViewPreferences({bool? isList, int? columns}) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (isList != null) {
+      await prefs.setBool('pos_is_list_view', isList);
+      if (mounted) setState(() => _isListView = isList);
+    }
+    if (columns != null) {
+      await prefs.setInt('pos_grid_columns', columns);
+      if (mounted) setState(() => _gridColumns = columns);
+    }
+  }
+
+  void _showViewSelectorModal() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => ViewSelectorSheet(
+        currentIsList: _isListView,
+        currentColumns: _gridColumns,
+        onSelect: (isList, columns) async {
+          _updateViewPreferences(isList: isList, columns: columns);
+          Navigator.pop(context);
+        },
+      ),
+    );
   }
 
   @override
@@ -94,7 +138,17 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
     final activeStoreId = ref.watch(lockedStoreProvider).value;
     final storeChosen = ref.watch(storeExplicitlyChosenProvider).value;
     if (selectable.length >= 2 && (activeStoreId == null || !storeChosen)) {
-      return _buildStoreGate(context);
+      if (!_hasAutoShownPicker) {
+        _hasAutoShownPicker = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          final currentActive = ref.read(lockedStoreProvider).value;
+          final currentChosen = ref.read(storeExplicitlyChosenProvider).value;
+          if (currentActive == null || !currentChosen) {
+            showStorePickerSheet(context, ref, isDismissible: false);
+          }
+        });
+      }
     }
 
     if (_controller == null) {
@@ -197,6 +251,8 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
                               subtextCol: subtextCol,
                               borderCol: borderCol,
                               controller: _controller!,
+                              isListView: _isListView,
+                              gridColumns: _gridColumns,
                             ),
                           ),
                         ),
@@ -209,93 +265,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
     );
   }
 
-  /// §12.1: shown to any user with more than one store who hasn't explicitly
-  /// picked the store they're selling from (an all-stores viewer on "All Stores",
-  /// or a confined multi-store user on MainLayout's silent default). POS sells
-  /// from exactly one store, so selling is blocked until the user picks one.
-  /// Choosing a store sets the global active store (`lockedStoreId`) and marks it
-  /// explicitly chosen, which the sidebar picker reflects too, and this gate then
-  /// resolves to the normal POS.
-  Widget _buildStoreGate(BuildContext context) {
-    final t = Theme.of(context);
-    final primary = t.colorScheme.primary;
-    final textCol = t.colorScheme.onSurface;
-    final subtextCol = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
-    final bizName = ref.watch(currentBusinessNameProvider);
 
-    return SharedScaffold(
-      activeRoute: 'pos',
-      backgroundColor: t.scaffoldBackgroundColor,
-      appBar: AppBar(
-        backgroundColor: t.colorScheme.surface,
-        elevation: 0,
-        leading: const MenuButton(),
-        title: AppBarHeader(
-          icon: FontAwesomeIcons.beerMugEmpty.data,
-          title: bizName.isNotEmpty ? bizName : 'Reebaplus POS',
-          subtitle: 'Point of Sale',
-        ),
-        actions: [
-          const NotificationBell(),
-          SizedBox(width: context.getRSize(16)),
-        ],
-      ),
-      body: SafeArea(
-        top: false,
-        child: Center(
-          child: Padding(
-            padding: EdgeInsets.all(context.getRSize(32)),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: context.getRSize(72),
-                  height: context.getRSize(72),
-                  decoration: BoxDecoration(
-                    color: primary.withValues(alpha: 0.12),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    FontAwesomeIcons.store.data,
-                    size: context.getRSize(28),
-                    color: primary,
-                  ),
-                ),
-                SizedBox(height: context.getRSize(20)),
-                Text(
-                  'Select a store to start selling',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: context.getRFontSize(17),
-                    color: textCol,
-                  ),
-                ),
-                SizedBox(height: context.getRSize(8)),
-                Text(
-                  'POS records every sale against one store. Choose the '
-                  'store you\'re selling from to continue.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(13.5),
-                    color: subtextCol,
-                    height: 1.4,
-                  ),
-                ),
-                SizedBox(height: context.getRSize(24)),
-                AppButton(
-                  text: 'Choose Store',
-                  icon: FontAwesomeIcons.store.data,
-                  isFullWidth: false,
-                  onPressed: () => showStorePickerSheet(context, ref),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 
   PreferredSizeWidget _buildAppBar(
     BuildContext context,
@@ -320,6 +290,14 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
         subtitle: _controller!.currentStoreName ?? 'Point of Sale',
       ),
       actions: [
+        IconButton(
+          icon: Icon(
+            _isListView ? FontAwesomeIcons.list.data : FontAwesomeIcons.borderAll.data,
+            size: 18,
+            color: subtextCol,
+          ),
+          onPressed: _showViewSelectorModal,
+        ),
         IconButton(
           icon: Icon(
             _controller!.isSearching

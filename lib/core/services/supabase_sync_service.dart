@@ -133,6 +133,25 @@ class SupabaseSyncService {
   bool _pushing = false;
   bool _loggedJwtClaimsThisSession = false;
 
+  /// One-shot per app session: the first queue drain pays a cold-network tax
+  /// (DNS resolution + TLS handshake + idle-radio wake + auth/session settling)
+  /// that the tight 5s first-attempt chunk timeout routinely loses to — surfacing
+  /// a false `timeout` failure on whatever row drains first (almost always
+  /// `user_businesses` right after login). We pay that cost once with a cheap
+  /// throwaway warm-up request *before* the first real drain, and floor that
+  /// first drain's per-chunk timeout at [_firstDrainTimeoutFloor] as a backstop
+  /// (in case the warm-up itself was the request that ate the cold tax). Stays
+  /// false until a warm-up succeeds; reset on every sign-in/out so a
+  /// logout→re-login warms the new session again.
+  bool _didWarmUpThisSession = false;
+
+  /// Per-chunk timeout floor for the first drain of a session. Matches the
+  /// attempt-1 budget — i.e. the first cold attempt gets the same patience a
+  /// warm retry would, enough to clear the cold-start long tail (weak in-store
+  /// Wi-Fi, congested cellular, slow token refresh) without making a genuinely
+  /// dead link wait longer than it already does on attempt 1.
+  static const Duration _firstDrainTimeoutFloor = Duration(seconds: 10);
+
   /// Ceiling chunk size for a batched push call on Wi-Fi/ethernet — well
   /// under the ~200-row group max so one round trip stays small enough to
   /// finish (or time out) quickly on a weak link.
@@ -466,6 +485,8 @@ class SupabaseSyncService {
       'auth_user_id',
       'name',
       'email',
+      'phone',
+      'address',
       'role',
       'role_tier',
       'avatar_color',
@@ -473,15 +494,15 @@ class SupabaseSyncService {
       'store_id',
       'created_at',
       'last_updated_at',
-      // NOTE: `phone`, `status`, `joined_at`, `is_deleted` were removed
-      // — `phone`/`status`/`joined_at` never existed on cloud users
-      // (those live on `business_members`), and `is_deleted` was
-      // dropped by migration 0035 in the staff-lifecycle hard-delete
-      // refactor. `role_tier` MUST be present: cloud DEFAULT is 1 and
-      // the CHECK constraint `role_tier IN (2,3,4,5,6)` rejects 1,
-      // so scrubbing it out causes 23514 on every fresh-row insert.
-      // PIN material (pin, pin_hash, pin_salt, pin_iterations,
-      // password_hash) is intentionally absent — local secret material.
+      // NOTE: `status`, `joined_at`, `is_deleted` were removed — they
+      // never existed on cloud users (those live on `business_members`),
+      // and `is_deleted` was dropped by migration 0035 in the
+      // staff-lifecycle hard-delete refactor. `role_tier` MUST be present:
+      // cloud DEFAULT is 1 and the CHECK constraint `role_tier IN
+      // (2,3,4,5,6)` rejects 1, so scrubbing it out causes 23514 on
+      // every fresh-row insert. PIN material (pin, pin_hash, pin_salt,
+      // pin_iterations, password_hash) is intentionally absent — local
+      // secret material.
     },
     'sessions': {
       'id',
@@ -812,6 +833,28 @@ class SupabaseSyncService {
       '${orderedGroups.length} batched calls...',
     );
 
+    // Cold-start warm-up (see [_didWarmUpThisSession]). The first drain of a
+    // session would otherwise spend its tight 5s first-attempt budget on a cold
+    // DNS+TLS+radio round trip and log a false `timeout` on the first row. Pay
+    // that cost once with a cheap throwaway request, then drain at normal
+    // timeouts so no real row absorbs the cold tax. `isFirstDrain` floors this
+    // drain's per-chunk timeout regardless of the ping's outcome — if the link
+    // was so cold the warm-up itself timed out, the real rows still need grace.
+    final isFirstDrain = !_didWarmUpThisSession;
+    if (isFirstDrain) {
+      await _warmUpConnection(sessionBusinessId);
+    }
+
+    // Cascade guard: groups are ordered parent→child by FK priority. If a group
+    // hits a degraded link (timeout / transient network), the parent rows likely
+    // didn't land, so attempting the later (child) groups — and the domain
+    // envelopes, which FK-reference rows we just tried to push — would just
+    // produce a storm of guaranteed 23503 FK violations against parents that
+    // aren't in the cloud (the "FK violation storm" on a flaky link). Stop the
+    // cycle and let the next trigger retry the whole queue in priority order.
+    // Only link-degraded failures abort; per-row FK-deferred / permanent errors
+    // keep their own backoff and don't.
+    var isLinkDegraded = false;
     for (final group in orderedGroups) {
       final items = groups[group]!;
       final ids = items.map((i) => i.id).toList();
@@ -895,9 +938,15 @@ class SupabaseSyncService {
         final chunkPayloads = validPayloads.sublist(start, end);
         final chunkIds = validIds.sublist(start, end);
         final chunkAttempts = validAttempts.sublist(start, end);
-        final chunkTimeout = _pushChunkTimeoutForAttempts(
+        var chunkTimeout = _pushChunkTimeoutForAttempts(
           chunkAttempts.fold(0, (max, a) => a > max ? a : max),
         );
+        // First-drain backstop: even a fresh (attempt-0) chunk gets the roomier
+        // floor on the session's first drain, so the cold-start long tail
+        // doesn't log a false timeout if the warm-up didn't fully heat the link.
+        if (isFirstDrain && chunkTimeout < _firstDrainTimeoutFloor) {
+          chunkTimeout = _firstDrainTimeoutFloor;
+        }
 
         try {
           if (group.action == 'insert' ||
@@ -962,6 +1011,8 @@ class SupabaseSyncService {
           for (final id in chunkIds) {
             await _db.syncDao.markFailed(id, 'timeout: $e');
           }
+          // Degraded link — don't cascade into child groups (see guard above).
+          isLinkDegraded = true;
         } catch (e) {
           final code = e is PostgrestException ? (e.code ?? '?') : '?';
           // Legacy order-number collision self-heal (§30.8.1). The cloud already
@@ -1008,21 +1059,69 @@ class SupabaseSyncService {
               fkDeferred: isFkViolation,
             );
           }
+          // A transient network / 5xx failure (not a per-row FK-deferred or
+          // permanent constraint) means the link is degraded — stop cascading
+          // into child groups, same as a timeout.
+          if (!isFkViolation && !isPermanent) {
+            isLinkDegraded = true;
+          }
         }
+      }
+
+      // Parent group couldn't be delivered over this link — skip the remaining
+      // (child) groups this cycle so they don't FK-fail against parents that
+      // never landed. The queue is intact; the next trigger retries in order.
+      if (isLinkDegraded) {
+        debugPrint(
+          '[SyncService] Link degraded while pushing ${group.table} — '
+          'deferring remaining groups to the next push cycle.',
+        );
+        break;
       }
     }
 
     // Now that parent-table rows are in the cloud, drain domain envelopes.
     // Their server-side RPCs FK-reference rows we just pushed (e.g.
-    // pos_create_product → stock_adjustments.performed_by → users.id).
-    if (domainItems.isNotEmpty) {
+    // pos_create_product → stock_adjustments.performed_by → users.id). Skip on a
+    // degraded link — the parents may not have landed and the RPC would fail.
+    if (domainItems.isNotEmpty && !isLinkDegraded) {
       await _pushDomainItems(domainItems, sessionBusinessId, currentAuthUid);
     }
 
+    // A drain that completed without a degraded link means the connection is
+    // now warm regardless of whether the warm-up ping itself succeeded — clear
+    // the first-drain grace so subsequent drains fail fast as designed.
+    if (!isLinkDegraded) _didWarmUpThisSession = true;
+
     // If the raw select hit the page limit, more is waiting — drain in the
     // next tick rather than recursing (avoids stack growth on huge backlogs).
-    if (rawItems.length == 200) {
+    // Not while link-degraded: continuing to hammer a bad link just stalls;
+    // the next connectivity / periodic trigger resumes the drain.
+    if (rawItems.length == 200 && !isLinkDegraded) {
       Future.microtask(pushPending);
+    }
+  }
+
+  /// Cheap throwaway request that pays the cold-start network cost (DNS + TLS
+  /// handshake + idle-radio wake) once, so the first *real* queue chunk rides a
+  /// warm connection instead of losing its tight timeout to the handshake. A
+  /// scoped `select … limit 1` on the session's own business row — RLS-safe and
+  /// tiny. Its own timeout uses the first-drain floor; on success we mark the
+  /// session warmed so we don't ping again. Any failure (offline mid-drain, RLS
+  /// edge, slow link) is swallowed: the floored real-drain timeout is the
+  /// backstop, and the next drain simply warms again.
+  Future<void> _warmUpConnection(String sessionBusinessId) async {
+    try {
+      await _supabase
+          .from('businesses')
+          .select('id')
+          .eq('id', sessionBusinessId)
+          .limit(1)
+          .timeout(_firstDrainTimeoutFloor);
+      _didWarmUpThisSession = true;
+      debugPrint('[SyncService] Connection warm-up ok (cold start paid).');
+    } catch (e) {
+      debugPrint('[SyncService] Connection warm-up skipped/failed: $e');
     }
   }
 
@@ -2771,6 +2870,13 @@ class SupabaseSyncService {
   /// Stops listening to real-time changes (e.g., on logout).
   void stopRealtimeSync() {
     debugPrint('[SyncService] Stopping real-time sync.');
+    _tearDownRealtimeChannels();
+    stopAutoPush();
+  }
+
+  /// Removes the active realtime channels without touching auto-push. Shared by
+  /// [stopRealtimeSync] (logout) and [restartRealtimeSync] (resubscribe).
+  void _tearDownRealtimeChannels() {
     for (final channel in _tableChannels) {
       _supabase.removeChannel(channel);
     }
@@ -2779,7 +2885,25 @@ class SupabaseSyncService {
       _supabase.removeChannel(_businessesChannel!);
       _businessesChannel = null;
     }
-    stopAutoPush();
+  }
+
+  /// Re-establishes the realtime subscriptions after they may have been
+  /// silently dropped. `startRealtimeSync` is called only once at sign-in and
+  /// no-ops while the channel objects are still held (`_tableChannels` guard),
+  /// so a websocket that the OS suspended during Doze / app-background, or that
+  /// a WiFi↔mobile handoff tore down, leaves the channels permanently dead with
+  /// no path back to live updates — the symptom is "live sync stops" on a
+  /// physical device even though the one-shot reconnect pull still catches up.
+  /// The SDK's channel rejoin is not guaranteed to fire after a long
+  /// suspension, so we drop the stale channels and resubscribe from scratch.
+  /// Driven by app-resume and connectivity-recovery. Idempotent and cheap (a
+  /// few channels); a no-op when there were no channels to begin with (not yet
+  /// signed in) — `startRealtimeSync` itself requires a logged-in business.
+  void restartRealtimeSync(String businessId) {
+    if (_tableChannels.isEmpty && _businessesChannel == null) return;
+    debugPrint('[SyncService] Re-subscribing realtime for $businessId.');
+    _tearDownRealtimeChannels();
+    startRealtimeSync(businessId);
   }
 
   /// Watches the local sync queue and pushes pending items to Supabase
@@ -2860,6 +2984,9 @@ class SupabaseSyncService {
               state.event == AuthChangeEvent.tokenRefreshed ||
               state.event == AuthChangeEvent.initialSession) {
             _loggedJwtClaimsThisSession = false;
+            // Re-warm on every fresh session: a logout→re-login (or token
+            // refresh after a long idle) starts from a cold connection again.
+            _didWarmUpThisSession = false;
             // Supabase fires signedIn before AuthService.setCurrentUser
             // restores the Drift _currentBusinessId, so clearFailureBackoff
             // (whereBusiness → requireBusinessId) would throw on a
@@ -2871,6 +2998,7 @@ class SupabaseSyncService {
             _scheduleDebouncedPush();
           } else if (state.event == AuthChangeEvent.signedOut) {
             _loggedJwtClaimsThisSession = false;
+            _didWarmUpThisSession = false;
           }
         },
         // Token-refresh failures (offline, DNS lookup errors) surface on
@@ -2897,6 +3025,9 @@ class SupabaseSyncService {
         try {
           if (_pushing) return;
           await _db.syncDao.resetStuckInProgress();
+          // §6.8.1: re-enqueue any now-healable orphans before draining so a
+          // recovered row goes up on this same tick.
+          await _recoverDueOrphans();
           await _runPushOnce();
         } catch (e) {
           debugPrint('[SyncService] periodic drain tick failed: $e');
@@ -2935,6 +3066,29 @@ class SupabaseSyncService {
       debugPrint('[SyncService] auto-push failed: $e');
     } finally {
       _pushing = false;
+    }
+  }
+
+  /// Automatic orphan-recovery sweep (§6.8.1). Re-enqueues self-healing
+  /// orphans (FK-deferred parents that may have landed, ledger `created_at`
+  /// immutables now scrubbed at push) back into `sync_queue`, capped per orphan
+  /// so a still-failing row can't loop forever. Skipped when offline — a
+  /// re-enqueue would just sit in the queue with no push attempt — and gated by
+  /// `_pushing` is unnecessary (it only moves rows; the caller pushes after).
+  /// Returns true if anything was recovered, so the caller can kick a push.
+  Future<bool> _recoverDueOrphans() async {
+    if (!isOnline.value) return false;
+    try {
+      final recovered = await _db.syncDao.autoRecoverDueOrphans();
+      if (recovered > 0) {
+        debugPrint(
+          '[SyncService] auto-recovered $recovered orphan(s) into the queue.',
+        );
+      }
+      return recovered > 0;
+    } catch (e) {
+      debugPrint('[SyncService] orphan auto-recovery failed: $e');
+      return false;
     }
   }
 
@@ -2996,10 +3150,19 @@ class SupabaseSyncService {
       if (_db.currentBusinessId != null) {
         await _db.syncDao.clearFailureBackoff();
       }
+      // §6.8.1: a better link is the ideal moment to re-attempt self-healing
+      // orphans (e.g. an FK parent that landed while we were offline). Move
+      // them back into the queue before the push below sweeps it.
+      await _recoverDueOrphans();
       _scheduleDebouncedPush();
 
       final businessId = _db.businessIdResolver.call();
       if (businessId != null) {
+        // A network transition (reconnect, or a WiFi↔mobile handoff that fires
+        // this listener) can leave the realtime websocket dead with no SDK
+        // rejoin — resubscribe so live updates resume, not just the one-shot
+        // catch-up pull below.
+        restartRealtimeSync(businessId);
         unawaited(() async {
           try {
             // Reconnect backstop for a staff device that was offline when the

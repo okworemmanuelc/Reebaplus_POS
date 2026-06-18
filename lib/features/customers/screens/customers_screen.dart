@@ -15,6 +15,7 @@ import 'package:reebaplus_pos/features/customers/widgets/add_customer_sheet.dart
 import 'package:reebaplus_pos/features/customers/screens/customer_detail_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
+import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
 
 class CustomersScreen extends ConsumerStatefulWidget {
   const CustomersScreen({super.key});
@@ -25,6 +26,7 @@ class CustomersScreen extends ConsumerStatefulWidget {
 
 class _CustomersScreenState extends ConsumerState<CustomersScreen> {
   bool _isFirstLoad = true;
+  bool _isScrolled = false;
 
   @override
   void initState() {
@@ -54,12 +56,24 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
     // (null = "All Stores"); no per-screen store dropdown.
     final storeFilter = ref.watch(lockedStoreProvider).value;
 
-    return Scaffold(
-      backgroundColor: bgCol,
-      appBar: _buildAppBar(context, surfaceCol, textCol, borderCol),
-      drawer: const AppDrawer(activeRoute: 'customers'),
-      body: Column(
-        children: [
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            bgCol,
+            Theme.of(context).colorScheme.primary.withValues(alpha: 0.05),
+            Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+          ],
+        ),
+      ),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: _buildAppBar(context, surfaceCol, textCol, borderCol),
+        drawer: const AppDrawer(activeRoute: 'customers'),
+        body: Column(
+          children: [
           Expanded(
             child: Builder(
               builder: (context) {
@@ -95,9 +109,21 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                     ),
                   );
                 }
-                return AppRefreshWrapper(
-                  child: ListView.separated(
-                    padding: context
+                return NotificationListener<ScrollUpdateNotification>(
+                  onNotification: (notif) {
+                    if (notif.metrics.axis == Axis.vertical) {
+                      final scrolled = notif.metrics.pixels > 10;
+                      if (scrolled != _isScrolled) {
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted) setState(() => _isScrolled = scrolled);
+                        });
+                      }
+                    }
+                    return false;
+                  },
+                  child: AppRefreshWrapper(
+                    child: ListView.separated(
+                      padding: context
                         .rPadding(16)
                         .copyWith(
                           bottom:
@@ -121,8 +147,9 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                       );
                     },
                   ),
-                );
-              },
+                ),
+              );
+            },
             ),
           ),
         ],
@@ -135,6 +162,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
               label: 'Add Customer',
             )
           : null,
+      ),
     );
   }
 
@@ -145,7 +173,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
     Color borderCol,
   ) {
     return AppBar(
-      backgroundColor: surfaceCol,
+      backgroundColor: _isScrolled ? Theme.of(context).colorScheme.surface.withValues(alpha: 0.8) : Colors.transparent,
       elevation: 0,
       actions: [
         const NotificationBell(),
@@ -267,27 +295,17 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
     final balanceColor = isNegative ? danger : success;
     final formattedBalance = formatCurrency(balanceKobo / 100.0);
 
-    return InkWell(
-      onTap: () {
-        Navigator.push(
-          context,
-          slideDownRoute(CustomerDetailScreen(customer: customer)),
-        );
-      },
-      borderRadius: BorderRadius.circular(context.getRSize(16)),
-      child: Container(
-        decoration: BoxDecoration(
-          color: surfaceCol,
-          borderRadius: BorderRadius.circular(context.getRSize(16)),
-          border: Border.all(color: borderCol),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.02),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
+    return GlassyCard(
+      radius: context.getRSize(16),
+      padding: EdgeInsets.zero,
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            slideDownRoute(CustomerDetailScreen(customer: customer)),
+          );
+        },
+        borderRadius: BorderRadius.circular(context.getRSize(16)),
         child: Padding(
           padding: context.rPadding(16),
           child: Row(
