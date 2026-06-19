@@ -200,10 +200,10 @@ class NavigationService {
   }
 
   /// Resets navigation state to defaults. Call on logout so the next session
-  /// starts clean (tab 0, empty history).
+  /// starts clean (tab 1 = POS, empty history).
   void resetNavigation() {
     _history.clear();
-    currentIndex.value = 0;
+    currentIndex.value = 1;
     _lastBackPress = null;
     _lastHandleTime = null;
     for (int i = 0; i < _tabCanPop.length; i++) {

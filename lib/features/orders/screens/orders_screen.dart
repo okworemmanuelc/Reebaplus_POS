@@ -807,6 +807,11 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
 
     final storeAddress = await _resolveStoreAddress(richOrder.order.storeId);
 
+    // Fetch manufacturers once before showing the modal
+    final db = ref.read(databaseProvider);
+    final mfrList = await db.inventoryDao.watchAllManufacturers().first;
+    final manufacturerNames = {for (final m in mfrList) m.id: m.name};
+
     if (!context.mounted) return;
 
     showModalBottomSheet(
@@ -858,12 +863,16 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                                   'size': ri.product?.size,
                                   'qty': ri.item.quantity,
                                   'price': ri.item.unitPriceKobo / 100.0,
+                                  'unit': ri.product?.unit,
+                                  'trackEmpties': ri.product?.trackEmpties,
+                                  'manufacturerId': ri.product?.manufacturerId,
                                 },
                               )
                               .toList(),
                           subtotal: currentOrder.totalAmountKobo / 100.0,
                           crateDeposit: 0,
                           total: currentOrder.netAmountKobo / 100.0,
+                          manufacturerNames: manufacturerNames,
                           paymentMethod: currentOrder.paymentType,
                           customerName:
                               richOrder.customer?.name ?? 'Walk-in Customer',
@@ -964,6 +973,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
             'size': ri.product?.size,
             'qty': ri.item.quantity,
             'price': ri.item.unitPriceKobo / 100.0,
+            'unit': ri.product?.unit,
+            'trackEmpties': ri.product?.trackEmpties,
+            'manufacturerId': ri.product?.manufacturerId,
           },
         )
         .toList();
@@ -994,6 +1006,10 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                     .getWalletBalanceKobo(richOrder.customer!.id)) /
                 100.0;
 
+      final db = ref.read(databaseProvider);
+      final mfrList = await db.inventoryDao.watchAllManufacturers().first;
+      final manufacturerNames = {for (final m in mfrList) m.id: m.name};
+
       final bytes = await ThermalReceiptService.buildReceipt(
         orderId: order.orderNumber,
         cart: receiptMapping,
@@ -1014,6 +1030,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
         refundAmount: order.amountPaidKobo / 100.0,
         storeAddress: finalStoreAddress,
         businessName: ref.read(currentBusinessNameProvider),
+        manufacturerNames: manufacturerNames,
       );
 
       if (!context.mounted) return;

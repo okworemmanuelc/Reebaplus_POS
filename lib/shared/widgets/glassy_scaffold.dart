@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 
 /// A reusable Scaffold wrapper that implements the "Glassy & Modernistic UI Standard" (§10.1+).
 /// Features a gradient background and a scroll-reactive AppBar that dims when the user scrolls.
@@ -31,17 +32,7 @@ class _GlassyScaffoldState extends State<GlassyScaffold> {
     final isScrolled = _scrollOffset > 10;
 
     return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            t.scaffoldBackgroundColor,
-            t.colorScheme.primary.withValues(alpha: 0.05),
-            t.colorScheme.primary.withValues(alpha: 0.12),
-          ],
-        ),
-      ),
+      decoration: AppDecorations.glassyBackground(context),
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(

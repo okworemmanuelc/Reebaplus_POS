@@ -160,6 +160,7 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen>
         unselectedLabelColor: _subtext,
         indicatorColor: Theme.of(context).colorScheme.primary,
         indicatorWeight: 3,
+        dividerColor: Colors.transparent,
         labelStyle: TextStyle(
           fontWeight: FontWeight.bold,
           fontSize: context.getRFontSize(14),
@@ -460,9 +461,37 @@ class _StaffCard extends StatelessWidget {
                       fontWeight: FontWeight.bold,
                       fontSize: context.getRFontSize(15),
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                   ),
+                  if (row.user.email != null && row.user.email!.isNotEmpty) ...[
+                    SizedBox(height: context.getRSize(4)),
+                    Text(
+                      row.user.email!,
+                      style: TextStyle(
+                        color: subtext,
+                        fontSize: context.getRFontSize(13),
+                      ),
+                    ),
+                  ],
+                  if (row.user.phone != null && row.user.phone!.isNotEmpty) ...[
+                    SizedBox(height: context.getRSize(2)),
+                    Text(
+                      row.user.phone!,
+                      style: TextStyle(
+                        color: subtext,
+                        fontSize: context.getRFontSize(13),
+                      ),
+                    ),
+                  ],
+                  if (row.user.address != null && row.user.address!.isNotEmpty) ...[
+                    SizedBox(height: context.getRSize(2)),
+                    Text(
+                      row.user.address!,
+                      style: TextStyle(
+                        color: subtext,
+                        fontSize: context.getRFontSize(13),
+                      ),
+                    ),
+                  ],
                   SizedBox(height: context.getRSize(6)),
                   Row(
                     children: [

@@ -69,14 +69,15 @@ void main() {
     // AuthService repoints db.businessIdResolver at value?.businessId (null),
     // so re-point it at the seeded business for the business-scoped DAO query.
     final client = Supabase.instance.client;
+    final nav = NavigationService();
     final auth = AuthService(
       db,
-      NavigationService(),
+      nav,
       SecureStorageService(),
       SupabaseSyncService(db, client),
       client,
     );
-    cart = CartService(auth);
+    cart = CartService(auth, nav);
     db.businessIdResolver = () => businessId;
   });
 

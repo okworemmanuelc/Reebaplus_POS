@@ -6,6 +6,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/app_drawer.dart';
@@ -44,7 +45,6 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
     ref.watch(
       currencySymbolProvider,
     ); // rebuild money displays when currency changes
-    final bgCol = Theme.of(context).scaffoldBackgroundColor;
     final surfaceCol = Theme.of(context).colorScheme.surface;
     final textCol = Theme.of(context).colorScheme.onSurface;
     final subtextCol =
@@ -57,17 +57,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
     final storeFilter = ref.watch(lockedStoreProvider).value;
 
     return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            bgCol,
-            Theme.of(context).colorScheme.primary.withValues(alpha: 0.05),
-            Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
-          ],
-        ),
-      ),
+      decoration: AppDecorations.glassyBackground(context),
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: _buildAppBar(context, surfaceCol, textCol, borderCol),

@@ -12,6 +12,7 @@ import 'package:reebaplus_pos/shared/widgets/menu_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
 import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -320,17 +321,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final theme = Theme.of(context);
 
     return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            theme.scaffoldBackgroundColor,
-            theme.colorScheme.primary.withValues(alpha: 0.05),
-            theme.colorScheme.primary.withValues(alpha: 0.12),
-          ],
-        ),
-      ),
+      decoration: AppDecorations.glassyBackground(context),
       child: SharedScaffold(
         activeRoute: 'dashboard',
         backgroundColor: Colors.transparent,

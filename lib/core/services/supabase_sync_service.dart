@@ -433,6 +433,10 @@ class SupabaseSyncService {
     'crate_ledger': 33,
     'manufacturer_crate_balances': 34,
     'store_crate_balances': 35,
+    // v53 (§3.13) — supplier crate ledger + balance cache push after their
+    // parents (suppliers=5, manufacturers=3) so the FK targets land first.
+    'supplier_crate_ledger': 36,
+    'supplier_crate_balances': 37,
     'system_config': 50,
   };
 
@@ -453,6 +457,12 @@ class SupabaseSyncService {
   /// plain-enqueued — so they don't need an entry.)
   static const Map<String, String> _naturalKeyPushConflictTargets = {
     'store_crate_balances': 'business_id,store_id,manufacturer_id',
+    // v53 (§3.13) — supplier crate balance cache is plain-enqueued by
+    // SupplierCrateLedgerDao (no domain RPC), so two devices can independently
+    // mint different ids for the same (business, supplier, manufacturer) before
+    // syncing. Key the cloud upsert on the natural key so they merge instead of
+    // tripping the cloud UNIQUE (2067).
+    'supplier_crate_balances': 'business_id,supplier_id,manufacturer_id',
   };
 
   /// Per-table whitelist of cloud-pushable columns. Any payload key NOT
@@ -2061,10 +2071,18 @@ class SupabaseSyncService {
     // pull/restore/realtime loops never ingest it and a supplier invoice/payment
     // recorded on one device never reaches the others.
     'supplier_ledger_entries',
+    // v53 (§3.13) — append-only supplier empty-crate ledger. References
+    // suppliers + manufacturers + stores + users (all pulled above), so FK-safe
+    // here. Without this entry a supplier crate receipt/return on one device
+    // never reaches the others.
+    'supplier_crate_ledger',
     'saved_carts',
     'pending_crate_returns',
     'manufacturer_crate_balances',
     'store_crate_balances',
+    // v53 (§3.13) — per-(supplier, manufacturer) crate balance cache. References
+    // suppliers + manufacturers (both pulled above), so FK-safe here.
+    'supplier_crate_balances',
     'crate_ledger',
     'system_config',
     'price_lists',
@@ -2102,6 +2120,10 @@ class SupabaseSyncService {
     'notifications',
     'payment_transactions',
     'crate_ledger',
+    // v53 (§3.13) — append-only supplier crate ledger. Leaf table (nothing
+    // FK-references it; the balance cache is app-derived, not an FK), so
+    // deferring a missing slice can't trip restore-time FK violations.
+    'supplier_crate_ledger',
   };
 
   /// SharedPreferences key (per-business) carrying the last set of tables
@@ -4460,6 +4482,59 @@ class SupabaseSyncService {
               lastUpdatedAt: Value(d.lastUpdatedAt),
             ),
           );
+          break;
+        case 'supplier_crate_ledger':
+          // v53 (§3.13) — append-only supplier empty-crate ledger; restore via
+          // the ledger path (catch-up insert + targeted void update), like
+          // supplier_ledger_entries. References suppliers(supplier_id) +
+          // manufacturers(manufacturer_id) + stores(store_id) +
+          // users(performed_by), so FK-resilient.
+          await _restoreLedgerTable(
+            rows,
+            tableName: 'supplier_crate_ledger',
+            fkSkipped: fkSkipped,
+            table: _db.supplierCrateLedger,
+            fromJson: SupplierCrateLedgerEntryData.fromJson,
+            voidedAtOf: (d) => d.voidedAt,
+            whereNotYetVoided: (t, d) =>
+                t.id.equals(d.id) & t.voidedAt.isNull(),
+            buildVoidCompanion: (d) => SupplierCrateLedgerCompanion(
+              voidedAt: Value(d.voidedAt),
+              voidedBy: Value(d.voidedBy),
+              voidReason: Value(d.voidReason),
+              lastUpdatedAt: Value(d.lastUpdatedAt),
+            ),
+          );
+          break;
+        case 'supplier_crate_balances':
+          for (var r in rows) {
+            // Natural-key cache (same rationale as store_crate_balances above):
+            // the client mints UuidV7 while a peer/cloud row may carry a
+            // different id, so reconcile on
+            // UNIQUE(business_id, supplier_id, manufacturer_id) to avoid a 2067
+            // collision when the two ids diverge. FK-resilient: references
+            // suppliers + manufacturers.
+            await _insertResilient('supplier_crate_balances', r, fkSkipped, () {
+              final parsed = SupplierCrateBalanceData.fromJson(r);
+              return _db
+                  .into(_db.supplierCrateBalances)
+                  .insert(
+                    parsed,
+                    onConflict: DoUpdate(
+                      (_) => SupplierCrateBalancesCompanion(
+                        id: Value(parsed.id),
+                        balance: Value(parsed.balance),
+                        lastUpdatedAt: Value(parsed.lastUpdatedAt),
+                      ),
+                      target: [
+                        _db.supplierCrateBalances.businessId,
+                        _db.supplierCrateBalances.supplierId,
+                        _db.supplierCrateBalances.manufacturerId,
+                      ],
+                    ),
+                  );
+            });
+          }
           break;
         case 'saved_carts':
           for (var r in rows) {

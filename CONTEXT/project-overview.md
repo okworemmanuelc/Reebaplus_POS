@@ -18,7 +18,7 @@ Reebaplus POS is an offline-first, mobile point-of-sale app for small and medium
 
 1. On a fresh install, the user opens the app and lands on the Welcome screen.
 2. The CEO taps "Create a new business" and completes sign-up step by step: business name, business type (all seven types are shown but only Beverage distributor is selectable — the other six are greyed out as coming soon), first store details (name, phone number, street address, local government / district, state / region, country; currency auto-fills from country), full name, email, 6-digit email OTP, create 6-digit PIN, confirm PIN.
-3. On completion, the app auto-creates the four default roles with default permissions, creates the first store, assigns the CEO to it, and lands the CEO on Home.
+3. On completion, the app auto-creates the four default roles with default permissions, creates the first store, assigns the CEO to it, and lands the CEO on Point of Sale.
 4. The CEO opens Staff Management, taps "Invite new staff", picks a role and store, and generates an 8-character invite code to share.
 5. A staff member installs the app, taps "Join with invite code", and enters the code, then their email (must match the invite), email OTP, their first name and last name, phone number, street address, local government / district, state / region, country, create PIN, and confirm PIN; they are signed in with the role and store carried from the invite.
 6. The CEO opens Inventory and adds products (name, per-tier prices, stock quantity, store) so the POS grid has stock to sell.
@@ -121,7 +121,7 @@ Reebaplus POS is an offline-first, mobile point-of-sale app for small and medium
 
 ## Success Criteria
 
-1. A CEO can create a business from a fresh install, reach Home, and see themselves as the first staff card in Staff Management.
+1. A CEO can create a business from a fresh install, reach Point of Sale, and see themselves as the first staff card in Staff Management.
 2. A CEO can generate an invite code, and a new staff member can join with it and sign in with the role and store carried from the invite.
 3. A staff member can select themselves in the "Who's working?" picker and unlock with their PIN, and five wrong PIN attempts force the Forgot-PIN (email OTP) flow.
 4. A cashier can add in-stock products to the cart, apply a discount up to their role cap (and be capped if they exceed it), and complete a Cash/Transfer sale that produces a printable and shareable receipt — fully offline.

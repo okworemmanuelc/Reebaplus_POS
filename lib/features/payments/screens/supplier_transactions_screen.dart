@@ -4,6 +4,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/date_period.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -67,18 +68,10 @@ class _SupplierTransactionsScreenState
         .where((e) => window.includes(e.activityDate))
         .toList();
 
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            _bg,
-            Theme.of(context).colorScheme.primary.withValues(alpha: 0.05),
-            Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
-          ],
-        ),
-      ),
+    return ColoredBox(
+      color: _bg,
+      child: Container(
+        decoration: AppDecorations.glassyBackground(context),
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
@@ -212,6 +205,7 @@ class _SupplierTransactionsScreenState
             ),
         ),
       ),
+    ),
     );
   }
 }

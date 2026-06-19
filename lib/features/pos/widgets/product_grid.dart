@@ -99,19 +99,19 @@ class ProductGrid extends StatelessWidget {
     }
 
     // Calculate aspect ratio dynamically to guarantee a minimum height and avoid overflow
-    final totalPadding = context.getRSize(32); // 16 padding on each side
-    final totalSpacing = context.getRSize(16) * (effectiveColumns - 1);
+    final totalPadding = context.getRSize(16); // 8 padding on each side
+    final totalSpacing = context.getRSize(8) * (effectiveColumns - 1);
     final cellWidth = (screenWidth - totalPadding - totalSpacing) / effectiveColumns;
-    // We need roughly 250px (scaled) of height for the image, name, price, stock
-    final aspect = cellWidth / context.getRSize(250);
+    // We need roughly 210px (scaled) of height for the image, name, price, stock
+    final aspect = cellWidth / context.getRSize(210);
 
     return GridView.builder(
-      padding: EdgeInsets.all(context.getRSize(16)),
+      padding: EdgeInsets.all(context.getRSize(8)),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: effectiveColumns,
         childAspectRatio: aspect,
-        crossAxisSpacing: context.getRSize(16),
-        mainAxisSpacing: context.getRSize(16),
+        crossAxisSpacing: context.getRSize(8),
+        mainAxisSpacing: context.getRSize(8),
       ),
       itemCount: products.length,
       itemBuilder: (context, index) {
@@ -424,16 +424,34 @@ class _ProductCardState extends ConsumerState<_ProductCard>
                           width: double.infinity,
                           height: double.infinity,
                           fit: BoxFit.cover,
-                          errorBuilder: (ctx, _, __) => Icon(
-                            FontAwesomeIcons.beerMugEmpty.data,
-                            size: context.getRSize(32),
-                            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.4),
+                          errorBuilder: (ctx, _, __) => Padding(
+                            padding: EdgeInsets.symmetric(horizontal: context.getRSize(8)),
+                            child: Text(
+                              product.name,
+                              textAlign: TextAlign.center,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: context.getRFontSize(16),
+                                fontWeight: FontWeight.bold,
+                                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.6),
+                              ),
+                            ),
                           ),
                         )
-                      : Icon(
-                          FontAwesomeIcons.beerMugEmpty.data,
-                          size: context.getRSize(32),
-                          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.4),
+                      : Padding(
+                          padding: EdgeInsets.symmetric(horizontal: context.getRSize(8)),
+                          child: Text(
+                            product.name,
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: context.getRFontSize(16),
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.6),
+                            ),
+                          ),
                         ),
                 ),
               ),
@@ -550,17 +568,35 @@ class _ProductCardState extends ConsumerState<_ProductCard>
                             width: double.infinity,
                             height: double.infinity,
                             fit: BoxFit.cover,
-                            errorBuilder: (ctx, _, __) => Icon(
-                              FontAwesomeIcons.beerMugEmpty.data,
-                              size: context.getRSize(24),
-                              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.4),
+                            errorBuilder: (ctx, _, __) => Padding(
+                              padding: EdgeInsets.symmetric(horizontal: context.getRSize(4)),
+                              child: Text(
+                                product.name,
+                                textAlign: TextAlign.center,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: context.getRFontSize(12),
+                                  fontWeight: FontWeight.bold,
+                                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.6),
+                                ),
+                              ),
                             ),
                           ),
                         )
-                      : Icon(
-                          FontAwesomeIcons.beerMugEmpty.data,
-                          size: context.getRSize(24),
-                          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.4),
+                      : Padding(
+                          padding: EdgeInsets.symmetric(horizontal: context.getRSize(4)),
+                          child: Text(
+                            product.name,
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: context.getRFontSize(12),
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.6),
+                            ),
+                          ),
                         ),
                 ),
                 if (isOutOfStock)

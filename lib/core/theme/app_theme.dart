@@ -14,7 +14,7 @@ class AppTheme {
   static const _blueSemantics = AppSemanticColors(
     success: successGreen,
     warning: Color(0xFFFFB020),
-    info: blueMain,
+    info: Color(0xFF3B82F6),
   );
   static const _amberSemantics = AppSemanticColors(
     success: successGreen,
@@ -142,9 +142,9 @@ class AppTheme {
     brightness: Brightness.dark,
     extensions: const [_blueSemantics],
     scaffoldBackgroundColor: dBg,
-    primaryColor: blueMain,
+    primaryColor: bluePrimaryDark,
     colorScheme: const ColorScheme.dark(
-      primary: blueMain,
+      primary: bluePrimaryDark,
       secondary: blueLight,
       surface: dSurface,
       onSurface: dText,
@@ -162,7 +162,7 @@ class AppTheme {
     ),
     bottomNavigationBarTheme: const BottomNavigationBarThemeData(
       backgroundColor: dSurface,
-      selectedItemColor: blueMain,
+      selectedItemColor: bluePrimaryDark,
       unselectedItemColor: Colors.grey,
       showSelectedLabels: true,
       showUnselectedLabels: true,
@@ -177,7 +177,7 @@ class AppTheme {
     dividerColor: dBorder,
     chipTheme: ChipThemeData(
       backgroundColor: dCard,
-      selectedColor: blueMain,
+      selectedColor: bluePrimaryDark,
       labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
       side: BorderSide.none,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
@@ -203,7 +203,7 @@ class AppTheme {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: blueMain, width: 2.0),
+        borderSide: const BorderSide(color: bluePrimaryDark, width: 2.0),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
@@ -217,7 +217,7 @@ class AppTheme {
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
-        backgroundColor: blueMain,
+        backgroundColor: bluePrimaryDark,
         foregroundColor: Colors.white,
         minimumSize: const Size.fromHeight(48),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

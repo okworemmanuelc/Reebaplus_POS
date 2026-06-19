@@ -60,14 +60,15 @@ void main() {
       );
     });
 
-    test('permissions table seeded with 35 default rows on fresh install',
+    test('permissions table seeded with 36 default rows on fresh install',
         () async {
       final perms = await db.permissionsDao.getAll();
-      expect(perms.length, equals(35));
+      expect(perms.length, equals(36));
 
       // Spot-check a few keys + categories.
       final keys = perms.map((p) => p.key).toSet();
       expect(keys.contains('sales.make'), isTrue);
+      expect(keys.contains('sales.set_custom_price'), isTrue); // §13.4
       expect(keys.contains('expenses.approve'), isTrue);
       expect(keys.contains('settings.manage'), isTrue);
       expect(keys.contains('settings.delete_business'), isTrue);

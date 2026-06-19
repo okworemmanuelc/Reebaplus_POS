@@ -940,6 +940,83 @@ class SupplierLedgerDaoManager {
       );
 }
 
+mixin _$SupplierCrateLedgerDaoMixin on DatabaseAccessor<AppDatabase> {
+  $BusinessesTable get businesses => attachedDatabase.businesses;
+  $CrateSizeGroupsTable get crateSizeGroups => attachedDatabase.crateSizeGroups;
+  $SuppliersTable get suppliers => attachedDatabase.suppliers;
+  $ManufacturersTable get manufacturers => attachedDatabase.manufacturers;
+  $StoresTable get stores => attachedDatabase.stores;
+  $UsersTable get users => attachedDatabase.users;
+  $SupplierCrateLedgerTable get supplierCrateLedger =>
+      attachedDatabase.supplierCrateLedger;
+  $SupplierCrateBalancesTable get supplierCrateBalances =>
+      attachedDatabase.supplierCrateBalances;
+  SupplierCrateLedgerDaoManager get managers =>
+      SupplierCrateLedgerDaoManager(this);
+}
+
+class SupplierCrateLedgerDaoManager {
+  final _$SupplierCrateLedgerDaoMixin _db;
+  SupplierCrateLedgerDaoManager(this._db);
+  $$BusinessesTableTableManager get businesses =>
+      $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$CrateSizeGroupsTableTableManager get crateSizeGroups =>
+      $$CrateSizeGroupsTableTableManager(
+        _db.attachedDatabase,
+        _db.crateSizeGroups,
+      );
+  $$SuppliersTableTableManager get suppliers =>
+      $$SuppliersTableTableManager(_db.attachedDatabase, _db.suppliers);
+  $$ManufacturersTableTableManager get manufacturers =>
+      $$ManufacturersTableTableManager(_db.attachedDatabase, _db.manufacturers);
+  $$StoresTableTableManager get stores =>
+      $$StoresTableTableManager(_db.attachedDatabase, _db.stores);
+  $$UsersTableTableManager get users =>
+      $$UsersTableTableManager(_db.attachedDatabase, _db.users);
+  $$SupplierCrateLedgerTableTableManager get supplierCrateLedger =>
+      $$SupplierCrateLedgerTableTableManager(
+        _db.attachedDatabase,
+        _db.supplierCrateLedger,
+      );
+  $$SupplierCrateBalancesTableTableManager get supplierCrateBalances =>
+      $$SupplierCrateBalancesTableTableManager(
+        _db.attachedDatabase,
+        _db.supplierCrateBalances,
+      );
+}
+
+mixin _$SupplierCrateBalancesDaoMixin on DatabaseAccessor<AppDatabase> {
+  $BusinessesTable get businesses => attachedDatabase.businesses;
+  $CrateSizeGroupsTable get crateSizeGroups => attachedDatabase.crateSizeGroups;
+  $SuppliersTable get suppliers => attachedDatabase.suppliers;
+  $ManufacturersTable get manufacturers => attachedDatabase.manufacturers;
+  $SupplierCrateBalancesTable get supplierCrateBalances =>
+      attachedDatabase.supplierCrateBalances;
+  SupplierCrateBalancesDaoManager get managers =>
+      SupplierCrateBalancesDaoManager(this);
+}
+
+class SupplierCrateBalancesDaoManager {
+  final _$SupplierCrateBalancesDaoMixin _db;
+  SupplierCrateBalancesDaoManager(this._db);
+  $$BusinessesTableTableManager get businesses =>
+      $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$CrateSizeGroupsTableTableManager get crateSizeGroups =>
+      $$CrateSizeGroupsTableTableManager(
+        _db.attachedDatabase,
+        _db.crateSizeGroups,
+      );
+  $$SuppliersTableTableManager get suppliers =>
+      $$SuppliersTableTableManager(_db.attachedDatabase, _db.suppliers);
+  $$ManufacturersTableTableManager get manufacturers =>
+      $$ManufacturersTableTableManager(_db.attachedDatabase, _db.manufacturers);
+  $$SupplierCrateBalancesTableTableManager get supplierCrateBalances =>
+      $$SupplierCrateBalancesTableTableManager(
+        _db.attachedDatabase,
+        _db.supplierCrateBalances,
+      );
+}
+
 mixin _$CrateSizeGroupsDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
   $CrateSizeGroupsTable get crateSizeGroups => attachedDatabase.crateSizeGroups;

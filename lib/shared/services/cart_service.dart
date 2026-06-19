@@ -3,48 +3,69 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
+import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 
 class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
   final AuthService _auth;
+  final NavigationService _nav;
   final ValueNotifier<Customer?> activeCustomer = ValueNotifier<Customer?>(
     null,
   );
 
-  // Per-user cart storage: userId → cart items
+  // Per-user, per-store cart storage: "userId|storeId" → cart items. The cart
+  // is gated on the active store selected in the side bar (§12.1, nav-drawer
+  // store picker): switching stores swaps to that store's own cart so lines
+  // priced/stocked for one store never leak into another. "All Stores" (locked
+  // store == null) is its own bucket (empty store segment).
   final Map<String, List<Map<String, dynamic>>> _userCarts = {};
-  // Per-user active customer: userId → customer
+  // Per-user, per-store active customer: "userId|storeId" → customer.
   final Map<String, Customer?> _userCustomers = {};
 
-  CartService(this._auth) : super([]) {
+  CartService(this._auth, this._nav) : super([]) {
     // Swap to the new user's cart whenever login/logout happens
     _auth.addListener(_onUserChanged);
+    // Swap to the active store's cart whenever the side-bar store changes.
+    _nav.lockedStoreId.addListener(_onStoreChanged);
   }
 
-  /// Track the previous user so we can clean up their cart on logout.
+  /// Track the previous user so we can clean up their carts on logout.
   String? _previousUid;
 
   void _onUserChanged() {
     final newUid = _uid;
 
     // If the previous user logged out (current user is null / anonymous),
-    // clean up their stored cart to prevent unbounded memory growth.
+    // clean up ALL of their stored per-store carts to prevent unbounded memory
+    // growth.
     if (_previousUid != null &&
         _previousUid!.isNotEmpty &&
         _auth.currentUser == null) {
-      _userCarts.remove(_previousUid);
-      _userCustomers.remove(_previousUid);
+      final prefix = '$_previousUid|';
+      _userCarts.removeWhere((key, _) => key.startsWith(prefix));
+      _userCustomers.removeWhere((key, _) => key.startsWith(prefix));
     }
     _previousUid = newUid;
 
-    value = List.from(_userCarts[newUid] ?? []);
-    activeCustomer.value = _userCustomers[newUid];
+    _loadActiveCart();
+  }
+
+  /// Swap the live cart/customer to the now-active store's bucket.
+  void _onStoreChanged() => _loadActiveCart();
+
+  /// Point [value]/[activeCustomer] at the cart for the current user+store key.
+  void _loadActiveCart() {
+    value = List.from(_userCarts[_cartKey] ?? []);
+    activeCustomer.value = _userCustomers[_cartKey];
   }
 
   /// The current user's ID. Empty string when nobody is logged in.
   String get _uid => _auth.currentUser?.id ?? '';
 
+  /// Storage key for the active cart: the user scoped to the side-bar store.
+  String get _cartKey => '$_uid|${_nav.lockedStoreId.value ?? ''}';
+
   void setActiveCustomer(Customer? customer) {
-    _userCustomers[_uid] = customer;
+    _userCustomers[_cartKey] = customer;
     activeCustomer.value = customer;
   }
 
@@ -64,7 +85,7 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
     final String name = product is ProductData ? product.name : product['name'];
     final String? id = product is ProductData ? product.id : null;
 
-    final current = List<Map<String, dynamic>>.from(_userCarts[_uid] ?? []);
+    final current = List<Map<String, dynamic>>.from(_userCarts[_cartKey] ?? []);
     final index = current.indexWhere(
       (item) => item['id'] == id && item['name'] == name,
     );
@@ -100,6 +121,18 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
             : product['subtitle'],
         'price': unitPriceKobo / 100.0,
         'unitPriceKobo': unitPriceKobo,
+        // Designated selling price (kobo) for the chosen tier — the immutable
+        // catalog reference. `unitPriceKobo`/`price` above are the EFFECTIVE
+        // charged price and may be overwritten by a custom price (§13.4);
+        // `catalogPriceKobo` is never mutated by a custom price so the line can
+        // revert and so staleness compares against the right number.
+        'catalogPriceKobo': unitPriceKobo,
+        // Per-line custom price (§13.4). null = no override (charge the catalog
+        // price); a positive kobo value = the unit price was set by hand by a
+        // user holding `sales.set_custom_price`. When set, it equals
+        // `unitPriceKobo`. Marks the line for the "Custom" badge and skips the
+        // checkout staleness check.
+        'customPriceKobo': null,
         // Tier the line was priced at (§12.2). Used by checkout staleness so a
         // wholesaler line is re-priced against the wholesaler column, not
         // silently reverted to retailer. Quick-Sale (Map) lines default to
@@ -149,7 +182,7 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
       });
     }
 
-    _userCarts[_uid] = current;
+    _userCarts[_cartKey] = current;
     value = List.from(current);
     return fullyAccepted;
   }
@@ -158,13 +191,13 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
   /// item's stored `maxStock`. Returns true if the requested [newQty] was
   /// applied as-is, false if it was clamped (or the item wasn't found).
   bool updateQty(String productName, double newQty) {
-    final current = List<Map<String, dynamic>>.from(_userCarts[_uid] ?? []);
+    final current = List<Map<String, dynamic>>.from(_userCarts[_cartKey] ?? []);
     final index = current.indexWhere((item) => item['name'] == productName);
     if (index == -1) return false;
 
     if (newQty <= 0) {
       current.removeAt(index);
-      _userCarts[_uid] = current;
+      _userCarts[_cartKey] = current;
       value = List.from(current);
       return true;
     }
@@ -181,7 +214,7 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
         current[index]['discountKobo'] = lineTotalKobo;
       }
     }
-    _userCarts[_uid] = current;
+    _userCarts[_cartKey] = current;
     value = List.from(current);
     return clamped >= newQty;
   }
@@ -202,7 +235,7 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
     required double enteredValue,
     required int discountKobo,
   }) {
-    final current = List<Map<String, dynamic>>.from(_userCarts[_uid] ?? []);
+    final current = List<Map<String, dynamic>>.from(_userCarts[_cartKey] ?? []);
     final index = current.indexWhere((item) => item['name'] == productName);
     if (index == -1) return;
     final lineTotalKobo = _lineTotalKobo(current[index]);
@@ -210,15 +243,50 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
     current[index]['discountKind'] = clamped == 0 ? null : kind;
     current[index]['discountValue'] = clamped == 0 ? 0.0 : enteredValue;
     current[index]['discountKobo'] = clamped;
-    _userCarts[_uid] = current;
+    _userCarts[_cartKey] = current;
+    value = List.from(current);
+  }
+
+  /// Sets (or clears) a per-line custom unit price (§13.4). Gated in the UI on
+  /// `sales.set_custom_price`. Passing a positive [customPriceKobo] overrides
+  /// the effective unit price (`unitPriceKobo`/`price`) for this line; passing
+  /// null or a non-positive value clears the override and reverts to the line's
+  /// designated catalog price (`catalogPriceKobo`). Any existing per-line
+  /// discount is re-clamped to the new line total so a lower price can never
+  /// produce a negative net.
+  void setCustomPrice(String productName, {required int? customPriceKobo}) {
+    final current = List<Map<String, dynamic>>.from(_userCarts[_cartKey] ?? []);
+    final index = current.indexWhere((item) => item['name'] == productName);
+    if (index == -1) return;
+    final catalogKobo =
+        (current[index]['catalogPriceKobo'] as int?) ??
+        (current[index]['unitPriceKobo'] as num).toInt();
+    if (customPriceKobo == null || customPriceKobo <= 0) {
+      current[index]['customPriceKobo'] = null;
+      current[index]['unitPriceKobo'] = catalogKobo;
+      current[index]['price'] = catalogKobo / 100.0;
+    } else {
+      current[index]['customPriceKobo'] = customPriceKobo;
+      current[index]['unitPriceKobo'] = customPriceKobo;
+      current[index]['price'] = customPriceKobo / 100.0;
+    }
+    // Re-clamp any existing per-line discount to the new line total (§13.2).
+    final existingDiscount = (current[index]['discountKobo'] as int?) ?? 0;
+    if (existingDiscount > 0) {
+      final lineTotalKobo = _lineTotalKobo(current[index]);
+      if (existingDiscount > lineTotalKobo) {
+        current[index]['discountKobo'] = lineTotalKobo;
+      }
+    }
+    _userCarts[_cartKey] = current;
     value = List.from(current);
   }
 
   void removeItem(String productName) {
     final current = List<Map<String, dynamic>>.from(
-      _userCarts[_uid] ?? [],
+      _userCarts[_cartKey] ?? [],
     ).where((item) => item['name'] != productName).toList();
-    _userCarts[_uid] = current;
+    _userCarts[_cartKey] = current;
     value = List.from(current);
   }
 
@@ -226,19 +294,19 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
   /// — backs the "Item removed. Undo" snackbar (§13.2). No-op if a line with
   /// the same id+name is already present.
   void restoreLine(Map<String, dynamic> item) {
-    final current = List<Map<String, dynamic>>.from(_userCarts[_uid] ?? []);
+    final current = List<Map<String, dynamic>>.from(_userCarts[_cartKey] ?? []);
     final exists = current.any(
       (i) => i['id'] == item['id'] && i['name'] == item['name'],
     );
     if (exists) return;
     current.add(Map<String, dynamic>.from(item));
-    _userCarts[_uid] = current;
+    _userCarts[_cartKey] = current;
     value = List.from(current);
   }
 
   void clear() {
-    _userCarts[_uid] = [];
-    _userCustomers[_uid] = null;
+    _userCarts[_cartKey] = [];
+    _userCustomers[_cartKey] = null;
     value = [];
     activeCustomer.value = null;
   }
@@ -259,18 +327,24 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
       final cart = _userCarts[uid]!;
       for (int i = 0; i < cart.length; i++) {
         if (cart[i]['id'] == productId) {
+          final isCustomPriced = cart[i]['customPriceKobo'] != null;
           cart[i] = Map<String, dynamic>.from(cart[i])
             ..['name'] = name
-            ..['price'] = price
             ..['emptyCrateValueKobo'] = emptyCrateValueKobo;
-          if (unitPriceKobo != null) cart[i]['unitPriceKobo'] = unitPriceKobo;
+          // A custom-priced line keeps its hand-set price; only refresh the
+          // catalog reference (§13.4). A normal line tracks the new price.
+          if (unitPriceKobo != null) cart[i]['catalogPriceKobo'] = unitPriceKobo;
+          if (!isCustomPriced) {
+            cart[i]['price'] = price;
+            if (unitPriceKobo != null) cart[i]['unitPriceKobo'] = unitPriceKobo;
+          }
           if (version != null) cart[i]['version'] = version;
           anyChanged = true;
         }
       }
     }
     if (anyChanged) {
-      value = List.from(_userCarts[_uid] ?? []);
+      value = List.from(_userCarts[_cartKey] ?? []);
     }
   }
 
@@ -279,28 +353,48 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
   void acceptStaleness(
     Map<String, ({int unitPriceKobo, int version})> updates,
   ) {
-    final cart = List<Map<String, dynamic>>.from(_userCarts[_uid] ?? []);
+    final cart = List<Map<String, dynamic>>.from(_userCarts[_cartKey] ?? []);
     bool anyChanged = false;
     for (int i = 0; i < cart.length; i++) {
       final id = cart[i]['id'] as String?;
       if (id == null) continue;
       final fresh = updates[id];
       if (fresh == null) continue;
+      // Custom-priced lines are excluded from the staleness check upstream, so
+      // `updates` never carries them; the catalog reference still tracks the
+      // fresh price for any later revert.
       cart[i] = Map<String, dynamic>.from(cart[i])
         ..['unitPriceKobo'] = fresh.unitPriceKobo
         ..['price'] = fresh.unitPriceKobo / 100.0
+        ..['catalogPriceKobo'] = fresh.unitPriceKobo
         ..['version'] = fresh.version;
       anyChanged = true;
     }
     if (anyChanged) {
-      _userCarts[_uid] = cart;
+      _userCarts[_cartKey] = cart;
       value = List.from(cart);
     }
   }
 
-  void loadCart(List<Map<String, dynamic>> items, Customer? customer) {
-    _userCustomers[_uid] = customer;
-    _userCarts[_uid] = List.from(items);
+  /// Restores a saved cart (§13.5). When [storeId] is provided (the store the
+  /// cart was saved under, §12.1) and differs from the active store, the
+  /// side-bar store is switched to it first so the cart lands in — and is shown
+  /// from — its origin store's bucket; stock and pricing are then coherent with
+  /// the recalled lines. A null [storeId] (legacy / "All Stores" cart) loads
+  /// into the currently active bucket.
+  void loadCart(
+    List<Map<String, dynamic>> items,
+    Customer? customer, {
+    String? storeId,
+  }) {
+    // Switch the active store first. This synchronously fires _onStoreChanged →
+    // _loadActiveCart (pointing at the target store's bucket); the writes below
+    // then overwrite that bucket with the recalled lines (last write wins).
+    if (storeId != null && storeId != _nav.lockedStoreId.value) {
+      _nav.setLockedStore(storeId);
+    }
+    _userCustomers[_cartKey] = customer;
+    _userCarts[_cartKey] = List.from(items);
     activeCustomer.value = customer;
     value = List.from(items);
   }

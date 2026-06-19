@@ -85,7 +85,7 @@ class _SuccessDashboardEntryScreenState
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 40),
                 child: Text(
-                  'Preparing your dashboard...',
+                  'Preparing your Point of Sale...',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 16,

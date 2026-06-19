@@ -548,7 +548,7 @@ class AuthService extends ValueNotifier<UserData?> {
       showPickerOnUnlock = false;
       // Side-effects first — navigationService fully ready before any rebuild
       _nav.applyUserStoreLock(user.storeId);
-      _nav.setIndex(0);
+      _nav.setIndex(1); // Default to POS screen for all roles
       saveDeviceUserId(user.id);
       if (user.email != null) saveLastLoggedInEmail(user.email!);
 

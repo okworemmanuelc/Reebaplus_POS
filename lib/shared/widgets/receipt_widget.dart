@@ -21,11 +21,6 @@ class ReceiptWidget extends StatelessWidget {
   /// "Add wallet info to receipt" checkbox at checkout. Off by default.
   final bool showWalletInfo;
 
-  /// §13.4 — the customer's empty-crate standing, shown under wallet info when
-  /// [showWalletInfo] is on: total crates the customer owes, and total crates
-  /// credited to them (owed back by the business). 0 = nothing to show.
-  final int cratesOwed;
-  final int cratesCredit;
   final DateTime? reprintDate;
   final DateTime? reshareDate;
   final String? riderName;
@@ -58,8 +53,6 @@ class ReceiptWidget extends StatelessWidget {
     this.cashReceived,
     this.walletBalance,
     this.showWalletInfo = false,
-    this.cratesOwed = 0,
-    this.cratesCredit = 0,
     this.reprintDate,
     this.reshareDate,
     this.riderName,
@@ -78,6 +71,8 @@ class ReceiptWidget extends StatelessWidget {
     const textCol = Color(0xFF111111);
     const sub = Color(0xFF555555);
     const divCol = Color(0xFFDDDDDD);
+    // Theme-independent like the rest of the palette: receipts are printed /
+    // captured for PDF where the ambient theme may not be the app's. Keep amber.
     const primary = Color(0xFFF5A623); // amberPrimary brand colour
 
     return Container(
@@ -298,6 +293,49 @@ class ReceiptWidget extends StatelessWidget {
             );
           }),
 
+          () {
+            final Map<String, double> empties = _computeEmpties();
+            if (empties.isEmpty) return const SizedBox.shrink();
+
+            final sortedEntries = empties.entries.toList()
+              ..sort((a, b) {
+                final nameA = manufacturerNames?[a.key] ?? 'Unknown';
+                final nameB = manufacturerNames?[b.key] ?? 'Unknown';
+                return nameA.compareTo(nameB);
+              });
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(height: context.getRSize(12)),
+                Container(height: 1, color: divCol),
+                SizedBox(height: context.getRSize(12)),
+                Text(
+                  'Empty Crates',
+                  style: TextStyle(
+                    fontSize: context.getRFontSize(13),
+                    fontWeight: FontWeight.bold,
+                    color: textCol,
+                  ),
+                ),
+                SizedBox(height: context.getRSize(4)),
+                ...sortedEntries.map((e) {
+                  final mfrName = manufacturerNames?[e.key] ?? 'Unknown';
+                  return Padding(
+                    padding: EdgeInsets.symmetric(vertical: context.getRSize(2)),
+                    child: Text(
+                      '$mfrName (${e.value.toStringAsFixed(0)} crates)',
+                      style: TextStyle(
+                        fontSize: context.getRFontSize(13),
+                        color: sub,
+                      ),
+                    ),
+                  );
+                }),
+              ],
+            );
+          }(),
+
           SizedBox(height: context.getRSize(12)),
           Container(height: 1, color: divCol),
           SizedBox(height: context.getRSize(12)),
@@ -305,84 +343,7 @@ class ReceiptWidget extends StatelessWidget {
           _infoRow(context, 'Subtotal', subtotal, sub),
           if (crateDeposit > 0) ...[
             SizedBox(height: context.getRSize(4)),
-            // Build per-manufacturer crate breakdown when names are available.
-            if (manufacturerNames != null && manufacturerNames!.isNotEmpty) ...[
-              () {
-                // Group crate cart items by manufacturerId
-                final Map<String, double> mfrQty = {};
-                for (final item in cart) {
-                  final mid = item['manufacturerId'];
-                  if (mid is String &&
-                      (item['crateSizeGroupId'] != null ||
-                          ((item['emptyCrateValueKobo'] ?? 0) as num) > 0)) {
-                    mfrQty[mid] =
-                        (mfrQty[mid] ?? 0) + (item['qty'] as num).toDouble();
-                  }
-                }
-                if (mfrQty.isEmpty) {
-                  return _infoRow(context, 'Crate Deposit', crateDeposit, sub);
-                }
-                final sortedEntries = mfrQty.entries.toList()
-                  ..sort((a, b) {
-                    final nameA = manufacturerNames![a.key] ?? '';
-                    final nameB = manufacturerNames![b.key] ?? '';
-                    return nameA.compareTo(nameB);
-                  });
-                return Column(
-                  children:
-                      sortedEntries.map((e) {
-                        final mfrName = manufacturerNames![e.key] ?? 'Unknown';
-                        return Padding(
-                          padding: EdgeInsets.symmetric(
-                            vertical: context.getRSize(2),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  '$mfrName (${e.value.toStringAsFixed(0)} crates)',
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: context.getRFontSize(12),
-                                    color: sub,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }).toList()..add(
-                        Padding(
-                          padding: EdgeInsets.symmetric(
-                            vertical: context.getRSize(2),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'Crate Deposit',
-                                style: TextStyle(
-                                  fontSize: context.getRFontSize(13),
-                                  color: sub,
-                                ),
-                              ),
-                              Text(
-                                formatCurrency(crateDeposit),
-                                style: TextStyle(
-                                  fontSize: context.getRFontSize(13),
-                                  fontWeight: FontWeight.w600,
-                                  color: sub,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                );
-              }(),
-            ] else
-              _infoRow(context, 'Crate Deposit', crateDeposit, sub),
+            _infoRow(context, 'Crate Deposit', crateDeposit, sub),
           ],
 
           SizedBox(height: context.getRSize(12)),
@@ -446,31 +407,6 @@ class ReceiptWidget extends StatelessWidget {
                 ),
               ),
             ),
-            // §13.4 — empty-crate standing is part of the customer's account.
-            if (cratesOwed > 0)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Empty Crates Owed: $cratesOwed',
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(13),
-                    fontWeight: FontWeight.w600,
-                    color: textCol,
-                  ),
-                ),
-              ),
-            if (cratesCredit > 0)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Empty Crates Credit: $cratesCredit',
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(13),
-                    fontWeight: FontWeight.w600,
-                    color: textCol,
-                  ),
-                ),
-              ),
           ],
 
           SizedBox(height: context.getRSize(24)),
@@ -543,5 +479,21 @@ class ReceiptWidget extends StatelessWidget {
     ];
     return '${dt.day} ${months[dt.month - 1]} ${dt.year}, '
         '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  }
+
+  Map<String, double> _computeEmpties() {
+    final Map<String, double> mfrQty = {};
+    for (final item in cart) {
+      final unit = (item['unit'] as String?)?.toLowerCase();
+      final trackEmpties = (item['trackEmpties'] as bool?) ?? false;
+
+      if (unit == 'bottle' && trackEmpties) {
+        final mid = item['manufacturerId'];
+        if (mid is String) {
+          mfrQty[mid] = (mfrQty[mid] ?? 0) + (item['qty'] as num).toDouble();
+        }
+      }
+    }
+    return mfrQty;
   }
 }

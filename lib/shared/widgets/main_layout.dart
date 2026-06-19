@@ -15,7 +15,7 @@ import 'package:reebaplus_pos/features/deliveries/screens/deliveries_screen.dart
 import 'package:reebaplus_pos/shared/widgets/activity_log_screen.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
-import 'package:reebaplus_pos/shared/models/order.dart';
+import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/widgets/tab_navigator.dart';
 
@@ -68,9 +68,11 @@ class _MainLayoutState extends ConsumerState<MainLayout>
     const ActivityLogScreen(), // 10
   ];
 
-  // Persistent pending-orders count — subscribed once, never recreated.
-  int _pendingOrderCount = 0;
-  StreamSubscription<List<Order>>? _pendingOrdersSub;
+  // Persistent pending-orders list — subscribed once, never recreated. Holds
+  // every store's pending orders; the badge filters to the active side-bar
+  // store at build time (§12.1) so the count tracks the selected store.
+  List<OrderData> _pendingOrders = const [];
+  StreamSubscription<List<OrderData>>? _pendingOrdersSub;
 
   late final AnimationController _tabSwitchController;
   late final Animation<double> _tabFadeAnimation;
@@ -89,9 +91,12 @@ class _MainLayoutState extends ConsumerState<MainLayout>
       (i) => _TabPopObserver(tabIndex: i, nav: _nav),
     );
 
-    // Only pre-load the landing tab
+    // Only pre-load the landing tab. Remaining tabs are warmed offstage one per
+    // frame after the first frame settles (see _warmNextTab), so the first tap
+    // on any tab is an instant show instead of a cold, janky synchronous build.
     _initializedTabs.add(_nav.currentIndex.value);
     _previousTabIndex = _nav.currentIndex.value;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _warmNextTab());
 
     _tabSwitchController = AnimationController(
       vsync: this,
@@ -106,10 +111,11 @@ class _MainLayoutState extends ConsumerState<MainLayout>
     _nav.currentIndex.addListener(_onTabIndexChanged);
 
     _pendingOrdersSub = ref
-        .read(orderServiceProvider)
+        .read(databaseProvider)
+        .ordersDao
         .watchPendingOrders()
         .listen((orders) {
-          if (mounted) setState(() => _pendingOrderCount = orders.length);
+          if (mounted) setState(() => _pendingOrders = orders);
         });
 
     // Consume the one-shot Add Product flag set by SuccessDashboardEntryScreen.
@@ -142,10 +148,34 @@ class _MainLayoutState extends ConsumerState<MainLayout>
     _tabSwitchController.forward(from: 0);
   }
 
+  // Progressively mount the not-yet-visited tabs offstage, one per frame, after
+  // the first frame has settled. Spreading the mounts across frames keeps cold
+  // start cheap (only the landing tab builds synchronously) while ensuring that
+  // by the time the user taps a tab its heavy first build (DB streams, lists) is
+  // already done — so the switch is an instant offstage→onstage flip with no
+  // synchronous-build jank competing with the fade.
+  void _warmNextTab() {
+    if (!mounted) return;
+    for (var i = 0; i < _tabWidgets.length; i++) {
+      if (!_initializedTabs.contains(i)) {
+        setState(() => _initializedTabs.add(i));
+        WidgetsBinding.instance.addPostFrameCallback((_) => _warmNextTab());
+        return;
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     final nav = ref.read(navigationProvider);
+
+    // §12.1: the Orders badge is scoped to the active side-bar store. A concrete
+    // store counts only its own pending orders; "All Stores" (null) counts all.
+    final activeStoreId = ref.watch(lockedStoreProvider).value;
+    final pendingOrderCount = activeStoreId == null
+        ? _pendingOrders.length
+        : _pendingOrders.where((o) => o.storeId == activeStoreId).length;
 
     // §12.1 confined-user default. A user who cannot view all stores must always
     // have a concrete active store so every view filters correctly and the
@@ -286,14 +316,14 @@ class _MainLayoutState extends ConsumerState<MainLayout>
                         ),
                       BottomNavigationBarItem(
                         icon: Badge(
-                          label: Text(_pendingOrderCount.toString()),
-                          isLabelVisible: _pendingOrderCount > 0,
+                          label: Text(pendingOrderCount.toString()),
+                          isLabelVisible: pendingOrderCount > 0,
                           backgroundColor: t.colorScheme.error,
                           child: const Icon(Icons.receipt_long_outlined),
                         ),
                         activeIcon: Badge(
-                          label: Text(_pendingOrderCount.toString()),
-                          isLabelVisible: _pendingOrderCount > 0,
+                          label: Text(pendingOrderCount.toString()),
+                          isLabelVisible: pendingOrderCount > 0,
                           backgroundColor: t.colorScheme.error,
                           child: Icon(
                             isNavTab

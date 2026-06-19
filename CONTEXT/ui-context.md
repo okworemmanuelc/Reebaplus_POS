@@ -234,6 +234,14 @@ The app is actively migrating to a modern, premium "Glassy" design language. Whe
 
 ---
 
+## Responsive Grid & Card Layouts
+
+To prevent **overflow errors** on varying screen sizes (especially inside `GridView` where items have a fixed aspect ratio), follow these rules:
+
+1. **Avoid `Expanded` for text blocks**: Never use `Expanded` or hardcoded flex proportions for areas containing text inside a constrained card. Text scaling (`getRFontSize`) and structural scaling (`getRSize`) may scale at slightly different rates, causing text to overflow a fixed percentage of a card.
+2. **Flexible visual areas**: Use `Expanded` on the visual or empty areas (e.g., images, colored headers, top backgrounds) so they fill the *remaining* space dynamically.
+3. **Intrinsic height for content**: Let text blocks define their own height. Wrap them in a standard `Padding` or `Container` (without an `Expanded` parent) so they naturally expand as needed, pushing back against the flexible visual area.
+
 ## Layout patterns
 
 ### `MainLayout` (`lib/shared/widgets/main_layout.dart`)

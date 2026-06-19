@@ -235,8 +235,6 @@ class ReconData {
     required this.refundsKobo,
     required this.bestStaff,
     required this.bestStaffKobo,
-    required this.topItem,
-    required this.topItemQty,
     required this.expensesKobo,
     required this.expensesCount,
     required this.damageUnits,
@@ -257,6 +255,12 @@ class ReconData {
     required this.showCrates,
     required this.crateUnits,
     required this.crateDepositKobo,
+    required this.supplierPayableKobo,
+    required this.inventoryOnHandKobo,
+    required this.uncostedInventoryItems,
+    required this.surplusCostKobo,
+    required this.topItems,
+    required this.manufacturerEmpties,
   });
 
   final int totalRevenueKobo;
@@ -268,8 +272,6 @@ class ReconData {
   final int refundsKobo;
   final String? bestStaff;
   final int bestStaffKobo;
-  final String? topItem;
-  final int topItemQty;
   final int expensesKobo;
   final int expensesCount;
   final int damageUnits;
@@ -290,9 +292,23 @@ class ReconData {
   final bool showCrates;
   final int crateUnits;
   final int crateDepositKobo;
+  final int supplierPayableKobo;
+  final int inventoryOnHandKobo;
+  final int uncostedInventoryItems;
+  final int surplusCostKobo;
+  final List<({String name, int qty})> topItems;
+  final List<({String manufacturerName, int count, int valueKobo})> manufacturerEmpties;
 
   int get grossProfitKobo => costedRevenueKobo - cogsKobo;
   int get netProfitKobo => grossProfitKobo - expensesKobo - damageCostKobo;
+  int get periodNetResultKobo => grossProfitKobo - expensesKobo - damageCostKobo - shortageCostKobo;
+  int get businessNetPositionKobo => inventoryOnHandKobo + totalOwedKobo + crateDepositKobo - supplierPayableKobo;
+
+  /// Gross margin as a 1-dp percentage string ("0.0" when there's no costed
+  /// revenue). Shared by the Statement card and the CSV export.
+  String get grossMarginPct => costedRevenueKobo > 0
+      ? (grossProfitKobo / costedRevenueKobo * 100).toStringAsFixed(1)
+      : '0.0';
 
   bool get isEmpty =>
       totalRevenueKobo == 0 &&
@@ -323,8 +339,15 @@ ReconData computeReconData(
   final ledger =
       ref.watch(allSupplierLedgerEntriesProvider).valueOrNull ?? const [];
   final counts = ref.watch(allStockCountsProvider).valueOrNull ?? const [];
+  // Inventory-on-hand must honour the active-store scope like every other
+  // figure here (§12.1): pass the locked store so a single-store view doesn't
+  // sum every store's stock (null = All Stores). The products list itself is
+  // unaffected — only the stock totals are store-filtered — so `productById`
+  // (used for damage/shortage/surplus cost lookups) stays complete.
+  final activeStoreId = ref.watch(lockedStoreProvider).value;
   final productsWS =
-      ref.watch(productsWithStockProvider(null)).valueOrNull ?? const [];
+      ref.watch(productsWithStockProvider(activeStoreId)).valueOrNull ??
+      const [];
   final balances =
       ref.watch(walletBalancesKoboProvider).valueOrNull ?? const {};
   final manufacturers =
@@ -375,6 +398,11 @@ ReconData computeReconData(
         costedRevenueKobo += lineRev;
         cogsKobo += i.item.quantity * i.item.buyingPriceKobo;
         skuSet.add(product.id);
+      }
+      // Rank top items by units sold across every identifiable product —
+      // including ones with no recorded buying price. Truly ad-hoc lines (no
+      // linked product) carry no SKU/name to rank, so they're omitted.
+      if (product != null) {
         final cur = byProduct[product.id];
         byProduct[product.id] = (
           name: product.name,
@@ -400,14 +428,22 @@ ReconData computeReconData(
           : (users[staffId]?.name ?? 'Staff');
     }
   });
-  String? topItem;
-  var topItemQty = 0;
-  byProduct.forEach((_, p) {
-    if (p.qty > topItemQty) {
-      topItemQty = p.qty;
-      topItem = p.name;
+  final topItemsList = byProduct.entries
+      .map((e) => (name: e.value.name, qty: e.value.qty))
+      .toList()
+    ..sort((a, b) => b.qty.compareTo(a.qty));
+  final topItems = topItemsList.take(3).toList();
+
+  // ── Inventory on hand at cost (point-in-time) ────────────────────────────
+  var inventoryOnHandKobo = 0;
+  var uncostedInventoryItems = 0;
+  for (final p in productsWS) {
+    if (p.product.buyingPriceKobo <= 0) {
+      uncostedInventoryItems += p.totalStock;
+    } else {
+      inventoryOnHandKobo += p.totalStock * p.product.buyingPriceKobo;
     }
-  });
+  }
 
   // ── Expenses (approved, in span, in scope) ───────────────────────────────
   var expensesKobo = 0;
@@ -450,6 +486,7 @@ ReconData computeReconData(
   var shortageUnits = 0;
   var surplusCount = 0;
   var surplusUnits = 0;
+  var surplusCostKobo = 0;
   var shortageCostKobo = 0;
   var shortageRetailKobo = 0;
   final shortages = <ReconShortLine>[];
@@ -464,9 +501,12 @@ ReconData computeReconData(
     for (final l
         in (jsonDecode(c.linesJson) as List).cast<Map<String, dynamic>>()) {
       final diff = (l['d'] as num).toInt();
+      final p = productById[l['p'] as String?];
+      if (diff > 0) {
+        surplusCostKobo += diff * (p?.buyingPriceKobo ?? 0);
+      }
       if (diff >= 0) continue;
       final units = -diff;
-      final p = productById[l['p'] as String?];
       shortageCostKobo += units * (p?.buyingPriceKobo ?? 0);
       shortageRetailKobo += units * (p?.retailerPriceKobo ?? 0);
       shortages.add(
@@ -483,12 +523,21 @@ ReconData computeReconData(
   // ── Supplier ledger flows (CEO only) ─────────────────────────────────────
   var goodsReceivedKobo = 0;
   var supplierPaidKobo = 0;
+  var supplierPayableKobo = 0;
   if (isCeo) {
     for (final l in ledger) {
       // Skip both halves of a voided pair (original carries voidedAt; the
       // compensating reversal is referenceType 'void') for clean gross flows.
       if (l.voidedAt != null || l.referenceType == 'void') continue;
-      if (!inSpan(l.activityDate) || !inScope(l.storeId)) continue;
+      if (!inScope(l.storeId)) continue;
+      
+      if (l.referenceType == 'invoice') {
+        supplierPayableKobo += l.amountKobo;
+      } else if (l.referenceType.startsWith('payment_')) {
+        supplierPayableKobo -= l.amountKobo;
+      }
+
+      if (!inSpan(l.activityDate)) continue;
       if (l.referenceType == 'invoice') {
         goodsReceivedKobo += l.amountKobo;
       } else if (l.referenceType.startsWith('payment_')) {
@@ -514,14 +563,24 @@ ReconData computeReconData(
   final showCrates = isCrateBusiness(bizType);
   var crateUnits = 0;
   var crateDepositKobo = 0;
+  final manufacturerEmpties = <({String manufacturerName, int count, int valueKobo})>[];
   if (showCrates) {
     final depositById = {
       for (final m in manufacturers) m.id: m.depositAmountKobo,
     };
+    final mfrNameById = {
+      for (final m in manufacturers) m.id: m.name,
+    };
     crateCounts.forEach((mfrId, count) {
       if (count > 0) {
         crateUnits += count;
-        crateDepositKobo += count * (depositById[mfrId] ?? 0);
+        final value = count * (depositById[mfrId] ?? 0);
+        crateDepositKobo += value;
+        manufacturerEmpties.add((
+          manufacturerName: mfrNameById[mfrId] ?? 'Unknown',
+          count: count,
+          valueKobo: value,
+        ));
       }
     });
   }
@@ -536,8 +595,6 @@ ReconData computeReconData(
     refundsKobo: refundsKobo,
     bestStaff: bestStaff,
     bestStaffKobo: bestStaffKobo,
-    topItem: topItem,
-    topItemQty: topItemQty,
     expensesKobo: expensesKobo,
     expensesCount: expensesCount,
     damageUnits: damageUnits,
@@ -558,5 +615,11 @@ ReconData computeReconData(
     showCrates: showCrates,
     crateUnits: crateUnits,
     crateDepositKobo: crateDepositKobo,
+    supplierPayableKobo: supplierPayableKobo,
+    inventoryOnHandKobo: inventoryOnHandKobo,
+    uncostedInventoryItems: uncostedInventoryItems,
+    surplusCostKobo: surplusCostKobo,
+    topItems: topItems,
+    manufacturerEmpties: manufacturerEmpties,
   );
 }

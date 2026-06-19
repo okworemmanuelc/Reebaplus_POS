@@ -172,6 +172,11 @@ class _CartScreenState extends ConsumerState<CartScreen>
                 customerId: drift.Value(_activeCustomer?.id),
                 cartData: cartJson,
                 cashierId: drift.Value(ref.read(authProvider).currentUser?.id),
+                // Tag the store this cart was saved under (§12.1) so recall
+                // restores it into the right store's bucket. null = "All Stores".
+                storeId: drift.Value(
+                  ref.read(navigationProvider).lockedStoreId.value,
+                ),
                 createdAt: drift.Value(DateTime.now()),
                 businessId:
                     ref.read(authProvider).currentUser?.businessId ?? '',
@@ -231,7 +236,10 @@ class _CartScreenState extends ConsumerState<CartScreen>
               ),
               Expanded(
                 child: StreamBuilder<List<SavedCartData>>(
-                  stream: db.ordersDao.watchSavedCarts(cashierId),
+                  stream: db.ordersDao.watchSavedCarts(
+                    cashierId,
+                    storeId: ref.read(navigationProvider).lockedStoreId.value,
+                  ),
                   builder: (context, snapshot) {
                     if (!snapshot.hasData) {
                       return const Center(child: CircularProgressIndicator());
@@ -291,7 +299,11 @@ class _CartScreenState extends ConsumerState<CartScreen>
                               if (cart.customerId != null) {
                                 customer = custSvc.getById(cart.customerId!);
                               }
-                              cartSvc.loadCart(items, customer);
+                              cartSvc.loadCart(
+                                items,
+                                customer,
+                                storeId: cart.storeId,
+                              );
                               Navigator.pop(modalCtx);
                               AppNotification.showSuccess(
                                 context,
@@ -700,6 +712,29 @@ class _CartScreenState extends ConsumerState<CartScreen>
           fontSize: context.getRFontSize(11),
           fontWeight: FontWeight.w800,
           color: _success,
+        ),
+      ),
+    );
+  }
+
+  /// Small "Custom price" badge on a cart line whose unit price was hand-set
+  /// (§13.4), so it's clear the line isn't at its designated selling price.
+  Widget _customPriceBadge() {
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: context.getRSize(8),
+        vertical: context.getRSize(2),
+      ),
+      decoration: BoxDecoration(
+        color: _primary.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        'Custom price',
+        style: TextStyle(
+          fontSize: context.getRFontSize(11),
+          fontWeight: FontWeight.w800,
+          color: _primary,
         ),
       ),
     );
@@ -1202,6 +1237,13 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                                 color: _subtext,
                                               ),
                                             ),
+                                            if (item['customPriceKobo'] !=
+                                                null) ...[
+                                              SizedBox(
+                                                height: context.getRSize(4),
+                                              ),
+                                              _customPriceBadge(),
+                                            ],
                                             if (((item['discountKobo']
                                                         as int?) ??
                                                     0) >

@@ -217,6 +217,21 @@ class _ReceiveDeliverySheetState extends ConsumerState<ReceiveDeliverySheet> {
             qty,
             storeId: _selectedStore?.id,
           );
+
+          // §3.13 — the supplier-side mirror of crate-issue-at-sale: receiving
+          // full crates from a supplier means we now owe them that many empties.
+          // Track the receipt against the supplier so the Supplier Details →
+          // Empty Crates tab shows what we owe and the refundable deposit value.
+          final staffId = ref.read(authProvider).currentUser?.id;
+          if (staffId != null && staffId.isNotEmpty) {
+            await db.supplierCrateLedgerDao.recordCrateReceiptFromSupplier(
+              supplierId: l.selectedSupplier!.id,
+              manufacturerId: l.selectedProduct!.manufacturerId!,
+              quantity: qty,
+              performedBy: staffId,
+              storeId: _selectedStore?.id,
+            );
+          }
         }
 
         deliveryItems.add(

@@ -28,6 +28,7 @@ import 'package:reebaplus_pos/shared/services/notification_service.dart';
 import 'package:reebaplus_pos/shared/services/crate_return_approval_service.dart';
 import 'package:reebaplus_pos/shared/services/order_service.dart';
 import 'package:reebaplus_pos/shared/services/supplier_account_service.dart';
+import 'package:reebaplus_pos/shared/services/supplier_crate_service.dart';
 import 'package:reebaplus_pos/shared/services/printer_service.dart';
 import 'package:reebaplus_pos/shared/services/reorder_alert_service.dart';
 import 'package:reebaplus_pos/core/diagnostics/sync_diagnostic.dart';
@@ -141,7 +142,7 @@ final themeProvider = ChangeNotifierProvider<ThemeController>(
 
 // ── Cart ────────────────────────────────────────────────────────────────────
 final cartProvider = ChangeNotifierProvider<CartService>((ref) {
-  return CartService(ref.read(authProvider));
+  return CartService(ref.read(authProvider), ref.read(navigationProvider));
 });
 final activeCustomerProvider = ChangeNotifierProvider<ValueNotifier<Customer?>>(
   (ref) {
@@ -267,6 +268,52 @@ final supplierAllHistoryProvider =
           .read(databaseProvider)
           .supplierLedgerDao
           .watchAllHistory(storeId: storeId);
+    });
+
+// ── Supplier empty-crate tracking (§3.13) ────────────────────────────────────
+/// Records crate receipts/returns against a supplier (with deposits).
+final supplierCrateServiceProvider = Provider<SupplierCrateService>((ref) {
+  return SupplierCrateService(ref.read(databaseProvider));
+});
+
+/// One supplier's per-manufacturer crate balances, live. A positive balance =
+/// WE owe the supplier that many empties; negative = a crate credit.
+/// Business-wide (crate debt is between the store and the supplier, not a store).
+final supplierCrateBalancesProvider = StreamProvider.autoDispose
+    .family<List<SupplierCrateBalanceWithManufacturer>, String>((ref, id) {
+      return ref
+          .read(databaseProvider)
+          .supplierCrateBalancesDao
+          .watchBySupplier(id);
+    });
+
+/// One supplier's net refundable deposit still held by them (kobo), live.
+final supplierCrateDepositHeldProvider = StreamProvider.autoDispose
+    .family<int, String>((ref, id) {
+      return ref
+          .read(databaseProvider)
+          .supplierCrateLedgerDao
+          .watchDepositHeldKobo(id);
+    });
+
+/// One supplier's cumulative crates received from / returned (sent back) to
+/// them — running totals, not the net balance.
+final supplierCrateMovementTotalsProvider = StreamProvider.autoDispose
+    .family<({int received, int returned}), String>((ref, id) {
+      return ref
+          .read(databaseProvider)
+          .supplierCrateLedgerDao
+          .watchMovementTotals(id);
+    });
+
+/// One supplier's empty-crate movement history (receipts + returns), newest
+/// first.
+final supplierCrateHistoryProvider = StreamProvider.autoDispose
+    .family<List<SupplierCrateLedgerEntryData>, String>((ref, id) {
+      return ref
+          .read(databaseProvider)
+          .supplierCrateLedgerDao
+          .watchHistory(id);
     });
 
 // ── Delivery ────────────────────────────────────────────────────────────────
