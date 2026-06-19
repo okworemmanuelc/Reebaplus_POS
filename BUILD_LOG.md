@@ -2,6 +2,28 @@
 
 ---
 
+## 2026-06-20 — Receive Stock Flow (Phase 1)
+
+**Goal:** Build a POS-style "Receive Stock" flow for restocking inventory from suppliers.
+
+**What was built:**
+- **Entry Point & Grid:** Created `ReceiveProductGrid` reachable from the Inventory tab's split FAB (gated on `products.add`). Grid supports category filtering, search, and "tap to add".
+- **Product Editing:** Long-pressing a grid tile opens `UpdateProductSheet` prefilled for editing (buying-price gated by `products.edit_buying_price`). Pinned "+" tile opens `AddProductScreen` for new products.
+- **Receive Cart:** Built `ReceiveCartScreen` (reading from `receiveCartProvider`). Shows Invoice Total (buying × qty), allows inline qty edits or swipe-to-remove. Blocked empty checkouts and added explicit "Clear Cart" dialog. No customer or discount fields.
+- **Checkout & Empties:** Built `ReceiveCheckoutScreen`. Selects a supplier, collects optional "Reference Note". Discovers products with `trackEmpties` and collects "Empty crates returned now".
+- **Atomic Save:** Confirming checkout runs an atomic transaction that:
+  1. Records the invoice total via `SupplierAccountService.recordInvoice`.
+  2. Adjusts inventory stock (`db.inventoryDao.adjustStock`).
+  3. Increments owed full crates via `db.crateLedgerDao.recordCrateReceiveFromManufacturer`.
+  4. Reduces owed empty crates via `db.crateLedgerDao.recordCrateReturnByManufacturer`.
+
+**Verification:**
+- Fixed a compilation error involving `syncDao.enqueue` arity.
+- `flutter analyze lib` clean on all touched files.
+- `flutter test` fully passing.
+
+---
+
 ## 2026-06-18 — Sync Issues: collapse `sessions:upsert` churn (reuse session id per device+user)
 
 **Investigation.** A device's Sync Issues screen showed a pile of pending

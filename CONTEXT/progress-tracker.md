@@ -23,6 +23,12 @@ phone + LGA fields), and verification of the permission gating screen rendering.
 
 ## Completed
 
+### Receive Stock Flow (2026-06-20)
+- Implemented the POS-style "Receive Stock" flow where users can add items via a grid, review them in a receive cart (Invoice Total computed from buying price × qty), and checkout.
+- Added empty crate tracking support during supplier checkout for products where `trackEmpties == true`.
+- Ensured atomic storage transaction covering ledger updates, inventory addition, and crate movement records (`recordCrateReceiveFromManufacturer` and `recordCrateReturnByManufacturer`).
+- Fixed compilation error regarding `db.syncDao.enqueue` and verified that 100% of the project-wide tests pass successfully.
+
 ### Sync Issues — collapse `sessions:upsert` churn (2026-06-18)
 - Diagnosed a Sync Issues queue full of pending `sessions:upsert` / a couple
   `user_businesses:upsert` rows (attempts → 15). Errors were network-rooted:

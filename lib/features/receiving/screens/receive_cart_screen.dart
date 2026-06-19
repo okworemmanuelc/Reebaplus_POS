@@ -32,9 +32,29 @@ class ReceiveCartScreen extends ConsumerWidget {
         actions: [
           if (cart.isNotEmpty)
             TextButton.icon(
-              onPressed: () {
-                notifier.clear();
-                Navigator.pop(context);
+              onPressed: () async {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Clear Cart'),
+                    content: const Text('Are you sure you want to remove all items from the cart?'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: const Text('Cancel'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: const Text('Clear', style: TextStyle(color: Colors.red)),
+                      ),
+                    ],
+                  ),
+                );
+                
+                if (confirm == true && context.mounted) {
+                  notifier.clear();
+                  Navigator.pop(context);
+                }
               },
               icon: const Icon(Icons.delete_sweep, color: Colors.redAccent, size: 20),
               label: const Text('Clear', style: TextStyle(color: Colors.redAccent)),
