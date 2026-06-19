@@ -6890,9 +6890,8 @@ class CrateLedgerDao extends DatabaseAccessor<AppDatabase>
           'p_movement_type': 'received',
         };
         await db.syncDao.enqueue(
-          'rpc',
-          'record_crate_movement_v2',
-          payload,
+          'domain:pos_record_crate_return',
+          jsonEncode(payload),
         );
       } else {
         await db.syncDao.enqueueUpsert('crate_ledger', ledgerComp);
