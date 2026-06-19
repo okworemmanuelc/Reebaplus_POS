@@ -6828,6 +6828,78 @@ class CrateLedgerDao extends DatabaseAccessor<AppDatabase>
     with _$CrateLedgerDaoMixin, BusinessScopedDao<AppDatabase> {
   CrateLedgerDao(super.db);
 
+  Future<void> recordCrateReceiveFromManufacturer({
+    required String manufacturerId,
+    required int quantity,
+    required String performedBy,
+    String? storeId,
+  }) async {
+    final delta = quantity; // receiving full crates increases our owed balance
+
+    final flagValue = await db.systemConfigDao.get(
+      'feature.domain_rpcs_v2.record_crate_return',
+    );
+    final useDomainRpc = flagValue == 'true' || flagValue == '"true"';
+
+    await transaction(() async {
+      final ledgerId = UuidV7.generate();
+      final ledgerComp = CrateLedgerCompanion.insert(
+        id: Value(ledgerId),
+        businessId: requireBusinessId(),
+        manufacturerId: Value(manufacturerId),
+        storeId: Value(storeId),
+        quantityDelta: delta,
+        movementType: 'received',
+        performedBy: Value(performedBy),
+        lastUpdatedAt: Value(DateTime.now()),
+      );
+      await into(crateLedger).insert(ledgerComp);
+
+      await customInsert(
+        'INSERT INTO manufacturer_crate_balances (id, business_id, manufacturer_id, balance) '
+        'VALUES (?, ?, ?, ?) '
+        'ON CONFLICT(business_id, manufacturer_id) DO UPDATE SET '
+        'balance = balance + excluded.balance, '
+        'last_updated_at = CAST(strftime(\'%s\', CURRENT_TIMESTAMP) AS INTEGER)',
+        variables: [
+          Variable(UuidV7.generate()),
+          Variable(requireBusinessId()),
+          Variable(manufacturerId),
+          Variable(delta),
+        ],
+        updates: {manufacturerCrateBalances},
+      );
+
+      if (storeId != null) {
+        await db.storeCrateBalancesDao.applyDelta(
+          storeId: storeId,
+          manufacturerId: manufacturerId,
+          delta: delta,
+        );
+      }
+
+      if (useDomainRpc) {
+        final payload = <String, dynamic>{
+          'p_business_id': requireBusinessId(),
+          'p_actor_id': performedBy,
+          'p_ledger_id': ledgerId,
+          'p_owner_kind': 'manufacturer',
+          'p_owner_id': manufacturerId,
+          'p_manufacturer_id': manufacturerId,
+          'p_quantity_delta': delta,
+          'p_movement_type': 'received',
+        };
+        await db.syncDao.enqueue(
+          'rpc',
+          'record_crate_movement_v2',
+          payload,
+        );
+      } else {
+        await db.syncDao.enqueueUpsert('crate_ledger', ledgerComp);
+      }
+    });
+  }
+
   Future<void> recordCrateReturnByManufacturer({
     required String manufacturerId,
     required int quantity,

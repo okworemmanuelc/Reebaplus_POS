@@ -30,7 +30,7 @@ import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 ///  - Optional Expiry Date (all business types).
 ///  - Colour selector removed (products keep a default `colorHex`).
 class AddProductScreen extends ConsumerStatefulWidget {
-  final VoidCallback? onProductAdded;
+  final void Function(ProductData)? onProductAdded;
   const AddProductScreen({super.key, this.onProductAdded});
 
   @override
@@ -539,7 +539,8 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
               productId: productId,
             );
         if (mounted) Navigator.pop(context);
-        widget.onProductAdded?.call();
+        final updatedProduct = await (db.select(db.products)..where((t) => t.id.equals(productId))).getSingle();
+        widget.onProductAdded?.call(updatedProduct);
       } catch (e, st) {
         CrashReporter.record(e, st, context: 'inventory.add_product');
         debugPrint('AddProductScreen._save (existing) error: $e');
@@ -698,7 +699,8 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
           );
 
       if (mounted) Navigator.pop(context);
-      widget.onProductAdded?.call();
+      final newProduct = await (db.select(db.products)..where((t) => t.id.equals(productId))).getSingle();
+      widget.onProductAdded?.call(newProduct);
     } catch (e, st) {
       CrashReporter.record(e, st, context: 'inventory.add_product');
       debugPrint('AddProductScreen._save error: $e');

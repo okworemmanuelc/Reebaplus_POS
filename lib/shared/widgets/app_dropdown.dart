@@ -51,13 +51,18 @@ class _AppDropdownState<T> extends FormFieldState<T> {
   void didUpdateWidget(AppDropdown<T> oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.currentValue != oldWidget.currentValue && widget.currentValue != value) {
-      didChange(widget.currentValue);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) didChange(widget.currentValue);
+      });
     }
   }
 
   @override
   void dispose() {
-    _closeDropdown();
+    if (_overlayEntry != null) {
+      _overlayEntry!.remove();
+      _overlayEntry = null;
+    }
     super.dispose();
   }
 

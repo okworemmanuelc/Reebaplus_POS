@@ -25,7 +25,7 @@ class UpdateProductSheet extends ConsumerStatefulWidget {
   final ProductData product;
   final int totalStock;
   final String? currentStoreId;
-  final VoidCallback? onProductUpdated;
+  final void Function(ProductData)? onProductUpdated;
 
   const UpdateProductSheet({
     super.key,
@@ -515,7 +515,8 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
       if (mounted) {
         AppNotification.showSuccess(context, '$name updated successfully');
         Navigator.pop(context);
-        widget.onProductUpdated?.call();
+        final updatedProduct = await (db.select(db.products)..where((t) => t.id.equals(widget.product.id))).getSingle();
+        widget.onProductUpdated?.call(updatedProduct);
       }
     } catch (e, st) {
       CrashReporter.record(e, st, context: 'inventory.update_product');

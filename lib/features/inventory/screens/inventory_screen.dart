@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:reebaplus_pos/core/widgets/app_fab.dart';
+
 import 'package:reebaplus_pos/core/data/business_types.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -37,6 +37,8 @@ import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 import 'package:reebaplus_pos/shared/utils/product_icon_helper.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/expandable_fab.dart';
+import 'package:reebaplus_pos/features/receiving/screens/receive_stock_screen.dart';
 
 class InventoryScreen extends ConsumerStatefulWidget {
   const InventoryScreen({super.key});
@@ -329,13 +331,14 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       backgroundColor: _bg,
       appBar: _buildAppBar(context),
       floatingActionButton: (onProductsTab && canAddProduct)
-          ? AppFAB(
+          ? ExpandableFab(
               // Stock is a bottom-nav tab root — the visible bottom bar already
               // lifts the FAB above the system nav; don't add the inset.
               reserveBottomInset: false,
-              onPressed: _showAddProductSheet,
-              icon: FontAwesomeIcons.plus.data,
-              label: 'Add Product',
+              onAddNewProduct: _showAddProductSheet,
+              onReceiveStock: () {
+                Navigator.of(context).push(slideDownRoute(const ReceiveStockScreen()));
+              },
             )
           : null,
       body: SafeArea(
@@ -1046,7 +1049,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                 builder: (ctx) => UpdateProductSheet(
                   product: product,
                   totalStock: currentStock,
-                  onProductUpdated: () => setState(() {}),
+                  onProductUpdated: (_) => setState(() {}),
                 ),
               );
             }
@@ -2174,7 +2177,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   void _showAddProductSheet() {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => AddProductScreen(onProductAdded: () => setState(() {})),
+        builder: (_) => AddProductScreen(onProductAdded: (_) => setState(() {})),
       ),
     );
   }

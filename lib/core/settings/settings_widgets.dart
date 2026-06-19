@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+
 import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
 
 /// Shared building blocks for the CEO Settings menu (§10.1) and its sub-pages.

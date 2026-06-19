@@ -5,7 +5,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/role_permissions_detail_screen.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
-import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/utils/role_display.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
