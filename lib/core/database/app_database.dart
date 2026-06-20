@@ -242,6 +242,76 @@ class SupplierLedgerEntries extends Table {
   ];
 }
 
+/// Append-only ledger of empty-crate movements between the store and a SUPPLIER
+/// (§3.13). The supplier-side mirror of the customer's [CrateLedger]: a customer
+/// owes US empties (tracked in [CustomerCrateBalances]); here WE owe the SUPPLIER
+/// empties for the full crates they delivered. `quantity_delta` is +N on a
+/// `received` row (full crates arrived → we now owe N empties) and −N on a
+/// `returned` row (empties handed back). `deposit_paid_kobo` is the refundable
+/// deposit money that moved on that row (paid out on a receipt, refunded back to
+/// us on a return). Never edited or hard-deleted — corrections are new rows.
+@DataClassName('SupplierCrateLedgerEntryData')
+class SupplierCrateLedger extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get supplierId => text().references(Suppliers, #id)();
+  TextColumn get manufacturerId => text().references(Manufacturers, #id)();
+  // The store the movement is attributed to (active-store picker, §21.11).
+  // Nullable: onboarding-era writes carry none → shown only in "All Stores".
+  TextColumn get storeId => text().nullable().references(Stores, #id)();
+  IntColumn get quantityDelta => integer()();
+  // 'received' (+) | 'returned' (−) | 'adjusted' (manual correction).
+  TextColumn get movementType => text().withLength(min: 1, max: 32)();
+  // Refundable deposit money that moved on this row (kobo). Always >= 0; the
+  // sign of the cash flow is implied by movementType (out on received, back on
+  // returned). Net deposit still held by the supplier = SUM over received −
+  // SUM over returned.
+  IntColumn get depositPaidKobo => integer().withDefault(const Constant(0))();
+  TextColumn get note => text().nullable()();
+  TextColumn get performedBy => text().nullable().references(Users, #id)();
+  DateTimeColumn get voidedAt => dateTime().nullable()();
+  TextColumn get voidedBy => text().nullable().references(Users, #id)();
+  TextColumn get voidReason => text().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => [
+    "CHECK (movement_type IN ('received','returned','adjusted'))",
+    'CHECK (deposit_paid_kobo >= 0)',
+  ];
+}
+
+/// Per-(supplier, manufacturer) empty-crate balance cache (§3.13) — the
+/// supplier-side mirror of [CustomerCrateBalances]. Source of truth is
+/// [SupplierCrateLedger]: balance = SUM(quantity_delta). A positive balance =
+/// WE owe the supplier that many empties; negative = the supplier owes us (we
+/// returned more than we received — a crate credit). Registered in
+/// kSyncCacheTables; rehydratable from the ledger.
+@DataClassName('SupplierCrateBalanceData')
+class SupplierCrateBalances extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get supplierId => text().references(Suppliers, #id)();
+  TextColumn get manufacturerId => text().references(Manufacturers, #id)();
+  IntColumn get balance => integer().withDefault(const Constant(0))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => [
+    'UNIQUE (business_id, supplier_id, manufacturer_id)',
+  ];
+}
+
 /// The unit types a product can be measured / sold in — the single source of
 /// truth for the Add / Edit Product dropdowns AND the `products.unit` CHECK
 /// constraint on the [Products] table below. Kept in lock-step so the UI can
@@ -1044,6 +1114,12 @@ class SavedCarts extends Table {
   TextColumn get customerId => text().nullable().references(Customers, #id)();
   TextColumn get cartData => text()();
   TextColumn get cashierId => text().nullable()();
+  // Store the cart was saved under (§12.1, side-bar store picker). Nullable: a
+  // null means the cart was saved in "All Stores" mode (or is a pre-v55 legacy
+  // row). On recall the cart is restored into its origin store's bucket so a
+  // store-A cart never leaks into store B. Recall is also filtered by the active
+  // store so each store sees only its own saved carts.
+  TextColumn get storeId => text().nullable().references(Stores, #id)();
   DateTimeColumn get expiresAt => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
@@ -1572,6 +1648,8 @@ class MigrationEvents extends Table {
     Categories,
     Suppliers,
     SupplierLedgerEntries,
+    SupplierCrateLedger,
+    SupplierCrateBalances,
     Products,
     PriceLists,
     Customers,
@@ -1641,6 +1719,8 @@ class MigrationEvents extends Table {
     SessionsDao,
     WalletTransactionsDao,
     SupplierLedgerDao,
+    SupplierCrateLedgerDao,
+    SupplierCrateBalancesDao,
     StockCountsDao,
     CustomerWalletsDao,
     CrateSizeGroupsDao,
@@ -1695,7 +1775,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 52;
+  int get schemaVersion => 55;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3587,6 +3667,105 @@ class AppDatabase extends _$AppDatabase {
           /* already present (idempotency guard) */
         }
       }
+      if (from < 53) {
+        // v53 (§3.13 supplier empty-crate tracking): two new tables — the
+        // supplier-side mirror of the customer crate ledger + balance cache.
+        // Mirrors supabase/migrations/0117_supplier_crate_tracking.sql.
+        //
+        // 1. `supplier_crate_ledger` — a new synced, append-only ledger table
+        //    (same new-synced-table shape as the v46 error_logs block, plus the
+        //    append-only ledger triggers emitted from the single `_ledgerTables`
+        //    source so a fresh install (onCreate) and an upgrade end up
+        //    identical). Idempotency guard (like v44/v45/v46) for a DB stepped
+        //    back to < 53 by the revert-then-re-upgrade tests.
+        final sclExists = await customSelect(
+          "SELECT 1 FROM sqlite_master WHERE type='table' "
+          "AND name='supplier_crate_ledger'",
+        ).get();
+        if (sclExists.isEmpty) {
+          await m.createTable(supplierCrateLedger);
+          await customStatement(
+            'CREATE INDEX idx_supplier_crate_ledger_business_lua '
+            'ON supplier_crate_ledger (business_id, last_updated_at)',
+          );
+          await customStatement(
+            'CREATE INDEX idx_supplier_crate_ledger_owner '
+            'ON supplier_crate_ledger (business_id, supplier_id, manufacturer_id, created_at)',
+          );
+          await customStatement(
+            'CREATE TRIGGER bump_supplier_crate_ledger_last_updated_at '
+            'AFTER UPDATE ON supplier_crate_ledger '
+            'FOR EACH ROW '
+            'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+            'BEGIN '
+            "UPDATE supplier_crate_ledger SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+            'END',
+          );
+          for (final stmt in _ledgerTriggerStatements(
+            _ledgerTables.firstWhere((l) => l.table == 'supplier_crate_ledger'),
+          )) {
+            await customStatement(stmt);
+          }
+        }
+
+        // 2. `supplier_crate_balances` — per-(supplier, manufacturer) balance
+        //    cache (mirrors customer_crate_balances). Registered in
+        //    kSyncCacheTables; source of truth is supplier_crate_ledger. The
+        //    DAO stamps last_updated_at on every upsert, but the bump trigger
+        //    matches the store_crate_balances shape so onCreate == onUpgrade.
+        final scbExists = await customSelect(
+          "SELECT 1 FROM sqlite_master WHERE type='table' "
+          "AND name='supplier_crate_balances'",
+        ).get();
+        if (scbExists.isEmpty) {
+          await m.createTable(supplierCrateBalances);
+          await customStatement(
+            'CREATE INDEX idx_supplier_crate_balances_business_lua '
+            'ON supplier_crate_balances (business_id, last_updated_at)',
+          );
+          await customStatement(
+            'CREATE TRIGGER bump_supplier_crate_balances_last_updated_at '
+            'AFTER UPDATE ON supplier_crate_balances '
+            'FOR EACH ROW '
+            'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+            'BEGIN '
+            "UPDATE supplier_crate_balances SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+            'END',
+          );
+        }
+      }
+      if (from < 54) {
+        // v54: add the sales.set_custom_price permission — gates setting a custom
+        // unit price on a cart line (a price other than the product's designated
+        // selling price). CEO-only by default; the CEO can grant it to other
+        // roles via CEO Settings → Roles & Permissions (it appears as a normal
+        // toggle — it is NOT in kHiddenPermissionKeys). The CEO grant arrives
+        // from the cloud via pull (CEO backfill in
+        // supabase/migrations/0118_add_sales_custom_price_permission.sql).
+        // Idempotent — key is the PK.
+        await customStatement(
+          "INSERT OR IGNORE INTO permissions (key, description, category) "
+          "VALUES ('sales.set_custom_price', "
+          "'Set a custom price on a cart item', 'Sales')",
+        );
+      }
+      if (from < 55) {
+        // v55: store-gate saved carts (§12.1). Tag each saved cart with the
+        // store it was saved under so recall restores it into the right store's
+        // cart bucket and the Recall list is filtered to the active store.
+        // Nullable so pre-v55 rows survive as "All Stores" legacy carts. Mirrors
+        // supabase/migrations/0119_saved_carts_store_id.sql.
+        // Guarded so the ladder is replay-safe when the harness already built
+        // the live schema (which carries store_id) before forcing an old
+        // user_version — a real device upgrading from <55 lacks the column.
+        final savedCartCols =
+            await customSelect('PRAGMA table_info(saved_carts)').get();
+        final hasStoreId =
+            savedCartCols.any((r) => r.read<String>('name') == 'store_id');
+        if (!hasStoreId) {
+          await m.addColumn(savedCarts, savedCarts.storeId);
+        }
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -3721,6 +3900,8 @@ const List<String> _syncedTenantTables = [
   'suppliers',
   // v42 (master plan §21.10) — append-only supplier ledger (invoices + payments).
   'supplier_ledger_entries',
+  // v53 (§3.13) — append-only supplier empty-crate ledger (receipts + returns).
+  'supplier_crate_ledger',
   'products',
   'price_lists',
   'customers',
@@ -3791,6 +3972,8 @@ const List<String> kSyncCacheTables = [
   'customer_crate_balances',
   'manufacturer_crate_balances',
   'store_crate_balances',
+  // v53 (§3.13) — per-(supplier, manufacturer) empty-crate balance cache.
+  'supplier_crate_balances',
 ];
 
 /// Every table name a DAO may legitimately enqueue. `businesses` syncs via
@@ -3833,7 +4016,7 @@ const List<String> _v13HotPathIndexStatements = [
 // Identical on every device and on the cloud (mirror this list in
 // supabase/migrations/0043_seed_permissions_and_backfill_businesses.sql).
 // Each row: (key, description, category). Category groups toggles in
-// the CEO Settings > Roles & Permissions sub-page. 35 keys total.
+// the CEO Settings > Roles & Permissions sub-page. 36 keys total.
 const List<List<String>> _defaultPermissionRows = [
   // Stores — rendered first on the role page (§10.2). CEO-only by default.
   ['stores.manage', 'Add, edit, and remove stores', 'Stores'],
@@ -3846,6 +4029,7 @@ const List<List<String>> _defaultPermissionRows = [
   ['sales.make', 'Make a sale', 'Sales'],
   ['sales.cancel', 'Cancel a sale', 'Sales'],
   ['sales.discount.give', 'Give a discount on a sale', 'Sales'],
+  ['sales.set_custom_price', 'Set a custom price on a cart item', 'Sales'],
   // Products
   ['products.add', 'Add a new product', 'Products'],
   ['products.edit_price', 'Edit product', 'Products'],
@@ -4050,6 +4234,21 @@ const List<_LedgerImmutability> _ledgerTables = [
     'performed_by',
     'created_at',
   ]),
+  // v53 (§3.13) — supplier empty-crate ledger. Only the void columns +
+  // last_updated_at may change after insert (same contract as crate_ledger).
+  _LedgerImmutability('supplier_crate_ledger', [
+    'id',
+    'business_id',
+    'supplier_id',
+    'manufacturer_id',
+    'store_id',
+    'quantity_delta',
+    'movement_type',
+    'deposit_paid_kobo',
+    'note',
+    'performed_by',
+    'created_at',
+  ]),
 ];
 
 List<String> get _postCreateStatements {
@@ -4084,6 +4283,8 @@ List<String> get _postCreateStatements {
     'CREATE INDEX idx_supplier_ledger_business_supplier_time ON supplier_ledger_entries (business_id, supplier_id, created_at)',
     // v47 (§21.11) — per-store balance/history scans (active-store filter).
     'CREATE INDEX idx_supplier_ledger_business_store_supplier ON supplier_ledger_entries (business_id, store_id, supplier_id)',
+    // v53 (§3.13) — supplier crate ledger scans by (supplier, manufacturer).
+    'CREATE INDEX idx_supplier_crate_ledger_owner ON supplier_crate_ledger (business_id, supplier_id, manufacturer_id, created_at)',
     'CREATE INDEX idx_crate_ledger_owner_group ON crate_ledger (business_id, customer_id, manufacturer_id, created_at)',
     'CREATE INDEX idx_inventory_business_ps ON inventory (business_id, product_id, store_id)',
     'CREATE INDEX idx_stock_txn_prod_loc_time ON stock_transactions (product_id, location_id, created_at)',

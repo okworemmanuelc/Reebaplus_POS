@@ -159,6 +159,8 @@ void main() {
           id: Value(productId),
           businessId: businessId,
           name: 'Star Bottle',
+          unit: const Value('Bottle'),
+          trackEmpties: const Value(true),
           manufacturerId: const Value(manufacturerId)));
       await db.into(db.inventory).insert(InventoryCompanion.insert(
           businessId: businessId,
@@ -192,6 +194,49 @@ void main() {
       expect(emissions.last, 19, reason: 'full count must deplete live on sale');
       await sub.cancel();
     });
+
+    test('non-bottle (PET) stock is NOT counted as full crates', () async {
+      final storeId = UuidV7.generate();
+      await db.into(db.stores).insert(StoresCompanion.insert(
+          id: Value(storeId), businessId: businessId, name: 'Main'));
+
+      // Bottle product of the manufacturer — IS a crate product.
+      final bottleId = UuidV7.generate();
+      await db.into(db.products).insert(ProductsCompanion.insert(
+          id: Value(bottleId),
+          businessId: businessId,
+          name: 'Coca-Cola Bottle',
+          unit: const Value('Bottle'),
+          trackEmpties: const Value(true),
+          manufacturerId: const Value(manufacturerId)));
+      await db.into(db.inventory).insert(InventoryCompanion.insert(
+          businessId: businessId,
+          productId: bottleId,
+          storeId: storeId,
+          quantity: const Value(12)));
+
+      // PET product of the SAME manufacturer — must NOT be tracked as crates,
+      // even if trackEmpties was somehow flipped on.
+      final petId = UuidV7.generate();
+      await db.into(db.products).insert(ProductsCompanion.insert(
+          id: Value(petId),
+          businessId: businessId,
+          name: 'Coca-Cola PET',
+          unit: const Value('PET'),
+          trackEmpties: const Value(true),
+          manufacturerId: const Value(manufacturerId)));
+      await db.into(db.inventory).insert(InventoryCompanion.insert(
+          businessId: businessId,
+          productId: petId,
+          storeId: storeId,
+          quantity: const Value(48)));
+
+      final full = await db.inventoryDao
+          .watchFullCratesByManufacturer()
+          .first;
+      expect(full[manufacturerId], 12,
+          reason: 'only the bottle stock counts; the PET 48 is excluded');
+    });
   });
 
   // §16.8.1 Phase 2 — per-store empty-crate accuracy. The Crates tab shows a
@@ -212,6 +257,8 @@ void main() {
           id: Value(productId),
           businessId: businessId,
           name: 'Star Bottle',
+          unit: const Value('Bottle'),
+          trackEmpties: const Value(true),
           manufacturerId: const Value(manufacturerId)));
 
       // Same brand stocked in both stores: 10 in A, 7 in B.

@@ -67,6 +67,8 @@ class EditItemModal extends ConsumerStatefulWidget {
       'name': product.name,
       'qty': 1,
       'unitPriceKobo': unitPriceKobo,
+      'catalogPriceKobo': unitPriceKobo,
+      'customPriceKobo': null,
       'discountKind': null,
       'discountValue': 0.0,
       'allowFractionalSales': product.allowFractionalSales,
@@ -88,6 +90,9 @@ class EditItemModal extends ConsumerStatefulWidget {
 class _EditItemModalState extends ConsumerState<EditItemModal> {
   late TextEditingController _qtyCtrl;
   late TextEditingController _discountCtrl;
+  // Custom unit price field (§13.4) — empty when the line uses the catalog
+  // price; gated on `sales.set_custom_price`.
+  late TextEditingController _customPriceCtrl;
   // 'percent' (default) | 'naira' — §13.2.
   late String _discountKind;
 
@@ -103,8 +108,15 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
     _discountCtrl = TextEditingController(
       text: existingValue > 0 ? _trimNum(existingValue) : '',
     );
+    final existingCustomKobo = widget.item['customPriceKobo'] as int?;
+    _customPriceCtrl = TextEditingController(
+      text: (existingCustomKobo != null && existingCustomKobo > 0)
+          ? _trimNum(existingCustomKobo / 100.0)
+          : '',
+    );
     _qtyCtrl.addListener(_onInputChanged);
     _discountCtrl.addListener(_onInputChanged);
+    _customPriceCtrl.addListener(_onInputChanged);
 
     // Auto-highlight text and show keyboard
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -146,8 +158,10 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
   void dispose() {
     _qtyCtrl.removeListener(_onInputChanged);
     _discountCtrl.removeListener(_onInputChanged);
+    _customPriceCtrl.removeListener(_onInputChanged);
     _qtyCtrl.dispose();
     _discountCtrl.dispose();
+    _customPriceCtrl.dispose();
     super.dispose();
   }
 
@@ -195,6 +209,16 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
 
     final maxPercent = ref.watch(currentUserMaxDiscountPercentProvider);
     final canDiscount = maxPercent > 0;
+    final canSetCustomPrice = hasPermission(ref, 'sales.set_custom_price');
+    // Designated selling price for the line — the immutable catalog reference.
+    final catalogUnitPriceKobo =
+        (widget.item['catalogPriceKobo'] as int?) ??
+        (widget.item['unitPriceKobo'] as num).toInt();
+    // Live custom price typed into the field (kobo). Only honoured when the
+    // user holds the permission; a non-positive entry means "no override".
+    final customEntered = double.tryParse(_customPriceCtrl.text.trim()) ?? 0.0;
+    final customKobo = (customEntered * 100).round();
+    final hasCustomPrice = canSetCustomPrice && customKobo > 0;
     final rawQty = double.tryParse(_qtyCtrl.text) ?? 1.0;
     // Quantity can't exceed available stock (the POS card count). Snap an
     // over-limit entry back down to the cap, same pattern as the discount cap.
@@ -207,8 +231,12 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
       });
     }
     final qty = rawQty > _maxQty ? _maxQty : rawQty;
-    final unitPriceKobo = (widget.item['unitPriceKobo'] as num).toInt();
-    final lineTotalKobo = (unitPriceKobo * qty).round();
+    // Effective unit price = the typed custom price (when permitted) else the
+    // catalog price. Drives the line total, the discount cap, and the order.
+    final effectiveUnitPriceKobo = hasCustomPrice
+        ? customKobo
+        : catalogUnitPriceKobo;
+    final lineTotalKobo = (effectiveUnitPriceKobo * qty).round();
     final resolved = _resolveDiscount(
       lineTotalKobo: lineTotalKobo,
       maxPercent: maxPercent,
@@ -425,6 +453,18 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
 
             SizedBox(height: context.getRSize(28)),
 
+            // ── Custom Price (§13.4) ──────────────────────────────────────────
+            // Only for users granted `sales.set_custom_price`. Lets the line be
+            // sold at a price other than its designated selling price.
+            if (canSetCustomPrice) ...[
+              _customPriceSection(
+                catalogUnitPriceKobo: catalogUnitPriceKobo,
+                hasCustomPrice: hasCustomPrice,
+                effectiveUnitPriceKobo: effectiveUnitPriceKobo,
+              ),
+              SizedBox(height: context.getRSize(28)),
+            ],
+
             // ── Apply Discount (§13.2) ────────────────────────────────────────
             _discountSection(
               canDiscount: canDiscount,
@@ -474,6 +514,14 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
                                 maxStock: widget.maxStock,
                                 tier: widget.tier,
                               );
+                        // Apply (or clear) the custom price before the discount
+                        // so the discount clamps to the new line total (§13.4).
+                        if (canSetCustomPrice) {
+                          cart.setCustomPrice(
+                            widget.item['name'],
+                            customPriceKobo: hasCustomPrice ? customKobo : null,
+                          );
+                        }
                         // Apply the resolved (role-capped) discount to the line.
                         if (resolved.discountKobo > 0) {
                           final entered =
@@ -519,6 +567,14 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
                         final cart = ref.read(cartProvider);
                         final qty = double.tryParse(_qtyCtrl.text) ?? 1.0;
                         cart.updateQty(widget.item['name'], qty);
+                        // Apply (or clear) the custom price before the discount
+                        // so the discount clamps to the new line total (§13.4).
+                        if (canSetCustomPrice) {
+                          cart.setCustomPrice(
+                            widget.item['name'],
+                            customPriceKobo: hasCustomPrice ? customKobo : null,
+                          );
+                        }
                         // Persist the resolved (role-capped) discount alongside qty.
                         final entered =
                             double.tryParse(_discountCtrl.text.trim()) ?? 0.0;
@@ -537,6 +593,86 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _customPriceSection({
+    required int catalogUnitPriceKobo,
+    required bool hasCustomPrice,
+    required int effectiveUnitPriceKobo,
+  }) {
+    final t = Theme.of(context);
+    final text = t.colorScheme.onSurface;
+    final primary = t.colorScheme.primary;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'CUSTOM PRICE',
+          style: TextStyle(
+            fontSize: context.getRFontSize(12),
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.5,
+            color: text.withValues(alpha: 0.5),
+          ),
+        ),
+        SizedBox(height: context.getRSize(6)),
+        Text(
+          'Designated price: ${formatCurrency(catalogUnitPriceKobo / 100.0)}',
+          style: TextStyle(
+            fontSize: context.getRFontSize(12),
+            fontWeight: FontWeight.w600,
+            color: text.withValues(alpha: 0.5),
+          ),
+        ),
+        SizedBox(height: context.getRSize(10)),
+        Row(
+          children: [
+            Container(
+              width: context.getRSize(44),
+              height: context.getRSize(44),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: primary.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: primary.withValues(alpha: 0.5)),
+              ),
+              child: Text(
+                activeCurrencySymbol,
+                style: TextStyle(
+                  fontSize: context.getRFontSize(16),
+                  fontWeight: FontWeight.w800,
+                  color: primary,
+                ),
+              ),
+            ),
+            SizedBox(width: context.getRSize(12)),
+            Expanded(
+              child: AppInput(
+                controller: _customPriceCtrl,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                inputFormatters: [CurrencyInputFormatter(grouping: false)],
+                hintText: 'Use designated price',
+              ),
+            ),
+          ],
+        ),
+        if (hasCustomPrice) ...[
+          SizedBox(height: context.getRSize(10)),
+          Text(
+            'Selling at ${formatCurrency(effectiveUnitPriceKobo / 100.0)} per '
+            'unit (was ${formatCurrency(catalogUnitPriceKobo / 100.0)}).',
+            style: TextStyle(
+              fontSize: context.getRFontSize(13),
+              fontWeight: FontWeight.w700,
+              color: primary,
+            ),
+          ),
+        ],
+      ],
     );
   }
 

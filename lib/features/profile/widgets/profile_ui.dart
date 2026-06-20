@@ -349,8 +349,6 @@ class ProfileInfoRow extends StatelessWidget {
               fontWeight: FontWeight.bold,
               fontSize: context.getRFontSize(13),
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
           ),
         ),
         if (onTap != null) ...[

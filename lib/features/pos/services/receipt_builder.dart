@@ -19,8 +19,6 @@ class ThermalReceiptService {
     double? cashReceived,
     double? walletBalance,
     bool showWalletInfo = false,
-    int cratesOwed = 0,
-    int cratesCredit = 0,
     DateTime? reprintDate,
     DateTime? reshareDate,
     String? riderName,
@@ -29,6 +27,7 @@ class ThermalReceiptService {
     double? refundAmount,
     String? storeAddress,
     String? businessName,
+    Map<String, String>? manufacturerNames,
   }) async {
     // Generate profile for 58mm printer
     final profile = await CapabilityProfile.load();
@@ -177,7 +176,37 @@ class ThermalReceiptService {
     }
     bytes += generator.hr();
 
-    // --- 4. TOTALS SECTION ---
+    // --- 4. EMPTY CRATES SECTION ---
+    final Map<String, double> empties = {};
+    for (final item in cart) {
+      final unit = (item['unit'] as String?)?.toLowerCase();
+      final trackEmpties = (item['trackEmpties'] as bool?) ?? false;
+
+      if (unit == 'bottle' && trackEmpties) {
+        final mid = item['manufacturerId'];
+        if (mid is String) {
+          empties[mid] = (empties[mid] ?? 0) + (item['qty'] as num).toDouble();
+        }
+      }
+    }
+
+    if (empties.isNotEmpty) {
+      bytes += generator.text('Empty Crates', styles: const PosStyles(bold: true));
+      final sortedEntries = empties.entries.toList()
+        ..sort((a, b) {
+          final nameA = manufacturerNames?[a.key] ?? 'Unknown';
+          final nameB = manufacturerNames?[b.key] ?? 'Unknown';
+          return nameA.compareTo(nameB);
+        });
+
+      for (final e in sortedEntries) {
+        final mfrName = manufacturerNames?[e.key] ?? 'Unknown';
+        bytes += generator.text('$mfrName (${e.value.toStringAsFixed(0)} crates)');
+      }
+      bytes += generator.hr();
+    }
+
+    // --- 5. TOTALS SECTION ---
     bytes += _buildTwoColumnRow(
       generator,
       'Subtotal',
@@ -228,21 +257,6 @@ class ThermalReceiptService {
         'Wallet Balance:',
         '${formatCurrency(walletBalance).replaceAll('₦', 'N')} $tag',
       );
-      // §13.4 — empty-crate standing is part of the customer's account.
-      if (cratesOwed > 0) {
-        bytes += _buildTwoColumnRow(
-          generator,
-          'Empty Crates Owed:',
-          '$cratesOwed',
-        );
-      }
-      if (cratesCredit > 0) {
-        bytes += _buildTwoColumnRow(
-          generator,
-          'Empty Crates Credit:',
-          '$cratesCredit',
-        );
-      }
     }
 
     bytes += generator.text('');

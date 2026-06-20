@@ -58,6 +58,440 @@
 
 ---
 
+## 2026-06-19 — Deliverable 2 review pass (checkout crate confirmation + receipt fixes)
+
+Reviewed Part A (checkout) and Part B (receipt) together.
+
+**Part A — verified.** The checkout crate section now renders for any
+`_isCrateBusiness && crateLines.isNotEmpty` (not just when a money deposit
+applies): deposit applies → the editable `_buildCrateDepositSection`; otherwise
+→ a new read-only **"Empty Crates Being Taken"** confirmation (walk-in / Wallet /
+Credit-Sale / no-deposit brands). Crate **returns** remain only in
+`CrateReturnModal` at order-confirm — checkout writes nothing on return. Correct.
+
+**Part B — verified, two fixes applied:**
+1. **Analyzer was NOT clean** (contrary to the entry below): removing the receipt
+   `cratesOwed`/`cratesCredit` params left their **computation** behind in
+   `checkout_page.dart` — two `unused_local_variable` warnings *and* a wasted
+   per-checkout `watchCrateBalancesWithGroups(...).first` async DB call. Removed
+   the whole dead block.
+2. **Receipt brand colour** had been switched from the fixed
+   `const Color(0xFFF5A623)` to `Theme.of(context).colorScheme.primary`. Receipts
+   are intentionally theme-independent (printed / captured for PDF where the
+   ambient theme may not be the app's) — reverted to the const amber.
+
+**Verification (post-fix):** `flutter analyze` clean on all touched files (0
+issues); `flutter test test/crates test/pos` → 67/67 green. Emulator print
+alignment still to be eyeballed on device.
+
+---
+
+## 2026-06-19 — Empty Crates display on Receipts
+
+**Goal:** Surface the empty crates taken/issued on a sale explicitly on the receipt, independent of the payment method or deposit paid.
+
+**Changes:**
+- **Receipt UI (`receipt_widget.dart`)**:
+  - Replaced the `cratesOwed`/`cratesCredit` wallet info lines with a dedicated **Empty Crates** section that always renders if any tracked bottle products exist in the cart.
+  - Computes the crate quantity internally (`_computeEmpties`) per manufacturer based on `unit == 'bottle'` and `trackEmpties == true` directly from the cart map.
+  - Simplified the previous dynamic per-manufacturer deposit breakdown into a single "Crate Deposit" financial line, removing redundancy.
+- **ESC/POS Generator (`receipt_builder.dart`)**:
+  - Parity implemented for Bluetooth thermal prints (`ThermalReceiptService.buildReceipt`). 
+  - Generates an `Empty Crates` block identical to the on-screen widget.
+  - Removed `cratesOwed` and `cratesCredit` lines from the ESC/POS wallet section.
+- **Call-Site Alignments**:
+  - The cart mappings in `orders_screen.dart` and `customer_detail_screen.dart` now include `unit`, `trackEmpties`, and `manufacturerId` explicitly so that receipts generated from history have the required context to compute empties.
+  - Both screens now fetch `manufacturerNames` via `inventoryDao.watchAllManufacturers().first` before triggering the receipt rendering, matching `checkout_page.dart`.
+  - Removed the unused local state variables and `cratesOwed`/`cratesCredit` params from `checkout_page.dart`.
+
+**Verification:**
+- `dart analyze` clean on all touched files. No unresolved undefined identifiers.
+- Cart mappings correctly plumb the keys into `receipt_widget`.
+- Manual testing on device required to verify POS print alignment.
+
+---
+
+## 2026-06-19 — Recon Part 1 review fix: inventory-on-hand was not store-scoped
+
+**Symptom (found in review).** `businessNetPositionKobo` (and the "Inventory on
+hand (at cost)" line in the new Statement card) included **every store's** stock
+even when a single store was active in the §12.1 picker — while every other
+figure in the report (revenue, COGS, expenses, damages, shortages, supplier
+flows) is store-scoped. A single-store net position was overstated.
+
+**Root cause.** `computeReconData` read `productsWithStockProvider(null)`, which
+sums inventory across all stores (`InventoryDao.watchProductsWithStock` only
+filters by store when `storeId != null`), and the new `inventoryOnHandKobo` loop
+applied no `inScope` filter.
+
+**Fix.** Pass the active store: `productsWithStockProvider(ref.watch(lockedStoreProvider).value)`
+(null = All Stores). The products list is unaffected (only the stock totals are
+store-filtered), so `productById` stays complete for the damage/shortage/surplus
+cost lookups. `flutter analyze` clean.
+
+**Cleanup (same review pass).**
+- Removed the now-dead `topItem` / `topItemQty` fields from `ReconData` and the
+  redundant `byProduct.forEach` that computed them — the UI reads `topItems`
+  (top-3) only; `topItems.first` is the same value.
+- `topItems` now ranks across **every identifiable product**, not just costed
+  lines (`byProduct` population moved out of the costed-only branch). Real
+  products with no recorded buying price now appear in "Top items"; only
+  nameless ad-hoc lines (no linked product) are omitted, since order lines carry
+  no name snapshot.
+- De-duped the gross-margin calc into a `ReconData.grossMarginPct` getter, now
+  used by both `_statementCard` and `_exportCsv`. `flutter analyze` clean.
+
+---
+
+## 2026-06-19 — Daily Reconciliation UI Part 2: Statement of Account & semantic colors
+
+**Goal:** Present the new Daily Reconciliation metrics (`inventoryOnHandKobo`, `periodNetResultKobo`, etc.) to the CEO via the `_statementCard`.
+
+**Changes:**
+- Split `_statementCard` into three separate cards: "Net result for this period (flow)" (Section A), "Business worth right now (point-in-time)" (Section B), and "Other context flows (informational)".
+- **Semantic Colors:** Integrated `AppSemanticColors.success` and `theme.colorScheme.error` for profitability and net-position badges. Removed hardcoded `Color(0xFF...)` and `Colors.blueAccent` usage from `_plCard` and `_statementCard`.
+- **Crate Deposit Direction:** Based on the user's updated instruction, updated the net position algorithm in `recon_data.dart` to treat `crateDepositKobo` as a recoverable asset (`+ crateDepositKobo`) rather than a liability.
+- **CSV Export:** Updated `_exportCsv` to include the new fields ("Net result for period", "Inventory on hand (at cost)", "Owed to suppliers (now)", "Business net position (now)") conditionally for the CEO view.
+
+**Verification:**
+- `flutter analyze` clean on all touched files. No new test breakages.
+
+## 2026-06-19 — Daily Reconciliation UI Part 3: Sales summary & Empty crates card
+
+**Goal:** Surface the new `topItems` and `manufacturerEmpties` fields in the Daily Reconciliation UI.
+
+**Changes:**
+- **Sales Summary:** Replaced the single "Top item" line in `_salesCard` with "Top items", listing the top 3 items dynamically generated from `topItems`. Handled empty states gracefully by returning '—'.
+- **Empty Crates Card:** Rebuilt `_cratesCard` to list per-manufacturer crate holds and their calculated monetary value based on the respective manufacturer deposit amounts. Replaced `Colors.brown` with the `theme.colorScheme.primary` token.
+- Ensured existing business-level gating (showing crates card only for track-empties businesses) remains intact.
+
+**Verification:**
+- `flutter analyze` clean.
+
+## 2026-06-19 — Empty Crates "Full" counted non-bottle stock (Coca-Cola PET tracked)
+
+**Symptom.** A Coca-Cola **PET** product was being tracked in the inventory
+Empty Crates tab — its inventory inflated the manufacturer's "Full" crate count
+even though only returnable bottles have crates/empties.
+
+**Root cause.** `InventoryDao.watchFullCratesByManufacturer` (the sole feed for
+`fullCratesByManufacturerProvider` / the Crates-tab "Full" stat) joined
+`inventory↔products` filtering only on `manufacturerId IS NOT NULL` and
+`isDeleted = false`. It never checked the packaging, so **every** product of a
+manufacturer (PET, Can, etc.) was summed as full crates. The cart
+(`cart_screen.dart`) and `createOrder` (`daos.dart`) both already gate crate
+issuance on `unit.toLowerCase() == 'bottle' && trackEmpties`, so the Full count
+diverged from what actually accrues empties.
+
+**Fix.** Added `unit.lower() == 'bottle'` **and** `trackEmpties = true` to the
+query predicate, matching `createOrder`'s exact basis. A manufacturer that sells
+both bottle and PET now counts only the bottle stock; empties were already
+bottle-only (returns / receive-delivery gate on bottle). Card visibility
+unchanged (a bottle-less manufacturer shows 0/0).
+
+**Tests.** Updated two existing fixtures (`'Star Bottle'`) to set
+`unit: 'Bottle', trackEmpties: true` (they are crate products). Added regression
+test `non-bottle (PET) stock is NOT counted as full crates` — a Coca-Cola Bottle
+(12) + Coca-Cola PET (48, trackEmpties on) of the same manufacturer yields Full
+= 12. `test/crates/crate_logic_test.dart` 16/16 green; `flutter analyze
+lib/core/database/daos.dart` clean.
+
+---
+
+## 2026-06-19 — Real root cause of Glassy "leftover previous screen": translucent page gradient
+
+**Supersedes the earlier "ghost/leftover-text" entry below.** Removing the
+route `FadeTransition` was necessary but not sufficient — the ghosting persisted
+(reported again on Home → Customers wallet card, and Customers → customer
+detail). The slide-only fix only works if the incoming page is actually opaque,
+and it was NOT.
+
+**Root cause.** The Glassy page background was
+`Container(decoration: BoxDecoration(color: scaffoldBg, gradient: LinearGradient(colors: [scaffoldBg, primary@0.05, primary@0.12])))`.
+In a `BoxDecoration`, **when `gradient` is non-null the `color` field is ignored
+entirely** — only the gradient paints. That gradient's 2nd/3rd stops are
+`primary` at alpha 0.05/0.12 → ~90–95% transparent. So most of the page
+(toward bottom-right) was see-through and the screen beneath bled through during
+(and after) the slide. The `color: scaffoldBg` everyone assumed made it opaque
+was dead code.
+
+**Fix.** New central helper `AppDecorations.glassyBackground(context)` builds the
+same gradient but with every stop OPAQUE: each tint is composited over the
+scaffold background via `Color.alphaBlend(primary.withValues(alpha:…), bg)`.
+Visually identical, fully opaque fill. Replaced the inlined decoration in
+`glassy_scaffold.dart`, `customers_screen.dart`, `customer_detail_screen.dart`,
+`home_screen.dart`, and (for consistency — they already had an opaque `ColoredBox`
+backing so weren't ghosting) `supplier_transactions_screen.dart`,
+`supplier_accounts_report_screen.dart`, `supplier_detail_screen.dart`.
+`activity_log_screen` uses a plain opaque `Scaffold(backgroundColor:)` — untouched.
+The route `FadeTransition` removal (entry below) stays.
+
+**Bottom-nav lag.** `MainLayout` lazily mounted tabs on first tap, so the first
+visit to a tab built its whole screen (DB streams, lists) synchronously on that
+frame → dropped frames. Added `_warmNextTab()`: after the first frame, mount the
+remaining tabs offstage one-per-frame during idle, so the first tap is an instant
+offstage→onstage flip. The 200ms tab cross-fade (`_tabFadeAnimation`) is kept.
+
+**Verify.** `flutter analyze` clean on all 9 changed files.
+
+---
+
+## 2026-06-19 — Saved carts are store-tagged (§12.1 / §13.5)
+
+**Context.** Follow-up to the store-gated cart change: the in-memory cart is now
+bucketed per store, but a *saved* cart restored via `loadCart` landed in
+whatever store happened to be active at restore time (saved carts carried no
+store), so a store-A cart could be recalled into store B.
+
+**Fix.**
+- New nullable `store_id` on `saved_carts` (Drift schema v55, cloud migration
+  `0119_saved_carts_store_id.sql`; `to_jsonb` pull means no snapshot-RPC change).
+  null = saved in "All Stores" / pre-v55 legacy.
+- Save (`cart_screen._saveCart`) stamps `nav.lockedStoreId.value`.
+- Recall list (`watchSavedCarts(cashierId, storeId:)`) is confined to the active
+  store, keeping null-store rows visible everywhere; "All Stores" (null) sees
+  all.
+- `CartService.loadCart(..., storeId:)` switches the side-bar store to the
+  cart's origin store first (so stock/pricing are coherent) then writes the
+  lines into that store's bucket — a store-A cart can no longer leak into B.
+
+**Verify.** `flutter analyze` clean on the 4 touched files; new
+`test/pos/saved_cart_store_gating_test.dart` (3 cases: list confinement,
+All-Stores view, loadCart store-switch + bucket isolation) + existing cart tests
+pass. Cloud migration 0119 deployed (`supabase db push`).
+
+---
+
+## 2026-06-19 — Fix "SliverGeometry is not valid: layoutExtent exceeds paintExtent" opening supplier/customer detail
+
+**Symptom.** Opening a supplier profile from Supplier Accounts threw
+`FlutterError (SliverGeometry is not valid: The "layoutExtent" exceeds the
+"paintExtent". The paintExtent is 58.8, but the layoutExtent is 60.0)` from the
+pinned `_SliverPinnedPersistentHeader` (the crate-business Ledger/Empty-Crates
+tab bar). Intermittent — depends on the device's responsive scale factor.
+
+**Root cause.** In `RenderSliverPinnedPersistentHeader.performLayout`, a pinned
+header reports `paintExtent = min(childExtent, remainingPaintExtent)` (the
+child's *actual* rendered height) but `layoutExtent = maxExtent - scrollOffset`
+(the *declared* `maxExtent`). `_SliverTabBarDelegate` hard-declared
+`minExtent == maxExtent == 60`, yet `layoutChild` lays the child out with loose
+constraints, so the TabBar + its responsive `getRSize(8)` margin rendered at
+58.8px — shorter than the promised 60. paintExtent (58.8) then fell below
+layoutExtent (60) and the framework asserted. The framework requires
+`layoutExtent <= paintExtent`.
+
+**Fix.** `_SliverTabBarDelegate` now takes an `extent`, declares min/maxExtent
+from it, and wraps its child in `SizedBox(height: extent)` so the rendered
+`childExtent` always equals `maxExtent`. Call sites pass
+`extent: context.getRSize(60)` so the reserved height tracks the same responsive
+scale as the content. Applied to both `supplier_detail_screen.dart` and
+`customer_detail_screen.dart` (identical latent bug).
+
+**Verify.** `flutter analyze` clean on both files.
+
+---
+
+## 2026-06-19 — Fix ghost/leftover-text during screen-open transitions (Glassy UI)
+
+**Symptom.** After the Glassy UI upgrade, pushing a detail screen (e.g.
+Customers → customer detail) showed the previous screen's text bleeding through
+the incoming screen mid-animation — a "glitchy" double-exposure.
+
+**Root cause.** `slideDownRoute`/`slideLeftRoute` (`slide_route.dart`) wrapped
+the incoming page in a `FadeTransition` (opacity 0→1) on top of the still-opaque
+outgoing screen. The incoming Glassy screens are full-screen and opaque (root
+gradient's first stop is the opaque `scaffoldBackgroundColor`), so fading their
+opacity over the opaque previous screen blends BOTH screens at every frame where
+opacity < 1 → ghost text. Standard page routes never do this; they slide an
+opaque page without cross-fading opacity.
+
+**Fix.** Dropped the `FadeTransition` from both helpers; keep the
+`SlideTransition` only. An opaque page sliding in fully covers what's underneath,
+so there's no blend and no ghosting. Curve/durations unchanged. `SmoothRoute`
+(pure fade) is left as-is — it's auth/onboarding-only and not the reported path.
+
+**Verify.** `flutter analyze` clean on `slide_route.dart`.
+
+---
+
+## 2026-06-19 — Cart + cart/orders badges are store-gated to the side-bar store (§12.1)
+
+**Goal.** The cart, the Cart-tab badge, and the Orders-tab badge must follow the
+store selected in the side bar (nav-drawer picker / `lockedStoreId`), matching
+Home/Inventory/Orders-list which already filter by the active store. Previously
+the cart was per-user only, so lines added under Store A stayed visible (and
+counted) after switching to Store B, and the Orders badge counted every store's
+pending orders regardless of selection.
+
+**Cart (`cart_service.dart`).** Cart + active-customer storage re-keyed from
+`userId` to `"userId|storeId"` (empty store segment = "All Stores"). The service
+now takes `NavigationService` and listens to `lockedStoreId`; on a store change
+it swaps `value`/`activeCustomer` to that store's bucket (mirrors the existing
+login/logout swap). Logout cleanup now purges ALL of a user's per-store buckets
+(prefix match). Provider updated to inject `navigationProvider`.
+
+**Cart badge (`main_layout.dart`).** No change needed — the badge's
+`ValueListenableBuilder` on `cartProvider` rebuilds when the service swaps
+`value` on store change.
+
+**Orders badge (`main_layout.dart`).** Switched the persistent pending-orders
+subscription from `orderService.watchPendingOrders()` (domain `Order`, no
+`storeId`) to `ordersDao.watchPendingOrders()` (`OrderData`, carries `storeId`),
+held the full list in state, and filter to `lockedStoreProvider` at build time:
+concrete store counts only its own pending orders, "All Stores" (null) counts
+all. Mirrors the Orders-list filter.
+
+**Tests.** Updated the two `CartService(auth)` call sites in
+`test/pos/cart_custom_price_test.dart` and `cart_tier_pricing_test.dart` to pass
+the shared `NavigationService`. All cart tests green; `flutter analyze` clean on
+the touched files.
+
+---
+
+## 2026-06-19 — Custom price on a cart item (§13.4) + `sales.set_custom_price` permission
+
+**Goal.** Let a permitted user sell a cart line at a price other than its
+designated selling price (e.g. a negotiated/spot price), and let the CEO toggle
+who may do so per role.
+
+**Permission.** New catalogue key `sales.set_custom_price` ("Set a custom price
+on a cart item", category Sales). CEO-only by default; surfaces as a normal
+toggle on CEO Settings → Roles & Permissions (NOT in `kHiddenPermissionKeys`),
+so the CEO grants it to any role/store/staff via the existing override layers.
+- Local: added to `_defaultPermissionRows`; Drift schema **v53 → v54** with an
+  idempotent `if (from < 54)` `INSERT OR IGNORE INTO permissions` so existing
+  devices get the catalogue row (mirrors the v48 `settings.delete_business`
+  pattern). No table/shape change.
+- Cloud: `0118_add_sales_custom_price_permission.sql` (catalogue insert + CEO
+  backfill for existing businesses; new businesses auto-grant via the CEO's
+  dynamic `SELECT key FROM permissions` in `seed_default_roles_for_business`).
+  **Pushed 2026-06-19** (with the pending 0117); verified 1 catalogue row,
+  granted to all 6 CEO roles, 0 non-CEO grants.
+
+**Cart model (`cart_service.dart`).** Each line gains two fields: immutable
+`catalogPriceKobo` (the designated tier price) and `customPriceKobo` (null = no
+override). New `setCustomPrice(name, customPriceKobo:)` overwrites the EFFECTIVE
+`unitPriceKobo`/`price` when set (so all downstream totals, the order line, and
+profit math "just work") and reverts to `catalogPriceKobo` when cleared; it
+re-clamps any existing per-line discount to the new line total. `refreshProduct`
+keeps a custom price but tracks the new catalog reference; `acceptStaleness`
+bumps `catalogPriceKobo` too.
+
+**UI (`edit_item_modal.dart`).** A permission-gated "Custom Price" section
+(shown only when `hasPermission(ref, 'sales.set_custom_price')`) above the
+discount section: currency field seeded from any existing override, the
+designated price as a hint, and a live "selling at X (was Y)" line. The discount
+cap computes off the effective (custom) line total. Save in both add and edit
+modes applies the custom price BEFORE the discount.
+
+**Checkout / cart.** `checkout_page._detectCartStaleness` skips lines with a
+`customPriceKobo` (a hand-set price is intentional, never reverted to catalog).
+`cart_screen` shows a "Custom price" badge on such lines next to the discount
+badge.
+
+**Tests.** New `test/pos/cart_custom_price_test.dart` (5 green: override, revert,
+discount clamp, refreshProduct retention, non-positive = clear).
+`roles_v13_seed_test` count 35 → 36. `flutter analyze lib` clean (only the 3
+pre-existing settings unused-import warnings); `test/pos/` + `test/sync/` +
+`test/database/` all green.
+
+**Follow-up.** `0118` pushed. On-device: confirm the section appears only for
+granted roles, the custom price flows to the receipt/order and reports, and a
+saved cart round-trips the custom price.
+
+---
+
+## 2026-06-19 — Fix: `AppDropdown` `orElse` type crash on nullable-T dropdowns
+
+**Symptom.** Runtime `_TypeError (type '() => DropdownMenuItem<String?>' is not a
+subtype of type '(() => DropdownMenuItem<String>)?' of 'orElse')` thrown from
+`sky_engine/.../collection/list.dart` (`firstWhere`).
+
+**Cause.** `AppDropdown<T>.buildUI` resolved the selected item via
+`widget.items.firstWhere((i) => i.value == value, orElse: () => widget.items.first)`.
+When the widget is instantiated as `AppDropdown<String?>` (product_detail,
+cart_screen, staff_management, add_product, update_product_sheet, …) but its
+`items` are built with non-null `String` values, the list's reified element type
+is `DropdownMenuItem<String>` while the `orElse` closure reifies as
+`() => DropdownMenuItem<String?>` — Dart's runtime subtype check on the optional
+`orElse` parameter rejects it and throws.
+
+**Fix.** Replaced the `firstWhere`+`orElse` with a plain `for` loop in
+`lib/shared/widgets/app_dropdown.dart`, immune to how `T` is bound. Side benefit:
+when `value` matches no item it now shows the hint rather than the (misleading)
+first item's label. Single-widget fix — covers every call site. `flutter analyze`
+clean.
+
+---
+
+## 2026-06-19 — Supplier empty-crate tracking (§3.13): the supplier-side mirror of customer crates
+
+**Goal.** Replace the §3.13 "Available Empty Crates — coming soon" placeholder on
+Supplier Details with real per-supplier empty-crate tracking, *just as implemented
+for the customer*: track how many crates we owe / are owed a supplier, how many we
+returned, and the deposit the store pays the supplier for empty crates.
+
+**Model.** A customer owes US empties (`crate_ledger` + `customer_crate_balances`);
+the supplier mirror is "WE owe the SUPPLIER empties for the full crates they
+delivered." Two new tables (a dedicated `supplier_crate_ledger` rather than
+overloading `crate_ledger`, so the existing customer/manufacturer crate
+reconciliation can never miscount supplier rows):
+- `supplier_crate_ledger` — append-only. `received` (+N, we now owe N), `returned`
+  (−N), `adjusted`. Carries `deposit_paid_kobo` (refundable deposit that moved on
+  the row) + `store_id`. Schema v52→**v53**; in `_syncedTenantTables` +
+  `_ledgerTables` (immutable + no-delete triggers, fresh-install via
+  `_postCreateStatements`, upgrade via the v53 onUpgrade block).
+- `supplier_crate_balances` — per-(supplier, manufacturer) cache. balance =
+  SUM(delta); positive = we owe. In `kSyncCacheTables` +
+  `_naturalKeyPushConflictTargets` (`business_id,supplier_id,manufacturer_id`) so
+  two devices independently minting the row can't 2067 on the cloud.
+
+**DAOs / service / providers.** `SupplierCrateLedgerDao`
+(recordCrateReceiptFromSupplier / recordCrateReturnToSupplier / watchHistory /
+watchDepositHeldKobo) + `SupplierCrateBalancesDao` (watchBySupplier /
+watchTotalOwed), mirroring `CrateLedgerDao`. `SupplierCrateService` adds the
+Activity-Log writes. Providers: supplierCrateService / supplierCrateBalances /
+supplierCrateDepositHeld / supplierCrateHistory.
+
+**Sync.** Both tables wired into `_pullOrder`, `_restoreTableData`
+(supplier_crate_ledger via `_restoreLedgerTable` like supplier_ledger_entries; the
+cache via natural-key resilient upsert like store/customer crate caches),
+`_tablePushPriority` (36/37, after suppliers=5/manufacturers=3), and
+`supplier_crate_ledger` into `_deferrableTables` (leaf, append-only). The sync
+registration-completeness test (`sync_table_registration_test`) passes.
+
+**Cloud.** `0117_supplier_crate_tracking.sql` — both tables, RLS via
+`current_user_business_ids()`, realtime (REPLICA IDENTITY FULL on the ledger),
+`_bump_last_updated_at` triggers, and both names added to `pos_pull_snapshot`'s
+`v_tenant_tables` (FK-safe). **Written, NOT yet pushed** — must precede a v53
+build to avoid 42P01. No cloud append-only trigger (matches error_logs /
+store_crate_balances; the local Drift no-delete trigger guards on-device deletes).
+
+**UI.** Supplier Details → **Empty Crates** tab (the tab shell already existed):
+net crate balance (owed / credit), refundable deposit value, a **Crates received
+/ Crates returned** (sent-back) cumulative-totals row (`watchMovementTotals` —
+gross counts, not net), per-manufacturer rows, and a "Record crate activity"
+sheet (Received / Returned toggle + manufacturer + count + optional deposit).
+Gated on `suppliers.manage` with a write-boundary re-check. **Receive Delivery**
+now records a supplier crate receipt per tracked line (the supplier-side analogue
+of crate-issue-at-sale), so the delivery/invoice tracks how many crates arrived.
+
+**Deposit decision.** The headline "Deposit value (refundable)" is COMPUTED as
+Σ(positive balance × `Manufacturers.depositAmountKobo`) so it stays consistent
+with the crate balance automatically (returning crates lowers it). The record
+sheet still stores the literal `deposit_paid_kobo` per row for the audit trail;
+`watchDepositHeldKobo` nets paid − refunded for tests / a future detail line.
+
+**Verification.** `flutter analyze lib` clean (only the 3 pre-existing settings
+unused-import warnings). New `test/suppliers/supplier_crate_test.dart` — 5 green
+(receipt/return netting, crate credit, per-(supplier,manufacturer) scope,
+deposit-held netting, append-only delete rejection). `flutter test test/database
+test/sync` — 183 green (migration upgrade + registration-completeness included).
+Full suite 452 pass / 58 skipped / 1 pre-existing unrelated failure
+(`invite_staff_sheet_test`). `build_runner` regenerated. On-device pass pending.
+
+---
+
 ## 2026-06-18 — Sync Issues: collapse `sessions:upsert` churn (reuse session id per device+user)
 
 **Investigation.** A device's Sync Issues screen showed a pile of pending

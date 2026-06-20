@@ -205,13 +205,21 @@ class _AppDropdownState<T> extends FormFieldState<T> {
     final t = Theme.of(context);
     final subtextColor = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
     
+    // NOTE: a plain loop (not `items.firstWhere(... orElse: () => items.first)`)
+    // on purpose. When this dropdown is instantiated as `AppDropdown<String?>`
+    // but fed `items` built with non-null String values (their runtime element
+    // type is `DropdownMenuItem<String>`), `firstWhere`'s reified `orElse`
+    // closure types as `() => DropdownMenuItem<String?>` and fails Dart's
+    // runtime subtype check ("not a subtype of ... orElse"). The loop sidesteps
+    // that mismatch regardless of how T is bound.
     Widget? selectedChild;
-    if (value != null) {
-      final selectedItem = widget.items.firstWhere(
-        (item) => item.value == value,
-        orElse: () => widget.items.first,
-      );
-      selectedChild = selectedItem.child;
+    if (value != null && widget.items.isNotEmpty) {
+      for (final item in widget.items) {
+        if (item.value == value) {
+          selectedChild = item.child;
+          break;
+        }
+      }
     }
 
     final isDark = t.brightness == Brightness.dark;

@@ -5,6 +5,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 
@@ -27,7 +28,6 @@ class _SupplierAccountsReportScreenState extends ConsumerState<SupplierAccountsR
   Widget build(BuildContext context) {
     ref.watch(currencySymbolProvider);
     final bg = Theme.of(context).scaffoldBackgroundColor;
-    final primary = Theme.of(context).colorScheme.primary;
     final surface = Theme.of(context).colorScheme.surface;
     final text = Theme.of(context).colorScheme.onSurface;
     final subtext =
@@ -43,18 +43,10 @@ class _SupplierAccountsReportScreenState extends ConsumerState<SupplierAccountsR
 
     final rows = _aggregate(suppliers, entries);
 
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            bg,
-            primary.withValues(alpha: 0.05),
-            primary.withValues(alpha: 0.12),
-          ],
-        ),
-      ),
+    return ColoredBox(
+      color: bg,
+      child: Container(
+        decoration: AppDecorations.glassyBackground(context),
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
@@ -135,6 +127,7 @@ class _SupplierAccountsReportScreenState extends ConsumerState<SupplierAccountsR
           ),
         ),
       ),
+    ),
     );
   }
 

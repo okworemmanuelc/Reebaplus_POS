@@ -111,12 +111,6 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   /// Null for walk-ins (no wallet).
   double? _receiptWalletBalance;
 
-  /// §13.4 — the customer's empty-crate standing AFTER this sale (incl. the
-  /// crates just issued), snapshotted at confirm for the receipt's wallet-info
-  /// block: total crates owed, and total crates credited to them.
-  int _receiptCratesOwed = 0;
-  int _receiptCratesCredit = 0;
-
   late final CartService _cart;
   bool get _isWalkIn => _initialCustomer == null || _initialCustomer.isWalkIn;
   Color get _bg => Theme.of(context).scaffoldBackgroundColor;
@@ -413,10 +407,13 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             ),
           ),
 
-          // ── Crate Deposit (editable, per brand) ───────────────────────
-          if (_depositApplies) ...[
+          // ── Crates Taken & Deposit ────────────────────────────────────
+          if (_isCrateBusiness && widget.crateLines.isNotEmpty) ...[
             SizedBox(height: context.getRSize(28)),
-            _buildCrateDepositSection(),
+            if (_depositApplies)
+              _buildCrateDepositSection()
+            else
+              _buildReadOnlyCratesSection(),
           ],
 
           SizedBox(height: context.getRSize(28)),
@@ -584,6 +581,98 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           ),
         ),
       ],
+    );
+  }
+
+  // ── Empty Crates (read-only, per brand) ──────────────────────────────────────
+  /// §13.4 — read-only confirmation of empty crates taken when no deposit applies
+  /// (walk-ins, Wallet, or Credit Sale modes).
+  Widget _buildReadOnlyCratesSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionLabel('Empty Crates Being Taken'),
+        SizedBox(height: context.getRSize(6)),
+        Text(
+          _isWalkIn
+              ? 'Walk-in customers do not pay a crate deposit. Ensure empties are returned.'
+              : 'No deposit is collected for this payment mode. Crates will be tracked on the customer\'s balance.',
+          style: TextStyle(fontSize: context.getRFontSize(12), color: _subtext),
+        ),
+        SizedBox(height: context.getRSize(12)),
+        Container(
+          decoration: BoxDecoration(
+            color: _surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: _border),
+          ),
+          child: Column(
+            children: [
+              for (int i = 0; i < widget.crateLines.length; i++) ...[
+                if (i > 0) Divider(height: 1, color: _border),
+                _readOnlyCrateRow(widget.crateLines[i]),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _readOnlyCrateRow(Map<String, dynamic> line) {
+    final name = (line['name'] as String?) ?? 'Brand';
+    final crates = (line['crates'] as num?)?.toDouble() ?? 0;
+
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: context.getRSize(16),
+        vertical: context.getRSize(12),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: EdgeInsets.all(context.getRSize(8)),
+            decoration: BoxDecoration(
+              color: Theme.of(
+                context,
+              ).colorScheme.primary.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              FontAwesomeIcons.beerMugEmpty.data,
+              size: context.getRSize(14),
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+          SizedBox(width: context.getRSize(12)),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: context.getRFontSize(14),
+                    color: _text,
+                  ),
+                ),
+                SizedBox(height: context.getRSize(2)),
+                Text(
+                  '${crates.toStringAsFixed(crates == crates.roundToDouble() ? 0 : 1)} '
+                  'crate${crates == 1 ? '' : 's'} taken',
+                  style: TextStyle(
+                    fontSize: context.getRFontSize(12),
+                    color: _subtext,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -796,6 +885,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     for (final item in widget.cart) {
       final id = item['id'] as String?;
       if (id == null || id.isEmpty) continue; // Quick-sale: no DB product
+      // A hand-set custom price (§13.4) is intentional — never flag it as stale
+      // against the catalog price or revert it.
+      if (item['customPriceKobo'] != null) continue;
       final version = item['version'] as int?;
       final unitPriceKobo =
           (item['unitPriceKobo'] as int?) ??
@@ -1048,30 +1140,6 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             paymentSubType: paymentSubType,
           );
 
-      // §13.4 — snapshot the customer's empty-crate standing AFTER the sale
-      // (createOrder has just issued this sale's crates) for the receipt's
-      // wallet-info block. Registered customers only (walk-ins hold no crates).
-      int cratesOwed = 0, cratesCredit = 0;
-      final crateCustomerId = _initialCustomer?.id;
-      if (!_isWalkIn && crateCustomerId != null) {
-        try {
-          final balances = await ref
-              .read(databaseProvider)
-              .customersDao
-              .watchCrateBalancesWithGroups(crateCustomerId)
-              .first;
-          for (final b in balances) {
-            if (b.balance > 0) {
-              cratesOwed += b.balance;
-            } else if (b.balance < 0) {
-              cratesCredit += -b.balance;
-            }
-          }
-        } catch (_) {
-          // Non-fatal — the receipt just omits the crate lines if this fails.
-        }
-      }
-
       // ── Success Flow ────────────────────────────────────────────────
       if (mounted) {
         setState(() {
@@ -1081,8 +1149,6 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           _receiptWalletBalance = _isWalkIn
               ? null
               : (oldWalletKobo + amountPaidKobo - totalKobo) / 100.0;
-          _receiptCratesOwed = cratesOwed;
-          _receiptCratesCredit = cratesCredit;
           _paymentConfirmed = true;
           _currentOrderId = orderNo;
         });
@@ -1149,8 +1215,6 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                 cashReceived: _amountPaid,
                 walletBalance: _receiptWalletBalance,
                 showWalletInfo: !_isWalkIn && _addWalletInfoToReceipt,
-                cratesOwed: _receiptCratesOwed,
-                cratesCredit: _receiptCratesCredit,
                 riderName: 'Pick-up Order',
                 manufacturerNames: _manufacturerNames,
                 storeAddress: _storeAddress,
@@ -1350,11 +1414,10 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         // already updated, so recomputing here would double-count the legs.
         walletBalance: _receiptWalletBalance,
         showWalletInfo: !_isWalkIn && _addWalletInfoToReceipt,
-        cratesOwed: _receiptCratesOwed,
-        cratesCredit: _receiptCratesCredit,
         riderName: 'Pick-up Order',
         storeAddress: _storeAddress,
         businessName: ref.read(currentBusinessNameProvider),
+        manufacturerNames: _manufacturerNames,
       );
 
       if (!mounted) return;
@@ -1608,7 +1671,8 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         AppInput(
           controller: _cashReceivedCtrl,
           labelText: 'Amount Paid',
-          hintText: '₦ Enter amount paid',
+          hintText: 'Enter amount paid',
+          prefixText: '$activeCurrencySymbol ',
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           inputFormatters: [CurrencyInputFormatter()],
           onChanged: (v) => setState(() {}),
@@ -1620,9 +1684,14 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             ),
             onPressed: () {
               final val = suggestedKobo / 100.0;
-              _cashReceivedCtrl.text = val == val.roundToDouble()
+              final rawText = val == val.roundToDouble()
                   ? val.toInt().toString()
                   : val.toStringAsFixed(2);
+              final formatter = CurrencyInputFormatter();
+              _cashReceivedCtrl.value = formatter.formatEditUpdate(
+                const TextEditingValue(),
+                TextEditingValue(text: rawText),
+              );
               setState(() {});
             },
             child: Text(

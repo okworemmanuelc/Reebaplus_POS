@@ -927,6 +927,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
         'name': p.name,
         'qty': i.quantity,
         'price': i.unitPriceKobo / 100.0,
+        'unit': p.unit,
+        'trackEmpties': p.trackEmpties,
+        'manufacturerId': p.manufacturerId,
       };
     }).toList();
 
@@ -939,6 +942,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
           .map((w) => receiptStoreAddress(w.location))
           .firstOrNull;
     }
+
+    final mfrList = await db.inventoryDao.watchAllManufacturers().first;
+    final manufacturerNames = {for (final m in mfrList) m.id: m.name};
 
     if (!mounted) return;
 
@@ -1006,6 +1012,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                           reshareDate: reshareDate,
                           storeAddress: storeAddress,
                           businessName: ref.read(currentBusinessNameProvider),
+                          manufacturerNames: manufacturerNames,
                         ),
                       ),
                     ),
@@ -1033,6 +1040,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                                 order,
                                 items,
                                 storeAddress,
+                                manufacturerNames,
                               );
                             },
                           ),
@@ -1074,6 +1082,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     OrderData order,
     List<Map<String, dynamic>> items,
     String? storeAddress,
+    Map<String, String>? manufacturerNames,
   ) async {
     try {
       final granted = await ref
@@ -1101,6 +1110,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
         refundAmount: order.amountPaidKobo / 100.0,
         storeAddress: storeAddress,
         businessName: ref.read(currentBusinessNameProvider),
+        manufacturerNames: manufacturerNames,
       );
 
       if (!ctx.mounted) return;
@@ -1209,17 +1219,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     return DefaultTabController(
       length: showCrates ? 3 : 2,
       child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              theme.scaffoldBackgroundColor,
-              theme.colorScheme.primary.withValues(alpha: 0.05),
-              theme.colorScheme.primary.withValues(alpha: 0.12),
-            ],
-          ),
-        ),
+        decoration: AppDecorations.glassyBackground(context),
         child: Scaffold(
           backgroundColor: Colors.transparent,
           appBar: AppBar(
@@ -1333,6 +1333,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
           SliverPersistentHeader(
             pinned: true,
             delegate: _SliverTabBarDelegate(
+              extent: context.getRSize(60),
               child: Container(
                 color: Colors.transparent,
                 padding: EdgeInsets.symmetric(horizontal: context.getRSize(20)),
@@ -2583,12 +2584,13 @@ class _SheetField extends StatelessWidget {
 
 class _SliverTabBarDelegate extends SliverPersistentHeaderDelegate {
   final Widget child;
-  _SliverTabBarDelegate({required this.child});
+  final double extent;
+  _SliverTabBarDelegate({required this.child, this.extent = 60});
 
   @override
-  double get minExtent => 60;
+  double get minExtent => extent;
   @override
-  double get maxExtent => 60;
+  double get maxExtent => extent;
 
   @override
   Widget build(
@@ -2596,11 +2598,17 @@ class _SliverTabBarDelegate extends SliverPersistentHeaderDelegate {
     double shrinkOffset,
     bool overlapsContent,
   ) {
-    return child;
+    // Pin the child to exactly [extent]. Under a NestedScrollView a pinned
+    // header reports paintExtent from the child's *actual* rendered height but
+    // layoutExtent from the declared maxExtent; if the (loosely-constrained)
+    // child renders even fractionally shorter than [extent], paintExtent drops
+    // below layoutExtent and the framework asserts "layoutExtent exceeds
+    // paintExtent". Forcing the height keeps childExtent == maxExtent.
+    return SizedBox(height: extent, child: child);
   }
 
   @override
   bool shouldRebuild(_SliverTabBarDelegate oldDelegate) {
-    return false;
+    return oldDelegate.extent != extent;
   }
 }

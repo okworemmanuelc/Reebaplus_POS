@@ -60,6 +60,7 @@ Four storage locations, with a strict rule for what lives where. Business data g
 | Orders, order lines, payment records | Drift (SQLite) | Created offline at the till; converge across devices. | Yes |
 | Customer & supplier profiles | Drift (SQLite) | Attached to sales offline; shared business-wide. | Yes |
 | Wallet ledger rows (customer & supplier) | Drift (SQLite), **append-only** | Source of truth for balances. Balances are derived, never stored as a single mutable field. | Yes |
+| Empty-crate movements (customer & supplier) | Drift (SQLite), **append-only** ledgers (`crate_ledger`, `supplier_crate_ledger`); per-owner balance caches (`customer_crate_balances`, `manufacturer_crate_balances`, `store_crate_balances`, `supplier_crate_balances`) | A customer owes US empties; we owe the SUPPLIER empties for the full crates they delivered (§3.13). The signed balance = SUM(quantity_delta); positive on the supplier side = we owe the supplier. Deposit value = outstanding crates × the per-manufacturer deposit rate. | Yes |
 | Staff, roles, permission rows, per-staff overrides | Drift (SQLite) | Gating must work offline; CEO edits propagate to all devices. | Yes |
 | Expenses, supplier invoices/payments | Drift (SQLite) | Recorded offline; feed reports and ledgers. | Yes |
 | Activity logs, error logs | Drift (SQLite); error captures use the `error_logs` table | Captured offline, including during a crash. | Yes (via the sync queue) |

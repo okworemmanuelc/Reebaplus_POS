@@ -38,6 +38,33 @@ class AppDecorations {
     );
   }
 
+  /// Full-screen "glassy" page background (§10.1). A subtle primary-tinted
+  /// gradient over the scaffold background.
+  ///
+  /// IMPORTANT: every gradient stop is OPAQUE. In a [BoxDecoration], when a
+  /// `gradient` is set the `color` field is ignored entirely — so a gradient
+  /// whose stops use a translucent `primary.withValues(alpha: …)` paints a
+  /// partly see-through page. When such a page is pushed over another, the
+  /// previous screen bleeds through (the "leftover/ghost previous screen"
+  /// glitch). We composite each tint over [scaffoldBackgroundColor] with
+  /// [Color.alphaBlend] so the look is unchanged but the fill is solid.
+  static BoxDecoration glassyBackground(BuildContext context) {
+    final theme = Theme.of(context);
+    final bg = theme.scaffoldBackgroundColor;
+    final primary = theme.colorScheme.primary;
+    return BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          bg,
+          Color.alphaBlend(primary.withValues(alpha: 0.05), bg),
+          Color.alphaBlend(primary.withValues(alpha: 0.12), bg),
+        ],
+      ),
+    );
+  }
+
   /// Surface card decoration — adapts to current theme.
   static BoxDecoration surfaceCard(
     BuildContext context, {
