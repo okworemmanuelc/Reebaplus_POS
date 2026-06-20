@@ -569,10 +569,8 @@ class AppDrawer extends ConsumerWidget {
       nav.setIndex(7);
     } else if (route == 'cart') {
       nav.setIndex(8);
-    } else if (route == 'deliveries') {
-      nav.setIndex(9);
     } else if (route == 'activity_logs') {
-      nav.setIndex(10);
+      nav.setIndex(9);
     }
   }
 

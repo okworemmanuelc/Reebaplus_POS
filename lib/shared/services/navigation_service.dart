@@ -85,8 +85,7 @@ class NavigationService {
     6: 'expenses',
     7: 'stores',
     8: 'cart',
-    9: 'deliveries',
-    10: 'activity',
+    9: 'activity',
   };
 
   void setIndex(int index) {

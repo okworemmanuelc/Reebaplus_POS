@@ -11,16 +11,50 @@
 - **Product Editing:** Long-pressing a grid tile opens `UpdateProductSheet` prefilled for editing (buying-price gated by `products.edit_buying_price`). Pinned "+" tile opens `AddProductScreen` for new products.
 - **Receive Cart:** Built `ReceiveCartScreen` (reading from `receiveCartProvider`). Shows Invoice Total (buying × qty), allows inline qty edits or swipe-to-remove. Blocked empty checkouts and added explicit "Clear Cart" dialog. No customer or discount fields.
 - **Checkout & Empties:** Built `ReceiveCheckoutScreen`. Selects a supplier, collects optional "Reference Note". Discovers products with `trackEmpties` and collects "Empty crates returned now".
-- **Atomic Save:** Confirming checkout runs an atomic transaction that:
-  1. Records the invoice total via `SupplierAccountService.recordInvoice`.
-  2. Adjusts inventory stock (`db.inventoryDao.adjustStock`).
-  3. Increments owed full crates via `db.crateLedgerDao.recordCrateReceiveFromManufacturer`.
-  4. Reduces owed empty crates via `db.crateLedgerDao.recordCrateReturnByManufacturer`.
+- **Atomic Save:** Confirming checkout runs `ReceiveStockService.confirmReceipt`
+  inside a single Drift transaction (all-or-nothing — a mid-write failure rolls
+  back the invoice + stock + crates together):
+  1. Records the invoice total via `SupplierAccountService.recordInvoice` (skipped
+     for a zero-value invoice).
+  2. Adjusts inventory stock per line (`db.inventoryDao.adjustStock`), which also
+     appends the Inventory → History `stock_transactions` row.
+  3. For each `trackEmpties` line with empties returned > 0, reduces owed crates
+     via `db.crateLedgerDao.recordCrateReturnByManufacturer` (movement `returned`).
+  4. Writes one summary `stock.received` Activity Log row.
+
+**Review & completion (Units 4–5, 2026-06-20):**
+- **Dropped the broken crate-RECEIVE leg.** The earlier draft called
+  `recordCrateReceiveFromManufacturer`, which inserts `movement_type: 'received'`
+  — forbidden by the `crate_ledger` CHECK (`issued/returned/damaged/adjusted/
+  transferred_in/transferred_out`), so every confirm with a bottle line threw
+  `SqliteException(275)`. That method is dead/broken on this branch (only this
+  service called it) and the full supplier-crate "receive increases what we owe"
+  subsystem (§3.13) is NOT on this branch. The user's explicit requirement is
+  only to track **empties returned to the supplier**, so the receive leg was
+  removed and only the valid `returned` leg kept.
+- **Guards (§14):** route guard on `products.add` self-blocks deep-link/back-stack
+  reach for Cashier/Stock keeper/Manager-without-permission; long-press edit gated
+  on `products.edit_price`; buying-price re-checked at the write boundary in
+  `UpdateProductSheet` (falls back to the existing price without
+  `products.edit_buying_price`). All gated UI is hidden, not greyed.
+- **Store lock (§15.7):** the flow captures the active store at init
+  (`_flowStoreId`); `_confirm` aborts with a warning if `lockedStoreProvider`
+  changed mid-flow — never silently re-stamps.
+- **Legacy cleanup (§17.12):** removed the dead inbound supplier-delivery flow —
+  deleted `deliveries_screen.dart`, `receive_delivery_sheet.dart`,
+  `delivery_service.dart`, `delivery.dart` (model) and `deliveryServiceProvider`;
+  reindexed MainLayout/NavigationService/AppDrawer (tab 9 was Deliveries, now
+  Activity Log; navigatorKeys/observers 11→10). Confirmed truly dead first: the
+  only `'deliveries'` route emitter was the screen's own drawer. Kept the LIVE
+  order-side `DeliveryReceipt`/`DeliveryReceiptService` (rider hand-off, used by
+  `orders_screen`).
 
 **Verification:**
-- Fixed a compilation error involving `syncDao.enqueue` arity.
-- `flutter analyze lib` clean on all touched files.
-- `flutter test` fully passing.
+- `flutter analyze lib` clean.
+- `flutter test` green — 455 passed / 58 skipped / 0 failed, including the new
+  `test/receiving/receive_stock_test.dart` (7 tests: cart combine/no-ceiling/
+  setQty-0/invoice-total; service stock+invoice+crate-return+activity, empty-cart
+  guard, atomicity rollback).
 
 ---
 

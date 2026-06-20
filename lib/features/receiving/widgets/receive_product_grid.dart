@@ -4,7 +4,6 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
-import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
 import 'package:reebaplus_pos/features/receiving/widgets/new_product_card.dart';
@@ -189,7 +188,7 @@ class _ReceiveProductCard extends ConsumerWidget {
                 child: Text(
                   cartQty.toString(),
                   style: TextStyle(
-                    color: Colors.white,
+                    color: Theme.of(context).colorScheme.onPrimary,
                     fontSize: context.getRFontSize(11),
                     fontWeight: FontWeight.bold,
                   ),
@@ -201,7 +200,7 @@ class _ReceiveProductCard extends ConsumerWidget {
     );
   }
 
-  Widget _buildGridLayout(BuildContext context, dynamic product, int totalStock, bool isOutOfStock) {
+  Widget _buildGridLayout(BuildContext context, ProductData product, int totalStock, bool isOutOfStock) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -242,7 +241,7 @@ class _ReceiveProductCard extends ConsumerWidget {
               ),
               SizedBox(height: context.getRSize(2)),
               Text(
-                '${product.size != null && product.size.toString() != 'null' ? '${product.size} ' : ''}${product.unit ?? ''}'.trim(),
+                '${product.size != null && product.size!.isNotEmpty ? '${product.size} ' : ''}${product.unit}'.trim(),
                 style: TextStyle(
                   fontSize: context.getRFontSize(11),
                   color: subtextCol,
@@ -256,7 +255,7 @@ class _ReceiveProductCard extends ConsumerWidget {
                 isOutOfStock ? 'No stock' : 'Current: $totalStock',
                 style: TextStyle(
                   fontSize: context.getRFontSize(11),
-                  color: isOutOfStock ? danger : subtextCol,
+                  color: isOutOfStock ? Theme.of(context).colorScheme.error : subtextCol,
                   fontWeight: isOutOfStock ? FontWeight.bold : FontWeight.w500,
                 ),
               ),

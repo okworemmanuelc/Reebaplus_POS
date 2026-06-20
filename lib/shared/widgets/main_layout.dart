@@ -11,7 +11,6 @@ import 'package:reebaplus_pos/features/payments/screens/payments_screen.dart';
 import 'package:reebaplus_pos/features/expenses/screens/expenses_screen.dart';
 import 'package:reebaplus_pos/features/stores/screens/stores_screen.dart';
 import 'package:reebaplus_pos/features/pos/screens/cart_screen.dart';
-import 'package:reebaplus_pos/features/deliveries/screens/deliveries_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/activity_log_screen.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -35,7 +34,7 @@ class _MainLayoutState extends ConsumerState<MainLayout>
 
   // 11 tabs = 11 Navigators (Funds Register removed, §23).
   final List<GlobalKey<NavigatorState>> _navigatorKeys = List.generate(
-    11,
+    10,
     (_) => GlobalKey<NavigatorState>(),
   );
 
@@ -64,8 +63,7 @@ class _MainLayoutState extends ConsumerState<MainLayout>
     const ExpensesScreen(), // 6
     const StoresScreen(), // 7
     const CartScreen(cart: [], onCustomerChanged: _voidOnCustomerChanged), // 8
-    const DeliveriesScreen(), // 9
-    const ActivityLogScreen(), // 10
+    const ActivityLogScreen(), // 9
   ];
 
   // Persistent pending-orders count — subscribed once, never recreated.
@@ -85,7 +83,7 @@ class _MainLayoutState extends ConsumerState<MainLayout>
     _nav.tabNavigatorKeys = _navigatorKeys;
 
     _observers = List.generate(
-      11,
+      10,
       (i) => _TabPopObserver(tabIndex: i, nav: _nav),
     );
 

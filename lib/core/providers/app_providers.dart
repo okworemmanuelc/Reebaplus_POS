@@ -16,7 +16,6 @@ import 'package:reebaplus_pos/core/theme/theme_notifier.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/customers/data/services/customer_service.dart';
 import 'package:reebaplus_pos/features/deliveries/data/models/delivery_receipt.dart';
-import 'package:reebaplus_pos/features/deliveries/data/services/delivery_service.dart';
 import 'package:reebaplus_pos/features/inventory/data/services/supplier_service.dart';
 import 'package:reebaplus_pos/features/payments/data/services/payment_service.dart';
 import 'package:reebaplus_pos/shared/services/activity_log_service.dart';
@@ -28,6 +27,7 @@ import 'package:reebaplus_pos/shared/services/notification_service.dart';
 import 'package:reebaplus_pos/shared/services/crate_return_approval_service.dart';
 import 'package:reebaplus_pos/shared/services/order_service.dart';
 import 'package:reebaplus_pos/shared/services/supplier_account_service.dart';
+import 'package:reebaplus_pos/shared/services/receive_stock_service.dart';
 import 'package:reebaplus_pos/shared/services/printer_service.dart';
 import 'package:reebaplus_pos/shared/services/reorder_alert_service.dart';
 import 'package:reebaplus_pos/core/diagnostics/sync_diagnostic.dart';
@@ -216,6 +216,15 @@ final supplierAccountServiceProvider = Provider<SupplierAccountService>((ref) {
   return SupplierAccountService(ref.read(databaseProvider));
 });
 
+/// Atomic "Receive Stock" commit: supplier invoice + stock increment + crate
+/// movements + activity log, all in one transaction. See [ReceiveStockService].
+final receiveStockServiceProvider = Provider<ReceiveStockService>((ref) {
+  return ReceiveStockService(
+    ref.read(databaseProvider),
+    ref.read(supplierAccountServiceProvider),
+  );
+});
+
 /// supplierId → signed ledger balance (kobo), live. Negative = we owe the
 /// supplier. Drives the per-supplier balance chip on the Suppliers list.
 /// Scoped to the active store (§21.11); null lock = "All Stores" aggregate.
@@ -269,10 +278,7 @@ final supplierAllHistoryProvider =
           .watchAllHistory(storeId: storeId);
     });
 
-// ── Delivery ────────────────────────────────────────────────────────────────
-final deliveryServiceProvider = ChangeNotifierProvider<DeliveryService>((ref) {
-  return DeliveryService(ref.read(notificationProvider));
-});
+// ── Delivery receipts (rider hand-off on customer orders, §orders) ───────────
 final deliveryReceiptServiceProvider =
     ChangeNotifierProvider<DeliveryReceiptService>((ref) {
       return DeliveryReceiptService();

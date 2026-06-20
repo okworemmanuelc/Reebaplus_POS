@@ -9,6 +9,7 @@ import 'package:reebaplus_pos/features/pos/widgets/category_filter_bar.dart';
 import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
 import 'package:reebaplus_pos/features/receiving/widgets/receive_product_grid.dart';
 import 'package:reebaplus_pos/features/receiving/screens/receive_cart_screen.dart';
+import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'dart:async';
@@ -114,6 +115,28 @@ class _ReceiveStockScreenState extends ConsumerState<ReceiveStockScreen> {
     final subtextCol = Theme.of(context).textTheme.bodySmall?.color ?? Theme.of(context).iconTheme.color!;
     final borderCol = Theme.of(context).dividerColor;
 
+    // §14.7 — defense-in-depth route guard. The split FAB that opens this screen
+    // is already gated on `products.add` (CEO + Manager-with-permission); this
+    // blocks any back-stack / deep-link reach for Cashier / Stock keeper /
+    // Manager-without-permission.
+    if (!hasPermission(ref, 'products.add')) {
+      return Scaffold(
+        backgroundColor: surfaceCol,
+        appBar: AppBar(
+          title: const Text('Receive Stock'),
+          backgroundColor: surfaceCol,
+          elevation: 0,
+          centerTitle: true,
+        ),
+        body: Center(
+          child: Text(
+            "You don't have access to Receive Stock.",
+            style: TextStyle(color: subtextCol),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: surfaceCol,
       appBar: AppBar(
@@ -202,32 +225,15 @@ class _ReceiveStockScreenState extends ConsumerState<ReceiveStockScreen> {
       ),
       child: SafeArea(
         top: false,
-        child: ElevatedButton(
+        child: AppButton(
+          text: 'Review Items ($cartLineCount)',
+          icon: FontAwesomeIcons.cartShopping.data,
+          isFullWidth: true,
           onPressed: () {
             Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const ReceiveCartScreen()),
             );
           },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Theme.of(context).colorScheme.primary,
-            foregroundColor: Colors.white,
-            padding: EdgeInsets.symmetric(vertical: context.getRSize(16)),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(FontAwesomeIcons.cartShopping.data, size: 18),
-              SizedBox(width: context.getRSize(12)),
-              Text(
-                'Review Items ($cartLineCount)',
-                style: TextStyle(
-                  fontSize: context.getRFontSize(16),
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     );

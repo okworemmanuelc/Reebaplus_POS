@@ -45,7 +45,10 @@ class ReceiveCartScreen extends ConsumerWidget {
                       ),
                       TextButton(
                         onPressed: () => Navigator.pop(ctx, true),
-                        child: const Text('Clear', style: TextStyle(color: Colors.red)),
+                        child: Text(
+                          'Clear',
+                          style: TextStyle(color: Theme.of(context).colorScheme.error),
+                        ),
                       ),
                     ],
                   ),
@@ -56,8 +59,15 @@ class ReceiveCartScreen extends ConsumerWidget {
                   Navigator.pop(context);
                 }
               },
-              icon: const Icon(Icons.delete_sweep, color: Colors.redAccent, size: 20),
-              label: const Text('Clear', style: TextStyle(color: Colors.redAccent)),
+              icon: Icon(
+                FontAwesomeIcons.trashCan.data,
+                color: Theme.of(context).colorScheme.error,
+                size: 20,
+              ),
+              label: Text(
+                'Clear',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
             ),
           const SizedBox(width: 8),
         ],
@@ -93,8 +103,12 @@ class ReceiveCartScreen extends ConsumerWidget {
                   background: Container(
                     alignment: Alignment.centerRight,
                     padding: const EdgeInsets.only(right: 20),
-                    color: Colors.red,
-                    child: Icon(FontAwesomeIcons.trash.data, color: Colors.white, size: 20),
+                    color: Theme.of(context).colorScheme.error,
+                    child: Icon(
+                      FontAwesomeIcons.trash.data,
+                      color: Theme.of(context).colorScheme.onError,
+                      size: 20,
+                    ),
                   ),
                   onDismissed: (_) {
                     notifier.remove(line.productId);

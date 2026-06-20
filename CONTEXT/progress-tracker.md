@@ -24,10 +24,32 @@ phone + LGA fields), and verification of the permission gating screen rendering.
 ## Completed
 
 ### Receive Stock Flow (2026-06-20)
-- Implemented the POS-style "Receive Stock" flow where users can add items via a grid, review them in a receive cart (Invoice Total computed from buying price × qty), and checkout.
-- Added empty crate tracking support during supplier checkout for products where `trackEmpties == true`.
-- Ensured atomic storage transaction covering ledger updates, inventory addition, and crate movement records (`recordCrateReceiveFromManufacturer` and `recordCrateReturnByManufacturer`).
-- Fixed compilation error regarding `db.syncDao.enqueue` and verified that 100% of the project-wide tests pass successfully.
+- Implemented the POS-style "Receive Stock" flow (5 units): grid entry from the
+  Inventory split FAB (gated `products.add`) → receive cart (Invoice Total =
+  buying × qty, no customer/discount) → invoice checkout (searchable supplier
+  picker excluding soft-deleted, backdatable receive date, optional note,
+  empties-returned capture).
+- `ReceiveStockService.confirmReceipt` commits the whole receipt atomically in one
+  Drift transaction: supplier invoice (skipped if zero) + per-line stock adjust
+  (with `stock_transactions` history) + crate **return** for empties handed back
+  (`recordCrateReturnByManufacturer`) + one summary `stock.received` activity row.
+- **Empty-crate tracking is return-only** here: empties handed back to the supplier
+  on the receipt reduce owed crates for the line's manufacturer. The crate-RECEIVE
+  leg from the draft (`recordCrateReceiveFromManufacturer`, movement `received`)
+  was removed — it violated the `crate_ledger` CHECK and belongs to the §3.13
+  supplier-crate subsystem, which is not on this branch.
+- Guards (§14): route guard on `products.add`, long-press edit on
+  `products.edit_price`, buying-price write-boundary re-check via
+  `UpdateProductSheet` (`products.edit_buying_price`). Store-lock revalidation
+  (§15.7): flow captures the active store at init and aborts if it changes before
+  confirm.
+- Legacy cleanup (§17.12): deleted the dead inbound supplier-delivery flow
+  (`deliveries_screen`, `receive_delivery_sheet`, `delivery_service`, `delivery`
+  model, `deliveryServiceProvider`) and reindexed the nav (Deliveries tab 9 gone;
+  Activity Log now 9). The live order-side `DeliveryReceipt`/`DeliveryReceiptService`
+  (rider hand-off) is retained.
+- Verification: `flutter analyze lib` clean; `flutter test` green (455 passed / 58
+  skipped / 0 failed) incl. new `test/receiving/receive_stock_test.dart`.
 
 ### Sync Issues — collapse `sessions:upsert` churn (2026-06-18)
 - Diagnosed a Sync Issues queue full of pending `sessions:upsert` / a couple
