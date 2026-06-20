@@ -71,9 +71,8 @@ class ReceiptWidget extends StatelessWidget {
     const textCol = Color(0xFF111111);
     const sub = Color(0xFF555555);
     const divCol = Color(0xFFDDDDDD);
-    // Theme-independent like the rest of the palette: receipts are printed /
-    // captured for PDF where the ambient theme may not be the app's. Keep amber.
-    const primary = Color(0xFFF5A623); // amberPrimary brand colour
+    // Use the app's theme for the primary color instead of hardcoded amber.
+    final primary = Theme.of(context).colorScheme.primary;
 
     return Container(
       width: double.infinity,
