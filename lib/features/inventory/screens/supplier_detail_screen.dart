@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
 
-import 'package:reebaplus_pos/core/data/business_types.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -74,8 +73,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
     final supplierAsync = ref.watch(supplierByIdProvider(widget.supplierId));
     final supplier = supplierAsync.valueOrNull;
 
-    final isCrateBus = isCrateBusiness(ref.watch(currentBusinessProvider)?.type);
-    final showCrates = isCrateBus;
+    final showCrates = businessTracksCrates(ref.watch(currentBusinessProvider));
 
     Widget content;
     if (!canManage) {

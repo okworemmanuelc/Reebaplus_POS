@@ -534,6 +534,7 @@ class SupabaseSyncService {
       'logo_url',
       'owner_id',
       'onboarding_complete',
+      'tracks_empty_crates',
       'created_at',
       'last_updated_at',
       // NOTE: timezone is local-only (cloud schema doesn't have it).

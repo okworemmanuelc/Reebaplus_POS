@@ -3,6 +3,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
+import 'package:reebaplus_pos/shared/services/order_service.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
 
 class _Seed {
@@ -407,6 +408,96 @@ void main() {
       expect(stale.first.newPriceKobo, equals(75000));
       expect(stale.first.cartVersion, equals(original.version));
       expect(stale.first.currentVersion, greaterThan(original.version));
+    });
+  });
+
+  group('OrderService payment classification', () {
+    late OrderService orderService;
+
+    setUp(() {
+      orderService = OrderService(db);
+    });
+
+    test('classifies credit sale fully covered by wallet as wallet payment', () async {
+      final s = await _seed(db);
+
+      // Create an order via OrderService, with amountPaidKobo = 0 (credit sale),
+      // but walletBalanceKobo = 100000 (equal to order total).
+      final orderNumber = await orderService.addOrder(
+        customerId: s.customerId,
+        cart: [
+          {'id': s.productId, 'name': 'Test Beer', 'qty': 1, 'unitPriceKobo': 100000}
+        ],
+        totalAmountKobo: 100000,
+        amountPaidKobo: 0,
+        paymentType: 'Credit Sale',
+        staffId: s.staffId,
+        storeId: s.storeId,
+        walletBalanceKobo: 100000,
+      );
+
+      final order = await (db.select(db.orders)..where((o) => o.orderNumber.equals(orderNumber))).getSingle();
+      expect(order.paymentType, equals('wallet'));
+    });
+
+    test('classifies credit sale NOT fully covered by wallet as credit', () async {
+      final s = await _seed(db);
+
+      final orderNumber = await orderService.addOrder(
+        customerId: s.customerId,
+        cart: [
+          {'id': s.productId, 'name': 'Test Beer', 'qty': 1, 'unitPriceKobo': 100000}
+        ],
+        totalAmountKobo: 100000,
+        amountPaidKobo: 0,
+        paymentType: 'Credit Sale',
+        staffId: s.staffId,
+        storeId: s.storeId,
+        walletBalanceKobo: 50000, // less than total
+      );
+
+      final order = await (db.select(db.orders)..where((o) => o.orderNumber.equals(orderNumber))).getSingle();
+      expect(order.paymentType, equals('credit'));
+    });
+
+    test('classifies partial payment correctly as mixed', () async {
+      final s = await _seed(db);
+
+      final orderNumber = await orderService.addOrder(
+        customerId: s.customerId,
+        cart: [
+          {'id': s.productId, 'name': 'Test Beer', 'qty': 1, 'unitPriceKobo': 100000}
+        ],
+        totalAmountKobo: 100000,
+        amountPaidKobo: 50000,
+        paymentType: 'Partial Payment',
+        staffId: s.staffId,
+        storeId: s.storeId,
+        walletBalanceKobo: 0,
+      );
+
+      final order = await (db.select(db.orders)..where((o) => o.orderNumber.equals(orderNumber))).getSingle();
+      expect(order.paymentType, equals('mixed'));
+    });
+
+    test('classifies full payment correctly as cash', () async {
+      final s = await _seed(db);
+
+      final orderNumber = await orderService.addOrder(
+        customerId: s.customerId,
+        cart: [
+          {'id': s.productId, 'name': 'Test Beer', 'qty': 1, 'unitPriceKobo': 100000}
+        ],
+        totalAmountKobo: 100000,
+        amountPaidKobo: 100000,
+        paymentType: 'Cash / Transfer',
+        staffId: s.staffId,
+        storeId: s.storeId,
+        walletBalanceKobo: 0,
+      );
+
+      final order = await (db.select(db.orders)..where((o) => o.orderNumber.equals(orderNumber))).getSingle();
+      expect(order.paymentType, equals('cash'));
     });
   });
 }

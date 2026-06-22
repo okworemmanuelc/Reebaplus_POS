@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:reebaplus_pos/core/data/business_types.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/services/biometric_service.dart';
 import 'package:reebaplus_pos/core/theme/theme_notifier.dart';
@@ -453,6 +454,18 @@ final currentBusinessProvider = Provider.autoDispose<BusinessData?>((ref) {
   // device, returning null avoids surfacing the WRONG business's name (§7.2a).
   return list.length == 1 ? list.first : null;
 });
+
+/// Combined visibility gate for all empty-crate surfaces. True only when:
+///  1. The business type is crate-eligible (Bar / Beverage distributor), AND
+///  2. The CEO opted in to crate tracking at onboarding (tracksEmptyCrates=true).
+///
+/// Use this everywhere instead of calling [isCrateBusiness] directly. Pass the
+/// [BusinessData] row from [currentBusinessProvider]. Returns false when null.
+bool businessTracksCrates(BusinessData? business) {
+  if (business == null) return false;
+  if (!isCrateBusiness(business.type)) return false;
+  return business.tracksEmptyCrates;
+}
 
 /// The active business name, live (see [currentBusinessProvider]). Empty when
 /// no business is bound yet.

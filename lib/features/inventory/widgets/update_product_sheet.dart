@@ -6,7 +6,6 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
-import 'package:reebaplus_pos/core/data/business_types.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
@@ -100,17 +99,8 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
 
   /// §13.4 / rule #13 — empty-crate tracking is Bar / Beer Distributor only.
   /// Gate the toggle (below) + force the saved value off for non-crate types.
-  bool get _isCrateBusiness {
-    final bid = ref.read(authProvider).currentUser?.businessId;
-    return isCrateBusiness(
-      ref
-          .read(localBusinessesProvider)
-          .valueOrNull
-          ?.where((b) => b.id == bid)
-          .map((b) => b.type)
-          .firstOrNull,
-    );
-  }
+  bool get _isCrateBusiness =>
+      businessTracksCrates(ref.read(currentBusinessProvider));
 
   /// trackEmpties as actually saved — forced off for non-crate businesses.
   bool get _effectiveTrackEmpties => _isCrateBusiness && _trackEmpties;

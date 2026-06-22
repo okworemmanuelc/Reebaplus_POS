@@ -618,6 +618,11 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
     // full crate — item + its container — was lost) or 'empty' (a stored
     // returned empty was damaged).
     String crateFate = 'none';
+    // Crate-fate surfaces are gated on the combined business opt-in, not just a
+    // product's trackEmpties — when the business has crate tracking OFF, a
+    // legacy product still flagged trackEmpties must never offer a crate fate
+    // or write empty-crate ledger rows.
+    final tracksCrates = businessTracksCrates(ref.read(currentBusinessProvider));
     // Reuse the State-owned controller; clear any value left from a prior open.
     _damageQtyCtrl.clear();
     bool submitting = false;
@@ -646,8 +651,10 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
               final reasonLabel = _kDamageReasons[reasonKey]!;
               final p = product!;
 
-              // §17.2 crate-aware: only a tracked bottle can carry a crate fate.
+              // §17.2 crate-aware: only a tracked bottle can carry a crate fate,
+              // and only when the business opted into crate tracking.
               final isTrackedBottle =
+                  tracksCrates &&
                   p.product.unit.toLowerCase() == 'bottle' &&
                   p.product.trackEmpties;
               final fate = isTrackedBottle ? crateFate : 'none';
@@ -869,6 +876,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                         // Crate fate only applies to a tracked bottle; reset it
                         // when switching to a product that can't carry one.
                         final tb =
+                            tracksCrates &&
                             v != null &&
                             v.product.unit.toLowerCase() == 'bottle' &&
                             v.product.trackEmpties;
@@ -900,7 +908,8 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                     ),
                     // §17.2 crate-aware: a tracked bottle can lose its crate
                     // deposit too. Ask whether the empty crate went with it.
-                    if (product != null &&
+                    if (tracksCrates &&
+                        product != null &&
                         product!.product.unit.toLowerCase() == 'bottle' &&
                         product!.product.trackEmpties) ...[
                       SizedBox(height: context.getRSize(14)),

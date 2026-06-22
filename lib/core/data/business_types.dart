@@ -29,3 +29,4 @@ bool isCrateBusiness(String? type) {
   final t = type?.trim().toLowerCase();
   return t == 'bar' || t == 'beer distributor' || t == 'beverage distributor';
 }
+

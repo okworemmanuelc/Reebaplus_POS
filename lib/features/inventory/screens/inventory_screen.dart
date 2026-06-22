@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
-import 'package:reebaplus_pos/core/data/business_types.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 
@@ -118,14 +117,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     // `suppliers.manage` wouldn't change the visible tabs. The grants watch above
     // stays only as the load-gate so the tab bar still reveals in one shot.
     final perms = ref.watch(currentUserPermissionsProvider);
-    final businessId = ref.read(authProvider).currentUser?.businessId;
-    final businessType = businessesAsync.value!
-        .where((b) => b.id == businessId)
-        .map((b) => b.type)
-        .firstOrNull;
-
     final showSuppliers = perms.contains('suppliers.manage');
-    final showCrates = isCrateBusiness(businessType);
+    final showCrates = businessTracksCrates(ref.watch(currentBusinessProvider));
     final showHistory =
         role.slug == 'ceo' ||
         role.slug == 'manager' ||

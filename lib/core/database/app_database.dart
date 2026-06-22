@@ -48,6 +48,12 @@ class Businesses extends Table {
   // creator. Set locally during onboarding and backfilled from cloud on pull.
   // Used to prevent any CEO (including added ones) from changing the owner's role.
   TextColumn get ownerId => text().nullable()();
+  // Opt-in flag for empty-crate / returnable-case tracking. Only meaningful
+  // when isCrateBusiness(type) is true (Bar / Beverage distributor). Default
+  // true so existing tenants keep their crate features after the migration.
+  // Set explicitly at onboarding and editable via CEO Settings → Business Info.
+  BoolColumn get tracksEmptyCrates =>
+      boolean().withDefault(const Constant(true))();
   // Subscription / access gating (master plan §32). Set by the web admin
   // console in the cloud; CLOUD-AUTHORITATIVE / APP-READ-ONLY — these columns
   // are deliberately omitted from the businesses push whitelist
@@ -1775,7 +1781,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 56;
+  int get schemaVersion => 57;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3786,6 +3792,21 @@ class AppDatabase extends _$AppDatabase {
           "VALUES ('stores.dispatch_transfer', "
           "'Approve and dispatch stock requests from your store', 'Stores')",
         );
+      }
+      if (from < 57) {
+        // v57: businesses.tracks_empty_crates — per-business opt-in for
+        // empty-crate / returnable-case tracking (onboarding-time choice).
+        // Default true so all existing crate-business tenants keep their
+        // features after upgrade without any data change. Guard the add: a DB
+        // stepped back by the revert-then-re-upgrade tests already carries the
+        // column from onCreate (same pattern as v43 above).
+        final has = await customSelect(
+          "SELECT 1 FROM pragma_table_info('businesses') "
+          "WHERE name = 'tracks_empty_crates'",
+        ).get();
+        if (has.isEmpty) {
+          await m.addColumn(businesses, businesses.tracksEmptyCrates);
+        }
       }
     },
     beforeOpen: (details) async {

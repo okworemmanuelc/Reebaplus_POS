@@ -85,4 +85,44 @@ void main() {
         .any((w) => w.runtimeType.toString().contains('Barcode'));
     expect(hasBarcode, isFalse, reason: 'QR/barcode must not be on the receipt');
   });
+
+  testWidgets('walk-in customer is not shown on receipt', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: ReceiptWidget(
+            orderId: 'ORD-000002',
+            cart: cart,
+            subtotal: 2000,
+            crateDeposit: 0,
+            total: 2000,
+            paymentMethod: 'Full Cash / Card',
+            customerName: 'Walk-in Customer',
+            showWalletInfo: false,
+          ),
+        ),
+      ),
+    ));
+    expect(find.textContaining('Walk-in Customer'), findsNothing);
+  });
+
+  testWidgets('null/empty customer is not shown on receipt', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: ReceiptWidget(
+            orderId: 'ORD-000002',
+            cart: cart,
+            subtotal: 2000,
+            crateDeposit: 0,
+            total: 2000,
+            paymentMethod: 'Full Cash / Card',
+            customerName: '',
+            showWalletInfo: false,
+          ),
+        ),
+      ),
+    ));
+    expect(find.textContaining('Walk-in Customer'), findsNothing);
+  });
 }

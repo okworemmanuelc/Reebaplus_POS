@@ -101,26 +101,23 @@ class ThermalReceiptService {
     bytes += generator.hr(); // "--------------------------------"
 
     // --- 2. CUSTOMER & TRANSACTION DETAILS ---
-    if (customerName != null && customerName.isNotEmpty) {
+    if (customerName != null &&
+        customerName.isNotEmpty &&
+        customerName.toLowerCase() != 'walk-in customer') {
       bytes += generator.text(
         customerName,
         styles: const PosStyles(bold: true),
       );
-      if (customerAddress != null && customerAddress.isNotEmpty) {
+      if (customerAddress != null &&
+          customerAddress.isNotEmpty &&
+          customerAddress != 'N/A') {
         bytes += generator.text(customerAddress);
       }
       if (customerPhone != null && customerPhone.isNotEmpty) {
         bytes += generator.text(customerPhone);
       }
-    } else {
-      bytes += generator.text(
-        'Walk-in Customer',
-        styles: const PosStyles(bold: true),
-      );
+      bytes += generator.text('');
     }
-
-    // Add empty line spacing
-    bytes += generator.text('');
 
     final now = DateTime.now();
     final dateStr =

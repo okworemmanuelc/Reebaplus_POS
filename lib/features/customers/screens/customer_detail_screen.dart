@@ -8,7 +8,6 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:screenshot/screenshot.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:reebaplus_pos/core/data/business_types.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -1197,16 +1196,8 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
 
   /// §18.3 — the Crates tab only shows for Bar / Beer Distributor businesses.
   /// Same business-type gate the Inventory screen uses for its Empty Crates tab.
-  bool _showCratesTab() {
-    final businessesAsync = ref.watch(localBusinessesProvider);
-    if (!businessesAsync.hasValue) return false;
-    final businessId = ref.read(authProvider).currentUser?.businessId;
-    final type = businessesAsync.value!
-        .where((b) => b.id == businessId)
-        .map((b) => b.type)
-        .firstOrNull;
-    return isCrateBusiness(type);
-  }
+  bool _showCratesTab() =>
+      businessTracksCrates(ref.watch(currentBusinessProvider));
 
   @override
   Widget build(BuildContext context) {

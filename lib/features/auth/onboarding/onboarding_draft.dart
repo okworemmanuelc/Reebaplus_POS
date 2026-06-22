@@ -32,6 +32,9 @@ class OnboardingDraft {
   String? ownerName;
   String? businessName;
   String? businessType;
+  // Onboarding opt-in: shown when businessType is crate-eligible. Default true
+  // so crate businesses keep their features; non-crate types don't use this.
+  bool tracksEmptyCrates = true;
   String? businessPhone;
   String? businessEmail;
 

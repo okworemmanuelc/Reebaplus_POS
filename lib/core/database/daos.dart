@@ -1441,7 +1441,9 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
                 ..where((b) => b.id.equals(requireBusinessId()))
                 ..limit(1))
               .getSingleOrNull();
-      if (customerId != null && isCrateBusiness(crateBiz?.type)) {
+      if (customerId != null &&
+          isCrateBusiness(crateBiz?.type) &&
+          (crateBiz?.tracksEmptyCrates ?? true)) {
         final cratesByManufacturer = <String, int>{};
         for (final item in items) {
           final productId = item.productId.value;
@@ -8111,7 +8113,12 @@ class BusinessesDao extends DatabaseAccessor<AppDatabase>
   /// still routes through `enqueueUpsert`. Because that absence also means
   /// no `bump_businesses_last_updated_at` trigger exists, `lastUpdatedAt`
   /// is stamped explicitly here (same as onboarding's local mirror).
-  Future<void> updateInfo({String? name, String? type, String? phone}) async {
+  Future<void> updateInfo({
+    String? name,
+    String? type,
+    String? phone,
+    bool? tracksEmptyCrates,
+  }) async {
     final id = requireBusinessId();
     await (update(businesses)..where((t) => t.id.equals(id))).write(
       BusinessesCompanion(
@@ -8121,6 +8128,9 @@ class BusinessesDao extends DatabaseAccessor<AppDatabase>
         phone: phone == null
             ? const Value.absent()
             : Value(phone.isEmpty ? null : phone),
+        tracksEmptyCrates: tracksEmptyCrates == null
+            ? const Value.absent()
+            : Value(tracksEmptyCrates),
         lastUpdatedAt: Value(DateTime.now()),
       ),
     );

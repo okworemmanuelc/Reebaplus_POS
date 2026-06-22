@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:reebaplus_pos/core/data/business_types.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
@@ -31,15 +30,7 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
     // §13.4 / rule #13 — crate-deposit features only exist for Bar & Beer
     // distributor businesses. Gate the Crate Deposits report card on the same
     // business-type check the Inventory Empty Crates tab uses (case-insensitive).
-    final businessId = ref.read(authProvider).currentUser?.businessId;
-    final isCrate = isCrateBusiness(
-      ref
-          .watch(localBusinessesProvider)
-          .valueOrNull
-          ?.where((b) => b.id == businessId)
-          .map((b) => b.type)
-          .firstOrNull,
-    );
+    final isCrate = businessTracksCrates(ref.watch(currentBusinessProvider));
     // §16.6.1 + §12.3.1 — count of stock-keeper adjustments AND cashier Quick
     // Sale requests awaiting this viewer's approval (a CEO sees all stores; a
     // Manager only their assigned store(s)).

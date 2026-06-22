@@ -13,6 +13,7 @@ import 'package:reebaplus_pos/core/data/currencies.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
+import 'package:reebaplus_pos/core/data/business_types.dart';
 import 'package:reebaplus_pos/features/auth/onboarding/onboarding_draft.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_form_kit.dart';
 import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
@@ -114,6 +115,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
   final _otpCtrl = TextEditingController();
 
   String? _businessType;
+  bool _tracksEmptyCrates = true;
   String _stateValue = '';
   String _lgaValue = '';
   String _countryValue = kDefaultCountry;
@@ -321,9 +323,12 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
     final dbType = _businessType == 'Beverage distributor'
         ? 'Beer distributor'
         : _businessType;
-    ref
-        .read(onboardingDraftProvider.notifier)
-        .update((d) => d.businessType = dbType);
+    ref.read(onboardingDraftProvider.notifier).update((d) {
+      d.businessType = dbType;
+      // Only write the flag for crate-eligible types; non-crate types always
+      // get true (the default) since the flag is meaningless for them.
+      d.tracksEmptyCrates = isCrateBusiness(dbType) ? _tracksEmptyCrates : true;
+    });
     _goTo(2);
   }
 
@@ -792,6 +797,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
   }
 
   Widget _buildBusinessTypeStep() {
+    final showCrateToggle = isCrateBusiness(_businessType);
     return AuthFormShell(
       title: 'What type of business?',
       subtitle: 'Pick the one that fits best.',
@@ -807,10 +813,21 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
               comingSoon: t.comingSoon,
               onTap: t.comingSoon
                   ? null
-                  : () => setState(() => _businessType = t.label),
+                  : () => setState(() {
+                    _businessType = t.label;
+                    // Reset to default when the type changes.
+                    _tracksEmptyCrates = true;
+                  }),
             ),
           );
         }),
+        if (showCrateToggle) ...[
+          const SizedBox(height: 4),
+          _CrateTrackingToggle(
+            value: _tracksEmptyCrates,
+            onChanged: (v) => setState(() => _tracksEmptyCrates = v),
+          ),
+        ],
         const SizedBox(height: 8),
         AppButton(
           text: 'Continue',
@@ -1268,6 +1285,51 @@ class _StepDots extends StatelessWidget {
           ),
         );
       }),
+    );
+  }
+}
+
+class _CrateTrackingToggle extends StatelessWidget {
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _CrateTrackingToggle({required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    final surface = Theme.of(context).colorScheme.surface;
+    return Container(
+      decoration: BoxDecoration(
+        color: surface.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: onSurface.withValues(alpha: 0.12),
+        ),
+      ),
+      child: SwitchListTile(
+        value: value,
+        onChanged: onChanged,
+        activeThumbColor: primary,
+        activeTrackColor: primary.withValues(alpha: 0.35),
+        title: Text(
+          'Track empty crates',
+          style: TextStyle(
+            color: authTextPrimary(context),
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        subtitle: Text(
+          'Enable to track returnable bottles and crate deposits.',
+          style: TextStyle(
+            color: authTextPrimary(context).withValues(alpha: 0.55),
+            fontSize: 13,
+          ),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      ),
     );
   }
 }

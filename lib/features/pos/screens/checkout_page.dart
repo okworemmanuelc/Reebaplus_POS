@@ -9,7 +9,6 @@ import 'package:screenshot/screenshot.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
-import 'package:reebaplus_pos/core/data/business_types.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/receipt_widget.dart';
@@ -204,6 +203,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       case PayMode.wallet:
         return 'Wallet Payment';
       case PayMode.credit:
+        if (!_isWalkIn && _currentCustomerWalletKobo >= _totalKobo) {
+          return 'Wallet Payment';
+        }
         return 'Credit Sale';
       case PayMode.cashTransfer:
         if (_isWalkIn) return 'Cash / Transfer';
@@ -295,17 +297,8 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   /// §13.4 / rule #13 — the selected business is Bar / Beer Distributor. The
   /// cart only passes crateLines for a crate business, but guard here too so the
   /// deposit section can never render for a non-crate type (defense in depth).
-  bool get _isCrateBusiness {
-    final bid = ref.read(authProvider).currentUser?.businessId;
-    return isCrateBusiness(
-      ref
-          .read(localBusinessesProvider)
-          .valueOrNull
-          ?.where((b) => b.id == bid)
-          .map((b) => b.type)
-          .firstOrNull,
-    );
-  }
+  bool get _isCrateBusiness =>
+      businessTracksCrates(ref.read(currentBusinessProvider));
 
   bool get _depositApplies =>
       !_isWalkIn &&
@@ -1018,10 +1011,17 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       // Cash / Transfer needs an amount entered. To book the whole total as
       // debt, the cashier picks "Register as Credit Sale" instead.
       if (_mode == PayMode.cashTransfer && paidKobo <= 0) {
-        AppNotification.showError(
-          context,
-          'Enter the amount paid, or choose Register as Credit Sale.',
-        );
+        if (_currentCustomerWalletKobo > 0) {
+          AppNotification.showError(
+            context,
+            'This customer has wallet credit available. Please select the Wallet payment method.',
+          );
+        } else {
+          AppNotification.showError(
+            context,
+            'Enter the amount paid, or choose Register as Credit Sale.',
+          );
+        }
         return;
       }
 
@@ -1138,6 +1138,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             // 'cash' covers Cash / Transfer and Credit Sale — the entered amount
             // (0 for a credit sale) credits the wallet, netting against the total.
             paymentSubType: paymentSubType,
+            walletBalanceKobo: oldWalletKobo,
           );
 
       // ── Success Flow ────────────────────────────────────────────────

@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
-import 'package:reebaplus_pos/core/data/business_types.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
 
@@ -810,15 +809,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
     // business type — the same check Inventory's Empty Crates tab uses. Gating
     // bottleItems at the source empties everything downstream (deposit lines,
     // crateLines passed to checkout, customer crate-credit) for non-crate types.
-    final businessId = ref.read(authProvider).currentUser?.businessId;
-    final isCrate = isCrateBusiness(
-      ref
-          .watch(localBusinessesProvider)
-          .valueOrNull
-          ?.where((b) => b.id == businessId)
-          .map((b) => b.type)
-          .firstOrNull,
-    );
+    final isCrate = businessTracksCrates(ref.watch(currentBusinessProvider));
     final bottleItems = !isCrate
         ? const <Map<String, dynamic>>[]
         : cartItems

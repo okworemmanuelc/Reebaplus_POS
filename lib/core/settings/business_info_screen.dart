@@ -28,6 +28,7 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   String? _type;
+  bool _tracksEmptyCrates = true;
   String _currency = kDefaultCurrency;
   bool _loading = true;
   bool _saving = false;
@@ -69,6 +70,7 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
         loadedType = 'Beverage distributor';
       }
       _type = kBusinessTypes.contains(loadedType) ? loadedType : null;
+      _tracksEmptyCrates = biz?.tracksEmptyCrates ?? true;
       // Normalise legacy label-style values (e.g. "NGN (₦)") to a clean ISO
       // code so the picker shows "NGN" and saving repairs the stored value.
       _currency = normalizeCurrencyCode(currency);
@@ -109,6 +111,7 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
         name: name,
         type: dbType,
         phone: _phoneController.text.trim(),
+        tracksEmptyCrates: isCrateBusiness(dbType) ? _tracksEmptyCrates : true,
       );
       await db.settingsDao.set('default_currency', _currency);
       await db.activityLogDao.log(
@@ -185,8 +188,34 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
                             for (final type in kBusinessTypes)
                               DropdownMenuItem(value: type, child: Text(type)),
                           ],
-                          onChanged: (v) => setState(() => _type = v),
+                          onChanged: (v) => setState(() {
+                            _type = v;
+                            // Reset to default when type changes.
+                            _tracksEmptyCrates = true;
+                          }),
                         ),
+                        if (isCrateBusiness(_type)) ...[
+                          const SizedBox(height: 8),
+                          SwitchListTile(
+                            value: _tracksEmptyCrates,
+                            onChanged: (v) =>
+                                setState(() => _tracksEmptyCrates = v),
+                            activeThumbColor:
+                                Theme.of(context).colorScheme.primary,
+                            activeTrackColor: Theme.of(
+                              context,
+                            ).colorScheme.primary.withValues(alpha: 0.35),
+                            title: Text(
+                              'Track empty crates',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            subtitle: Text(
+                              'Enable to track returnable bottles and crate deposits.',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                        ],
                         const SizedBox(height: 16),
                         AppDropdown<String>(
                           value: _currency,

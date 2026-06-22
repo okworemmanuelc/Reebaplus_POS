@@ -1170,6 +1170,7 @@ class AuthService extends ValueNotifier<UserData?> {
             'tax_reg_number': draft.taxRegNumber,
           },
           'p_user_id': draft.userId,
+          'p_tracks_empty_crates': draft.tracksEmptyCrates,
         },
       );
       debugPrint('[AuthService] completeOnboarding: cloud RPC ok');
@@ -1212,6 +1213,7 @@ class AuthService extends ValueNotifier<UserData?> {
                 phone: Value(draft.businessPhone),
                 email: Value(draft.businessEmail),
                 onboardingComplete: const Value(true),
+                tracksEmptyCrates: Value(draft.tracksEmptyCrates),
                 ownerId: Value(_supabase.auth.currentUser!.id),
                 lastUpdatedAt: Value(now),
               ),

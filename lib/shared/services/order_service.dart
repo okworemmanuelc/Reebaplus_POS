@@ -42,6 +42,7 @@ class OrderService {
     int crateDepositPaidKobo = 0,
     int discountKobo = 0,
     String paymentSubType = 'cash',
+    int walletBalanceKobo = 0,
     // §13.4 — deposit actually paid per manufacturer/brand (Ring 3). Empty until
     // the checkout per-brand capture is wired; createOrder then treats every
     // crate brand as "no deposit" (crate-track).
@@ -65,6 +66,7 @@ class OrderService {
       paymentSubType: paymentSubType,
       amountPaidKobo: amountPaidKobo,
       totalAmountKobo: totalAmountKobo,
+      walletBalanceKobo: walletBalanceKobo,
     );
     final walletDebitKobo = _resolveWalletDebit(
       dbPaymentType: dbPaymentType,
@@ -337,9 +339,16 @@ class OrderService {
     required String paymentSubType,
     required int amountPaidKobo,
     required int totalAmountKobo,
+    required int walletBalanceKobo,
   }) {
     if (paymentSubType == 'wallet') return 'wallet';
-    if (amountPaidKobo <= 0) return 'credit';
+    if (amountPaidKobo <= 0) {
+      // A "credit sale" the customer's EXISTING wallet credit fully covers is
+      // financially a wallet payment — _resolveWalletDebit debits the full total
+      // for both 'credit' and 'wallet', so this is a label change only, no ledger
+      // change. Record it as wallet so receipt/badge reflect what settled it.
+      return walletBalanceKobo >= totalAmountKobo ? 'wallet' : 'credit';
+    }
     if (amountPaidKobo < totalAmountKobo) return 'mixed';
     return 'cash';
   }

@@ -1,3 +1,5 @@
+// ignore_for_file: unused_element, unused_field
+
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -610,6 +612,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             ),
           ),
         */
+        /*
         if (_canDelete)
           IconButton(
             onPressed: () => _confirmDelete(context),
@@ -628,6 +631,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
               ),
             ),
           ),
+        */
         SizedBox(width: context.getRSize(8)),
       ],
       flexibleSpace: FlexibleSpaceBar(
@@ -1143,57 +1147,36 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
           _buildDeliveryCard(context),
 
           SizedBox(height: context.getRSize(32)),
-          if (_canEdit && _editMode) ...[
-            // ── CEO / Manager (editing): save all fields in one update ─
-            AppButton(
-              text: 'Save Product',
-              variant: AppButtonVariant.primary,
-              icon: FontAwesomeIcons.floppyDisk.data,
-              isLoading: _savingChanges,
-              onPressed: _productData == null ? null : _saveChanges,
+          // ── Read-only notice ──────────────────────────────────────
+          Container(
+            width: double.infinity,
+            padding: EdgeInsets.all(context.getRSize(16)),
+            decoration: BoxDecoration(
+              color: _surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: _border),
             ),
-          ] else if ((_canAddStock || _canAdjustStock) && !_canEdit) ...[
-            // ── Stock keeper: quantity adjustments only (§16.6) ───────
-            AppButton(
-              text: 'Update Stock',
-              variant: AppButtonVariant.primary,
-              icon: FontAwesomeIcons.boxesStacked.data,
-              onPressed: _productData == null
-                  ? null
-                  : () => _showUpdateStockModal(),
-            ),
-          ] else if (!_canEdit) ...[
-            // ── Read-only notice ──────────────────────────────────────
-            Container(
-              width: double.infinity,
-              padding: EdgeInsets.all(context.getRSize(16)),
-              decoration: BoxDecoration(
-                color: _surface,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: _border),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.lock_outline,
-                    size: context.getRSize(14),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.lock_outline,
+                  size: context.getRSize(14),
+                  color: _subtext,
+                ),
+                SizedBox(width: context.getRSize(6)),
+                Text(
+                  'VIEW ONLY',
+                  style: TextStyle(
+                    fontSize: context.getRFontSize(12),
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8,
                     color: _subtext,
                   ),
-                  SizedBox(width: context.getRSize(6)),
-                  Text(
-                    'VIEW ONLY',
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(12),
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.8,
-                      color: _subtext,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
+          ),
           SizedBox(height: context.getRSize(40)),
         ],
       ),

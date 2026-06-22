@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:reebaplus_pos/core/data/business_types.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/shared/models/order_status.dart';
@@ -391,7 +390,6 @@ ReconData computeReconData(
   // deposit below.
   final crateDamages =
       ref.watch(allCrateDamagesProvider).valueOrNull ?? const [];
-  final businesses = ref.watch(localBusinessesProvider).valueOrNull ?? const [];
   final users = ref.watch(usersByBusinessProvider).valueOrNull ?? const {};
 
   final productById = {for (final p in productsWS) p.product.id: p.product};
@@ -611,15 +609,7 @@ ReconData computeReconData(
       .fold<int>(0, (s, b) => s - b);
 
   // ── Empty crates held (Bar / Beer Distributor only; point-in-time) ───────
-  final bizId = ref.watch(databaseProvider).currentBusinessId;
-  String? bizType;
-  for (final b in businesses) {
-    if (b.id == bizId) {
-      bizType = b.type;
-      break;
-    }
-  }
-  final showCrates = isCrateBusiness(bizType);
+  final showCrates = businessTracksCrates(ref.watch(currentBusinessProvider));
   var crateUnits = 0;
   var crateDepositKobo = 0;
   final manufacturerEmpties = <({String manufacturerName, int count, int valueKobo})>[];

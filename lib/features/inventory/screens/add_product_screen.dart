@@ -2,7 +2,6 @@ import 'package:drift/drift.dart' as drift;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:reebaplus_pos/core/data/business_types.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
@@ -484,17 +483,8 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   /// defaults on, so gate it on the business type — otherwise a non-crate
   /// business would silently create trackEmpties products (which leak the crate
   /// deposit UI into the cart/checkout and accrue crate-owed ledger rows).
-  bool get _isCrateBusiness {
-    final bid = ref.read(authProvider).currentUser?.businessId;
-    return isCrateBusiness(
-      ref
-          .read(localBusinessesProvider)
-          .valueOrNull
-          ?.where((b) => b.id == bid)
-          .map((b) => b.type)
-          .firstOrNull,
-    );
-  }
+  bool get _isCrateBusiness =>
+      businessTracksCrates(ref.read(currentBusinessProvider));
 
   /// trackEmpties as actually saved — forced off for non-crate businesses even
   /// if the (hidden) checkbox state is on.

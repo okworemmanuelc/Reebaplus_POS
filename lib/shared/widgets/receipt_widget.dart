@@ -197,27 +197,30 @@ class ReceiptWidget extends StatelessWidget {
           Container(height: 1, color: divCol),
           SizedBox(height: context.getRSize(12)),
 
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              (customerName != null && customerName!.isNotEmpty)
-                  ? [
-                      customerName!,
-                      if (customerAddress != null &&
-                          customerAddress!.isNotEmpty)
-                        customerAddress!,
-                      if (customerPhone != null && customerPhone!.isNotEmpty)
-                        customerPhone!,
-                    ].join('\n')
-                  : 'Walk-in Customer',
-              style: TextStyle(
-                fontSize: context.getRFontSize(13),
-                fontWeight: FontWeight.bold,
-                color: textCol,
+          if (customerName != null &&
+              customerName!.isNotEmpty &&
+              customerName!.toLowerCase() != 'walk-in customer') ...[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                [
+                  customerName!,
+                  if (customerAddress != null &&
+                      customerAddress!.isNotEmpty &&
+                      customerAddress != 'N/A')
+                    customerAddress!,
+                  if (customerPhone != null && customerPhone!.isNotEmpty)
+                    customerPhone!,
+                ].join('\n'),
+                style: TextStyle(
+                  fontSize: context.getRFontSize(13),
+                  fontWeight: FontWeight.bold,
+                  color: textCol,
+                ),
               ),
             ),
-          ),
-          SizedBox(height: context.getRSize(8)),
+            SizedBox(height: context.getRSize(8)),
+          ],
           Align(
             alignment: Alignment.centerLeft,
             child: Column(
