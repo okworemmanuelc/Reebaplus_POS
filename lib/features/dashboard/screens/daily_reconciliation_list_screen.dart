@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,6 +12,7 @@ import 'package:reebaplus_pos/features/dashboard/reconciliation/recon_data.dart'
 import 'package:reebaplus_pos/features/dashboard/screens/daily_reconciliation_detail_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
+import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 
 /// Daily Reconciliation entry list (§25.9). Store-scoped via the §12.1 picker and
@@ -276,81 +276,70 @@ class _DailyReconciliationListScreenState
 
   Widget _bucketCard(ThemeData theme, ReconBucket b) {
     final mismatch = b.hasShortage;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(context.radiusL),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-        child: Container(
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surface.withValues(alpha: 0.4),
-            borderRadius: BorderRadius.circular(context.radiusL),
-            border: Border.all(
-              color: mismatch
-                  ? theme.colorScheme.error.withValues(alpha: 0.3)
-                  : theme.colorScheme.primary.withValues(alpha: 0.05),
+    return GlassyCard(
+      radius: context.radiusL,
+      padding: EdgeInsets.zero,
+      border: Border.all(
+        color: mismatch
+            ? theme.colorScheme.error.withValues(alpha: 0.3)
+            : theme.colorScheme.primary.withValues(alpha: 0.05),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(context.radiusL),
+        onTap: () => Navigator.push(
+          context,
+          slideDownRoute(
+            DailyReconciliationDetailScreen(
+              start: b.start,
+              endExclusive: b.endExclusive,
+              grouping: b.grouping,
+              title: b.label,
             ),
           ),
-          child: Material(
-            type: MaterialType.transparency,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(context.radiusL),
-              onTap: () => Navigator.push(
-                context,
-                slideDownRoute(
-                  DailyReconciliationDetailScreen(
-                    start: b.start,
-                    endExclusive: b.endExclusive,
-                    grouping: b.grouping,
-                    title: b.label,
-                  ),
-                ),
-              ),
-              child: Padding(
-                padding: EdgeInsets.all(context.spacingM),
-                child: Row(
+        ),
+        child: Padding(
+          padding: EdgeInsets.all(context.spacingM),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            b.label,
-                            style: context.bodyMedium.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          SizedBox(height: context.getRSize(4)),
-                          Text(
-                            '${fmtNumber(b.itemsSold)} items sold',
-                            style: context.bodySmall.copyWith(color: theme.hintColor),
-                          ),
-                        ],
+                    Text(
+                      b.label,
+                      style: context.bodyMedium.copyWith(
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                    if (mismatch)
-                      Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: context.getRSize(8),
-                          vertical: context.getRSize(4),
-                        ),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.error.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          'Mismatch',
-                          style: context.bodySmall.copyWith(
-                            color: theme.colorScheme.error,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    SizedBox(width: context.getRSize(8)),
-                    Icon(Icons.chevron_right_rounded, color: theme.hintColor),
+                    SizedBox(height: context.getRSize(4)),
+                    Text(
+                      '${fmtNumber(b.itemsSold)} items sold',
+                      style: context.bodySmall.copyWith(color: theme.hintColor),
+                    ),
                   ],
                 ),
               ),
-            ),
+              if (mismatch)
+                Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: context.getRSize(8),
+                    vertical: context.getRSize(4),
+                  ),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.error.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    'Mismatch',
+                    style: context.bodySmall.copyWith(
+                      color: theme.colorScheme.error,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              SizedBox(width: context.getRSize(8)),
+              Icon(Icons.chevron_right_rounded, color: theme.hintColor),
+            ],
           ),
         ),
       ),

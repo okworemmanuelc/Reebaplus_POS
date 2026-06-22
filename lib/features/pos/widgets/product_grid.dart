@@ -3,6 +3,7 @@ import 'dart:math';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -25,6 +26,8 @@ class ProductGrid extends StatelessWidget {
   final PosController controller;
   final bool isListView;
   final int gridColumns;
+  final bool showHint;
+  final VoidCallback? onHintTap;
 
   const ProductGrid({
     super.key,
@@ -37,6 +40,8 @@ class ProductGrid extends StatelessWidget {
     required this.controller,
     this.isListView = false,
     this.gridColumns = 3,
+    this.showHint = false,
+    this.onHintTap,
   });
 
   @override
@@ -81,6 +86,8 @@ class ProductGrid extends StatelessWidget {
             borderCol: borderCol,
             controller: controller,
             isListView: true,
+            showHint: showHint,
+            onHintTap: onHintTap,
           );
         },
       );
@@ -125,6 +132,8 @@ class ProductGrid extends StatelessWidget {
           borderCol: borderCol,
           controller: controller,
           isListView: false,
+          showHint: showHint,
+          onHintTap: onHintTap,
         );
       },
     );
@@ -140,6 +149,8 @@ class _ProductCard extends ConsumerStatefulWidget {
   final Color borderCol;
   final PosController controller;
   final bool isListView;
+  final bool showHint;
+  final VoidCallback? onHintTap;
 
   const _ProductCard({
     required this.item,
@@ -150,6 +161,8 @@ class _ProductCard extends ConsumerStatefulWidget {
     required this.borderCol,
     required this.controller,
     this.isListView = false,
+    this.showHint = false,
+    this.onHintTap,
   });
 
   @override
@@ -172,6 +185,7 @@ class _ProductCardState extends ConsumerState<_ProductCard>
   /// Long-press opens the qty + discount sheet (the same editor used for cart
   /// lines), letting the user add the product with a chosen quantity/discount.
   Future<void> _openAddModal() async {
+    HapticFeedback.mediumImpact();
     final accepted = await EditItemModal.showForProduct(
       context,
       product: widget.item.product,
@@ -348,8 +362,8 @@ class _ProductCardState extends ConsumerState<_ProductCard>
                         BoxShadow(
                           color: inCart && !isOutOfStock
                               ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.15)
-                              : Colors.black.withValues(alpha: 0.02),
-                          blurRadius: 10,
+                              : Colors.black.withValues(alpha: 0.06),
+                          blurRadius: 12,
                           offset: const Offset(0, 4),
                         ),
                       ],
@@ -398,6 +412,27 @@ class _ProductCardState extends ConsumerState<_ProductCard>
                 ),
               ),
             ),
+            // Info Icon
+            if (widget.showHint && !isOutOfStock)
+              Positioned(
+                top: 8,
+                right: 8,
+                child: GestureDetector(
+                  onTap: widget.onHintTap,
+                  child: Container(
+                    padding: EdgeInsets.all(context.getRSize(4)),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.4),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      FontAwesomeIcons.circleInfo.data,
+                      size: context.getRSize(10),
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
           ],
         );
       },

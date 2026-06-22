@@ -120,18 +120,29 @@ void main() {
       expect(cart.invoiceTotalKobo, 30000);
       expect(cart.totalUnits, 3);
     });
+
+    test('setRetailPrice and setWholesalePrice updates values in cart line', () {
+      cart.addOrIncrement(bottle);
+      cart.setRetailPrice(bottleProductId, 15000);
+      cart.setWholesalePrice(bottleProductId, 14000);
+      final lines = container.read(receiveCartProvider);
+      expect(lines.first.retailKobo, 15000);
+      expect(lines.first.wholesaleKobo, 14000);
+    });
   });
 
   group('ReceiveStockService.confirmReceipt', () {
     test('increments stock, posts one invoice, nets crates, logs activity',
         () async {
-      final lines = [
+      final lines = <ReceiveCartLine>[
         const ReceiveCartLine(
           productId: bottleProductId,
           productName: 'Star 60cl',
           unit: 'Bottle',
           qty: 5,
           buyingPriceKobo: 10000,
+          retailKobo: 12000,
+          wholesaleKobo: 11000,
           manufacturerId: manufacturerId,
           trackEmpties: true,
         ),
@@ -141,6 +152,8 @@ void main() {
           unit: 'Pack',
           qty: 3,
           buyingPriceKobo: 20000,
+          retailKobo: 24000,
+          wholesaleKobo: 22000,
           manufacturerId: null,
           trackEmpties: false,
         ),
@@ -153,7 +166,7 @@ void main() {
         dateReceived: DateTime(2026, 6, 1),
         staffId: userId,
         lines: lines,
-        emptiesReturnedByProduct: const {bottleProductId: 2},
+        emptiesReturnedByManufacturer: const {manufacturerId: 2},
         note: 'Inv #42',
       );
 
@@ -187,7 +200,7 @@ void main() {
           dateReceived: DateTime(2026, 6, 1),
           staffId: userId,
           lines: const [],
-          emptiesReturnedByProduct: const {},
+          emptiesReturnedByManufacturer: const {},
         ),
         throwsA(isA<ArgumentError>()),
       );
@@ -198,13 +211,15 @@ void main() {
       // A trackEmpties line whose manufacturer does not exist, combined with an
       // empties return, forces an FK violation on the crate-return write AFTER
       // the invoice + stock writes inside the transaction.
-      final lines = [
+      final lines = <ReceiveCartLine>[
         const ReceiveCartLine(
           productId: bottleProductId,
           productName: 'Star 60cl',
           unit: 'Bottle',
           qty: 5,
           buyingPriceKobo: 10000,
+          retailKobo: 12000,
+          wholesaleKobo: 11000,
           manufacturerId: 'mfr-does-not-exist',
           trackEmpties: true,
         ),
@@ -218,7 +233,7 @@ void main() {
           dateReceived: DateTime(2026, 6, 1),
           staffId: userId,
           lines: lines,
-          emptiesReturnedByProduct: const {bottleProductId: 1},
+          emptiesReturnedByManufacturer: const {'mfr-does-not-exist': 1},
         ),
         throwsA(anything),
       );
@@ -227,6 +242,68 @@ void main() {
       expect(await stockOf(bottleProductId), 0);
       expect(await db.supplierLedgerDao.getBalanceKobo(supplierId), 0);
       expect(await activityCount('stock.received'), 0);
+    });
+
+    test('price persistence updates catalog prices on confirmReceipt', () async {
+      final lines = [
+        const ReceiveCartLine(
+          productId: bottleProductId,
+          productName: 'Star 60cl',
+          unit: 'Bottle',
+          qty: 5,
+          buyingPriceKobo: 12000,
+          retailKobo: 18000,
+          wholesaleKobo: 16000,
+          manufacturerId: manufacturerId,
+          trackEmpties: true,
+        ),
+      ];
+
+      await service.confirmReceipt(
+        supplierId: supplierId,
+        supplierName: 'Acme Distributors',
+        storeId: storeId,
+        dateReceived: DateTime(2026, 6, 1),
+        staffId: userId,
+        lines: lines,
+        emptiesReturnedByManufacturer: const {},
+      );
+
+      final p = await (db.select(db.products)..where((t) => t.id.equals(bottleProductId))).getSingle();
+      expect(p.buyingPriceKobo, 12000);
+      expect(p.retailerPriceKobo, 18000);
+      expect(p.wholesalerPriceKobo, 16000);
+    });
+
+    test('supplier payment on zero-value invoice does not get dropped', () async {
+      final lines = [
+        const ReceiveCartLine(
+          productId: bottleProductId,
+          productName: 'Star 60cl',
+          unit: 'Bottle',
+          qty: 5,
+          buyingPriceKobo: 0,
+          retailKobo: 10000,
+          wholesaleKobo: 9000,
+          manufacturerId: manufacturerId,
+          trackEmpties: true,
+        ),
+      ];
+
+      await service.confirmReceipt(
+        supplierId: supplierId,
+        supplierName: 'Acme Distributors',
+        storeId: storeId,
+        dateReceived: DateTime(2026, 6, 1),
+        staffId: userId,
+        lines: lines,
+        emptiesReturnedByManufacturer: const {},
+        amountPaidKobo: 5000,
+        paymentMethod: 'cash',
+      );
+
+      // Ledger balance should be +5000 (we paid supplier 5000 for a 0 invoice, so supplier owes us 5000)
+      expect(await db.supplierLedgerDao.getBalanceKobo(supplierId), 5000);
     });
   });
 }

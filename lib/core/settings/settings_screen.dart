@@ -114,6 +114,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     return GlassyScaffold(
       title: 'CEO Settings',
+      subtitle: ref.watch(activeStoreLabelProvider),
       body: !canManage
           ? const SettingsNoAccess()
           : SettingsFadeIn(

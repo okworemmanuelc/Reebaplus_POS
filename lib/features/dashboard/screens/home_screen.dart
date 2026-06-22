@@ -200,12 +200,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ((isManager || isCashier) && hasPermission(ref, 'customers.add'));
     final showStaffSales = isCeo || isManager;
 
-    final subtitle = isCashier
-        ? "Today's Sales"
-        : isStockKeeper
-        ? 'Stock Overview'
-        : 'Business Overview';
-
     // ── Store filter (§12.1) ─────────────────────────────────────────────────
     // The store filter follows the nav-drawer store picker (null = "All
     // Stores"). Confinement is enforced upstream — the picker only offers the
@@ -332,7 +326,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           title: AppBarHeader(
             icon: FontAwesomeIcons.chartLine.data,
             title: bizName.isNotEmpty ? bizName : 'Reebaplus POS',
-            subtitle: subtitle,
+            subtitle: ref.watch(activeStoreLabelProvider),
           ),
           actions: [
             const NotificationBell(),

@@ -254,7 +254,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                   ),
                 ),
                 Text(
-                  'Client Management',
+                  ref.watch(activeStoreLabelProvider),
                   style: TextStyle(
                     fontSize: context.getRFontSize(11),
                     color: Theme.of(context).colorScheme.primary,

@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/core/utils/notifications.dart';
 
 class AppBarHeader extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
+  final bool truncateTitleWithReveal;
 
   const AppBarHeader({
     super.key,
     required this.icon,
     required this.title,
     required this.subtitle,
+    this.truncateTitleWithReveal = false,
   });
 
   @override
@@ -44,18 +47,34 @@ class AppBarHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(18),
-                    fontWeight: FontWeight.w800,
-                    color: text,
-                    letterSpacing: -0.5,
+              if (truncateTitleWithReveal)
+                GestureDetector(
+                  onTap: () => AppNotification.showInfo(context, title),
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: context.getRFontSize(18),
+                      fontWeight: FontWeight.w800,
+                      color: text,
+                      letterSpacing: -0.5,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                )
+              else
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: context.getRFontSize(18),
+                      fontWeight: FontWeight.w800,
+                      color: text,
+                      letterSpacing: -0.5,
+                    ),
                   ),
                 ),
-              ),
               Text(
                 subtitle,
                 style: TextStyle(

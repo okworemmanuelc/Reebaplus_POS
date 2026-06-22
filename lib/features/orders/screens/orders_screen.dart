@@ -209,7 +209,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       title: AppBarHeader(
         icon: FontAwesomeIcons.receipt.data,
         title: 'Orders',
-        subtitle: 'Sales History',
+        subtitle: ref.watch(activeStoreLabelProvider),
       ),
       centerTitle: true,
       actions: const [NotificationBell(), SizedBox(width: 8)],

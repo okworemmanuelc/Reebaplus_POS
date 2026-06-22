@@ -188,6 +188,89 @@ final allInTransitTransfersProvider = StreamProvider<List<StockTransferData>>((
   return ref.watch(databaseProvider).stockTransferDao.watchAllInTransit();
 });
 
+/// All `pending` transfer requests for the business — the raw feed the
+/// viewer-scoped request providers derive their lists from in memory.
+final allPendingTransfersProvider = StreamProvider<List<StockTransferData>>((
+  ref,
+) {
+  return ref.watch(databaseProvider).stockTransferDao.watchAllPending();
+});
+
+/// Pending requests the current viewer's stores must ACCEPT & DISPATCH — i.e.
+/// requests where one of the viewer's stores HOLDS the goods (`fromLocationId`).
+/// CEO sees every pending request; a store-assigned user sees only requests
+/// against their assigned stores. Gated for action by `stores.dispatch_transfer`.
+final viewerScopedIncomingRequestsProvider = Provider<List<StockTransferData>>(
+  (ref) {
+    final all = ref.watch(allPendingTransfersProvider).valueOrNull ?? const [];
+    final role = ref.watch(currentUserRoleProvider);
+    if (role?.slug == 'ceo') return all;
+    final userId = ref.watch(authProvider).currentUser?.id;
+    if (userId == null) return const [];
+    final assignedStoreIds =
+        (ref.watch(myUserStoresProvider(userId)).valueOrNull ??
+                const <UserStoreData>[])
+            .map((s) => s.storeId)
+            .toSet();
+    return all
+        .where((r) => assignedStoreIds.contains(r.fromLocationId))
+        .toList();
+  },
+);
+
+/// Pending requests the current viewer's stores RAISED — i.e. requests where one
+/// of the viewer's stores NEEDS the goods (`toLocationId`). CEO sees all; a
+/// store-assigned user sees only their stores' outstanding requests.
+final viewerScopedOutgoingRequestsProvider = Provider<List<StockTransferData>>(
+  (ref) {
+    final all = ref.watch(allPendingTransfersProvider).valueOrNull ?? const [];
+    final role = ref.watch(currentUserRoleProvider);
+    if (role?.slug == 'ceo') return all;
+    final userId = ref.watch(authProvider).currentUser?.id;
+    if (userId == null) return const [];
+    final assignedStoreIds =
+        (ref.watch(myUserStoresProvider(userId)).valueOrNull ??
+                const <UserStoreData>[])
+            .map((s) => s.storeId)
+            .toSet();
+    return all.where((r) => assignedStoreIds.contains(r.toLocationId)).toList();
+  },
+);
+
+// ── Per-store transfer feeds (store-details hub, §16.8.2) ────────────────────
+// These are scoped to ONE concrete store, not to the viewer's assignment set —
+// the store-details screen already decides whether the viewer may act.
+
+/// `pending` requests THIS store must fulfil (others asking it to send).
+final storeIncomingRequestsProvider =
+    StreamProvider.family<List<StockTransferData>, String>((ref, storeId) {
+      return ref
+          .watch(databaseProvider)
+          .stockTransferDao
+          .watchPendingForHolderStore(storeId);
+    });
+
+/// `pending` requests THIS store raised that have not been dispatched yet.
+final storeOutgoingRequestsProvider =
+    StreamProvider.family<List<StockTransferData>, String>((ref, storeId) {
+      return ref
+          .watch(databaseProvider)
+          .stockTransferDao
+          .watchPendingFromStore(storeId);
+    });
+
+/// `in_transit` transfers arriving AT this store (the confirm-receipt queue).
+final storeIncomingTransfersProvider =
+    StreamProvider.family<List<StockTransferData>, String>((ref, storeId) {
+      return ref.watch(databaseProvider).stockTransferDao.watchIncoming(storeId);
+    });
+
+/// `in_transit` transfers dispatched FROM this store (awaiting receipt).
+final storeOutgoingTransfersProvider =
+    StreamProvider.family<List<StockTransferData>, String>((ref, storeId) {
+      return ref.watch(databaseProvider).stockTransferDao.watchOutgoing(storeId);
+    });
+
 /// In-transit transfers where the current viewer's stores are the DESTINATION
 /// (the confirm queue). CEO sees all stores; store users see only their
 /// assigned stores (mirrors [viewerScopedPendingStockRequestsProvider]).
@@ -236,6 +319,16 @@ final stockTransferHistoryProvider = StreamProvider<List<StockTransferData>>((
   ref,
 ) {
   return ref.watch(databaseProvider).stockTransferDao.watchHistory();
+});
+
+/// Completed stock transfers (received + cancelled) involving a specific store in either direction, newest
+/// first. Used by the Transfer History section in the store details hub.
+final storeTransferHistoryProvider =
+    StreamProvider.family<List<StockTransferData>, String>((ref, storeId) {
+  return ref
+      .watch(databaseProvider)
+      .stockTransferDao
+      .watchHistoryForStore(storeId);
 });
 
 // ── Products by store ───────────────────────────────────────────────────────
@@ -665,6 +758,25 @@ final currentUserPermissionsProvider = Provider<Set<String>>((ref) {
   );
 });
 
+/// Whether the current user's permission set has finished resolving locally.
+/// False while the role row or its grant rows are still arriving (a fresh
+/// login or the post-login background pull). [currentUserPermissionsProvider]
+/// can't distinguish "still loading" from "definitively denied" — both surface
+/// as an empty set — so a **full-screen** permission gate that renders a "no
+/// access" message must wait for this before showing it, or it flashes the
+/// denial for a frame before the grants land (the CEO-lands-on-POS flash).
+/// Inline hide-don't-block gates don't need this: hiding while loading is the
+/// safe default and never flashes a denial.
+final currentUserPermissionsReadyProvider = Provider<bool>((ref) {
+  final userId = ref.watch(authProvider).currentUser?.id;
+  if (userId == null) return false; // logged out — nothing to resolve
+  final role = ref.watch(currentUserRoleProvider);
+  if (role == null) return false; // membership/role row not arrived yet
+  // The base grant rows for the role are the signal that gating can be decided;
+  // store/user override streams default to no-op when still null.
+  return ref.watch(rolePermissionsProvider(role.id)).valueOrNull != null;
+});
+
 /// True if the current user's role grants [key]. Thin reader over
 /// [currentUserPermissionsProvider] — reused by every role-gated screen,
 /// button, and action (CLAUDE.md hard rule #6). Hide, don't disable, when
@@ -903,6 +1015,14 @@ final emptyCratesByManufacturerProvider = StreamProvider<Map<String, int>>((
       .watchEmptyCratesByManufacturer();
 });
 
+/// Every `damaged` empty-crate movement (§17.2 crate-aware damages — the
+/// stored-empty fate). Drives the Daily Reconciliation Statement's forfeited
+/// crate-deposit roll-up for empties damaged in storage, which write no
+/// stock_adjustment. Crate businesses only.
+final allCrateDamagesProvider = StreamProvider<List<CrateLedgerData>>((ref) {
+  return ref.watch(databaseProvider).inventoryDao.watchAllCrateDamages();
+});
+
 /// Per-store empty-crate balances for the currently locked store (§16.8.1 Phase 2).
 /// Returns an empty list when no store is locked. Crate businesses only.
 final storeCrateBalancesProvider = StreamProvider<List<StoreCrateBalanceData>>((
@@ -914,6 +1034,17 @@ final storeCrateBalancesProvider = StreamProvider<List<StoreCrateBalanceData>>((
       .watch(databaseProvider)
       .storeCrateBalancesDao
       .watchForStore(storeId);
+});
+
+/// Current empty-crate balance per manufacturer for a given store, mapped as
+/// manufacturerId -> balance. Scoped to [storeId] (§16.8.1).
+final storeEmptiesByManufacturerProvider =
+    StreamProvider.family<Map<String, int>, String>((ref, storeId) {
+  return ref
+      .watch(databaseProvider)
+      .storeCrateBalancesDao
+      .watchForStore(storeId)
+      .map((rows) => {for (final row in rows) row.manufacturerId: row.balance});
 });
 
 /// Full bottles in stock per manufacturer, scoped to the active store (§16.8.1

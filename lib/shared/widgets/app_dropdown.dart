@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/shared/widgets/optimized_backdrop_filter.dart';
 
 class AppDropdown<T> extends FormField<T> {
   final T? currentValue;
@@ -233,8 +234,9 @@ class _AppDropdownState<T> extends FormFieldState<T> {
         link: _layerLink,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(14),
-          child: BackdropFilter(
+          child: OptimizedBackdropFilter(
             filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+            fallbackBuilder: (context, child) => child,
             child: Container(
               key: _key,
               padding: widget.contentPadding ?? const EdgeInsets.symmetric(horizontal: 14, vertical: 14),

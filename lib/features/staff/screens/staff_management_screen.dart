@@ -11,11 +11,13 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/widgets/app_fab.dart';
+import 'package:reebaplus_pos/features/staff/screens/invite_staff_screen.dart';
 import 'package:reebaplus_pos/features/staff/screens/staff_detail_screen.dart';
-import 'package:reebaplus_pos/features/staff/widgets/invite_staff_sheet.dart';
 import 'package:reebaplus_pos/shared/utils/role_display.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
+import 'package:reebaplus_pos/shared/widgets/menu_button.dart';
+import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 
 /// One-shot, read-only pull of the current business so newly-joined members'
 /// users / user_businesses rows reach this device. The CEO's roster can be
@@ -81,23 +83,38 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen>
     // effect. The FAB below builds only past this gate. Fail CLOSED: `perms` is
     // empty while grants load → spinner, not a flash of no-access.
     final perms = ref.watch(currentUserPermissionsProvider);
+    final activeStoreLabel = ref.watch(activeStoreLabelProvider);
     if (!perms.contains('staff.invite')) {
-      return Scaffold(
+      return SharedScaffold(
+        activeRoute: 'staff',
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         appBar: AppBar(
           backgroundColor: _surface,
           elevation: 0,
-          leading: IconButton(
-            icon: Icon(Icons.arrow_back_ios_new, color: _text, size: 20),
-            onPressed: () => Navigator.pop(context),
-          ),
-          title: Text(
-            'Staff',
-            style: TextStyle(
-              color: _text,
-              fontSize: context.getRFontSize(16),
-              fontWeight: FontWeight.w800,
-            ),
+          leading: const MenuButton(),
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Staff',
+                style: TextStyle(
+                  color: _text,
+                  fontSize: context.getRFontSize(16),
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              Text(
+                activeStoreLabel,
+                style: TextStyle(
+                  fontSize: context.getRFontSize(11),
+                  color: Theme.of(context).colorScheme.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
           ),
         ),
         body: Center(
@@ -113,9 +130,10 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen>
         ),
       );
     }
-    return Scaffold(
+    return SharedScaffold(
+      activeRoute: 'staff',
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: _buildAppBar(context),
+      appBar: _buildAppBar(context, activeStoreLabel),
       body: TabBarView(
         controller: _tabController,
         children: [
@@ -131,7 +149,13 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen>
         builder: (context) {
           return AppFAB(
             heroTag: 'staff_fab',
-            onPressed: () => InviteStaffSheet.show(context),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const InviteStaffScreen(),
+                ),
+              );
+            },
             icon: FontAwesomeIcons.userPlus.data,
             label: 'Invite new staff',
           );
@@ -140,19 +164,36 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen>
     );
   }
 
-  PreferredSizeWidget _buildAppBar(BuildContext context) {
+  PreferredSizeWidget _buildAppBar(BuildContext context, String activeStoreLabel) {
     return AppBar(
       backgroundColor: _surface,
       elevation: 0,
       iconTheme: IconThemeData(color: _text),
-      title: Text(
-        'Staff Management',
-        style: TextStyle(
-          fontSize: context.getRFontSize(18),
-          fontWeight: FontWeight.w800,
-          color: _text,
-          letterSpacing: -0.5,
-        ),
+      leading: const MenuButton(),
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'Staff Management',
+            style: TextStyle(
+              fontSize: context.getRFontSize(18),
+              fontWeight: FontWeight.w800,
+              color: _text,
+              letterSpacing: -0.5,
+            ),
+          ),
+          Text(
+            activeStoreLabel,
+            style: TextStyle(
+              fontSize: context.getRFontSize(11),
+              color: Theme.of(context).colorScheme.primary,
+              fontWeight: FontWeight.w600,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
       bottom: TabBar(
         controller: _tabController,

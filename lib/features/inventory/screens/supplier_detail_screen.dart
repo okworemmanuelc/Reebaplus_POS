@@ -23,6 +23,8 @@ import 'package:reebaplus_pos/features/payments/widgets/supplier_ledger_entry_ti
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
+import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
+import 'package:reebaplus_pos/shared/widgets/optimized_backdrop_filter.dart';
 
 /// §21.3 / §21.10 — Supplier Details on real ledger data. Balance =
 /// SUM(payments) − SUM(invoices); negative (red) = we owe the supplier.
@@ -258,8 +260,9 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
-        child: BackdropFilter(
+        child: OptimizedBackdropFilter(
           filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          fallbackBuilder: (context, child) => child,
           child: TabBar(
             indicatorSize: TabBarIndicatorSize.tab,
             indicatorPadding: EdgeInsets.all(context.getRSize(4)),
@@ -482,6 +485,87 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
     );
   }
 
+  Widget _buildSummaryTile(
+    ThemeData theme,
+    String label,
+    double amount,
+    Color color,
+  ) {
+    return _GlassyCard(
+      padding: EdgeInsets.symmetric(
+        horizontal: context.getRSize(14),
+        vertical: context.getRSize(10),
+      ),
+      radius: 12,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: context.getRFontSize(11),
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onSurface.withAlpha(128),
+            ),
+          ),
+          SizedBox(height: context.getRSize(4)),
+          Text(
+            formatCurrency(amount),
+            style: TextStyle(
+              fontSize: context.getRFontSize(15),
+              fontWeight: FontWeight.w800,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLedgerSummaryRow(ThemeData theme, List<SupplierLedgerEntryData> filteredHistory) {
+    int totalInKobo = 0, totalOutKobo = 0;
+    for (final entry in filteredHistory) {
+      if (entry.voidedAt != null) continue;
+      if (entry.referenceType == 'void') continue;
+
+      if (entry.signedAmountKobo >= 0) {
+        totalInKobo += entry.signedAmountKobo;
+      } else {
+        totalOutKobo += entry.signedAmountKobo.abs();
+      }
+    }
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        context.getRSize(20),
+        context.getRSize(12),
+        context.getRSize(20),
+        0,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildSummaryTile(
+              theme,
+              'Total In',
+              totalInKobo / 100.0,
+              success,
+            ),
+          ),
+          SizedBox(width: context.getRSize(10)),
+          Expanded(
+            child: _buildSummaryTile(
+              theme,
+              'Total Out',
+              totalOutKobo / 100.0,
+              danger,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildHistoryTab(
     BuildContext context,
     ThemeData theme,
@@ -489,53 +573,74 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
     SupplierData supplier,
     Map<String, String>? storeNameById,
   ) {
+    final summaryRow = Column(
+      children: [
+        _buildLedgerSummaryRow(theme, entries),
+        SizedBox(height: context.getRSize(4)),
+      ],
+    );
+
     if (entries.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: EdgeInsets.all(context.getRSize(40)),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                FontAwesomeIcons.fileInvoiceDollar.data,
-                size: context.getRSize(48),
-                color: theme.colorScheme.onSurface.withAlpha(40),
-              ),
-              SizedBox(height: context.getRSize(16)),
-              Text(
-                'No activity in this period',
-                style: TextStyle(
-                  color: theme.colorScheme.onSurface.withAlpha(128),
-                  fontSize: context.getRFontSize(14),
-                  fontWeight: FontWeight.w500,
+      return Column(
+        children: [
+          summaryRow,
+          Expanded(
+            child: Center(
+              child: Padding(
+                padding: EdgeInsets.all(context.getRSize(40)),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      FontAwesomeIcons.fileInvoiceDollar.data,
+                      size: context.getRSize(48),
+                      color: theme.colorScheme.onSurface.withAlpha(40),
+                    ),
+                    SizedBox(height: context.getRSize(16)),
+                    Text(
+                      'No activity in this period',
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurface.withAlpha(128),
+                        fontSize: context.getRFontSize(14),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
-        ),
+        ],
       );
     }
     
     final isCeo = ref.watch(currentUserRoleProvider)?.slug == 'ceo';
-    return ListView.builder(
-      padding: EdgeInsets.fromLTRB(
-        context.getRSize(20),
-        context.getRSize(8),
-        context.getRSize(20),
-        context.getRSize(96) + context.deviceBottomPadding,
-      ),
-      itemCount: entries.length,
-      itemBuilder: (ctx, i) {
-        final e = entries[i];
-        return SupplierLedgerEntryTile(
-          entry: e,
-          onTap: isCeo ? () => _showEntryActions(supplier, e) : null,
-          storeName: storeNameById == null
-              ? null
-              : (storeNameById[e.storeId] ??
-                    (e.storeId == null ? 'Unassigned' : null)),
-        );
-      },
+    return Column(
+      children: [
+        summaryRow,
+        Expanded(
+          child: ListView.builder(
+            padding: EdgeInsets.fromLTRB(
+              context.getRSize(20),
+              context.getRSize(8),
+              context.getRSize(20),
+              context.getRSize(96) + context.deviceBottomPadding,
+            ),
+            itemCount: entries.length,
+            itemBuilder: (ctx, i) {
+              final e = entries[i];
+              return SupplierLedgerEntryTile(
+                entry: e,
+                onTap: isCeo ? () => _showEntryActions(supplier, e) : null,
+                storeName: storeNameById == null
+                    ? null
+                    : (storeNameById[e.storeId] ??
+                          (e.storeId == null ? 'Unassigned' : null)),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
@@ -1409,29 +1514,11 @@ class _GlassyCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    return Container(
+    return GlassyCard(
+      padding: padding,
       margin: margin,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(radius),
-        child: BackdropFilter(
-          filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Container(
-            padding: padding ?? EdgeInsets.all(context.getRSize(16)),
-            decoration: BoxDecoration(
-              color: isDark
-                  ? theme.colorScheme.surface.withValues(alpha: 0.25)
-                  : theme.colorScheme.surface.withValues(alpha: 0.5),
-              borderRadius: BorderRadius.circular(radius),
-              border: Border.all(
-                color: theme.colorScheme.primary.withValues(alpha: isDark ? 0.1 : 0.05),
-              ),
-            ),
-            child: child,
-          ),
-        ),
-      ),
+      radius: radius,
+      child: child,
     );
   }
 }

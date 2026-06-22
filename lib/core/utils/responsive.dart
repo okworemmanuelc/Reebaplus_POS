@@ -128,7 +128,7 @@ extension ResponsiveHelper on BuildContext {
   /// double-counts it and jumps content too high.
   double get deviceBottomPadding {
     final view = View.maybeOf(this);
-    if (view == null) return MediaQuery.maybeOf(this)?.padding.bottom ?? 0;
-    return MediaQueryData.fromView(view).padding.bottom;
+    if (view == null) return MediaQuery.maybeOf(this)?.viewPadding.bottom ?? 0;
+    return MediaQueryData.fromView(view).viewPadding.bottom;
   }
 }

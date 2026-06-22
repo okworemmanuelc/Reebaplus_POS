@@ -12,6 +12,7 @@ import 'package:reebaplus_pos/features/receiving/screens/receive_cart_screen.dar
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
+import 'package:reebaplus_pos/shared/services/ui_hint_service.dart';
 import 'dart:async';
 
 class ReceiveStockScreen extends ConsumerStatefulWidget {
@@ -30,6 +31,7 @@ class _ReceiveStockScreenState extends ConsumerState<ReceiveStockScreen> {
   String _searchQuery = '';
   bool _isSearching = false;
   bool _isLoading = true;
+  bool _showReceiveHint = false;
 
   StreamSubscription? _productsSub;
   StreamSubscription? _categoriesSub;
@@ -37,6 +39,9 @@ class _ReceiveStockScreenState extends ConsumerState<ReceiveStockScreen> {
   @override
   void initState() {
     super.initState();
+    uiHintService.shouldShow(UiHintService.hintReceiveLongpress).then((show) {
+      if (show && mounted) setState(() => _showReceiveHint = true);
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _initStreams();
     });
@@ -115,11 +120,15 @@ class _ReceiveStockScreenState extends ConsumerState<ReceiveStockScreen> {
     final subtextCol = Theme.of(context).textTheme.bodySmall?.color ?? Theme.of(context).iconTheme.color!;
     final borderCol = Theme.of(context).dividerColor;
 
-    // §14.7 — defense-in-depth route guard. The split FAB that opens this screen
-    // is already gated on `products.add` (CEO + Manager-with-permission); this
-    // blocks any back-stack / deep-link reach for Cashier / Stock keeper /
-    // Manager-without-permission.
-    if (!hasPermission(ref, 'products.add')) {
+    // §14.7 / §16.7 — defense-in-depth route guard. Matches the FAB that opens
+    // this screen: anyone who can add stock (`stock.add`, e.g. stock keepers) or
+    // add products (`products.add`) may receive. Inside the flow the New Product
+    // card is separately gated on `products.add`, price edits on their own
+    // permissions, and the supplier-payment section on `suppliers.manage`, so a
+    // stock keeper with only `stock.add` can update quantities but can't create
+    // products, change prices, or record payments. This still blocks any
+    // back-stack / deep-link reach for a Cashier (or Manager without either key).
+    if (!hasPermission(ref, 'stock.add') && !hasPermission(ref, 'products.add')) {
       return Scaffold(
         backgroundColor: surfaceCol,
         appBar: AppBar(
@@ -179,6 +188,10 @@ class _ReceiveStockScreenState extends ConsumerState<ReceiveStockScreen> {
                 textCol: textCol,
                 borderCol: borderCol,
               ),
+            if (!_isLoading &&
+                _showReceiveHint &&
+                hasPermission(ref, 'products.edit_price'))
+              _buildReceiveHint(),
             Expanded(
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
@@ -194,6 +207,58 @@ class _ReceiveStockScreenState extends ConsumerState<ReceiveStockScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // Inline dismissible hint above the product grid telling stock receivers
+  // how to edit a product. Mirrors the cart screen's "tap an item to edit"
+  // banner; only shown to roles that can edit price.
+  Widget _buildReceiveHint() {
+    final primary = Theme.of(context).colorScheme.primary;
+    return Container(
+      margin: EdgeInsets.fromLTRB(
+        context.getRSize(20),
+        context.getRSize(8),
+        context.getRSize(20),
+        0,
+      ),
+      padding: EdgeInsets.all(context.getRSize(12)),
+      decoration: BoxDecoration(
+        color: primary.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            FontAwesomeIcons.circleInfo.data,
+            size: context.getRSize(16),
+            color: primary,
+          ),
+          SizedBox(width: context.getRSize(12)),
+          Expanded(
+            child: Text(
+              'Tap and hold a product to edit it.',
+              style: TextStyle(
+                fontSize: context.getRFontSize(13),
+                color: primary,
+              ),
+            ),
+          ),
+          IconButton(
+            icon: Icon(
+              FontAwesomeIcons.xmark.data,
+              size: context.getRSize(16),
+              color: primary,
+            ),
+            onPressed: () {
+              setState(() => _showReceiveHint = false);
+              uiHintService.markShown(UiHintService.hintReceiveLongpress);
+            },
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+        ],
       ),
     );
   }
@@ -218,23 +283,25 @@ class _ReceiveStockScreenState extends ConsumerState<ReceiveStockScreen> {
     if (cartLineCount == 0) return const SizedBox.shrink();
 
     return Container(
-      padding: EdgeInsets.all(context.getRSize(16)),
+      padding: EdgeInsets.fromLTRB(
+        context.getRSize(16),
+        context.getRSize(16),
+        context.getRSize(16),
+        context.getRSize(16) + context.deviceBottomPadding,
+      ),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         border: Border(top: BorderSide(color: Theme.of(context).dividerColor)),
       ),
-      child: SafeArea(
-        top: false,
-        child: AppButton(
-          text: 'Review Items ($cartLineCount)',
-          icon: FontAwesomeIcons.cartShopping.data,
-          isFullWidth: true,
-          onPressed: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const ReceiveCartScreen()),
-            );
-          },
-        ),
+      child: AppButton(
+        text: 'Review Items ($cartLineCount)',
+        icon: FontAwesomeIcons.cartShopping.data,
+        isFullWidth: true,
+        onPressed: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const ReceiveCartScreen()),
+          );
+        },
       ),
     );
   }

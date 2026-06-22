@@ -320,10 +320,10 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
                   ),
                 ),
                 Text(
-                  'Manage operating costs',
+                  ref.watch(activeStoreLabelProvider),
                   style: TextStyle(
                     fontSize: context.getRFontSize(11),
-                    color: Theme.of(context).colorScheme.error,
+                    color: Theme.of(context).colorScheme.primary,
                     fontWeight: FontWeight.w600,
                   ),
                   maxLines: 1,

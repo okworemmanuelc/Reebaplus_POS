@@ -6,9 +6,13 @@ import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
+import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
+import 'package:reebaplus_pos/features/stores/screens/request_stock_screen.dart';
+import 'package:reebaplus_pos/features/stores/widgets/store_transfer_hub.dart';
 
 class StoreDetailsScreen extends ConsumerStatefulWidget {
   final StoreData store;
@@ -65,8 +69,34 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
     super.dispose();
   }
 
+  void _openRequestScreen({String? fixedDestStoreId, String? fixedSourceStoreId}) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => RequestStockScreen(
+          fixedDestStoreId: fixedDestStoreId,
+          fixedSourceStoreId: fixedSourceStoreId,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Full access = CEO / all-stores Manager, or a user assigned to THIS store.
+    // Otherwise the viewer gets a read-only, request-only restricted view.
+    final canViewAll = ref.watch(canViewAllStoresProvider);
+    final userId = ref.watch(authProvider).currentUser?.id;
+    final assignedIds =
+        (userId == null
+                ? null
+                : ref.watch(myUserStoresProvider(userId)).valueOrNull)
+            ?.map((s) => s.storeId)
+            .toSet() ??
+            const <String>{};
+    final hasFullAccess = canViewAll || assignedIds.contains(widget.store.id);
+    final canRequest = hasPermission(ref, 'stores.request_transfer');
+
     final totalStock = _inventory.fold<int>(0, (sum, p) => sum + p.totalStock);
     final totalValue = _inventory.fold<double>(
       0.0,
@@ -100,6 +130,9 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
       body: LayoutBuilder(
         builder: (context, constraints) {
           final isWide = constraints.maxWidth > 600;
+          if (!hasFullAccess) {
+            return _buildRestrictedView(canRequest);
+          }
           return ListView(
             padding: EdgeInsets.all(rSize(context, 16)).copyWith(
               bottom: rSize(context, 16) + context.deviceBottomPadding,
@@ -111,12 +144,79 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
               SizedBox(height: rSize(context, 24)),
               _buildInventoryList(),
               SizedBox(height: rSize(context, 16)),
+              if (canRequest) ...[
+                AppButton(
+                  text: 'Request Stock',
+                  icon: FontAwesomeIcons.handHoldingDollar.data,
+                  variant: AppButtonVariant.secondary,
+                  isFullWidth: true,
+                  onPressed: () =>
+                      _openRequestScreen(fixedDestStoreId: widget.store.id),
+                ),
+                SizedBox(height: rSize(context, 16)),
+              ],
               _buildQuickActions(isWide),
+              SizedBox(height: rSize(context, 24)),
+              StoreTransferHub(storeId: widget.store.id),
               SizedBox(height: rSize(context, 100)),
             ],
           );
         },
       ),
+    );
+  }
+
+  // ── Restricted view (viewer not assigned to this store) ─────────────────────
+  // Read-only browse of the store's stock + a single "Request Stock" action.
+  // No metrics, no management, no transfer hub.
+  Widget _buildRestrictedView(bool canRequest) {
+    return ListView(
+      padding: EdgeInsets.all(rSize(context, 16)).copyWith(
+        bottom: rSize(context, 16) + context.deviceBottomPadding,
+      ),
+      children: [
+        Container(
+          padding: EdgeInsets.all(rSize(context, 14)),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: _border),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                FontAwesomeIcons.circleInfo.data,
+                size: rSize(context, 16),
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              SizedBox(width: rSize(context, 10)),
+              Expanded(
+                child: Text(
+                  "You can browse this store's stock and request items. Full "
+                  "management is available only for stores you're assigned to.",
+                  style: TextStyle(
+                    color: _subtext,
+                    fontSize: rFontSize(context, 12),
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(height: rSize(context, 20)),
+        _buildInventoryList(),
+        SizedBox(height: rSize(context, 16)),
+        if (canRequest)
+          AppButton(
+            text: 'Request Stock from this store',
+            icon: FontAwesomeIcons.handHoldingDollar.data,
+            isFullWidth: true,
+            onPressed: () =>
+                _openRequestScreen(fixedSourceStoreId: widget.store.id),
+          ),
+        SizedBox(height: rSize(context, 100)),
+      ],
     );
   }
 

@@ -19,8 +19,6 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/features/stores/screens/store_details_screen.dart';
-import 'package:reebaplus_pos/features/stores/screens/stock_transfer_screen.dart';
-import 'package:reebaplus_pos/features/stores/screens/incoming_transfers_screen.dart';
 
 class StoresScreen extends ConsumerStatefulWidget {
   const StoresScreen({super.key});
@@ -550,12 +548,19 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
   // ── Build ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    // Stores management is CEO-only — `stores.manage` (hard rule #6/#7). The
-    // drawer entry is gated, but this tab is persistently mounted, so guard the
-    // screen reactively too: if the grant is revoked live, the Add / Stock
-    // Transfer entry points, the store cards' Edit/Delete, and the list all
-    // disappear at once.
+    // Add/Edit/Delete a store is CEO-only — `stores.manage` (hard rule #6/#7).
+    // Browsing the store list is open to any Manager who takes part in the
+    // store-scoped transfer flow (§16.8.2) so they can open a store and request
+    // stock from it; per-store full view + actions are gated inside the details
+    // screen. Stock Transfer entry points have moved off this screen into the
+    // store details. This tab is persistently mounted, so guard reactively: a
+    // live grant change updates the FAB, the cards' Edit/Delete, and access.
     final canManage = hasPermission(ref, 'stores.manage');
+    final canSeeStores = canManage ||
+        ref.watch(canViewAllStoresProvider) ||
+        hasPermission(ref, 'stores.request_transfer') ||
+        hasPermission(ref, 'stores.dispatch_transfer') ||
+        hasPermission(ref, 'stores.receive_transfer');
     return SharedScaffold(
       activeRoute: 'store',
       backgroundColor: _bg,
@@ -566,29 +571,9 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
         title: AppBarHeader(
           icon: FontAwesomeIcons.store.data,
           title: 'Stores',
-          subtitle: 'Manage Storage Locations',
+          subtitle: ref.watch(activeStoreLabelProvider),
         ),
         actions: [
-          if (canManage)
-            IconButton(
-              tooltip: 'Stock Transfer',
-              icon: const Icon(Icons.swap_horiz_rounded),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const StockTransferScreen()),
-              ),
-            ),
-          if (canManage || hasPermission(ref, 'stores.receive_transfer'))
-            IconButton(
-              tooltip: 'Transfer Queue',
-              icon: const Icon(Icons.move_to_inbox_rounded),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const IncomingTransfersScreen(),
-                ),
-              ),
-            ),
           const NotificationBell(),
           SizedBox(width: rSize(context, 8)),
         ],
@@ -600,7 +585,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
               label: 'Add Store',
             )
           : null,
-      body: !canManage
+      body: !canSeeStores
           ? Center(
               child: Padding(
                 padding: EdgeInsets.all(rSize(context, 32)),
@@ -771,6 +756,7 @@ class _StoreCardState extends ConsumerState<_StoreCard> {
 
     return Container(
       margin: EdgeInsets.only(bottom: rSize(context, 14)),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: _surface,
         borderRadius: BorderRadius.circular(16),
@@ -894,37 +880,39 @@ class _StoreCardState extends ConsumerState<_StoreCard> {
             ),
           ),
 
-          // Actions row
-          Container(
-            decoration: BoxDecoration(
-              color: _stripe,
-              border: Border(top: BorderSide(color: _strongBorder)),
-              borderRadius: const BorderRadius.vertical(
-                bottom: Radius.circular(16),
+          // Actions row — Edit/Delete a store is CEO-only (`stores.manage`).
+          // Hidden entirely for browse-only viewers (hide-don't-block).
+          if (hasPermission(ref, 'stores.manage'))
+            Container(
+              decoration: BoxDecoration(
+                color: _stripe,
+                border: Border(top: BorderSide(color: _strongBorder)),
+                borderRadius: const BorderRadius.vertical(
+                  bottom: Radius.circular(16),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _actionButton(
+                      icon: FontAwesomeIcons.penToSquare.data,
+                      color: Theme.of(context).colorScheme.primary,
+                      label: 'Edit',
+                      onTap: widget.onEdit,
+                    ),
+                  ),
+                  Container(width: 1, height: 36, color: _strongBorder),
+                  Expanded(
+                    child: _actionButton(
+                      icon: FontAwesomeIcons.trash.data,
+                      color: Theme.of(context).colorScheme.error,
+                      label: 'Delete',
+                      onTap: widget.onDelete,
+                    ),
+                  ),
+                ],
               ),
             ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _actionButton(
-                    icon: FontAwesomeIcons.penToSquare.data,
-                    color: Theme.of(context).colorScheme.primary,
-                    label: 'Edit',
-                    onTap: widget.onEdit,
-                  ),
-                ),
-                Container(width: 1, height: 36, color: _strongBorder),
-                Expanded(
-                  child: _actionButton(
-                    icon: FontAwesomeIcons.trash.data,
-                    color: Theme.of(context).colorScheme.error,
-                    label: 'Delete',
-                    onTap: widget.onDelete,
-                  ),
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );

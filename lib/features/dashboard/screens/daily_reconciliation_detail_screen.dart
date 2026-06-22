@@ -201,6 +201,13 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
           'Damages (at cost)',
           '− ${formatCurrency(d.damageCostKobo / 100.0)}',
         ),
+        if (d.crateDamageDepositKobo > 0)
+          _line(
+            context,
+            theme,
+            'Crate deposit loss',
+            '− ${formatCurrency(d.crateDamageDepositKobo / 100.0)}',
+          ),
         _divider(theme),
         _line(
           context,
@@ -245,6 +252,8 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
             _line(context, theme, 'Gross profit', formatCurrency(d.grossProfitKobo / 100.0), strong: true),
             _line(context, theme, 'Expenses', '− ${formatCurrency(d.expensesKobo / 100.0)}'),
             _line(context, theme, 'Damages (at cost)', '− ${formatCurrency(d.damageCostKobo / 100.0)}'),
+            if (d.crateDamageDepositKobo > 0)
+              _line(context, theme, 'Crate deposit loss', '− ${formatCurrency(d.crateDamageDepositKobo / 100.0)}'),
             _line(context, theme, 'Stock shortages (at cost)', '− ${formatCurrency(d.shortageCostKobo / 100.0)}'),
             _divider(theme),
             _line(context, theme, 'Net result for period', formatCurrency(d.periodNetResultKobo / 100.0), strong: true, color: periodNetColor),
@@ -668,6 +677,8 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
         ['Gross margin %', d.grossMarginPct],
         ['Expenses', money(d.expensesKobo)],
         ['Damages (at cost)', money(d.damageCostKobo)],
+        if (d.showCrates)
+          ['Crate deposit loss (at deposit)', money(d.crateDamageDepositKobo)],
         ['Stock shortages (at cost)', money(d.shortageCostKobo)],
         ['Net result for period', money(d.periodNetResultKobo)],
         ['Net profit (excludes shortages)', money(d.netProfitKobo)],

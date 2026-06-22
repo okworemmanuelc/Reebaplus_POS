@@ -415,6 +415,26 @@ class AuthService extends ValueNotifier<UserData?> {
       return null;
     }
 
+    // The local users.business_id FK requires the parent businesses row to
+    // exist on THIS device. On a recovery path where the device never onboarded
+    // this business (e.g. the identity belongs to a different business than the
+    // one being set up, or the pull hasn't landed yet) the row is absent and
+    // the insert would throw a raw FK-787 (SqliteException(787)). Refuse
+    // gracefully so the caller can show a clean error and retry after a pull,
+    // rather than crashing.
+    final localBiz =
+        await (_db.select(_db.businesses)
+              ..where((b) => b.id.equals(businessId)))
+            .getSingleOrNull();
+    if (localBiz == null) {
+      debugPrint(
+        '[AuthService] upsertLocalUserFromProfile: local businesses row '
+        'missing for business=$businessId — refusing to insert users row '
+        '(would FK-fail). Caller must retry after a pull restores the business.',
+      );
+      return null;
+    }
+
     final now = DateTime.now();
     final newComp = UsersCompanion.insert(
       id: Value(canonicalId),
@@ -548,7 +568,10 @@ class AuthService extends ValueNotifier<UserData?> {
       showPickerOnUnlock = false;
       // Side-effects first — navigationService fully ready before any rebuild
       _nav.applyUserStoreLock(user.storeId);
-      _nav.setIndex(1); // Default to POS screen for all roles
+      // Default landing = POS. MainLayout bounces a role without `sales.make`
+      // (e.g. the stock keeper) to Home once permissions resolve, since POS is
+      // hidden from their nav bar.
+      _nav.setIndex(1);
       saveDeviceUserId(user.id);
       if (user.email != null) saveLastLoggedInEmail(user.email!);
 

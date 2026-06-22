@@ -113,6 +113,26 @@ bool isDamageReason(String reason) {
       r.startsWith('broken');
 }
 
+/// §17.2 crate-aware damages — FULL crate lost. When a damaged tracked-bottle
+/// product also forfeits its refundable crate deposit because the full crate
+/// (item + its container) was lost, Record Damages appends this suffix to the
+/// `damage:<key>` reason. The held-empties pool is untouched — that container
+/// was never a returned empty — so only the deposit is forfeited on the
+/// Statement. The suffix keeps the `damage:` prefix so [isDamageReason] still
+/// classifies the row. Deposit basis is 1 tracked bottle unit = 1 crate (the
+/// same basis `watchFullCratesByManufacturer`/`createOrder` use).
+///
+/// The other fate — a STORED empty was damaged — is a crate-only loss: no drink
+/// is involved, so it removes no bottle stock and writes no stock_adjustment. It
+/// is recorded purely as a `damaged` crate_ledger movement
+/// ([InventoryDao.recordEmptyCrateDamage]); its forfeited deposit is summed from
+/// that ledger in [computeReconData], not from a damage reason.
+const String kCrateLostSuffix = '+cratelost';
+
+/// True when a damage reason forfeits the per-crate deposit (a full crate lost).
+bool damageForfeitsFullCrate(String reason) =>
+    reason.toLowerCase().contains(kCrateLostSuffix);
+
 // ── Buckets (list cards + drill-down breakdown) ──────────────────────────────
 
 class ReconBucket {
@@ -240,6 +260,7 @@ class ReconData {
     required this.damageUnits,
     required this.damageCostKobo,
     required this.damageRetailKobo,
+    required this.crateDamageDepositKobo,
     required this.hasStockCount,
     required this.productsCounted,
     required this.shortageCount,
@@ -277,6 +298,11 @@ class ReconData {
   final int damageUnits;
   final int damageCostKobo;
   final int damageRetailKobo;
+  /// §17.2 crate-aware: refundable crate deposit forfeited by damages flagged
+  /// "crate lost with item" / "stored empty damaged", valued at the
+  /// per-manufacturer deposit rate. A realized loss, separate from the bottle's
+  /// own cost (`damageCostKobo`).
+  final int crateDamageDepositKobo;
   final bool hasStockCount;
   final int productsCounted;
   final int shortageCount;
@@ -300,8 +326,14 @@ class ReconData {
   final List<({String manufacturerName, int count, int valueKobo})> manufacturerEmpties;
 
   int get grossProfitKobo => costedRevenueKobo - cogsKobo;
-  int get netProfitKobo => grossProfitKobo - expensesKobo - damageCostKobo;
-  int get periodNetResultKobo => grossProfitKobo - expensesKobo - damageCostKobo - shortageCostKobo;
+  int get netProfitKobo =>
+      grossProfitKobo - expensesKobo - damageCostKobo - crateDamageDepositKobo;
+  int get periodNetResultKobo =>
+      grossProfitKobo -
+      expensesKobo -
+      damageCostKobo -
+      crateDamageDepositKobo -
+      shortageCostKobo;
   int get businessNetPositionKobo => inventoryOnHandKobo + totalOwedKobo + crateDepositKobo - supplierPayableKobo;
 
   /// Gross margin as a 1-dp percentage string ("0.0" when there's no costed
@@ -354,6 +386,11 @@ ReconData computeReconData(
       ref.watch(allManufacturersProvider).valueOrNull ?? const [];
   final crateCounts =
       ref.watch(emptyCratesByManufacturerProvider).valueOrNull ?? const {};
+  // §17.2 crate-aware: `damaged` crate_ledger rows are the stored-empty fate —
+  // a crate-only loss that writes no stock_adjustment. Drives the forfeited
+  // deposit below.
+  final crateDamages =
+      ref.watch(allCrateDamagesProvider).valueOrNull ?? const [];
   final businesses = ref.watch(localBusinessesProvider).valueOrNull ?? const [];
   final users = ref.watch(usersByBusinessProvider).valueOrNull ?? const {};
 
@@ -456,9 +493,14 @@ ReconData computeReconData(
   }
 
   // ── Damages (reason names a loss; a removal) ─────────────────────────────
+  // §17.2 crate-aware: a damage flagged +cratelost / +crateempty also forfeits
+  // the per-crate refundable deposit (1 tracked bottle unit = 1 crate). The
+  // deposit rate is per-manufacturer (Manufacturers.depositAmountKobo).
+  final depositByMfr = {for (final m in manufacturers) m.id: m.depositAmountKobo};
   var damageUnits = 0;
   var damageCostKobo = 0;
   var damageRetailKobo = 0;
+  var crateDamageDepositKobo = 0;
   for (final a in adjustments) {
     if (!isDamageReason(a.reason) || a.quantityDiff >= 0) continue;
     if (!inSpan(a.createdAt) || !inScope(a.storeId)) continue;
@@ -467,6 +509,23 @@ ReconData computeReconData(
     damageUnits += units;
     damageCostKobo += units * (p?.buyingPriceKobo ?? 0);
     damageRetailKobo += units * (p?.retailerPriceKobo ?? 0);
+    if (damageForfeitsFullCrate(a.reason)) {
+      crateDamageDepositKobo += units * (depositByMfr[p?.manufacturerId] ?? 0);
+    }
+  }
+  // §17.2 crate-aware: a STORED empty damaged writes no stock_adjustment (no
+  // drink lost) — only a `damaged` crate_ledger movement. Forfeit its deposit
+  // here so the Statement still recognises the loss. The pool debit it also
+  // makes is reflected separately in "Empty crates held" (the stock view), so
+  // the period P&L (flow) and the held-empties asset (stock) never double-count
+  // the same crate.
+  for (final c in crateDamages) {
+    if (c.voidedAt != null) continue;
+    if (!inSpan(c.createdAt) || !inScope(c.storeId)) continue;
+    final lostEmpties = -c.quantityDelta;
+    if (lostEmpties <= 0) continue;
+    crateDamageDepositKobo +=
+        lostEmpties * (depositByMfr[c.manufacturerId] ?? 0);
   }
 
   // ── Stock audit + shortage value (latest count per store/date in span) ───
@@ -600,6 +659,7 @@ ReconData computeReconData(
     damageUnits: damageUnits,
     damageCostKobo: damageCostKobo,
     damageRetailKobo: damageRetailKobo,
+    crateDamageDepositKobo: crateDamageDepositKobo,
     hasStockCount: hasStockCount,
     productsCounted: productsCounted,
     shortageCount: shortageCount,

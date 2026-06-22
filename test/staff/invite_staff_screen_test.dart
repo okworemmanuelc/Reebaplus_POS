@@ -1,14 +1,14 @@
-// invite_staff_sheet_test.dart
+// invite_staff_screen_test.dart
 //
-// Phase 8B — verifies the invite-new-staff modal's role/store gating
+// Phase 8B — verifies the invite-new-staff screen's role/store gating
 // (master plan §9.4):
-//   * A Manager sees only Cashier + Stock keeper in the role dropdown
+//   * A Manager sees only Cashier + Stock keeper in the role cards selector
 //     (never CEO or Manager).
 //   * A Manager's store dropdown is limited to their own store.
 //
 // Roles, the current Manager user + membership, and stores are seeded
 // directly into an in-memory Drift DB (test-only inserts, not production
-// sync writes). The sheet derives the current role via
+// sync writes). The screen derives the current role via
 // currentUserRoleProvider, which reads the seeded membership + roles.
 
 import 'package:drift/drift.dart';
@@ -22,7 +22,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
-import 'package:reebaplus_pos/features/staff/widgets/invite_staff_sheet.dart';
+import 'package:reebaplus_pos/features/staff/screens/invite_staff_screen.dart';
 
 void main() {
   late AppDatabase db;
@@ -105,7 +105,7 @@ void main() {
 
   tearDown(() => db.close());
 
-  testWidgets('Manager role dropdown excludes CEO and Manager',
+  testWidgets('Manager role selector excludes CEO and Manager',
       (tester) async {
     final container = ProviderContainer(
       overrides: [databaseProvider.overrideWithValue(db)],
@@ -120,18 +120,12 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: const MaterialApp(home: Scaffold(body: InviteStaffSheet())),
+        child: const MaterialApp(home: InviteStaffScreen()),
       ),
     );
     await tester.pumpAndSettle();
 
-    // Open the role dropdown. warnIfMissed: false — the dropdown's hint text
-    // partly overlaps decoration in the test viewport, but the tap still
-    // routes to the field and opens the menu.
-    await tester.tap(find.text('Select a role'), warnIfMissed: false);
-    await tester.pumpAndSettle();
-
-    // Cashier + Stock keeper offered; CEO + Manager never appear.
+    // Cashier + Stock keeper offered; CEO + Manager never appear as selectable cards.
     expect(find.text('Cashier'), findsWidgets);
     expect(find.text('Stock keeper'), findsWidgets);
     expect(find.text('CEO'), findsNothing);

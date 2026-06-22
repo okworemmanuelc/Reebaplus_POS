@@ -765,6 +765,34 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
       auth.setCurrentUser(localUser);
     } catch (e, stack) {
       debugPrint('[StaffSignUp] redeem FAILED: ${e.runtimeType}: $e\n$stack');
+
+      // §6.2 / invariant #9 — the signed-in email already belongs to ANOTHER
+      // business. The server now rejects this cleanly (P0001) instead of
+      // letting the INSERT violate the global users_auth_user_id_key (raw
+      // 23505). Surface a clear message and do NOT run the cloud-hydrate
+      // fallback below: that mirrors the user's *existing* (other-business)
+      // profile and would FK-fail locally because this device never onboarded
+      // that business. (The raw constraint name is matched too as a backstop in
+      // case an older RPC without the guard is still deployed.)
+      final msg = e.toString().toLowerCase();
+      final alreadyLinkedElsewhere =
+          msg.contains('already linked to another business') ||
+          msg.contains('users_auth_user_id_key');
+      if (alreadyLinkedElsewhere) {
+        if (mounted) {
+          setState(() {
+            _committing = false;
+            _pin = '';
+            _firstPin = '';
+            _pinError =
+                'This email already belongs to another business. '
+                'Use a different email to join this one.';
+            _step = 6;
+          });
+        }
+        return;
+      }
+
       // Fall back to cloud hydrate exactly like completeOnboarding: the RPC
       // is idempotent, so on a retry the canonical rows are already cloud-side.
       try {

@@ -10,6 +10,14 @@ The human updates it when resolving open questions or making architectural decis
 
 149 sessions logged. Codebase is live and being verified on-device.
 
+### Crate-aware damages (§17.2) — forfeited crate deposit on the Statement
+- Record Damages asks the crate fate for a tracked bottle (`unit=='bottle' && trackEmpties`). **Only two scenarios are tracked** (user-confirmed):
+  - **`full` — full crate lost** (drink + its container): drink cost (`damageCostKobo`) AND crate deposit (`crateDamageDepositKobo`) forfeited; held-empties pool **untouched** (that container was never a returned empty). Rides on the `damage:<key>+cratelost` reason suffix; still a product damage (decrements bottle stock).
+  - **`empty` — stored empty crate damaged**: a **crate-only loss** — no drink involved, so it removes **no** bottle stock and books **no** drink cost. Debits the empty-crate pool + store balance + a `damaged` crate_ledger row via `InventoryDao.recordEmptyCrateDamage`; quantity validated against the held-empties pool, not stock. Writes **no** stock_adjustment.
+  - `none` is the non-crate baseline (just the drink lost).
+- Deposit math `crateDamageDepositKobo` = `units * Manufacturers.depositAmountKobo` (1 bottle unit = 1 crate). Source split: full-crate from the `+cratelost` adjustment rows (`damageForfeitsFullCrate`); stored-empty from the `damaged` crate_ledger rows (new `allCrateDamagesProvider` / `InventoryDao.watchAllCrateDamages`). Subtracted in `netProfitKobo` + `periodNetResultKobo`; shown as "Crate deposit loss" in the P&L/Statement cards + CSV. No double-count (flow P&L vs. held-empties stock view).
+- Cloud already accepts the `damaged` crate_ledger movement (0011/0047/0070) — no migration. Tests: test/crates/crate_damage_test.dart. `flutter analyze` clean; crates + inventory suites green (50). On-device check pending (verify the empty-crate fate removes no bottle stock + shows "Crate deposit loss").
+
 ### Daily Reconciliation Report engine enhancements (Part 1, 2, & 3)
 - **ReconData updates (Part 1):** Added `supplierPayableKobo`, `inventoryOnHandKobo`, `uncostedInventoryItems`, `surplusCostKobo`, `topItems`, and `manufacturerEmpties`.
 - **Invariants maintained:** `orderCountsAsSale(status)` remains unchanged; ledger filtering for voided entries is strictly followed; money math is exclusively in kobo (`int`).
@@ -57,27 +65,164 @@ phone + LGA fields), and verification of the permission gating screen rendering.
 
 ---
 
+## In Progress — Store-scoped Stock Transfer + empties-by-manufacturer
+
+Brief: `context/stock-transfer-empties-brief.md` (5 units). Redefines stock
+transfer to a requester-initiated request → accept/dispatch → receive flow, all
+inside a store's details; moves transfer entry points off the all-stores screen;
+adds a Manager store-visibility model (full view only for assigned stores, others
+read-only to request); and groups empties by manufacturer everywhere.
+
+- **Unit 1 — empties by manufacturer in Receive Stock — DONE (2026-06-22).**
+  Receive checkout now collects empties per manufacturer (one input per
+  manufacturer, summed full-crates), and `ReceiveStockService.confirmReceipt`
+  takes `emptiesReturnedByManufacturer`. UI-/service-layer only — no migration
+  (downstream `recordCrateReturnByManufacturer` already aggregated by
+  manufacturer). `flutter analyze` clean; receive_stock_test green (10).
+- **Unit 2 — permission catalogue (`stores.request_transfer`,
+  `stores.dispatch_transfer`) — DONE (2026-06-22).** Requester confirmed the
+  two-key model. Both keys seeded locally (schema v56) + cloud (migration 0122,
+  pushed); default CEO + Manager. 0122 also granted the existing
+  `stores.receive_transfer` to Manager. `stores.manage` stays CEO-only = store
+  CRUD. Migration upgrade test green; cloud grants verified (ceo + manager × 4
+  businesses for all three keys).
+- **Unit 3 — DAO request/dispatch/reject methods + scoped providers — DONE
+  (2026-06-22).** `StockTransferDao.requestTransfer/dispatchTransfer/
+  rejectRequest` + `watchAllPending`; `allPendingTransfersProvider` +
+  `viewerScopedIncomingRequestsProvider` (holder side) +
+  `viewerScopedOutgoingRequestsProvider` (requester side). Reuses the unused
+  `pending` status — no schema migration. 19/19 DAO tests green.
+- **Unit 4 — store-visibility model + relocation — DONE (2026-06-22).** Drawer
+  Stores entry opens to any transfer-permission holder; `stores_screen` no longer
+  hard-blocks non-CEOs (Add/Edit/Delete still `stores.manage`); app-bar transfer
+  icons removed; `StockTransferScreen` + `IncomingTransfersScreen` retired.
+- **Unit 5 — store-details transfer hub — DONE (2026-06-22).** New
+  `request_stock_sheet.dart` + `store_transfer_hub.dart`; `store_details` branches
+  full (CEO/all-stores/assigned → metrics + Request Stock + hub) vs restricted
+  (read-only inventory + "Request Stock from this store"). Per-store family
+  providers + DAO watches added.
+
+**Feature status:** all 5 units implemented + tested; Unit 2 cloud-deployed
+(0122). Whole-project `flutter analyze` clean; affected test suites green.
+Remaining: on-device walkthrough on the emulator.
+
 ## Completed
 
+### Refactor Request Stock Flow to Dedicated Screen (2026-06-22)
+- Refactored the "Request Stock" flow from a modal bottom sheet (`RequestStockSheet`) to a dedicated screen (`RequestStockScreen`) utilizing the `GlassyScaffold` wrapper.
+- Deleted the now-unused widget `lib/features/stores/widgets/request_stock_sheet.dart`.
+- Refactored `store_details_screen.dart` to perform a route push to `RequestStockScreen` instead of showing a modal sheet.
+- Enhanced the `AppDropdown` store selectors on the Request Stock screen with premium prefix icons (`FontAwesomeIcons.store`).
+- Implemented mutual exclusion logic: selecting a store in one dropdown automatically clears it from the other to prevent conflicts.
+- Verified that `flutter analyze` runs successfully with zero errors or warnings.
+
+### Optimize Route Transitions and BackdropFilter Jank (2026-06-22)
+- Centralized BackdropFilter bypass logic in a custom `GlassyCard` component to avoid expensive blur rasterization during page slide animations.
+- Refactored private `_GlassyCard` widgets in `customer_detail_screen.dart` and `supplier_detail_screen.dart` to delegate to the public `GlassyCard`.
+- Replaced custom `BackdropFilter` widgets with `GlassyCard` in `supplier_ledger_entry_tile.dart`, `daily_reconciliation_list_screen.dart`, `supplier_accounts_report_screen.dart`, and `supplier_transactions_screen.dart`.
+- Refactored `_RoleSelectionCard` in `invite_staff_screen.dart` to use `GlassyCard`.
+- Wrapped static TabBar in `supplier_detail_screen.dart` and dropdown button in `app_dropdown.dart` with `OptimizedBackdropFilter` to temporarily disable Gaussian blur during screen transitions.
+- Cleaned up unused/unnecessary imports of `dart:ui` across the codebase to ensure 100% clean static analysis.
+- Verified that `flutter analyze` runs successfully with zero warnings or errors.
+
+### Store-scoped Stock Transfer, Empties, and Per-Store History (2026-06-22)
+- **Unit A — Empties move with a transfer:** Wired the existing `transferCrates` database paths into the dispatch flow. When dispatching a crate-eligible product (`unit` == `'Bottle'` case-insensitively and `trackEmpties` == `true`), the user can optionally send empty crates alongside the product (capped at the holder store's available empties). This updates the local crate ledger and enqueues the `domain:pos_transfer_crates` sync outbox transaction.
+- **Unit B — Per-store transfer history:** Added a read-only "Transfer history" `ExpansionTile` at the bottom of the store details hub, displaying a list of the most recent completed (`received` / `cancelled`) inbound and outbound transfers, detailing product, quantity, direction chip ("In"/"Out"), counterparty, status, and timestamp.
+- **Verification:** Both unit tests and static analysis are clean (0 issues, all 24 transfer suite tests passed).
+
+### Supplier screens Total In / Total Out (2026-06-22)
+- Added a two-tile summary showing "Total In" (payments) and "Total Out" (invoices) to both `supplier_transactions_screen.dart` and `supplier_detail_screen.dart`.
+- The summary respects the period dropdown filter and skips reversed/reversal rows and voided entries.
+- Styled to match the glassy/surface aesthetics of the customer `_buildSummaryTile`.
+
+### Add Staff Screen and Role Capabilities Selector (2026-06-22)
+- **Invite Staff Screen**: Created `InviteStaffScreen` in `lib/features/staff/screens/invite_staff_screen.dart` using the new global `GlassyScaffold` standard with scroll-reactive AppBars and glassy background gradients.
+- **Interactive Role Selector**: Replaced the simple role dropdown selector with premium vertical selection cards. Each card represents a role option and dynamically shows detailed, bulleted capability lists detailing what that specific role can do (and what they are restricted from doing).
+- **Refactoring & Deletion**: Re-routed the "Invite new staff" FAB in `StaffManagementScreen` to navigate to the new screen. Retired and deleted `lib/features/staff/widgets/invite_staff_sheet.dart`.
+- **Testing**: Updated and renamed the widget test suite to `test/staff/invite_staff_screen_test.dart`, verifying that Manager role selectors correctly restrict invitable roles. All staff tests pass.
+
+### Move Long-press Hint Info Icon to Product Card (2026-06-22)
+- **POS Screen:** Removed the info icon from the AppBar actions list in `pos_home_screen.dart` and added `showHint` and `onHintTap` parameters to `ProductGrid` and `_ProductCard`. Rendered a small `circleInfo` icon at the top right of each `_ProductCard` inside its Stack, with a tap handler to trigger the hint notification.
+- **Receive Stock Screen:** Applied the same UI layout change for consistency. Removed the info icon from the action bar of `receive_stock_screen.dart`, added `showHint` and `onHintTap` parameters to `ReceiveProductGrid` and `_ReceiveProductCard` in `receive_product_grid.dart`, and imported the font_awesome package.
+
+### Four UI Fixes (2026-06-22)
+- **Active Store Subtitles (Task 1):** Configured active store subtitle rendering (or "All Stores" fallback) across Home, Inventory, Orders, Cart, and Stores via `AppBarHeader`. Configured Customers, Payments, Expenses, Activity Log, and Reports Hub to display the live-updating active store subtitle. Standardized `GlassyScaffold` to support subtitles.
+- **Staff Management Menu Button & Scaffold (Task 2):** Wrapped main/denied Staff screens in `SharedScaffold` to preserve routes and drawer access. Replaced back buttons with `MenuButton` to toggle the drawer.
+- **Smooth Route Transitions (Task 3):** Replaced `CupertinoPageTransitionsBuilder` with a custom `SlideLeftPageTransitionsBuilder` across all 8 theme blocks in `app_theme.dart`. This slides the incoming page without cross-fading or rendering the outgoing page, eliminating BackdropFilter jank. commented out unused edit buttons/methods in `product_detail_screen.dart` to solve dead code warnings.
+- **POS Title Bar Truncation (Task 4):** Updated `AppBarHeader` with `truncateTitleWithReveal`. Enabled it on POS screen to truncate the title at 18px font size with "..." and tap-to-reveal via `AppNotification.showInfo`.
+
+### Long-press haptics + first-run "tap-and-hold to edit" hints (2026-06-22)
+- Added `HapticFeedback.mediumImpact()` to all product grid long-press interactions (POS grid, Receive grid, Inventory grid) and Cart item taps.
+- Implemented `UiHintService` to track and limit UI hint displays via SharedPreferences (stops after 2 views).
+- Replaced the auto-toast hint on POS and Inventory screens with consistent tap-to-reveal info icons in the app bar for POS and Receive Stock screens, and an inline dismissible banner for the Cart screen.
+- Properly permission-gated the UI hints (`products.edit_price` / `sales.make`).
+
+### Product Detail UI Adjustments (2026-06-22)
+- Temporarily hid the "Edit" button from the Product Detail screen for all users per request.
+
+### Add / Update Product Form Enhancements (2026-06-22)
+- Replaced the `AppDropdown` Category field with an `AppInput` + search-as-you-type suggestion list (matching the Manufacturer block) to support large category lists and inline creation.
+- Made Product Name and Description placeholders dynamic based on the `_isCrateBusiness` status (e.g., 'Eva water 75cl' vs 'e.g. Heineken 60cl').
+- Removed the SIZE dropdown entirely from the UI, keeping the underlying data structure intact for backward compatibility.
+
+### POS "no access" flash on login fixed (2026-06-21)
+- After login (notably CEO) the POS landing flashed "You don't have access to
+  Point of Sale." for ~1s before the grid appeared. Cause: the `sales.make`
+  gate reads `currentUserPermissionsProvider`, which returns an empty set both
+  while loading and when truly denied; on fresh login the role + grant streams
+  emit a frame after POS builds, so the gate flashed the denial then flipped.
+- Added `currentUserPermissionsReadyProvider` (true once role row + base grants
+  resolve locally). POS now shows a neutral empty scaffold while unresolved and
+  only renders the denial once permissions are known absent. See BUILD_LOG.
+- Same pattern exists on other full-screen denial gates (Inventory, Staff, etc.)
+  but is less visible (navigated to post-resolve); readiness provider is ready
+  to reuse there if needed.
+
+### Staff invite redemption — reject cross-business cleanly (2026-06-20)
+- Fixed a crash creating a staff PIN: redeeming an invite while the signed-in
+  email already belonged to another business raised a raw 23505 on the global
+  `users_auth_user_id_key`, then an FK-787 in the client fallback. This was the
+  deferred §6.2 "email already linked to another business" case leaking through.
+- Migration 0120 (DEPLOYED) adds a one-email-one-business guard to
+  `redeem_invite_code` (typed P0001 before the conflicting INSERT) — enforces
+  architecture invariant #9; same-business re-onboarding is unaffected. Applies
+  to all staff roles (shared RPC).
+- Client: `staff_sign_up_screen` surfaces a clear message and skips the
+  FK-crashing cloud-hydrate fallback for that case;
+  `auth_service.upsertLocalUserFromProfile` returns null (not FK-787) when the
+  local business row is missing.
+- Migration 0121 (DEPLOYED) adds the same guard to `complete_onboarding` (CEO
+  create-business), which previously had only an ownership guard.
+- One-off cleanup: removed the duplicate test businesses on
+  `okworchimezie5050@gmail.com` (Coldcrate LTD + C C Okwor deleted; Stable Goods
+  pending — has append-only rows, needs the operator-run trigger-disable delete).
+
 ### Receive Stock Flow (2026-06-20)
-- Implemented the POS-style "Receive Stock" flow (5 units): grid entry from the
-  Inventory split FAB (gated `products.add`) → receive cart (Invoice Total =
+- Implemented the POS-style "Receive Stock" flow: a single "Receive Stock" FAB
+  on the Inventory tab → product grid → receive cart (Invoice Total =
   buying × qty, no customer/discount) → invoice checkout (searchable supplier
   picker excluding soft-deleted, backdatable receive date, optional note,
-  empties-returned capture).
+  empties-returned capture). The earlier expandable (Receive Stock + Add New
+  Product) FAB was replaced by this single button; `expandable_fab.dart` deleted.
+- Re-routed product Add/Update through the Receive Stock cart: new products with initial stock and existing-product restocks now add items to the `ReceiveCartNotifier` instead of directly incrementing inventory. A `receiveMode` flag on `AddProductScreen`/`UpdateProductSheet` (default `false`) preserves the direct-write path for onboarding and the inventory-tab detail editor; in `receiveMode` the per-product Supplier + Store fields are hidden (supplier is chosen once at checkout) and the inventory-tab editor shows no quantity field (details-only).
+- Added per-line price editing directly in the Receive Cart UI — buying, retail, AND wholesale price for each line before checkout. Each field is permission-gated: buying on `products.edit_buying_price`, retail/wholesale on `products.edit_price`; the edit affordance is hidden when the role has neither, and the write re-checks each permission. Edited prices persist back to the product on confirm via `CatalogDao.updateProductPrices` (full-row enqueue).
+- Added supplier payment capture at checkout: users can specify an "Amount Paid Now" (any non-negative amount, overpayment allowed) + payment method (Cash/Transfer/POS) which atomically records a supplier payment alongside the invoice. The payment section is gated on `suppliers.manage` (render-gate + write-boundary re-check).
+- Stock-keeper access: the Receive Stock FAB is gated on `stock.add` OR `products.add`, so a stock keeper can open the flow and add quantity of existing products, but the "New Product" card is gated on `products.add` and price edits on the edit-price permissions — so without those toggles a stock keeper can only adjust quantities. Receiving stock writes inventory directly at checkout (the §16.6.1 approval queue applies to inventory-tab adjustments, not the supplier receive flow).
 - `ReceiveStockService.confirmReceipt` commits the whole receipt atomically in one
   Drift transaction: supplier invoice (skipped if zero) + per-line stock adjust
   (with `stock_transactions` history) + crate **return** for empties handed back
-  (`recordCrateReturnByManufacturer`) + one summary `stock.received` activity row.
+  (`recordCrateReturnByManufacturer`) + optional supplier payment + one summary `stock.received` activity row.
 - **Empty-crate tracking is return-only** here: empties handed back to the supplier
   on the receipt reduce owed crates for the line's manufacturer. The crate-RECEIVE
   leg from the draft (`recordCrateReceiveFromManufacturer`, movement `received`)
   was removed — it violated the `crate_ledger` CHECK and belongs to the §3.13
   supplier-crate subsystem (since merged in from main), which the Receive Stock
   flow deliberately does not use.
-- Guards (§14): route guard on `products.add`, long-press edit on
-  `products.edit_price`, buying-price write-boundary re-check via
-  `UpdateProductSheet` (`products.edit_buying_price`). Store-lock revalidation
+- Guards (§14): FAB on `stock.add`/`products.add`, New Product card on
+  `products.add`, grid long-press edit on `products.edit_price`, per-line price
+  edits on `products.edit_buying_price` (buying) / `products.edit_price`
+  (retail+wholesale), supplier payment on `suppliers.manage` — all with a
+  write-boundary re-check, not just a render gate. Store-lock revalidation
   (§15.7): flow captures the active store at init and aborts if it changes before
   confirm.
 - Legacy cleanup (§17.12): deleted the dead inbound supplier-delivery flow
@@ -85,8 +230,10 @@ phone + LGA fields), and verification of the permission gating screen rendering.
   model, `deliveryServiceProvider`) and reindexed the nav (Deliveries tab 9 gone;
   Activity Log now 9). The live order-side `DeliveryReceipt`/`DeliveryReceiptService`
   (rider hand-off) is retained.
-- Verification: `flutter analyze lib` clean; `flutter test` green (455 passed / 58
-  skipped / 0 failed) incl. new `test/receiving/receive_stock_test.dart`.
+- Verification: `flutter analyze lib` clean; `flutter test` green incl.
+  `test/receiving/receive_stock_test.dart` (atomic commit, zero-invoice payment,
+  price persistence) and `test/receiving/receive_flow_mode_test.dart`
+  (`receiveMode` hides/renders Store + Supplier and the quantity field).
 
 ### Daily Reconciliation UI Modernization & Custom Range (2026-06-19)
 - Redesigned `DailyReconciliationListScreen` to follow the glassy UI standard (`AppDecorations.glassyBackground`, `SharedScaffold`).
@@ -165,6 +312,7 @@ phone + LGA fields), and verification of the permission gating screen rendering.
 
 ### Login routing changed to POS (2026-06-19)
 - Changed the default post-login landing screen from Home (Dashboard, index 0) to Point of Sale (index 1) for all roles, including CEO and Manager, matching the user's intent to land them on POS directly after sign in.
+- **Exception (2026-06-20):** roles without `sales.make` (e.g. Stock keeper) land on Home, not POS — POS/Cart are hidden from their nav bar + drawer, so MainLayout bounces a POS/Cart landing to Home once permissions resolve.
 - Updated `auth_service.dart`, `navigation_service.dart`, and UI strings in `ceo_sign_up_screen.dart` and `success_dashboard_entry_screen.dart` to refer to "Point of Sale" instead of "dashboard".
 - Updated `CONTEXT/project-overview.md` to reflect this change in the core flow and success criteria.
 

@@ -196,6 +196,28 @@ class _MainLayoutState extends ConsumerState<MainLayout>
       }
     }
 
+    // Hard rule #7: a role without POS access (e.g. the stock keeper) must never
+    // land on the POS (1) or Cart (8) tab — both are sales.make-gated and hidden
+    // from their nav bar, so a POS landing leaves them on a screen they can't use
+    // with no tab to leave it. setCurrentUser defaults every login to POS; bounce
+    // a non-seller to Home (0) here instead. Gated on the permission set being
+    // RESOLVED (not the transient empty-while-loading state) so a seller isn't
+    // wrongly redirected before their grants stream in.
+    final canSell = hasPermission(ref, 'sales.make');
+    final role = ref.watch(currentUserRoleProvider);
+    final permsResolved =
+        role != null && ref.watch(rolePermissionsProvider(role.id)).hasValue;
+    if (permsResolved && !canSell) {
+      final idx = nav.currentIndex.value;
+      if (idx == 1 || idx == 8) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          final live = nav.currentIndex.value;
+          if (live == 1 || live == 8) nav.setIndex(0);
+        });
+      }
+    }
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {

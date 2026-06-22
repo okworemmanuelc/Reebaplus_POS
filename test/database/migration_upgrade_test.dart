@@ -672,4 +672,37 @@ void main() {
       expect(funds, isEmpty, reason: 'v36 must drop funds_accounts');
     });
   });
+
+  group('onUpgrade v55 → v56 (store-transfer permissions)', () {
+    test('re-seeds both catalog rows on a DB that lacks them', () async {
+      Future<int> permCount(AppDatabase db) async {
+        final r = await db
+            .customSelect(
+              "SELECT COUNT(*) c FROM permissions "
+              "WHERE key IN ('stores.request_transfer', "
+              "'stores.dispatch_transfer')",
+            )
+            .getSingle();
+        return r.read<int>('c');
+      }
+
+      // Fresh DB already seeds both keys in onCreate (they're in
+      // _defaultPermissionRows). Delete them + revert to v55 so the re-open's
+      // v56 block has work to do.
+      final db1 = await openAndInit();
+      await db1.customStatement(
+        "DELETE FROM permissions WHERE key IN "
+        "('stores.request_transfer', 'stores.dispatch_transfer')",
+      );
+      expect(await permCount(db1), 0);
+      await db1.customStatement('PRAGMA user_version = 55');
+      await db1.close();
+
+      // Re-open → onUpgrade(55 → 56) must re-insert both catalog rows.
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+      expect(await permCount(db2), 2,
+          reason: 'v56 block must seed the two store-transfer permissions');
+    });
+  });
 }

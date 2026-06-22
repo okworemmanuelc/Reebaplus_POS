@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/date_period.dart';
+import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/payments/widgets/supplier_ledger_entry_tile.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
+import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
 
 /// §21.10 — every ledger entry across all suppliers (invoices, payments, voids),
 /// newest first, filtered by a period dropdown. Read-only history view.
@@ -40,6 +42,97 @@ class _SupplierTransactionsScreenState
       Theme.of(context).textTheme.bodySmall?.color ??
       Theme.of(context).iconTheme.color!;
   Color get _border => Theme.of(context).dividerColor;
+
+  Widget _buildSummaryTile(
+    BuildContext context,
+    ThemeData theme,
+    String label,
+    double amount,
+    Color color,
+  ) {
+    final isDark = theme.brightness == Brightness.dark;
+    return GlassyCard(
+      radius: 12,
+      padding: EdgeInsets.symmetric(
+        horizontal: context.getRSize(14),
+        vertical: context.getRSize(10),
+      ),
+      backgroundColor: isDark
+          ? theme.colorScheme.surface.withValues(alpha: 0.25)
+          : theme.colorScheme.surface.withValues(alpha: 0.5),
+      border: Border.all(
+        color: theme.colorScheme.primary.withValues(alpha: isDark ? 0.1 : 0.05),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: context.getRFontSize(11),
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onSurface.withAlpha(128),
+            ),
+          ),
+          SizedBox(height: context.getRSize(4)),
+          Text(
+            formatCurrency(amount),
+            style: TextStyle(
+              fontSize: context.getRFontSize(15),
+              fontWeight: FontWeight.w800,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLedgerSummaryRow(ThemeData theme, List<SupplierLedgerEntryData> filteredHistory) {
+    int totalInKobo = 0, totalOutKobo = 0;
+    for (final entry in filteredHistory) {
+      if (entry.voidedAt != null) continue;
+      if (entry.referenceType == 'void') continue;
+
+      if (entry.signedAmountKobo >= 0) {
+        totalInKobo += entry.signedAmountKobo;
+      } else {
+        totalOutKobo += entry.signedAmountKobo.abs();
+      }
+    }
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        context.getRSize(16),
+        context.getRSize(8),
+        context.getRSize(16),
+        context.getRSize(8),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildSummaryTile(
+              context,
+              theme,
+              'Total In',
+              totalInKobo / 100.0,
+              success,
+            ),
+          ),
+          SizedBox(width: context.getRSize(10)),
+          Expanded(
+            child: _buildSummaryTile(
+              context,
+              theme,
+              'Total Out',
+              totalOutKobo / 100.0,
+              danger,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -154,6 +247,7 @@ class _SupplierTransactionsScreenState
                     ],
                   ),
                 ),
+                _buildLedgerSummaryRow(Theme.of(context), filtered),
                 Expanded(
                   child: filtered.isEmpty
                       ? Center(

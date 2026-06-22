@@ -29,7 +29,6 @@ import 'package:reebaplus_pos/features/inventory/screens/stock_count_screen.dart
 import 'package:reebaplus_pos/features/inventory/screens/product_detail_screen.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
-import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/inventory_history_tab.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/update_product_sheet.dart';
 import 'package:reebaplus_pos/core/utils/product_name.dart';
@@ -37,7 +36,7 @@ import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 import 'package:reebaplus_pos/shared/utils/product_icon_helper.dart';
-import 'package:reebaplus_pos/features/inventory/widgets/expandable_fab.dart';
+import 'package:reebaplus_pos/core/widgets/app_fab.dart';
 import 'package:reebaplus_pos/features/receiving/screens/receive_stock_screen.dart';
 
 class InventoryScreen extends ConsumerStatefulWidget {
@@ -323,20 +322,24 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         tabsReady &&
         _currentTab < _tabKeys.length &&
         _tabKeys[_currentTab] == 'products';
-    // Add Product FAB is gated on `products.add` (§16.7) — CEO + Manager only.
-    final canAddProduct = hasPermission(ref, 'products.add');
+    // Receive Stock FAB — open to anyone who can add stock (stock keepers, §16.7)
+    // or add products. Inside the flow, creating a NEW product is separately
+    // gated on `products.add` (the New Product card) and price edits on their own
+    // permissions, so a stock keeper with only `stock.add` can receive/update
+    // quantities but can't create products or change prices.
+    final canReceiveStock =
+        hasPermission(ref, 'stock.add') || hasPermission(ref, 'products.add');
 
     return SharedScaffold(
       activeRoute: 'inventory',
       backgroundColor: _bg,
       appBar: _buildAppBar(context),
-      floatingActionButton: (onProductsTab && canAddProduct)
-          ? ExpandableFab(
-              // Stock is a bottom-nav tab root — the visible bottom bar already
-              // lifts the FAB above the system nav; don't add the inset.
+      floatingActionButton: (onProductsTab && canReceiveStock)
+          ? AppFAB(
+              label: 'Receive Stock',
+              icon: FontAwesomeIcons.plus.data,
               reserveBottomInset: false,
-              onAddNewProduct: _showAddProductSheet,
-              onReceiveStock: () {
+              onPressed: () {
                 Navigator.of(context).push(slideDownRoute(const ReceiveStockScreen()));
               },
             )
@@ -378,7 +381,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       title: AppBarHeader(
         icon: FontAwesomeIcons.boxesStacked.data,
         title: 'Inventory',
-        subtitle: 'Stock Management',
+        subtitle: ref.watch(activeStoreLabelProvider),
       ),
       actions: [
         // Search toggle — only meaningful on the Products tab (§16.4).
@@ -1042,6 +1045,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       // Stock sheet instead, never this editor.
       onLongPress: hasPermission(ref, 'products.edit_price')
           ? () {
+              HapticFeedback.mediumImpact();
               showModalBottomSheet(
                 context: context,
                 isScrollControlled: true,
@@ -2174,13 +2178,6 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     );
   }
 
-  void _showAddProductSheet() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => AddProductScreen(onProductAdded: (_) => setState(() {})),
-      ),
-    );
-  }
 
   void _showAddSupplierDialog() {
     final nameCtrl = TextEditingController();

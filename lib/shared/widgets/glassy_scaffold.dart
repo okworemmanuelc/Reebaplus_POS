@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
 
 /// A reusable Scaffold wrapper that implements the "Glassy & Modernistic UI Standard" (§10.1+).
 /// Features a gradient background and a scroll-reactive AppBar that dims when the user scrolls.
 class GlassyScaffold extends StatefulWidget {
   final String title;
+  final String? subtitle;
   final Widget body;
   final List<Widget>? actions;
   final PreferredSizeWidget? bottom;
@@ -13,6 +15,7 @@ class GlassyScaffold extends StatefulWidget {
   const GlassyScaffold({
     super.key,
     required this.title,
+    this.subtitle,
     required this.body,
     this.actions,
     this.bottom,
@@ -36,10 +39,33 @@ class _GlassyScaffoldState extends State<GlassyScaffold> {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
-          title: Text(
-            widget.title,
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
+          title: widget.subtitle == null
+              ? Text(
+                  widget.title,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                )
+              : Column(
+                  crossAxisAlignment: widget.centerTitle
+                      ? CrossAxisAlignment.center
+                      : CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      widget.title,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      widget.subtitle!,
+                      style: TextStyle(
+                        fontSize: context.getRFontSize(11),
+                        color: t.colorScheme.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
           centerTitle: widget.centerTitle,
           actions: widget.actions,
           backgroundColor: isScrolled

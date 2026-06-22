@@ -30,6 +30,8 @@ import 'package:reebaplus_pos/core/utils/product_name.dart';
 import 'package:reebaplus_pos/features/pos/widgets/edit_item_modal.dart';
 import 'package:reebaplus_pos/shared/services/cart_service.dart';
 import 'package:reebaplus_pos/shared/utils/product_icon_helper.dart';
+import 'package:reebaplus_pos/shared/services/ui_hint_service.dart';
+import 'package:flutter/services.dart';
 
 class CartScreen extends ConsumerStatefulWidget {
   final List<Map<String, dynamic>> cart;
@@ -60,6 +62,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
   late AnimationController _clearCtrl;
   bool _isClearing = false;
   List<Map<String, dynamic>> _animatingItems = [];
+  bool _showCartHint = false;
 
   static const _cgColors = [
     Color(0xFFF59E0B),
@@ -89,6 +92,12 @@ class _CartScreenState extends ConsumerState<CartScreen>
     });
     db.inventoryDao.watchAllManufacturers().listen((data) {
       if (mounted) setState(() => _manufacturers = data);
+    });
+    uiHintService.shouldShow(UiHintService.hintCartTapEdit).then((show) {
+      if (show && mounted) {
+        setState(() => _showCartHint = true);
+        uiHintService.markShown(UiHintService.hintCartTapEdit);
+      }
     });
   }
 
@@ -941,7 +950,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
         title: AppBarHeader(
           icon: FontAwesomeIcons.cartShopping.data,
           title: 'Cart',
-          subtitle: 'Review Selection',
+          subtitle: ref.watch(activeStoreLabelProvider),
         ),
         actions: [
           const NotificationBell(),
@@ -1135,6 +1144,58 @@ class _CartScreenState extends ConsumerState<CartScreen>
                     )
                   : CustomScrollView(
                       slivers: [
+                        if (_showCartHint)
+                          SliverToBoxAdapter(
+                            child: Container(
+                              margin: EdgeInsets.fromLTRB(
+                                context.getRSize(20),
+                                context.getRSize(8),
+                                context.getRSize(20),
+                                0,
+                              ),
+                              padding: EdgeInsets.all(context.getRSize(12)),
+                              decoration: BoxDecoration(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.primary.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    FontAwesomeIcons.circleInfo.data,
+                                    size: context.getRSize(16),
+                                    color: Theme.of(context).colorScheme.primary,
+                                  ),
+                                  SizedBox(width: context.getRSize(12)),
+                                  Expanded(
+                                    child: Text(
+                                      'Tap an item to edit quantity, price or discount.',
+                                      style: TextStyle(
+                                        fontSize: context.getRFontSize(13),
+                                        color: Theme.of(context).colorScheme.primary,
+                                      ),
+                                    ),
+                                  ),
+                                  IconButton(
+                                    icon: Icon(
+                                      FontAwesomeIcons.xmark.data,
+                                      size: context.getRSize(16),
+                                      color: Theme.of(context).colorScheme.primary,
+                                    ),
+                                    onPressed: () {
+                                      setState(() => _showCartHint = false);
+                                      uiHintService.markShown(
+                                        UiHintService.hintCartTapEdit,
+                                      );
+                                    },
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
                         SliverToBoxAdapter(
                           child: ListView.separated(
                             shrinkWrap: true,
@@ -1167,7 +1228,10 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                 borderRadius: BorderRadius.circular(14),
                                 onTap: _isClearing
                                     ? null
-                                    : () => _editItem(context, item),
+                                    : () {
+                                        HapticFeedback.mediumImpact();
+                                        _editItem(context, item);
+                                      },
                                 child: Container(
                                   padding: EdgeInsets.all(context.getRSize(12)),
                                   decoration: BoxDecoration(

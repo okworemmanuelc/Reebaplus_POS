@@ -133,9 +133,25 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
     return SharedScaffold(
       activeRoute: 'dashboard',
       appBar: AppBar(
-        title: Text(
-          'Business Reports',
-          style: context.h3.copyWith(fontWeight: FontWeight.bold),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Business Reports',
+              style: context.h3.copyWith(fontWeight: FontWeight.bold),
+            ),
+            Text(
+              ref.watch(activeStoreLabelProvider),
+              style: TextStyle(
+                fontSize: context.getRFontSize(11),
+                color: Theme.of(context).colorScheme.primary,
+                fontWeight: FontWeight.w600,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
         ),
         elevation: 0,
         backgroundColor: context.backgroundColor,

@@ -416,6 +416,26 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
     await db.syncDao.enqueueUpsert('products', comp);
   }
 
+  Future<void> updateProductPrices(
+    String productId, {
+    required int buyingPriceKobo,
+    required int retailerPriceKobo,
+    required int wholesalerPriceKobo,
+  }) async {
+    final now = DateTime.now();
+    final comp = ProductsCompanion(
+      id: Value(productId),
+      buyingPriceKobo: Value(buyingPriceKobo),
+      retailerPriceKobo: Value(retailerPriceKobo),
+      wholesalerPriceKobo: Value(wholesalerPriceKobo),
+      lastUpdatedAt: Value(now),
+    );
+    await (update(products)
+          ..where((t) => t.id.equals(productId) & whereBusiness(t)))
+        .write(comp);
+    await _enqueueFullProduct(productId);
+  }
+
   Future<List<String>> getUniqueProductUnits() async {
     final query = selectOnly(products, distinct: true)
       ..addColumns([products.unit])
@@ -526,6 +546,18 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
   Stream<List<StockAdjustmentData>> watchAllAdjustments() {
     return (select(stockAdjustments)
           ..where((t) => whereBusiness(t))
+          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+        .watch();
+  }
+
+  /// Every `damaged` empty-crate movement for the business, newest first
+  /// (§17.2 crate-aware damages — the stored-empty fate written by
+  /// [recordEmptyCrateDamage]). These carry no stock_adjustment because no drink
+  /// is lost, so the §25.10 Statement sums their forfeited deposit from here
+  /// instead. Business-scoped.
+  Stream<List<CrateLedgerData>> watchAllCrateDamages() {
+    return (select(crateLedger)
+          ..where((t) => whereBusiness(t) & t.movementType.equals('damaged'))
           ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
         .watch();
   }
@@ -980,6 +1012,58 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
         storeId: Value(storeId),
         quantityDelta: quantity,
         movementType: 'adjusted',
+        lastUpdatedAt: Value(DateTime.now()),
+      );
+      await into(crateLedger).insert(ledgerComp);
+      await db.syncDao.enqueueUpsert('crate_ledger', ledgerComp);
+    }
+  }
+
+  /// Debit a manufacturer's empty-crate pool because STORED empties were
+  /// damaged/lost (§17.2 crate-aware damages, the `+crateempty` fate). Mirrors
+  /// [addEmptyCrates] but subtracts and stamps a `damaged` crate_ledger
+  /// movement. The pool is clamped at zero. Note: the "full crate lost"
+  /// (`+cratelost`) fate does NOT call this — that container was never in the
+  /// returned-empties pool, so it only forfeits the deposit on the Statement
+  /// (derived from the damage reason in `computeReconData`).
+  Future<void> recordEmptyCrateDamage(
+    String manufacturerId,
+    int quantity, {
+    String? storeId,
+  }) async {
+    if (quantity <= 0) return;
+    await customUpdate(
+      'UPDATE manufacturers SET empty_crate_stock = MAX(0, empty_crate_stock - ?), '
+      'last_updated_at = CAST(strftime(\'%s\', CURRENT_TIMESTAMP) AS INTEGER) '
+      'WHERE id = ? AND business_id = ?',
+      variables: [
+        Variable(quantity),
+        Variable(manufacturerId),
+        Variable(requireBusinessId()),
+      ],
+      updates: {manufacturers},
+    );
+    final mfrRow =
+        await (select(manufacturers)
+              ..where((t) => t.id.equals(manufacturerId) & whereBusiness(t)))
+            .getSingle();
+    await db.syncDao.enqueueUpsert('manufacturers', mfrRow);
+
+    // Per-store tracking (§16.8.1): mirror the balance + a store-scoped
+    // crate_ledger row tagged `damaged`.
+    if (storeId != null) {
+      await db.storeCrateBalancesDao.applyDelta(
+        storeId: storeId,
+        manufacturerId: manufacturerId,
+        delta: -quantity,
+      );
+      final ledgerComp = CrateLedgerCompanion.insert(
+        id: Value(UuidV7.generate()),
+        businessId: requireBusinessId(),
+        manufacturerId: Value(manufacturerId),
+        storeId: Value(storeId),
+        quantityDelta: -quantity,
+        movementType: 'damaged',
         lastUpdatedAt: Value(DateTime.now()),
       );
       await into(crateLedger).insert(ledgerComp);
@@ -3369,14 +3453,75 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
 
   Future<void> resetStuckInProgress() async {
     // Items stuck in 'syncing' for more than 5 minutes are reset to 'pending'
-    final fiveMinsAgo = DateTime.now().subtract(const Duration(minutes: 5));
-    await (update(syncQueue)..where(
-          (t) =>
-              t.status.equals('syncing') &
-              t.createdAt.isSmallerThanValue(fiveMinsAgo) &
-              whereBusiness(t),
-        ))
-        .write(const SyncQueueCompanion(status: Value('pending')));
+    // so a later push tick retries them (e.g. after an app kill mid-push).
+    //
+    // A naive bulk `syncing -> pending` UPDATE can collide with the partial
+    // unique index `idx_sync_queue_dedup_pending` (action_type, payload.id
+    // WHERE status='pending'): while a row sits in 'syncing', a fresh edit to
+    // the same domain row enqueues a NEW pending row (enqueueUpsert's coalesce
+    // lookup only sees 'pending' rows, so the in-flight 'syncing' twin is
+    // invisible — and we must not coalesce into a row mid-push). Flipping the
+    // stale 'syncing' row back to 'pending' then duplicates that key -> 2067.
+    //
+    // Resolve it deterministically before the flip. These rows are upserts
+    // keyed by row id, so collapsing duplicates to the newest payload is
+    // exactly what coalescing intends — no data is lost.
+    final cutoffSecs =
+        DateTime.now().subtract(const Duration(minutes: 5)).millisecondsSinceEpoch ~/
+        1000;
+    final bid = requireBusinessId();
+    await transaction(() async {
+      // 1. Drop stuck 'syncing' rows whose key already has a 'pending' twin:
+      //    that pending row carries the newer edit and supersedes the stale
+      //    in-flight payload.
+      await customStatement(
+        "DELETE FROM sync_queue "
+        "WHERE status = 'syncing' "
+        "  AND created_at < ?1 "
+        "  AND business_id = ?2 "
+        "  AND action_type NOT LIKE 'domain:%' "
+        "  AND json_extract(payload, '\$.id') IS NOT NULL "
+        "  AND EXISTS ("
+        "    SELECT 1 FROM sync_queue p "
+        "     WHERE p.status = 'pending' "
+        "       AND p.business_id = sync_queue.business_id "
+        "       AND p.action_type = sync_queue.action_type "
+        "       AND json_extract(p.payload, '\$.id') = "
+        "           json_extract(sync_queue.payload, '\$.id'))",
+        [cutoffSecs, bid],
+      );
+      // 2. Collapse any remaining stuck 'syncing' rows that share a key with
+      //    each other (two pushes interrupted for the same row): keep only the
+      //    newest payload, discard the older stale duplicates.
+      await customStatement(
+        "DELETE FROM sync_queue "
+        "WHERE status = 'syncing' "
+        "  AND created_at < ?1 "
+        "  AND business_id = ?2 "
+        "  AND action_type NOT LIKE 'domain:%' "
+        "  AND json_extract(payload, '\$.id') IS NOT NULL "
+        "  AND rowid NOT IN ("
+        "    SELECT s.rowid FROM sync_queue s "
+        "     WHERE s.status = 'syncing' "
+        "       AND s.created_at < ?1 "
+        "       AND s.business_id = sync_queue.business_id "
+        "       AND s.action_type = sync_queue.action_type "
+        "       AND json_extract(s.payload, '\$.id') = "
+        "           json_extract(sync_queue.payload, '\$.id') "
+        "     ORDER BY s.created_at DESC, s.rowid DESC "
+        "     LIMIT 1)",
+        [cutoffSecs, bid],
+      );
+      // 3. Flip the survivors. No two share a key now, and none collides with
+      //    a pre-existing pending row, so the dedup index is satisfied.
+      await customStatement(
+        "UPDATE sync_queue SET status = 'pending' "
+        "WHERE status = 'syncing' "
+        "  AND created_at < ?1 "
+        "  AND business_id = ?2",
+        [cutoffSecs, bid],
+      );
+    });
   }
 
   Future<void> clearFailureBackoff() async {
@@ -5102,7 +5247,7 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
   /// `domain:pos_transfer_crates` envelope (idempotent via ledger IDs).
   /// store_crate_balances is NOT separately enqueued — the domain RPC is the
   /// sole cloud writer (prevents double-count).
-  Future<void> transferCrates({
+  Future<void> _writeCrateTransferLegs({
     required String transferId,
     required String fromStoreId,
     required String toStoreId,
@@ -5115,88 +5260,376 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
     final inLedgerId = UuidV7.generate();
     final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
 
+    // 1. Local crate_ledger rows (append-only; store-stamped §v44).
+    await customStatement(
+      'INSERT INTO crate_ledger '
+      '  (id, business_id, manufacturer_id, store_id, '
+      '   quantity_delta, movement_type, performed_by, created_at, last_updated_at) '
+      'VALUES (?,?,?,?,?,?,?,?,?)',
+      [
+        outLedgerId,
+        bizId,
+        manufacturerId,
+        fromStoreId,
+        -quantity,
+        'transferred_out',
+        performedBy,
+        nowSec,
+        nowSec,
+      ],
+    );
+    await customStatement(
+      'INSERT INTO crate_ledger '
+      '  (id, business_id, manufacturer_id, store_id, '
+      '   quantity_delta, movement_type, performed_by, created_at, last_updated_at) '
+      'VALUES (?,?,?,?,?,?,?,?,?)',
+      [
+        inLedgerId,
+        bizId,
+        manufacturerId,
+        toStoreId,
+        quantity,
+        'transferred_in',
+        performedBy,
+        nowSec,
+        nowSec,
+      ],
+    );
+
+    // 2. Local store_crate_balances — immediate UI feedback only.
+    //    NOT enqueued directly; the domain RPC is the sole cloud writer.
+    await customStatement(
+      'INSERT INTO store_crate_balances '
+      '  (id, business_id, store_id, manufacturer_id, balance, last_updated_at) '
+      'VALUES (?,?,?,?,?,?) '
+      'ON CONFLICT(business_id, store_id, manufacturer_id) DO UPDATE SET '
+      '  balance = balance + excluded.balance, '
+      '  last_updated_at = excluded.last_updated_at',
+      [
+        UuidV7.generate(),
+        bizId,
+        fromStoreId,
+        manufacturerId,
+        -quantity,
+        nowSec,
+      ],
+    );
+    await customStatement(
+      'INSERT INTO store_crate_balances '
+      '  (id, business_id, store_id, manufacturer_id, balance, last_updated_at) '
+      'VALUES (?,?,?,?,?,?) '
+      'ON CONFLICT(business_id, store_id, manufacturer_id) DO UPDATE SET '
+      '  balance = balance + excluded.balance, '
+      '  last_updated_at = excluded.last_updated_at',
+      [UuidV7.generate(), bizId, toStoreId, manufacturerId, quantity, nowSec],
+    );
+
+    // 3. Enqueue the domain RPC (handles cloud crate_ledger + store_crate_balances atomically).
+    final payload = <String, dynamic>{
+      'p_business_id': bizId,
+      'p_actor_id': performedBy,
+      'p_transfer_id': transferId,
+      'p_from_store_id': fromStoreId,
+      'p_to_store_id': toStoreId,
+      'p_manufacturer_id': manufacturerId,
+      'p_quantity': quantity,
+      'p_out_ledger_id': outLedgerId,
+      'p_in_ledger_id': inLedgerId,
+    };
+    await db.syncDao.enqueue(
+      'domain:pos_transfer_crates',
+      jsonEncode(payload),
+    );
+  }
+
+  /// Moves [quantity] empty crates of [manufacturerId] from [fromStoreId] to
+  /// [toStoreId] atomically (Phase 3, §16.9). Executed at dispatch time — no
+  /// separate confirm step for crates (they travel with the product shipment).
+  ///
+  /// Local: writes two store-stamped crate_ledger rows and updates
+  /// store_crate_balances for immediate UI feedback. Cloud: a single atomic
+  /// `domain:pos_transfer_crates` envelope (idempotent via ledger IDs).
+  /// store_crate_balances is NOT separately enqueued — the domain RPC is the
+  /// sole cloud writer (prevents double-count).
+  Future<void> transferCrates({
+    required String transferId,
+    required String fromStoreId,
+    required String toStoreId,
+    required String manufacturerId,
+    required int quantity,
+    required String performedBy,
+  }) async {
     await transaction(() async {
-      // 1. Local crate_ledger rows (append-only; store-stamped §v44).
-      await customStatement(
-        'INSERT INTO crate_ledger '
-        '  (id, business_id, manufacturer_id, store_id, '
-        '   quantity_delta, movement_type, performed_by, created_at, last_updated_at) '
-        'VALUES (?,?,?,?,?,?,?,?,?)',
-        [
-          outLedgerId,
-          bizId,
-          manufacturerId,
-          fromStoreId,
-          -quantity,
-          'transferred_out',
-          performedBy,
-          nowSec,
-          nowSec,
-        ],
-      );
-      await customStatement(
-        'INSERT INTO crate_ledger '
-        '  (id, business_id, manufacturer_id, store_id, '
-        '   quantity_delta, movement_type, performed_by, created_at, last_updated_at) '
-        'VALUES (?,?,?,?,?,?,?,?,?)',
-        [
-          inLedgerId,
-          bizId,
-          manufacturerId,
-          toStoreId,
-          quantity,
-          'transferred_in',
-          performedBy,
-          nowSec,
-          nowSec,
-        ],
-      );
-
-      // 2. Local store_crate_balances — immediate UI feedback only.
-      //    NOT enqueued directly; the domain RPC is the sole cloud writer.
-      await customStatement(
-        'INSERT INTO store_crate_balances '
-        '  (id, business_id, store_id, manufacturer_id, balance, last_updated_at) '
-        'VALUES (?,?,?,?,?,?) '
-        'ON CONFLICT(business_id, store_id, manufacturer_id) DO UPDATE SET '
-        '  balance = balance + excluded.balance, '
-        '  last_updated_at = excluded.last_updated_at',
-        [
-          UuidV7.generate(),
-          bizId,
-          fromStoreId,
-          manufacturerId,
-          -quantity,
-          nowSec,
-        ],
-      );
-      await customStatement(
-        'INSERT INTO store_crate_balances '
-        '  (id, business_id, store_id, manufacturer_id, balance, last_updated_at) '
-        'VALUES (?,?,?,?,?,?) '
-        'ON CONFLICT(business_id, store_id, manufacturer_id) DO UPDATE SET '
-        '  balance = balance + excluded.balance, '
-        '  last_updated_at = excluded.last_updated_at',
-        [UuidV7.generate(), bizId, toStoreId, manufacturerId, quantity, nowSec],
-      );
-
-      // 3. Enqueue the domain RPC (handles cloud crate_ledger + store_crate_balances atomically).
-      final payload = <String, dynamic>{
-        'p_business_id': bizId,
-        'p_actor_id': performedBy,
-        'p_transfer_id': transferId,
-        'p_from_store_id': fromStoreId,
-        'p_to_store_id': toStoreId,
-        'p_manufacturer_id': manufacturerId,
-        'p_quantity': quantity,
-        'p_out_ledger_id': outLedgerId,
-        'p_in_ledger_id': inLedgerId,
-      };
-      await db.syncDao.enqueue(
-        'domain:pos_transfer_crates',
-        jsonEncode(payload),
+      await _writeCrateTransferLegs(
+        transferId: transferId,
+        fromStoreId: fromStoreId,
+        toStoreId: toStoreId,
+        manufacturerId: manufacturerId,
+        quantity: quantity,
+        performedBy: performedBy,
       );
     });
+  }
+
+  // ── Request → Dispatch → Reject (requester-initiated flow, §16.8.2) ────────
+
+  /// Raise a stock-transfer REQUEST from the requesting store [toStoreId] to the
+  /// holder store [fromStoreId]. Writes a `pending` header and nothing else —
+  /// NO inventory or crate movement happens until the holder dispatches. Field
+  /// meaning is unchanged: `fromLocationId` holds the goods (source),
+  /// `toLocationId` needs them (requester). `initiatedBy` is the requester.
+  ///
+  /// Returns the new transfer id. Notifies the holder store's users + the CEO.
+  Future<String> requestTransfer({
+    required String fromStoreId,
+    required String toStoreId,
+    required String productId,
+    required int quantity,
+    required String requestedBy,
+  }) async {
+    if (fromStoreId == toStoreId) {
+      throw ArgumentError('Source and destination stores must differ.');
+    }
+    if (quantity <= 0) {
+      throw ArgumentError('Quantity must be positive.');
+    }
+
+    final transferId = UuidV7.generate();
+    final now = DateTime.now();
+
+    await transaction(() async {
+      final header = StockTransfersCompanion.insert(
+        id: Value(transferId),
+        businessId: requireBusinessId(),
+        fromLocationId: fromStoreId,
+        toLocationId: toStoreId,
+        productId: productId,
+        quantity: quantity,
+        status: const Value('pending'),
+        initiatedBy: requestedBy,
+        initiatedAt: Value(now),
+        createdAt: Value(now),
+        lastUpdatedAt: Value(now),
+      );
+      await into(stockTransfers).insert(header);
+      await db.syncDao.enqueueUpsert('stock_transfers', header);
+    });
+
+    await db.activityLogDao.log(
+      action: 'stock_transfer_requested',
+      description:
+          'Requested $quantity unit(s) of $productId '
+          'from $fromStoreId → $toStoreId',
+      staffId: requestedBy,
+      storeId: toStoreId,
+      productId: productId,
+    );
+
+    // Notify the holder store (its assigned users) + the CEO that a request
+    // is waiting for them to accept and dispatch.
+    final ceoIds = await db.userBusinessesDao.getUserIdsForRoleSlugs(['ceo']);
+    final holderUserIds = (await db.userStoresDao.getUserIdsForStore(
+      fromStoreId,
+    )).toSet();
+    for (final uid in <String>{
+      ...ceoIds,
+      ...holderUserIds,
+    }..remove(requestedBy)) {
+      await db.notificationsDao.fireNotification(
+        type: 'stock_transfer.requested',
+        message: 'Stock request: $quantity unit(s) requested from your store.',
+        severity: 'info',
+        linkedRecordId: transferId,
+        recipientUserId: uid,
+      );
+    }
+
+    return transferId;
+  }
+
+  /// Accept a `pending` request on the holder side and DISPATCH it: optionally
+  /// alter [quantity] to match availability, decrement the source inventory
+  /// (`transfer_out`, which throws [InsufficientStockException] on shortfall),
+  /// and flip the header → `in_transit`. The requester then confirms receipt.
+  ///
+  /// Throws [StateError] if the transfer is not `pending`.
+  Future<void> dispatchTransfer({
+    required String transferId,
+    required String dispatchedBy,
+    int? quantity,
+    int emptyCratesToSend = 0,
+  }) async {
+    if (quantity != null && quantity <= 0) {
+      throw ArgumentError('Quantity must be positive.');
+    }
+    if (emptyCratesToSend < 0) {
+      throw ArgumentError('emptyCratesToSend cannot be negative.');
+    }
+
+    String? fromStoreId;
+    String? toStoreId;
+    String? productId;
+    int? dispatchedQty;
+
+    await transaction(() async {
+      final transfer =
+          await (select(stockTransfers)
+                ..where((t) => t.id.equals(transferId) & whereBusiness(t)))
+              .getSingleOrNull();
+      if (transfer == null) {
+        throw StateError('Transfer $transferId not found.');
+      }
+      if (transfer.status != 'pending') {
+        throw StateError(
+          'Transfer $transferId is ${transfer.status}, not pending.',
+        );
+      }
+
+      fromStoreId = transfer.fromLocationId;
+      toStoreId = transfer.toLocationId;
+      productId = transfer.productId;
+      dispatchedQty = quantity ?? transfer.quantity;
+      final now = DateTime.now();
+
+      // 1. Decrement source inventory (transfer_out). Guards negative stock.
+      await db.inventoryDao.adjustStock(
+        transfer.productId,
+        transfer.fromLocationId,
+        -dispatchedQty!,
+        'Transfer out to ${transfer.toLocationId.substring(0, 8)}…',
+        dispatchedBy,
+        movementType: 'transfer_out',
+        refId: transferId,
+      );
+
+      // 2. Flip header → in_transit, persisting any altered quantity.
+      final updated = transfer
+          .toCompanion(true)
+          .copyWith(
+            status: const Value('in_transit'),
+            quantity: Value(dispatchedQty!),
+            lastUpdatedAt: Value(now),
+          );
+      await (update(stockTransfers)
+            ..where((t) => t.id.equals(transferId) & whereBusiness(t)))
+          .write(updated);
+      final row = await (select(
+        stockTransfers,
+      )..where((t) => t.id.equals(transferId) & whereBusiness(t))).getSingle();
+      await db.syncDao.enqueueUpsert('stock_transfers', row.toCompanion(true));
+
+      // 3. Move empties if requested.
+      if (emptyCratesToSend > 0) {
+        final product = await db.catalogDao.findById(transfer.productId);
+        if (product == null) {
+          throw StateError('Product ${transfer.productId} not found.');
+        }
+        final isEligible = product.unit.toLowerCase() == 'bottle' && product.trackEmpties;
+        if (!isEligible) {
+          throw StateError(
+            'Product ${product.name} is not crate eligible (unit: ${product.unit}, trackEmpties: ${product.trackEmpties}).',
+          );
+        }
+        final manufacturerId = product.manufacturerId;
+        if (manufacturerId == null) {
+          throw StateError('Product ${product.name} does not have a manufacturerId.');
+        }
+
+        await _writeCrateTransferLegs(
+          transferId: transferId,
+          fromStoreId: fromStoreId!,
+          toStoreId: toStoreId!,
+          manufacturerId: manufacturerId,
+          quantity: emptyCratesToSend,
+          performedBy: dispatchedBy,
+        );
+      }
+    });
+
+    await db.activityLogDao.log(
+      action: 'stock_transfer_dispatched',
+      description:
+          'Dispatched $dispatchedQty unit(s) of $productId '
+          'from $fromStoreId → $toStoreId'
+          '${emptyCratesToSend > 0 ? " + $emptyCratesToSend empty crate(s)" : ""}',
+      staffId: dispatchedBy,
+      storeId: fromStoreId,
+      productId: productId,
+    );
+
+    // Notify the requester that their goods are on the way.
+    final transfer =
+        await (select(stockTransfers)
+              ..where((t) => t.id.equals(transferId) & whereBusiness(t)))
+            .getSingleOrNull();
+    if (transfer != null) {
+      await db.notificationsDao.fireNotification(
+        type: 'stock_transfer.dispatched',
+        message:
+            'Your request was dispatched: $dispatchedQty unit(s) on the way.',
+        severity: 'info',
+        linkedRecordId: transferId,
+        recipientUserId: transfer.initiatedBy,
+      );
+    }
+  }
+
+  /// Reject a `pending` request (holder declines). Flips the header →
+  /// `cancelled`. No inventory change (none ever happened for a pending row).
+  ///
+  /// Throws [StateError] if the transfer is not `pending`.
+  Future<void> rejectRequest({
+    required String transferId,
+    required String rejectedBy,
+  }) async {
+    String? requesterId;
+
+    await transaction(() async {
+      final transfer =
+          await (select(stockTransfers)
+                ..where((t) => t.id.equals(transferId) & whereBusiness(t)))
+              .getSingleOrNull();
+      if (transfer == null) {
+        throw StateError('Transfer $transferId not found.');
+      }
+      if (transfer.status != 'pending') {
+        throw StateError(
+          'Transfer $transferId is ${transfer.status}, not pending.',
+        );
+      }
+
+      requesterId = transfer.initiatedBy;
+      final now = DateTime.now();
+      final updated = transfer
+          .toCompanion(true)
+          .copyWith(
+            status: const Value('cancelled'),
+            lastUpdatedAt: Value(now),
+          );
+      await (update(stockTransfers)
+            ..where((t) => t.id.equals(transferId) & whereBusiness(t)))
+          .write(updated);
+      final row = await (select(
+        stockTransfers,
+      )..where((t) => t.id.equals(transferId) & whereBusiness(t))).getSingle();
+      await db.syncDao.enqueueUpsert('stock_transfers', row.toCompanion(true));
+    });
+
+    await db.activityLogDao.log(
+      action: 'stock_transfer_rejected',
+      description: 'Rejected pending transfer request $transferId.',
+      staffId: rejectedBy,
+    );
+
+    if (requesterId != null) {
+      await db.notificationsDao.fireNotification(
+        type: 'stock_transfer.rejected',
+        message: 'Your stock request was declined by the holding store.',
+        severity: 'info',
+        linkedRecordId: transferId,
+        recipientUserId: requesterId!,
+      );
+    }
   }
 
   // ── Watch ────────────────────────────────────────────────────────────────
@@ -5306,6 +5739,83 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
               expression: t.initiatedAt,
               mode: OrderingMode.desc,
             ),
+          ]))
+        .watch();
+  }
+
+  /// Business-wide `pending` transfer requests (raised, not yet dispatched),
+  /// newest first. The viewer-scoped request providers in stream_providers.dart
+  /// filter this in memory: incoming-requests by `fromLocationId` (holder side),
+  /// outgoing-requests by `toLocationId` (requester side).
+  Stream<List<StockTransferData>> watchAllPending() {
+    return (select(stockTransfers)
+          ..where((t) => whereBusiness(t) & t.status.equals('pending'))
+          ..orderBy([
+            (t) => OrderingTerm(
+              expression: t.initiatedAt,
+              mode: OrderingMode.desc,
+            ),
+          ]))
+        .watch();
+  }
+
+  /// `pending` requests this store must fulfil — others asking [holderStoreId]
+  /// to send (`fromLocationId == holderStoreId`). The store-details hub's
+  /// "Incoming Requests" section (Accept & dispatch / Reject).
+  Stream<List<StockTransferData>> watchPendingForHolderStore(
+    String holderStoreId,
+  ) {
+    return (select(stockTransfers)
+          ..where(
+            (t) =>
+                whereBusiness(t) &
+                t.fromLocationId.equals(holderStoreId) &
+                t.status.equals('pending'),
+          )
+          ..orderBy([
+            (t) => OrderingTerm(
+              expression: t.initiatedAt,
+              mode: OrderingMode.desc,
+            ),
+          ]))
+        .watch();
+  }
+
+  /// `pending` requests [requesterStoreId] raised but that have not been
+  /// dispatched yet (`toLocationId == requesterStoreId`). The store-details
+  /// hub's outstanding "My Requests" section.
+  Stream<List<StockTransferData>> watchPendingFromStore(
+    String requesterStoreId,
+  ) {
+    return (select(stockTransfers)
+          ..where(
+            (t) =>
+                whereBusiness(t) &
+                t.toLocationId.equals(requesterStoreId) &
+                t.status.equals('pending'),
+          )
+          ..orderBy([
+            (t) => OrderingTerm(
+              expression: t.initiatedAt,
+              mode: OrderingMode.desc,
+            ),
+          ]))
+        .watch();
+  }
+
+  /// Watch received and cancelled transfers involving the store in either direction,
+  /// sorted newest first.
+  Stream<List<StockTransferData>> watchHistoryForStore(String storeId) {
+    return (select(stockTransfers)
+          ..where((t) =>
+              whereBusiness(t) &
+              (t.fromLocationId.equals(storeId) | t.toLocationId.equals(storeId)) &
+              t.status.isIn(['received', 'cancelled']))
+          ..orderBy([
+            (t) => OrderingTerm(
+                  expression: t.initiatedAt,
+                  mode: OrderingMode.desc,
+                ),
           ]))
         .watch();
   }

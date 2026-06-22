@@ -47,9 +47,10 @@ class _SecuritySettingsScreenState
 
     if (!mounted) return;
     setState(() {
-      // Snap any legacy/non-preset value (or unset) to the default so the UI
-      // and the chips stay consistent; a tap then persists a real preset.
-      _autoLockSeconds = (stored != null && _presets.contains(stored))
+      // 0 is an explicit "off" value (auto-lock disabled). Snap any other
+      // legacy/non-preset value (or unset) to the default so the UI and the
+      // chips stay consistent; a tap then persists a real preset.
+      _autoLockSeconds = (stored != null && (stored == 0 || _presets.contains(stored)))
           ? stored
           : _defaultSeconds;
       _biometricsEnabled = prefs.getBool('biometrics_enabled') ?? false;
@@ -68,6 +69,7 @@ class _SecuritySettingsScreenState
     }
     setState(() => _autoLockSeconds = seconds);
     final db = ref.read(databaseProvider);
+    final off = seconds == 0;
     try {
       await db.settingsDao.set(
         'auto_lock_interval_seconds',
@@ -75,11 +77,15 @@ class _SecuritySettingsScreenState
       );
       await db.activityLogDao.log(
         action: 'settings.security.auto_lock',
-        description: 'Set auto-lock to ${seconds ~/ 60} min',
+        description:
+            off ? 'Turned auto-lock off' : 'Set auto-lock to ${seconds ~/ 60} min',
         staffId: db.currentUserId,
       );
       if (mounted) {
-        AppNotification.showSuccess(context, 'Auto-lock updated.');
+        AppNotification.showSuccess(
+          context,
+          off ? 'Auto-lock turned off.' : 'Auto-lock updated.',
+        );
       }
     } catch (_) {
       if (mounted) {
@@ -207,7 +213,9 @@ class _SecuritySettingsScreenState
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Return to the sign-in picker after inactivity',
+                      _autoLockSeconds == 0
+                          ? 'Off — tap a timer to turn it on'
+                          : 'Return to the sign-in picker after inactivity',
                       style: TextStyle(
                         fontSize: 13,
                         color: t.colorScheme.onSurface.withValues(alpha: 0.6),
@@ -224,11 +232,32 @@ class _SecuritySettingsScreenState
             runSpacing: 8,
             children: [
               for (final seconds in _presets)
-                ChoiceChip(
-                  label: Text('${seconds ~/ 60} min'),
-                  selected: _autoLockSeconds == seconds,
-                  onSelected: (_) => _saveAutoLock(seconds),
-                ),
+                () {
+                  final selected = _autoLockSeconds == seconds;
+                  return ChoiceChip(
+                    label: Text('${seconds ~/ 60} min'),
+                    selected: selected,
+                    // Explicit colors so the unselected label stays legible in
+                    // both light and dark themes (the chip theme's light label
+                    // tint washed out on the light surface).
+                    backgroundColor: t.colorScheme.surface,
+                    selectedColor: t.colorScheme.primary,
+                    checkmarkColor: t.colorScheme.onPrimary,
+                    side: BorderSide(
+                      color: t.colorScheme.onSurface.withValues(alpha: 0.12),
+                    ),
+                    labelStyle: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: selected
+                          ? t.colorScheme.onPrimary
+                          : t.colorScheme.onSurface,
+                    ),
+                    // Re-tapping the active chip turns auto-lock off (saves 0).
+                    onSelected: (_) =>
+                        _saveAutoLock(selected ? 0 : seconds),
+                  );
+                }(),
             ],
           ),
         ],

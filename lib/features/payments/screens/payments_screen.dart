@@ -36,7 +36,7 @@ class PaymentsScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: bg,
       drawer: const AppDrawer(activeRoute: 'supplier_accounts'),
-      appBar: _buildAppBar(context),
+      appBar: _buildAppBar(context, ref),
       body: !canManage
           ? Center(
               child: perms.isEmpty
@@ -61,7 +61,7 @@ class PaymentsScreen extends ConsumerWidget {
     );
   }
 
-  PreferredSizeWidget _buildAppBar(BuildContext context) {
+  PreferredSizeWidget _buildAppBar(BuildContext context, WidgetRef ref) {
     final surface = Theme.of(context).colorScheme.surface;
     final text = Theme.of(context).colorScheme.onSurface;
     return AppBar(
@@ -157,7 +157,7 @@ class PaymentsScreen extends ConsumerWidget {
                   ),
                 ),
                 Text(
-                  'Manage supplier payments',
+                  ref.watch(activeStoreLabelProvider),
                   style: TextStyle(
                     fontSize: context.getRFontSize(11),
                     color: Theme.of(context).colorScheme.primary,

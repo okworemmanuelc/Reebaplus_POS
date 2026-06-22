@@ -33,9 +33,12 @@ class ReceiveStockService {
 
   ReceiveStockService(this._db, this._supplierAccounts);
 
-  /// Commit a receipt. [lines] are the cart lines; [emptiesReturnedByProduct]
-  /// maps a productId → empties handed back on this receipt (only consulted for
-  /// bottle + trackEmpties lines with a manufacturer).
+  /// Commit a receipt. [lines] are the cart lines; [emptiesReturnedByManufacturer]
+  /// maps a manufacturerId → empty crates handed back on this receipt. Empties
+  /// are a per-manufacturer quantity (the canonical crate-debt owner is the
+  /// manufacturer, not the product), so a manufacturer that ships several SKUs
+  /// on one receipt has a single empties figure — not one per SKU. Only
+  /// manufacturers represented by a bottle + trackEmpties line are consulted.
   Future<void> confirmReceipt({
     required String supplierId,
     required String supplierName,
@@ -43,8 +46,10 @@ class ReceiveStockService {
     required DateTime dateReceived,
     required String staffId,
     required List<ReceiveCartLine> lines,
-    required Map<String, int> emptiesReturnedByProduct,
+    required Map<String, int> emptiesReturnedByManufacturer,
     String? note,
+    int? amountPaidKobo,
+    String? paymentMethod,
   }) async {
     if (lines.isEmpty) {
       throw ArgumentError('Cannot receive stock with an empty cart');
@@ -69,7 +74,19 @@ class ReceiveStockService {
         );
       }
 
-      // 2 + 3. Per-line stock increment and crate movements.
+      if (amountPaidKobo != null && amountPaidKobo > 0) {
+        await _supplierAccounts.recordPayment(
+          supplierId: supplierId,
+          amountKobo: amountPaidKobo,
+          method: paymentMethod ?? 'cash',
+          paidOn: dateReceived,
+          staffId: staffId,
+          storeId: storeId,
+          referenceNote: note ?? 'Payment for received stock',
+        );
+      }
+
+      // 2. Per-line stock increment and price persistence.
       for (final line in lines) {
         await _db.inventoryDao.adjustStock(
           line.productId,
@@ -79,17 +96,31 @@ class ReceiveStockService {
           staffId,
         );
 
-        if (line.trackEmpties && line.manufacturerId != null) {
-          // Empty crates handed back to the supplier on this receipt.
-          final returned = emptiesReturnedByProduct[line.productId] ?? 0;
-          if (returned > 0) {
-            await _db.crateLedgerDao.recordCrateReturnByManufacturer(
-              manufacturerId: line.manufacturerId!,
-              quantity: returned,
-              performedBy: staffId,
-              storeId: storeId,
-            );
-          }
+        // Update product prices in the database to persist edited prices
+        await _db.catalogDao.updateProductPrices(
+          line.productId,
+          buyingPriceKobo: line.buyingPriceKobo,
+          retailerPriceKobo: line.retailKobo,
+          wholesalerPriceKobo: line.wholesaleKobo,
+        );
+      }
+
+      // 3. Empty crates handed back to the supplier on this receipt, recorded
+      //    once per manufacturer (not per product). Only manufacturers carried
+      //    by a bottle + trackEmpties line on this receipt are consulted.
+      final eligibleManufacturerIds = <String>{
+        for (final line in lines)
+          if (line.trackEmpties && line.manufacturerId != null)
+            line.manufacturerId!,
+      };
+      for (final entry in emptiesReturnedByManufacturer.entries) {
+        if (entry.value > 0 && eligibleManufacturerIds.contains(entry.key)) {
+          await _db.crateLedgerDao.recordCrateReturnByManufacturer(
+            manufacturerId: entry.key,
+            quantity: entry.value,
+            performedBy: staffId,
+            storeId: storeId,
+          );
         }
       }
 
@@ -98,7 +129,8 @@ class ReceiveStockService {
         action: 'stock.received',
         description:
             'Received ${lines.length} product(s), $totalUnits unit(s) from '
-            '$supplierName — invoice ${formatCurrency(invoiceTotalKobo / 100)}',
+            '$supplierName — invoice ${formatCurrency(invoiceTotalKobo / 100)}'
+            '${amountPaidKobo != null && amountPaidKobo > 0 ? ' (Paid: ${formatCurrency(amountPaidKobo / 100)})' : ''}',
         staffId: staffId,
         storeId: storeId,
         entityType: 'supplier',

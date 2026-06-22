@@ -161,7 +161,7 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
                     ),
                   ),
                   Text(
-                    'System History',
+                    ref.watch(activeStoreLabelProvider),
                     style: TextStyle(
                       fontSize: context.getRFontSize(11),
                       color: Theme.of(context).colorScheme.primary,

@@ -249,6 +249,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
 
   /// Re-seed the editable controllers/fields from the loaded product so a
   /// Cancel discards unsaved edits.
+  /*
   void _resetEdits() {
     final product = _productData;
     setState(() {
@@ -278,6 +279,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       }
     });
   }
+  */
 
   /// Re-seed the displayed (non-editing) fields from a freshly-synced product
   /// row so a realtime cloud edit reflects immediately (§5). Synchronous — the
@@ -579,6 +581,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       ),
       actions: [
         // Edit toggle (CEO/Manager) — fields stay read-only until this is on.
+        // Temporarily hidden per user request
+        /*
         if (_canEdit)
           IconButton(
             tooltip: _editMode ? 'Cancel editing' : 'Edit product',
@@ -605,6 +609,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
               ),
             ),
           ),
+        */
         if (_canDelete)
           IconButton(
             onPressed: () => _confirmDelete(context),

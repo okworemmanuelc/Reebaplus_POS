@@ -7,6 +7,8 @@ class ReceiveCartLine {
   final String? unit;
   final int qty;
   final int buyingPriceKobo;
+  final int retailKobo;
+  final int wholesaleKobo;
   final String? manufacturerId;
   final bool trackEmpties;
 
@@ -16,6 +18,8 @@ class ReceiveCartLine {
     this.unit,
     required this.qty,
     required this.buyingPriceKobo,
+    required this.retailKobo,
+    required this.wholesaleKobo,
     this.manufacturerId,
     required this.trackEmpties,
   });
@@ -26,6 +30,8 @@ class ReceiveCartLine {
     String? unit,
     int? qty,
     int? buyingPriceKobo,
+    int? retailKobo,
+    int? wholesaleKobo,
     String? manufacturerId,
     bool? trackEmpties,
   }) {
@@ -35,6 +41,8 @@ class ReceiveCartLine {
       unit: unit ?? this.unit,
       qty: qty ?? this.qty,
       buyingPriceKobo: buyingPriceKobo ?? this.buyingPriceKobo,
+      retailKobo: retailKobo ?? this.retailKobo,
+      wholesaleKobo: wholesaleKobo ?? this.wholesaleKobo,
       manufacturerId: manufacturerId ?? this.manufacturerId,
       trackEmpties: trackEmpties ?? this.trackEmpties,
     );
@@ -62,6 +70,8 @@ class ReceiveCartNotifier extends Notifier<List<ReceiveCartLine>> {
           unit: product.unit,
           qty: amount,
           buyingPriceKobo: product.buyingPriceKobo,
+          retailKobo: product.retailerPriceKobo,
+          wholesaleKobo: product.wholesalerPriceKobo,
           manufacturerId: product.manufacturerId,
           trackEmpties: product.trackEmpties,
         )
@@ -78,6 +88,36 @@ class ReceiveCartNotifier extends Notifier<List<ReceiveCartLine>> {
     if (existingIndex >= 0) {
       final updated = List<ReceiveCartLine>.from(state);
       updated[existingIndex] = updated[existingIndex].copyWith(qty: qty);
+      state = updated;
+    }
+  }
+
+  void setBuyingPrice(String productId, int priceKobo) {
+    if (priceKobo < 0) return;
+    final existingIndex = state.indexWhere((l) => l.productId == productId);
+    if (existingIndex >= 0) {
+      final updated = List<ReceiveCartLine>.from(state);
+      updated[existingIndex] = updated[existingIndex].copyWith(buyingPriceKobo: priceKobo);
+      state = updated;
+    }
+  }
+
+  void setRetailPrice(String productId, int priceKobo) {
+    if (priceKobo < 0) return;
+    final existingIndex = state.indexWhere((l) => l.productId == productId);
+    if (existingIndex >= 0) {
+      final updated = List<ReceiveCartLine>.from(state);
+      updated[existingIndex] = updated[existingIndex].copyWith(retailKobo: priceKobo);
+      state = updated;
+    }
+  }
+
+  void setWholesalePrice(String productId, int priceKobo) {
+    if (priceKobo < 0) return;
+    final existingIndex = state.indexWhere((l) => l.productId == productId);
+    if (existingIndex >= 0) {
+      final updated = List<ReceiveCartLine>.from(state);
+      updated[existingIndex] = updated[existingIndex].copyWith(wholesaleKobo: priceKobo);
       state = updated;
     }
   }

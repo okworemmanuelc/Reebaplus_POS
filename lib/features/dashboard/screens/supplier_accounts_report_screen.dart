@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -8,6 +7,7 @@ import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
 
 /// §25.2 — Supplier Accounts Report. One row per supplier showing the current
 /// outstanding balance, total paid, and total received (invoice totals), scoped
@@ -210,77 +210,63 @@ class _SupplierReportRow extends StatelessWidget {
               ? 'Credit ${formatCurrency(row.balanceKobo / 100)}'
               : 'Settled');
 
-    return Container(
+    return GlassyCard(
       margin: EdgeInsets.only(bottom: context.getRSize(12)),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Container(
-            padding: EdgeInsets.all(context.getRSize(16)),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.4),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.05),
-              ),
-            ),
-            child: Material(
-              type: MaterialType.transparency,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          row.name,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: context.getRFontSize(16),
-                            color: text,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      SizedBox(width: context.getRSize(8)),
-                      Text(
-                        balLabel,
-                        style: TextStyle(
-                          color: balColor,
-                          fontSize: context.getRFontSize(13),
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
+      padding: EdgeInsets.all(context.getRSize(16)),
+      backgroundColor: Theme.of(context).colorScheme.surface.withValues(alpha: 0.4),
+      border: Border.all(
+        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.05),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  row.name,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: context.getRFontSize(16),
+                    color: text,
                   ),
-                  SizedBox(height: context.getRSize(12)),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _stat(
-                          context,
-                          'Total received',
-                          formatCurrency(row.receivedKobo / 100),
-                          danger,
-                        ),
-                      ),
-                      Expanded(
-                        child: _stat(
-                          context,
-                          'Total paid',
-                          formatCurrency(row.paidKobo / 100),
-                          success,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-            ),
+              SizedBox(width: context.getRSize(8)),
+              Text(
+                balLabel,
+                style: TextStyle(
+                  color: balColor,
+                  fontSize: context.getRFontSize(13),
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
           ),
-        ),
+          SizedBox(height: context.getRSize(12)),
+          Row(
+            children: [
+              Expanded(
+                child: _stat(
+                  context,
+                  'Total received',
+                  formatCurrency(row.receivedKobo / 100),
+                  danger,
+                ),
+              ),
+              Expanded(
+                child: _stat(
+                  context,
+                  'Total paid',
+                  formatCurrency(row.paidKobo / 100),
+                  success,
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

@@ -24,6 +24,7 @@ import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/store_picker_sheet.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:reebaplus_pos/shared/services/ui_hint_service.dart';
 
 class PosHomeScreen extends ConsumerStatefulWidget {
   const PosHomeScreen({super.key});
@@ -38,11 +39,15 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
   bool _hasAutoShownPicker = false;
   bool _isListView = false;
   int _gridColumns = 3;
+  bool _showPosHint = false;
 
   @override
   void initState() {
     super.initState();
     _loadViewPreferences();
+    uiHintService.shouldShow(UiHintService.hintPosLongpress).then((show) {
+      if (show && mounted) setState(() => _showPosHint = true);
+    });
     Future.microtask(() {
       if (!mounted) return;
       setState(() {
@@ -108,6 +113,21 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
     // §12 / hard rule #6: POS is gated to roles that hold `sales.make` (CEO,
     // Manager, Cashier). Stock keeper is already hidden in the sidebar; this is
     // defense-in-depth against deep-links / bottom-nav.
+    //
+    // Wait for permissions to resolve before rendering the denial: on a fresh
+    // login the role + grant rows arrive a frame or two after this builds, and
+    // an empty permission set reads the same as "denied". Showing the denial
+    // unconditionally flashes "You don't have access to Point of Sale." for a
+    // moment even for the CEO before the grants land. While unresolved, show the
+    // same neutral placeholder POS uses before its controller is ready.
+    final permsReady = ref.watch(currentUserPermissionsReadyProvider);
+    if (!permsReady) {
+      return SharedScaffold(
+        activeRoute: 'pos',
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        body: const SafeArea(child: SizedBox.shrink()),
+      );
+    }
     if (!hasPermission(ref, 'sales.make')) {
       return SharedScaffold(
         activeRoute: 'pos',
@@ -137,7 +157,14 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
     final selectable = ref.watch(selectableStoresProvider);
     final activeStoreId = ref.watch(lockedStoreProvider).value;
     final storeChosen = ref.watch(storeExplicitlyChosenProvider).value;
-    if (selectable.length >= 2 && (activeStoreId == null || !storeChosen)) {
+    // True while a multi-store user is on "All Stores" (active store null) or
+    // hasn't explicitly picked the store they're selling from. While this holds
+    // the picker is up; the grid behind it must NOT render real products — show a
+    // "pick a store" placeholder instead so nothing is accidentally sold from a
+    // silent default / the wrong store.
+    final needsStoreSelection =
+        selectable.length >= 2 && (activeStoreId == null || !storeChosen);
+    if (needsStoreSelection) {
       if (!_hasAutoShownPicker) {
         _hasAutoShownPicker = true;
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -232,9 +259,13 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
                         textCol: textCol,
                         borderCol: borderCol,
                       ),
+                if (!_controller!.isLoading && _showPosHint && !needsStoreSelection)
+                  _buildPosHint(),
                 Expanded(
                   // ...
-                  child: _controller!.isLoading
+                  child: needsStoreSelection
+                      ? _buildSelectStorePlaceholder(context, subtextCol)
+                      : _controller!.isLoading
                       ? const SizedBox.shrink()
                       : TweenAnimationBuilder<double>(
                           // §12.5: subtle fade-in for content, no spinner.
@@ -267,6 +298,105 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
 
 
 
+  // Shown in place of the product grid while a multi-store user is on "All
+  // Stores" / hasn't picked the store they're selling from. The picker sheet is
+  // up on top of this; tapping the placeholder re-opens it if dismissed.
+  Widget _buildSelectStorePlaceholder(BuildContext context, Color subtextCol) {
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: context.getRSize(32)),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              FontAwesomeIcons.store.data,
+              size: context.getRSize(48),
+              color: subtextCol.withValues(alpha: 0.5),
+            ),
+            SizedBox(height: context.getRSize(20)),
+            Text(
+              'Please select a store to view POS products.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: context.getRFontSize(15),
+                color: subtextCol,
+              ),
+            ),
+            SizedBox(height: context.getRSize(20)),
+            TextButton.icon(
+              onPressed: () =>
+                  showStorePickerSheet(context, ref, isDismissible: false),
+              icon: Icon(
+                FontAwesomeIcons.store.data,
+                size: context.getRSize(14),
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              label: Text(
+                'Select store',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Inline dismissible hint shown above the product grid (first couple of
+  // visits) telling the operator how to edit a product. Mirrors the cart
+  // screen's "tap an item to edit" banner, but for the POS long-press gesture.
+  Widget _buildPosHint() {
+    final primary = Theme.of(context).colorScheme.primary;
+    return Container(
+      margin: EdgeInsets.fromLTRB(
+        context.getRSize(20),
+        context.getRSize(8),
+        context.getRSize(20),
+        0,
+      ),
+      padding: EdgeInsets.all(context.getRSize(12)),
+      decoration: BoxDecoration(
+        color: primary.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            FontAwesomeIcons.circleInfo.data,
+            size: context.getRSize(16),
+            color: primary,
+          ),
+          SizedBox(width: context.getRSize(12)),
+          Expanded(
+            child: Text(
+              'Tap and hold a product to edit it.',
+              style: TextStyle(
+                fontSize: context.getRFontSize(13),
+                color: primary,
+              ),
+            ),
+          ),
+          IconButton(
+            icon: Icon(
+              FontAwesomeIcons.xmark.data,
+              size: context.getRSize(16),
+              color: primary,
+            ),
+            onPressed: () {
+              setState(() => _showPosHint = false);
+              uiHintService.markShown(UiHintService.hintPosLongpress);
+            },
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+        ],
+      ),
+    );
+  }
+
   PreferredSizeWidget _buildAppBar(
     BuildContext context,
     Color surfaceCol,
@@ -288,6 +418,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
         icon: FontAwesomeIcons.beerMugEmpty.data,
         title: bizName.isNotEmpty ? bizName : 'Reebaplus POS',
         subtitle: _controller!.currentStoreName ?? 'Point of Sale',
+        truncateTitleWithReveal: true,
       ),
       actions: [
         IconButton(

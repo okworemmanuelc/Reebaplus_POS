@@ -20,6 +20,7 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/auto_lock_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
+import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
 
 class UpdateProductSheet extends ConsumerStatefulWidget {
   final ProductData product;
@@ -27,12 +28,15 @@ class UpdateProductSheet extends ConsumerStatefulWidget {
   final String? currentStoreId;
   final void Function(ProductData)? onProductUpdated;
 
+  final bool receiveMode;
+
   const UpdateProductSheet({
     super.key,
     required this.product,
     required this.totalStock,
     this.currentStoreId,
     this.onProductUpdated,
+    this.receiveMode = false,
   });
 
   @override
@@ -50,6 +54,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
   late final TextEditingController _qtyToAddCtrl;
   late final TextEditingController _supplierCtrl;
   late final TextEditingController _manufacturerCtrl;
+  late final TextEditingController _categoryCtrl;
 
   late String _unit;
   late bool _trackEmpties;
@@ -65,6 +70,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
   List<StoreData> _stores = [];
   List<SupplierData> _allSuppliers = [];
   List<CategoryData> _allCategories = [];
+  List<CategoryData> _categorySuggestions = [];
   List<SupplierData> _supplierSuggestions = [];
   List<ManufacturerData> _allManufacturers = [];
   List<ManufacturerData> _manufacturerSuggestions = [];
@@ -156,6 +162,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
     _supplierCtrl = TextEditingController();
     // Manufacturer name is populated in _loadData() via FK lookup.
     _manufacturerCtrl = TextEditingController();
+    _categoryCtrl = TextEditingController();
     _imagePath = p.imagePath;
 
     _unit = p.unit;
@@ -202,6 +209,9 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
         (c) => c?.id == widget.product.categoryId,
         orElse: () => cats.isNotEmpty ? cats.first : null,
       );
+      if (_selectedCategory != null) {
+        _categoryCtrl.text = _selectedCategory!.name;
+      }
 
       // Pre-select manufacturer
       _selectedManufacturer = manufacturers
@@ -237,6 +247,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
     _qtyToAddCtrl.dispose();
     _supplierCtrl.dispose();
     _manufacturerCtrl.dispose();
+    _categoryCtrl.dispose();
     super.dispose();
   }
 
@@ -266,6 +277,54 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
       _selectedSupplier = null;
       _supplierSuggestions = [];
     });
+  }
+
+  void _onCategoryChanged(String query) {
+    final q = query.trim().toLowerCase();
+    setState(() {
+      _categorySuggestions = q.isEmpty
+          ? []
+          : _allCategories
+                .where((c) => c.name.toLowerCase().contains(q))
+                .take(20)
+                .toList();
+    });
+  }
+
+  void _selectCategory(CategoryData category) {
+    _categoryCtrl.text = category.name;
+    setState(() {
+      _selectedCategory = category;
+      _categorySuggestions = [];
+    });
+  }
+
+  void _clearCategory() {
+    _categoryCtrl.clear();
+    setState(() {
+      _selectedCategory = null;
+      _categorySuggestions = [];
+    });
+  }
+
+  Future<CategoryData?> _getOrCreateCategory(String name) async {
+    final db = ref.read(databaseProvider);
+    final businessId = ref.read(authProvider).currentUser?.businessId;
+    if (businessId == null) return null;
+    final existing = await db.inventoryDao.getAllCategories();
+    final match = existing
+        .where((c) => c.name.toLowerCase() == name.toLowerCase())
+        .firstOrNull;
+    if (match != null) return match;
+    final id = await db.catalogDao.insertCategory(
+      CategoriesCompanion.insert(name: name, businessId: businessId),
+    );
+    final categories = await db.inventoryDao.getAllCategories();
+    if (!mounted) return null;
+    setState(() {
+      _allCategories = categories;
+    });
+    return categories.firstWhere((c) => c.id == id);
   }
 
   void _onManufacturerChanged(String query) {
@@ -378,25 +437,6 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
 
     final canEditBuying = _canEditBuying;
     final name = _nameCtrl.text.trim();
-    String? missingField;
-    if (name.isEmpty) {
-      missingField = 'Product Name';
-    } else if (_selectedCategory == null) {
-      missingField = 'Category';
-    } else if (_retailPriceCtrl.text.trim().isEmpty) {
-      missingField = 'Retailer Price';
-    } else if (_wholesalePriceCtrl.text.trim().isEmpty) {
-      missingField = 'Wholesaler Price';
-    } else if (canEditBuying && _buyingPriceCtrl.text.trim().isEmpty) {
-      missingField = 'Buying Price';
-    } else if (_selectedStore == null) {
-      missingField = 'Store';
-    }
-
-    if (missingField != null) {
-      setState(() => _errorMessage = '$missingField is required.');
-      return;
-    }
 
     final retailPrice = parseCurrency(_retailPriceCtrl.text);
     final wholesalePrice = parseCurrency(_wholesalePriceCtrl.text);
@@ -425,11 +465,42 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
         );
       }
 
+      // Auto-handle category if typed but not explicitly selected
+      if (_selectedCategory == null &&
+          _categoryCtrl.text.trim().isNotEmpty) {
+        _selectedCategory = await _getOrCreateCategory(
+          _categoryCtrl.text.trim(),
+        );
+      }
+
       // Auto-handle supplier if typed but not explicitly selected (optional)
       if (_selectedSupplier == null && _supplierCtrl.text.trim().isNotEmpty) {
         _selectedSupplier = await _getOrCreateSupplier(
           _supplierCtrl.text.trim(),
         );
+      }
+
+      String? missingField;
+      if (name.isEmpty) {
+        missingField = 'Product Name';
+      } else if (_selectedCategory == null) {
+        missingField = 'Category';
+      } else if (_retailPriceCtrl.text.trim().isEmpty) {
+        missingField = 'Retailer Price';
+      } else if (_wholesalePriceCtrl.text.trim().isEmpty) {
+        missingField = 'Wholesaler Price';
+      } else if (canEditBuying && _buyingPriceCtrl.text.trim().isEmpty) {
+        missingField = 'Buying Price';
+      } else if (!widget.receiveMode && _selectedStore == null) {
+        missingField = 'Store';
+      }
+
+      if (missingField != null) {
+        setState(() {
+          _errorMessage = '$missingField is required.';
+          _isSaving = false;
+        });
+        return;
       }
 
       final retailKobo = (retailPrice * 100).round();
@@ -470,34 +541,21 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
         );
       }
 
-      // 3. Add stock if a quantity was entered — gated on `stock.add` (hard
-      //    rule #6). A stock keeper's add needs Manager/CEO approval (§16.6.1),
-      //    so route it to a pending request rather than touching inventory.
-      var stockRequested = false;
+      // 3. Add stock if a quantity was entered. The quantity field only renders
+      //    in receiveMode (the inventory-tab editor is details-only, §D4), so any
+      //    quantity here is always routed to the Receive Cart and committed at
+      //    the receive checkout — this sheet never writes inventory directly.
+      //    Gated on `stock.add`, so stock keepers can add quantity (but not edit
+      //    prices, which have their own gates).
       final adding = qtyToAdd > 0 && _canAddStock;
       if (adding) {
-        final actorName = auth.currentUser?.name ?? 'Unknown';
-        final isStockKeeper =
-            ref.read(currentUserRoleProvider)?.slug == 'stock_keeper';
-        if (isStockKeeper) {
-          await db.stockAdjustmentRequestsDao.requestStockAdjustment(
-            productId: widget.product.id,
-            storeId: _selectedStore!.id,
-            quantityDiff: qtyToAdd,
-            reason: 'Restock by $actorName',
-            summary:
-                '$actorName requested +$qtyToAdd ${widget.product.unit}(s) '
-                'of $name (${_selectedStore!.name})',
-            requestedBy: auth.currentUser?.id,
-          );
-          stockRequested = true;
-        } else {
-          await db.inventoryDao.adjustStock(
-            widget.product.id,
-            _selectedStore!.id,
-            qtyToAdd,
-            'Restock by $actorName',
-            auth.currentUser?.id,
+        ref
+            .read(receiveCartProvider.notifier)
+            .addOrIncrement(widget.product, amount: qtyToAdd);
+        if (mounted) {
+          AppNotification.showSuccess(
+            context,
+            '$qtyToAdd units of $name added to Receive Cart',
           );
         }
       }
@@ -508,7 +566,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
           .logAction(
             'update_product',
             '${auth.currentUser?.name ?? 'Unknown'} updated product: $name'
-                '${adding ? (stockRequested ? ', requested +$qtyToAdd units' : ', added $qtyToAdd units') : ''}',
+                '${adding ? ', routed $qtyToAdd units to receive cart' : ''}',
             productId: widget.product.id,
           );
 
@@ -721,30 +779,76 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                     AppInput(
                       controller: _nameCtrl,
                       labelText: 'Product Name *',
-                      hintText: 'e.g. Heineken 60cl',
+                      hintText: _isCrateBusiness ? 'Eva water 75cl' : 'e.g. Heineken 60cl',
                     ),
                     const SizedBox(height: 14),
 
                     // ── CATEGORY ─────────────────────────────────────────────
-                    _sectionLabel('CATEGORY *', subtext),
-                    const SizedBox(height: 8),
-                    if (_allCategories.isEmpty)
-                      Text(
-                        'No categories found',
-                        style: TextStyle(color: subtext, fontSize: 13),
-                      )
-                    else
-                      AppDropdown<CategoryData?>(
-                        value: _selectedCategory,
-                        items: _allCategories
-                            .map(
-                              (c) => DropdownMenuItem<CategoryData?>(
-                                value: c,
-                                child: Text(c.name),
-                              ),
+                    AppInput(
+                      controller: _categoryCtrl,
+                      labelText: 'CATEGORY *',
+                      hintText: 'Search or type category name…',
+                      prefixIcon: Icon(Icons.search, size: 18, color: subtext),
+                      onChanged: _onCategoryChanged,
+                      suffixIcon: _selectedCategory != null
+                          ? GestureDetector(
+                              onTap: _clearCategory,
+                              child: Icon(Icons.close, size: 16, color: subtext),
                             )
-                            .toList(),
-                        onChanged: (v) => setState(() => _selectedCategory = v),
+                          : null,
+                    ),
+                    if (_categorySuggestions.isNotEmpty ||
+                        (_categoryCtrl.text.trim().isNotEmpty &&
+                            _selectedCategory == null))
+                      _suggestionList(
+                        children: [
+                          ..._categorySuggestions.map(
+                            (c) => _suggestionTile(
+                              label: c.name,
+                              icon: Icons.category_outlined,
+                              textColor: textColor,
+                              card: card,
+                              border: border,
+                              onTap: () => _selectCategory(c),
+                            ),
+                          ),
+                          if (_categoryCtrl.text.trim().isNotEmpty &&
+                              !_categorySuggestions.any(
+                                (c) =>
+                                    c.name.toLowerCase() ==
+                                    _categoryCtrl.text.trim().toLowerCase(),
+                              ))
+                            _suggestionTile(
+                              label: 'Create "${_categoryCtrl.text.trim()}"',
+                              icon: Icons.add_circle_outline,
+                              textColor: Theme.of(context).colorScheme.primary,
+                              card: card,
+                              border: border,
+                              onTap: () async {
+                                try {
+                                  final c = await _getOrCreateCategory(
+                                    _categoryCtrl.text.trim(),
+                                  );
+                                  if (c != null && mounted) _selectCategory(c);
+                                } catch (e, st) {
+                                  CrashReporter.record(
+                                    e,
+                                    st,
+                                    context:
+                                        'inventory.update_product.create_category',
+                                  );
+                                  if (mounted) {
+                                    setState(
+                                      () => _errorMessage =
+                                          'Could not create category. Please try again.',
+                                    );
+                                  }
+                                }
+                              },
+                            ),
+                        ],
+                        card: card,
+                        border: border,
                       ),
                     const SizedBox(height: 14),
 
@@ -752,7 +856,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                     AppInput(
                       controller: _subtitleCtrl,
                       labelText: 'Description / Subtitle',
-                      hintText: 'e.g. Premium Lager',
+                      hintText: _isCrateBusiness ? 'sparkling water' : 'e.g. Premium Lager',
                     ),
                     const SizedBox(height: 14),
 
@@ -836,17 +940,20 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                     const SizedBox(height: 8),
 
                     // ── ALLOW FRACTIONAL SALES ───────────────────────────────
-                    CheckboxListTile(
-                      value: _allowFractionalSales,
-                      onChanged: (v) =>
-                          setState(() => _allowFractionalSales = v ?? false),
-                      title: const Text('Allow fractional sales'),
-                      subtitle: const Text(
-                        'Enables ±0.5 quantity steps when selling this product',
+                    Material(
+                      type: MaterialType.transparency,
+                      child: CheckboxListTile(
+                        value: _allowFractionalSales,
+                        onChanged: (v) =>
+                            setState(() => _allowFractionalSales = v ?? false),
+                        title: const Text('Allow fractional sales'),
+                        subtitle: const Text(
+                          'Enables ±0.5 quantity steps when selling this product',
+                        ),
+                        controlAffinity: ListTileControlAffinity.leading,
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
                       ),
-                      controlAffinity: ListTileControlAffinity.leading,
-                      contentPadding: EdgeInsets.zero,
-                      dense: true,
                     ),
                     const SizedBox(height: 8),
 
@@ -863,29 +970,6 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                       border: border,
                       subtext: subtext,
                       textColor: textColor,
-                    ),
-                    const SizedBox(height: 16),
-
-                    // ── SIZE ─────────────────────────────────────────────────
-                    _sectionLabel('SIZE', subtext),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Only select for crate / bottle products',
-                      style: TextStyle(fontSize: 11, color: subtext),
-                    ),
-                    const SizedBox(height: 8),
-                    AppDropdown<String?>(
-                      value: _size,
-                      items: const [
-                        DropdownMenuItem(value: null, child: Text('None')),
-                        DropdownMenuItem(value: 'big', child: Text('Big')),
-                        DropdownMenuItem(
-                          value: 'medium',
-                          child: Text('Medium'),
-                        ),
-                        DropdownMenuItem(value: 'small', child: Text('Small')),
-                      ],
-                      onChanged: (v) => setState(() => _size = v),
                     ),
                     const SizedBox(height: 16),
 
@@ -967,17 +1051,20 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                     // businesses; _effectiveTrackEmpties forces it off on save.
                     if (_unit.toLowerCase() == 'bottle' &&
                         _isCrateBusiness) ...[
-                      CheckboxListTile(
-                        value: _trackEmpties,
-                        onChanged: (v) =>
-                            setState(() => _trackEmpties = v ?? false),
-                        title: const Text('Track empty crate returns'),
-                        subtitle: const Text(
-                          'Enables deposit collection and crate return flow for this product',
+                      Material(
+                        type: MaterialType.transparency,
+                        child: CheckboxListTile(
+                          value: _trackEmpties,
+                          onChanged: (v) =>
+                              setState(() => _trackEmpties = v ?? false),
+                          title: const Text('Track empty crate returns'),
+                          subtitle: const Text(
+                            'Enables deposit collection and crate return flow for this product',
+                          ),
+                          controlAffinity: ListTileControlAffinity.leading,
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
                         ),
-                        controlAffinity: ListTileControlAffinity.leading,
-                        contentPadding: EdgeInsets.zero,
-                        dense: true,
                       ),
                       // Crate value is shared at the manufacturer level; selecting
                       // a manufacturer autofills it (§16.5).
@@ -997,86 +1084,83 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                       const SizedBox(height: 16),
                     ],
 
-                    // ── SUPPLIER ─────────────────────────────────────────────
-                    AppInput(
-                      controller: _supplierCtrl,
-                      labelText: 'SUPPLIER (optional)',
-                      hintText: 'Search supplier name…',
-                      prefixIcon: Icon(Icons.search, size: 18, color: subtext),
-                      onChanged: _onSupplierChanged,
-                      suffixIcon: _selectedSupplier != null
-                          ? GestureDetector(
-                              onTap: _clearSupplier,
-                              child: Icon(
-                                Icons.close,
-                                size: 16,
-                                color: subtext,
-                              ),
-                            )
-                          : null,
-                    ),
-                    if (_supplierSuggestions.isNotEmpty ||
-                        (_supplierCtrl.text.trim().isNotEmpty &&
-                            _selectedSupplier == null))
-                      _suggestionList(
-                        children: [
-                          ..._supplierSuggestions.map(
-                            (s) => _suggestionTile(
-                              label: s.name,
-                              textColor: textColor,
-                              card: card,
-                              border: border,
-                              onTap: () => _selectSupplier(s),
-                            ),
-                          ),
-                          if (_supplierCtrl.text.trim().isNotEmpty &&
-                              !_supplierSuggestions.any(
-                                (s) =>
-                                    s.name.toLowerCase() ==
-                                    _supplierCtrl.text.trim().toLowerCase(),
-                              ))
-                            _suggestionTile(
-                              label: 'Create "${_supplierCtrl.text.trim()}"',
-                              icon: Icons.add_circle_outline,
-                              textColor: Theme.of(context).colorScheme.primary,
-                              card: card,
-                              border: border,
-                              onTap: () async {
-                                try {
-                                  final s = await _getOrCreateSupplier(
-                                    _supplierCtrl.text.trim(),
-                                  );
-                                  if (!mounted) return;
-                                  if (s != null) _selectSupplier(s);
-                                } catch (e, st) {
-                                  CrashReporter.record(
-                                    e,
-                                    st,
-                                    context:
-                                        'inventory.update_product.create_supplier',
-                                  );
-                                  if (!mounted) return;
-                                  setState(
-                                    () => _errorMessage =
-                                        'Could not create supplier. Please try again.',
-                                  );
-                                }
-                              },
-                            ),
-                        ],
-                        card: card,
-                        border: border,
+                    if (!widget.receiveMode) ...[
+                      // ── SUPPLIER ─────────────────────────────────────────────
+                      AppInput(
+                        controller: _supplierCtrl,
+                        labelText: 'SUPPLIER (optional)',
+                        hintText: 'Search supplier name…',
+                        prefixIcon: Icon(Icons.search, size: 18, color: subtext),
+                        onChanged: _onSupplierChanged,
+                        suffixIcon: _selectedSupplier != null
+                            ? GestureDetector(
+                                onTap: _clearSupplier,
+                                child: Icon(
+                                  Icons.close,
+                                  size: 16,
+                                  color: subtext,
+                                ),
+                              )
+                            : null,
                       ),
-                    const SizedBox(height: 16),
+                      if (_supplierSuggestions.isNotEmpty ||
+                          (_supplierCtrl.text.trim().isNotEmpty &&
+                              _selectedSupplier == null))
+                        _suggestionList(
+                          children: [
+                            ..._supplierSuggestions.map(
+                              (s) => _suggestionTile(
+                                label: s.name,
+                                textColor: textColor,
+                                card: card,
+                                border: border,
+                                onTap: () => _selectSupplier(s),
+                              ),
+                            ),
+                            if (_supplierCtrl.text.trim().isNotEmpty &&
+                                !_supplierSuggestions.any(
+                                  (s) =>
+                                      s.name.toLowerCase() ==
+                                      _supplierCtrl.text.trim().toLowerCase(),
+                                ))
+                              _suggestionTile(
+                                label: 'Create "${_supplierCtrl.text.trim()}"',
+                                icon: Icons.add_circle_outline,
+                                textColor: Theme.of(context).colorScheme.primary,
+                                card: card,
+                                border: border,
+                                onTap: () async {
+                                  try {
+                                    final s = await _getOrCreateSupplier(
+                                      _supplierCtrl.text.trim(),
+                                    );
+                                    if (!mounted) return;
+                                    if (s != null) _selectSupplier(s);
+                                  } catch (e, st) {
+                                    CrashReporter.record(
+                                      e,
+                                      st,
+                                      context:
+                                          'inventory.update_product.create_supplier',
+                                    );
+                                    if (!mounted) return;
+                                    setState(
+                                      () => _errorMessage =
+                                          'Could not create supplier. Please try again.',
+                                    );
+                                  }
+                                },
+                              ),
+                          ],
+                          card: card,
+                          border: border,
+                        ),
+                      const SizedBox(height: 16),
+                    ],
 
-                    const Divider(),
-                    const SizedBox(height: 16),
-
-                    // ── STOCK SECTION ────────────────────────────────────────
-                    // Add-stock is gated on `stock.add` (hard rule #6/#7). The
-                    // entry already requires `products.edit_price`, so this
-                    // hides the field when add-stock specifically is revoked.
-                    if (_canAddStock) ...[
+                    if (widget.receiveMode && _canAddStock) ...[
+                      const Divider(),
+                      const SizedBox(height: 16),
                       Text(
                         'Stock Management',
                         style: TextStyle(
@@ -1105,46 +1189,48 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                         'This amount will be added to the existing stock',
                         style: TextStyle(fontSize: 11, color: subtext),
                       ),
+                      const SizedBox(height: 14),
                     ],
-                    const SizedBox(height: 14),
 
-                    // ── STORE ────────────────────────────────────────────
-                    _sectionLabel('STORE *', subtext),
-                    const SizedBox(height: 8),
-                    if (_stores.isEmpty)
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 14,
-                        ),
-                        decoration: BoxDecoration(
-                          color: card,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: border),
-                        ),
-                        child: Text(
-                          'No stores',
-                          style: TextStyle(fontSize: 14, color: subtext),
-                        ),
-                      )
-                    else
-                      AppDropdown<StoreData?>(
-                        value: _selectedStore,
-                        items: _stores
-                            .map(
-                              (w) => DropdownMenuItem<StoreData?>(
-                                value: w,
-                                child: Text(
-                                  w.name,
-                                  overflow: TextOverflow.ellipsis,
+                    if (!widget.receiveMode) ...[
+                      // ── STORE ────────────────────────────────────────────
+                      _sectionLabel('STORE *', subtext),
+                      const SizedBox(height: 8),
+                      if (_stores.isEmpty)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 14,
+                          ),
+                          decoration: BoxDecoration(
+                            color: card,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: border),
+                          ),
+                          child: Text(
+                            'No stores',
+                            style: TextStyle(fontSize: 14, color: subtext),
+                          ),
+                        )
+                      else
+                        AppDropdown<StoreData?>(
+                          value: _selectedStore,
+                          items: _stores
+                              .map(
+                                (w) => DropdownMenuItem<StoreData?>(
+                                  value: w,
+                                  child: Text(
+                                    w.name,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (v) => setState(() => _selectedStore = v),
-                      ),
-                    const SizedBox(height: 24),
+                              )
+                              .toList(),
+                          onChanged: (v) => setState(() => _selectedStore = v),
+                        ),
+                      const SizedBox(height: 24),
+                    ],
                   ],
                 ),
               ),

@@ -1,7 +1,31 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
+
+class SlideLeftPageTransitionsBuilder extends PageTransitionsBuilder {
+  const SlideLeftPageTransitionsBuilder();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    final offset = Tween<Offset>(
+      begin: const Offset(1.0, 0.0),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: animation,
+      curve: Curves.fastOutSlowIn,
+    ));
+    return SlideTransition(
+      position: offset,
+      child: child,
+    );
+  }
+}
 
 class AppTheme {
   AppTheme._();
@@ -128,11 +152,11 @@ class AppTheme {
     ),
     pageTransitionsTheme: const PageTransitionsTheme(
       builders: {
-        TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-        TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-        TargetPlatform.windows: CupertinoPageTransitionsBuilder(),
-        TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
-        TargetPlatform.linux: CupertinoPageTransitionsBuilder(),
+        TargetPlatform.android: SlideLeftPageTransitionsBuilder(),
+        TargetPlatform.iOS: SlideLeftPageTransitionsBuilder(),
+        TargetPlatform.windows: SlideLeftPageTransitionsBuilder(),
+        TargetPlatform.macOS: SlideLeftPageTransitionsBuilder(),
+        TargetPlatform.linux: SlideLeftPageTransitionsBuilder(),
       },
     ),
   );
@@ -226,11 +250,11 @@ class AppTheme {
     ),
     pageTransitionsTheme: const PageTransitionsTheme(
       builders: {
-        TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-        TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-        TargetPlatform.windows: CupertinoPageTransitionsBuilder(),
-        TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
-        TargetPlatform.linux: CupertinoPageTransitionsBuilder(),
+        TargetPlatform.android: SlideLeftPageTransitionsBuilder(),
+        TargetPlatform.iOS: SlideLeftPageTransitionsBuilder(),
+        TargetPlatform.windows: SlideLeftPageTransitionsBuilder(),
+        TargetPlatform.macOS: SlideLeftPageTransitionsBuilder(),
+        TargetPlatform.linux: SlideLeftPageTransitionsBuilder(),
       },
     ),
   );
@@ -442,11 +466,11 @@ class AppTheme {
       ),
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
-          TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.windows: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.linux: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.android: SlideLeftPageTransitionsBuilder(),
+          TargetPlatform.iOS: SlideLeftPageTransitionsBuilder(),
+          TargetPlatform.windows: SlideLeftPageTransitionsBuilder(),
+          TargetPlatform.macOS: SlideLeftPageTransitionsBuilder(),
+          TargetPlatform.linux: SlideLeftPageTransitionsBuilder(),
         },
       ),
     );
@@ -655,11 +679,11 @@ class AppTheme {
       ),
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
-          TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.windows: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.linux: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.android: SlideLeftPageTransitionsBuilder(),
+          TargetPlatform.iOS: SlideLeftPageTransitionsBuilder(),
+          TargetPlatform.windows: SlideLeftPageTransitionsBuilder(),
+          TargetPlatform.macOS: SlideLeftPageTransitionsBuilder(),
+          TargetPlatform.linux: SlideLeftPageTransitionsBuilder(),
         },
       ),
     );
@@ -868,11 +892,11 @@ class AppTheme {
       ),
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
-          TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.windows: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.linux: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.android: SlideLeftPageTransitionsBuilder(),
+          TargetPlatform.iOS: SlideLeftPageTransitionsBuilder(),
+          TargetPlatform.windows: SlideLeftPageTransitionsBuilder(),
+          TargetPlatform.macOS: SlideLeftPageTransitionsBuilder(),
+          TargetPlatform.linux: SlideLeftPageTransitionsBuilder(),
         },
       ),
     );
@@ -1081,11 +1105,11 @@ class AppTheme {
       ),
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
-          TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.windows: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.linux: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.android: SlideLeftPageTransitionsBuilder(),
+          TargetPlatform.iOS: SlideLeftPageTransitionsBuilder(),
+          TargetPlatform.windows: SlideLeftPageTransitionsBuilder(),
+          TargetPlatform.macOS: SlideLeftPageTransitionsBuilder(),
+          TargetPlatform.linux: SlideLeftPageTransitionsBuilder(),
         },
       ),
     );
@@ -1569,11 +1593,11 @@ class AppTheme {
       ),
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
-          TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.windows: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.linux: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.android: SlideLeftPageTransitionsBuilder(),
+          TargetPlatform.iOS: SlideLeftPageTransitionsBuilder(),
+          TargetPlatform.windows: SlideLeftPageTransitionsBuilder(),
+          TargetPlatform.macOS: SlideLeftPageTransitionsBuilder(),
+          TargetPlatform.linux: SlideLeftPageTransitionsBuilder(),
         },
       ),
     );
@@ -1783,11 +1807,11 @@ class AppTheme {
       ),
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
-          TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.windows: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.linux: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.android: SlideLeftPageTransitionsBuilder(),
+          TargetPlatform.iOS: SlideLeftPageTransitionsBuilder(),
+          TargetPlatform.windows: SlideLeftPageTransitionsBuilder(),
+          TargetPlatform.macOS: SlideLeftPageTransitionsBuilder(),
+          TargetPlatform.linux: SlideLeftPageTransitionsBuilder(),
         },
       ),
     );

@@ -16,8 +16,10 @@ import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 /// Invoice / checkout screen for the Receive Stock flow (spec Sections 7–9).
 /// Picks ONE supplier, shows a read-only Invoice Total, captures the receipt
 /// date + an optional note + empties returned per bottle line, then commits
-/// atomically via [receiveStockServiceProvider]. This is a purchase, not a sale:
-/// no payment-method picker and no payment notification.
+/// atomically via [receiveStockServiceProvider]. Optionally captures an
+/// "Amount Paid Now" + payment method, recorded against the supplier ledger
+/// (that payment section is gated on `suppliers.manage`). This is a purchase,
+/// not a sale.
 class ReceiveCheckoutScreen extends ConsumerStatefulWidget {
   const ReceiveCheckoutScreen({super.key});
 
@@ -28,6 +30,8 @@ class ReceiveCheckoutScreen extends ConsumerStatefulWidget {
 
 class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
   final _noteCtrl = TextEditingController();
+  final _amountPaidCtrl = TextEditingController();
+  String _paymentMethod = 'cash';
   bool _isLoading = true;
   bool _isSaving = false;
 
@@ -40,8 +44,11 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
   /// rather than silently re-stamp.
   String? _flowStoreId;
 
-  // productId → empties returned on this receipt (bottle + trackEmpties lines).
-  final Map<String, int> _emptiesReturned = {};
+  // manufacturerId → empty crates returned to the supplier on this receipt.
+  // Empties are a per-manufacturer figure (the manufacturer owns the crate
+  // deposit), so one input per manufacturer even when several of its SKUs are
+  // on the receipt — never one per product.
+  final Map<String, int> _emptiesReturnedByManufacturer = {};
   final Map<String, TextEditingController> _emptiesControllers = {};
 
   @override
@@ -55,6 +62,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
   @override
   void dispose() {
     _noteCtrl.dispose();
+    _amountPaidCtrl.dispose();
     for (final c in _emptiesControllers.values) {
       c.dispose();
     }
@@ -75,14 +83,19 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
       _isLoading = false;
     });
 
+    // One empties controller per distinct manufacturer carrying a bottle +
+    // trackEmpties line (not one per product).
     for (final line in ref.read(receiveCartProvider)) {
-      if (line.trackEmpties && line.manufacturerId != null) {
+      final mfrId = line.manufacturerId;
+      if (line.trackEmpties &&
+          mfrId != null &&
+          !_emptiesControllers.containsKey(mfrId)) {
         final c = TextEditingController(text: '0');
         c.addListener(() {
-          _emptiesReturned[line.productId] = int.tryParse(c.text) ?? 0;
+          _emptiesReturnedByManufacturer[mfrId] = int.tryParse(c.text) ?? 0;
         });
-        _emptiesControllers[line.productId] = c;
-        _emptiesReturned[line.productId] = 0;
+        _emptiesControllers[mfrId] = c;
+        _emptiesReturnedByManufacturer[mfrId] = 0;
       }
     }
   }
@@ -169,6 +182,12 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
     final note = _noteCtrl.text.trim();
 
     try {
+      final canManageSuppliers = hasPermission(ref, 'suppliers.manage');
+      final amountPaid = (canManageSuppliers && _amountPaidCtrl.text.isNotEmpty)
+          ? (double.tryParse(_amountPaidCtrl.text.replaceAll(',', '')) ?? 0)
+          : 0;
+      final amountPaidKobo = (amountPaid * 100).round();
+
       await ref.read(receiveStockServiceProvider).confirmReceipt(
             supplierId: supplier.id,
             supplierName: supplier.name,
@@ -176,8 +195,11 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
             dateReceived: _dateReceived,
             staffId: staffId,
             lines: cart,
-            emptiesReturnedByProduct: Map<String, int>.from(_emptiesReturned),
+            emptiesReturnedByManufacturer:
+                Map<String, int>.from(_emptiesReturnedByManufacturer),
             note: note.isEmpty ? null : note,
+            amountPaidKobo: amountPaidKobo > 0 ? amountPaidKobo : null,
+            paymentMethod: amountPaidKobo > 0 ? _paymentMethod : null,
           );
 
       if (!mounted) return;
@@ -291,8 +313,29 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
     final subtext = theme.textTheme.bodySmall?.color;
 
     final totalValueStr = formatCurrency(notifier.invoiceTotalKobo / 100);
-    final emptiesLines =
-        cart.where((l) => l.trackEmpties && l.manufacturerId != null).toList();
+
+    // Empties are grouped by manufacturer: one row per manufacturer, with the
+    // full crates received summed across all of its bottle + trackEmpties lines.
+    final manufacturers =
+        ref.watch(allManufacturersProvider).valueOrNull ??
+            const <ManufacturerData>[];
+    final mfrNames = {for (final m in manufacturers) m.id: m.name};
+    final emptiesGroups =
+        <({String manufacturerId, String name, int fullCrates})>[];
+    final seenManufacturers = <String>{};
+    for (final l in cart) {
+      final mfrId = l.manufacturerId;
+      if (!l.trackEmpties || mfrId == null) continue;
+      if (!seenManufacturers.add(mfrId)) continue;
+      final fullCrates = cart
+          .where((x) => x.trackEmpties && x.manufacturerId == mfrId)
+          .fold<int>(0, (sum, x) => sum + x.qty);
+      emptiesGroups.add((
+        manufacturerId: mfrId,
+        name: mfrNames[mfrId] ?? 'Manufacturer',
+        fullCrates: fullCrates,
+      ));
+    }
 
     return Scaffold(
       backgroundColor: bg,
@@ -408,6 +451,52 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
                   ),
                   SizedBox(height: context.getRSize(24)),
 
+                  if (hasPermission(ref, 'suppliers.manage')) ...[
+                    // Payment (optional)
+                    _fieldLabel('PAYMENT', subtext),
+                    SizedBox(height: context.getRSize(8)),
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: AppInput(
+                            controller: _amountPaidCtrl,
+                            labelText: 'Amount Paid Now',
+                            hintText: '0.00',
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          ),
+                        ),
+                        SizedBox(width: context.getRSize(12)),
+                        Expanded(
+                          flex: 1,
+                          child: Container(
+                            padding: EdgeInsets.symmetric(horizontal: context.getRSize(12)),
+                            decoration: BoxDecoration(
+                              color: cardColor,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: border),
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value: _paymentMethod,
+                                isExpanded: true,
+                                items: const [
+                                  DropdownMenuItem(value: 'cash', child: Text('Cash')),
+                                  DropdownMenuItem(value: 'transfer', child: Text('Transfer')),
+                                  DropdownMenuItem(value: 'pos', child: Text('POS')),
+                                ],
+                                onChanged: (v) {
+                                  if (v != null) setState(() => _paymentMethod = v);
+                                },
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: context.getRSize(24)),
+                  ],
+
                   // Line items summary
                   _fieldLabel('ITEMS', subtext),
                   SizedBox(height: context.getRSize(8)),
@@ -427,8 +516,8 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
                     ),
                   ),
 
-                  // Empties returned (bottle + trackEmpties lines)
-                  if (emptiesLines.isNotEmpty) ...[
+                  // Empties returned (grouped by manufacturer)
+                  if (emptiesGroups.isNotEmpty) ...[
                     SizedBox(height: context.getRSize(24)),
                     Row(
                       children: [
@@ -447,9 +536,9 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
                       ),
                       child: Column(
                         children: [
-                          for (var i = 0; i < emptiesLines.length; i++) ...[
+                          for (var i = 0; i < emptiesGroups.length; i++) ...[
                             if (i > 0) Divider(height: 1, color: border),
-                            _emptiesRow(emptiesLines[i], textColor, subtext),
+                            _emptiesRow(emptiesGroups[i], textColor, subtext),
                           ],
                         ],
                       ),
@@ -532,7 +621,11 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
     );
   }
 
-  Widget _emptiesRow(ReceiveCartLine line, Color textColor, Color? subtext) {
+  Widget _emptiesRow(
+    ({String manufacturerId, String name, int fullCrates}) group,
+    Color textColor,
+    Color? subtext,
+  ) {
     return Padding(
       padding: EdgeInsets.symmetric(
         horizontal: context.getRSize(16),
@@ -545,13 +638,13 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  line.productName,
+                  group.name,
                   style:
                       TextStyle(fontWeight: FontWeight.w600, color: textColor),
                 ),
                 SizedBox(height: context.getRSize(2)),
                 Text(
-                  'Full crates received: ${line.qty}',
+                  'Full crates received: ${group.fullCrates}',
                   style: TextStyle(
                       fontSize: context.getRFontSize(12), color: subtext),
                 ),
@@ -561,7 +654,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
           SizedBox(
             width: context.getRSize(72),
             child: AppInput(
-              controller: _emptiesControllers[line.productId],
+              controller: _emptiesControllers[group.manufacturerId],
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               textAlign: TextAlign.center,

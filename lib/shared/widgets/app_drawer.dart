@@ -409,10 +409,13 @@ class AppDrawer extends ConsumerWidget {
             active: activeRoute == 'expenses',
             onTap: () => _navigateTo(context, ref, 'expenses'),
           ),
-        // Stores — gated by stores.manage (§10.2), CEO-only by default.
-        // Also visible to users with stores.receive_transfer so they can reach
-        // the Transfer Queue button on the Stores screen (§16.8.1).
+        // Stores — CEO (stores.manage) plus any Manager who can take part in
+        // the store-scoped transfer flow (§16.8.2): request / dispatch / receive.
+        // The store list itself is read-only browsing for non-CEOs; full
+        // per-store actions are gated inside the store details screen.
         if (hasPermission(ref, 'stores.manage') ||
+            hasPermission(ref, 'stores.request_transfer') ||
+            hasPermission(ref, 'stores.dispatch_transfer') ||
             hasPermission(ref, 'stores.receive_transfer'))
           _navItem(
             context,

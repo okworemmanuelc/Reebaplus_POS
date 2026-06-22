@@ -13,32 +13,50 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/shared/utils/role_display.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
+import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
+import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
 
-/// Invite-new-staff modal (master plan §9.4). Single form: email + role +
-/// store → "Generate code". Role dropdown is filtered by the current user's
-/// role (CEO sees all four; Manager sees only Cashier + Stock keeper). Store
-/// dropdown is locked to the Manager's own store. After generating, the sheet
-/// switches to show the code with Copy / SMS / WhatsApp share.
-class InviteStaffSheet extends ConsumerStatefulWidget {
-  const InviteStaffSheet({super.key});
+/// Detailed capabilities for each role slug, shown dynamically in the selector cards.
+const Map<String, List<String>> _roleCapabilities = {
+  'ceo': [
+    'Full, unrestricted access to all business features and settings.',
+    'Access profit & loss statement, statement of worth, and logs.',
+    'Manage all stores, permissions, and roles.',
+    'Invite, suspend, or delete any staff member.'
+  ],
+  'manager': [
+    'Manage stores, inventory, suppliers, and customers.',
+    'Record and self-approve expenses (up to the CEO-defined limit).',
+    'Manage stock transfers and record damages.',
+    'Invite and manage Cashiers and Stock keepers.'
+  ],
+  'cashier': [
+    'Access Point of Sale (POS) to create orders and process checkouts.',
+    'Add new customers, manage customer wallets, and record payments.',
+    'View basic sales history and print receipts.',
+    'Restricted from editing prices, viewing profit reports, or managing stock.'
+  ],
+  'stock_keeper': [
+    'Add stock, record product damages, and count inventory.',
+    'Initiate stock transfers between stores.',
+    'Restricted from making sales, viewing customer wallets, or accessing financial reports.'
+  ],
+};
 
-  static void show(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => const InviteStaffSheet(),
-    );
-  }
+/// Invite new staff screen (replaces the old InviteStaffSheet modal).
+/// Gated by `staff.invite` permission.
+class InviteStaffScreen extends ConsumerStatefulWidget {
+  const InviteStaffScreen({super.key});
 
   @override
-  ConsumerState<InviteStaffSheet> createState() => _InviteStaffSheetState();
+  ConsumerState<InviteStaffScreen> createState() => _InviteStaffScreenState();
 }
 
-class _InviteStaffSheetState extends ConsumerState<InviteStaffSheet> {
+class _InviteStaffScreenState extends ConsumerState<InviteStaffScreen> {
   final _emailCtrl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
@@ -46,8 +64,6 @@ class _InviteStaffSheetState extends ConsumerState<InviteStaffSheet> {
   String? _storeId;
   bool _generating = false;
 
-  // Holds the generated code + invitee email once "Generate" succeeds; null
-  // while the form is still showing.
   String? _generatedCode;
   String? _generatedEmail;
 
@@ -57,8 +73,6 @@ class _InviteStaffSheetState extends ConsumerState<InviteStaffSheet> {
     super.dispose();
   }
 
-  /// Roles the current user may invite. CEO: all four. Manager: Cashier and
-  /// Stock keeper only.
   List<RoleData> _invitableRoles(List<RoleData> all, String? mySlug) {
     if (mySlug == 'manager') {
       return all
@@ -76,9 +90,6 @@ class _InviteStaffSheetState extends ConsumerState<InviteStaffSheet> {
 
   Future<void> _generate() async {
     if (!_formKey.currentState!.validate()) return;
-    // Write-boundary re-check (§10.2.1): the screen + drawer entry are gated on
-    // `staff.invite`, but re-check the effective permission before writing the
-    // invite so a revoked per-user override is honored at the action too.
     if (!ref.read(currentUserPermissionsProvider).contains('staff.invite')) {
       AppNotification.showError(
         context,
@@ -101,8 +112,6 @@ class _InviteStaffSheetState extends ConsumerState<InviteStaffSheet> {
       return;
     }
 
-    // Duplicate guard: an email already belonging to an active staff member
-    // of this business can't be invited again (master plan §9.4).
     final existing = await db.storesDao.getUserByEmail(
       email,
       preferredBusinessId: businessId,
@@ -124,8 +133,6 @@ class _InviteStaffSheetState extends ConsumerState<InviteStaffSheet> {
 
     setState(() => _generating = true);
     try {
-      // Resolved before any await so a mid-write dispose can't invalidate the
-      // ref reads. Drives the §26.4 invite-generated notification below.
       final actorIsCeo = ref.read(currentUserRoleProvider)?.slug == 'ceo';
       final roles =
           ref.read(allRolesProvider).valueOrNull ?? const <RoleData>[];
@@ -155,8 +162,6 @@ class _InviteStaffSheetState extends ConsumerState<InviteStaffSheet> {
         staffId: currentUser.id,
         storeId: _storeId,
       );
-      // §26.4 Staff — "New staff invite generated (fires to CEO)". Fires only
-      // when a non-CEO (a Manager) generated it; the CEO is never self-notified.
       if (!actorIsCeo) {
         final ceoIds = await db.userBusinessesDao.getUserIdsForRoleSlugs([
           'ceo',
@@ -218,66 +223,32 @@ class _InviteStaffSheetState extends ConsumerState<InviteStaffSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    final surface = t.colorScheme.surface;
-    final text = t.colorScheme.onSurface;
+    final title = _generatedCode == null ? 'Invite Staff' : 'Invite Ready';
 
-    // Bottom padding is nav-only (deviceBottomPadding); MainLayout's Scaffold
-    // resize handles keyboard avoidance, and a single SingleChildScrollView
-    // handles overflow.
-    return Container(
-      decoration: BoxDecoration(
-        color: surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: SingleChildScrollView(
+    return GlassyScaffold(
+      title: title,
+      centerTitle: true,
+      body: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(
           context.getRSize(20),
-          context.getRSize(16),
+          context.getRSize(20),
           context.getRSize(20),
           context.getRSize(20) + context.deviceBottomPadding,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: context.getRSize(40),
-                height: 4,
-                margin: EdgeInsets.only(bottom: context.getRSize(16)),
-                decoration: BoxDecoration(
-                  color: t.dividerColor,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            Text(
-              _generatedCode == null ? 'Invite new staff' : 'Invite ready',
-              style: TextStyle(
-                color: text,
-                fontSize: context.getRFontSize(18),
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            SizedBox(height: context.getRSize(16)),
-            if (_generatedCode == null)
-              _buildForm(context)
-            else
-              _buildGenerated(context),
-          ],
-        ),
+        child: _generatedCode == null
+            ? _buildForm(context)
+            : _buildGenerated(context),
       ),
     );
   }
 
   Widget _buildForm(BuildContext context) {
+    final t = Theme.of(context);
     final mySlug = ref.watch(currentUserRoleProvider)?.slug;
     final allRoles = ref.watch(allRolesProvider).valueOrNull ?? const [];
     final roles = _invitableRoles(allRoles, mySlug);
     final allStores = ref.watch(allStoresProvider).valueOrNull ?? const [];
 
-    // Manager: store is locked to their own. Resolve it once.
     final isManager = mySlug == 'manager';
     final myStoreId = ref.read(authProvider).currentUser?.storeId;
     if (isManager && _storeId == null && myStoreId != null) {
@@ -309,16 +280,6 @@ class _InviteStaffSheetState extends ConsumerState<InviteStaffSheet> {
           ),
           SizedBox(height: context.getRSize(16)),
           AppDropdown<String>(
-            value: _roleId,
-            labelText: 'Role',
-            hintText: 'Select a role',
-            items: roles
-                .map((r) => DropdownMenuItem(value: r.id, child: Text(r.name)))
-                .toList(),
-            onChanged: (v) => setState(() => _roleId = v),
-          ),
-          SizedBox(height: context.getRSize(16)),
-          AppDropdown<String>(
             value: _storeId,
             labelText: 'Store',
             hintText: 'Select a store',
@@ -327,6 +288,27 @@ class _InviteStaffSheetState extends ConsumerState<InviteStaffSheet> {
                 .toList(),
             onChanged: isManager ? (_) {} : (v) => setState(() => _storeId = v),
           ),
+          SizedBox(height: context.getRSize(20)),
+          Text(
+            'Select Role & View Capabilities',
+            style: TextStyle(
+              fontSize: context.getRFontSize(14),
+              fontWeight: FontWeight.bold,
+              color: t.colorScheme.onSurface,
+            ),
+          ),
+          SizedBox(height: context.getRSize(8)),
+          // Custom vertical selector list of role capability cards
+          ...roles.map((role) {
+            final isSelected = _roleId == role.id;
+            final capabilities = _roleCapabilities[role.slug] ?? const [];
+            return _RoleSelectionCard(
+              role: role,
+              isSelected: isSelected,
+              capabilities: capabilities,
+              onTap: () => setState(() => _roleId = role.id),
+            );
+          }),
           SizedBox(height: context.getRSize(24)),
           AppButton(
             text: 'Generate code',
@@ -407,13 +389,169 @@ class _InviteStaffSheetState extends ConsumerState<InviteStaffSheet> {
             ),
           ],
         ),
-        SizedBox(height: context.getRSize(12)),
+        SizedBox(height: context.getRSize(20)),
         AppButton(
           text: 'Done',
           variant: AppButtonVariant.ghost,
           onPressed: () => Navigator.pop(context),
         ),
       ],
+    );
+  }
+}
+
+/// Custom selection card for role options that lists specific capabilities.
+class _RoleSelectionCard extends StatelessWidget {
+  final RoleData role;
+  final bool isSelected;
+  final List<String> capabilities;
+  final VoidCallback onTap;
+
+  const _RoleSelectionCard({
+    required this.role,
+    required this.isSelected,
+    required this.capabilities,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final primaryColor = theme.colorScheme.primary;
+
+    return GlassyCard(
+      margin: EdgeInsets.only(bottom: context.getRSize(12)),
+      padding: EdgeInsets.zero,
+      backgroundColor: isSelected
+          ? primaryColor.withValues(alpha: isDark ? 0.15 : 0.08)
+          : (isDark
+              ? theme.colorScheme.surface.withValues(alpha: 0.25)
+              : theme.colorScheme.surface.withValues(alpha: 0.6)),
+      border: Border.all(
+        color: isSelected
+            ? primaryColor
+            : (isDark
+                ? Colors.white.withValues(alpha: 0.05)
+                : theme.colorScheme.primary.withValues(alpha: 0.05)),
+        width: isSelected ? 2 : 1,
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: EdgeInsets.all(context.getRSize(16)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: context.getRSize(18),
+                    height: context.getRSize(18),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: isSelected
+                            ? primaryColor
+                            : theme.colorScheme.onSurfaceVariant.withValues(
+                                alpha: 0.4,
+                              ),
+                        width: 2,
+                      ),
+                    ),
+                    child: isSelected
+                        ? Center(
+                            child: Container(
+                              width: context.getRSize(10),
+                              height: context.getRSize(10),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: primaryColor,
+                              ),
+                            ),
+                          )
+                        : null,
+                  ),
+                  SizedBox(width: context.getRSize(12)),
+                  Text(
+                    role.name,
+                    style: TextStyle(
+                      fontSize: context.getRFontSize(15),
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
+                  const Spacer(),
+                  _RoleTag(role: role),
+                ],
+              ),
+              if (capabilities.isNotEmpty) ...[
+                SizedBox(height: context.getRSize(12)),
+                ...capabilities.map(
+                  (cap) => Padding(
+                    padding: EdgeInsets.only(bottom: context.getRSize(6)),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: EdgeInsets.only(
+                            top: context.getRSize(3),
+                            right: context.getRSize(8),
+                          ),
+                          child: Icon(
+                            FontAwesomeIcons.circleCheck.data,
+                            size: context.getRSize(12),
+                            color: isSelected
+                                ? primaryColor
+                                : theme.colorScheme.onSurfaceVariant
+                                    .withValues(alpha: 0.6),
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            cap,
+                            style: TextStyle(
+                              fontSize: context.getRFontSize(13),
+                              color: theme.colorScheme.onSurfaceVariant,
+                              height: 1.3,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RoleTag extends StatelessWidget {
+  final RoleData? role;
+  const _RoleTag({required this.role});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = roleTagColor(role?.slug);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        role?.name ?? 'Unknown',
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
     );
   }
 }

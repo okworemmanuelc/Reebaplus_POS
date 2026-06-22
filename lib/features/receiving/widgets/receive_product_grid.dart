@@ -2,7 +2,9 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
@@ -19,6 +21,8 @@ class ReceiveProductGrid extends ConsumerWidget {
   final Color subtextCol;
   final Color borderCol;
   final int gridColumns;
+  final bool showHint;
+  final VoidCallback? onHintTap;
 
   const ReceiveProductGrid({
     super.key,
@@ -28,10 +32,16 @@ class ReceiveProductGrid extends ConsumerWidget {
     required this.subtextCol,
     required this.borderCol,
     this.gridColumns = 3,
+    this.showHint = false,
+    this.onHintTap,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Creating a NEW product from the receive grid needs `products.add`.
+    // Stock keepers without it can still tap existing products to receive
+    // quantity — they just don't get the "New Product" card.
+    final canAddProduct = hasPermission(ref, 'products.add');
     final screenWidth = MediaQuery.of(context).size.width;
     int effectiveColumns = gridColumns;
 
@@ -56,9 +66,9 @@ class ReceiveProductGrid extends ConsumerWidget {
         crossAxisSpacing: context.getRSize(8),
         mainAxisSpacing: context.getRSize(8),
       ),
-      itemCount: products.length + 1,
+      itemCount: products.length + (canAddProduct ? 1 : 0),
       itemBuilder: (context, index) {
-        if (index == 0) {
+        if (canAddProduct && index == 0) {
           return NewProductCard(
             cardCol: cardCol,
             textCol: textCol,
@@ -67,8 +77,9 @@ class ReceiveProductGrid extends ConsumerWidget {
                 context,
                 MaterialPageRoute(
                   builder: (ctx) => AddProductScreen(
+                    receiveMode: true,
                     onProductAdded: (product) {
-                      ref.read(receiveCartProvider.notifier).addOrIncrement(product);
+                      // Cart addition is handled inside AddProductScreen
                     },
                   ),
                 ),
@@ -76,13 +87,15 @@ class ReceiveProductGrid extends ConsumerWidget {
             },
           );
         }
-        final item = products[index - 1];
+        final item = products[canAddProduct ? index - 1 : index];
         return _ReceiveProductCard(
           item: item,
           cardCol: cardCol,
           textCol: textCol,
           subtextCol: subtextCol,
           borderCol: borderCol,
+          showHint: showHint,
+          onHintTap: onHintTap,
         );
       },
     );
@@ -95,6 +108,8 @@ class _ReceiveProductCard extends ConsumerWidget {
   final Color textCol;
   final Color subtextCol;
   final Color borderCol;
+  final bool showHint;
+  final VoidCallback? onHintTap;
 
   const _ReceiveProductCard({
     required this.item,
@@ -102,6 +117,8 @@ class _ReceiveProductCard extends ConsumerWidget {
     required this.textCol,
     required this.subtextCol,
     required this.borderCol,
+    this.showHint = false,
+    this.onHintTap,
   });
 
   @override
@@ -120,6 +137,7 @@ class _ReceiveProductCard extends ConsumerWidget {
       children: [
         GestureDetector(
           onLongPress: () {
+            HapticFeedback.mediumImpact();
             if (!hasPermission(ref, 'products.edit_price')) {
               AppNotification.showError(context, 'You lack permission to edit products.');
               return;
@@ -131,8 +149,9 @@ class _ReceiveProductCard extends ConsumerWidget {
               builder: (ctx) => UpdateProductSheet(
                 product: product,
                 totalStock: item.totalStock,
+                receiveMode: true,
                 onProductUpdated: (updatedProduct) {
-                  ref.read(receiveCartProvider.notifier).addOrIncrement(updatedProduct);
+                  // Cart addition is handled inside UpdateProductSheet
                 },
               ),
             );
@@ -156,8 +175,8 @@ class _ReceiveProductCard extends ConsumerWidget {
                   BoxShadow(
                     color: inCart
                         ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.15)
-                        : Colors.black.withValues(alpha: 0.02),
-                    blurRadius: 10,
+                        : Colors.black.withValues(alpha: 0.06),
+                    blurRadius: 12,
                     offset: const Offset(0, 4),
                   ),
                 ],
@@ -192,6 +211,27 @@ class _ReceiveProductCard extends ConsumerWidget {
                     fontSize: context.getRFontSize(11),
                     fontWeight: FontWeight.bold,
                   ),
+                ),
+              ),
+            ),
+          ),
+        // Info Icon
+        if (showHint && !isOutOfStock)
+          Positioned(
+            top: 8,
+            right: 8,
+            child: GestureDetector(
+              onTap: onHintTap,
+              child: Container(
+                padding: EdgeInsets.all(context.getRSize(4)),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.4),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  FontAwesomeIcons.circleInfo.data,
+                  size: context.getRSize(10),
+                  color: Colors.white,
                 ),
               ),
             ),

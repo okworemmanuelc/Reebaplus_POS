@@ -1775,7 +1775,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 55;
+  int get schemaVersion => 56;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3766,6 +3766,27 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(savedCarts, savedCarts.storeId);
         }
       }
+      if (from < 56) {
+        // v56: two new store-transfer permissions for the requester-initiated
+        // transfer flow — `stores.request_transfer` (raise a request from your
+        // store) and `stores.dispatch_transfer` (approve & dispatch a request
+        // from your store). CEO + Manager by default; the grants arrive from
+        // the cloud via pull (CEO/Manager backfill in
+        // supabase/migrations/0122_add_stores_transfer_permissions.sql, which
+        // also grants the existing stores.receive_transfer to Manager).
+        // Catalogue keys only locally — grants are never seeded on-device.
+        // Idempotent — key is the PK.
+        await customStatement(
+          "INSERT OR IGNORE INTO permissions (key, description, category) "
+          "VALUES ('stores.request_transfer', "
+          "'Request stock from another store', 'Stores')",
+        );
+        await customStatement(
+          "INSERT OR IGNORE INTO permissions (key, description, category) "
+          "VALUES ('stores.dispatch_transfer', "
+          "'Approve and dispatch stock requests from your store', 'Stores')",
+        );
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -4016,13 +4037,23 @@ const List<String> _v13HotPathIndexStatements = [
 // Identical on every device and on the cloud (mirror this list in
 // supabase/migrations/0043_seed_permissions_and_backfill_businesses.sql).
 // Each row: (key, description, category). Category groups toggles in
-// the CEO Settings > Roles & Permissions sub-page. 36 keys total.
+// the CEO Settings > Roles & Permissions sub-page. 38 keys total.
 const List<List<String>> _defaultPermissionRows = [
   // Stores — rendered first on the role page (§10.2). CEO-only by default.
   ['stores.manage', 'Add, edit, and remove stores', 'Stores'],
   [
     'stores.receive_transfer',
     'Confirm receipt of incoming stock transfers',
+    'Stores',
+  ],
+  [
+    'stores.request_transfer',
+    'Request stock from another store',
+    'Stores',
+  ],
+  [
+    'stores.dispatch_transfer',
+    'Approve and dispatch stock requests from your store',
     'Stores',
   ],
   // Sales
