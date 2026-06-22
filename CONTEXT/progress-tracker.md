@@ -108,6 +108,85 @@ Remaining: on-device walkthrough on the emulator.
 
 ## Completed
 
+### Sync — Phase 2: `pos_pull_snapshot` retired for first/full pulls (2026-06-22)
+- Full/first pulls (`since == null`) now ALWAYS use the paginated `_pullViaPostgRest`
+  path, regardless of connectivity. The monolithic RPC is used only for incremental
+  pulls on a fast link (`!isSlow && since != null`).
+- **Change:** `lib/core/services/supabase_sync_service.dart`, method `pullInitialData`
+  (~line 2210). `if (!isSlow)` gate replaced with
+  `if (SupabaseSyncService.shouldUseSnapshotRpc(isSlow: isSlow, since: since))`.
+- **Helper:** new `@visibleForTesting static bool shouldUseSnapshotRpc({required bool
+  isSlow, required DateTime? since})` — pure function, no network, directly unit-testable.
+- **Log lines:** full pull logs
+  `'[SyncService] Full pull (since=null) → paginated PostgREST path (snapshot RPC bypassed).'`;
+  slow incremental still logs the existing slow-connection message.
+- **`pos_pull_snapshot` RPC / migration untouched** — incremental pulls on fast links
+  still use it; no DB migration in this task.
+- Everything after the decision (users fetch, businesses/users canaries, `restoreList`,
+  hard-delete reconcile, `PartialPullException`, deferred-tables return) is byte-for-byte
+  unchanged.
+- **Tests:** `test/sync/pull_path_decision_test.dart` (4 new tests, all green):
+  fast+full→false, fast+incremental→true, slow+full→false, slow+incremental→false.
+- `flutter analyze` zero errors/new warnings; `flutter test test/sync/` green.
+- **Remaining:** on-device/emulator check — fresh login → debug log should show
+  `'Full pull (since=null) → paginated PostgREST path (snapshot RPC bypassed).'`
+
+### Supplier Transaction History Keyset Pagination — Phase 1 / Unit 4 (2026-06-22)
+- Converted `SupplierTransactionsScreen` from full-table `supplierAllHistoryProvider` +
+  in-memory `activityDate` window filter + in-memory summary to on-demand, local keyset
+  pagination backed by SQL.
+- **DAO** (`SupplierLedgerDao`, daos.dart): added `getSupplierHistoryPage` (paged fetch),
+  `watchSupplierHistoryPage` (live head), and `watchSupplierHistoryStats` (aggregate).
+  New `SupplierLedgerStats` class (`count`, `totalIn`, `totalOut`, `.empty()` factory).
+- **Keyset cursor** is a 3-column triple `({DateTime createdAt, int signedAmountKobo, String id})`.
+  ORDER BY `created_at DESC, signed_amount_kobo ASC, id DESC` (mixed-direction).
+  Cursor predicate:
+  `created_at < c.createdAt`
+  `OR (created_at = c.createdAt AND signed_amount_kobo > c.signedAmountKobo)`
+  `OR (created_at = c.createdAt AND signed_amount_kobo = c.signedAmountKobo AND id < c.id)`.
+- **Date window** pushed down on `activity_date >= startDate` (not `created_at`). Resolved
+  via `dateRangeForLabel(period)` locally (no business-tz); matches screen semantics.
+- **List keeps voided originals + void compensating rows** (no `voidedAt.isNull()` on list
+  queries). Stats exclude them with NULL-safe `(reference_type IS NULL OR reference_type <> 'void')`.
+- **Providers** (`stream_providers.dart`): `SupplierHistoryPageState`,
+  `PaginatedSupplierHistoryNotifier`, `paginatedSupplierHistoryProvider`,
+  `supplierHistoryStatsProvider` — all `autoDispose.family` keyed on
+  `({String? storeId, String period})`. Live-head + paged-tail with dedup by `id`.
+- **Screen**: header count + summary from SQL stats; list from paginated provider;
+  scroll trigger at `index >= length - 5`; spinner footer while `isLoadingMore`.
+  `watchAllHistory`/`watchHistory`/`watchAllBalancesKobo`/`voidEntry` untouched.
+- **Tests** (`test/payments/supplier_history_pagination_test.dart`, 6/6 green):
+  mixed-direction boundary, hasMore/partial/exact-multiple, activityDate vs createdAt,
+  store+business scope, voided/void visibility, stats semantics (NULL-safe referenceType).
+- Phase 3 remote-fallback open question (in Open Questions) applies here too.
+- `flutter analyze` clean; new test suite 6/6 green.
+
+### Inventory History Keyset Pagination (2026-06-22)
+- Converted the Inventory History tab from a full-table in-memory watch/filter to on-demand, local keyset pagination using the compound cursor `(createdAt, id)` on the joined transactions query.
+- Implemented a "live head + paged tail" pagination strategy in `PaginatedStockHistoryNotifier` using `StreamSubscription` to watch the first page of 30 items reactively and append uniquely fetched page rows to a local tail list, filtering out duplicates dynamically.
+- Implemented a SQL-based aggregate query `watchTransactionsStats` inside `StockLedgerDao` to calculate the "Stock In" and "Stock Out" summary values over the full filtered set in SQL, instead of summing the paged list in memory.
+- Integrated an index-based scroll trigger (`index >= list.length - 5`) with a bottom loading progress footer on the `InventoryHistoryTab` UI.
+- Added unit tests in `test/inventory/stock_history_pagination_test.dart` to verify compound keyset cursor sorting at the identical-second boundary, page size hasMore/multiple semantics, filters push-down, business scoping, voided row exclusion, and stats aggregation.
+- Verified that the entire project passes static analysis with zero errors/warnings and all unit tests run green.
+
+### Activity Logs Keyset Pagination (2026-06-22)
+- Converted the Activity Logs screen from a full-table (limit 100) in-memory watch to on-demand, local keyset pagination using the compound cursor `(createdAt, id)` to prevent duplication/skipping under identical-second timestamps.
+- Implemented a "live head + paged tail" pagination strategy in `PaginatedActivityLogsNotifier` using `StreamSubscription` to watch the first page of 30 items reactively and append uniquely fetched page rows to a local tail list, filtering out duplicates dynamically.
+- Pushed down the store-scoping filter to Drift/SQL queries to protect low-end devices and prevent database/UI thrashing.
+- Verified that the write API of `ActivityLogService` and all its write call-sites remained completely untouched.
+- Added comprehensive unit tests in `test/activity/activity_logs_pagination_test.dart` to verify compound keyset cursor sorting at the identical-second boundary, page size hasMore/multiple semantics, SQL store filter heuristic push-down, multi-business scoping, voided row exclusion, and streaming head updates.
+- Verified that the entire project passes static analysis with zero errors/warnings and all unit tests run green.
+
+### Orders History Keyset Pagination (2026-06-22)
+- Converted Completed and Cancelled tabs on the Orders screen from a full-table in-memory watch/filter to on-demand, local keyset pagination using the compound cursor `(createdAt, id)` to prevent duplication/skipping under identical-second timestamps.
+- Implemented a "live head + paged tail" pagination strategy in `PaginatedOrdersNotifier` using `StreamSubscription` to watch the first page of 30 items reactively and append uniquely fetched page rows to a local tail list, filtering out duplicates dynamically.
+- Pushed down the date period, store-locking, and search filters entirely to SQLite queries in `OrdersDao` to prevent DB thrashing, including support for matching refunded statuses in the Cancelled tab.
+- Integrated a ~300ms debounce in the UI search text field before updating the autoDispose paginated provider key to prevent creating redundant provider/query instances.
+- Added `isLoading` state management to handle initial page load gracefully, and integrated an index-based scroll trigger (`index >= list.length - 5`) with a bottom loading progress footer on the `OrdersScreen` UI.
+- Added unit tests in `test/orders/orders_pagination_test.dart` to verify compound keyset cursor sorting at the identical-second boundary, page size hasMore/multiple semantics, filters push-down, multi-business scoping, and order-item folding.
+- Confirmed that refunded orders must surface in the Cancelled tab, as they are considered reversed sales in `order_status.dart` and are explicitly tracked in the Cancelled tab summary and status badges. Documented this design decision with code comments.
+- Verified that the entire project passes static analysis with zero errors/warnings and all unit tests run green.
+
 ### Walk-in Customer Visibility on Receipt (2026-06-22)
 - Fixed the receipt rendering logic to hide customer name, phone, address, and related spacing/placeholders for Walk-in Customers, leaving them completely blank.
 - Modified both the `ReceiptWidget` (for image capture/sharing/in-app display) and `ThermalReceiptService` (for Bluetooth ESC/POS printing).
@@ -756,7 +835,7 @@ Remaining: on-device walkthrough on the emulator.
    cellular connection.
 2. Decide: app-wide colour sweep vs next feature unit.
 3. **Inventory + Product Details §16** — not started.
-4. **Orders §19** — not started.
+4. **Orders §19** — Phase 1 completed (local keyset pagination for Completed/Cancelled tabs). Remaining phases (remote sync queries and remote fallback) pending.
 5. **Expenses + Pending Approval flow §20** — store-scope wired (Session 133);
    full §20 feature pass not started.
 6. **Activity Logs §24** — not started.
@@ -770,6 +849,8 @@ Remaining: on-device walkthrough on the emulator.
 ---
 
 ## Open Questions
+
+- **Orders & Activity History Remote Fallback / Windowed Sync Bypass (Phase 3).** When local database keyset pagination on Completed/Cancelled tabs (Orders) or the Activity Logs screen reaches the end of locally stored Drift records, should the pagination notifier trigger an on-demand remote fetch from Supabase to retrieve older historical entries, or is history strictly limited to the locally synced dataset?
 
 - **Empty crates — walk-in crate semantics (§3.14–3.16).** The checklist says a
   walk-in sale should still adjust empty-crate inventory automatically and that

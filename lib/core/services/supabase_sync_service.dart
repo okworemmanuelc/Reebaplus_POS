@@ -2134,13 +2134,44 @@ class SupabaseSyncService {
   static String pendingDeferredTablesKey(String businessId) =>
       'pending_deferred_tables::$businessId';
 
+  /// Returns `true` when `pullInitialData` should call the monolithic
+  /// `pos_pull_snapshot` RPC; `false` when it should use the paginated
+  /// `_pullViaPostgRest` path.
+  ///
+  /// **Phase 2 rule (2026-06-22):** Full/first pulls ([since] == null) NEVER
+  /// use the RPC — the unbounded aggregate query can time out on large datasets.
+  /// The RPC is used ONLY for incremental pulls ([since] != null) on a fast
+  /// link ([isSlow] == false), where the payload is bounded by what changed
+  /// since the cursor and one round-trip is the cheaper path.
+  ///
+  /// Truth table:
+  /// | isSlow | since     | result |
+  /// |--------|-----------|--------|
+  /// | false  | null      | false  | ← full pull on fast link → paginated
+  /// | false  | DateTime  | true   | ← incremental on fast link → RPC
+  /// | true   | null      | false  | ← full pull on slow link → paginated
+  /// | true   | DateTime  | false  | ← incremental on slow link → paginated
+  @visibleForTesting
+  static bool shouldUseSnapshotRpc({
+    required bool isSlow,
+    required DateTime? since,
+  }) =>
+      !isSlow && since != null;
+
   /// Pulls data for the current business from Supabase and populates the local DB.
   /// If [since] is provided, performs an incremental pull.
   ///
-  /// Fast path: a single `pos_pull_snapshot` RPC returns every table's rows
-  /// in one round-trip. Falls back to the per-table PostgREST path if the
-  /// RPC isn't deployed yet (the migration in 0005_sync_rpcs.sql may not be
-  /// applied to every environment).
+  /// **Pull-path routing (Phase 2):**
+  /// - Full/first pulls ([since] == null) ALWAYS use the paginated
+  ///   `_pullViaPostgRest` path, regardless of connectivity. The monolithic
+  ///   `pos_pull_snapshot` RPC has no row cap on a full pull and can time out
+  ///   on large datasets — the paginated keyset path is strictly safer.
+  /// - Incremental pulls ([since] != null) on a fast link (Wi-Fi/ethernet)
+  ///   still use the `pos_pull_snapshot` RPC for a single round-trip, because
+  ///   the payload is bounded by what changed since the cursor.
+  /// - Incremental pulls on a slow link (cellular/poor) use the paginated path.
+  /// - Decision rule: `!isSlow && since != null` → RPC; everything else →
+  ///   paginated PostgREST. See [shouldUseSnapshotRpc].
   ///
   /// Returns the set of tables that were leaf-deferred on this pull (subset
   /// of [_deferrableTables]). When non-empty, the caller (pullChanges) must
@@ -2176,7 +2207,10 @@ class SupabaseSyncService {
     Map<String, List<dynamic>>? snapshot;
     Set<String> skipped = const <String>{};
 
-    if (!isSlow) {
+    if (SupabaseSyncService.shouldUseSnapshotRpc(
+      isSlow: isSlow,
+      since: since,
+    )) {
       try {
         final result = await _supabase
             .rpc(
@@ -2204,6 +2238,11 @@ class SupabaseSyncService {
           '[SyncService] Snapshot RPC unavailable, falling back to per-table fetch: $e',
         );
       }
+    } else if (since == null) {
+      debugPrint(
+        '[SyncService] Full pull (since=null) → paginated PostgREST path '
+        '(snapshot RPC bypassed).',
+      );
     } else {
       debugPrint(
         '[SyncService] Slow connection (pageSize=$pageSize) — '

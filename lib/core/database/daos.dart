@@ -1316,6 +1316,320 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
+  Stream<List<OrderWithItems>> watchPendingOrdersWithItems({String? storeId}) {
+    final query = select(orders).join([
+      leftOuterJoin(orderItems, orderItems.orderId.equalsExp(orders.id)),
+      leftOuterJoin(customers, customers.id.equalsExp(orders.customerId)),
+      leftOuterJoin(products, products.id.equalsExp(orderItems.productId)),
+    ]);
+    query.where(whereBusiness(orders) & orders.status.equals('pending'));
+    if (storeId != null) {
+      query.where(orders.storeId.equals(storeId));
+    }
+    query.orderBy([OrderingTerm.desc(orders.createdAt)]);
+
+    return query.watch().map((rows) {
+      final Map<String, OrderWithItems> result = {};
+      for (final row in rows) {
+        final order = row.readTable(orders);
+        final item = row.readTableOrNull(orderItems);
+        final customer = row.readTableOrNull(customers);
+        final product = row.readTableOrNull(products);
+
+        result.putIfAbsent(order.id, () => OrderWithItems(order, [], customer));
+
+        if (item != null) {
+          result[order.id]!.items.add(
+            OrderItemDataWithProductData(item, product),
+          );
+        }
+      }
+      return result.values.toList();
+    });
+  }
+
+  Future<List<OrderWithItems>> getOrdersPage({
+    required String status,
+    String? storeId,
+    DateTime? from,
+    DateTime? to,
+    String? search,
+    ({DateTime createdAt, String id})? cursor,
+    int limit = 30,
+  }) async {
+    final query = select(orders).join([
+      leftOuterJoin(customers, customers.id.equalsExp(orders.customerId)),
+    ]);
+
+    final Expression<bool> statusPredicate;
+    if (status == 'cancelled') {
+      // Refunded orders represent reversed sales and are grouped under the Cancelled tab.
+      statusPredicate = orders.status.isIn(const ['cancelled', 'refunded']);
+    } else {
+      statusPredicate = orders.status.equals(status);
+    }
+    var predicate = whereBusiness(orders) & statusPredicate;
+
+    if (storeId != null) {
+      predicate = predicate & orders.storeId.equals(storeId);
+    }
+
+    final Expression<DateTime> orderDateExpr;
+    if (status == 'completed') {
+      orderDateExpr = coalesce([orders.completedAt, orders.createdAt]);
+    } else if (status == 'cancelled') {
+      orderDateExpr = coalesce([orders.cancelledAt, orders.createdAt]);
+    } else {
+      orderDateExpr = orders.createdAt;
+    }
+
+    if (from != null) {
+      predicate = predicate & orderDateExpr.isBiggerOrEqualValue(from);
+    }
+    if (to != null) {
+      predicate = predicate & orderDateExpr.isSmallerThanValue(to);
+    }
+
+    if (search != null && search.isNotEmpty) {
+      final term = '%$search%';
+      predicate = predicate & (
+        orders.orderNumber.like(term) |
+        orders.id.like(term) |
+        customers.name.like(term)
+      );
+    }
+
+    if (cursor != null) {
+      predicate = predicate & (
+        orders.createdAt.isSmallerThanValue(cursor.createdAt) |
+        (orders.createdAt.equals(cursor.createdAt) & orders.id.isSmallerThanValue(cursor.id))
+      );
+    }
+
+    query.where(predicate);
+
+    query.orderBy([
+      OrderingTerm.desc(orders.createdAt),
+      OrderingTerm.desc(orders.id),
+    ]);
+
+    query.limit(limit);
+
+    final rows = await query.get();
+    if (rows.isEmpty) return const [];
+
+    final ordersList = rows.map((r) => r.readTable(orders)).toList();
+    final orderIds = ordersList.map((o) => o.id).toList();
+
+    final itemsQuery = select(orders).join([
+      leftOuterJoin(orderItems, orderItems.orderId.equalsExp(orders.id)),
+      leftOuterJoin(customers, customers.id.equalsExp(orders.customerId)),
+      leftOuterJoin(products, products.id.equalsExp(orderItems.productId)),
+    ]);
+    itemsQuery.where(orders.id.isIn(orderIds));
+    itemsQuery.orderBy([
+      OrderingTerm.desc(orders.createdAt),
+      OrderingTerm.desc(orders.id),
+    ]);
+
+    final itemsRows = await itemsQuery.get();
+
+    final Map<String, OrderWithItems> result = {};
+    for (final row in rows) {
+      final order = row.readTable(orders);
+      final customer = row.readTableOrNull(customers);
+      result[order.id] = OrderWithItems(order, [], customer);
+    }
+
+    for (final row in itemsRows) {
+      final order = row.readTable(orders);
+      final item = row.readTableOrNull(orderItems);
+      final product = row.readTableOrNull(products);
+
+      if (item != null && result.containsKey(order.id)) {
+        result[order.id]!.items.add(
+          OrderItemDataWithProductData(item, product),
+        );
+      }
+    }
+
+    return orderIds.map((id) => result[id]!).toList();
+  }
+
+  Stream<List<OrderWithItems>> watchOrdersPage({
+    required String status,
+    String? storeId,
+    DateTime? from,
+    DateTime? to,
+    String? search,
+    int limit = 30,
+  }) {
+    final query = select(orders).join([
+      leftOuterJoin(customers, customers.id.equalsExp(orders.customerId)),
+    ]);
+
+    final Expression<bool> statusPredicate;
+    if (status == 'cancelled') {
+      // Refunded orders represent reversed sales and are grouped under the Cancelled tab.
+      statusPredicate = orders.status.isIn(const ['cancelled', 'refunded']);
+    } else {
+      statusPredicate = orders.status.equals(status);
+    }
+    var predicate = whereBusiness(orders) & statusPredicate;
+
+    if (storeId != null) {
+      predicate = predicate & orders.storeId.equals(storeId);
+    }
+
+    final Expression<DateTime> orderDateExpr;
+    if (status == 'completed') {
+      orderDateExpr = coalesce([orders.completedAt, orders.createdAt]);
+    } else if (status == 'cancelled') {
+      orderDateExpr = coalesce([orders.cancelledAt, orders.createdAt]);
+    } else {
+      orderDateExpr = orders.createdAt;
+    }
+
+    if (from != null) {
+      predicate = predicate & orderDateExpr.isBiggerOrEqualValue(from);
+    }
+    if (to != null) {
+      predicate = predicate & orderDateExpr.isSmallerThanValue(to);
+    }
+
+    if (search != null && search.isNotEmpty) {
+      final term = '%$search%';
+      predicate = predicate & (
+        orders.orderNumber.like(term) |
+        orders.id.like(term) |
+        customers.name.like(term)
+      );
+    }
+
+    query.where(predicate);
+
+    query.orderBy([
+      OrderingTerm.desc(orders.createdAt),
+      OrderingTerm.desc(orders.id),
+    ]);
+
+    query.limit(limit);
+
+    return query.watch().switchMap((rows) {
+      if (rows.isEmpty) return Stream.value(const <OrderWithItems>[]);
+
+      final ordersList = rows.map((r) => r.readTable(orders)).toList();
+      final orderIds = ordersList.map((o) => o.id).toList();
+
+      final itemsQuery = select(orders).join([
+        leftOuterJoin(orderItems, orderItems.orderId.equalsExp(orders.id)),
+        leftOuterJoin(customers, customers.id.equalsExp(orders.customerId)),
+        leftOuterJoin(products, products.id.equalsExp(orderItems.productId)),
+      ]);
+      itemsQuery.where(orders.id.isIn(orderIds));
+      itemsQuery.orderBy([
+        OrderingTerm.desc(orders.createdAt),
+        OrderingTerm.desc(orders.id),
+      ]);
+
+      return itemsQuery.watch().map((itemsRows) {
+        final Map<String, OrderWithItems> result = {};
+        for (final r in rows) {
+          final order = r.readTable(orders);
+          final customer = r.readTableOrNull(customers);
+          result[order.id] = OrderWithItems(order, [], customer);
+        }
+
+        for (final row in itemsRows) {
+          final order = row.readTable(orders);
+          final item = row.readTableOrNull(orderItems);
+          final product = row.readTableOrNull(products);
+
+          if (item != null && result.containsKey(order.id)) {
+            result[order.id]!.items.add(
+              OrderItemDataWithProductData(item, product),
+            );
+          }
+        }
+
+        return orderIds.map((id) => result[id]!).toList();
+      });
+    });
+  }
+
+  Stream<OrdersStats> watchOrdersStats({
+    required String status,
+    String? storeId,
+    DateTime? from,
+    DateTime? to,
+    String? search,
+  }) {
+    final query = selectOnly(orders).join([
+      leftOuterJoin(customers, customers.id.equalsExp(orders.customerId)),
+    ]);
+
+    final Expression<bool> statusPredicate;
+    if (status == 'cancelled') {
+      // Refunded orders represent reversed sales and are grouped under the Cancelled tab.
+      statusPredicate = orders.status.isIn(const ['cancelled', 'refunded']);
+    } else {
+      statusPredicate = orders.status.equals(status);
+    }
+    var predicate = whereBusiness(orders) & statusPredicate;
+
+    if (storeId != null) {
+      predicate = predicate & orders.storeId.equals(storeId);
+    }
+
+    final Expression<DateTime> orderDateExpr;
+    if (status == 'completed') {
+      orderDateExpr = coalesce([orders.completedAt, orders.createdAt]);
+    } else if (status == 'cancelled') {
+      orderDateExpr = coalesce([orders.cancelledAt, orders.createdAt]);
+    } else {
+      orderDateExpr = orders.createdAt;
+    }
+
+    if (from != null) {
+      predicate = predicate & orderDateExpr.isBiggerOrEqualValue(from);
+    }
+    if (to != null) {
+      predicate = predicate & orderDateExpr.isSmallerThanValue(to);
+    }
+
+    if (search != null && search.isNotEmpty) {
+      final term = '%$search%';
+      predicate = predicate & (
+        orders.orderNumber.like(term) |
+        orders.id.like(term) |
+        customers.name.like(term)
+      );
+    }
+
+    query.where(predicate);
+
+    final countCol = orders.id.count();
+    final amountSum = orders.netAmountKobo.sum();
+    final paidSum = orders.amountPaidKobo.sum();
+    final depositSum = orders.crateDepositPaidKobo.sum();
+    const refundedCol = CustomExpression<int>(
+      "SUM(CASE WHEN orders.status = 'refunded' THEN 1 ELSE 0 END)",
+    );
+
+    query.addColumns([countCol, amountSum, paidSum, depositSum, refundedCol]);
+
+    return query.watchSingle().map((row) {
+      return OrdersStats(
+        count: row.read(countCol) ?? 0,
+        totalAmountKobo: row.read(amountSum) ?? 0,
+        amountPaidKobo: row.read(paidSum) ?? 0,
+        crateDepositPaidKobo: row.read(depositSum) ?? 0,
+        refundedCount: row.read(refundedCol) ?? 0,
+      );
+    });
+  }
+
+
   // ── Writes ─────────────────────────────────────────────────────────────────
 
   /// Enqueues the FULL order row for sync. Per-column order updates build a
@@ -2340,6 +2654,30 @@ class ProductSalesSummary {
     monthUnits: 0,
     monthRevenueKobo: 0,
   );
+}
+
+class OrdersStats {
+  final int count;
+  final int totalAmountKobo;
+  final int amountPaidKobo;
+  final int crateDepositPaidKobo;
+  final int refundedCount;
+
+  const OrdersStats({
+    required this.count,
+    required this.totalAmountKobo,
+    required this.amountPaidKobo,
+    required this.crateDepositPaidKobo,
+    required this.refundedCount,
+  });
+
+  factory OrdersStats.empty() => const OrdersStats(
+        count: 0,
+        totalAmountKobo: 0,
+        amountPaidKobo: 0,
+        crateDepositPaidKobo: 0,
+        refundedCount: 0,
+      );
 }
 
 class OrderWithItems {
@@ -4189,6 +4527,66 @@ class ActivityLogDao extends DatabaseAccessor<AppDatabase>
         .watch();
   }
 
+  Future<List<ActivityLogData>> getActivityLogsPage({
+    String? storeId,
+    ({DateTime createdAt, String id})? cursor,
+    int limit = 30,
+  }) async {
+    var predicate = whereBusiness(activityLogs) & activityLogs.voidedAt.isNull();
+
+    if (storeId != null) {
+      final isStoreScoped = activityLogs.storeId.isNotNull() |
+          (activityLogs.entityType.isNotNull() & activityLogs.entityType.isIn(const ['product', 'order', 'delivery'])) |
+          activityLogs.action.lower().like('%inventory%') |
+          activityLogs.action.lower().like('%stock%') |
+          activityLogs.action.lower().like('%delivery%');
+      predicate = predicate & (activityLogs.storeId.equals(storeId) | isStoreScoped.not());
+    }
+
+    if (cursor != null) {
+      predicate = predicate & (
+        activityLogs.createdAt.isSmallerThanValue(cursor.createdAt) |
+        (activityLogs.createdAt.equals(cursor.createdAt) & activityLogs.id.isSmallerThanValue(cursor.id))
+      );
+    }
+
+    final query = select(activityLogs)
+      ..where((t) => predicate)
+      ..orderBy([
+        (t) => OrderingTerm.desc(t.createdAt),
+        (t) => OrderingTerm.desc(t.id),
+      ])
+      ..limit(limit);
+
+    return query.get();
+  }
+
+  Stream<List<ActivityLogData>> watchActivityLogsPage({
+    String? storeId,
+    int limit = 30,
+  }) {
+    var predicate = whereBusiness(activityLogs) & activityLogs.voidedAt.isNull();
+
+    if (storeId != null) {
+      final isStoreScoped = activityLogs.storeId.isNotNull() |
+          (activityLogs.entityType.isNotNull() & activityLogs.entityType.isIn(const ['product', 'order', 'delivery'])) |
+          activityLogs.action.lower().like('%inventory%') |
+          activityLogs.action.lower().like('%stock%') |
+          activityLogs.action.lower().like('%delivery%');
+      predicate = predicate & (activityLogs.storeId.equals(storeId) | isStoreScoped.not());
+    }
+
+    final query = select(activityLogs)
+      ..where((t) => predicate)
+      ..orderBy([
+        (t) => OrderingTerm.desc(t.createdAt),
+        (t) => OrderingTerm.desc(t.id),
+      ])
+      ..limit(limit);
+
+    return query.watch();
+  }
+
   Future<List<ActivityLogData>> getForOrder(String orderId) {
     return (select(activityLogs)
           ..where(
@@ -4647,6 +5045,8 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
     DateTime? startDate,
     DateTime? endDate,
     String? movementType,
+    ({DateTime createdAt, String id})? cursor,
+    int? limit,
   }) {
     final query = select(stockTransactions).join([
       innerJoin(products, products.id.equalsExp(stockTransactions.productId)),
@@ -4668,7 +5068,20 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
     if (movementType != null) {
       query.where(stockTransactions.movementType.equals(movementType));
     }
-    query.orderBy([OrderingTerm.desc(stockTransactions.createdAt)]);
+    if (cursor != null) {
+      query.where(
+        stockTransactions.createdAt.isSmallerThanValue(cursor.createdAt) |
+            (stockTransactions.createdAt.equals(cursor.createdAt) &
+                stockTransactions.id.isSmallerThanValue(cursor.id)),
+      );
+    }
+    query.orderBy([
+      OrderingTerm.desc(stockTransactions.createdAt),
+      OrderingTerm.desc(stockTransactions.id),
+    ]);
+    if (limit != null) {
+      query.limit(limit);
+    }
     return query;
   }
 
@@ -4719,6 +5132,83 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
       movementType: movementType,
     ).get();
     return rows.map(_mapRow).toList();
+  }
+
+  Future<List<StockTransactionWithDetails>> getTransactionsPage({
+    String? storeId,
+    DateTime? startDate,
+    DateTime? endDate,
+    String? movementType,
+    ({DateTime createdAt, String id})? cursor,
+    int limit = 30,
+  }) async {
+    final rows = await _buildFilteredQuery(
+      storeId: storeId,
+      startDate: startDate,
+      endDate: endDate,
+      movementType: movementType,
+      cursor: cursor,
+      limit: limit,
+    ).get();
+    return rows.map(_mapRow).toList();
+  }
+
+  Stream<List<StockTransactionWithDetails>> watchTransactionsPage({
+    String? storeId,
+    DateTime? startDate,
+    DateTime? endDate,
+    String? movementType,
+    int limit = 30,
+  }) {
+    return _buildFilteredQuery(
+      storeId: storeId,
+      startDate: startDate,
+      endDate: endDate,
+      movementType: movementType,
+      limit: limit,
+    ).watch().map((rows) => rows.map(_mapRow).toList());
+  }
+
+  Stream<StockHistoryStats> watchTransactionsStats({
+    String? storeId,
+    DateTime? startDate,
+    DateTime? endDate,
+    String? movementType,
+  }) {
+    final query = selectOnly(stockTransactions);
+    query.where(
+      whereBusiness(stockTransactions) & stockTransactions.voidedAt.isNull(),
+    );
+    if (storeId != null) {
+      query.where(stockTransactions.locationId.equals(storeId));
+    }
+    if (startDate != null) {
+      query.where(stockTransactions.createdAt.isBiggerOrEqualValue(startDate));
+    }
+    if (endDate != null) {
+      query.where(stockTransactions.createdAt.isSmallerOrEqualValue(endDate));
+    }
+    if (movementType != null) {
+      query.where(stockTransactions.movementType.equals(movementType));
+    }
+
+    const totalInCol = CustomExpression<int>(
+      'SUM(CASE WHEN stock_transactions.quantity_delta > 0 THEN stock_transactions.quantity_delta ELSE 0 END)',
+    );
+    const totalOutCol = CustomExpression<int>(
+      'SUM(CASE WHEN stock_transactions.quantity_delta < 0 THEN -stock_transactions.quantity_delta ELSE 0 END)',
+    );
+    final countCol = stockTransactions.id.count();
+
+    query.addColumns([totalInCol, totalOutCol, countCol]);
+
+    return query.watchSingle().map((row) {
+      return StockHistoryStats(
+        totalIn: row.read(totalInCol) ?? 0,
+        totalOut: row.read(totalOutCol) ?? 0,
+        count: row.read(countCol) ?? 0,
+      );
+    });
   }
 
   Future<PeriodStockSummary> getPeriodSummary({
@@ -4962,6 +5452,24 @@ class PeriodStockSummary {
     required this.flaggedCount,
     required this.transactionCount,
   });
+}
+
+class StockHistoryStats {
+  final int totalIn;
+  final int totalOut;
+  final int count;
+
+  const StockHistoryStats({
+    required this.totalIn,
+    required this.totalOut,
+    required this.count,
+  });
+
+  factory StockHistoryStats.empty() => const StockHistoryStats(
+        totalIn: 0,
+        totalOut: 0,
+        count: 0,
+      );
 }
 
 class PeriodReconciliation {
@@ -7089,6 +7597,131 @@ class SupplierLedgerDao extends DatabaseAccessor<AppDatabase>
       return true;
     });
   }
+
+  // ── Paginated Transaction History (§21.10) ────────────────────────────────
+
+  /// Page of ledger entries across all suppliers, newest first, with
+  /// mixed-direction 3-column keyset cursor:
+  ///   ORDER BY created_at DESC, signed_amount_kobo ASC, id DESC.
+  /// The [cursor] skips past the row at that position. [startDate] filters by
+  /// activity_date >= startDate (Trap 3 — uses activityDate, not createdAt).
+  Future<List<SupplierLedgerEntryData>> getSupplierHistoryPage({
+    String? storeId,
+    DateTime? startDate,
+    ({DateTime createdAt, int signedAmountKobo, String id})? cursor,
+    int limit = 30,
+  }) async {
+    final query = select(supplierLedgerEntries)
+      ..where((t) => _scope(storeId));
+    if (startDate != null) {
+      query.where((t) => t.activityDate.isBiggerOrEqualValue(startDate));
+    }
+    if (cursor != null) {
+      final c = cursor;
+      query.where(
+        (t) =>
+            t.createdAt.isSmallerThanValue(c.createdAt) |
+            (t.createdAt.equals(c.createdAt) &
+                t.signedAmountKobo.isBiggerThanValue(c.signedAmountKobo)) |
+            (t.createdAt.equals(c.createdAt) &
+                t.signedAmountKobo.equals(c.signedAmountKobo) &
+                t.id.isSmallerThanValue(c.id)),
+      );
+    }
+    query
+      ..orderBy([
+        (t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc),
+        (t) =>
+            OrderingTerm(expression: t.signedAmountKobo, mode: OrderingMode.asc),
+        (t) => OrderingTerm(expression: t.id, mode: OrderingMode.desc),
+      ])
+      ..limit(limit);
+    return query.get();
+  }
+
+  /// Live head (no cursor) for [getSupplierHistoryPage] — drives the watch
+  /// subscription in [PaginatedSupplierHistoryNotifier].
+  Stream<List<SupplierLedgerEntryData>> watchSupplierHistoryPage({
+    String? storeId,
+    DateTime? startDate,
+    int limit = 30,
+  }) {
+    final query = select(supplierLedgerEntries)
+      ..where((t) => _scope(storeId));
+    if (startDate != null) {
+      query.where((t) => t.activityDate.isBiggerOrEqualValue(startDate));
+    }
+    query
+      ..orderBy([
+        (t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc),
+        (t) =>
+            OrderingTerm(expression: t.signedAmountKobo, mode: OrderingMode.asc),
+        (t) => OrderingTerm(expression: t.id, mode: OrderingMode.desc),
+      ])
+      ..limit(limit);
+    return query.watch();
+  }
+
+  /// Aggregate stats over the full windowed set (no cursor/limit).
+  /// count = ALL windowed rows (voided + void included).
+  /// totalIn / totalOut exclude voided originals AND void compensating rows;
+  /// NULL-safe referenceType check prevents SQL three-valued-logic drop.
+  Stream<SupplierLedgerStats> watchSupplierHistoryStats({
+    String? storeId,
+    DateTime? startDate,
+  }) {
+    final query = selectOnly(supplierLedgerEntries);
+    query.where(_scope(storeId));
+    if (startDate != null) {
+      query.where(
+        supplierLedgerEntries.activityDate.isBiggerOrEqualValue(startDate),
+      );
+    }
+
+    const totalInCol = CustomExpression<int>(
+      'SUM(CASE WHEN supplier_ledger_entries.voided_at IS NULL'
+      ' AND (supplier_ledger_entries.reference_type IS NULL'
+      ' OR supplier_ledger_entries.reference_type <> \'void\')'
+      ' AND supplier_ledger_entries.signed_amount_kobo >= 0'
+      ' THEN supplier_ledger_entries.signed_amount_kobo ELSE 0 END)',
+    );
+    const totalOutCol = CustomExpression<int>(
+      'SUM(CASE WHEN supplier_ledger_entries.voided_at IS NULL'
+      ' AND (supplier_ledger_entries.reference_type IS NULL'
+      ' OR supplier_ledger_entries.reference_type <> \'void\')'
+      ' AND supplier_ledger_entries.signed_amount_kobo < 0'
+      ' THEN -supplier_ledger_entries.signed_amount_kobo ELSE 0 END)',
+    );
+    final countCol = supplierLedgerEntries.id.count();
+
+    query.addColumns([totalInCol, totalOutCol, countCol]);
+
+    return query.watchSingle().map((row) {
+      return SupplierLedgerStats(
+        count: row.read(countCol) ?? 0,
+        totalIn: row.read(totalInCol) ?? 0,
+        totalOut: row.read(totalOutCol) ?? 0,
+      );
+    });
+  }
+}
+
+class SupplierLedgerStats {
+  final int count;
+  final int totalIn;
+  final int totalOut;
+
+  const SupplierLedgerStats({
+    required this.count,
+    required this.totalIn,
+    required this.totalOut,
+  });
+
+  factory SupplierLedgerStats.empty() => const SupplierLedgerStats(
+    count: 0,
+    totalIn: 0,
+    totalOut: 0,
+  );
 }
 
 /// §3.13 — one per-(supplier, manufacturer) crate balance, joined with the

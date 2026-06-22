@@ -88,19 +88,10 @@ class _SupplierTransactionsScreenState
     );
   }
 
-  Widget _buildLedgerSummaryRow(ThemeData theme, List<SupplierLedgerEntryData> filteredHistory) {
-    int totalInKobo = 0, totalOutKobo = 0;
-    for (final entry in filteredHistory) {
-      if (entry.voidedAt != null) continue;
-      if (entry.referenceType == 'void') continue;
-
-      if (entry.signedAmountKobo >= 0) {
-        totalInKobo += entry.signedAmountKobo;
-      } else {
-        totalOutKobo += entry.signedAmountKobo.abs();
-      }
-    }
-
+  Widget _buildLedgerSummaryRow(
+    ThemeData theme,
+    SupplierLedgerStats stats,
+  ) {
     return Padding(
       padding: EdgeInsets.fromLTRB(
         context.getRSize(16),
@@ -115,7 +106,7 @@ class _SupplierTransactionsScreenState
               context,
               theme,
               'Total In',
-              totalInKobo / 100.0,
+              stats.totalIn / 100.0,
               success,
             ),
           ),
@@ -125,7 +116,7 @@ class _SupplierTransactionsScreenState
               context,
               theme,
               'Total Out',
-              totalOutKobo / 100.0,
+              stats.totalOut / 100.0,
               danger,
             ),
           ),
@@ -141,165 +132,205 @@ class _SupplierTransactionsScreenState
     final perms = ref.watch(currentUserPermissionsProvider);
     final canManage = perms.contains('suppliers.manage');
 
-    final entries =
-        ref.watch(supplierAllHistoryProvider).valueOrNull ??
-        const <SupplierLedgerEntryData>[];
+    final lockedStoreId = ref.watch(lockedStoreProvider).value;
+    final providerKey = (storeId: lockedStoreId, period: _effectivePeriod);
+
+    final pageState = ref.watch(paginatedSupplierHistoryProvider(providerKey));
+    final statsAsync = ref.watch(supplierHistoryStatsProvider(providerKey));
+    final stats = statsAsync.valueOrNull ?? SupplierLedgerStats.empty();
+
     final suppliers =
         ref.watch(allSuppliersProvider).valueOrNull ?? const <SupplierData>[];
     final nameById = {for (final s in suppliers) s.id: s.name};
 
     // §21.11 — when viewing "All Stores" (no store locked), show which store
     // recorded each entry. With a concrete store locked, every row is that store.
-    final isAllStores = ref.watch(lockedStoreProvider).value == null;
+    final isAllStores = lockedStoreId == null;
     final scopeLabel = ref.watch(activeStoreLabelProvider);
     final stores =
         ref.watch(allStoresProvider).valueOrNull ?? const <StoreData>[];
     final storeNameById = {for (final s in stores) s.id: s.name};
 
-    final window = datePeriodFromLabel(_effectivePeriod);
-    final filtered = entries
-        .where((e) => window.includes(e.activityDate))
-        .toList();
+    final entries = pageState.entries;
+    final isLoading = pageState.isLoading;
+    final isLoadingMore = pageState.isLoadingMore;
+    final hasMore = pageState.hasMore;
 
     return ColoredBox(
       color: _bg,
       child: Container(
         decoration: AppDecorations.glassyBackground(context),
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        appBar: AppBar(
-          backgroundColor: _isScrolled
-              ? _surface.withValues(alpha: 0.8)
-              : Colors.transparent,
-          elevation: 0,
-          leading: IconButton(
-            icon: Icon(Icons.arrow_back_ios_new, color: _text, size: 20),
-            onPressed: () => Navigator.pop(context),
-          ),
-          title: Text(
-            'Transaction History',
-            style: TextStyle(
-              color: _text,
-              fontSize: context.getRFontSize(18),
-              fontWeight: FontWeight.w800,
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          appBar: AppBar(
+            backgroundColor: _isScrolled
+                ? _surface.withValues(alpha: 0.8)
+                : Colors.transparent,
+            elevation: 0,
+            leading: IconButton(
+              icon: Icon(Icons.arrow_back_ios_new, color: _text, size: 20),
+              onPressed: () => Navigator.pop(context),
+            ),
+            title: Text(
+              'Transaction History',
+              style: TextStyle(
+                color: _text,
+                fontSize: context.getRFontSize(18),
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
-        ),
-        body: NotificationListener<ScrollUpdateNotification>(
-          onNotification: (notif) {
-            if (notif.metrics.pixels > 10 && !_isScrolled) {
-              setState(() => _isScrolled = true);
-            } else if (notif.metrics.pixels <= 10 && _isScrolled) {
-              setState(() => _isScrolled = false);
-            }
-            return false;
-          },
-          child: !canManage
-          ? Center(
-              child: perms.isEmpty
-                  ? const CircularProgressIndicator()
-                  : Text(
-                      'You don’t have access to Supplier Accounts.',
-                      style: TextStyle(color: _subtext),
-                    ),
-            )
-          : Column(
-              children: [
-                Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    context.getRSize(16),
-                    context.getRSize(12),
-                    context.getRSize(16),
-                    context.getRSize(4),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '${filtered.length} transaction'
-                          '${filtered.length == 1 ? '' : 's'} • $scopeLabel',
-                          style: TextStyle(
-                            color: _subtext,
-                            fontSize: context.getRFontSize(13),
-                            fontWeight: FontWeight.w600,
+          body: NotificationListener<ScrollUpdateNotification>(
+            onNotification: (notif) {
+              if (notif.metrics.pixels > 10 && !_isScrolled) {
+                setState(() => _isScrolled = true);
+              } else if (notif.metrics.pixels <= 10 && _isScrolled) {
+                setState(() => _isScrolled = false);
+              }
+              return false;
+            },
+            child: !canManage
+                ? Center(
+                    child: perms.isEmpty
+                        ? const CircularProgressIndicator()
+                        : Text(
+                            'You don’t have access to Supplier Accounts.',
+                            style: TextStyle(color: _subtext),
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                  )
+                : Column(
+                    children: [
+                      Padding(
+                        padding: EdgeInsets.fromLTRB(
+                          context.getRSize(16),
+                          context.getRSize(12),
+                          context.getRSize(16),
+                          context.getRSize(4),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '${stats.count} transaction'
+                                '${stats.count == 1 ? '' : 's'} • $scopeLabel',
+                                style: TextStyle(
+                                  color: _subtext,
+                                  fontSize: context.getRFontSize(13),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            SizedBox(width: context.getRSize(8)),
+                            AppDropdown<String>(
+                              value: _effectivePeriod,
+                              width: context.getRSize(140),
+                              items: _periodOptions.map((val) {
+                                return DropdownMenuItem<String>(
+                                  value: val,
+                                  child: Text(val),
+                                );
+                              }).toList(),
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setState(() => _periodFilter = val);
+                                }
+                              },
+                            ),
+                          ],
                         ),
                       ),
-                      SizedBox(width: context.getRSize(8)),
-                      AppDropdown<String>(
-                        value: _effectivePeriod,
-                        width: context.getRSize(140),
-                        items: _periodOptions.map((val) {
-                          return DropdownMenuItem<String>(
-                            value: val,
-                            child: Text(val),
-                          );
-                        }).toList(),
-                        onChanged: (val) {
-                          if (val != null) {
-                            setState(() => _periodFilter = val);
-                          }
-                        },
+                      _buildLedgerSummaryRow(Theme.of(context), stats),
+                      Expanded(
+                        child: isLoading
+                            ? const Center(child: CircularProgressIndicator())
+                            : entries.isEmpty
+                                ? Center(
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          FontAwesomeIcons.receipt.data,
+                                          size: context.getRSize(48),
+                                          color: _border,
+                                        ),
+                                        SizedBox(height: context.getRSize(16)),
+                                        Text(
+                                          'No transactions in this period',
+                                          style: TextStyle(
+                                            color: _subtext,
+                                            fontSize: context.getRFontSize(15),
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                : ListView.builder(
+                                    padding: EdgeInsets.fromLTRB(
+                                      context.getRSize(16),
+                                      context.getRSize(8),
+                                      context.getRSize(16),
+                                      context.getRSize(24) +
+                                          context.deviceBottomPadding,
+                                    ),
+                                    itemCount: entries.length + (hasMore ? 1 : 0),
+                                    itemBuilder: (_, i) {
+                                      if (i >= entries.length) {
+                                        if (!isLoadingMore) {
+                                          Future.microtask(
+                                            () => ref
+                                                .read(
+                                                  paginatedSupplierHistoryProvider(
+                                                    providerKey,
+                                                  ).notifier,
+                                                )
+                                                .loadMore(),
+                                          );
+                                        }
+                                        return Padding(
+                                          padding: EdgeInsets.symmetric(
+                                            vertical: context.getRSize(16),
+                                          ),
+                                          child: const Center(
+                                            child: CircularProgressIndicator(),
+                                          ),
+                                        );
+                                      }
+                                      if (i >= entries.length - 5 && hasMore && !isLoadingMore) {
+                                        Future.microtask(
+                                          () => ref
+                                              .read(
+                                                paginatedSupplierHistoryProvider(
+                                                  providerKey,
+                                                ).notifier,
+                                              )
+                                              .loadMore(),
+                                        );
+                                      }
+                                      final e = entries[i];
+                                      return SupplierLedgerEntryTile(
+                                        entry: e,
+                                        supplierName: nameById[e.supplierId] ??
+                                            'Unknown supplier',
+                                        storeName: isAllStores
+                                            ? (storeNameById[e.storeId] ??
+                                                (e.storeId == null
+                                                    ? 'Unassigned'
+                                                    : null))
+                                            : null,
+                                      );
+                                    },
+                                  ),
                       ),
                     ],
                   ),
-                ),
-                _buildLedgerSummaryRow(Theme.of(context), filtered),
-                Expanded(
-                  child: filtered.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                FontAwesomeIcons.receipt.data,
-                                size: context.getRSize(48),
-                                color: _border,
-                              ),
-                              SizedBox(height: context.getRSize(16)),
-                              Text(
-                                'No transactions in this period',
-                                style: TextStyle(
-                                  color: _subtext,
-                                  fontSize: context.getRFontSize(15),
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        )
-                      : ListView.builder(
-                          padding: EdgeInsets.fromLTRB(
-                            context.getRSize(16),
-                            context.getRSize(8),
-                            context.getRSize(16),
-                            context.getRSize(24) + context.deviceBottomPadding,
-                          ),
-                          itemCount: filtered.length,
-                          itemBuilder: (_, i) {
-                            final e = filtered[i];
-                            return SupplierLedgerEntryTile(
-                              entry: e,
-                              supplierName:
-                                  nameById[e.supplierId] ?? 'Unknown supplier',
-                              storeName: isAllStores
-                                  ? (storeNameById[e.storeId] ??
-                                        (e.storeId == null
-                                            ? 'Unassigned'
-                                            : null))
-                                  : null,
-                            );
-                          },
-                        ),
-                ),
-              ],
-            ),
+          ),
         ),
       ),
-    ),
     );
   }
 }

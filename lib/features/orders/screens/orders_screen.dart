@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:screenshot/screenshot.dart';
@@ -24,7 +24,6 @@ import 'package:reebaplus_pos/shared/widgets/receipt_widget.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/features/deliveries/data/models/delivery_receipt.dart'
     as model;
-import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/menu_button.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
@@ -128,70 +127,51 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       appBar: _buildAppBar(context),
       body: Builder(
         builder: (context) {
-          final ordersAsync = ref.watch(allOrdersProvider);
-          // §12.1: the Orders list is scoped to the active store. A concrete
-          // store shows only its own orders; "All Stores" (null) shows every
-          // store's orders. Mirrors Home/Inventory.
           final activeStoreId = ref.watch(lockedStoreProvider).value;
 
-          return ordersAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text('Error: $e')),
-            data: (allOrders) {
-              final now = DateTime.now();
-
-              final allOrdersWithItems = activeStoreId == null
-                  ? allOrders
-                  : allOrders
-                        .where((o) => o.order.storeId == activeStoreId)
-                        .toList();
-
-              final pending = _applySearch(
-                allOrdersWithItems
-                    .where((o) => o.order.status == 'pending')
-                    .toList(),
+          return RefreshIndicator(
+            onRefresh: () async {
+              HapticFeedback.lightImpact();
+              final completedKey = (
+                status: 'completed',
+                storeId: activeStoreId,
+                dateLabel: _completedFilter,
+                search: _searchQuery,
               );
-
-              final separatedCompleted = allOrdersWithItems
-                  .where((o) => o.order.status == 'completed')
-                  .toList();
-              final completed = _applySearch(
-                separatedCompleted.where((o) {
-                  final t = o.order.completedAt ?? o.order.createdAt;
-                  return datePeriodFromLabel(
-                    _completedFilter,
-                  ).includes(t, now: now);
-                }).toList(),
+              final cancelledKey = (
+                status: 'cancelled',
+                storeId: activeStoreId,
+                dateLabel: _cancelledFilter,
+                search: _searchQuery,
               );
+              ref.invalidate(paginatedOrdersProvider(completedKey));
+              ref.invalidate(paginatedOrdersProvider(cancelledKey));
+              ref.invalidate(ordersStatsProvider(completedKey));
+              ref.invalidate(ordersStatsProvider(cancelledKey));
+              ref.invalidate(pendingOrdersProvider(activeStoreId));
 
-              final separatedCancelled = allOrdersWithItems
-                  .where((o) => o.order.status == 'cancelled')
-                  .toList();
-              final cancelled = _applySearch(
-                separatedCancelled.where((o) {
-                  final t = o.order.cancelledAt ?? o.order.createdAt;
-                  return datePeriodFromLabel(
-                    _cancelledFilter,
-                  ).includes(t, now: now);
-                }).toList(),
-              );
-
-              return AppRefreshWrapper(
-                child: NestedScrollView(
-                  headerSliverBuilder: (context, innerBoxIsScrolled) => [
-                    SliverToBoxAdapter(child: _buildTabBar(context)),
-                  ],
-                  body: TabBarView(
-                    controller: _tabController,
-                    children: [
-                      _buildPendingTab(context, pending),
-                      _buildCompletedTab(context, completed),
-                      _buildCancelledTab(context, cancelled),
-                    ],
-                  ),
-                ),
-              );
+              try {
+                final authService = ref.read(authProvider);
+                final user = authService.currentUser;
+                if (user != null) {
+                  final syncService = ref.read(supabaseSyncServiceProvider);
+                  await syncService.syncAll(user.businessId);
+                }
+              } catch (_) {}
             },
+            child: NestedScrollView(
+              headerSliverBuilder: (context, innerBoxIsScrolled) => [
+                SliverToBoxAdapter(child: _buildTabBar(context)),
+              ],
+              body: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildPendingTab(context, activeStoreId),
+                  _buildCompletedTab(context, activeStoreId),
+                  _buildCancelledTab(context, activeStoreId),
+                ],
+              ),
+            ),
           );
         },
       ),
@@ -384,158 +364,294 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
 
   // ─────────────────────────── TABS ───────────────────────────────────────
 
-  Widget _buildPendingTab(BuildContext context, List<OrderWithItems> list) {
-    // §19.3: roles below Manager don't see monetary values in Orders.
-    final managerUp = isManagerOrAbove(ref);
+  Widget _buildPendingTab(BuildContext context, String? activeStoreId) {
+    final pendingAsync = ref.watch(pendingOrdersProvider(activeStoreId));
 
-    // Compute summary stats
-    final totalValue = list.fold<int>(
-      0,
-      (sum, o) => sum + o.order.netAmountKobo,
-    );
-    final unassigned = list
-        .where((o) => o.order.riderName == 'Pick-up Order')
-        .length;
+    return pendingAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(child: Text('Error: $e')),
+      data: (allPending) {
+        final list = _applySearch(allPending);
+        final managerUp = isManagerOrAbove(ref);
 
-    // §19.2: no "Outstanding" card — a pending order is already settled at
-    // checkout (received or charged to the wallet, §14.3), so it never owes.
-    // Any debt lives on the customer's wallet (rule #4) and shows per card via
-    // the wallet-debt badge when the balance is below zero.
-    final stats = [
-      _StatItem(
-        label: 'Pending',
-        value: '${list.length}',
-        color: Theme.of(context).colorScheme.primary,
-      ),
-      if (managerUp)
-        _StatItem(
-          label: 'Total Value',
-          value: formatCurrency(totalValue / 100.0),
-          color: Theme.of(context).colorScheme.primary,
-        ),
-      _StatItem(label: 'Pick-up', value: '$unassigned', color: subtextCol),
-    ];
+        // Compute summary stats
+        final totalValue = list.fold<int>(
+          0,
+          (sum, o) => sum + o.order.netAmountKobo,
+        );
+        final unassigned = list
+            .where((o) => o.order.riderName == 'Pick-up Order')
+            .length;
 
-    final searchBarHeight = context.getRSize(64.0);
-    return CustomScrollView(
-      slivers: [
-        SliverToBoxAdapter(child: _SummaryStrip(stats: stats)),
-        SliverPersistentHeader(
-          pinned: true,
-          delegate: _PinnedHeaderDelegate(
-            height: searchBarHeight,
-            // Pending has no period filter — search field only.
-            child: _buildSearchBar(context),
+        final stats = [
+          _StatItem(
+            label: 'Pending',
+            value: '${list.length}',
+            color: Theme.of(context).colorScheme.primary,
           ),
-        ),
-        ..._buildOrderSlivers(context, list, status: 'pending'),
-      ],
+          if (managerUp)
+            _StatItem(
+              label: 'Total Value',
+              value: formatCurrency(totalValue / 100.0),
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          _StatItem(label: 'Pick-up', value: '$unassigned', color: subtextCol),
+        ];
+
+        final searchBarHeight = context.getRSize(64.0);
+        return CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(child: _SummaryStrip(stats: stats)),
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _PinnedHeaderDelegate(
+                height: searchBarHeight,
+                child: _buildSearchBar(context),
+              ),
+            ),
+            ..._buildOrderSlivers(context, list, status: 'pending'),
+          ],
+        );
+      },
     );
   }
 
-  Widget _buildCompletedTab(BuildContext context, List<OrderWithItems> list) {
+  Widget _buildCompletedTab(BuildContext context, String? activeStoreId) {
     final managerUp = isManagerOrAbove(ref);
-
-    final totalRevenue = list.fold<int>(
-      0,
-      (sum, o) => sum + o.order.netAmountKobo,
-    );
-    final totalCollected = list.fold<int>(
-      0,
-      (sum, o) => sum + o.order.amountPaidKobo,
-    );
-    final crateDeposits = list.fold<int>(
-      0,
-      (sum, o) => sum + o.order.crateDepositPaidKobo,
+    final key = (
+      status: 'completed',
+      storeId: activeStoreId,
+      dateLabel: _completedFilter,
+      search: _searchQuery,
     );
 
-    final stats = [
-      _StatItem(label: 'Completed', value: '${list.length}', color: success),
-      if (managerUp) ...[
-        _StatItem(
-          label: 'Revenue',
-          value: formatCurrency(totalRevenue / 100.0),
-          color: Theme.of(context).colorScheme.primary,
-        ),
-        _StatItem(
-          label: 'Collected',
-          value: formatCurrency(totalCollected / 100.0),
-          color: success,
-        ),
-        _StatItem(
-          label: 'Crate Deposits',
-          value: formatCurrency(crateDeposits / 100.0),
-          color: subtextCol,
-        ),
-      ],
-    ];
+    final statsAsync = ref.watch(ordersStatsProvider(key));
+    final stateAsync = ref.watch(paginatedOrdersProvider(key));
 
-    final searchBarHeight = context.getRSize(64.0);
-    return CustomScrollView(
-      slivers: [
-        SliverToBoxAdapter(child: _SummaryStrip(stats: stats)),
-        SliverPersistentHeader(
-          pinned: true,
-          delegate: _PinnedHeaderDelegate(
-            height: searchBarHeight,
-            child: _buildSearchBar(
-              context,
-              selectedFilter: _completedFilter,
-              onSelectFilter: (f) => setState(() => _completedFilter = f),
-              filterOptions: _periodOptions(managerUp),
+    return statsAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(child: Text('Error: $e')),
+      data: (stats) {
+        final statItems = [
+          _StatItem(label: 'Completed', value: '${stats.count}', color: success),
+          if (managerUp) ...[
+            _StatItem(
+              label: 'Revenue',
+              value: formatCurrency(stats.totalAmountKobo / 100.0),
+              color: Theme.of(context).colorScheme.primary,
             ),
-          ),
-        ),
-        ..._buildOrderSlivers(context, list, status: 'completed'),
-      ],
+            _StatItem(
+              label: 'Collected',
+              value: formatCurrency(stats.amountPaidKobo / 100.0),
+              color: success,
+            ),
+            _StatItem(
+              label: 'Crate Deposits',
+              value: formatCurrency(stats.crateDepositPaidKobo / 100.0),
+              color: subtextCol,
+            ),
+          ],
+        ];
+
+        if (stateAsync.isLoading) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final searchBarHeight = context.getRSize(64.0);
+        return CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(child: _SummaryStrip(stats: statItems)),
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _PinnedHeaderDelegate(
+                height: searchBarHeight,
+                child: _buildSearchBar(
+                  context,
+                  selectedFilter: _completedFilter,
+                  onSelectFilter: (f) => setState(() => _completedFilter = f),
+                  filterOptions: _periodOptions(managerUp),
+                ),
+              ),
+            ),
+            ..._buildPaginatedOrderSlivers(
+              context,
+              stateAsync.orders,
+              status: 'completed',
+              isLoadingMore: stateAsync.isLoadingMore,
+              hasMore: stateAsync.hasMore,
+              key: key,
+            ),
+          ],
+        );
+      },
     );
   }
 
-  Widget _buildCancelledTab(BuildContext context, List<OrderWithItems> list) {
+  Widget _buildCancelledTab(BuildContext context, String? activeStoreId) {
     final managerUp = isManagerOrAbove(ref);
-
-    final valueForfeited = list.fold<int>(
-      0,
-      (sum, o) => sum + o.order.netAmountKobo,
+    final key = (
+      status: 'cancelled',
+      storeId: activeStoreId,
+      dateLabel: _cancelledFilter,
+      search: _searchQuery,
     );
-    final refundsIssued = list
-        .where((o) => o.order.status == 'refunded')
-        .length;
 
-    final stats = [
-      _StatItem(label: 'Cancelled', value: '${list.length}', color: danger),
-      if (managerUp)
-        _StatItem(
-          label: 'Value Forfeited',
-          value: formatCurrency(valueForfeited / 100.0),
-          color: danger,
-        ),
-      _StatItem(
-        label: 'Refunds Issued',
-        value: '$refundsIssued',
-        color: blueMain,
-      ),
-    ];
+    final statsAsync = ref.watch(ordersStatsProvider(key));
+    final stateAsync = ref.watch(paginatedOrdersProvider(key));
 
-    final searchBarHeight = context.getRSize(64.0);
-    return CustomScrollView(
-      slivers: [
-        SliverToBoxAdapter(child: _SummaryStrip(stats: stats)),
-        SliverPersistentHeader(
-          pinned: true,
-          delegate: _PinnedHeaderDelegate(
-            height: searchBarHeight,
-            child: _buildSearchBar(
+    return statsAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(child: Text('Error: $e')),
+      data: (stats) {
+        final statItems = [
+          _StatItem(label: 'Cancelled', value: '${stats.count}', color: danger),
+          if (managerUp)
+            _StatItem(
+              label: 'Value Forfeited',
+              value: formatCurrency(stats.totalAmountKobo / 100.0),
+              color: danger,
+            ),
+          _StatItem(
+            label: 'Refunds Issued',
+            value: '${stats.refundedCount}',
+            color: blueMain,
+          ),
+        ];
+
+        if (stateAsync.isLoading) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final searchBarHeight = context.getRSize(64.0);
+        return CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(child: _SummaryStrip(stats: statItems)),
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _PinnedHeaderDelegate(
+                height: searchBarHeight,
+                child: _buildSearchBar(
+                  context,
+                  selectedFilter: _cancelledFilter,
+                  onSelectFilter: (f) => setState(() => _cancelledFilter = f),
+                  filterOptions: _periodOptions(managerUp),
+                ),
+              ),
+            ),
+            ..._buildPaginatedOrderSlivers(
               context,
-              selectedFilter: _cancelledFilter,
-              onSelectFilter: (f) => setState(() => _cancelledFilter = f),
-              filterOptions: _periodOptions(managerUp),
+              stateAsync.orders,
+              status: 'cancelled',
+              isLoadingMore: stateAsync.isLoadingMore,
+              hasMore: stateAsync.hasMore,
+              key: key,
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  List<Widget> _buildPaginatedOrderSlivers(
+    BuildContext context,
+    List<OrderWithItems> list, {
+    required String status,
+    required bool isLoadingMore,
+    required bool hasMore,
+    required ({String status, String? storeId, String dateLabel, String search}) key,
+  }) {
+    if (list.isEmpty) {
+      IconData icon;
+      String text;
+      if (status == 'completed') {
+        icon = FontAwesomeIcons.clipboardCheck.data;
+        text = _searchQuery.isNotEmpty
+            ? 'No completed orders match "$_searchQuery"'
+            : 'No completed orders';
+      } else {
+        icon = FontAwesomeIcons.ban.data;
+        text = _searchQuery.isNotEmpty
+            ? 'No cancelled orders match "$_searchQuery"'
+            : 'No cancelled orders';
+      }
+
+      return [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: context.getRSize(48), color: borderCol),
+                SizedBox(height: context.getRSize(16)),
+                Text(
+                  text,
+                  style: TextStyle(
+                    color: subtextCol,
+                    fontSize: context.getRFontSize(16),
+                    fontWeight: FontWeight.w600,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
             ),
           ),
         ),
-        ..._buildOrderSlivers(context, list, status: 'cancelled'),
-      ],
-    );
+      ];
+    }
+
+    final canRefund = hasPermission(ref, 'sales.cancel');
+
+    // We add 1 to the child count if we are loading more to render the spinner.
+    final childCount = list.length + (isLoadingMore ? 1 : 0);
+
+    return [
+      SliverPadding(
+        padding: EdgeInsets.fromLTRB(
+          context.getRSize(16),
+          context.getRSize(16),
+          context.getRSize(16),
+          context.getRSize(100) + context.bottomInset,
+        ),
+        sliver: SliverList(
+          delegate: SliverChildBuilderDelegate((context, index) {
+            // Trigger load more near the bottom
+            if (hasMore && !isLoadingMore && index >= list.length - 5) {
+              Future.microtask(() {
+                if (mounted) {
+                  ref.read(paginatedOrdersProvider(key).notifier).loadMore();
+                }
+              });
+            }
+
+            if (index == list.length) {
+              return Padding(
+                padding: EdgeInsets.symmetric(vertical: context.getRSize(16)),
+                child: const Center(
+                  child: CircularProgressIndicator(),
+                ),
+              );
+            }
+
+            final item = list[index];
+            return _OrderCard(
+              orderWithItems: item,
+              status: status,
+              onMarkAsDelivered: status == 'pending'
+                  ? () => _markAsDelivered(item)
+                  : null,
+              onRefund: (status == 'pending' && canRefund)
+                  ? () => _refundPendingOrder(item.order)
+                  : null,
+              onAssignRider: status == 'pending'
+                  ? (orderId) => _showRiderSelection(context, orderId)
+                  : null,
+              onViewReceipt: () => _viewReceipt(context, item),
+            );
+          }, childCount: childCount),
+        ),
+      ),
+    ];
   }
 
   // ─────────────────────────── ORDER LIST ─────────────────────────────────

@@ -7,6 +7,7 @@ library;
 import 'dart:async';
 
 import 'package:drift/drift.dart' show Variable;
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/data/currencies.dart';
@@ -14,12 +15,756 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/theme/theme_notifier.dart';
 import 'package:reebaplus_pos/core/utils/business_time.dart';
+import 'package:reebaplus_pos/core/utils/date_period.dart';
+import 'package:reebaplus_pos/shared/models/activity_log.dart';
 import 'package:reebaplus_pos/shared/utils/role_display.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
 
 // ── Orders ──────────────────────────────────────────────────────────────────
 final allOrdersProvider = StreamProvider<List<OrderWithItems>>((ref) {
   return ref.watch(orderServiceProvider).watchAllOrdersWithItems();
+});
+
+final pendingOrdersProvider = StreamProvider.family<List<OrderWithItems>, String?>((ref, storeId) {
+  return ref.watch(orderServiceProvider).watchPendingOrdersWithItems(storeId: storeId);
+});
+
+class OrdersPageState {
+  final List<OrderWithItems> orders;
+  final bool isLoading;
+  final bool isLoadingMore;
+  final bool hasMore;
+
+  const OrdersPageState({
+    required this.orders,
+    required this.isLoading,
+    required this.isLoadingMore,
+    required this.hasMore,
+  });
+
+  OrdersPageState copyWith({
+    List<OrderWithItems>? orders,
+    bool? isLoading,
+    bool? isLoadingMore,
+    bool? hasMore,
+  }) {
+    return OrdersPageState(
+      orders: orders ?? this.orders,
+      isLoading: isLoading ?? this.isLoading,
+      isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+      hasMore: hasMore ?? this.hasMore,
+    );
+  }
+}
+
+class PaginatedOrdersNotifier extends StateNotifier<OrdersPageState> {
+  final Ref _ref;
+  final ({String status, String? storeId, String dateLabel, String search}) _arg;
+
+  StreamSubscription<List<OrderWithItems>>? _headSubscription;
+  List<OrderWithItems> _headOrders = const [];
+  List<OrderWithItems> _tailOrders = const [];
+  bool _isLoading = true;
+  bool _isLoadingMore = false;
+  bool _hasMore = true;
+
+  PaginatedOrdersNotifier(this._ref, this._arg)
+      : super(const OrdersPageState(
+          orders: [],
+          isLoading: true,
+          isLoadingMore: false,
+          hasMore: true,
+        )) {
+    _init();
+  }
+
+  void _init() {
+    final (from, to) = dateRangeForLabel(_arg.dateLabel);
+
+    final headStream = _ref.read(orderServiceProvider).watchOrdersPage(
+          status: _arg.status,
+          storeId: _arg.storeId,
+          from: from,
+          to: to,
+          search: _arg.search,
+          limit: 30,
+        );
+
+    _headSubscription?.cancel();
+    _headSubscription = headStream.listen(
+      (head) {
+        _headOrders = head;
+        _isLoading = false;
+        if (head.length < 30) {
+          _hasMore = false;
+        } else {
+          if (_tailOrders.isEmpty) {
+            _hasMore = true;
+          }
+        }
+        _emitState();
+      },
+      onError: (err, stack) {
+        _isLoading = false;
+        _emitState();
+        debugPrint('Error in head stream: $err');
+      },
+    );
+
+    _ref.onDispose(() {
+      _headSubscription?.cancel();
+    });
+  }
+
+  void _emitState() {
+    final headIds = _headOrders.map((o) => o.order.id).toSet();
+    // Note: In this live-head/static-tail design, if an order is created between 
+    // the head's last row and the tail cursor after the tail is loaded, it will 
+    // only appear after a manual pull-to-refresh (deduping by id prevents duplication).
+    final filteredTail = _tailOrders.where((o) => !headIds.contains(o.order.id)).toList();
+
+    state = OrdersPageState(
+      orders: [..._headOrders, ...filteredTail],
+      isLoading: _isLoading,
+      isLoadingMore: _isLoadingMore,
+      hasMore: _hasMore,
+    );
+  }
+
+  Future<void> loadMore() async {
+    if (_isLoadingMore || !_hasMore) return;
+
+    _isLoadingMore = true;
+    _emitState();
+
+    try {
+      final lastOrder = _tailOrders.isNotEmpty
+          ? _tailOrders.last
+          : (_headOrders.isNotEmpty ? _headOrders.last : null);
+      if (lastOrder == null) {
+        _hasMore = false;
+        _isLoadingMore = false;
+        _emitState();
+        return;
+      }
+
+      final cursor = (createdAt: lastOrder.order.createdAt, id: lastOrder.order.id);
+      final (from, to) = dateRangeForLabel(_arg.dateLabel);
+
+      final nextPage = await _ref.read(orderServiceProvider).getOrdersPage(
+            status: _arg.status,
+            storeId: _arg.storeId,
+            from: from,
+            to: to,
+            search: _arg.search,
+            cursor: cursor,
+            limit: 30,
+          );
+
+      if (nextPage.length < 30) {
+        _hasMore = false;
+      } else {
+        _hasMore = true;
+      }
+
+      final existingIds = {
+        ..._headOrders.map((o) => o.order.id),
+        ..._tailOrders.map((o) => o.order.id)
+      };
+      final newUniqueItems = nextPage.where((o) => !existingIds.contains(o.order.id)).toList();
+
+      _tailOrders = [..._tailOrders, ...newUniqueItems];
+    } catch (err) {
+      debugPrint('Error loading more orders: $err');
+    } finally {
+      _isLoadingMore = false;
+      _emitState();
+    }
+  }
+
+  @override
+  void dispose() {
+    _headSubscription?.cancel();
+    super.dispose();
+  }
+}
+
+final paginatedOrdersProvider = StateNotifierProvider.autoDispose.family<
+    PaginatedOrdersNotifier,
+    OrdersPageState,
+    ({String status, String? storeId, String dateLabel, String search})
+>((ref, arg) {
+  return PaginatedOrdersNotifier(ref, arg);
+});
+
+final ordersStatsProvider = StreamProvider.autoDispose.family<
+    OrdersStats,
+    ({String status, String? storeId, String dateLabel, String search})
+>((ref, arg) {
+  final (from, to) = dateRangeForLabel(arg.dateLabel);
+  return ref.watch(orderServiceProvider).watchOrdersStats(
+        status: arg.status,
+        storeId: arg.storeId,
+        from: from,
+        to: to,
+        search: arg.search,
+      );
+});
+
+// ── Activity Logs ───────────────────────────────────────────────────────────
+class ActivityLogsPageState {
+  final List<ActivityLog> logs;
+  final bool isLoading;
+  final bool isLoadingMore;
+  final bool hasMore;
+
+  const ActivityLogsPageState({
+    required this.logs,
+    required this.isLoading,
+    required this.isLoadingMore,
+    required this.hasMore,
+  });
+
+  ActivityLogsPageState copyWith({
+    List<ActivityLog>? logs,
+    bool? isLoading,
+    bool? isLoadingMore,
+    bool? hasMore,
+  }) {
+    return ActivityLogsPageState(
+      logs: logs ?? this.logs,
+      isLoading: isLoading ?? this.isLoading,
+      isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+      hasMore: hasMore ?? this.hasMore,
+    );
+  }
+}
+
+class PaginatedActivityLogsNotifier extends StateNotifier<ActivityLogsPageState> {
+  final Ref _ref;
+  final String? _storeId;
+
+  StreamSubscription<List<ActivityLogData>>? _headSubscription;
+  List<ActivityLogData> _headLogsData = const [];
+  List<ActivityLogData> _tailLogsData = const [];
+  bool _isLoading = true;
+  bool _isLoadingMore = false;
+  bool _hasMore = true;
+
+  PaginatedActivityLogsNotifier(this._ref, this._storeId)
+      : super(const ActivityLogsPageState(
+          logs: [],
+          isLoading: true,
+          isLoadingMore: false,
+          hasMore: true,
+        )) {
+    _init();
+  }
+
+  void _init() {
+    final headStream = _ref.read(databaseProvider).activityLogDao.watchActivityLogsPage(
+          storeId: _storeId,
+          limit: 30,
+        );
+
+    _headSubscription?.cancel();
+    _headSubscription = headStream.listen(
+      (head) {
+        _headLogsData = head;
+        _isLoading = false;
+        if (head.length < 30) {
+          _hasMore = false;
+        } else {
+          if (_tailLogsData.isEmpty) {
+            _hasMore = true;
+          }
+        }
+        _emitState();
+      },
+      onError: (err, stack) {
+        _isLoading = false;
+        _emitState();
+        debugPrint('Error in activity log head stream: $err');
+      },
+    );
+
+    _ref.onDispose(() {
+      _headSubscription?.cancel();
+    });
+  }
+
+  void _emitState() {
+    final headIds = _headLogsData.map((l) => l.id).toSet();
+    final filteredTail = _tailLogsData.where((l) => !headIds.contains(l.id)).toList();
+    final combinedData = [..._headLogsData, ...filteredTail];
+    final mappedLogs = combinedData.map((data) => ActivityLog.fromDb(data)).toList();
+
+    state = ActivityLogsPageState(
+      logs: mappedLogs,
+      isLoading: _isLoading,
+      isLoadingMore: _isLoadingMore,
+      hasMore: _hasMore,
+    );
+  }
+
+  Future<void> loadMore() async {
+    if (_isLoadingMore || !_hasMore) return;
+
+    _isLoadingMore = true;
+    _emitState();
+
+    try {
+      final lastLog = _tailLogsData.isNotEmpty
+          ? _tailLogsData.last
+          : (_headLogsData.isNotEmpty ? _headLogsData.last : null);
+      if (lastLog == null) {
+        _hasMore = false;
+        _isLoadingMore = false;
+        _emitState();
+        return;
+      }
+
+      final cursor = (createdAt: lastLog.createdAt, id: lastLog.id);
+
+      final nextPage = await _ref.read(databaseProvider).activityLogDao.getActivityLogsPage(
+            storeId: _storeId,
+            cursor: cursor,
+            limit: 30,
+          );
+
+      if (nextPage.length < 30) {
+        _hasMore = false;
+      } else {
+        _hasMore = true;
+      }
+
+      final existingIds = {
+        ..._headLogsData.map((l) => l.id),
+        ..._tailLogsData.map((l) => l.id)
+      };
+      final newUniqueItems = nextPage.where((l) => !existingIds.contains(l.id)).toList();
+
+      _tailLogsData = [..._tailLogsData, ...newUniqueItems];
+    } catch (err) {
+      debugPrint('Error loading more activity logs: $err');
+    } finally {
+      _isLoadingMore = false;
+      _emitState();
+    }
+  }
+
+  @override
+  void dispose() {
+    _headSubscription?.cancel();
+    super.dispose();
+  }
+}
+
+final paginatedActivityLogsProvider = StateNotifierProvider.autoDispose
+    .family<PaginatedActivityLogsNotifier, ActivityLogsPageState, String?>((ref, storeId) {
+  return PaginatedActivityLogsNotifier(ref, storeId);
+});
+
+// ── Stock History / Inventory History ───────────────────────────────────────
+class StockHistoryPageState {
+  final List<StockTransactionWithDetails> transactions;
+  final bool isLoading;
+  final bool isLoadingMore;
+  final bool hasMore;
+
+  const StockHistoryPageState({
+    required this.transactions,
+    required this.isLoading,
+    required this.isLoadingMore,
+    required this.hasMore,
+  });
+
+  StockHistoryPageState copyWith({
+    List<StockTransactionWithDetails>? transactions,
+    bool? isLoading,
+    bool? isLoadingMore,
+    bool? hasMore,
+  }) {
+    return StockHistoryPageState(
+      transactions: transactions ?? this.transactions,
+      isLoading: isLoading ?? this.isLoading,
+      isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+      hasMore: hasMore ?? this.hasMore,
+    );
+  }
+}
+
+class PaginatedStockHistoryNotifier extends StateNotifier<StockHistoryPageState> {
+  final Ref _ref;
+  final ({String? storeId, String period}) _arg;
+
+  StreamSubscription<List<StockTransactionWithDetails>>? _headSubscription;
+  List<StockTransactionWithDetails> _headTransactions = const [];
+  List<StockTransactionWithDetails> _tailTransactions = const [];
+  bool _isLoading = true;
+  bool _isLoadingMore = false;
+  bool _hasMore = true;
+  String _businessTz = 'UTC';
+
+  PaginatedStockHistoryNotifier(this._ref, this._arg)
+      : super(const StockHistoryPageState(
+          transactions: [],
+          isLoading: true,
+          isLoadingMore: false,
+          hasMore: true,
+        )) {
+    _init();
+  }
+
+  Future<void> _init() async {
+    final db = _ref.read(databaseProvider);
+    final businessId = db.currentBusinessId;
+    if (businessId != null) {
+      _businessTz = await getBusinessTimezone(db, businessId);
+    }
+    _startWatch();
+  }
+
+  (DateTime?, DateTime?) _getDateRange() {
+    final now = DateTime.now();
+    switch (_arg.period) {
+      case 'Today':
+        return (localDayStartUtc(now, _businessTz), null);
+      case '7 Days':
+        return (now.subtract(const Duration(days: 7)), null);
+      case '30 Days':
+        return (now.subtract(const Duration(days: 30)), null);
+      case 'All':
+      default:
+        return (null, null);
+    }
+  }
+
+  void _startWatch() {
+    final dates = _getDateRange();
+    final headStream = _ref.read(databaseProvider).stockLedgerDao.watchTransactionsPage(
+          storeId: _arg.storeId,
+          startDate: dates.$1,
+          endDate: dates.$2,
+          limit: 30,
+        );
+
+    _headSubscription?.cancel();
+    _headSubscription = headStream.listen(
+      (head) {
+        _headTransactions = head;
+        _isLoading = false;
+        if (head.length < 30) {
+          _hasMore = false;
+        } else {
+          if (_tailTransactions.isEmpty) {
+            _hasMore = true;
+          }
+        }
+        _emitState();
+      },
+      onError: (err, stack) {
+        _isLoading = false;
+        _emitState();
+        debugPrint('Error in stock history head stream: $err');
+      },
+    );
+
+    _ref.onDispose(() {
+      _headSubscription?.cancel();
+    });
+  }
+
+  void _emitState() {
+    final headIds = _headTransactions.map((t) => t.transactionId).toSet();
+    final filteredTail = _tailTransactions.where((t) => !headIds.contains(t.transactionId)).toList();
+
+    state = StockHistoryPageState(
+      transactions: [..._headTransactions, ...filteredTail],
+      isLoading: _isLoading,
+      isLoadingMore: _isLoadingMore,
+      hasMore: _hasMore,
+    );
+  }
+
+  Future<void> loadMore() async {
+    if (_isLoadingMore || !_hasMore) return;
+
+    _isLoadingMore = true;
+    _emitState();
+
+    try {
+      final lastTx = _tailTransactions.isNotEmpty
+          ? _tailTransactions.last
+          : (_headTransactions.isNotEmpty ? _headTransactions.last : null);
+      if (lastTx == null) {
+        _hasMore = false;
+        _isLoadingMore = false;
+        _emitState();
+        return;
+      }
+
+      final cursor = (createdAt: lastTx.createdAt, id: lastTx.transactionId);
+      final dates = _getDateRange();
+
+      final nextPage = await _ref.read(databaseProvider).stockLedgerDao.getTransactionsPage(
+            storeId: _arg.storeId,
+            startDate: dates.$1,
+            endDate: dates.$2,
+            cursor: cursor,
+            limit: 30,
+          );
+
+      if (nextPage.length < 30) {
+        _hasMore = false;
+      } else {
+        _hasMore = true;
+      }
+
+      final existingIds = {
+        ..._headTransactions.map((t) => t.transactionId),
+        ..._tailTransactions.map((t) => t.transactionId)
+      };
+      final newUniqueItems = nextPage.where((t) => !existingIds.contains(t.transactionId)).toList();
+
+      _tailTransactions = [..._tailTransactions, ...newUniqueItems];
+    } catch (err) {
+      debugPrint('Error loading more stock history: $err');
+    } finally {
+      _isLoadingMore = false;
+      _emitState();
+    }
+  }
+
+  @override
+  void dispose() {
+    _headSubscription?.cancel();
+    super.dispose();
+  }
+}
+
+final paginatedStockHistoryProvider = StateNotifierProvider.autoDispose.family<
+    PaginatedStockHistoryNotifier,
+    StockHistoryPageState,
+    ({String? storeId, String period})
+>((ref, arg) {
+  return PaginatedStockHistoryNotifier(ref, arg);
+});
+
+final stockHistoryStatsProvider = StreamProvider.autoDispose.family<
+    StockHistoryStats,
+    ({String? storeId, String period})
+>((ref, arg) async* {
+  final db = ref.watch(databaseProvider);
+  final businessId = db.currentBusinessId;
+  String tz = 'UTC';
+  if (businessId != null) {
+    tz = await getBusinessTimezone(db, businessId);
+  }
+
+  final now = DateTime.now();
+  DateTime? startDate;
+  DateTime? endDate;
+  switch (arg.period) {
+    case 'Today':
+      startDate = localDayStartUtc(now, tz);
+      break;
+    case '7 Days':
+      startDate = now.subtract(const Duration(days: 7));
+      break;
+    case '30 Days':
+      startDate = now.subtract(const Duration(days: 30));
+      break;
+    case 'All':
+    default:
+      break;
+  }
+
+  yield* db.stockLedgerDao.watchTransactionsStats(
+    storeId: arg.storeId,
+    startDate: startDate,
+    endDate: endDate,
+  );
+});
+
+// ── Supplier Transaction History Pagination ──────────────────────────────────
+
+class SupplierHistoryPageState {
+  final List<SupplierLedgerEntryData> entries;
+  final bool isLoading;
+  final bool isLoadingMore;
+  final bool hasMore;
+
+  const SupplierHistoryPageState({
+    required this.entries,
+    required this.isLoading,
+    required this.isLoadingMore,
+    required this.hasMore,
+  });
+
+  SupplierHistoryPageState copyWith({
+    List<SupplierLedgerEntryData>? entries,
+    bool? isLoading,
+    bool? isLoadingMore,
+    bool? hasMore,
+  }) {
+    return SupplierHistoryPageState(
+      entries: entries ?? this.entries,
+      isLoading: isLoading ?? this.isLoading,
+      isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+      hasMore: hasMore ?? this.hasMore,
+    );
+  }
+}
+
+class PaginatedSupplierHistoryNotifier
+    extends StateNotifier<SupplierHistoryPageState> {
+  final Ref _ref;
+  final ({String? storeId, String period}) _arg;
+
+  StreamSubscription<List<SupplierLedgerEntryData>>? _headSubscription;
+  List<SupplierLedgerEntryData> _headEntries = const [];
+  List<SupplierLedgerEntryData> _tailEntries = const [];
+  bool _isLoading = true;
+  bool _isLoadingMore = false;
+  bool _hasMore = true;
+
+  PaginatedSupplierHistoryNotifier(this._ref, this._arg)
+      : super(const SupplierHistoryPageState(
+          entries: [],
+          isLoading: true,
+          isLoadingMore: false,
+          hasMore: true,
+        )) {
+    _startWatch();
+  }
+
+  DateTime? _getStartDate() {
+    final (start, _) = dateRangeForLabel(_arg.period);
+    return start;
+  }
+
+  void _startWatch() {
+    final startDate = _getStartDate();
+    final headStream =
+        _ref.read(databaseProvider).supplierLedgerDao.watchSupplierHistoryPage(
+              storeId: _arg.storeId,
+              startDate: startDate,
+              limit: 30,
+            );
+
+    _headSubscription?.cancel();
+    _headSubscription = headStream.listen(
+      (head) {
+        _headEntries = head;
+        _isLoading = false;
+        if (head.length < 30) {
+          _hasMore = false;
+        } else {
+          if (_tailEntries.isEmpty) {
+            _hasMore = true;
+          }
+        }
+        _emitState();
+      },
+      onError: (err, stack) {
+        _isLoading = false;
+        _emitState();
+        debugPrint('Error in supplier history head stream: $err');
+      },
+    );
+
+    _ref.onDispose(() {
+      _headSubscription?.cancel();
+    });
+  }
+
+  void _emitState() {
+    final headIds = _headEntries.map((e) => e.id).toSet();
+    final filteredTail =
+        _tailEntries.where((e) => !headIds.contains(e.id)).toList();
+
+    state = SupplierHistoryPageState(
+      entries: [..._headEntries, ...filteredTail],
+      isLoading: _isLoading,
+      isLoadingMore: _isLoadingMore,
+      hasMore: _hasMore,
+    );
+  }
+
+  Future<void> loadMore() async {
+    if (_isLoadingMore || !_hasMore) return;
+
+    _isLoadingMore = true;
+    _emitState();
+
+    try {
+      final lastEntry = _tailEntries.isNotEmpty
+          ? _tailEntries.last
+          : (_headEntries.isNotEmpty ? _headEntries.last : null);
+      if (lastEntry == null) {
+        _hasMore = false;
+        _isLoadingMore = false;
+        _emitState();
+        return;
+      }
+
+      final cursor = (
+        createdAt: lastEntry.createdAt,
+        signedAmountKobo: lastEntry.signedAmountKobo,
+        id: lastEntry.id,
+      );
+      final startDate = _getStartDate();
+
+      final nextPage = await _ref
+          .read(databaseProvider)
+          .supplierLedgerDao
+          .getSupplierHistoryPage(
+            storeId: _arg.storeId,
+            startDate: startDate,
+            cursor: cursor,
+            limit: 30,
+          );
+
+      _hasMore = nextPage.length >= 30;
+
+      final existingIds = {
+        ..._headEntries.map((e) => e.id),
+        ..._tailEntries.map((e) => e.id),
+      };
+      final newUnique =
+          nextPage.where((e) => !existingIds.contains(e.id)).toList();
+      _tailEntries = [..._tailEntries, ...newUnique];
+    } catch (err) {
+      debugPrint('Error loading more supplier history: $err');
+    } finally {
+      _isLoadingMore = false;
+      _emitState();
+    }
+  }
+
+  @override
+  void dispose() {
+    _headSubscription?.cancel();
+    super.dispose();
+  }
+}
+
+final paginatedSupplierHistoryProvider = StateNotifierProvider.autoDispose
+    .family<PaginatedSupplierHistoryNotifier, SupplierHistoryPageState,
+        ({String? storeId, String period})>((ref, arg) {
+  return PaginatedSupplierHistoryNotifier(ref, arg);
+});
+
+final supplierHistoryStatsProvider = StreamProvider.autoDispose.family<
+    SupplierLedgerStats,
+    ({String? storeId, String period})>((ref, arg) {
+  final db = ref.watch(databaseProvider);
+  final (startDate, _) = dateRangeForLabel(arg.period);
+  return db.supplierLedgerDao.watchSupplierHistoryStats(
+    storeId: arg.storeId,
+    startDate: startDate,
+  );
 });
 
 // ── Stores ──────────────────────────────────────────────────────────────────
@@ -422,7 +1167,7 @@ DesignSystem? _parseDesignSystem(String? v) {
 
 /// The business-wide accent colour, streamed from the synced `settings` row.
 /// Null when no session is bound (pre-login) or the key is unset/invalid — the
-/// app-root bridge then leaves the device's themeController value alone (amber
+/// app-root bridge then leaves the device's themeController value alone (blue
 /// default). The null-session guard is required because `settingsDao.watch`
 /// calls `requireBusinessId()`, which throws without a business.
 final businessDesignSystemProvider = StreamProvider<DesignSystem?>((ref) {

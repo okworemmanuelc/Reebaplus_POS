@@ -298,7 +298,7 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
 
     // Apply the CEO-chosen business accent colour (synced) to this device.
     // Null = pre-login / unset → leave the device's themeController value alone
-    // (amber default). setDesignSystem no-ops on an unchanged value, so the
+    // (blue default). setDesignSystem no-ops on an unchanged value, so the
     // CEO's own write doesn't loop back through the settings stream.
     ref.listen(businessDesignSystemProvider, (_, next) {
       final ds = next.valueOrNull;

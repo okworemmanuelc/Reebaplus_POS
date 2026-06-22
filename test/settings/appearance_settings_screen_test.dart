@@ -87,7 +87,7 @@ void main() {
     await db.close();
     // themeController is a global singleton — reset to the brand default so a
     // tap in one test doesn't leak into another.
-    themeController.setDesignSystem(DesignSystem.amber);
+    themeController.setDesignSystem(DesignSystem.blue);
   });
 
   Future<void> pumpScreen(WidgetTester tester, String userId) async {

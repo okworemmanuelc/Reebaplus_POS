@@ -11,8 +11,8 @@ class ThemeController extends ChangeNotifier {
   static const _keyThemeMode = 'theme_mode';
   static const _keyDesignSystem = 'design_system';
 
-  ThemeMode _themeMode = ThemeMode.system;
-  DesignSystem _designSystem = DesignSystem.amber;
+  ThemeMode _themeMode = ThemeMode.light;
+  DesignSystem _designSystem = DesignSystem.blue;
 
   ThemeMode get themeMode => _themeMode;
   DesignSystem get designSystem => _designSystem;

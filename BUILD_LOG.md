@@ -2,6 +2,26 @@
 
 ---
 
+## 2026-06-22 — Local list pagination (Phase 1) + first-sync RPC retirement (Phase 2)
+
+**Why:** A first-time user with a large dataset had no protection: history lists rendered the entire table at once (low-end-phone jank) and the first/full sync went through the monolithic `pos_pull_snapshot` RPC — an unbounded 60s aggregate over every tenant table that can time out / over-fetch on a big business. Two-layer fix: (Phase 1) page history lists locally from Drift as the user scrolls; (Phase 2) route first/full pulls through the existing paginated keyset path instead of the monolithic RPC. Neither violates Invariant #1 (Drift-only reads); offline-first history is preserved on-device.
+
+**Changes:**
+- **Pattern (all Phase 1 units):** compound keyset cursor, `ORDER BY created_at DESC, id DESC`; a "live head (watch most-recent page) + paged tail (on-demand `getXPage` with the last row as cursor, dedup by id)" notifier; `StateNotifier.autoDispose.family`; `ListView.builder` scroll trigger (`index >= len-5 → loadMore()`) + bottom spinner; summary figures from a SQL aggregate (never summed from the loaded page).
+- **Unit 1 — Orders** (`daos.dart` `getOrdersPage`/`watchOrdersPage`/`watchOrdersStats` + `OrdersStats`; `stream_providers.dart`; `orders_screen.dart`; 300ms search debounce; Cancelled tab includes `refunded`). Page-orders-then-load-items (1:many join). `test/orders/orders_pagination_test.dart`.
+- **Unit 2 — Activity Logs** (`getActivityLogsPage`/`watchActivityLogsPage`; `activity_log_screen.dart`). Store-filter heuristic moved into SQL (NULL-guarded `entityType` IN); write facade `ActivityLogService` and its ~14 `.log(...)` call-sites untouched. `test/activity/activity_logs_pagination_test.dart`.
+- **Unit 3 — Inventory History** (`getTransactionsPage`/`watchTransactionsPage`/`watchTransactionsStats` + `StockHistoryStats`; `inventory_history_tab.dart`). 1:1 join → limit-on-join. Total In/Out moved from in-memory sum to SQL aggregate. `test/inventory/stock_history_pagination_test.dart`.
+- **Unit 4 — Supplier History** (`getSupplierHistoryPage`/`watchSupplierHistoryPage`/`watchSupplierHistoryStats` + `SupplierLedgerStats`; `supplier_transactions_screen.dart`). Mixed-direction 3-column keyset `created_at DESC, signed_amount_kobo ASC, id DESC` (cursor triple); voided + `void` rows stay in the list (no `voidedAt` filter); date window on `activity_date`; stats `count` includes voided/void while `totalIn/Out` exclude them (NULL-safe `reference_type`). `test/payments/supplier_history_pagination_test.dart`.
+- **Phase 2 — first-sync path** (`supabase_sync_service.dart`): extracted `shouldUseSnapshotRpc({isSlow, since}) => !isSlow && since != null` (`@visibleForTesting`), swapped the `pullInitialData` gate to it. Full/first pulls (`since == null`) now ALWAYS use the paginated `_pullViaPostgRest` path; the `pos_pull_snapshot` RPC is retained ONLY for incremental-on-fast pulls. RPC + migration untouched (incremental still uses it); post-decision restore/canary/deferred-return logic unchanged. `test/sync/pull_path_decision_test.dart`. Docs: `context/architecture.md` Pull-path rule + `context/progress-tracker.md` (Phase 3 windowed-sync left as the open question).
+
+**Verification:**
+- `flutter analyze` → clean across all changed files and whole-project runs.
+- Per-unit tests green: orders, activity, inventory, supplier-history pagination suites (each covers same-second keyset boundary, hasMore/partial, filter push-down, business scope, soft-delete/void handling, and stats-over-full-set). Supplier Unit 4 Test 1 crosses page boundaries at a same-second/same-amount collision to exercise the 3-level cursor.
+- Phase 2: `pull_path_decision_test.dart` (4 truth-table cells) + full `test/sync/` (125) + `test/database/` green; restore path unchanged. **On-device (emulator) confirmed:** a fresh full pull logs `Full pull (since=null) → paginated PostgREST path (snapshot RPC bypassed)` and syncs correctly.
+- Deferred: customer wallet history + expenses screens (lowest-volume / analytics-shaped — poor cost/benefit for keyset paging); Phase 3 windowed sync (conflicts with Invariant #1, logged as open question).
+
+---
+
 ## 2026-06-22 — Walk-in Customer Visibility on Receipt
 
 **Why:** When a walk-in customer is selected at checkout, the receipt (both visual/shared receipt and printed thermal receipt) should not specify "Walk-in Customer" anywhere. It should just leave the customer details section completely blank to make it look clean.

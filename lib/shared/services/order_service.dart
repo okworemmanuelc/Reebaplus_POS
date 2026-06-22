@@ -446,6 +446,64 @@ class OrderService {
     return _ordersDao.watchAllOrdersWithItems();
   }
 
+  Stream<List<OrderWithItems>> watchPendingOrdersWithItems({String? storeId}) {
+    return _ordersDao.watchPendingOrdersWithItems(storeId: storeId);
+  }
+
+  Future<List<OrderWithItems>> getOrdersPage({
+    required String status,
+    String? storeId,
+    DateTime? from,
+    DateTime? to,
+    String? search,
+    ({DateTime createdAt, String id})? cursor,
+    int limit = 30,
+  }) {
+    return _ordersDao.getOrdersPage(
+      status: status,
+      storeId: storeId,
+      from: from,
+      to: to,
+      search: search,
+      cursor: cursor,
+      limit: limit,
+    );
+  }
+
+  Stream<List<OrderWithItems>> watchOrdersPage({
+    required String status,
+    String? storeId,
+    DateTime? from,
+    DateTime? to,
+    String? search,
+    int limit = 30,
+  }) {
+    return _ordersDao.watchOrdersPage(
+      status: status,
+      storeId: storeId,
+      from: from,
+      to: to,
+      search: search,
+      limit: limit,
+    );
+  }
+
+  Stream<OrdersStats> watchOrdersStats({
+    required String status,
+    String? storeId,
+    DateTime? from,
+    DateTime? to,
+    String? search,
+  }) {
+    return _ordersDao.watchOrdersStats(
+      status: status,
+      storeId: storeId,
+      from: from,
+      to: to,
+      search: search,
+    );
+  }
+
   Future<List<CartStaleItem>> checkCartStaleness(List<CartLineSnapshot> lines) {
     return _ordersDao.checkCartStaleness(lines);
   }

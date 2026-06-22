@@ -22,9 +22,6 @@ class ActivityLogScreen extends ConsumerStatefulWidget {
 }
 
 class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
-  String? _selectedStoreId;
-  final bool _loading = false;
-
   @override
   Widget build(BuildContext context) {
     // §27.3 / hard rules #6 (every screen checks permissions) and #7 (hide,
@@ -58,18 +55,6 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
         Theme.of(context).iconTheme.color!;
     final borderCol = Theme.of(context).dividerColor;
     final cardCol = Theme.of(context).cardColor;
-
-    // §12.1: the store filter follows the nav-drawer store picker (null =
-    // "All Stores"); no per-screen store dropdown. Mirror it into the local
-    // filter so `_filterLogs` keeps working.
-    final desiredStoreId = ref.watch(lockedStoreProvider).value;
-    if (_selectedStoreId != desiredStoreId) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _selectedStoreId != desiredStoreId) {
-          setState(() => _selectedStoreId = desiredStoreId);
-        }
-      });
-    }
 
     return Scaffold(
       backgroundColor: bgCol,
@@ -186,37 +171,90 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
           Expanded(
             child: Builder(
               builder: (context) {
-                final logs = ref.watch(activityLogProvider).value;
-                final filteredLogs = _filterLogs(logs);
+                final desiredStoreId = ref.watch(lockedStoreProvider).value;
+                final state = ref.watch(paginatedActivityLogsProvider(desiredStoreId));
 
-                if (_loading) {
+                if (state.isLoading) {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                if (filteredLogs.isEmpty) {
-                  return _buildEmptyState(context, textCol, subtextCol);
+                if (state.logs.isEmpty) {
+                  return RefreshIndicator(
+                    onRefresh: () async {
+                      ref.invalidate(paginatedActivityLogsProvider(desiredStoreId));
+                      try {
+                        final authService = ref.read(authProvider);
+                        final user = authService.currentUser;
+                        if (user != null) {
+                          final syncService = ref.read(supabaseSyncServiceProvider);
+                          await syncService.syncAll(user.businessId);
+                        }
+                      } catch (_) {}
+                    },
+                    child: SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      child: Container(
+                        height: MediaQuery.of(context).size.height - kToolbarHeight - 100,
+                        alignment: Alignment.center,
+                        child: _buildEmptyState(context, textCol, subtextCol, desiredStoreId),
+                      ),
+                    ),
+                  );
                 }
 
-                return ListView.separated(
-                  padding: context
-                      .rPadding(16)
-                      .add(
-                        EdgeInsets.only(bottom: context.deviceBottomPadding),
-                      ),
-                  itemCount: filteredLogs.length,
-                  separatorBuilder: (context, index) =>
-                      SizedBox(height: context.getRSize(12)),
-                  itemBuilder: (context, index) {
-                    return _buildLogCard(
-                      context,
-                      filteredLogs[index],
-                      cardCol,
-                      surfaceCol,
-                      textCol,
-                      subtextCol,
-                      borderCol,
-                    );
+                return RefreshIndicator(
+                  onRefresh: () async {
+                    ref.invalidate(paginatedActivityLogsProvider(desiredStoreId));
+                    try {
+                      final authService = ref.read(authProvider);
+                      final user = authService.currentUser;
+                      if (user != null) {
+                        final syncService = ref.read(supabaseSyncServiceProvider);
+                        await syncService.syncAll(user.businessId);
+                      }
+                    } catch (_) {}
                   },
+                  child: ListView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: context
+                        .rPadding(16)
+                        .add(
+                          EdgeInsets.only(bottom: context.deviceBottomPadding),
+                        ),
+                    itemCount: state.logs.length + (state.isLoadingMore ? 1 : 0),
+                    itemBuilder: (context, index) {
+                      if (state.hasMore && !state.isLoadingMore && index >= state.logs.length - 5) {
+                        Future.microtask(() {
+                          if (context.mounted) {
+                            ref.read(paginatedActivityLogsProvider(desiredStoreId).notifier).loadMore();
+                          }
+                        });
+                      }
+
+                      if (index == state.logs.length) {
+                        return Padding(
+                          padding: EdgeInsets.symmetric(vertical: context.getRSize(16)),
+                          child: const Center(
+                            child: CircularProgressIndicator(),
+                          ),
+                        );
+                      }
+
+                      final log = state.logs[index];
+                      return Padding(
+                        padding: EdgeInsets.only(bottom: context.getRSize(12)),
+                        child: _buildLogCard(
+                          context,
+                          log,
+                          cardCol,
+                          surfaceCol,
+                          textCol,
+                          subtextCol,
+                          borderCol,
+                        ),
+                      );
+                    },
+                  ),
                 );
               },
             ),
@@ -226,29 +264,11 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
     );
   }
 
-  List<ActivityLog> _filterLogs(List<ActivityLog> logs) {
-    // Lone owner sees everything. Only store filter remains.
-    if (_selectedStoreId == null) return logs;
-
-    return logs.where((log) {
-      final isStoreScoped =
-          log.storeId != null ||
-          log.entityType == 'product' ||
-          log.entityType == 'order' ||
-          log.entityType == 'delivery' ||
-          log.action.toLowerCase().contains('inventory') ||
-          log.action.toLowerCase().contains('stock') ||
-          log.action.toLowerCase().contains('delivery');
-
-      if (!isStoreScoped) return true;
-      return log.storeId == _selectedStoreId;
-    }).toList();
-  }
-
   Widget _buildEmptyState(
     BuildContext context,
     Color textCol,
     Color subtextCol,
+    String? storeId,
   ) {
     return Center(
       child: Column(
@@ -277,7 +297,7 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
           ),
           SizedBox(height: context.getRSize(8)),
           Text(
-            _selectedStoreId == null
+            storeId == null
                 ? 'Actions performed in the app will appear here.'
                 : 'No activity found for the selected store.',
             style: TextStyle(

@@ -1,12 +1,9 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:reebaplus_pos/core/database/daos.dart';
-import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
-import 'package:reebaplus_pos/core/utils/business_time.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 
@@ -21,114 +18,45 @@ class InventoryHistoryTab extends ConsumerStatefulWidget {
 }
 
 class _InventoryHistoryTabState extends ConsumerState<InventoryHistoryTab> {
-  List<StockTransactionWithDetails> _transactions = [];
-  StreamSubscription? _sub;
-  bool _loading = true;
   String _selectedPeriod = 'Today';
-  String _businessTz = 'UTC';
 
   static const _periods = ['Today', '7 Days', '30 Days', 'All'];
 
-  @override
-  void initState() {
-    super.initState();
-    _loadTimezone();
-    _subscribe();
-  }
-
-  Future<void> _loadTimezone() async {
-    final db = ref.read(databaseProvider);
-    final businessId = db.currentBusinessId;
-    if (businessId == null) return;
-    final tz = await getBusinessTimezone(db, businessId);
-    if (mounted && tz != _businessTz) {
-      setState(() => _businessTz = tz);
-      _subscribe();
-    }
-  }
-
-  @override
-  void didUpdateWidget(InventoryHistoryTab oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.storeId != widget.storeId) {
-      _subscribe();
-    }
-  }
-
-  @override
-  void dispose() {
-    _sub?.cancel();
-    super.dispose();
-  }
-
-  void _subscribe() {
-    _sub?.cancel();
-    setState(() => _loading = true);
-
-    final db = ref.read(databaseProvider);
-    final dates = _getDateRange(_selectedPeriod);
-    final wId = widget.storeId is String && widget.storeId.toString() == 'all'
-        ? null
-        : widget.storeId;
-
-    _sub = db.stockLedgerDao
-        .watchAllTransactionsFiltered(
-          storeId: wId,
-          startDate: dates.$1,
-          endDate: dates.$2,
-        )
-        .listen((data) {
-          if (mounted) {
-            setState(() {
-              _transactions = data;
-              _loading = false;
-            });
-          }
-        });
-  }
-
-  (DateTime?, DateTime?) _getDateRange(String period) {
-    final now = DateTime.now();
-    switch (period) {
-      case 'Today':
-        return (localDayStartUtc(now, _businessTz), null);
-      case '7 Days':
-        return (now.subtract(const Duration(days: 7)), null);
-      case '30 Days':
-        return (now.subtract(const Duration(days: 30)), null);
-      case 'All':
-      default:
-        return (null, null);
-    }
-  }
-
   void _onPeriodChanged(String period) {
-    _selectedPeriod = period;
-    _subscribe();
+    setState(() {
+      _selectedPeriod = period;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    if (_loading) {
+    final wId = widget.storeId is String && widget.storeId.toString() == 'all'
+        ? null
+        : widget.storeId;
+
+    final pageState = ref.watch(
+      paginatedStockHistoryProvider((storeId: wId, period: _selectedPeriod)),
+    );
+    final statsAsync = ref.watch(
+      stockHistoryStatsProvider((storeId: wId, period: _selectedPeriod)),
+    );
+
+    if (pageState.isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (_transactions.isEmpty) {
+    if (pageState.transactions.isEmpty) {
       return _buildEmptyState(context, colorScheme);
     }
 
-    // Compute summaries
-    int totalIn = 0;
-    int totalOut = 0;
-    for (final tx in _transactions) {
-      if (tx.isInflow) {
-        totalIn += tx.quantityDelta;
-      } else {
-        totalOut += tx.quantityDelta.abs();
-      }
-    }
+    final stats = statsAsync.valueOrNull ?? StockHistoryStats.empty();
+    final totalIn = stats.totalIn;
+    final totalOut = stats.totalOut;
+
+    final txns = pageState.transactions;
+    final childCount = txns.length + (pageState.isLoadingMore ? 1 : 0);
 
     return Column(
       children: [
@@ -140,13 +68,40 @@ class _InventoryHistoryTabState extends ConsumerState<InventoryHistoryTab> {
         Expanded(
           child: ListView.builder(
             padding: EdgeInsets.symmetric(horizontal: context.spacingM),
-            itemCount: _transactions.length,
-            itemBuilder: (context, index) => _buildTransactionRow(
-              context,
-              colorScheme,
-              _transactions[index],
-              index,
-            ),
+            itemCount: childCount,
+            itemBuilder: (context, index) {
+              if (pageState.hasMore &&
+                  !pageState.isLoadingMore &&
+                  index >= txns.length - 5) {
+                Future.microtask(() {
+                  if (mounted) {
+                    ref
+                        .read(
+                          paginatedStockHistoryProvider(
+                            (storeId: wId, period: _selectedPeriod),
+                          ).notifier,
+                        )
+                        .loadMore();
+                  }
+                });
+              }
+
+              if (index == txns.length) {
+                return Padding(
+                  padding: EdgeInsets.symmetric(vertical: context.spacingM),
+                  child: const Center(
+                    child: CircularProgressIndicator(),
+                  ),
+                );
+              }
+
+              return _buildTransactionRow(
+                context,
+                colorScheme,
+                txns[index],
+                index,
+              );
+            },
           ),
         ),
       ],
