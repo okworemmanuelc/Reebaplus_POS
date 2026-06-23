@@ -1272,6 +1272,15 @@ final activeStaffProvider =
           .watchActiveStaffForBusiness(businessId);
     });
 
+/// Device-authenticated staff (user + role) for a given business who have setup their PIN.
+final deviceStaffProvider =
+    StreamProvider.family<List<WhoIsWorkingEntry>, String>((ref, businessId) {
+      return ref
+          .watch(databaseProvider)
+          .userBusinessesDao
+          .watchDeviceStaffForBusiness(businessId);
+    });
+
 /// Stores the given user is assigned to.
 final myUserStoresProvider = StreamProvider.family<List<UserStoreData>, String>(
   (ref, userId) {

@@ -13,6 +13,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:reebaplus_pos/core/data/business_types.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/services/biometric_service.dart';
+import 'package:reebaplus_pos/core/services/business_logo_service.dart';
 import 'package:reebaplus_pos/core/theme/theme_notifier.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/customers/data/services/customer_service.dart';
@@ -34,6 +35,7 @@ import 'package:reebaplus_pos/shared/services/printer_service.dart';
 import 'package:reebaplus_pos/shared/services/reorder_alert_service.dart';
 import 'package:reebaplus_pos/core/diagnostics/sync_diagnostic.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
+import 'package:reebaplus_pos/main.dart' show googleWebClientId;
 
 // ── Crate Return Approval ──────────────────────────────────────────────────
 final crateReturnApprovalServiceProvider = Provider<CrateReturnApprovalService>(
@@ -128,6 +130,7 @@ final authProvider = ChangeNotifierProvider<AuthService>((ref) {
     ref.read(secureStorageProvider),
     ref.read(supabaseSyncServiceProvider),
     ref.read(supabaseClientProvider),
+    googleWebClientId: googleWebClientId,
   );
 });
 final deviceUserIdProvider = ChangeNotifierProvider<ValueNotifier<String?>>((
@@ -473,6 +476,28 @@ final currentBusinessNameProvider = Provider.autoDispose<String>((ref) {
   return ref.watch(currentBusinessProvider)?.name ?? '';
 });
 
+// ── Business Logo ──────────────────────────────────────────────────────────
+
+final businessLogoServiceProvider = Provider<BusinessLogoService>((ref) {
+  return BusinessLogoService(ref.read(supabaseClientProvider));
+});
+
+/// The local file path to the business logo, or null when no logo is set or
+/// the cache is still being populated. Watches [currentBusinessProvider] so
+/// it rebuilds when the business row updates (e.g. after a logo upload).
+/// Calls [BusinessLogoService.ensureCached] once per businessId — downloads
+/// from Storage on first use, then serves from the local file thereafter.
+final currentBusinessLogoPathProvider =
+    FutureProvider.autoDispose<String?>((ref) async {
+      final business = ref.watch(currentBusinessProvider);
+      if (business == null) return null;
+      final svc = ref.read(businessLogoServiceProvider);
+      return svc.ensureCached(
+        businessId: business.id,
+        logoUrl: business.logoUrl,
+      );
+    });
+
 /// Lifts the `SupabaseSyncService.pullStatus` ValueNotifier into Riverpod
 /// so the MainLayout catch-up banner (and SyncIssues) can `ref.watch` it.
 /// Mirrors the pattern used for the `isOnline` ValueNotifier (read directly
@@ -481,4 +506,15 @@ final pullStatusProvider = ChangeNotifierProvider<ValueNotifier<PullStatus>>((
   ref,
 ) {
   return ref.watch(supabaseSyncServiceProvider).pullStatus;
+});
+
+/// True once the local Drift database has at least one product row — used as
+/// the fresh-device gate signal. Distinct-filtered so it only notifies when
+/// the boolean flips (empty → non-empty), keeping rebuilds cheap.
+final hasLocalProductsProvider = StreamProvider<bool>((ref) {
+  final db = ref.watch(databaseProvider);
+  return db.inventoryDao
+      .watchAllProductDatasWithStock()
+      .map((list) => list.isNotEmpty)
+      .distinct();
 });

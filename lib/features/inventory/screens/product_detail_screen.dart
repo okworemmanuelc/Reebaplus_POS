@@ -612,16 +612,16 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             ),
           ),
         */
-        /*
         if (_canDelete)
           IconButton(
+            tooltip: 'Delete product',
             onPressed: () => _confirmDelete(context),
             icon: Container(
               padding: EdgeInsets.all(context.getRSize(8)),
               decoration: BoxDecoration(
                 color: Theme.of(
                   context,
-                ).colorScheme.error.withValues(alpha: 0.1),
+                ).colorScheme.error.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
@@ -631,7 +631,6 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
               ),
             ),
           ),
-        */
         SizedBox(width: context.getRSize(8)),
       ],
       flexibleSpace: FlexibleSpaceBar(

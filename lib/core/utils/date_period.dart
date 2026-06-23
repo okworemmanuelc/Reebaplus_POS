@@ -17,6 +17,8 @@
 /// keeps its own ("Today / 7 Days / 30 Days / All") labels by design.
 library;
 
+import 'package:intl/intl.dart';
+
 /// The five canonical calendar periods.
 enum DatePeriod { today, thisWeek, thisMonth, thisYear, toDate }
 
@@ -76,13 +78,16 @@ const List<String> kDatePeriodLabels = [
   'This Month',
   'This Year',
   'To Date',
+  'Custom',
 ];
 
 /// Labels a viewer may choose. Roles below Manager (Cashier, Stock keeper) are
 /// capped to Today / This Week / This Month (§19.2 / §30.11); Manager & CEO get
 /// the full set incl. This Year / To Date.
 List<String> datePeriodLabelsForRole({required bool managerUp}) =>
-    managerUp ? kDatePeriodLabels : kDatePeriodLabels.sublist(0, 3);
+    managerUp
+        ? kDatePeriodLabels
+        : [...kDatePeriodLabels.sublist(0, 3), 'Custom'];
 
 /// Resolves a label to a [DatePeriod]. Tolerant of every legacy label the app
 /// used — Day/Week/Month/Year/To Date, the rolling Last 24 hours/Last 7 days/
@@ -119,10 +124,76 @@ DatePeriod datePeriodFromLabel(String label) {
   }
 }
 
+(DateTime?, DateTime?) parseCustomDateRange(String label) {
+  final trimmed = label.trim();
+  if (!trimmed.startsWith('Custom:')) return (null, null);
+  final rest = trimmed.substring('Custom:'.length);
+  final parts = trimmed.split(':');
+  if (parts.length == 3) {
+    return (DateTime.tryParse(parts[1]), DateTime.tryParse(parts[2]));
+  } else if (parts.length == 7) {
+    return (
+      DateTime.tryParse('${parts[1]}:${parts[2]}:${parts[3]}'),
+      DateTime.tryParse('${parts[4]}:${parts[5]}:${parts[6]}'),
+    );
+  } else {
+    final match = RegExp(r'^(.+?T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?):(.+)$').firstMatch(rest);
+    if (match != null) {
+      return (
+        DateTime.tryParse(match.group(1) ?? ''),
+        DateTime.tryParse(match.group(2) ?? ''),
+      );
+    }
+  }
+  return (null, null);
+}
+
 /// `(start, end)` range for a [label], for callers that query a DB by date
 /// window (start inclusive, end exclusive/`null` = up to now). `start` is `null`
 /// for "to date". Computed from [now] (defaults to `DateTime.now()`).
 (DateTime?, DateTime?) dateRangeForLabel(String label, {DateTime? now}) {
+  final trimmed = label.trim();
+  if (trimmed.startsWith('Custom:')) {
+    final (start, end) = parseCustomDateRange(trimmed);
+    if (start != null && end != null) {
+      final startMidnight = DateTime(start.year, start.month, start.day);
+      final endInclusive = DateTime(end.year, end.month, end.day, 23, 59, 59, 999);
+      return (startMidnight, endInclusive);
+    }
+  }
   final start = datePeriodFromLabel(label).startFrom(now ?? DateTime.now());
   return (start, null);
 }
+
+/// Checks if a [date] is included in the period described by [periodLabel].
+/// Supports standard pre-defined periods as well as custom date range strings.
+bool isDateInPeriod(DateTime date, String periodLabel, {DateTime? now}) {
+  if (periodLabel.startsWith('Custom:')) {
+    final range = dateRangeForLabel(periodLabel, now: now);
+    if (range.$1 != null && range.$2 != null) {
+      final dateUtc = date.toUtc();
+      return !dateUtc.isBefore(range.$1!.toUtc()) && !dateUtc.isAfter(range.$2!.toUtc());
+    }
+  }
+  return datePeriodFromLabel(periodLabel).includes(date, now: now);
+}
+
+/// Formats a period string (predefined or Custom) for user-friendly display.
+String formatPeriodLabel(String period) {
+  final trimmed = period.trim();
+  if (trimmed.startsWith('Custom:')) {
+    final (start, end) = parseCustomDateRange(trimmed);
+    if (start != null && end != null) {
+      final startFmt = DateFormat('MMM d, yyyy').format(start);
+      final endFmt = DateFormat('MMM d, yyyy').format(end);
+      if (startFmt == endFmt) return startFmt;
+      return '$startFmt – $endFmt';
+    }
+    return 'Custom Range';
+  }
+  return period;
+}
+
+// Add missing dependency package import if needed. Since intl package is widely used in our app,
+// DateFormat is already available, but let's make sure it imports package:intl/intl.dart if it doesn't.
+

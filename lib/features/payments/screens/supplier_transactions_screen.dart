@@ -26,14 +26,20 @@ class SupplierTransactionsScreen extends ConsumerStatefulWidget {
 class _SupplierTransactionsScreenState
     extends ConsumerState<SupplierTransactionsScreen> {
   String _periodFilter = 'This Month'; // §30.6/§30.11 default
+  DateTimeRange? _customRange;
   bool _isScrolled = false;
 
   List<String> get _periodOptions =>
       datePeriodLabelsForRole(managerUp: isManagerOrAbove(ref));
 
-  String get _effectivePeriod => _periodOptions.contains(_periodFilter)
-      ? _periodFilter
-      : _periodOptions.last;
+  String get _effectivePeriod {
+    final isCustom = _periodFilter.startsWith('Custom:');
+    final dropdownValue = isCustom ? 'Custom' : _periodFilter;
+    if (_periodOptions.contains(dropdownValue)) {
+      return _periodFilter;
+    }
+    return _periodOptions.first;
+  }
 
   Color get _bg => Theme.of(context).scaffoldBackgroundColor;
   Color get _surface => Theme.of(context).colorScheme.surface;
@@ -225,7 +231,7 @@ class _SupplierTransactionsScreenState
                             ),
                             SizedBox(width: context.getRSize(8)),
                             AppDropdown<String>(
-                              value: _effectivePeriod,
+                              value: _effectivePeriod.startsWith('Custom:') ? 'Custom' : _effectivePeriod,
                               width: context.getRSize(140),
                               items: _periodOptions.map((val) {
                                 return DropdownMenuItem<String>(
@@ -233,9 +239,29 @@ class _SupplierTransactionsScreenState
                                   child: Text(val),
                                 );
                               }).toList(),
-                              onChanged: (val) {
-                                if (val != null) {
-                                  setState(() => _periodFilter = val);
+                              onChanged: (val) async {
+                                if (val == 'Custom') {
+                                  final range = await showDateRangePicker(
+                                    context: context,
+                                    firstDate: DateTime(2020),
+                                    lastDate: DateTime.now().add(const Duration(days: 365)),
+                                    initialDateRange: _customRange,
+                                    builder: (context, child) => Theme(
+                                      data: Theme.of(context),
+                                      child: child!,
+                                    ),
+                                  );
+                                  if (range != null) {
+                                    setState(() {
+                                      _customRange = range;
+                                      _periodFilter = 'Custom:${range.start.toIso8601String()}:${range.end.toIso8601String()}';
+                                    });
+                                  }
+                                } else if (val != null) {
+                                  setState(() {
+                                    _periodFilter = val;
+                                    _customRange = null;
+                                  });
                                 }
                               },
                             ),

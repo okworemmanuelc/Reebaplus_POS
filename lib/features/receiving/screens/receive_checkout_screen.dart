@@ -12,6 +12,7 @@ import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
+import 'package:reebaplus_pos/features/payments/widgets/supplier_form_sheet.dart';
 
 /// Invoice / checkout screen for the Receive Stock flow (spec Sections 7–9).
 /// Picks ONE supplier, shows a read-only Invoice Total, captures the receipt
@@ -131,7 +132,13 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
       builder: (ctx) => _SupplierPickerSheet(suppliers: _suppliers),
     );
     if (selected != null && mounted) {
-      setState(() => _selectedSupplier = selected);
+      final db = ref.read(databaseProvider);
+      final suppliers = await db.catalogDao.getAllSuppliers();
+      if (!mounted) return;
+      setState(() {
+        _suppliers = suppliers;
+        _selectedSupplier = selected;
+      });
     }
   }
 
@@ -729,15 +736,15 @@ class _TapField extends StatelessWidget {
 
 /// Searchable single-select supplier picker (§7.4). Soft-deleted suppliers are
 /// already excluded upstream by `getAllSuppliers()`.
-class _SupplierPickerSheet extends StatefulWidget {
+class _SupplierPickerSheet extends ConsumerStatefulWidget {
   final List<SupplierData> suppliers;
   const _SupplierPickerSheet({required this.suppliers});
 
   @override
-  State<_SupplierPickerSheet> createState() => _SupplierPickerSheetState();
+  ConsumerState<_SupplierPickerSheet> createState() => _SupplierPickerSheetState();
 }
 
-class _SupplierPickerSheetState extends State<_SupplierPickerSheet> {
+class _SupplierPickerSheetState extends ConsumerState<_SupplierPickerSheet> {
   final _searchCtrl = TextEditingController();
   String _query = '';
 
@@ -792,6 +799,22 @@ class _SupplierPickerSheetState extends State<_SupplierPickerSheet> {
               prefixIcon: Icon(FontAwesomeIcons.magnifyingGlass.data,
                   size: context.getRSize(16)),
             ),
+            if (hasPermission(ref, 'suppliers.manage')) ...[
+              SizedBox(height: context.getRSize(12)),
+              AppButton(
+                text: 'Add Supplier',
+                variant: AppButtonVariant.outline,
+                size: AppButtonSize.small,
+                icon: FontAwesomeIcons.plus.data,
+                onPressed: () async {
+                  final navigator = Navigator.of(context);
+                  final created = await SupplierFormSheet.show(context);
+                  if (created != null) {
+                    navigator.pop(created);
+                  }
+                },
+              ),
+            ],
             SizedBox(height: context.getRSize(12)),
             Expanded(
               child: filtered.isEmpty

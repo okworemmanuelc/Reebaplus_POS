@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/sync/widgets/initial_load_animation.dart';
+import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 
-/// Brief loading screen shown only when local DB has no `businesses` row
-/// (fresh device sign-in). Runs `syncMinimumLogin` to fetch the 4 tables
+/// Loading screen shown only while the local DB has no `businesses` row
+/// (fresh device sign-in). Runs `syncMinimumLogin` to pull the 4 tables
 /// MainLayout needs to render (profiles, businesses, users, stores).
-/// Expected wall-clock: ~1-6s depending on link speed. The whole-tenant
+/// Expected wall-clock: ~1–6 s depending on link speed. The whole-tenant
 /// pull continues in the background from `setCurrentUser` after MainLayout
-/// mounts. The screen only re-appears in the user-visible flow on a
-/// minimum-pull failure, where it shows the error + retry UI.
+/// mounts. Shows error + retry UI on failure.
 class FirstSyncScreen extends ConsumerStatefulWidget {
   final String businessId;
 
@@ -40,8 +43,6 @@ class _FirstSyncScreenState extends ConsumerState<FirstSyncScreen> {
 
     try {
       final syncService = ref.read(supabaseSyncServiceProvider);
-      // Minimum pull only — 4 tables. The full pull fires non-blocking
-      // from setCurrentUser after MainLayout mounts.
       await syncService.syncMinimumLogin(widget.businessId);
     } catch (e) {
       if (mounted) {
@@ -66,145 +67,92 @@ class _FirstSyncScreenState extends ConsumerState<FirstSyncScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_errorMessage == null) {
+      return const InitialLoadAnimation();
+    }
+
+    return _ErrorPanel(
+      errorMessage: _errorMessage!,
+      onRetry: _startInitialSync,
+    );
+  }
+}
+
+/// Shown when the minimum pull fails — offline or server error.
+class _ErrorPanel extends StatelessWidget {
+  final String errorMessage;
+  final VoidCallback onRetry;
+
+  const _ErrorPanel({required this.errorMessage, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
     final t = Theme.of(context);
-    final primaryColor = t.colorScheme.primary;
+    final cs = t.colorScheme;
 
     return Scaffold(
-      backgroundColor: t.scaffoldBackgroundColor,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
-          child: Column(
-            children: [
-              const Spacer(),
-              // Beautiful Glowing Branding Centerpiece
-              Center(
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    // Outer slowly pulsing glow
-                    TweenAnimationBuilder<double>(
-                      tween: Tween<double>(begin: 0.9, end: 1.1),
-                      duration: const Duration(seconds: 2),
-                      curve: Curves.easeInOut,
-                      onEnd:
-                          () {}, // Handled by continuous cycle below if stateful, but Tween handles it neatly
-                      builder: (context, scale, child) {
-                        return Container(
-                          width: 140 * scale,
-                          height: 140 * scale,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: primaryColor.withValues(alpha: 0.15),
-                                blurRadius: 40,
-                                spreadRadius: 10,
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                    // Centered circular spinner
-                    SizedBox(
-                      width: 100,
-                      height: 100,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 4,
-                        valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
-                        backgroundColor: primaryColor.withValues(alpha: 0.1),
-                      ),
-                    ),
-                    // Icon core
-                    Icon(
-                      FontAwesomeIcons.cloudArrowDown.data,
-                      size: 36,
-                      color: primaryColor,
-                    ),
-                  ],
+      backgroundColor: Colors.transparent,
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: AppDecorations.glassyBackground(context),
+        child: SafeArea(
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: context.getRSize(24),
+              vertical: context.getRSize(32),
+            ),
+            child: Column(
+              children: [
+                const Spacer(),
+                FaIcon(
+                  FontAwesomeIcons.triangleExclamation,
+                  size: context.getRSize(56),
+                  color: cs.error,
                 ),
-              ),
-              const SizedBox(height: 48),
-
-              // Title and Explainer
-              Text(
-                'Syncing Your Store',
-                style: t.textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  color: t.colorScheme.onSurface,
-                  letterSpacing: -0.5,
-                ),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                height: 44,
-                child: Center(
-                  child: Text(
-                    _errorMessage != null
-                        ? 'Sync Paused'
-                        : 'Setting up your store…',
-                    textAlign: TextAlign.center,
-                    style: t.textTheme.bodyMedium?.copyWith(
-                      color: _errorMessage != null
-                          ? t.colorScheme.error
-                          : t.colorScheme.onSurface.withValues(alpha: 0.7),
-                      height: 1.4,
-                    ),
+                SizedBox(height: context.getRSize(24)),
+                Text(
+                  'Sync Paused',
+                  style: t.textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: cs.onSurface,
+                    letterSpacing: -0.5,
                   ),
                 ),
-              ),
-
-              const Spacer(),
-
-              // Error or Action panel at the bottom
-              if (_errorMessage != null) ...[
+                SizedBox(height: context.getRSize(12)),
+                Text(
+                  'Syncing Your Store',
+                  style: t.textTheme.titleMedium?.copyWith(
+                    color: cs.onSurface.withValues(alpha: 0.6),
+                  ),
+                ),
+                const Spacer(),
                 Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: AppDecorations.glassCard(context, radius: 16),
+                  padding: EdgeInsets.all(context.getRSize(16)),
+                  decoration: AppDecorations.glassCard(context, radius: 20),
                   child: Column(
                     children: [
                       Text(
-                        _errorMessage!,
+                        errorMessage,
                         textAlign: TextAlign.center,
                         style: t.textTheme.bodySmall?.copyWith(
-                          color: t.colorScheme.error,
+                          color: cs.error,
                         ),
                       ),
-                      const SizedBox(height: 16),
-                      ElevatedButton.icon(
-                        onPressed: _startInitialSync,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: primaryColor,
-                          foregroundColor: t.colorScheme.onPrimary,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 24,
-                            vertical: 12,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        icon: Icon(
-                          FontAwesomeIcons.arrowsRotate.data,
-                          size: 14,
-                        ),
-                        label: const Text('Retry Synchronization'),
+                      SizedBox(height: context.getRSize(16)),
+                      AppButton(
+                        text: 'Retry Synchronization',
+                        variant: AppButtonVariant.primary,
+                        size: AppButtonSize.small,
+                        icon: FontAwesomeIcons.arrowsRotate.data,
+                        onPressed: onRetry,
                       ),
                     ],
                   ),
                 ),
-              ] else ...[
-                // Safe and calming informational note
-                Text(
-                  'This only happens once on your fresh device login.\nPlease keep the app open.',
-                  textAlign: TextAlign.center,
-                  style: t.textTheme.bodySmall?.copyWith(
-                    color: t.colorScheme.onSurface.withValues(alpha: 0.4),
-                  ),
-                ),
+                SizedBox(height: context.getRSize(16)),
               ],
-            ],
+            ),
           ),
         ),
       ),

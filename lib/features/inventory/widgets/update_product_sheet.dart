@@ -148,7 +148,10 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
           : '',
     );
     _lowStockCtrl = TextEditingController(text: p.lowStockThreshold.toString());
-    _qtyToAddCtrl = TextEditingController(text: '0');
+    final initialQty = widget.receiveMode
+        ? ref.read(receiveCartProvider).where((l) => l.productId == p.id).firstOrNull?.qty ?? 0
+        : 0;
+    _qtyToAddCtrl = TextEditingController(text: initialQty.toString());
     _supplierCtrl = TextEditingController();
     // Manufacturer name is populated in _loadData() via FK lookup.
     _manufacturerCtrl = TextEditingController();
@@ -483,6 +486,8 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
         missingField = 'Buying Price';
       } else if (!widget.receiveMode && _selectedStore == null) {
         missingField = 'Store';
+      } else if (_effectiveTrackEmpties && _selectedManufacturer == null) {
+        missingField = 'Manufacturer (required to track empty crates)';
       }
 
       if (missingField != null) {
@@ -537,16 +542,28 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
       //    the receive checkout — this sheet never writes inventory directly.
       //    Gated on `stock.add`, so stock keepers can add quantity (but not edit
       //    prices, which have their own gates).
-      final adding = qtyToAdd > 0 && _canAddStock;
+      final currentCartLine = ref
+          .read(receiveCartProvider)
+          .where((l) => l.productId == widget.product.id)
+          .firstOrNull;
+      final initialQty = currentCartLine?.qty ?? 0;
+      final adding = qtyToAdd != initialQty && _canAddStock;
       if (adding) {
         ref
             .read(receiveCartProvider.notifier)
-            .addOrIncrement(widget.product, amount: qtyToAdd);
+            .setProductQty(widget.product, qtyToAdd);
         if (mounted) {
-          AppNotification.showSuccess(
-            context,
-            '$qtyToAdd units of $name added to Receive Cart',
-          );
+          if (qtyToAdd > 0) {
+            AppNotification.showSuccess(
+              context,
+              'Quantity of $name set to $qtyToAdd in Receive Cart',
+            );
+          } else if (initialQty > 0) {
+            AppNotification.showSuccess(
+              context,
+              '$name removed from Receive Cart',
+            );
+          }
         }
       }
 
@@ -584,6 +601,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
         Theme.of(context).textTheme.bodySmall?.color ??
         Theme.of(context).iconTheme.color!;
     final border = Theme.of(context).dividerColor;
+    final manufacturerRequired = _unit.toLowerCase() == 'bottle' && _isCrateBusiness && _trackEmpties;
 
     return Padding(
       padding: EdgeInsets.only(bottom: context.deviceBottomPadding),
@@ -966,7 +984,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                     // ── MANUFACTURER ─────────────────────────────────────────
                     AppInput(
                       controller: _manufacturerCtrl,
-                      labelText: 'MANUFACTURER *',
+                      labelText: 'MANUFACTURER ${manufacturerRequired ? '*' : '(optional)'}',
                       hintText: 'Search or type manufacturer name…',
                       prefixIcon: Icon(Icons.search, size: 18, color: subtext),
                       onChanged: _onManufacturerChanged,
@@ -1167,7 +1185,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                       const SizedBox(height: 14),
                       AppInput(
                         controller: _qtyToAddCtrl,
-                        labelText: 'QUANTITY TO ADD',
+                        labelText: 'RECEIVE QUANTITY',
                         hintText: '0',
                         keyboardType: TextInputType.number,
                         inputFormatters: [
@@ -1176,7 +1194,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'This amount will be added to the existing stock',
+                        'This will set the quantity of this product in the receive cart.',
                         style: TextStyle(fontSize: 11, color: subtext),
                       ),
                       const SizedBox(height: 14),

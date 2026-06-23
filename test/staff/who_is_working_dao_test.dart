@@ -48,13 +48,14 @@ void main() {
 
   tearDown(() => db.close());
 
-  Future<String> addUser(String businessId, String name) async {
+  Future<String> addUser(String businessId, String name, {String? pinHash}) async {
     final id = UuidV7.generate();
     await db.into(db.users).insert(UsersCompanion.insert(
           id: Value(id),
           businessId: businessId,
           name: name,
           pin: '__HASHED__',
+          pinHash: Value(pinHash),
         ));
     return id;
   }
@@ -104,5 +105,23 @@ void main() {
     final entries =
         await db.userBusinessesDao.watchActiveStaffForBusiness(biz1).first;
     expect(entries, isEmpty);
+  });
+
+  test('watchDeviceStaffForBusiness/countDeviceStaffForBusiness returns only staff with pinHash configured', () async {
+    final alice = await addUser(biz1, 'Alice', pinHash: 'hash1');
+    final bob = await addUser(biz1, 'Bob'); // no pinHash
+    final carol = await addUser(biz1, 'Carol', pinHash: 'hash3'); // suspended
+    final dave = await addUser(biz2, 'Dave', pinHash: 'hash4'); // other business
+
+    await addMembership(biz1, alice, ceoRoleId);
+    await addMembership(biz1, bob, cashierRoleId);
+    await addMembership(biz1, carol, ceoRoleId, status: 'suspended');
+    await addMembership(biz2, dave, biz2RoleId);
+
+    final deviceStaff = await db.userBusinessesDao.watchDeviceStaffForBusiness(biz1).first;
+    expect(deviceStaff.map((e) => e.user.name).toList(), ['Alice']);
+
+    final count = await db.userBusinessesDao.countDeviceStaffForBusiness(biz1);
+    expect(count, 1);
   });
 }

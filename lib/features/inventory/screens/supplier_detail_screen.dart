@@ -39,13 +39,17 @@ class SupplierDetailScreen extends ConsumerStatefulWidget {
 
 class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
   String _timeFilter = 'This Month'; // §30.6/§30.11 default
+  DateTimeRange? _customRange;
   bool _isScrolled = false;
 
   List<String> get _periodOptions =>
       datePeriodLabelsForRole(managerUp: isManagerOrAbove(ref));
 
-  String get _effectivePeriod =>
-      _periodOptions.contains(_timeFilter) ? _timeFilter : _periodOptions.last;
+  String get _effectivePeriod {
+    final isCustom = _timeFilter.startsWith('Custom:');
+    final dropdownValue = isCustom ? 'Custom' : _timeFilter;
+    return _periodOptions.contains(dropdownValue) ? dropdownValue : _periodOptions.first;
+  }
 
   Color get _bg => Theme.of(context).scaffoldBackgroundColor;
   Color get _surface => Theme.of(context).colorScheme.surface;
@@ -194,9 +198,8 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
     final stores = ref.watch(allStoresProvider).valueOrNull ?? const <StoreData>[];
     final storeNameById = {for (final s in stores) s.id: s.name};
 
-    final window = datePeriodFromLabel(_effectivePeriod);
     final filtered = history
-        .where((e) => window.includes(e.activityDate))
+        .where((e) => isDateInPeriod(e.activityDate, _timeFilter))
         .toList();
 
     return NestedScrollView(
@@ -470,8 +473,31 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
                       items: _periodOptions
                           .map((p) => DropdownMenuItem(value: p, child: Text(p)))
                           .toList(),
-                      onChanged: (v) =>
-                          setState(() => _timeFilter = v ?? 'This Month'),
+                      onChanged: (v) async {
+                        if (v == 'Custom') {
+                          final range = await showDateRangePicker(
+                            context: context,
+                            firstDate: DateTime(2020),
+                            lastDate: DateTime.now().add(const Duration(days: 365)),
+                            initialDateRange: _customRange,
+                            builder: (context, child) => Theme(
+                              data: Theme.of(context),
+                              child: child!,
+                            ),
+                          );
+                          if (range != null) {
+                            setState(() {
+                              _customRange = range;
+                              _timeFilter = 'Custom:${range.start.toIso8601String()}:${range.end.toIso8601String()}';
+                            });
+                          }
+                        } else if (v != null) {
+                          setState(() {
+                            _timeFilter = v;
+                            _customRange = null;
+                          });
+                        }
+                      },
                     ),
                   ),
                 ],

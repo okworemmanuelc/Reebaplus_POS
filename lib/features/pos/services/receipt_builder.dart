@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
+import 'package:image/image.dart' as img;
 
 import 'package:reebaplus_pos/core/utils/number_format.dart'; // assuming fmtNumber is exported here
 import 'package:reebaplus_pos/core/utils/product_name.dart';
@@ -28,6 +31,10 @@ class ThermalReceiptService {
     String? storeAddress,
     String? businessName,
     Map<String, String>? manufacturerNames,
+    /// Local file path of the cached business logo. When present the image is
+    /// converted to a monochrome raster and emitted before the business name.
+    /// Falls back to name-only when null or the file is missing.
+    String? logoPath,
   }) async {
     // Generate profile for 58mm printer
     final profile = await CapabilityProfile.load();
@@ -76,6 +83,20 @@ class ThermalReceiptService {
         ),
       );
       bytes += generator.hr();
+    }
+    // --- Logo (before business name) ---
+    if (logoPath != null) {
+      final logoFile = File(logoPath);
+      if (logoFile.existsSync()) {
+        final rawBytes = await logoFile.readAsBytes();
+        final decoded = img.decodeImage(rawBytes);
+        if (decoded != null) {
+          // Resize to 58mm print width (≈200px at 203 DPI), convert to mono.
+          final resized = img.copyResize(decoded, width: 200);
+          img.grayscale(resized);
+          bytes += generator.image(resized, align: PosAlign.center);
+        }
+      }
     }
     if (businessName != null && businessName.trim().isNotEmpty) {
       bytes += generator.text(

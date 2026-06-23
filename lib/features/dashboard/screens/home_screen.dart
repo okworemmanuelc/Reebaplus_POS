@@ -37,6 +37,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   String _selectedPeriod = kDatePeriodLabels.first; // Today (§30.6/§30.11)
+  DateTimeRange? _customRange;
 
   // Store filter (null = All). Follows the §12.1 nav-drawer store picker via
   // `lockedStoreProvider`; no per-screen store dropdown.
@@ -163,7 +164,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   bool _isDateInPeriod(DateTime date, String period) =>
-      datePeriodFromLabel(period).includes(date);
+      isDateInPeriod(date, period);
 
   @override
   Widget build(BuildContext context) {
@@ -381,47 +382,80 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildPeriodHeader({required bool showReports}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Performance Overview',
-                  style: context.bodyLarge.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: _text,
-                  ),
-                ),
-                SizedBox(height: context.getRSize(2)),
-                Text(
-                  'Analytics for the selected period',
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(12),
-                    color: _subtext,
-                  ),
-                ),
-              ],
+    if (context.isPhone) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Performance Overview',
+            style: context.bodyLarge.copyWith(
+              fontWeight: FontWeight.bold,
+              color: _text,
             ),
-            if (showReports) _buildReportButton(),
-          ],
-        ),
-        SizedBox(height: context.getRSize(12)),
-        // §12.1: the store is chosen in the nav-drawer picker; Home just shows
-        // the period filter here now.
-        Row(children: [Flexible(child: _buildPeriodDropdown())]),
-      ],
-    );
+          ),
+          SizedBox(height: context.getRSize(2)),
+          Text(
+            'Analytics for the selected period',
+            style: TextStyle(
+              fontSize: context.getRFontSize(12),
+              color: _subtext,
+            ),
+          ),
+          SizedBox(height: context.getRSize(16)),
+          Row(
+            children: [
+              _buildPeriodDropdown(),
+              if (showReports) ...[
+                SizedBox(width: context.getRSize(12)),
+                Expanded(child: _buildReportButton()),
+              ],
+            ],
+          ),
+        ],
+      );
+    } else {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Performance Overview',
+                    style: context.bodyLarge.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: _text,
+                    ),
+                  ),
+                  SizedBox(height: context.getRSize(2)),
+                  Text(
+                    'Analytics for the selected period',
+                    style: TextStyle(
+                      fontSize: context.getRFontSize(12),
+                      color: _subtext,
+                    ),
+                  ),
+                ],
+              ),
+              if (showReports) _buildReportButton(),
+            ],
+          ),
+          SizedBox(height: context.getRSize(12)),
+          // §12.1: the store is chosen in the nav-drawer picker; Home just shows
+          // the period filter here now.
+          Row(children: [Flexible(child: _buildPeriodDropdown())]),
+        ],
+      );
+    }
   }
 
   Widget _buildReportButton() {
     return Material(
       color: context.primaryColor.withValues(alpha: 0.1),
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(context.radiusM),
       child: InkWell(
         onTap: () {
           Navigator.push(
@@ -429,38 +463,41 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             MaterialPageRoute(builder: (context) => const ReportsHubScreen()),
           );
         },
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(context.radiusM),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          height: context.getRSize(48),
+          alignment: Alignment.center,
+          padding: EdgeInsets.symmetric(horizontal: context.getRSize(16)),
           child: Row(
             mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
                 FontAwesomeIcons.fileContract.data,
-                size: 14,
+                size: context.getRSize(16),
                 color: context.primaryColor,
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: context.getRSize(8)),
               Text(
                 'Reports',
                 style: TextStyle(
                   color: context.primaryColor,
                   fontWeight: FontWeight.bold,
-                  fontSize: 13,
+                  fontSize: context.getRFontSize(14),
                 ),
               ),
-              const SizedBox(width: 4),
+              SizedBox(width: context.getRSize(6)),
               Container(
-                padding: const EdgeInsets.all(4),
-                decoration: const BoxDecoration(
-                  color: Colors.red,
+                padding: EdgeInsets.all(context.getRSize(5)),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.error,
                   shape: BoxShape.circle,
                 ),
-                child: const Text(
+                child: Text(
                   '3',
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: 8,
+                    fontSize: context.getRFontSize(10),
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -473,11 +510,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildPeriodDropdown() {
-    // §30.11 / §19.2: roles below Manager are capped to Today/This Week/This Month.
     final options = datePeriodLabelsForRole(managerUp: isManagerOrAbove(ref));
-    final selected = options.contains(_selectedPeriod)
-        ? _selectedPeriod
-        : options.last;
+    final isCustom = _selectedPeriod.startsWith('Custom:');
+    final dropdownValue = isCustom ? 'Custom' : _selectedPeriod;
+    final selected = options.contains(dropdownValue) ? dropdownValue : options.first;
+
     return SizedBox(
       width: context.getRSize(140),
       child: AppDropdown<String>(
@@ -485,8 +522,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         items: options
             .map((p) => DropdownMenuItem(value: p, child: Text(p)))
             .toList(),
-        onChanged: (v) =>
-            setState(() => _selectedPeriod = v ?? kDatePeriodLabels.first),
+        onChanged: (v) async {
+          if (v == 'Custom') {
+            final range = await showDateRangePicker(
+              context: context,
+              firstDate: DateTime(2020),
+              lastDate: DateTime.now().add(const Duration(days: 365)),
+              initialDateRange: _customRange,
+              builder: (context, child) => Theme(
+                data: Theme.of(context),
+                child: child!,
+              ),
+            );
+            if (range != null) {
+              setState(() {
+                _customRange = range;
+                _selectedPeriod = 'Custom:${range.start.toIso8601String()}:${range.end.toIso8601String()}';
+              });
+            }
+          } else if (v != null) {
+            setState(() {
+              _selectedPeriod = v;
+              _customRange = null;
+            });
+          }
+        },
       ),
     );
   }
@@ -494,7 +554,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void _openSalesDetail(List<OrderWithItems> orders, String mode) {
     Navigator.of(context).push(
       slideDownRoute(
-        SalesDetailScreen(orders: orders, mode: mode, period: _selectedPeriod),
+        SalesDetailScreen(
+          orders: orders,
+          mode: mode,
+          period: formatPeriodLabel(_selectedPeriod),
+        ),
       ),
     );
   }
@@ -530,7 +594,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         _robustMetricCard(
           label: 'Total Sales',
           value: formatCurrency(sales),
-          subtitle: 'Generated from $_selectedPeriod transactions',
+          subtitle: 'Generated from ${formatPeriodLabel(_selectedPeriod)} transactions',
           icon: FontAwesomeIcons.nairaSign.data,
           color: Theme.of(context).colorScheme.primary,
           trend: sales > 0 ? 'Active' : 'No sales',

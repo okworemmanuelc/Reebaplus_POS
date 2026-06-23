@@ -8,7 +8,7 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
-149 sessions logged. Codebase is live and being verified on-device.
+150 sessions logged. Codebase is live and being verified on-device.
 
 ### Crate-aware damages (§17.2) — forfeited crate deposit on the Statement
 - Record Damages asks the crate fate for a tracked bottle (`unit=='bottle' && trackEmpties`). **Only two scenarios are tracked** (user-confirmed):
@@ -59,9 +59,118 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Goal
 
-On-device verification of Session 143 pull-side pagination (throttled/cellular
-connection), Session 144 onboarding form updates (business type picker,
-phone + LGA fields), and verification of the permission gating screen rendering.
+Fresh-device loading animation + background-pull gate shipped (Session 151).
+Google sign-in diagnostics + error split shipped (Session 152, see below).
+
+Pending operator step (REQUIRED before Google sign-in works on release builds):
+Register the release signing-certificate SHA-1 in Google Cloud Console:
+1. Get debug SHA-1: `keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android`
+2. Get release SHA-1: `keytool -list -v -keystore android/app/upload-keystore.jks -alias upload` (passwords from android/key.properties)
+3. In Google Cloud Console → APIs & Services → Credentials (same project as client ID 807123945489-...), create an Android OAuth client with package `com.reebaplus.pos` and add both SHA-1 fingerprints.
+4. If distributing via Play App Signing: also add the SHA-1 from Play Console → Setup → App integrity.
+
+Other pending: on-device smoke test for fresh-device loading animation (Session 151).
+
+---
+
+## Session 152 — Google sign-in diagnostics + cancel/error split
+
+**Root cause:** Native `signIn()` on a release build throws a `PlatformException`
+with code `sign_in_failed` and ApiException status 10 (DEVELOPER_ERROR) when the
+release signing-certificate SHA-1 is not registered in Google Cloud Console. The
+prior monolithic `catch (e)` swallowed this as a quiet null return, so the UI
+showed the same "cancelled or failed" banner for a config error and a user dismiss.
+
+**Changes:**
+- `lib/shared/services/auth_service.dart`: Added `GoogleSignInException` class.
+  Split `signInWithGoogle` catch into `PlatformException` vs generic; user cancel
+  (`code == 'sign_in_cancelled'`) returns null silently; all other errors log a
+  `auth.google_signin_error` breadcrumb to `error_logs` via `CrashReporter.record`
+  and throw `GoogleSignInException(code, message)`. Added imports for
+  `flutter/services.dart` and `crash_reporter.dart`.
+- `lib/features/auth/screens/email_entry_screen.dart`: Wraps `signInWithGoogle()`
+  in a try-catch for `GoogleSignInException`; shows "Google sign-in failed (code)."
+  for real errors. User cancel now exits silently (no error banner).
+
+**Verification:** `flutter analyze` clean on both changed files. On-device
+confirmation of status code 10 → "Google sign-in failed (sign_in_failed)." message
+pending release build test. After SHA-1 registration, native picker should appear
+and sign-in should succeed end-to-end.
+
+Previous target: on-device verification of Session 143 pull-side pagination
+(throttled/cellular connection), Session 144 onboarding form updates
+(business type picker, phone + LGA fields), and permission gating screen.
+
+---
+
+## Session 151 — Fresh-device loading animation + background-pull gate
+
+**Root cause fixed:** After `syncMinimumLogin` pulled 4 tables (profiles,
+businesses, stores, users) the businesses gate in `_HomeRouter` flipped and
+mounted `MainLayout` immediately — landing the user on a blank POS grid
+because products had not arrived yet. The background full-pull was running
+invisibly with no indication to the user.
+
+**Changes shipped:**
+- `lib/features/sync/widgets/initial_load_animation.dart` (new): looping
+  `AnimationController(repeat(reverse:true))` glow + spinner + FadeTransition
+  icon. All sizes via `context.getRSize`, colors via `colorScheme.*`,
+  background via `AppDecorations.glassyBackground` (opaque). Accepts optional
+  `progressLabel`, `done`, `total` for live progress label.
+- `lib/features/sync/screens/first_sync_screen.dart` (refactor): uses
+  `InitialLoadAnimation` for the loading state; all raw pixel/color values
+  replaced with tokens; error/retry panel unchanged in logic but now uses
+  `AppButton` + `AppDecorations.glassCard`.
+- `lib/core/providers/app_providers.dart`: added `hasLocalProductsProvider`
+  — a distinct-filtered `StreamProvider<bool>` watching
+  `inventoryDao.watchAllProductDatasWithStock()`. Flips false→true exactly
+  once per fresh-device install.
+- `lib/main.dart`: extracted routing IIFE into `_HomeRouter` ConsumerWidget
+  (all `ref.watch` calls now at top of `build` per standards). Added
+  fresh-device gate: if `!hasLocalProducts && stage != completed` show
+  `_BackgroundPullLoading` (live progress) or `_BackgroundPullFailed` (retry
+  button). Wrapped navigation in `AnimatedSwitcher` with 350 ms
+  `FadeTransition` so loading→POS cross-fades smoothly.
+
+**Safety valves:**
+- Gate only fires when `!hasLocalProducts` — returning users with local data
+  pass straight through; no regression on normal login.
+- `PullStage.failed` + no products → `_BackgroundPullFailed` with retry
+  (calls `pullChanges` again).
+- `PullStage.completed` + no products (edge case) → falls through to
+  `MainLayout` rather than looping.
+
+**Verification:** `flutter analyze` clean; 84 tests pass.
+
+---
+
+## Planned — Data Analytics (Reports hub → Analytics hub)
+
+Brief: `context/data-analytics-brief.md` (13 units, two phases). Adds a "Data
+Analytics" card to `reports_hub_screen.dart` opening a new store/period-scoped
+Analytics hub of read-only insight cards. Phase 1 = product / staff+store /
+timing metrics off the existing `recon_data.dart` aggregation patterns (all data
+already collected; migrates "Best performing staff" and "Best selling item" into
+the hub). Phase 2 = customer, margin/cost, operations, inventory, and manager
+metrics. New permission key `reports.see_analytics` (CEO + Manager). No new
+tables/columns; revenue uses `orderCountsAsSale`, store-scoped via
+`lockedStoreProvider`. **Not started — Unit 1 (permission key + cloud migration)
+is the entry point; land it before any UI.**
+
+**Open questions (must resolve before the dependent unit):**
+- **Q1 — season definition** (calendar-quarter vs Nigerian wet/dry vs custom);
+  recommend wet/dry (Apr–Oct / Nov–Mar), configurable later. Blocks Unit 7.
+- **Q2 — worked-hours source** for sales-per-staff-per-hour (no clock-in);
+  recommend first→last-order proxy with caveat. Blocks Unit 13.
+- **Q3 — [BLOCKED] transaction duration**: no cart-open timestamp captured, so
+  "avg time to complete a transaction" / cross-store speed are not derivable
+  without new data capture. Out of scope until product decides.
+- **Q4 — expiry write-off path**: products carry expiry but no expiry-specific
+  write-off event distinct from a damage. Damage-based loss buildable now.
+- **Q5 — [BLOCKED] PO placed timestamp**: receipts record receive date but no
+  purchase-order placement event, so order→receive lead time has no start point.
+- **Q6 — "gone quiet" threshold** for lapsed customers (30/60/90 days).
+  Blocks Unit 11.
 
 ---
 
@@ -107,6 +216,82 @@ read-only to request); and groups empties by manufacturer everywhere.
 Remaining: on-device walkthrough on the emulator.
 
 ## Completed
+
+### Receive stock tap and hold to update product (2026-06-23)
+- Modified `ReceiveCartNotifier` to add `setProductQty(ProductData, int)` for setting/overwriting product quantities exactly in the receive cart.
+- Modified `UpdateProductSheet` in `receiveMode` to initialize the quantity field with the product's current quantity in the receive cart (or 0 if not present).
+- Changed save logic in `UpdateProductSheet` to use `setProductQty`, overwriting the quantity in the receive cart with the exact value entered instead of adding to it.
+- Updated the UI input label from "QUANTITY TO ADD" to "RECEIVE QUANTITY" and changed the helper text to "This will set the quantity of this product in the receive cart." when `receiveMode` is true.
+- Added comprehensive unit tests in `test/receiving/receive_stock_test.dart`.
+- Verification: `flutter analyze` clean, all receiving tests passed.
+
+### Wipe staff device at cold start when its business is deleted (2026-06-23)
+- Implemented the cold-start and app resume deletion gate (`wipeIfActiveBusinessDeleted`) on `AuthService`.
+- Added the active business deletion check in `WhoIsWorkingScreen._resolveBusiness()`. If wiped, the screen pushes replacement to `WelcomeScreen`.
+- Added `WidgetsBindingObserver` to `WhoIsWorkingScreen` to re-check for deletion when the app resumes (`AppLifecycleState.resumed`).
+- Added the async deletion check in `LoginScreen.initState()` and `didChangeAppLifecycleState()` for app resume on the single-staff PIN screen.
+- Created `test/auth/cold_start_deletion_gate_test.dart` to verify the deletion check logic under ambiguous, active, and deleted scenarios.
+- Verification: `flutter analyze` clean, all `test/auth` tests passed.
+
+### Improve supplier creation in product + receive-stock checkout & optional manufacturer (2026-06-23)
+- Converted `SupplierFormSheet` inline creation to return `Future<SupplierData?>` returning the newly created supplier row on save.
+- Added an "Add new supplier" `AppButton` on the Add Product screen (gated by `suppliers.manage`) to create and auto-select a new supplier inline.
+- Added an "Add Supplier" `AppButton` on the Receive Checkout screen (gated by `suppliers.manage`) to create and auto-select a new supplier inline.
+- Made the Manufacturer field optional when empty-crate tracking is off for a product. In both `AddProductScreen` and `UpdateProductSheet`, the Manufacturer label reads `MANUFACTURER (optional)` when tracking is off, and validation only requires it when `_effectiveTrackEmpties` is true.
+- Verification: `flutter analyze` clean, all tests passed.
+
+### Fix logout / login / Who's-working flow for shared-till and sole-user devices (2026-06-23)
+- **Core concept:** a device-authenticated user = a local `users` row with `pinHash != null` and an active membership. `pinHash` is local-only/never synced, so it is the authoritative signal that this person completed OTP + PIN setup on this device.
+- **DAO** (`daos.dart`): added `watchDeviceStaffForBusiness` and `countDeviceStaffForBusiness` (identical to the `Active` variants but add `users.pinHash.isNotNull()`) + `SyncDao.countPending`.
+- **Provider** (`stream_providers.dart`): `deviceStaffProvider`.
+- **Who Is Working screen**: swapped to `deviceStaffProvider`; simplified tap routing (all visible users have a PIN); shortcuts → WelcomeScreen (empty) or LoginScreen (single).
+- **Email Entry screen**: gated the "Already set up?" PIN button behind `countDeviceStaffForBusiness > 0`; redirects to `WhoIsWorkingScreen` instead of `LoginScreen`.
+- **Auth Service** (`auth_service.dart`): `LogoutWipeException`; `logOutCurrentUser` now branches:
+  - **Sole user (count ≤ 1):** checks `countPending` — if pending > 0 and offline → throws `LogoutWipeException`; if online → `pushPending()` first; then `clearAllData()` + `fullLogout()`.
+  - **Multi-user (count ≥ 2):** clears PIN, revokes session, Supabase+Google sign-out, sets `showPickerOnUnlock = true`, stops sync, resets nav, nulls `value`.
+- **Main routing** (`main.dart`): `_checkDeviceUser` uses `countDeviceStaffForBusiness` instead of `countActiveStaffForBusiness`.
+- **App Drawer** (`app_drawer.dart`): sole-user warning copy in the Log Out dialog; catches `LogoutWipeException` for offline abort.
+- **Tests:** `test/staff/who_is_working_dao_test.dart` (3 tests) + `test/auth/shared_till_logout_test.dart` (5 new tests covering multi-user PIN clear, sole-user pending abort, sole-user wipe, device-staff filtering, and stream reactivity).
+- `flutter analyze` clean; `flutter test` 552 passed, 58 skipped, 0 failures.
+
+### Business logo upload + show on receipts (2026-06-23)
+**Storage decision: Option A (cloud upload + local cache).**
+- **Unit 1 — `BusinessLogoService`** (`lib/core/services/business_logo_service.dart`):
+  `pickAndProcess()` (gallery picker → resize ≤512×512 PNG), `save({businessId, bytes})`
+  (local cache + Supabase Storage upsert → public URL), `ensureCached({businessId, logoUrl})`
+  (serve local; download once from Storage if absent), `clear(businessId)` (local + cloud delete).
+  All methods return `Result<T, AppError>` — new `lib/core/result.dart` sealed class.
+  Provider: `businessLogoServiceProvider`.
+- **Unit 2 — Business Info screen** (`lib/core/settings/business_info_screen.dart`):
+  `_LogoSection` widget at top of form card (80×80 avatar, Upload/Change + Remove buttons),
+  gated on `settings.manage`. `BusinessesDao.updateInfo` extended with optional `logoUrl`
+  param (`_absent` sentinel distinguishes "leave unchanged" from "clear").
+- **Unit 3 — Provider + image receipt** (`lib/core/providers/app_providers.dart`,
+  `lib/shared/widgets/receipt_widget.dart`): `currentBusinessLogoPathProvider`
+  (autoDispose FutureProvider, watches `currentBusinessProvider`, calls `ensureCached`).
+  `ReceiptWidget` gains nullable `logoPath` — renders `Image.file` above business name;
+  falls back to name-only when null. Threaded at `checkout_page.dart` ~1222,
+  `orders_screen.dart` ~1052, `customer_detail_screen.dart` ~1018.
+- **Unit 4 — Thermal receipt logo** (`lib/features/pos/services/receipt_builder.dart`):
+  `logoPath` param; image decoded via `image` package, resized to 200px, grayscale,
+  emitted with `generator.image()` before business name. `esc_pos_utils_plus` has native
+  raster support — no deferral needed.
+- `flutter analyze lib` — clean (zero issues).
+
+**Operator step (required before distributing a build with this feature):**
+1. Create a public Storage bucket named `business-logos` in the Supabase dashboard.
+2. RLS policies: INSERT/UPDATE — caller must be a `user_businesses` member of the
+   `businessId` path prefix; SELECT — public (`true`).
+3. No SQL migration needed (`businesses.logo_url` column + push whitelist already exist).
+
+### Replace Google OAuth browser flow with native in-app account picker (2026-06-23)
+- Replaced the browser-based Google OAuth redirect flow with the native ID-token flow using the `google_sign_in` SDK.
+- Modified `signInWithGoogle` in `lib/shared/services/auth_service.dart` to show the native account picker, acquire the `idToken` and `accessToken`, and exchange them with Supabase using `supabase.auth.signInWithIdToken`.
+- Introduced `googleWebClientId` constant in `lib/main.dart` following the hardcoded configuration pattern of the Supabase url/anonKey, and passed it to `AuthService` dynamically through the `authProvider` in `lib/core/providers/app_providers.dart`. Added a default value to the constructor to preserve backward compatibility in unit tests.
+- Configured iOS Google Sign-In support in `ios/Runner/Info.plist` by adding the placeholder reversed client ID URL scheme `com.googleusercontent.apps.1093122091494-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`.
+- Verified that all existing `GoogleSignIn().signOut()` calls remain functional.
+- Confirmed single-active-session kick contract is untouched and functions identically.
+- Checked static analysis via `flutter analyze` (clean, zero issues).
 
 ### Sync — Phase 2: `pos_pull_snapshot` retired for first/full pulls (2026-06-22)
 - Full/first pulls (`since == null`) now ALWAYS use the paginated `_pullViaPostgRest`
@@ -410,14 +595,18 @@ Remaining: on-device walkthrough on the emulator.
   and reverts to catalog when cleared; re-clamps any discount. `refreshProduct`
   keeps the custom price but tracks the new catalog ref; `acceptStaleness` bumps
   the catalog ref too.
+- **Custom price floor (2026-06-23):** Enforced a floor on custom prices so they may not drop below the role's maximum discount allowance: `floorKobo = round(catalogPriceKobo * (100 - maxPercent) / 100)`. Selected Option A: the floor governs the effective unit price *after* line discount.
+  - **Service:** Updated `CartService.setCustomPrice` and `setLineDiscount` to accept `maxPercent`, clamping custom prices and line discounts to enforce the floor at the write boundary.
+  - **UI:** Computed `floorKobo` in `EditItemModal`, added auto-snapping of input fields when typed below floor, clamped live math, limited discount to `(effectiveUnitPriceKobo - floorKobo) * qty`, and displayed a styled warning message under the field.
+  - **Tests:** Updated `test/pos/cart_custom_price_test.dart` to verify below-floor clamping, 0% max discount behavior, Option A combined back-door block, and above-catalog overrides. All 9 tests pass.
 - **UI (`edit_item_modal.dart`):** permission-gated "Custom Price" section above
   discount; discount cap computes off the effective line total; save applies the
   custom price before the discount in both add and edit modes.
 - **Checkout/cart:** `_detectCartStaleness` skips custom-priced lines (a hand-set
   price is never reverted); cart screen shows a "Custom price" badge.
-- New `test/pos/cart_custom_price_test.dart` (5 green). `roles_v13_seed_test`
-  35 → 36. `flutter analyze lib` clean (3 pre-existing settings warnings);
-  pos/sync/database suites green. See BUILD_LOG 2026-06-19.
+- New `test/pos/cart_custom_price_test.dart` (9 green). `roles_v13_seed_test`
+  35 → 36. `flutter analyze lib` clean;
+  pos/sync/database suites green. See BUILD_LOG 2026-06-19 and 2026-06-23.
 
 ### Login routing changed to POS (2026-06-19)
 - Changed the default post-login landing screen from Home (Dashboard, index 0) to Point of Sale (index 1) for all roles, including CEO and Manager, matching the user's intent to land them on POS directly after sign in.
@@ -966,6 +1155,47 @@ the reason here.
   survives cascade. RLS: any signed-in device may read it; writes are owner-only
   via `delete_business` RPC. Staff devices wipe via three triggers: realtime,
   on next app open, on reconnect. Migration 0114. (Session 140.)
+
+---
+
+## Invite email + Reebaplus-branded auth email (in progress)
+
+Goal: all OTP/auth email comes from the Reebaplus domain, and creating a staff
+invite auto-emails the code (Copy / SMS / WhatsApp share unchanged).
+
+**Code landed (not yet deployed):**
+- Edge Function `supabase/functions/send-invite-email/index.ts` — branded
+  invite email via Resend; invoked server-side by a DB trigger, gated by the
+  `x-invite-hook-secret` shared secret; stamps `invite_email_sent_at`.
+- Migration `0126_invite_email_trigger.sql` — enables `pg_net`, adds cloud-only
+  `invite_codes.invite_email_sent_at`, AFTER INSERT trigger calling the function
+  via `net.http_post`. Function URL + hook secret read from Vault (not in repo).
+- `invite_staff_screen.dart` success copy now says the code was emailed.
+
+**Pending — operator / dashboard (gates go-live):**
+1. Resend domain `reebaplus.com` — **verified** (2026-06-23).
+2. OTP track: configure Supabase Auth **Custom SMTP** → Resend, sender
+   `no-reply@reebaplus.com` / "Reebaplus"; brand the OTP template. (Makes all
+   auth email come from Reebaplus — no code.)
+3. Invite track, before deploy:
+   - `supabase secrets set RESEND_API_KEY=<full key>`
+   - `supabase secrets set INVITE_EMAIL_HOOK_SECRET=<random>`
+   - Vault: `select vault.create_secret('https://<ref>.supabase.co','project_url');`
+     and `select vault.create_secret('<same random>','invite_email_hook_secret');`
+   - Deploy function: `supabase functions deploy send-invite-email --no-verify-jwt`
+     (the shared secret is the gate; no user JWT on the trigger path).
+   - Then `supabase db push` (function before trigger).
+
+**Verify:** generate a code on-device → row syncs → invitee gets branded email
+with correct code → Copy/SMS/WhatsApp still work → re-sync does NOT re-send.
+
+---
+
+## Multi-Device Sessions (2026-06-23)
+
+- **Disabled single-active-session kick.** Enabled multi-device sign-ins by disabling the single active session restriction.
+- **Renamed `_kickOtherDevices` to `_registerCloudSession`.** Changed the logic to only register the current device's session on the cloud (`sessions` table upsert) and removed the code revoking other sessions (`revoked_at`) or calling `signOut(scope: SignOutScope.others)`.
+- **Added Automated Test.** Verified that multiple concurrent active sessions can coexist for the same user across different devices in `session_created_at_push_test.dart`.
 
 ---
 

@@ -10,6 +10,7 @@ import 'package:reebaplus_pos/shared/utils/role_display.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/features/auth/screens/email_entry_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/otp_verification_screen.dart';
+import 'package:reebaplus_pos/features/auth/screens/welcome_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/who_is_working_screen.dart';
 import 'dart:async';
 import 'package:local_auth/local_auth.dart';
@@ -39,6 +40,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   final ValueNotifier<String> _pinNotifier = ValueNotifier<String>('');
   bool _biometricsAvailable = false;
   final TextEditingController _emailController = TextEditingController();
+  bool _checkedDeletion = false;
 
   // ── Returning User & PIN-attempt State ──────────────────────────────────────
   UserData? _identifiedUser;
@@ -73,6 +75,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     );
 
     _initUserAndLockoutState();
+    _checkActiveBusinessDeleted();
   }
 
   @override
@@ -82,6 +85,26 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     // changes made while this screen was in the background.
     if (state == AppLifecycleState.resumed) {
       _checkBiometricAvailability();
+      _runDeletionCheck();
+    }
+  }
+
+  Future<void> _checkActiveBusinessDeleted() async {
+    if (_checkedDeletion) return;
+    if (widget.presetUser != null) {
+      _checkedDeletion = true;
+      return;
+    }
+    _checkedDeletion = true;
+    await _runDeletionCheck();
+  }
+
+  Future<void> _runDeletionCheck() async {
+    final deleted = await ref.read(authProvider).wipeIfActiveBusinessDeleted();
+    if (deleted && mounted) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const WelcomeScreen()),
+      );
     }
   }
 
@@ -548,14 +571,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   @override
   Widget build(BuildContext context) {
-    // Offer "Switch account" (→ Who's working) only when the same business has
-    // another active staff member to switch to — otherwise there's no one to
-    // pick (master plan §8).
+    // Offer "Switch account" (→ Who's working) only when another staff member
+    // is actually set up on THIS device to switch to — otherwise the picker
+    // would collapse straight back to this same PIN screen. Mirror the picker's
+    // device-authenticated source (deviceStaffProvider, pinHash != null) rather
+    // than the business-wide activeStaffProvider (master plan §8).
     final identified = _identifiedUser;
     bool showSwitch = false;
     if (!_loginSuccess && identified != null) {
       final staff = ref
-          .watch(activeStaffProvider(identified.businessId))
+          .watch(deviceStaffProvider(identified.businessId))
           .valueOrNull;
       showSwitch =
           staff != null && staff.any((e) => e.user.id != identified.id);

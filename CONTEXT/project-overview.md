@@ -19,7 +19,7 @@ Reebaplus POS is an offline-first, mobile point-of-sale app for small and medium
 1. On a fresh install, the user opens the app and lands on the Welcome screen.
 2. The CEO taps "Create a new business" and completes sign-up step by step: business name, business type (all seven types are shown but only Beverage distributor is selectable — the other six are greyed out as coming soon), first store details (name, phone number, street address, local government / district, state / region, country; currency auto-fills from country), full name, email, 6-digit email OTP, create 6-digit PIN, confirm PIN.
 3. On completion, the app auto-creates the four default roles with default permissions, creates the first store, assigns the CEO to it, and lands the CEO on Point of Sale.
-4. The CEO opens Staff Management, taps "Invite new staff", picks a role and store, and generates an 8-character invite code to share.
+4. The CEO opens Staff Management, taps "Invite new staff", picks a role and store, and generates an 8-character invite code. The code is emailed to the invitee automatically (branded as Reebaplus, sent server-side once the invite syncs to the cloud), and the CEO can still copy or share it via SMS / WhatsApp.
 5. A staff member installs the app, taps "Join with invite code", and enters the code, then their email (must match the invite), email OTP, their first name and last name, phone number, street address, local government / district, state / region, country, create PIN, and confirm PIN; they are signed in with the role and store carried from the invite.
 6. The CEO opens Inventory and adds products (name, per-tier prices, stock quantity, store) so the POS grid has stock to sell.
 7. On the shared till, a cold start shows the "Who's working?" picker; the staff member taps their card and enters their PIN, which unlocks only that chosen identity.
@@ -35,7 +35,7 @@ Reebaplus POS is an offline-first, mobile point-of-sale app for small and medium
 
 ### Authentication & Onboarding
 
-- Welcome screen, CEO sign-up (9 steps), staff sign-up via invite code (7 steps), login with email + OTP + PIN, and Forgot PIN via email OTP.
+- Welcome screen, CEO sign-up (9 steps), staff sign-up via invite code (7 steps), login with email + OTP + PIN, and Forgot PIN via email OTP. All transactional email — OTP, login, Forgot PIN, and the staff invite code — is sent from the Reebaplus domain (auth email via Supabase Custom SMTP; the invite code via the `send-invite-email` Edge Function), with the invite code also copyable/shareable on-device.
 - PINs are device-local unlock factors that are never sent to the cloud; email + OTP is the portable identity and the recovery path. A new device re-establishes the PIN locally after OTP.
 - "Who's working?" picker for shared tills with explicit identity selection; auto-lock and Switch User keep the current PIN, while Log Out clears the leaving user's PIN and device pointer.
 

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
-import 'package:reebaplus_pos/features/auth/screens/ceo_sign_up_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/coming_soon_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/email_entry_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/staff_sign_up_screen.dart';
@@ -91,7 +90,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                       const SizedBox(height: 44),
                       AppButton(
                         text: 'Create a new business',
-                        onPressed: () => _push(const CeoSignUpScreen()),
+                        onPressed: () => _push(const EmailEntryScreen(createBusinessIntent: true)),
                       ),
                       const SizedBox(height: 14),
                       AppButton(

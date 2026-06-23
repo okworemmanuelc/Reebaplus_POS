@@ -31,7 +31,13 @@ import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/features/auth/screens/success_dashboard_entry_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/access_granted_screen.dart';
 import 'package:reebaplus_pos/features/diagnostics/screens/schema_error_screen.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+
+import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/sync/screens/first_sync_screen.dart';
+import 'package:reebaplus_pos/features/sync/widgets/initial_load_animation.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_thanks.dart';
 import 'package:reebaplus_pos/features/subscription/screens/thank_you_subscription_screen.dart';
@@ -41,6 +47,11 @@ import 'package:timezone/data/latest.dart' as tz;
 
 /// Shared future — completes when Supabase client is ready for OTP calls.
 late final Future<void> supabaseReady;
+
+/// Google Web OAuth Client ID (serverClientId) backing the Supabase Google provider.
+/// Paste the client ID from Google Cloud Console that matches the Supabase Auth Google Provider.
+const String googleWebClientId =
+    '807123945489-048eug40i2jn7novlblidott50sqcl7b.apps.googleusercontent.com';
 
 void main() {
   // Master plan §33 (Reliability and Crash Handling): run the whole app inside
@@ -265,7 +276,7 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
       final db = ref.read(databaseProvider);
       final user = await db.storesDao.getUserById(userId);
       if (user != null) {
-        final count = await db.userBusinessesDao.countActiveStaffForBusiness(
+        final count = await db.userBusinessesDao.countDeviceStaffForBusiness(
           user.businessId,
         );
         multiStaff = count > 1;
@@ -292,9 +303,6 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
   @override
   Widget build(BuildContext context) {
     final theme = ref.watch(themeProvider);
-    final auth = ref.watch(authProvider);
-    final user = auth.value;
-    final localBusinessesAsync = ref.watch(localBusinessesProvider);
 
     // Apply the CEO-chosen business accent colour (synced) to this device.
     // Null = pre-login / unset → leave the device's themeController value alone
@@ -365,84 +373,12 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
             DesignSystem.blue => AppTheme.dark(),
           },
           navigatorKey: _navigatorKey,
-          home: () {
-            if (user == null) {
-              // Still reading SharedPreferences — show branded splash.
-              if (_hasDeviceUser == null) return const _BrandedSplash();
-              // New device / fresh install → email entry flow.
-              //
-              // Legacy in-progress onboarding (a half-built business from
-              // before the collect-first wizard) is no longer auto-resumed
-              // — the new wizard commits atomically at PIN, so abandonment
-              // can't leave a half-state to resume into. Users in that
-              // transitional bucket re-enter via EmailEntry / LoginScreen.
-              if (!_hasDeviceUser!) return const WelcomeScreen();
-              // Known device. A lock / Switch User / auto-lock returns to the
-              // Who Is Working picker (master plan §8.5). On a cold start, a
-              // multi-staff shared till ALSO returns to the picker so the right
-              // person is chosen explicitly (§7.2) — never assume the last
-              // device user. A single-staff device goes straight to that user's
-              // personalized PIN screen (keeps biometric unlock).
-              if (_auth.showPickerOnUnlock || _deviceMultiStaff) {
-                return const WhoIsWorkingScreen();
-              }
-              return const LoginScreen();
-            }
-
-            // Session-gate. Local user is set but Supabase has no JWT —
-            // mounting MainLayout here would render a logged-in shell that
-            // can't reach the cloud: every write would pile up in the queue
-            // with `pushPending` skipping on "no auth session" and the Sync
-            // Issues screen reporting "no profiles row for current
-            // auth.uid()". Bounce through OTP instead so the JWT is
-            // re-established before any tenant-scoped UI renders.
-            if (!_supabaseHasSession) {
-              return _SessionExpiredScreen(user: user);
-            }
-
-            // Gating the Business Reveal UX for brand-new logins on fresh devices:
-            // If the user has authenticated but there is no business row locally in our Drift database yet,
-            // show the FirstSyncScreen to perform the initial pull, keeping them out of empty screens.
-            final localBusinesses = localBusinessesAsync.valueOrNull;
-            if (localBusinesses == null || localBusinesses.isEmpty) {
-              return FirstSyncScreen(businessId: user.businessId);
-            }
-
-            // Check for special post-login screens set by BiometricSetupScreen.
-            final pendingRoute = auth.pendingPostLoginRoute;
-            if (pendingRoute != PostLoginRoute.none) {
-              auth.pendingPostLoginRoute = PostLoginRoute.none;
-              switch (pendingRoute) {
-                case PostLoginRoute.successDashboard:
-                  return const SuccessDashboardEntryScreen();
-                case PostLoginRoute.accessGranted:
-                  final pendingUser = auth.pendingPostLoginUser ?? user;
-                  auth.pendingPostLoginUser = null;
-                  return AccessGrantedScreen(user: pendingUser);
-                case PostLoginRoute.none:
-                  break;
-              }
-            }
-
-            // Subscription gate (master plan §32). The PRO / FREE TRIAL name
-            // badges and Settings → Subscription surface status everywhere; here
-            // the gate also (a) LOCKS the app on a known-expired trial or an
-            // inactive subscription, and (b) shows a one-time Thank-You on a
-            // fresh activation. Grace (unknown status / no deadline) never locks.
-            final subAccess = ref.watch(currentBusinessSubscriptionProvider);
-            if (subAccess.isLocked) {
-              return SubscriptionLockedScreen(access: subAccess);
-            }
-            final subBusiness = ref.watch(currentBusinessProvider);
-            if (subBusiness != null &&
-                ref
-                    .watch(subscriptionThanksProvider)
-                    .shouldCelebrate(subBusiness)) {
-              return ThankYouSubscriptionScreen(business: subBusiness);
-            }
-
-            return const MainLayout();
-          }(),
+          home: _HomeRouter(
+            hasDeviceUser: _hasDeviceUser,
+            deviceMultiStaff: _deviceMultiStaff,
+            supabaseHasSession: _supabaseHasSession,
+            showPickerOnUnlock: _auth.showPickerOnUnlock,
+          ),
         ),
       ),
     );
@@ -631,6 +567,239 @@ class _SessionExpiredScreenState extends ConsumerState<_SessionExpiredScreen> {
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Home routing widget — extracted from _ReebaplusPosAppState so all
+// ref.watch calls live at the top of a dedicated build() (code-standards.md)
+// and the AnimatedSwitcher persists across rebuilds for smooth transitions.
+// ---------------------------------------------------------------------------
+
+class _HomeRouter extends ConsumerWidget {
+  final bool? hasDeviceUser;
+  final bool deviceMultiStaff;
+  final bool supabaseHasSession;
+  final bool showPickerOnUnlock;
+
+  const _HomeRouter({
+    required this.hasDeviceUser,
+    required this.deviceMultiStaff,
+    required this.supabaseHasSession,
+    required this.showPickerOnUnlock,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final auth = ref.watch(authProvider);
+    final user = auth.value;
+    final localBusinessesAsync = ref.watch(localBusinessesProvider);
+    final pullStatus = ref.watch(pullStatusProvider).value;
+    final hasLocalProducts =
+        ref.watch(hasLocalProductsProvider).valueOrNull ?? false;
+    final subAccess = ref.watch(currentBusinessSubscriptionProvider);
+    final subBusiness = ref.watch(currentBusinessProvider);
+    final subThanks = ref.watch(subscriptionThanksProvider);
+
+    final screen = _resolve(
+      auth: auth,
+      user: user,
+      localBusinessesAsync: localBusinessesAsync,
+      pullStatus: pullStatus,
+      hasLocalProducts: hasLocalProducts,
+      subAccess: subAccess,
+      subBusiness: subBusiness,
+      subThanks: subThanks,
+    );
+
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 350),
+      transitionBuilder: (child, anim) =>
+          FadeTransition(opacity: anim, child: child),
+      child: KeyedSubtree(
+        key: ValueKey(screen.runtimeType),
+        child: screen,
+      ),
+    );
+  }
+
+  Widget _resolve({
+    required AuthService auth,
+    required UserData? user,
+    required AsyncValue<List<BusinessData>> localBusinessesAsync,
+    required PullStatus pullStatus,
+    required bool hasLocalProducts,
+    required SubscriptionAccess subAccess,
+    required BusinessData? subBusiness,
+    required SubscriptionThanksService subThanks,
+  }) {
+    if (user == null) {
+      // Still reading SharedPreferences — show branded splash.
+      if (hasDeviceUser == null) return const _BrandedSplash();
+      // New device / fresh install → email entry flow.
+      //
+      // Legacy in-progress onboarding (a half-built business from
+      // before the collect-first wizard) is no longer auto-resumed
+      // — the new wizard commits atomically at PIN, so abandonment
+      // can't leave a half-state to resume into. Users in that
+      // transitional bucket re-enter via EmailEntry / LoginScreen.
+      if (!hasDeviceUser!) return const WelcomeScreen();
+      // Known device. A lock / Switch User / auto-lock returns to the
+      // Who Is Working picker (master plan §8.5). On a cold start, a
+      // multi-staff shared till ALSO returns to the picker so the right
+      // person is chosen explicitly (§7.2) — never assume the last
+      // device user. A single-staff device goes straight to that user's
+      // personalized PIN screen (keeps biometric unlock).
+      if (showPickerOnUnlock || deviceMultiStaff) {
+        return const WhoIsWorkingScreen();
+      }
+      return const LoginScreen();
+    }
+
+    // Session-gate. Local user is set but Supabase has no JWT —
+    // mounting MainLayout here would render a logged-in shell that
+    // can't reach the cloud: every write would pile up in the queue
+    // with `pushPending` skipping on "no auth session" and the Sync
+    // Issues screen reporting "no profiles row for current
+    // auth.uid()". Bounce through OTP instead so the JWT is
+    // re-established before any tenant-scoped UI renders.
+    if (!supabaseHasSession) {
+      return _SessionExpiredScreen(user: user);
+    }
+
+    // Minimum-pull gate: no businesses row yet → run the 4-table minimum pull.
+    final localBusinesses = localBusinessesAsync.valueOrNull;
+    if (localBusinesses == null || localBusinesses.isEmpty) {
+      return FirstSyncScreen(businessId: user.businessId);
+    }
+
+    // Fresh-device background-pull gate (Invariant #11).
+    // Hold the loading screen until products exist locally.
+    // hasLocalProducts flips false → true exactly once per fresh device
+    // install, then this gate never re-engages (returning users pass straight
+    // through since hasLocalProducts is already true).
+    if (!hasLocalProducts && pullStatus.stage != PullStage.completed) {
+      if (pullStatus.stage == PullStage.failed) {
+        return _BackgroundPullFailed(businessId: user.businessId);
+      }
+      return _BackgroundPullLoading(pullStatus: pullStatus);
+    }
+
+    // Check for special post-login screens set by BiometricSetupScreen.
+    final pendingRoute = auth.pendingPostLoginRoute;
+    if (pendingRoute != PostLoginRoute.none) {
+      auth.pendingPostLoginRoute = PostLoginRoute.none;
+      switch (pendingRoute) {
+        case PostLoginRoute.successDashboard:
+          return const SuccessDashboardEntryScreen();
+        case PostLoginRoute.accessGranted:
+          final pendingUser = auth.pendingPostLoginUser ?? user;
+          auth.pendingPostLoginUser = null;
+          return AccessGrantedScreen(user: pendingUser);
+        case PostLoginRoute.none:
+          break;
+      }
+    }
+
+    // Subscription gate (master plan §32).
+    if (subAccess.isLocked) {
+      return SubscriptionLockedScreen(access: subAccess);
+    }
+    if (subBusiness != null && subThanks.shouldCelebrate(subBusiness)) {
+      return ThankYouSubscriptionScreen(business: subBusiness);
+    }
+
+    return const MainLayout();
+  }
+}
+
+/// Shown while the background full-pull is running on a fresh device.
+/// Reads pullStatus directly from the provider so the progress label
+/// updates without rebuilding the parent.
+class _BackgroundPullLoading extends ConsumerWidget {
+  final PullStatus pullStatus;
+
+  const _BackgroundPullLoading({required this.pullStatus});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final live = ref.watch(pullStatusProvider).value;
+    return InitialLoadAnimation(
+      done: live.tablesDone > 0 ? live.tablesDone : null,
+      total: live.tablesTotal > 0 ? live.tablesTotal : null,
+    );
+  }
+}
+
+/// Shown when the background full-pull fails before products are available.
+class _BackgroundPullFailed extends ConsumerWidget {
+  final String businessId;
+
+  const _BackgroundPullFailed({required this.businessId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = Theme.of(context);
+    final cs = t.colorScheme;
+
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: AppDecorations.glassyBackground(context),
+        child: SafeArea(
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: context.getRSize(24),
+              vertical: context.getRSize(32),
+            ),
+            child: Column(
+              children: [
+                const Spacer(),
+                FaIcon(
+                  FontAwesomeIcons.triangleExclamation,
+                  size: context.getRSize(56),
+                  color: cs.error,
+                ),
+                SizedBox(height: context.getRSize(24)),
+                Text(
+                  'Could Not Load Your Store',
+                  textAlign: TextAlign.center,
+                  style: t.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: cs.onSurface,
+                  ),
+                ),
+                SizedBox(height: context.getRSize(12)),
+                Text(
+                  'There was a problem downloading your store data.\n'
+                  'Please check your connection and try again.',
+                  textAlign: TextAlign.center,
+                  style: t.textTheme.bodyMedium?.copyWith(
+                    color: cs.onSurface.withValues(alpha: 0.65),
+                    height: 1.5,
+                  ),
+                ),
+                const Spacer(),
+                AppButton(
+                  text: 'Retry',
+                  variant: AppButtonVariant.primary,
+                  icon: FontAwesomeIcons.arrowsRotate.data,
+                  onPressed: () {
+                    ref
+                        .read(supabaseSyncServiceProvider)
+                        .pullChanges(businessId)
+                        .ignore();
+                  },
+                ),
+                SizedBox(height: context.getRSize(16)),
+              ],
+            ),
           ),
         ),
       ),

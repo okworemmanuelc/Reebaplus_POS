@@ -5,6 +5,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -219,6 +220,22 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
     final customEntered = double.tryParse(_customPriceCtrl.text.trim()) ?? 0.0;
     final customKobo = (customEntered * 100).round();
     final hasCustomPrice = canSetCustomPrice && customKobo > 0;
+
+    // Define the custom price floor
+    final floorKobo = (catalogUnitPriceKobo * (100 - maxPercent) / 100.0).round();
+
+    // Auto-snap the custom price input to the floor when custom price is below floor.
+    if (hasCustomPrice && customKobo < floorKobo) {
+      final snapText = _trimNum(floorKobo / 100.0);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _customPriceCtrl.text == snapText) return;
+        _customPriceCtrl.text = snapText;
+        _customPriceCtrl.selection = TextSelection.collapsed(
+          offset: snapText.length,
+        );
+      });
+    }
+
     final rawQty = double.tryParse(_qtyCtrl.text) ?? 1.0;
     // Quantity can't exceed available stock (the POS card count). Snap an
     // over-limit entry back down to the cap, same pattern as the discount cap.
@@ -232,15 +249,22 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
     }
     final qty = rawQty > _maxQty ? _maxQty : rawQty;
     // Effective unit price = the typed custom price (when permitted) else the
-    // catalog price. Drives the line total, the discount cap, and the order.
-    final effectiveUnitPriceKobo = hasCustomPrice
-        ? customKobo
-        : catalogUnitPriceKobo;
+    // catalog price. Clamp to floorKobo to prevent temporary sub-floor math.
+    // Drives the line total, the discount cap, and the order.
+    final effectiveCustomKobo = hasCustomPrice
+        ? (customKobo < floorKobo ? floorKobo : customKobo)
+        : null;
+    final effectiveUnitPriceKobo = effectiveCustomKobo ?? catalogUnitPriceKobo;
     final lineTotalKobo = (effectiveUnitPriceKobo * qty).round();
     final resolved = _resolveDiscount(
       lineTotalKobo: lineTotalKobo,
       maxPercent: maxPercent,
     );
+
+    // Option A: clamp the discount so that the effective unit price after discount
+    // does not dip below floorKobo.
+    final maxLineDiscountKobo = ((effectiveUnitPriceKobo - floorKobo) * qty).round();
+    final discountKobo = resolved.discountKobo.clamp(0, maxLineDiscountKobo);
 
     // Auto-snap the percent input to the role cap when exceeded (§13.2).
     if (resolved.cappedByRole && _discountKind == 'percent') {
@@ -461,6 +485,9 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
                 catalogUnitPriceKobo: catalogUnitPriceKobo,
                 hasCustomPrice: hasCustomPrice,
                 effectiveUnitPriceKobo: effectiveUnitPriceKobo,
+                floorKobo: floorKobo,
+                maxPercent: maxPercent,
+                customKobo: customKobo,
               ),
               SizedBox(height: context.getRSize(28)),
             ],
@@ -470,7 +497,7 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
               canDiscount: canDiscount,
               maxPercent: maxPercent,
               lineTotalKobo: lineTotalKobo,
-              discountKobo: resolved.discountKobo,
+              discountKobo: discountKobo,
               cappedByRole: resolved.cappedByRole,
             ),
 
@@ -520,17 +547,19 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
                           cart.setCustomPrice(
                             widget.item['name'],
                             customPriceKobo: hasCustomPrice ? customKobo : null,
+                            maxPercent: maxPercent,
                           );
                         }
                         // Apply the resolved (role-capped) discount to the line.
-                        if (resolved.discountKobo > 0) {
+                        if (discountKobo > 0) {
                           final entered =
                               double.tryParse(_discountCtrl.text.trim()) ?? 0.0;
                           cart.setLineDiscount(
                             widget.item['name'],
                             kind: _discountKind,
                             enteredValue: entered,
-                            discountKobo: resolved.discountKobo,
+                            discountKobo: discountKobo,
+                            maxPercent: maxPercent,
                           );
                         }
                         Navigator.pop(context, accepted);
@@ -573,6 +602,7 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
                           cart.setCustomPrice(
                             widget.item['name'],
                             customPriceKobo: hasCustomPrice ? customKobo : null,
+                            maxPercent: maxPercent,
                           );
                         }
                         // Persist the resolved (role-capped) discount alongside qty.
@@ -582,7 +612,8 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
                           widget.item['name'],
                           kind: _discountKind,
                           enteredValue: entered,
-                          discountKobo: resolved.discountKobo,
+                          discountKobo: discountKobo,
+                          maxPercent: maxPercent,
                         );
                         Navigator.pop(context);
                       },
@@ -600,10 +631,15 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
     required int catalogUnitPriceKobo,
     required bool hasCustomPrice,
     required int effectiveUnitPriceKobo,
+    required int floorKobo,
+    required int maxPercent,
+    required int customKobo,
   }) {
     final t = Theme.of(context);
     final text = t.colorScheme.onSurface;
     final primary = t.colorScheme.primary;
+
+    final showCustomWarning = hasCustomPrice && customKobo <= floorKobo;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -669,6 +705,17 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
               fontSize: context.getRFontSize(13),
               fontWeight: FontWeight.w700,
               color: primary,
+            ),
+          ),
+        ],
+        if (showCustomWarning) ...[
+          SizedBox(height: context.getRSize(4)),
+          Text(
+            'Lowest allowed price is ${formatCurrency(floorKobo / 100.0)} (max discount $maxPercent%).',
+            style: TextStyle(
+              fontSize: context.getRFontSize(12),
+              fontWeight: FontWeight.w600,
+              color: Theme.of(context).extension<AppSemanticColors>()?.warning ?? Colors.orange.shade700,
             ),
           ),
         ],

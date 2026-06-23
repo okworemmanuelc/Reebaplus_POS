@@ -232,55 +232,69 @@ class _AppDropdownState<T> extends FormFieldState<T> {
       onTap: _toggleDropdown,
       child: CompositedTransformTarget(
         link: _layerLink,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(14),
-          child: OptimizedBackdropFilter(
-            filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-            fallbackBuilder: (context, child) => child,
-            child: Container(
-              key: _key,
-              padding: widget.contentPadding ?? const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-              decoration: BoxDecoration(
-                color: buttonColor,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: hasError 
-                      ? Colors.red 
-                      : (isDark ? Colors.white.withValues(alpha: 0.05) : t.colorScheme.primary.withValues(alpha: 0.05)),
-                  width: 1,
-                ),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: isDark 
+                    ? Colors.black.withValues(alpha: 0.15) 
+                    : t.colorScheme.primary.withValues(alpha: 0.04),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
               ),
-              child: Row(
-                children: [
-                  if (widget.prefixIcon != null) ...[
-                    widget.prefixIcon!,
-                    const SizedBox(width: 10),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: OptimizedBackdropFilter(
+              filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+              fallbackBuilder: (context, child) => child,
+              child: Container(
+                key: _key,
+                padding: widget.contentPadding ?? const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                decoration: BoxDecoration(
+                  color: buttonColor,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: hasError 
+                        ? Colors.red 
+                        : (isDark ? Colors.white.withValues(alpha: 0.05) : t.colorScheme.primary.withValues(alpha: 0.05)),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    if (widget.prefixIcon != null) ...[
+                      widget.prefixIcon!,
+                      const SizedBox(width: 10),
+                    ],
+                    Expanded(
+                      child: selectedChild != null
+                          ? DefaultTextStyle(
+                              style: TextStyle(
+                                color: t.colorScheme.onSurface,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              child: selectedChild,
+                            )
+                          : Text(
+                              widget.hintText ?? '',
+                              style: TextStyle(
+                                color: subtextColor,
+                                fontSize: 13,
+                              ),
+                            ),
+                    ),
+                    Icon(
+                      _isOpen ? FontAwesomeIcons.chevronUp.data : FontAwesomeIcons.chevronDown.data,
+                      size: 13,
+                      color: subtextColor,
+                    ),
                   ],
-                  Expanded(
-                    child: selectedChild != null
-                        ? DefaultTextStyle(
-                            style: TextStyle(
-                              color: t.colorScheme.onSurface,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            child: selectedChild,
-                          )
-                        : Text(
-                            widget.hintText ?? '',
-                            style: TextStyle(
-                              color: subtextColor,
-                              fontSize: 13,
-                            ),
-                          ),
-                  ),
-                  Icon(
-                    _isOpen ? FontAwesomeIcons.chevronUp.data : FontAwesomeIcons.chevronDown.data,
-                    size: 13,
-                    color: subtextColor,
-                  ),
-                ],
+                ),
               ),
             ),
           ),

@@ -1,11 +1,15 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 
 import 'package:reebaplus_pos/core/data/business_types.dart';
 import 'package:reebaplus_pos/core/data/currencies.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/core/result.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
@@ -32,6 +36,16 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
   String _currency = kDefaultCurrency;
   bool _loading = true;
   bool _saving = false;
+
+  /// Cached local path of the current logo (null = no logo).
+  String? _logoLocalPath;
+
+  /// Pending bytes from a newly picked image (not yet saved to cloud).
+  /// Non-null means the user picked a new logo but hasn't hit "Save" yet.
+  _PendingLogo? _pendingLogo;
+
+  /// True when the user hit "Remove logo" — we clear on next Save.
+  bool _pendingRemoveLogo = false;
 
   /// Distinct currency codes offered in the picker, always including the
   /// default and whatever the business already has.
@@ -60,6 +74,16 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
         : (await db.select(db.businesses).get()).firstOrNull;
     final currency = await db.settingsDao.get('default_currency');
 
+    // Attempt to resolve a cached local logo path.
+    String? logoPath;
+    if (biz != null) {
+      final svc = ref.read(businessLogoServiceProvider);
+      logoPath = await svc.ensureCached(
+        businessId: biz.id,
+        logoUrl: biz.logoUrl,
+      );
+    }
+
     if (!mounted) return;
     setState(() {
       _nameController.text = biz?.name ?? '';
@@ -79,9 +103,38 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
         ...kCountryCurrency.values,
         _currency,
       }.toList()..sort();
+      _logoLocalPath = logoPath;
       _loading = false;
     });
   }
+
+  // ── Logo actions ────────────────────────────────────────────────────────────
+
+  Future<void> _pickLogo() async {
+    final svc = ref.read(businessLogoServiceProvider);
+    final result = await svc.pickAndProcess(source: ImageSource.gallery);
+    switch (result) {
+      case Ok(:final value):
+        setState(() {
+          _pendingLogo = _PendingLogo(value);
+          _pendingRemoveLogo = false;
+        });
+      case Err(:final error):
+        if (!mounted) return;
+        if (!error.isCancelled) {
+          AppNotification.showError(context, 'Could not load image.');
+        }
+    }
+  }
+
+  void _removeLogo() {
+    setState(() {
+      _pendingLogo = null;
+      _pendingRemoveLogo = true;
+    });
+  }
+
+  // ── Save ────────────────────────────────────────────────────────────────────
 
   Future<void> _save() async {
     // Defense-in-depth (hard rule #6): the drawer hides the entry, but the
@@ -107,11 +160,49 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
       final dbType = _type == 'Beverage distributor'
           ? 'Beer distributor'
           : _type;
+
+      // -- Logo changes first (get the URL before writing the business row).
+      final bizId = db.currentBusinessId;
+      String? newLogoUrl;
+      bool clearLogo = false;
+
+      if (bizId != null) {
+        final svc = ref.read(businessLogoServiceProvider);
+
+        if (_pendingLogo != null) {
+          final uploadResult = await svc.save(
+            businessId: bizId,
+            bytes: _pendingLogo!.bytes,
+          );
+          switch (uploadResult) {
+            case Ok(:final value):
+              newLogoUrl = value;
+              _logoLocalPath = await svc.localPathFor(bizId);
+              _pendingLogo = null;
+            case Err():
+              if (!mounted) return;
+              AppNotification.showError(
+                context,
+                'Logo upload failed. Other changes will still be saved.',
+              );
+          }
+        } else if (_pendingRemoveLogo) {
+          await svc.clear(bizId);
+          clearLogo = true;
+          _logoLocalPath = null;
+          _pendingRemoveLogo = false;
+        }
+      }
+
+      // -- Business info row.
       await db.businessesDao.updateInfo(
         name: name,
         type: dbType,
         phone: _phoneController.text.trim(),
         tracksEmptyCrates: isCrateBusiness(dbType) ? _tracksEmptyCrates : true,
+        logoUrl: clearLogo
+            ? ''
+            : newLogoUrl ?? const Object(), // sentinel = leave unchanged
       );
       await db.settingsDao.set('default_currency', _currency);
       await db.activityLogDao.log(
@@ -128,6 +219,8 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
       if (mounted) setState(() => _saving = false);
     }
   }
+
+  // ── Build ───────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -149,6 +242,24 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
                   24 + context.deviceBottomPadding,
                 ),
                 children: [
+                  const SettingsSectionTitle('Logo'),
+                  const SizedBox(height: 16),
+                  GlassyCard(
+                    padding: const EdgeInsets.all(16),
+                    radius: 16,
+                    child: _LogoSection(
+                      logoLocalPath: _pendingLogo != null || _pendingRemoveLogo
+                          ? null
+                          : _logoLocalPath,
+                      pendingBytes: _pendingLogo?.bytes,
+                      onPick: _pickLogo,
+                      onRemove: _logoLocalPath != null ||
+                              _pendingLogo != null
+                          ? _removeLogo
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
                   const SettingsSectionTitle('Business'),
                   const SizedBox(height: 16),
                   GlassyCard(
@@ -183,10 +294,14 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
                           value: _type,
                           isExpanded: true,
                           labelText: 'Business type',
-                          prefixIcon: const Icon(Icons.category_rounded, size: 20),
+                          prefixIcon:
+                              const Icon(Icons.category_rounded, size: 20),
                           items: [
                             for (final type in kBusinessTypes)
-                              DropdownMenuItem(value: type, child: Text(type)),
+                              DropdownMenuItem(
+                                value: type,
+                                child: Text(type),
+                              ),
                           ],
                           onChanged: (v) => setState(() {
                             _type = v;
@@ -221,10 +336,14 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
                           value: _currency,
                           isExpanded: true,
                           labelText: 'Currency',
-                          prefixIcon: const Icon(Icons.payments_rounded, size: 20),
+                          prefixIcon:
+                              const Icon(Icons.payments_rounded, size: 20),
                           items: [
                             for (final code in _currencyCodes)
-                              DropdownMenuItem(value: code, child: Text(code)),
+                              DropdownMenuItem(
+                                value: code,
+                                child: Text(code),
+                              ),
                           ],
                           onChanged: (v) =>
                               setState(() => _currency = v ?? _currency),
@@ -239,6 +358,135 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
             ),
     );
   }
+}
+
+// ── Logo section widget ────────────────────────────────────────────────────
+
+class _LogoSection extends StatelessWidget {
+  const _LogoSection({
+    required this.logoLocalPath,
+    required this.pendingBytes,
+    required this.onPick,
+    required this.onRemove,
+  });
+
+  /// Existing cached logo path — null when no logo.
+  final String? logoLocalPath;
+
+  /// Freshly picked bytes (before save) — overrides [logoLocalPath] preview.
+  final Uint8List? pendingBytes;
+
+  final VoidCallback onPick;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final hasLogo = logoLocalPath != null || pendingBytes != null;
+
+    Widget avatar;
+    if (pendingBytes != null) {
+      avatar = Image.memory(
+        pendingBytes!,
+        width: context.getRSize(80),
+        height: context.getRSize(80),
+        fit: BoxFit.cover,
+      );
+    } else if (logoLocalPath != null) {
+      avatar = Image.file(
+        File(logoLocalPath!),
+        width: context.getRSize(80),
+        height: context.getRSize(80),
+        fit: BoxFit.cover,
+      );
+    } else {
+      avatar = Icon(
+        Icons.business_rounded,
+        size: context.getRSize(40),
+        color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+      );
+    }
+
+    return Row(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            width: context.getRSize(80),
+            height: context.getRSize(80),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: theme.colorScheme.outline.withValues(alpha: 0.3),
+              ),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: avatar,
+            ),
+          ),
+        ),
+        SizedBox(width: context.getRSize(16)),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              GestureDetector(
+                onTap: onPick,
+                child: Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: context.getRSize(16),
+                    vertical: context.getRSize(10),
+                  ),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    hasLogo ? 'Change logo' : 'Upload logo',
+                    style: TextStyle(
+                      color: theme.colorScheme.primary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: context.getRFontSize(14),
+                    ),
+                  ),
+                ),
+              ),
+              if (onRemove != null) ...[
+                SizedBox(height: context.getRSize(8)),
+                GestureDetector(
+                  onTap: onRemove,
+                  child: Text(
+                    'Remove logo',
+                    style: TextStyle(
+                      color: theme.colorScheme.error,
+                      fontSize: context.getRFontSize(13),
+                    ),
+                  ),
+                ),
+              ],
+              SizedBox(height: context.getRSize(6)),
+              Text(
+                'PNG or JPG, max 512×512 px.',
+                style: TextStyle(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                  fontSize: context.getRFontSize(11),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+class _PendingLogo {
+  const _PendingLogo(this.bytes);
+  final Uint8List bytes;
 }
 
 class _SaveButton extends StatelessWidget {

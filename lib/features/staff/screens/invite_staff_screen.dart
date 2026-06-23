@@ -330,8 +330,8 @@ class _InviteStaffScreenState extends ConsumerState<InviteStaffScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Share this code with $_generatedEmail. It expires in 7 days '
-          'and can be used once.',
+          'We\'ve emailed this code to $_generatedEmail. You can also copy or '
+          'share it below. It expires in 7 days and can be used once.',
           style: TextStyle(color: subtext, fontSize: context.getRFontSize(13)),
         ),
         SizedBox(height: context.getRSize(16)),

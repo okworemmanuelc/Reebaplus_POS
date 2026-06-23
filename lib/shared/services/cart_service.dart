@@ -229,17 +229,34 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
   /// [value] is the entered number (kept for the badge); [discountKobo] is the
   /// resolved amount off the line total, clamped to [0, lineTotal]. A resolved
   /// amount of 0 clears the discount.
+  ///
+  /// If [maxPercent] is provided, enforces that the effective unit price after
+  /// discount does not fall below the custom price floor (Option A).
   void setLineDiscount(
     String productName, {
     required String kind,
     required double enteredValue,
     required int discountKobo,
+    int? maxPercent,
   }) {
     final current = List<Map<String, dynamic>>.from(_userCarts[_cartKey] ?? []);
     final index = current.indexWhere((item) => item['name'] == productName);
     if (index == -1) return;
+    
     final lineTotalKobo = _lineTotalKobo(current[index]);
-    final clamped = discountKobo.clamp(0, lineTotalKobo);
+    int capKobo = lineTotalKobo;
+
+    if (maxPercent != null) {
+      final catalogKobo =
+          (current[index]['catalogPriceKobo'] as int?) ??
+          (current[index]['unitPriceKobo'] as num).toInt();
+      final floorKobo = (catalogKobo * (100 - maxPercent) / 100.0).round();
+      final unitPriceKobo = current[index]['unitPriceKobo'] as int;
+      final maxLineDiscountKobo = ((unitPriceKobo - floorKobo) * (current[index]['qty'] as num).toDouble()).round();
+      capKobo = maxLineDiscountKobo.clamp(0, lineTotalKobo);
+    }
+
+    final clamped = discountKobo.clamp(0, capKobo);
     current[index]['discountKind'] = clamped == 0 ? null : kind;
     current[index]['discountValue'] = clamped == 0 ? 0.0 : enteredValue;
     current[index]['discountKobo'] = clamped;
@@ -254,7 +271,14 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
   /// designated catalog price (`catalogPriceKobo`). Any existing per-line
   /// discount is re-clamped to the new line total so a lower price can never
   /// produce a negative net.
-  void setCustomPrice(String productName, {required int? customPriceKobo}) {
+  ///
+  /// [maxPercent] is the user's role-based maximum discount percentage, used to
+  /// enforce the custom price floor: `floor = round(catalogPrice * (100 - maxPercent) / 100)`.
+  void setCustomPrice(
+    String productName, {
+    required int? customPriceKobo,
+    required int maxPercent,
+  }) {
     final current = List<Map<String, dynamic>>.from(_userCarts[_cartKey] ?? []);
     final index = current.indexWhere((item) => item['name'] == productName);
     if (index == -1) return;
@@ -266,16 +290,25 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
       current[index]['unitPriceKobo'] = catalogKobo;
       current[index]['price'] = catalogKobo / 100.0;
     } else {
-      current[index]['customPriceKobo'] = customPriceKobo;
-      current[index]['unitPriceKobo'] = customPriceKobo;
-      current[index]['price'] = customPriceKobo / 100.0;
+      final floorKobo = (catalogKobo * (100 - maxPercent) / 100.0).round();
+      final clampedCustomKobo = customPriceKobo < floorKobo ? floorKobo : customPriceKobo;
+      current[index]['customPriceKobo'] = clampedCustomKobo;
+      current[index]['unitPriceKobo'] = clampedCustomKobo;
+      current[index]['price'] = clampedCustomKobo / 100.0;
     }
-    // Re-clamp any existing per-line discount to the new line total (§13.2).
+    // Re-clamp any existing per-line discount to the new line total (§13.2)
+    // and ensure the effective unit price after discount doesn't fall below the floor (Option A).
     final existingDiscount = (current[index]['discountKobo'] as int?) ?? 0;
     if (existingDiscount > 0) {
+      final qty = (current[index]['qty'] as num).toDouble();
+      final unitPriceKobo = current[index]['unitPriceKobo'] as int;
+      final floorKobo = (catalogKobo * (100 - maxPercent) / 100.0).round();
+      final maxLineDiscountKobo = ((unitPriceKobo - floorKobo) * qty).round();
       final lineTotalKobo = _lineTotalKobo(current[index]);
-      if (existingDiscount > lineTotalKobo) {
-        current[index]['discountKobo'] = lineTotalKobo;
+      
+      final capKobo = maxLineDiscountKobo.clamp(0, lineTotalKobo);
+      if (existingDiscount > capKobo) {
+        current[index]['discountKobo'] = capKobo;
       }
     }
     _userCarts[_cartKey] = current;

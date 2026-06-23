@@ -1220,6 +1220,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                 manufacturerNames: _manufacturerNames,
                 storeAddress: _storeAddress,
                 businessName: ref.watch(currentBusinessNameProvider),
+                logoPath: ref
+                    .watch(currentBusinessLogoPathProvider)
+                    .valueOrNull,
               ),
             ),
           ),

@@ -16,6 +16,7 @@ void main() {
         'This Month',
         'This Year',
         'To Date',
+        'Custom',
       ]);
     });
 
@@ -146,12 +147,12 @@ void main() {
   });
 
   group('datePeriodLabelsForRole', () {
-    test('Manager-or-above gets the full five', () {
+    test('Manager-or-above gets the full six', () {
       expect(datePeriodLabelsForRole(managerUp: true), kDatePeriodLabels);
     });
-    test('below Manager is capped to Today / This Week / This Month', () {
+    test('below Manager is capped to Today / This Week / This Month / Custom', () {
       expect(datePeriodLabelsForRole(managerUp: false),
-          ['Today', 'This Week', 'This Month']);
+          ['Today', 'This Week', 'This Month', 'Custom']);
     });
   });
 
@@ -165,6 +166,47 @@ void main() {
       final (start, end) = dateRangeForLabel('To Date', now: now);
       expect(start, isNull);
       expect(end, isNull);
+    });
+    test('correctly parses custom date-only ranges (no time/colons)', () {
+      final (start, end) = dateRangeForLabel('Custom:2026-06-01:2026-06-23', now: now);
+      expect(start, DateTime(2026, 6, 1));
+      expect(end, DateTime(2026, 6, 23, 23, 59, 59, 999));
+    });
+    test('correctly parses custom date-time ranges (with time and colons)', () {
+      final (start, end) = dateRangeForLabel('Custom:2026-06-01T00:00:00.000Z:2026-06-23T00:00:00.000Z', now: now);
+      expect(start, DateTime(2026, 6, 1));
+      expect(end, DateTime(2026, 6, 23, 23, 59, 59, 999));
+    });
+  });
+
+  group('parseCustomDateRange', () {
+    test('parses date-only format', () {
+      final (start, end) = parseCustomDateRange('Custom:2026-06-01:2026-06-23');
+      expect(start, DateTime(2026, 6, 1));
+      expect(end, DateTime(2026, 6, 23));
+    });
+    test('parses ISO-8601 UTC format with colons', () {
+      final (start, end) = parseCustomDateRange('Custom:2026-06-01T00:00:00.000Z:2026-06-23T00:00:00.000Z');
+      expect(start, DateTime.utc(2026, 6, 1));
+      expect(end, DateTime.utc(2026, 6, 23));
+    });
+    test('returns nulls for non-custom labels', () {
+      final (start, end) = parseCustomDateRange('This Month');
+      expect(start, isNull);
+      expect(end, isNull);
+    });
+  });
+
+  group('formatPeriodLabel', () {
+    test('formats canonical periods unchanged', () {
+      expect(formatPeriodLabel('Today'), 'Today');
+      expect(formatPeriodLabel('This Month'), 'This Month');
+    });
+    test('formats custom date-only ranges', () {
+      expect(formatPeriodLabel('Custom:2026-06-01:2026-06-23'), 'Jun 1, 2026 – Jun 23, 2026');
+    });
+    test('formats custom ISO ranges with colons', () {
+      expect(formatPeriodLabel('Custom:2026-06-01T00:00:00.000Z:2026-06-23T00:00:00.000Z'), 'Jun 1, 2026 – Jun 23, 2026');
     });
   });
 }

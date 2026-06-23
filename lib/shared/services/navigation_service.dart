@@ -75,6 +75,15 @@ class NavigationService {
   /// Reset to false on logout and whenever the active store becomes "All Stores".
   final ValueNotifier<bool> storeExplicitlyChosen = ValueNotifier<bool>(false);
 
+  /// §12.1: true only when an all-stores viewer (CEO / all-stores Manager) has
+  /// *deliberately* picked "All Stores" (the picker's All Stores option). The app
+  /// never auto-lands on All Stores: MainLayout silently defaults every fresh
+  /// session to a concrete active store (the user's first selectable store, or
+  /// their lone store). This flag is what lets a viewer who *chose* All Stores
+  /// stay there without MainLayout yanking them back to a concrete store on the
+  /// next rebuild. Reset to false on logout/lock and on any concrete store pick.
+  final ValueNotifier<bool> allStoresChosen = ValueNotifier<bool>(false);
+
   static final Map<int, String> indexToRoute = {
     0: 'dashboard',
     1: 'pos',
@@ -189,6 +198,7 @@ class NavigationService {
     storeLocked.value = false;
     lockedStoreId.value = null;
     storeExplicitlyChosen.value = false;
+    allStoresChosen.value = false;
   }
 
   /// Called on logout — removes all store restrictions.
@@ -196,6 +206,7 @@ class NavigationService {
     storeLocked.value = false;
     lockedStoreId.value = null;
     storeExplicitlyChosen.value = false;
+    allStoresChosen.value = false;
   }
 
   /// Resets navigation state to defaults. Call on logout so the next session
@@ -219,5 +230,9 @@ class NavigationService {
   void setLockedStore(String? id, {bool explicit = true}) {
     lockedStoreId.value = id;
     storeExplicitlyChosen.value = explicit && id != null;
+    // Only a deliberate "All Stores" pick (explicit, id == null) latches the
+    // all-stores choice; any concrete store (or the silent default) clears it so
+    // MainLayout never treats a fresh/auto null as "the user wants All Stores".
+    allStoresChosen.value = explicit && id == null;
   }
 }

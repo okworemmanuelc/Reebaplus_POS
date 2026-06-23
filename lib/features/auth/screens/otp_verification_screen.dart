@@ -12,6 +12,7 @@ import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/features/auth/screens/create_pin_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/existing_account_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/login_screen.dart';
+import 'package:reebaplus_pos/features/auth/screens/ceo_sign_up_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/no_account_found_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/smooth_route.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_form_kit.dart';
@@ -23,12 +24,14 @@ class OtpVerificationScreen extends ConsumerStatefulWidget {
   final UserData? user;
   final String email;
   final bool isPinReset;
+  final bool createBusinessIntent;
 
   const OtpVerificationScreen({
     super.key,
     required this.user,
     required this.email,
     this.isPinReset = false,
+    this.createBusinessIntent = false,
   });
 
   @override
@@ -218,7 +221,9 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
               email: widget.email,
               account: account,
             ),
-            NoAccountFoundRoute() => NoAccountFoundScreen(email: widget.email),
+            NoAccountFoundRoute() => widget.createBusinessIntent
+                ? CeoSignUpScreen(verifiedEmail: widget.email)
+                : NoAccountFoundScreen(email: widget.email),
             LoginRoute(:final user) => LoginScreen(presetUser: user),
             CreatePinRoute(:final user) => CreatePinScreen(user: user),
           },
@@ -278,6 +283,7 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
     final textColor = authTextPrimary(context);
 
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: BrandedAuthBackground(
         child: SafeArea(

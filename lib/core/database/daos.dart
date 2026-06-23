@@ -3791,6 +3791,18 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
         .map((row) => row.read(syncQueue.id.count()) ?? 0);
   }
 
+  Future<int> countPending({String? businessId}) async {
+    final tenantFilter = businessId != null
+        ? syncQueue.businessId.equals(businessId)
+        : whereBusiness(syncQueue);
+    final countExp = syncQueue.id.count();
+    final row = await (selectOnly(syncQueue)
+          ..addColumns([countExp])
+          ..where(syncQueue.isSynced.not() & tenantFilter))
+        .getSingle();
+    return row.read(countExp) ?? 0;
+  }
+
   Future<void> resetStuckInProgress() async {
     // Items stuck in 'syncing' for more than 5 minutes are reset to 'pending'
     // so a later push tick retries them (e.g. after an app kill mid-push).
@@ -8733,6 +8745,12 @@ class SettingsDao extends DatabaseAccessor<AppDatabase>
 }
 
 @DriftAccessor(tables: [Businesses])
+/// Sentinel used by [BusinessesDao.updateInfo] to distinguish "caller did not
+/// pass logoUrl" (leave the column unchanged) from "caller passed null/empty"
+/// (clear the logo). Using a typed default of `Object?` lets the method
+/// accept `String`, `null`, `''`, or nothing, without overloading.
+const _absent = Object();
+
 class BusinessesDao extends DatabaseAccessor<AppDatabase>
     with _$BusinessesDaoMixin, BusinessScopedDao<AppDatabase> {
   BusinessesDao(super.db);
@@ -8751,6 +8769,8 @@ class BusinessesDao extends DatabaseAccessor<AppDatabase>
     String? type,
     String? phone,
     bool? tracksEmptyCrates,
+    // null = leave unchanged; empty string = clear (remove logo).
+    Object? logoUrl = _absent,
   }) async {
     final id = requireBusinessId();
     await (update(businesses)..where((t) => t.id.equals(id))).write(
@@ -8764,6 +8784,10 @@ class BusinessesDao extends DatabaseAccessor<AppDatabase>
         tracksEmptyCrates: tracksEmptyCrates == null
             ? const Value.absent()
             : Value(tracksEmptyCrates),
+        // logoUrl: pass a String to set/update, '' to clear, omit to leave.
+        logoUrl: logoUrl == _absent
+            ? const Value.absent()
+            : Value(logoUrl == '' ? null : logoUrl as String?),
         lastUpdatedAt: Value(DateTime.now()),
       ),
     );
@@ -9364,6 +9388,51 @@ class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
                     userBusinesses.status.equals('active'),
               ))
             .getSingle();
+    return row.read(countExp) ?? 0;
+  }
+
+  /// Streams the list of active staff for [businessId] who are also device-authenticated
+  /// (meaning their users.pinHash is not null). Drives the filtered staff picker.
+  Stream<List<WhoIsWorkingEntry>> watchDeviceStaffForBusiness(
+    String businessId,
+  ) {
+    final query =
+        select(userBusinesses).join([
+            innerJoin(users, users.id.equalsExp(userBusinesses.userId)),
+            leftOuterJoin(roles, roles.id.equalsExp(userBusinesses.roleId)),
+          ])
+          ..where(
+            userBusinesses.businessId.equals(businessId) &
+                userBusinesses.status.equals('active') &
+                users.pinHash.isNotNull(),
+          )
+          ..orderBy([OrderingTerm.asc(users.name)]);
+    return query.watch().map(
+      (rows) => rows
+          .map(
+            (row) => WhoIsWorkingEntry(
+              user: row.readTable(users),
+              role: row.readTableOrNull(roles),
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  /// One-shot count of active staff for [businessId] who are device-authenticated
+  /// (meaning their users.pinHash is not null).
+  Future<int> countDeviceStaffForBusiness(String businessId) async {
+    final countExp = userBusinesses.id.count();
+    final query = selectOnly(userBusinesses).join([
+      innerJoin(users, users.id.equalsExp(userBusinesses.userId)),
+    ])
+      ..addColumns([countExp])
+      ..where(
+        userBusinesses.businessId.equals(businessId) &
+            userBusinesses.status.equals('active') &
+            users.pinHash.isNotNull(),
+      );
+    final row = await query.getSingle();
     return row.read(countExp) ?? 0;
   }
 

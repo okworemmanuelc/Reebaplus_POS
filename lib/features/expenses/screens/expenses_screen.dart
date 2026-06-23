@@ -52,6 +52,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   String _periodFilter = 'This Month'; // §20.1/§30.6 default
+  DateTimeRange? _customRange;
   Color get _bg => Theme.of(context).scaffoldBackgroundColor;
   Color get _surface => Theme.of(context).colorScheme.surface;
   Color get _text => Theme.of(context).colorScheme.onSurface;
@@ -65,6 +66,12 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     super.initState();
     if (widget.initialPeriod != null) {
       _periodFilter = widget.initialPeriod!;
+      if (_periodFilter.startsWith('Custom:')) {
+        final (start, end) = parseCustomDateRange(_periodFilter);
+        if (start != null && end != null) {
+          _customRange = DateTimeRange(start: start, end: end);
+        }
+      }
     }
     _tabController = TabController(length: 2, vsync: this);
   }
@@ -76,7 +83,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
   }
 
   bool _isInPeriod(DateTime date, String period) =>
-      datePeriodFromLabel(period).includes(date);
+      isDateInPeriod(date, period);
 
   /// Period labels this viewer may choose (§19.2/§30.11 — roles below Manager
   /// are capped to Today/This Week/This Month).
@@ -85,9 +92,14 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
 
   /// [_periodFilter] clamped into [_periodOptions], so the dropdown value and
   /// the list filter agree for capped viewers.
-  String get _effectivePeriod => _periodOptions.contains(_periodFilter)
-      ? _periodFilter
-      : _periodOptions.last;
+  String get _effectivePeriod {
+    final isCustom = _periodFilter.startsWith('Custom:');
+    final dropdownValue = isCustom ? 'Custom' : _periodFilter;
+    if (_periodOptions.contains(dropdownValue)) {
+      return _periodFilter;
+    }
+    return _periodOptions.first;
+  }
 
   /// Resolves a recordedBy user id to a name; never shows a raw UUID (rule #4).
   String _recordedByName(String? userId, Map<String, UserData> users) {
@@ -425,7 +437,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
                   ],
                 ),
                 AppDropdown<String>(
-                  value: _effectivePeriod,
+                  value: _effectivePeriod.startsWith('Custom:') ? 'Custom' : _effectivePeriod,
                   width: context.getRSize(130),
                   items: _periodOptions.map((String val) {
                     return DropdownMenuItem<String>(
@@ -433,8 +445,30 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
                       child: Text(val),
                     );
                   }).toList(),
-                  onChanged: (val) {
-                    if (val != null) setState(() => _periodFilter = val);
+                  onChanged: (val) async {
+                    if (val == 'Custom') {
+                      final range = await showDateRangePicker(
+                        context: context,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime.now().add(const Duration(days: 365)),
+                        initialDateRange: _customRange,
+                        builder: (context, child) => Theme(
+                          data: Theme.of(context),
+                          child: child!,
+                        ),
+                      );
+                      if (range != null) {
+                        setState(() {
+                          _customRange = range;
+                          _periodFilter = 'Custom:${range.start.toIso8601String()}:${range.end.toIso8601String()}';
+                        });
+                      }
+                    } else if (val != null) {
+                      setState(() {
+                        _periodFilter = val;
+                        _customRange = null;
+                      });
+                    }
                   },
                 ),
               ],

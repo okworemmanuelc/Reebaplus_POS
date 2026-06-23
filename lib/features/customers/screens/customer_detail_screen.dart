@@ -52,6 +52,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
   int _depositsHeld = 0; // §13.4 — refundable crate deposit held (kobo)
   List<WalletTransactionData> _walletHistory = [];
   String _selectedPeriod = 'To Date'; // §30.11 canonical chip set
+  DateTimeRange? _customRange;
   List<OrderData> _orders = [];
   List<CrateBalanceEntry> _crateBalances = [];
 
@@ -142,14 +143,18 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
 
   /// [_selectedPeriod] clamped into [_periodOptions], so the dropdown value and
   /// the filter agree for capped viewers (default is "To Date", out of their set).
-  String get _effectivePeriod => _periodOptions.contains(_selectedPeriod)
-      ? _selectedPeriod
-      : _periodOptions.last;
+  String get _effectivePeriod {
+    final isCustom = _selectedPeriod.startsWith('Custom:');
+    final dropdownValue = isCustom ? 'Custom' : _selectedPeriod;
+    if (_periodOptions.contains(dropdownValue)) {
+      return _selectedPeriod;
+    }
+    return _periodOptions.first;
+  }
 
   List<WalletTransactionData> get _filteredHistory {
-    final window = datePeriodFromLabel(_effectivePeriod);
     return _walletHistory
-        .where((txn) => window.includes(txn.createdAt))
+        .where((txn) => isDateInPeriod(txn.createdAt, _effectivePeriod))
         .toList();
   }
 
@@ -1012,6 +1017,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                           storeAddress: storeAddress,
                           businessName: ref.read(currentBusinessNameProvider),
                           manufacturerNames: manufacturerNames,
+                          logoPath: ref
+                              .read(currentBusinessLogoPathProvider)
+                              .valueOrNull,
                         ),
                       ),
                     ),
@@ -1514,14 +1522,37 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                   SizedBox(
                     width: 120, // To give it a nice fixed width
                     child: AppDropdown<String>(
-                      value: _effectivePeriod,
+                      value: _effectivePeriod.startsWith('Custom:') ? 'Custom' : _effectivePeriod,
                       isExpanded: false,
                       contentPadding: EdgeInsets.symmetric(horizontal: context.getRSize(8), vertical: context.getRSize(6)),
                       items: _periodOptions
                           .map((p) => DropdownMenuItem(value: p, child: Text(p)))
                           .toList(),
-                      onChanged: (v) =>
-                          setState(() => _selectedPeriod = v ?? 'To Date'),
+                      onChanged: (v) async {
+                        if (v == 'Custom') {
+                          final range = await showDateRangePicker(
+                            context: context,
+                            firstDate: DateTime(2020),
+                            lastDate: DateTime.now().add(const Duration(days: 365)),
+                            initialDateRange: _customRange,
+                            builder: (context, child) => Theme(
+                              data: Theme.of(context),
+                              child: child!,
+                            ),
+                          );
+                          if (range != null) {
+                            setState(() {
+                              _customRange = range;
+                              _selectedPeriod = 'Custom:${range.start.toIso8601String()}:${range.end.toIso8601String()}';
+                            });
+                          }
+                        } else if (v != null) {
+                          setState(() {
+                            _selectedPeriod = v;
+                            _customRange = null;
+                          });
+                        }
+                      },
                     ),
                   ),
                 ],

@@ -33,6 +33,18 @@ class ProfitReportScreen extends ConsumerStatefulWidget {
 
 class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
   late String _period = widget.initialPeriod ?? kDatePeriodLabels.first;
+  DateTimeRange? _customRange;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialPeriod != null && widget.initialPeriod!.startsWith('Custom:')) {
+      final (start, end) = parseCustomDateRange(widget.initialPeriod!);
+      if (start != null && end != null) {
+        _customRange = DateTimeRange(start: start, end: end);
+      }
+    }
+  }
 
   /// Aggregate completed orders in [period] into headline totals + per-product
   /// rows (sorted by gross profit, descending). Lines whose captured buying
@@ -44,7 +56,6 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
   /// reported separately as [_ProfitData.uncostedItems] so the exclusion is
   /// transparent and Revenue − COGS always equals Gross Profit.
   _ProfitData _compute(List<OrderWithItems> orders, String period) {
-    final window = datePeriodFromLabel(period);
     final byProduct = <String, _ProductAccum>{};
     var revenueKobo = 0;
     var cogsKobo = 0;
@@ -54,7 +65,7 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
       // Recognized at checkout ('pending'), not at the ceremonial Confirm
       // ('completed'). Count any non-reversed sale.
       if (!orderCountsAsSale(o.order.status)) continue;
-      if (!window.includes(o.order.createdAt)) continue;
+      if (!isDateInPeriod(o.order.createdAt, period)) continue;
       for (final i in o.items) {
         final product = i.product;
         // Quick-sale lines (§12.3) have no product and no captured cost — like
@@ -124,6 +135,11 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
       data.marginPct.toStringAsFixed(1),
     ]);
     try {
+      final friendlyPeriod = formatPeriodLabel(_period);
+      final sanitizedPeriod = friendlyPeriod
+          .replaceAll(' ', '_')
+          .replaceAll(',', '')
+          .replaceAll('–', 'to');
       await shareCsv(
         csv: buildCsv([
           'Product',
@@ -133,8 +149,8 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
           'Gross profit',
           'Margin %',
         ], rows),
-        fileName: 'profit_report_${_period.replaceAll(' ', '_')}',
-        subject: 'Profit Report — $_period',
+        fileName: 'profit_report_$sanitizedPeriod',
+        subject: 'Profit Report — $friendlyPeriod',
       );
     } catch (e) {
       if (mounted) {
@@ -182,9 +198,9 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
             onPressed: hasCostedData ? () => _exportCsv(data) : null,
           ),
           SizedBox(
-            width: 110,
+            width: 130,
             child: AppDropdown<String>(
-              value: _period,
+              value: _period.startsWith('Custom:') ? 'Custom' : _period,
               items: kDatePeriodLabels
                   .map(
                     (p) => DropdownMenuItem(
@@ -193,8 +209,31 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
                     ),
                   )
                   .toList(),
-              onChanged: (v) =>
-                  setState(() => _period = v ?? kDatePeriodLabels.first),
+              onChanged: (v) async {
+                if (v == 'Custom') {
+                  final range = await showDateRangePicker(
+                    context: context,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime.now().add(const Duration(days: 365)),
+                    initialDateRange: _customRange,
+                    builder: (context, child) => Theme(
+                      data: Theme.of(context),
+                      child: child!,
+                    ),
+                  );
+                  if (range != null) {
+                    setState(() {
+                      _customRange = range;
+                      _period = 'Custom:${range.start.toIso8601String()}:${range.end.toIso8601String()}';
+                    });
+                  }
+                } else if (v != null) {
+                  setState(() {
+                    _period = v;
+                    _customRange = null;
+                  });
+                }
+              },
             ),
           ),
           const SizedBox(width: 8),

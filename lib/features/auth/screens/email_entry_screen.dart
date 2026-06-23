@@ -9,14 +9,19 @@ import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/features/auth/screens/login_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/otp_verification_screen.dart';
+import 'package:reebaplus_pos/features/auth/screens/ceo_sign_up_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/create_pin_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/no_account_found_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/existing_account_screen.dart';
+import 'package:reebaplus_pos/features/auth/screens/who_is_working_screen.dart';
 import 'package:reebaplus_pos/features/auth/auth_post_verify_route.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_form_kit.dart';
 import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart' show UserData;
+import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:reebaplus_pos/main.dart' show supabaseReady;
+import 'package:reebaplus_pos/shared/services/auth_service.dart'
+    show GoogleSignInException;
 
 class EmailEntryScreen extends ConsumerStatefulWidget {
   /// When non-null, pre-fills the email field. If [lockedEmail] is also
@@ -26,10 +31,16 @@ class EmailEntryScreen extends ConsumerStatefulWidget {
   final String? prefilledEmail;
   final bool lockedEmail;
 
+  /// When true, indicates the user is registering a new business (CEO signup).
+  /// The email will be verified up front, and brand-new emails will route directly
+  /// to the CEO signup flow to check for email conflicts early.
+  final bool createBusinessIntent;
+
   const EmailEntryScreen({
     super.key,
     this.prefilledEmail,
     this.lockedEmail = false,
+    this.createBusinessIntent = false,
   });
 
   @override
@@ -40,6 +51,7 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
   final _emailController = TextEditingController();
   bool _loading = false;
   bool _isEmailValid = false;
+  bool _hasDeviceAuthenticatedUser = false;
 
   @override
   void initState() {
@@ -49,6 +61,7 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
     }
     _emailController.addListener(_validateEmail);
     _validateEmail();
+    _checkDeviceAuthenticatedUsers();
 
     // One-shot snackbar after a remote-kick logout (another device signed
     // in and revoked this session). Read-and-clear so a later rebuild of
@@ -72,6 +85,34 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
           "You've been signed in on another device — signed out.",
         );
       });
+    }
+  }
+
+  Future<void> _checkDeviceAuthenticatedUsers() async {
+    try {
+      final auth = ref.read(authProvider);
+      final db = ref.read(databaseProvider);
+
+      String? businessId;
+      final userId = await auth.getDeviceUserId();
+      if (userId != null) {
+        final deviceUser = await db.storesDao.getUserById(userId);
+        businessId = deviceUser?.businessId;
+      }
+      if (businessId == null) {
+        final businesses = await db.select(db.businesses).get();
+        if (businesses.length == 1) businessId = businesses.first.id;
+      }
+      if (businessId != null) {
+        final count = await db.userBusinessesDao.countDeviceStaffForBusiness(businessId);
+        if (mounted) {
+          setState(() {
+            _hasDeviceAuthenticatedUser = count >= 1;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('[EmailEntryScreen] Error checking device auth users: $e');
     }
   }
 
@@ -108,12 +149,24 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
       return;
     }
 
-    final email = await auth.signInWithGoogle();
+    final String? email;
+    try {
+      email = await auth.signInWithGoogle();
+    } on GoogleSignInException catch (e) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      AppNotification.showError(
+        context,
+        'Google sign-in failed (${e.code}). '
+        'Please try again or use email instead.',
+      );
+      return;
+    }
     if (!mounted) return;
 
     if (email == null) {
+      // User dismissed the native account picker — no message needed.
       setState(() => _loading = false);
-      AppNotification.showError(context, 'Google sign-in cancelled or failed.');
       return;
     }
 
@@ -135,7 +188,9 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
           email: email,
           account: account,
         ),
-        NoAccountFoundRoute() => NoAccountFoundScreen(email: email),
+        NoAccountFoundRoute() => widget.createBusinessIntent
+            ? CeoSignUpScreen(verifiedEmail: email)
+            : NoAccountFoundScreen(email: email),
         LoginRoute(:final user) => LoginScreen(presetUser: user),
         CreatePinRoute(:final user) => CreatePinScreen(user: user),
       };
@@ -153,12 +208,18 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
           transitionDuration: const Duration(milliseconds: 500),
         ),
       );
-    } catch (e) {
+    } catch (e, stack) {
+      CrashReporter.record(
+        e,
+        stack,
+        context: 'google_sign_in.post_verify email=$email',
+      );
       if (!mounted) return;
       setState(() => _loading = false);
       AppNotification.showError(
         context,
-        'Signed in, but we could not load your account. Check your connection and try again.',
+        'Signed in, but we could not load your account ($e). '
+        'Check your connection and try again.',
       );
     }
   }
@@ -237,7 +298,11 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
     Navigator.of(context).push(
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) =>
-            OtpVerificationScreen(user: localUser, email: email),
+            OtpVerificationScreen(
+          user: localUser,
+          email: email,
+          createBusinessIntent: widget.createBusinessIntent,
+        ),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return FadeTransition(opacity: animation, child: child);
         },
@@ -250,7 +315,7 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) =>
-            const LoginScreen(),
+            const WhoIsWorkingScreen(),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           final curve = CurvedAnimation(
             parent: animation,
@@ -274,12 +339,15 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
     final textColor = authTextPrimary(context);
 
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: BrandedAuthBackground(
         child: SafeArea(
           child: AuthFormShell(
-            title: 'Sign in',
-            subtitle: 'Enter your email to continue.',
+            title: widget.createBusinessIntent ? 'Create your business' : 'Sign in',
+            subtitle: widget.createBusinessIntent
+                ? "First, confirm your email — we'll check it isn't already linked to a business."
+                : 'Enter your email to continue.',
             children: [
               // Email card
               AuthInputCard(
@@ -402,19 +470,21 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
               ),
               const SizedBox(height: 20),
 
-              Center(
-                child: TextButton(
-                  onPressed: _goToPinDirectly,
-                  child: Text(
-                    'Already set up on this device? Login with PIN',
-                    style: TextStyle(
-                      color: textColor.withValues(alpha: 0.65),
-                      fontSize: 13,
+              if (_hasDeviceAuthenticatedUser) ...[
+                Center(
+                  child: TextButton(
+                    onPressed: _goToPinDirectly,
+                    child: Text(
+                      'Already set up on this device? Login with PIN',
+                      style: TextStyle(
+                        color: textColor.withValues(alpha: 0.65),
+                        fontSize: 13,
+                      ),
+                      textAlign: TextAlign.center,
                     ),
-                    textAlign: TextAlign.center,
                   ),
                 ),
-              ),
+              ],
             ],
           ),
         ),

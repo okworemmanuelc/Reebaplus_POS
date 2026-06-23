@@ -13,8 +13,8 @@ Reebaplus POS is an offline-first Flutter application backed by Supabase. The de
 | Local database | Drift over SQLite | On-device source of truth. Holds all business data (products, orders, customers, suppliers, wallet ledgers, staff, roles, permissions) plus the sync outbox. Every screen reads from Drift, never from the network. |
 | Local key–value store | flutter_secure_storage | Device-local secrets and session pointers: the active user's PIN hash, the active business/store IDs, and the auth refresh token. Never synced. |
 | Cloud database | Supabase Postgres | Cloud source of truth and the convergence point across devices. Holds the authoritative copy of all business data and enforces Row-Level Security. |
-| Cloud auth | Supabase Auth | Identity provider supporting **email + OTP** and **Google OAuth**. Issues the JWT that authorizes all Postgres and RPC access; the resolved email is the canonical identity key. PINs are never part of this layer. |
-| Server logic | Postgres RPCs (SECURITY DEFINER functions) | Server-side operations that must not run on the client: `redeem_invite_code` (staff join), `delete_business` (atomic Danger Zone deletion), and the `pos_pull_snapshot` pull RPC. Edge Functions are **not** used by the app today — only `_shared` scaffolding exists under `supabase/functions/`; there is no client `functions.invoke`. |
+| Cloud auth | Supabase Auth | Identity provider supporting **email + OTP** and **Google OAuth**. Issues the JWT that authorizes all Postgres and RPC access; the resolved email is the canonical identity key. PINs are never part of this layer. All transactional auth email (OTP / login / Forgot PIN) is sent from the Reebaplus domain via Supabase Auth **Custom SMTP** (Resend) — a dashboard configuration, not app code. |
+| Server logic | Postgres RPCs (SECURITY DEFINER functions) + one Edge Function | Server-side operations that must not run on the client: `redeem_invite_code` (staff join), `delete_business` (atomic Danger Zone deletion), and the `pos_pull_snapshot` pull RPC. **Edge Function `send-invite-email`** delivers the branded Reebaplus invite-code email; it is invoked **server-side by an AFTER INSERT trigger on `invite_codes` (via `pg_net`)** — never by the client. The app still makes **no client `functions.invoke` call**; `_shared/` holds the function scaffolding. Outbound email uses Resend; the function URL + shared hook secret live in Vault, the Resend key in Edge Function secrets. |
 | Realtime | Supabase Realtime | Push channel that notifies a device that peer changes exist for its business, triggering a pull. Used as a signal, not as the transport for the data itself. |
 | Background execution | In-process `SupabaseSyncService` (no separate isolate / WorkManager / BGTaskScheduler) | The sync engine runs in the app process, driven by Supabase Realtime signals, connectivity changes, and app-lifecycle events. Heavy report aggregation uses `compute()` where needed (e.g. profit report). |
 | Network sensing | connectivity_plus | Detects connection type (WiFi / mobile data / poor or unknown / offline) at the start of each sync cycle. The result drives adaptive batch and page sizing on both the push and pull paths. |
@@ -45,8 +45,16 @@ through Riverpod providers).
 | `lib/features/auth/` | Session lifecycle: sign-in via email+OTP or Google OAuth, JWT/refresh handling, onboarding, the "Who's working?" picker, PIN set/verify, and auto-lock. `auth_service.dart` is the orchestrator. | Business/domain data access beyond the current identity. |
 
 **Sanctioned direct-Supabase exceptions** (outside the normal Drift→sync-queue
-path): the `redeem_invite_code` RPC in staff sign-up (auth bootstrap, must
-bypass the outbox) and the Sync Issues diagnostic screen (operator tooling).
+path):
+- `redeem_invite_code` RPC — staff sign-up auth bootstrap, must bypass the outbox.
+- Sync Issues diagnostic screen — operator tooling.
+- **`BusinessLogoService` (`lib/core/services/business_logo_service.dart`)** —
+  uploads/downloads/deletes the business logo via Supabase Storage bucket
+  `business-logos`. Storage objects are not tenant rows and have no Drift
+  equivalent; the resulting public URL is written to `businesses.logoUrl` and
+  syncs via the normal outbox. A local file cache at
+  `<appDocs>/business_logos/<businessId>.png` ensures receipts render offline.
+
 All ordinary business writes still go to Drift first and drain through the
 `sync_queue`.
 
@@ -89,15 +97,15 @@ Authentication is split deliberately into a **portable identity** and a **device
 - **Unlock factor (device-local):** a 6-digit PIN, stored only as a hash in `flutter_secure_storage` on that device. The PIN is never sent to the cloud and never stored in Postgres. It exists to let a staff member re-assert their identity quickly on a shared till without re-running the full provider sign-in (email OTP or Google).
 - **Shared-till session:** a cold start shows the "Who's working?" picker. Selecting a card and entering that user's PIN unlocks *only* that identity. After inactivity the till auto-locks back to the picker; Switch User keeps the PIN, Log Out clears the leaving user's PIN and device pointer.
 
-### Single active session per identity
+### Active sessions across multiple devices
 
-An identity may hold **only one active session at a time across devices**. A *fresh* sign-in (email OTP **or** Google — both funnel through the same `CreatePin → BiometricSetup` path, which calls `setCurrentUser(freshSignIn: true)`) runs `AuthService._kickOtherDevices`, which:
+An identity may hold **multiple active sessions simultaneously across different devices** (the previous single active session constraint has been disabled per product requirements). A *fresh* sign-in (email OTP **or** Google — both funnel through the same `CreatePin → BiometricSetup` path, which calls `setCurrentUser(freshSignIn: true)`) runs `AuthService._registerCloudSession`, which:
 
-1. inserts this device's row into the cloud `sessions` table (`device_id` is a stable per-install id in `SharedPreferences`, surviving logout);
-2. flips `revoked_at` on every **other** un-revoked `sessions` row for the same `user_id` (`device_id != thisDevice`); and
-3. calls `supabase.auth.signOut(scope: SignOutScope.others)` to revoke every **other** Supabase refresh token for the identity.
+1. inserts/upserts this device's row into the cloud `sessions` table (`device_id` is a stable per-install id in `SharedPreferences`, surviving logout) to register the active device session on Supabase.
 
-A revoked device discovers it through one of two channels and is signed out:
+A device's session remains active until explicit logout, business deletion, or explicit session revocation.
+
+If a session is explicitly revoked remotely:
 
 - **Remote kick (online):** the realtime `UPDATE` on its own `sessions` row (`revoked_at` set, `id == currentSessionId`) calls `onCurrentSessionRevoked → _handleRemoteKick → fullLogout`. Message: *"You've been signed in on another device — signed out."* It lands on Welcome / Email entry.
 - **Session-expired (its token was revoked while offline / it missed the event):** its persisted refresh token is rejected on the next auto-refresh, Supabase fires a real `signedOut` event, and `main.dart` flips `_supabaseHasSession = false`. With a local user still set, this renders `_SessionExpiredScreen`, which re-establishes the JWT via a fresh OTP **without** wiping the device (PIN, biometrics, and local data are preserved). `verifyLocalSessionStillActive` (a resume-time safety net) and the 30-day cloud `expires_at` are additional inputs to the same logout paths.

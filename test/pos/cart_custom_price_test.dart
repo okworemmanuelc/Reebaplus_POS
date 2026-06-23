@@ -85,7 +85,7 @@ void main() {
       () async {
     final p = await readProduct();
     cart.addItem(p); // retailer 100000
-    cart.setCustomPrice(p.name, customPriceKobo: 75000); // ₦750
+    cart.setCustomPrice(p.name, customPriceKobo: 75000, maxPercent: 50); // ₦750
 
     final line = cart.value.single;
     expect(line['customPriceKobo'], 75000);
@@ -98,8 +98,8 @@ void main() {
   test('(b) clearing the custom price reverts to the catalog price', () async {
     final p = await readProduct();
     cart.addItem(p);
-    cart.setCustomPrice(p.name, customPriceKobo: 75000);
-    cart.setCustomPrice(p.name, customPriceKobo: null);
+    cart.setCustomPrice(p.name, customPriceKobo: 75000, maxPercent: 50);
+    cart.setCustomPrice(p.name, customPriceKobo: null, maxPercent: 50);
 
     final line = cart.value.single;
     expect(line['customPriceKobo'], isNull);
@@ -110,7 +110,7 @@ void main() {
   test('(c) a per-line discount clamps against the custom line total', () async {
     final p = await readProduct();
     cart.addItem(p); // qty 1
-    cart.setCustomPrice(p.name, customPriceKobo: 50000); // ₦500 line total
+    cart.setCustomPrice(p.name, customPriceKobo: 50000, maxPercent: 50); // ₦500 line total
     // Attempt a ₦700 discount — more than the custom line total. It must clamp
     // to 50000, never produce a negative net.
     cart.setLineDiscount(
@@ -126,7 +126,7 @@ void main() {
       () async {
     final p = await readProduct();
     cart.addItem(p);
-    cart.setCustomPrice(p.name, customPriceKobo: 75000);
+    cart.setCustomPrice(p.name, customPriceKobo: 75000, maxPercent: 50);
 
     // Simulate a product edit that bumps the designated price to ₦1,200.
     cart.refreshProduct(
@@ -148,10 +148,72 @@ void main() {
   test('(e) a non-positive custom price is treated as clear', () async {
     final p = await readProduct();
     cart.addItem(p);
-    cart.setCustomPrice(p.name, customPriceKobo: 0);
+    cart.setCustomPrice(p.name, customPriceKobo: 0, maxPercent: 50);
 
     final line = cart.value.single;
     expect(line['customPriceKobo'], isNull);
     expect(line['unitPriceKobo'], _retailerKobo);
+  });
+
+  test('(f) custom price below floor is clamped to floor (maxPercent > 0)', () async {
+    final p = await readProduct();
+    cart.addItem(p); // 100000 (₦1,000)
+    // maxPercent = 10% -> floor = 90000. Try setting 85000.
+    cart.setCustomPrice(p.name, customPriceKobo: 85000, maxPercent: 10);
+
+    final line = cart.value.single;
+    expect(line['customPriceKobo'], 90000);
+    expect(line['unitPriceKobo'], 90000);
+    expect(line['price'], 900.0);
+  });
+
+  test('(g) maxPercent == 0 -> floor == catalog -> any below-catalog custom price clamps to catalog', () async {
+    final p = await readProduct();
+    cart.addItem(p); // 100000
+    // maxPercent = 0% -> floor = 100000. Try setting 95000.
+    cart.setCustomPrice(p.name, customPriceKobo: 95000, maxPercent: 0);
+
+    final line = cart.value.single;
+    expect(line['customPriceKobo'], 100000);
+    expect(line['unitPriceKobo'], 100000);
+    expect(line['price'], 1000.0);
+  });
+
+  test('(h) Option A: custom price at floor + attempted max discount does not dip below floor', () async {
+    final p = await readProduct();
+    cart.addItem(p); // 100000
+    // maxPercent = 10% -> floor = 90000. Set custom price to 90000.
+    cart.setCustomPrice(p.name, customPriceKobo: 90000, maxPercent: 10);
+    
+    // Attempt 10% discount on the new custom line total (90000 * 1 = 90000).
+    // 10% of 90000 is 9000.
+    // However, since custom price is already at floor, the max allowed discount kobo is:
+    // (90000 - 90000) * 1 = 0.
+    // So the discount is clamped to 0.
+    cart.setLineDiscount(
+      p.name,
+      kind: 'percent',
+      enteredValue: 10,
+      discountKobo: 9000,
+      maxPercent: 10,
+    );
+
+    final line = cart.value.single;
+    expect(line['discountKobo'], 0);
+    expect(line['unitPriceKobo'], 90000);
+    final netTotal = (line['unitPriceKobo'] * line['qty']) - line['discountKobo'];
+    expect(netTotal, 90000); // respects floor
+  });
+
+  test('(i) custom price above catalog is allowed unchanged (overpricing is fine)', () async {
+    final p = await readProduct();
+    cart.addItem(p); // 100000
+    // maxPercent = 10% -> floor = 90000. Try setting 120000.
+    cart.setCustomPrice(p.name, customPriceKobo: 120000, maxPercent: 10);
+
+    final line = cart.value.single;
+    expect(line['customPriceKobo'], 120000);
+    expect(line['unitPriceKobo'], 120000);
+    expect(line['price'], 1200.0);
   });
 }

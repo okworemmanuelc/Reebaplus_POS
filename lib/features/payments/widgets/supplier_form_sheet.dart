@@ -18,8 +18,8 @@ class SupplierFormSheet extends ConsumerStatefulWidget {
 
   const SupplierFormSheet({super.key, this.existing});
 
-  static void show(BuildContext context, {SupplierData? existing}) {
-    showModalBottomSheet(
+  static Future<SupplierData?> show(BuildContext context, {SupplierData? existing}) {
+    return showModalBottomSheet<SupplierData>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -116,6 +116,7 @@ class _SupplierFormSheetState extends ConsumerState<SupplierFormSheet> {
           entityType: 'supplier',
           entityId: widget.existing!.id,
         );
+        if (mounted) Navigator.pop(context);
       } else {
         final businessId = ref.read(authProvider).currentUser?.businessId;
         if (businessId == null) {
@@ -151,8 +152,9 @@ class _SupplierFormSheetState extends ConsumerState<SupplierFormSheet> {
           entityType: 'supplier',
           entityId: id,
         );
+        final created = (await db.catalogDao.getAllSuppliers()).firstWhere((s) => s.id == id);
+        if (mounted) Navigator.pop(context, created);
       }
-      if (mounted) Navigator.pop(context);
     } catch (_) {
       if (mounted) {
         setState(() => _saving = false);

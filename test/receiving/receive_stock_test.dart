@@ -102,6 +102,22 @@ void main() {
       expect(lines.first.qty, 2);
     });
 
+    test('setProductQty sets the exact quantity, adding it if not present, and overwriting if present', () {
+      // Not present initially
+      cart.setProductQty(bottle, 5);
+      expect(container.read(receiveCartProvider).length, 1);
+      expect(container.read(receiveCartProvider).first.qty, 5);
+
+      // Overwriting existing quantity
+      cart.setProductQty(bottle, 12);
+      expect(container.read(receiveCartProvider).length, 1);
+      expect(container.read(receiveCartProvider).first.qty, 12);
+
+      // Setting to 0 removes the line
+      cart.setProductQty(bottle, 0);
+      expect(container.read(receiveCartProvider), isEmpty);
+    });
+
     test('tap-to-increment has no stock ceiling', () {
       for (var i = 0; i < 25; i++) {
         cart.addOrIncrement(bottle);

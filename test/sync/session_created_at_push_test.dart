@@ -138,4 +138,44 @@ void main() {
       await boot.db.close();
     }
   });
+
+  test('multiple sessions can coexist concurrently for the same user on different devices', () async {
+    final boot = await bootstrapTestDb();
+    try {
+      final userId = UuidV7.generate();
+      await boot.db.into(boot.db.users).insert(
+            UsersCompanion.insert(
+              id: Value(userId),
+              businessId: boot.businessId,
+              name: 'Till User',
+              pin: '0000',
+            ),
+          );
+
+      final firstId = await boot.db.sessionsDao.createSession(
+        userId: userId,
+        ttl: const Duration(days: 30),
+        deviceId: 'device-1',
+      );
+      final secondId = await boot.db.sessionsDao.createSession(
+        userId: userId,
+        ttl: const Duration(days: 30),
+        deviceId: 'device-2',
+      );
+
+      expect(firstId, isNot(secondId),
+          reason: 'sessions on different devices must have unique IDs');
+
+      final active1 = await boot.db.sessionsDao.findActiveSession(firstId);
+      final active2 = await boot.db.sessionsDao.findActiveSession(secondId);
+
+      expect(active1, isNotNull, reason: 'first device session must still be active');
+      expect(active2, isNotNull, reason: 'second device session must be active');
+
+      final rows = await boot.db.select(boot.db.sessions).get();
+      expect(rows.length, 2, reason: 'two distinct active sessions should exist in local DB');
+    } finally {
+      await boot.db.close();
+    }
+  });
 }

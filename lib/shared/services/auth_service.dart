@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:drift/drift.dart';
 
@@ -6,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
+import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:reebaplus_pos/features/auth/onboarding/onboarding_draft.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
@@ -33,6 +35,27 @@ class DeleteBusinessException implements Exception {
   String toString() => message;
 }
 
+class LogoutWipeException implements Exception {
+  final String message;
+  const LogoutWipeException(this.message);
+  @override
+  String toString() => message;
+}
+
+/// Thrown by [AuthService.signInWithGoogle] when the native Google sign-in
+/// fails for a real reason (not a user cancel). Callers can catch this to show
+/// a more specific error message than the generic "cancelled or failed" text.
+/// [code] is the PlatformException code from the google_sign_in plugin
+/// (e.g. 'sign_in_failed') and [statusCode] is the underlying ApiException
+/// status code as reported in the message (e.g. 10 = DEVELOPER_ERROR).
+class GoogleSignInException implements Exception {
+  final String code;
+  final String message;
+  const GoogleSignInException({required this.code, required this.message});
+  @override
+  String toString() => 'GoogleSignInException($code): $message';
+}
+
 /// Holds the currently logged-in user.
 /// `value` is null when nobody is logged in.
 class AuthService extends ValueNotifier<UserData?> {
@@ -41,9 +64,17 @@ class AuthService extends ValueNotifier<UserData?> {
   final SecureStorageService _secure;
   final SupabaseSyncService _sync;
   final SupabaseClient _supabase;
+  final String googleWebClientId;
 
-  AuthService(this._db, this._nav, this._secure, this._sync, this._supabase)
-    : super(null) {
+  AuthService(
+    this._db,
+    this._nav,
+    this._secure,
+    this._sync,
+    this._supabase, {
+    this.googleWebClientId =
+        '807123945489-048eug40i2jn7novlblidott50sqcl7b.apps.googleusercontent.com',
+  }) : super(null) {
     // Hand the database a thin closure over `value` so DAOs that mix in
     // BusinessScopedDao always read the current session's businessId
     // (auto-tracks login/logout through the ValueNotifier).
@@ -622,7 +653,7 @@ class AuthService extends ValueNotifier<UserData?> {
           );
           currentSessionId = sessionId;
           if (freshSignIn) {
-            await _kickOtherDevices(
+            await _registerCloudSession(
               user: user,
               sessionId: sessionId,
               deviceId: deviceId,
@@ -637,14 +668,13 @@ class AuthService extends ValueNotifier<UserData?> {
     }
   }
 
-  /// Pushes this device's new session to the cloud, revokes every other
-  /// active session for this user, and invalidates other Supabase auth
-  /// refresh tokens. Called only on fresh OTP/Google sign-ins so that
-  /// re-entering the PIN on the same device does not kick other devices.
+  /// Pushes this device's new session to the cloud. Previously, this method
+  /// also revoked other active sessions and signed out other devices.
+  /// That kick-out behavior has been disabled to allow concurrent sign-ins 
+  /// on multiple devices.
   ///
-  /// Each step is wrapped independently — a network blip on one shouldn't
-  /// abort the others. Logs only; the post-login UI must not block on this.
-  Future<void> _kickOtherDevices({
+  /// Called only on fresh OTP/Google sign-ins.
+  Future<void> _registerCloudSession({
     required UserData user,
     required String sessionId,
     required String deviceId,
@@ -670,24 +700,7 @@ class AuthService extends ValueNotifier<UserData?> {
         'last_updated_at': now,
       });
     } catch (e) {
-      debugPrint('[AuthService] kick: cloud session upsert error: $e');
-    }
-
-    try {
-      await supabase
-          .from('sessions')
-          .update({'revoked_at': now, 'last_updated_at': now})
-          .eq('user_id', user.id)
-          .neq('device_id', deviceId)
-          .filter('revoked_at', 'is', null);
-    } catch (e) {
-      debugPrint('[AuthService] kick: revoke other sessions error: $e');
-    }
-
-    try {
-      await supabase.auth.signOut(scope: SignOutScope.others);
-    } catch (e) {
-      debugPrint('[AuthService] kick: signOut(others) error: $e');
+      debugPrint('[AuthService] registerCloudSession: cloud session upsert error: $e');
     }
   }
 
@@ -728,6 +741,35 @@ class AuthService extends ValueNotifier<UserData?> {
         '[AuthService] wipeOrphanedLocalBusiness clearAllData error: $e',
       );
     }
+    return true;
+  }
+
+  /// Cold-start / pre-sign-in gate (§10.3). Before the Who's-working picker or the
+  /// single-staff PIN screen renders for a KNOWN device, confirm the device's local
+  /// business hasn't been permanently deleted by its owner. If the cloud tombstone
+  /// confirms deletion, wipe + full-logout (→ WelcomeScreen) exactly like the
+  /// session-bound triggers, and return true so the caller suppresses the picker.
+  ///
+  /// Resolves the business id from the device user (single-local-business
+  /// fallback). Returns false on any ambiguity (offline, no tombstone, no
+  /// business) — never a false-positive wipe (same contract as confirmBusinessDeleted).
+  Future<bool> wipeIfActiveBusinessDeleted() async {
+    String? businessId;
+    final userId = await getDeviceUserId();
+    if (userId != null) {
+      final u = await _db.storesDao.getUserById(userId);
+      businessId = u?.businessId;
+    }
+    if (businessId == null) {
+      final businesses = await _db.select(_db.businesses).get();
+      if (businesses.length == 1) businessId = businesses.first.id;
+    }
+    if (businessId == null) return false;
+
+    if (!await _sync.confirmBusinessDeleted(businessId)) return false;
+
+    // Confirmed: reuse the exact same wipe + logout the session-bound triggers use.
+    await _handleActiveBusinessDeleted();
     return true;
   }
 
@@ -977,17 +1019,46 @@ class AuthService extends ValueNotifier<UserData?> {
   /// session-expired path), which must NOT reset the user's PIN.
   Future<void> logOutCurrentUser() async {
     final user = value;
+    if (user == null) return;
+    final businessId = user.businessId;
 
-    // Kill this user's PIN first so re-login cannot accept the old one.
-    if (user != null) {
-      try {
-        await clearUserPin(user.id);
-      } catch (e) {
-        debugPrint('[AuthService] logOutCurrentUser clearUserPin error: $e');
+    // Check if they are the sole device user BEFORE clearing their PIN.
+    final count = await _db.userBusinessesDao.countDeviceStaffForBusiness(businessId);
+    final isSoleUser = count <= 1;
+
+    if (isSoleUser) {
+      final pendingCount = await _db.syncDao.countPending(businessId: businessId);
+      if (pendingCount > 0 && !_sync.isOnline.value) {
+        throw LogoutWipeException(
+          'You have $pendingCount change${pendingCount == 1 ? "" : "s"} not yet synced. '
+          'Connect to the internet and let it sync before logging out.',
+        );
       }
+
+      if (pendingCount > 0 && _sync.isOnline.value) {
+        try {
+          await _sync.pushPending();
+        } catch (e) {
+          debugPrint('[AuthService] logOutCurrentUser final push before wipe failed: $e');
+        }
+      }
+
+      try {
+        await _db.clearAllData();
+      } catch (e) {
+        debugPrint('[AuthService] logOutCurrentUser clearAllData error: $e');
+      }
+      await fullLogout();
+      return;
     }
 
-    // Revoke this device's session row for the user.
+    // Multiple device-authenticated users: drop this user from the device set.
+    try {
+      await clearUserPin(user.id);
+    } catch (e) {
+      debugPrint('[AuthService] logOutCurrentUser clearUserPin error: $e');
+    }
+
     final sid = currentSessionId;
     if (sid != null) {
       try {
@@ -998,22 +1069,21 @@ class AuthService extends ValueNotifier<UserData?> {
       currentSessionId = null;
     }
 
-    // Stop sync (no user bound after this), clear the device pointer + tokens,
-    // reset nav, and drop the in-memory user → main.dart routes to Welcome.
-    _sync.stopRealtimeSync();
-    await _secure.clearAll();
-    deviceUserIdNotifier.value = null;
-    _supabase.auth
-        .signOut(scope: SignOutScope.local)
-        .catchError(
-          (e) =>
-              debugPrint('[AuthService] logOutCurrentUser signOut error: $e'),
-        );
+    try {
+      await _supabase.auth.signOut(scope: SignOutScope.local);
+    } catch (e) {
+      debugPrint('[AuthService] logOutCurrentUser signOut error: $e');
+    }
+
     try {
       await GoogleSignIn().signOut();
     } catch (e) {
       debugPrint('[AuthService] logOutCurrentUser Google signOut error: $e');
     }
+
+    // Set picker and navigation state, return to the WhoIsWorking picker.
+    showPickerOnUnlock = true;
+    _sync.stopRealtimeSync();
     _nav.clearStoreLock();
     _nav.resetNavigation();
     value = null;
@@ -1294,70 +1364,99 @@ class AuthService extends ValueNotifier<UserData?> {
   // ── Initialisation ──────────────────────────────────────────────────────
   Future<void> init() async {}
 
-  // ── Google Sign-In (via Supabase OAuth) ──────────────────────────────────
+  // ── Google Sign-In (via Native SDK) ──────────────────────────────────────
 
-  /// Authenticates with Google via Supabase OAuth redirect flow.
-  /// Opens a browser for Google login, then redirects back to the app.
-  /// Returns the user's email on success, or null if cancelled / failed.
+  /// Authenticates with Google using the native in-app account picker,
+  /// then exchanges the ID token with Supabase.
+  /// Returns the user's email on success, or null if the user cancelled.
+  /// Throws [GoogleSignInException] if the sign-in fails for a real reason
+  /// (config error, network error, etc.) so callers can show a specific message.
   Future<String?> signInWithGoogle() async {
     try {
-      final supabase = _supabase;
-
-      // Start the OAuth flow in an IN-APP browser (Chrome Custom Tab on
-      // Android, SFSafariViewController on iOS) — NOT the external Chrome app.
-      // supabase_flutter dismisses the in-app view automatically once it
-      // handles the `reebaplus://login-callback` redirect, so the browser
-      // closes itself when sign-in completes. With externalApplication the
-      // system browser tab can't be closed by the app and lingers on the
-      // redirect page after login. Custom Tabs still share Chrome's cookies,
-      // so the Google account picker (already-signed-in accounts) still shows.
-      final success = await supabase.auth.signInWithOAuth(
-        OAuthProvider.google,
-        redirectTo: 'reebaplus://login-callback',
-        authScreenLaunchMode: LaunchMode.inAppBrowserView,
-      );
-
-      if (!success) {
-        debugPrint('[AuthService] Google OAuth launch failed');
+      final googleSignIn = GoogleSignIn(serverClientId: googleWebClientId);
+      // Clear any cached account first so the native account picker ALWAYS
+      // appears. Without this, a previously-signed-in account is returned
+      // silently and the user can't switch emails. signOut only clears the
+      // local Google session cache; it doesn't revoke anything server-side.
+      await googleSignIn.signOut();
+      final googleUser = await googleSignIn.signIn(); // shows native picker
+      if (googleUser == null) {
+        debugPrint('[AuthService] Google sign-in was cancelled by user');
         return null;
       }
-
-      // Wait for the auth state to change (user redirected back).
-      final completer = Completer<String?>();
-      late final StreamSubscription<AuthState> sub;
-
-      sub = supabase.auth.onAuthStateChange.listen(
-        (data) {
-          if (data.event == AuthChangeEvent.signedIn) {
-            final email = data.session?.user.email;
-            sub.cancel();
-            completer.complete(email?.toLowerCase());
-          }
-        },
-        // Offline / DNS errors during refresh surface here; swallow so the
-        // OAuth flow keeps waiting for the real signedIn event instead of
-        // crashing on an uncaught stream error.
-        onError: (e) => debugPrint(
-          '[AuthService] onAuthStateChange error during OAuth: $e',
-        ),
-      );
-
-      // Timeout after 2 minutes if the user doesn't complete the flow.
-      final email = await completer.future.timeout(
-        const Duration(minutes: 2),
-        onTimeout: () {
-          sub.cancel();
-          return null;
-        },
-      );
-
-      if (email != null) {
-        debugPrint('[AuthService] Google + Supabase sign-in success: $email');
+      final googleAuth = await googleUser.authentication;
+      final idToken = googleAuth.idToken;
+      final accessToken = googleAuth.accessToken;
+      if (idToken == null) {
+        debugPrint('[AuthService] Google sign-in returned no idToken');
+        throw const GoogleSignInException(
+          code: 'no_id_token',
+          message: 'Google authentication returned no ID token.',
+        );
       }
+      final res = await _supabase.auth.signInWithIdToken(
+        provider: OAuthProvider.google,
+        idToken: idToken,
+        accessToken: accessToken,
+      );
+      final email = res.session?.user.email?.toLowerCase();
+      debugPrint(
+        '[AuthService] signInWithIdToken complete: '
+        'session=${res.session != null} email=$email',
+      );
+      if (email == null) {
+        // Supabase accepted the token but returned no email — config or
+        // account-linking issue, not a user cancel.
+        CrashReporter.record(
+          'Google sign-in: Supabase returned null email after token exchange',
+          null,
+          context: 'auth.google_signin_error session_had_user='
+              '${res.session?.user != null}',
+        );
+        throw const GoogleSignInException(
+          code: 'no_session_email',
+          message:
+              'Signed in with Google but no email was returned. '
+              'Try signing in with email/OTP instead.',
+        );
+      }
+      debugPrint('[AuthService] Google + Supabase sign-in success: $email');
       return email;
+    } on PlatformException catch (e) {
+      // PlatformException code 'sign_in_cancelled' = user dismissed the picker.
+      // Any other code (e.g. 'sign_in_failed' with status 10 = DEVELOPER_ERROR)
+      // is a real configuration/network failure — log it so it's visible on
+      // release devices in the Supabase console.
+      final isCancel = e.code == 'sign_in_cancelled';
+      debugPrint(
+        '[AuthService] Google sign-in PlatformException '
+        'code=${e.code} message=${e.message} details=${e.details} '
+        'cancel=$isCancel',
+      );
+      if (isCancel) return null;
+      CrashReporter.record(
+        e,
+        null,
+        context: 'auth.google_signin_error code=${e.code} '
+            'message=${e.message} details=${e.details}',
+      );
+      throw GoogleSignInException(
+        code: e.code,
+        message: e.message ?? e.toString(),
+      );
+    } on GoogleSignInException {
+      rethrow;
     } catch (e) {
-      debugPrint('[AuthService] Google Sign-In error: $e');
-      return null;
+      debugPrint('[AuthService] Google sign-in unexpected error: $e');
+      CrashReporter.record(
+        e,
+        null,
+        context: 'auth.google_signin_error unexpected: $e',
+      );
+      throw GoogleSignInException(
+        code: 'unexpected',
+        message: e.toString(),
+      );
     }
   }
 

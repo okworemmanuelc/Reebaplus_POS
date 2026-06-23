@@ -92,6 +92,34 @@ class ReceiveCartNotifier extends Notifier<List<ReceiveCartLine>> {
     }
   }
 
+  void setProductQty(ProductData product, int qty) {
+    if (qty <= 0) {
+      remove(product.id);
+      return;
+    }
+    final existingIndex = state.indexWhere((l) => l.productId == product.id);
+    if (existingIndex >= 0) {
+      final updated = List<ReceiveCartLine>.from(state);
+      updated[existingIndex] = updated[existingIndex].copyWith(qty: qty);
+      state = updated;
+    } else {
+      state = [
+        ...state,
+        ReceiveCartLine(
+          productId: product.id,
+          productName: product.name,
+          unit: product.unit,
+          qty: qty,
+          buyingPriceKobo: product.buyingPriceKobo,
+          retailKobo: product.retailerPriceKobo,
+          wholesaleKobo: product.wholesalerPriceKobo,
+          manufacturerId: product.manufacturerId,
+          trackEmpties: product.trackEmpties,
+        )
+      ];
+    }
+  }
+
   void setBuyingPrice(String productId, int priceKobo) {
     if (priceKobo < 0) return;
     final existingIndex = state.indexWhere((l) => l.productId == productId);

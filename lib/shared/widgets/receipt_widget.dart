@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
@@ -39,6 +41,11 @@ class ReceiptWidget extends StatelessWidget {
   /// the `businesses` row so a rename in Business Info (§10.1) reflects here.
   final String? businessName;
 
+  /// Local file path of the business logo (cached by [BusinessLogoService]).
+  /// When provided the logo is rendered above the business name. Null falls
+  /// back to name-only display so offline / no-logo receipts work identically.
+  final String? logoPath;
+
   const ReceiptWidget({
     super.key,
     required this.orderId,
@@ -62,6 +69,7 @@ class ReceiptWidget extends StatelessWidget {
     this.manufacturerNames,
     this.storeAddress,
     this.businessName,
+    this.logoPath,
   });
 
   @override
@@ -160,6 +168,18 @@ class ReceiptWidget extends StatelessWidget {
               ),
             ),
             SizedBox(height: context.getRSize(12)),
+          ],
+          if (logoPath != null && File(logoPath!).existsSync()) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.file(
+                File(logoPath!),
+                width: context.getRSize(64),
+                height: context.getRSize(64),
+                fit: BoxFit.cover,
+              ),
+            ),
+            SizedBox(height: context.getRSize(8)),
           ],
           if (businessName != null && businessName!.trim().isNotEmpty)
             Text(

@@ -175,22 +175,29 @@ class _MainLayoutState extends ConsumerState<MainLayout>
         ? _pendingOrders.length
         : _pendingOrders.where((o) => o.storeId == activeStoreId).length;
 
-    // §12.1 confined-user default. A user who cannot view all stores must always
-    // have a concrete active store so every view filters correctly and the
-    // permission resolver scopes to their store — including single-store staff
-    // who see no picker. All-stores viewers (CEO / all-stores Manager) keep
-    // `null` (= "All Stores"). The mutation is deferred to post-frame so it never
-    // runs during build (lockedStoreId has listeners that rebuild).
+    // §12.1 active-store default. The app never auto-lands on "All Stores": every
+    // user — confined staff AND all-stores viewers (CEO / all-stores Manager) —
+    // silently defaults to a concrete active store (their first selectable store,
+    // or their lone store) so every view filters to a real store and the
+    // permission resolver scopes correctly. "All Stores" is only ever reached as
+    // a deliberate pick from the store picker (latched via `allStoresChosen`),
+    // which we must NOT override here. The mutation is deferred to post-frame so
+    // it never runs during build (lockedStoreId has listeners that rebuild).
     final selectableStores = ref.watch(selectableStoresProvider);
-    if (!ref.watch(canViewAllStoresProvider) && selectableStores.isNotEmpty) {
+    if (selectableStores.isNotEmpty) {
       final active = nav.lockedStoreId.value;
-      if (active == null || !selectableStores.any((s) => s.id == active)) {
+      final activeValid =
+          active != null && selectableStores.any((s) => s.id == active);
+      // A CEO / all-stores Manager who deliberately chose All Stores keeps null.
+      final allStoresDeliberate =
+          ref.watch(canViewAllStoresProvider) && nav.allStoresChosen.value;
+      if (!activeValid && !allStoresDeliberate) {
         final target = selectableStores.first.id;
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           if (nav.lockedStoreId.value == target) return;
           // explicit: false — this is the silent default, not a user pick, so the
-          // POS gate still prompts a multi-store confined user to choose (§12.1).
+          // POS gate still prompts a multi-store user to choose before selling.
           nav.setLockedStore(target, explicit: false);
         });
       }

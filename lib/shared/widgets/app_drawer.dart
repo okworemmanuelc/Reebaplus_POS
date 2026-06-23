@@ -17,7 +17,9 @@ import 'package:reebaplus_pos/features/settings/screens/staff_settings_screen.da
 import 'package:reebaplus_pos/features/staff/screens/staff_management_screen.dart';
 import 'package:reebaplus_pos/features/sync/screens/sync_issues_screen.dart';
 import 'package:reebaplus_pos/shared/utils/role_display.dart';
+import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/shared/widgets/store_picker_sheet.dart';
+import 'package:reebaplus_pos/core/utils/notifications.dart';
 
 class AppDrawer extends ConsumerWidget {
   // Pass 'pos' or 'inventory' to highlight the correct nav item
@@ -509,15 +511,29 @@ class AppDrawer extends ConsumerWidget {
             // Capture the provider up front — `ref` is invalidated once this
             // widget unmounts mid-await.
             final auth = ref.read(authProvider);
+            final db = ref.read(databaseProvider);
+            final user = auth.currentUser;
+
+            int deviceStaffCount = 0;
+            if (user != null) {
+              deviceStaffCount = await db.userBusinessesDao.countDeviceStaffForBusiness(user.businessId);
+            }
+            final isSoleUser = deviceStaffCount <= 1;
+
+            if (!context.mounted) return;
+
             final confirmed = await showDialog<bool>(
               context: context,
               builder: (ctx) => AlertDialog(
-                title: const Text('Log out of this device?'),
-                content: const Text(
-                  "You'll need your email + a one-time code, and a new PIN, to "
-                  'sign back in. The till keeps its data and other staff stay '
-                  'signed in.\n\n'
-                  'To just switch staff, use Switch User instead.',
+                title: Text(isSoleUser ? 'Log out and erase all data?' : 'Log out of this device?'),
+                content: Text(
+                  isSoleUser
+                      ? "Logging out of the sole user on this device will erase all local data. You will re-download it after signing in again.\n\n"
+                          "You'll need your email + a one-time code, and a new PIN, to sign back in."
+                      : "You'll need your email + a one-time code, and a new PIN, to "
+                          'sign back in. The till keeps its data and other staff stay '
+                          'signed in.\n\n'
+                          'To just switch staff, use Switch User instead.',
                 ),
                 actions: [
                   TextButton(
@@ -526,14 +542,24 @@ class AppDrawer extends ConsumerWidget {
                   ),
                   TextButton(
                     onPressed: () => Navigator.of(ctx).pop(true),
-                    child: const Text('Log out'),
+                    child: Text(isSoleUser ? 'Log out & Erase' : 'Log out'),
                   ),
                 ],
               ),
             );
             if (confirmed != true) return;
             if (context.mounted) Navigator.pop(context); // close the drawer
-            await auth.logOutCurrentUser(); // → main.dart routes to Welcome
+            try {
+              await auth.logOutCurrentUser(); // → main.dart routes to Welcome
+            } on LogoutWipeException catch (e) {
+              if (context.mounted) {
+                AppNotification.showError(context, e.message);
+              }
+            } catch (e) {
+              if (context.mounted) {
+                AppNotification.showError(context, 'An unexpected error occurred during logout.');
+              }
+            }
           },
         ),
         SizedBox(height: context.getRSize(12)),

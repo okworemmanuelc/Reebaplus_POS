@@ -8,12 +8,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
-import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/utils/role_display.dart';
 import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
 import 'package:reebaplus_pos/features/auth/screens/login_screen.dart';
-import 'package:reebaplus_pos/features/auth/screens/otp_verification_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/welcome_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/view_selector_sheet.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
@@ -33,7 +31,8 @@ class WhoIsWorkingScreen extends ConsumerStatefulWidget {
   ConsumerState<WhoIsWorkingScreen> createState() => _WhoIsWorkingScreenState();
 }
 
-class _WhoIsWorkingScreenState extends ConsumerState<WhoIsWorkingScreen> {
+class _WhoIsWorkingScreenState extends ConsumerState<WhoIsWorkingScreen>
+    with WidgetsBindingObserver {
   String? _businessId;
   UserData? _deviceUser;
   bool _resolving = true;
@@ -44,7 +43,32 @@ class _WhoIsWorkingScreenState extends ConsumerState<WhoIsWorkingScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _resolveBusiness();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkDeletionOnResume();
+    }
+  }
+
+  Future<void> _checkDeletionOnResume() async {
+    final businessId = _businessId;
+    if (businessId != null &&
+        await ref.read(authProvider).wipeIfActiveBusinessDeleted()) {
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const WelcomeScreen()),
+      );
+    }
   }
 
   Future<void> _resolveBusiness() async {
@@ -70,6 +94,19 @@ class _WhoIsWorkingScreenState extends ConsumerState<WhoIsWorkingScreen> {
     }
 
     if (!mounted) return;
+
+    // §10.3: a staff device whose business was deleted while it was closed/offline
+    // must never see the picker — confirm via the cloud tombstone and bounce to
+    // Welcome (wipe happens inside). Online-only & false-positive-proof.
+    if (businessId != null &&
+        await ref.read(authProvider).wipeIfActiveBusinessDeleted()) {
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const WelcomeScreen()),
+      );
+      return; // do not fall through to setState(_resolving = false)
+    }
+
     setState(() {
       _businessId = businessId;
       _deviceUser = deviceUser;
@@ -103,34 +140,8 @@ class _WhoIsWorkingScreenState extends ConsumerState<WhoIsWorkingScreen> {
   }
 
   Future<void> _onTapStaff(WhoIsWorkingEntry entry) async {
-    final user = entry.user;
-    // Has a PIN → straight to the PIN screen (§8.4).
-    if (user.pinHash != null) {
-      Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => LoginScreen(presetUser: user)));
-      return;
-    }
-
-    // No PIN yet → verify by email OTP so they can set one.
-    final email = user.email;
-    if (email == null || email.isEmpty) {
-      AppNotification.showError(
-        context,
-        'No email on file for ${user.name}. Ask your CEO to update it.',
-      );
-      return;
-    }
-    final error = await ref.read(authProvider).sendOtp(email);
-    if (!mounted) return;
-    if (error != null) {
-      AppNotification.showError(context, error);
-      return;
-    }
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => OtpVerificationScreen(user: user, email: email),
-      ),
+      MaterialPageRoute(builder: (_) => LoginScreen(presetUser: entry.user)),
     );
   }
 
@@ -160,7 +171,7 @@ class _WhoIsWorkingScreenState extends ConsumerState<WhoIsWorkingScreen> {
       return const _BrandedFade(key: ValueKey('no-business'));
     }
 
-    final staffAsync = ref.watch(activeStaffProvider(businessId));
+    final staffAsync = ref.watch(deviceStaffProvider(businessId));
     return staffAsync.when(
       loading: () => const _BrandedFade(key: ValueKey('loading')),
       error: (_, __) {
@@ -168,24 +179,17 @@ class _WhoIsWorkingScreenState extends ConsumerState<WhoIsWorkingScreen> {
         return const _BrandedFade(key: ValueKey('error'));
       },
       data: (staff) {
-        // §8.3: 0 or 1 staff → skip the picker. Mirror _onTapStaff so a single
-        // staff member without a device PIN verifies by OTP rather than being
-        // dropped on the PIN screen.
+        // If no staff is set up on this device, route to WelcomeScreen.
+        // If exactly 1 staff is set up, skip the picker and go to their PIN screen.
         if (staff.length <= 1) {
-          final entry = staff.isEmpty ? null : staff.first;
-          final email = entry?.user.email;
-          // Only take the OTP shortcut when the lone staff has no device PIN
-          // AND a usable email — otherwise _onTapStaff just shows an error and
-          // returns, stranding the user on the branded fade with _navigated
-          // already set. Fall back to the PIN screen, which offers its own
-          // email/switch-account recovery path.
-          if (entry != null &&
-              entry.user.pinHash == null &&
-              email != null &&
-              email.isNotEmpty) {
-            _shortcutTo(() => _onTapStaff(entry));
+          if (staff.isEmpty) {
+            _shortcutTo(() {
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (_) => const WelcomeScreen()),
+              );
+            });
           } else {
-            _replaceWithPin(entry?.user ?? _deviceUser);
+            _replaceWithPin(staff.first.user);
           }
           return const _BrandedFade(key: ValueKey('shortcut'));
         }

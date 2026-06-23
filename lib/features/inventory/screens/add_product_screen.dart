@@ -16,6 +16,7 @@ import 'package:reebaplus_pos/core/utils/product_name.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
+import 'package:reebaplus_pos/features/payments/widgets/supplier_form_sheet.dart';
 
 /// Add Product — a full pushed screen (master plan §16.5, amended 2026-05-30:
 /// the form outgrew a bottom-sheet modal). Also doubles as the "add stock to an
@@ -564,6 +565,17 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         );
       }
 
+      if (_effectiveTrackEmpties && _selectedManufacturer == null) {
+        setState(() => _isSaving = false);
+        if (mounted) {
+          AppNotification.showError(
+            context,
+            'Manufacturer is required to track empty crates.',
+          );
+        }
+        return;
+      }
+
       setState(() => _isSaving = true);
       try {
         final productId = _selectedExistingProduct!.id;
@@ -725,12 +737,12 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         );
       }
 
-      if (_selectedManufacturer == null) {
+      if (_effectiveTrackEmpties && _selectedManufacturer == null) {
         setState(() => _isSaving = false);
         if (mounted) {
           AppNotification.showError(
             context,
-            'Manufacturer is required. Please select or create one.',
+            'Manufacturer is required to track empty crates.',
           );
         }
         return;
@@ -821,6 +833,14 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     }
   }
 
+  Future<void> _addSupplierViaForm() async {
+    final created = await SupplierFormSheet.show(context);
+    if (created == null || !mounted) return;
+    _allSuppliers = await ref.read(databaseProvider).catalogDao.getAllSuppliers();
+    if (!mounted) return;
+    _selectSupplier(created);
+  }
+
   @override
   Widget build(BuildContext context) {
     final card = Theme.of(context).cardColor;
@@ -831,6 +851,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     final border = Theme.of(context).dividerColor;
     final isExisting = _selectedExistingProduct != null;
     final canEditBuying = hasPermission(ref, 'products.edit_buying_price');
+    final manufacturerRequired = _unit.toLowerCase() == 'bottle' && _isCrateBusiness && _trackEmpties;
 
     return Scaffold(
       // Save-button padding is nav-only (deviceBottomPadding): this screen is
@@ -1147,7 +1168,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                 // ── MANUFACTURER ───────────────────────────────────────
                 AppInput(
                   controller: _manufacturerCtrl,
-                  labelText: 'MANUFACTURER *',
+                  labelText: 'MANUFACTURER ${manufacturerRequired ? '*' : '(optional)'}',
                   hintText: 'Search or type manufacturer name…',
                   prefixIcon: Icon(Icons.search, size: 18, color: subtext),
                   onChanged: _onManufacturerChanged,
@@ -1275,6 +1296,14 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                       card: card,
                       border: border,
                     ),
+                  if (hasPermission(ref, 'suppliers.manage')) ...[
+                    const SizedBox(height: 8),
+                    AppButton(
+                      text: 'Add new supplier',
+                      variant: AppButtonVariant.outline,
+                      onPressed: _addSupplierViaForm,
+                    ),
+                  ],
                   const SizedBox(height: 16),
                 ],
               ], // end of new-product-only fields

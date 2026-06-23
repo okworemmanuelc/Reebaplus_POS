@@ -54,6 +54,46 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
   // Date filters (§19.1/§30.11: default Last 24 hours).
   String _completedFilter = kDatePeriodLabels.first;
   String _cancelledFilter = kDatePeriodLabels.first;
+  DateTimeRange? _completedCustomRange;
+  DateTimeRange? _cancelledCustomRange;
+
+  Future<void> _changeFilter(String tab, String v) async {
+    if (v == 'Custom') {
+      final initialRange = tab == 'completed' ? _completedCustomRange : _cancelledCustomRange;
+      final range = await showDateRangePicker(
+        context: context,
+        firstDate: DateTime(2020),
+        lastDate: DateTime.now().add(const Duration(days: 365)),
+        initialDateRange: initialRange,
+        builder: (context, child) => Theme(
+          data: Theme.of(context),
+          child: child!,
+        ),
+      );
+      if (range != null) {
+        setState(() {
+          final rangeStr = 'Custom:${range.start.toIso8601String()}:${range.end.toIso8601String()}';
+          if (tab == 'completed') {
+            _completedCustomRange = range;
+            _completedFilter = rangeStr;
+          } else {
+            _cancelledCustomRange = range;
+            _cancelledFilter = rangeStr;
+          }
+        });
+      }
+    } else {
+      setState(() {
+        if (tab == 'completed') {
+          _completedFilter = v;
+          _completedCustomRange = null;
+        } else {
+          _cancelledFilter = v;
+          _cancelledCustomRange = null;
+        }
+      });
+    }
+  }
 
   // Search
   final TextEditingController _searchController = TextEditingController();
@@ -332,10 +372,14 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     required List<String> options,
     required ValueChanged<String> onSelect,
   }) {
+    final isCustom = selected.startsWith('Custom:');
+    final dropdownValue = isCustom ? 'Custom' : selected;
+    final selectedVal = options.contains(dropdownValue) ? dropdownValue : options.first;
+
     return SizedBox(
       width: context.getRSize(140),
       child: AppDropdown<String>(
-        value: selected,
+        value: selectedVal,
         items: options
             .map((p) => DropdownMenuItem(value: p, child: Text(p)))
             .toList(),
@@ -468,7 +512,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                 child: _buildSearchBar(
                   context,
                   selectedFilter: _completedFilter,
-                  onSelectFilter: (f) => setState(() => _completedFilter = f),
+                  onSelectFilter: (f) => _changeFilter('completed', f),
                   filterOptions: _periodOptions(managerUp),
                 ),
               ),
@@ -533,7 +577,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                 child: _buildSearchBar(
                   context,
                   selectedFilter: _cancelledFilter,
-                  onSelectFilter: (f) => setState(() => _cancelledFilter = f),
+                  onSelectFilter: (f) => _changeFilter('cancelled', f),
                   filterOptions: _periodOptions(managerUp),
                 ),
               ),
@@ -1006,6 +1050,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                           refundAmount: currentOrder.amountPaidKobo / 100.0,
                           storeAddress: storeAddress,
                           businessName: ref.read(currentBusinessNameProvider),
+                          logoPath: ref
+                              .read(currentBusinessLogoPathProvider)
+                              .valueOrNull,
                         ),
                       ),
                     ),
