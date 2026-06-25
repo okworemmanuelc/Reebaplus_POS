@@ -7,6 +7,7 @@ class NotificationModel {
   final DateTime timestamp;
   final bool isRead;
   final String? linkedRecordId;
+  final String severity;
 
   NotificationModel({
     required this.id,
@@ -15,6 +16,7 @@ class NotificationModel {
     required this.timestamp,
     this.isRead = false,
     this.linkedRecordId,
+    this.severity = 'info',
   });
 
   factory NotificationModel.fromDb(NotificationData data) {
@@ -25,6 +27,7 @@ class NotificationModel {
       timestamp: data.createdAt,
       isRead: data.isRead,
       linkedRecordId: data.linkedRecordId,
+      severity: data.severity,
     );
   }
 
@@ -35,6 +38,7 @@ class NotificationModel {
     DateTime? timestamp,
     bool? isRead,
     String? linkedRecordId,
+    String? severity,
   }) {
     return NotificationModel(
       id: id ?? this.id,
@@ -43,6 +47,8 @@ class NotificationModel {
       timestamp: timestamp ?? this.timestamp,
       isRead: isRead ?? this.isRead,
       linkedRecordId: linkedRecordId ?? this.linkedRecordId,
+      severity: severity ?? this.severity,
     );
   }
 }
+

@@ -57,29 +57,32 @@ class _ReceiveStockScreenState extends ConsumerState<ReceiveStockScreen> {
 
   void _initStreams() {
     final db = ref.read(databaseProvider);
+
+    // The "Current: X" count on each card must match what the user sees in the
+    // Inventory tab, so we mirror its display semantics exactly: a locked store
+    // shows that store's on-hand stock; "All Stores" (no lock) shows the
+    // aggregate across every store. Previously this fell back to the first
+    // selectable store in All-Stores mode, so it showed only one store's stock
+    // and diverged from Inventory. The receive WRITE target is resolved
+    // separately at checkout (§15.7) — this only governs the displayed count.
     final storeId = ref.read(lockedStoreProvider).value;
-    
-    // We must have a store ID to filter properly, fallback to first selectable if null
-    final fallback = ref.read(selectableStoresProvider).firstOrNull?.id;
-    final effectiveStoreId = storeId ?? fallback;
 
     _categoriesSub = db.inventoryDao.watchAllCategories().listen((cats) {
       if (mounted) setState(() => _categories = cats);
     });
 
-    if (effectiveStoreId != null) {
-      _productsSub = db.inventoryDao.watchProductDatasWithStockByStore(effectiveStoreId).listen((products) {
-        if (mounted) {
-          setState(() {
-            _allProducts = products;
-            _isLoading = false;
-          });
-        }
-      });
-    } else {
-      // Unlikely edge case if user has no stores
-      setState(() => _isLoading = false);
-    }
+    final productStream = storeId != null
+        ? db.inventoryDao.watchProductDatasWithStockByStore(storeId)
+        : db.inventoryDao.watchAllProductDatasWithStock();
+
+    _productsSub = productStream.listen((products) {
+      if (mounted) {
+        setState(() {
+          _allProducts = products;
+          _isLoading = false;
+        });
+      }
+    });
   }
 
   List<ProductDataWithStock> get _filteredProducts {

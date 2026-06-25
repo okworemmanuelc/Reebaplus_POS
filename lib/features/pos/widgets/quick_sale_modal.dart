@@ -63,15 +63,25 @@ class _QuickSaleModalState extends ConsumerState<QuickSaleModal>
   double _pendingQty = 1.0;
   double _pendingPriceNaira = 0.0;
 
-  late final AnimationController _pulse = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 900),
-  )..repeat(reverse: true);
+  // Created lazily the first time the "Awaiting Approval" state renders (the
+  // only place it's used) via [_pulseAnim]. Kept nullable — never a `late
+  // final` with an inline initializer — so dispose() can't trigger the
+  // initializer for a modal that closed without ever entering the waiting
+  // state (the common CEO/Manager direct-add path). Building an
+  // AnimationController does a TickerMode ancestor lookup, which throws
+  // "Looking up a deactivated widget's ancestor is unsafe" when run during the
+  // element's unmount.
+  AnimationController? _pulse;
+  AnimationController get _pulseAnim =>
+      _pulse ??= AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 900),
+      )..repeat(reverse: true);
 
   @override
   void dispose() {
     _statusSub?.cancel();
-    _pulse.dispose();
+    _pulse?.dispose();
     _nameCtrl.dispose();
     _qtyCtrl.dispose();
     _priceCtrl.dispose();
@@ -83,12 +93,18 @@ class _QuickSaleModalState extends ConsumerState<QuickSaleModal>
       _qtyCtrl.text.isNotEmpty &&
       _priceCtrl.text.isNotEmpty;
 
+  // Keep every value JSON-serializable: a Quick Sale line lands in the cart and
+  // a held cart is persisted via `jsonEncode` (§13.5). Store the bolt as its int
+  // codepoint (mirrors a real product's `iconCodePoint`; resolved back by
+  // [productIconFromCodePoint]) and leave `color` null — the cart/checkout
+  // readers fall back to the theme primary for a null colour, so the look is
+  // unchanged. A raw `IconData`/`Color` here would throw on `jsonEncode`.
   Map<String, dynamic> _buildProduct(String name, double priceNaira) => {
     'name': name,
     'subtitle': 'Quick Sale',
     'price': priceNaira,
-    'icon': FontAwesomeIcons.bolt,
-    'color': Theme.of(context).colorScheme.primary,
+    'icon': FontAwesomeIcons.bolt.data.codePoint,
+    'color': null,
     'category': 'Other',
   };
 
@@ -342,7 +358,7 @@ class _QuickSaleModalState extends ConsumerState<QuickSaleModal>
       children: [
         // Fade-pulse, not a rotating spinner (coding rule #6).
         FadeTransition(
-          opacity: Tween<double>(begin: 0.35, end: 1.0).animate(_pulse),
+          opacity: Tween<double>(begin: 0.35, end: 1.0).animate(_pulseAnim),
           child: Icon(
             FontAwesomeIcons.hourglassHalf.data,
             size: context.getRSize(34),

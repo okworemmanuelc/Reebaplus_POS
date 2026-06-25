@@ -217,27 +217,29 @@ class ReceiveCartScreen extends ConsumerWidget {
                                           ),
                                         ),
                                         SizedBox(width: context.getRSize(8)),
-                                        Container(
-                                          padding: EdgeInsets.symmetric(
-                                            horizontal: context.getRSize(6),
-                                            vertical: context.getRSize(2),
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: primary.withValues(
-                                              alpha: 0.1,
+                                        Flexible(
+                                          child: Container(
+                                            padding: EdgeInsets.symmetric(
+                                              horizontal: context.getRSize(6),
+                                              vertical: context.getRSize(2),
                                             ),
-                                            borderRadius: BorderRadius.circular(
-                                              4,
-                                            ),
-                                          ),
-                                          child: Text(
-                                            'Cost: ${formatCurrency(line.buyingPriceKobo / 100)}',
-                                            style: TextStyle(
-                                              fontSize: context.getRFontSize(
-                                                11,
+                                            decoration: BoxDecoration(
+                                              color: primary.withValues(
+                                                alpha: 0.1,
                                               ),
-                                              fontWeight: FontWeight.w600,
-                                              color: primary,
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              'Cost: ${formatCurrency(line.buyingPriceKobo / 100)}',
+                                              overflow: TextOverflow.ellipsis,
+                                              maxLines: 1,
+                                              style: TextStyle(
+                                                fontSize:
+                                                    context.getRFontSize(11),
+                                                fontWeight: FontWeight.w600,
+                                                color: primary,
+                                              ),
                                             ),
                                           ),
                                         ),

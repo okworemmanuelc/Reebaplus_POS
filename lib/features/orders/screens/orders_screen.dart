@@ -20,6 +20,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/receipt_widget.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/features/deliveries/data/models/delivery_receipt.dart'
@@ -169,9 +170,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
         builder: (context) {
           final activeStoreId = ref.watch(lockedStoreProvider).value;
 
-          return RefreshIndicator(
-            onRefresh: () async {
-              HapticFeedback.lightImpact();
+          return AppRefreshWrapper(
+            onRefresh: () {
               final completedKey = (
                 status: 'completed',
                 storeId: activeStoreId,
@@ -189,15 +189,6 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
               ref.invalidate(ordersStatsProvider(completedKey));
               ref.invalidate(ordersStatsProvider(cancelledKey));
               ref.invalidate(pendingOrdersProvider(activeStoreId));
-
-              try {
-                final authService = ref.read(authProvider);
-                final user = authService.currentUser;
-                if (user != null) {
-                  final syncService = ref.read(supabaseSyncServiceProvider);
-                  await syncService.syncAll(user.businessId);
-                }
-              } catch (_) {}
             },
             child: NestedScrollView(
               headerSliverBuilder: (context, innerBoxIsScrolled) => [

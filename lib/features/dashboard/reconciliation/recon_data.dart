@@ -335,6 +335,14 @@ class ReconData {
       shortageCostKobo;
   int get businessNetPositionKobo => inventoryOnHandKobo + totalOwedKobo + crateDepositKobo - supplierPayableKobo;
 
+  /// Supplier account treated as a WALLET (§21): all payments minus all goods
+  /// received, point-in-time. The inverse of [supplierPayableKobo] and identical
+  /// to `SupplierLedgerDao.getBalanceKobo` (SUM of signed entries).
+  ///   • positive (green) → credit we hold WITH the supplier (we've paid ahead);
+  ///   • negative (red)   → amount WE owe the supplier.
+  /// Display this signed value — never relabel a credit as "owed".
+  int get supplierWalletBalanceKobo => -supplierPayableKobo;
+
   /// Gross margin as a 1-dp percentage string ("0.0" when there's no costed
   /// revenue). Shared by the Statement card and the CSV export.
   String get grossMarginPct => costedRevenueKobo > 0

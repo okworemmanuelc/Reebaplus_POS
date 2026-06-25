@@ -17,6 +17,11 @@ IconData productIconFromCodePoint(int? codePoint) {
   if (codePoint == FontAwesomeIcons.box.data.codePoint) {
     return FontAwesomeIcons.box.data;
   }
+  // Quick Sale lines (§12.3) carry the bolt codepoint so they render the bolt
+  // in the cart/checkout instead of the box fallback.
+  if (codePoint == FontAwesomeIcons.bolt.data.codePoint) {
+    return FontAwesomeIcons.bolt.data;
+  }
   if (codePoint == FontAwesomeIcons.wineBottle.data.codePoint) {
     return FontAwesomeIcons.wineBottle.data;
   }

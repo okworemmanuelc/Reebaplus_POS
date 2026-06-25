@@ -10,6 +10,7 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/app_drawer.dart';
+import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/features/payments/widgets/supplier_form_sheet.dart';
 import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
 import 'package:reebaplus_pos/features/payments/screens/supplier_transactions_screen.dart';
@@ -226,15 +227,23 @@ class PaymentsScreen extends ConsumerWidget {
           ),
         ),
         Expanded(
-          child: suppliers.isEmpty
-              ? Center(
-                  child: Text(
-                    'No suppliers added yet',
-                    style: TextStyle(color: subtext),
-                  ),
-                )
-              : ListView.builder(
-                  padding: EdgeInsets.fromLTRB(
+          child: AppRefreshWrapper(
+            child: suppliers.isEmpty
+                ? ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    children: [
+                      SizedBox(height: context.getRSize(120)),
+                      Center(
+                        child: Text(
+                          'No suppliers added yet',
+                          style: TextStyle(color: subtext),
+                        ),
+                      ),
+                    ],
+                  )
+                : ListView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: EdgeInsets.fromLTRB(
                     context.getRSize(16),
                     context.getRSize(8),
                     context.getRSize(16),
@@ -257,6 +266,7 @@ class PaymentsScreen extends ConsumerWidget {
                     );
                   },
                 ),
+          ),
         ),
       ],
     );

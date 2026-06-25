@@ -21,7 +21,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart' show UserData;
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:reebaplus_pos/main.dart' show supabaseReady;
 import 'package:reebaplus_pos/shared/services/auth_service.dart'
-    show GoogleSignInException;
+    show AuthService, GoogleSignInException;
 
 class EmailEntryScreen extends ConsumerStatefulWidget {
   /// When non-null, pre-fills the email field. If [lockedEmail] is also
@@ -236,10 +236,50 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
 
     if (!mounted) return;
 
+    final auth = ref.read(authProvider);
+
+    // §9 / M4 — "Create a new business" with an email that already has a
+    // fully-set-up account ON THIS DEVICE can never create a second business
+    // (one email, one business). Recognise that here and route to sign-in
+    // BEFORE spending an OTP. Scoped to createBusinessIntent + a real local PIN
+    // so the ordinary sign-in flow and cloud-only / cross-device accounts are
+    // untouched — those still resolve post-OTP. We deliberately do NOT add a
+    // pre-auth "does this email exist" oracle for the cross-device case: account
+    // existence is revealed only after the user proves ownership via OTP, which
+    // is what prevents email enumeration. This local check leaks nothing — the
+    // row is already on this device.
+    if (widget.createBusinessIntent) {
+      UserData? existing;
+      try {
+        existing = await auth.getUserByEmail(email);
+      } catch (_) {
+        existing = null; // lookup failure → fall through to the normal OTP path
+      }
+      if (!mounted) return;
+      final hasRealPin = existing != null &&
+          existing.pin.isNotEmpty &&
+          existing.pin != AuthService.setupRequiredPin;
+      if (hasRealPin) {
+        setState(() => _loading = false);
+        AppNotification.showInfo(
+          context,
+          'This email already belongs to a business — sign in instead.',
+        );
+        Navigator.of(context).push(
+          PageRouteBuilder(
+            pageBuilder: (_, __, ___) => LoginScreen(presetUser: existing!),
+            transitionsBuilder: (_, animation, __, child) =>
+                FadeTransition(opacity: animation, child: child),
+            transitionDuration: const Duration(milliseconds: 500),
+          ),
+        );
+        return;
+      }
+    }
+
     // Run DB lookup and OTP send in parallel.
     // supabaseReady is chained inside sendOtp only — getUserByEmail starts
     // immediately so we don't block the DB query on Supabase init.
-    final auth = ref.read(authProvider);
     UserData? localUser;
     String? otpError;
     bool dbCheckDone = false;

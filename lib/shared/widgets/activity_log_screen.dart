@@ -11,6 +11,7 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/features/inventory/data/inventory_data.dart';
 import 'package:reebaplus_pos/features/stores/data/models/store.dart';
 import 'package:reebaplus_pos/shared/widgets/app_drawer.dart';
+import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 
@@ -179,18 +180,9 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
                 }
 
                 if (state.logs.isEmpty) {
-                  return RefreshIndicator(
-                    onRefresh: () async {
-                      ref.invalidate(paginatedActivityLogsProvider(desiredStoreId));
-                      try {
-                        final authService = ref.read(authProvider);
-                        final user = authService.currentUser;
-                        if (user != null) {
-                          final syncService = ref.read(supabaseSyncServiceProvider);
-                          await syncService.syncAll(user.businessId);
-                        }
-                      } catch (_) {}
-                    },
+                  return AppRefreshWrapper(
+                    onRefresh: () => ref
+                        .invalidate(paginatedActivityLogsProvider(desiredStoreId)),
                     child: SingleChildScrollView(
                       physics: const AlwaysScrollableScrollPhysics(),
                       child: Container(
@@ -202,18 +194,9 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
                   );
                 }
 
-                return RefreshIndicator(
-                  onRefresh: () async {
-                    ref.invalidate(paginatedActivityLogsProvider(desiredStoreId));
-                    try {
-                      final authService = ref.read(authProvider);
-                      final user = authService.currentUser;
-                      if (user != null) {
-                        final syncService = ref.read(supabaseSyncServiceProvider);
-                        await syncService.syncAll(user.businessId);
-                      }
-                    } catch (_) {}
-                  },
+                return AppRefreshWrapper(
+                  onRefresh: () => ref
+                      .invalidate(paginatedActivityLogsProvider(desiredStoreId)),
                   child: ListView.builder(
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: context

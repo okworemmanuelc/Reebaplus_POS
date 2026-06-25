@@ -26,6 +26,7 @@ import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/customers/widgets/edit_customer_sheet.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_builder.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
 import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
@@ -1307,12 +1308,8 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
             }
             return false;
           },
-          child: RefreshIndicator(
-            onRefresh: () async {
-              _loadData();
-              await Future.delayed(const Duration(milliseconds: 500));
-            },
-            color: theme.colorScheme.primary,
+          child: AppRefreshWrapper(
+            onRefresh: () => _loadData(),
             child: _contentReady
                 ? _buildContent(theme, showCrates)
                 : const Center(child: CircularProgressIndicator()),
