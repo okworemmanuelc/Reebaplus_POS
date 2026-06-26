@@ -37,7 +37,6 @@ class AddCustomerSheet extends ConsumerStatefulWidget {
 class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
   final _nameCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
-  final _locationCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   PriceTier _selectedGroup = PriceTier.retailer;
   final _formKey = GlobalKey<FormState>();
@@ -63,7 +62,6 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
   void dispose() {
     _nameCtrl.dispose();
     _addressCtrl.dispose();
-    _locationCtrl.dispose();
     _phoneCtrl.dispose();
     super.dispose();
   }
@@ -238,20 +236,9 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
                           ),
                           SizedBox(height: context.getRSize(16)),
                           AppInput(
-                            labelText: 'Address',
+                            labelText: 'Address (optional)',
                             controller: _addressCtrl,
                             hintText: 'e.g. 123 Main Street',
-                            validator: (v) => (v == null || v.trim().isEmpty)
-                                ? 'This field is required'
-                                : null,
-                          ),
-                          AppInput(
-                            labelText: 'Google Maps Location',
-                            controller: _locationCtrl,
-                            hintText: 'e.g. Plus Code or Link',
-                            validator: (v) => (v == null || v.trim().isEmpty)
-                                ? 'This field is required'
-                                : null,
                           ),
                           AppInput(
                             labelText: 'Phone Number',
@@ -318,7 +305,7 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
                               id: '', // Database will generate this
                               name: _nameCtrl.text.trim(),
                               addressText: _addressCtrl.text.trim(),
-                              googleMapsLocation: _locationCtrl.text.trim(),
+                              googleMapsLocation: '',
                               phone: _phoneCtrl.text.trim().isEmpty
                                   ? null
                                   : _phoneCtrl.text.trim(),

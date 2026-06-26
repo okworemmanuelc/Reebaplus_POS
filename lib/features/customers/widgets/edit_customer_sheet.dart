@@ -78,6 +78,9 @@ class EditCustomerSheet extends ConsumerStatefulWidget {
 class _EditCustomerSheetState extends ConsumerState<EditCustomerSheet> {
   late final _nameCtrl = TextEditingController(text: widget.initialName);
   late final _addressCtrl = TextEditingController(text: widget.initialAddress);
+  // The Google Maps Location field was removed from the UI, but we keep the
+  // controller seeded with the existing value so editing a customer doesn't
+  // wipe a location captured before the field was retired.
   late final _locationCtrl = TextEditingController(
     text: widget.initialLocation,
   );
@@ -297,20 +300,9 @@ class _EditCustomerSheetState extends ConsumerState<EditCustomerSheet> {
                       ),
                       SizedBox(height: context.getRSize(16)),
                       AppInput(
-                        labelText: 'Address',
+                        labelText: 'Address (optional)',
                         controller: _addressCtrl,
                         hintText: 'e.g. 123 Main Street',
-                        validator: (v) => (v == null || v.trim().isEmpty)
-                            ? 'This field is required'
-                            : null,
-                      ),
-                      AppInput(
-                        labelText: 'Google Maps Location',
-                        controller: _locationCtrl,
-                        hintText: 'e.g. Plus Code or Link',
-                        validator: (v) => (v == null || v.trim().isEmpty)
-                            ? 'This field is required'
-                            : null,
                       ),
                       AppInput(
                         labelText: 'Phone Number',
