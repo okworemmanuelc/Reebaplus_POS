@@ -18,6 +18,7 @@ import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
 import 'package:reebaplus_pos/shared/widgets/menu_button.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
+import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 
 /// One-shot, read-only pull of the current business so newly-joined members'
 /// users / user_businesses rows reach this device. The CEO's roster can be
@@ -381,8 +382,7 @@ class _StaffTabState extends ConsumerState<_StaffTab> {
           ],
         ),
         Expanded(
-          child: RefreshIndicator(
-            onRefresh: () => _pullStaffRoster(ref),
+          child: AppRefreshWrapper(
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
               padding: EdgeInsets.only(
@@ -742,8 +742,7 @@ class _InvitesTabState extends ConsumerState<_InvitesTab> {
           },
         ),
         Expanded(
-          child: RefreshIndicator(
-            onRefresh: () => _pullStaffRoster(ref),
+          child: AppRefreshWrapper(
             child: filtered.isEmpty
                 ? ListView(
                     physics: const AlwaysScrollableScrollPhysics(),

@@ -644,19 +644,54 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
       if (updatedUser == null) {
         throw StateError('local users row missing after PIN save');
       }
-      // Only drop the draft once all critical work has landed. The commit is
-      // idempotent (ON CONFLICT), so a mid-failure retry can safely re-run it
-      // as long as the draft survives.
-      draftNotifier.clear();
 
       // Post-onboarding pull so the 4 seeded roles (+ permissions/settings/
-      // memberships) land locally before Home renders. Non-fatal: if it
-      // fails, setCurrentUser fires another background pull anyway.
-      try {
-        await sync.pullChanges(updatedUser.businessId);
-      } catch (e) {
-        debugPrint('[CeoSignUp] post-onboarding pull failed (non-fatal): $e');
+      // memberships) land locally before Home renders. The CEO's role binding
+      // is cloud-seeded (seed_default_roles_for_business) and is NOT part of
+      // completeOnboarding's local mirror, so without it the user lands in a
+      // permission-less shell — no POS access, empty drawer, hidden buying
+      // price. Block on it: retry the pull a bounded number of times and
+      // verify the binding actually committed locally before handing off (H1).
+      var bindingReady = false;
+      for (var attempt = 0; attempt < 3 && !bindingReady; attempt++) {
+        try {
+          await sync.pullChanges(updatedUser.businessId);
+        } catch (e) {
+          debugPrint(
+            '[CeoSignUp] post-onboarding pull attempt ${attempt + 1} '
+            'failed: $e',
+          );
+        }
+        bindingReady = await auth.hasLocalRoleBinding(
+          updatedUser.id,
+          updatedUser.businessId,
+        );
       }
+
+      if (!bindingReady) {
+        // The business is committed cloud-side (idempotent), but its roles
+        // never reached this device. Don't enter the app permission-less —
+        // keep the draft and let the user retry by re-entering their PIN.
+        if (mounted) {
+          setState(() {
+            _committing = false;
+            _pin = '';
+            _firstPin = '';
+            _pinError =
+                'Your business was created, but we could not finish loading '
+                'it on this device. Check your connection and re-enter your '
+                'PIN to retry.';
+            _step = 6;
+          });
+        }
+        return;
+      }
+
+      // Only drop the draft once ALL critical work has landed (cloud commit +
+      // PIN + role binding mirrored locally). The commit is idempotent
+      // (ON CONFLICT), so keeping the draft until here lets a mid-failure
+      // retry safely re-run the whole flow.
+      draftNotifier.clear();
 
       if (!mounted) return;
       setState(() => _step = 8);
@@ -669,12 +704,30 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
       auth.setCurrentUser(updatedUser);
     } catch (e, stack) {
       debugPrint('[CeoSignUp] commit FAILED: ${e.runtimeType}: $e\n$stack');
+
+      // §9 / invariant #9 — this email already belongs to a business, so it
+      // cannot create another. complete_onboarding rejects this cleanly (P0001
+      // "already linked to another business"); the raw global-unique constraint
+      // name is matched too as a backstop for an older RPC without the guard.
+      // Re-entering the PIN can NEVER clear this (the email is permanently
+      // bound), so the generic "re-enter your PIN" copy is a dead-end loop —
+      // surface a clear, actionable message instead and let the user back out
+      // to restart with a different email. Mirrors staff_sign_up_screen's
+      // handling of the same P0001 from redeem_invite_code.
+      final msg = e.toString().toLowerCase();
+      final alreadyLinkedElsewhere =
+          msg.contains('already linked to another business') ||
+          msg.contains('users_auth_user_id_key');
+
       if (mounted) {
         setState(() {
           _committing = false;
           _pin = '';
           _firstPin = '';
-          _pinError = 'Something went wrong. Please re-enter your PIN.';
+          _pinError = alreadyLinkedElsewhere
+              ? 'This email already belongs to a business. Go back and use a '
+                    'different email to create a new one.'
+              : 'Something went wrong. Please re-enter your PIN.';
           _step = 6;
         });
       }

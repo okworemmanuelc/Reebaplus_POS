@@ -105,30 +105,13 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     final whs = await db.storesDao.getActiveStores();
     final suppliers = await db.catalogDao.getAllSuppliers();
     final manufacturers = await db.inventoryDao.getAllManufacturers();
-    var cats = await db.inventoryDao.getAllCategories();
+    // Categories are no longer preloaded — they are created on the fly via the
+    // searchable category dropdown (_createNewCategory / _getOrCreateCategory).
+    final cats = await db.inventoryDao.getAllCategories();
     final productsList = await (db.select(
       db.products,
     )..where((t) => t.isDeleted.not())).get();
     final uniqueUnits = await db.catalogDao.getUniqueProductUnits();
-
-    if (cats.isEmpty) {
-      final defaultCats = [
-        'Alcoholic',
-        'Non-Alcoholic',
-        'Energy Drinks',
-        'Wines',
-        'Spirits',
-      ];
-      final businessId = ref.read(authProvider).currentUser?.businessId;
-      if (businessId != null) {
-        for (final name in defaultCats) {
-          await db.catalogDao.insertCategory(
-            CategoriesCompanion.insert(name: name, businessId: businessId),
-          );
-        }
-      }
-      cats = await db.inventoryDao.getAllCategories();
-    }
 
     if (mounted) {
       setState(() {
@@ -854,11 +837,19 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     final manufacturerRequired = _unit.toLowerCase() == 'bottle' && _isCrateBusiness && _trackEmpties;
 
     return Scaffold(
-      // Save-button padding is nav-only (deviceBottomPadding): this screen is
-      // under MainLayout, whose Scaffold already resizes the body for the
-      // keyboard, so the inset must not re-add it. resizeToAvoidBottomInset:false
-      // is a harmless no-op here (the screen sees viewInsets 0 under MainLayout).
-      resizeToAvoidBottomInset: false,
+      // Keep the body + save button above the keyboard. This screen is pushed
+      // from two places onto DIFFERENT navigators: the Inventory FAB pushes it
+      // on the tab's nested navigator (under MainLayout, whose Scaffold already
+      // resizes for the keyboard), but the post-onboarding auto-show
+      // (main_layout.dart) pushes it on the ROOT navigator, ABOVE MainLayout —
+      // there nothing resizes for the keyboard, so the save button and the
+      // bottom Quantity/Store fields end up hidden behind it. `true` is correct
+      // in BOTH cases: nested, MainLayout's Scaffold has already zeroed the
+      // bottom viewInsets for descendants, so this is a no-op; on the root
+      // navigator it lifts the body + bottomNavigationBar above the keyboard.
+      // The save-button padding stays nav-only (deviceBottomPadding) — when the
+      // keyboard is up the system nav bar is occluded, so the extra is harmless.
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         leading: const BackButton(),
         title: Text(isExisting ? 'Add Stock' : 'Add Product'),

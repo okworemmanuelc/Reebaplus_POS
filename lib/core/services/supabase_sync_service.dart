@@ -251,8 +251,8 @@ class SupabaseSyncService {
 
   /// Re-entrancy guard for `pullChanges`. setCurrentUser fires it on every
   /// login boundary; the connectivity-recovery listener may also fire it;
-  /// users can tap retry; FirstSyncScreen-on-error retries. Without a guard
-  /// these can race and double-restore the same row range.
+  /// users can tap the catch-up banner retry. Without a guard these can race
+  /// and double-restore the same row range.
   bool _fullPullRunning = false;
 
   /// Last businessId the service is configured for. Used by the
@@ -492,7 +492,6 @@ class SupabaseSyncService {
     'users': {
       'id',
       'business_id',
-      'auth_user_id',
       'name',
       'email',
       'phone',
@@ -504,15 +503,27 @@ class SupabaseSyncService {
       'store_id',
       'created_at',
       'last_updated_at',
-      // NOTE: `status`, `joined_at`, `is_deleted` were removed — they
-      // never existed on cloud users (those live on `business_members`),
-      // and `is_deleted` was dropped by migration 0035 in the
-      // staff-lifecycle hard-delete refactor. `role_tier` MUST be present:
-      // cloud DEFAULT is 1 and the CHECK constraint `role_tier IN
-      // (2,3,4,5,6)` rejects 1, so scrubbing it out causes 23514 on
-      // every fresh-row insert. PIN material (pin, pin_hash, pin_salt,
-      // pin_iterations, password_hash) is intentionally absent — local
-      // secret material.
+      // NOTE: `auth_user_id` is intentionally ABSENT — it is cloud-
+      // authoritative (set server-side by `complete_onboarding` and
+      // `redeem_invite_code`), and the client never originates it: no
+      // Drift write sets `Users.authUserId`, so the local value is ALWAYS
+      // null. Including it here pushed `auth_user_id: null` on every users
+      // upsert (onboarding mirror, profile edits, biometric toggle…),
+      // clobbering the uid the onboarding RPC had just stamped. That null
+      // then broke the existing-account screen's role lookup (shown as
+      // "Member") and `upsertLocalUserFromProfile`'s canonical-id resolve
+      // (both key off cloud `users.auth_user_id`). Omitting it leaves the
+      // column out of the upsert SET clause so the cloud value survives;
+      // the pull restores the correct uid locally. See BUILD_LOG.
+      //
+      // `status`, `joined_at`, `is_deleted` were removed — they never
+      // existed on cloud users (those live on `business_members`), and
+      // `is_deleted` was dropped by migration 0035 in the staff-lifecycle
+      // hard-delete refactor. `role_tier` MUST be present: cloud DEFAULT is
+      // 1 and the CHECK constraint `role_tier IN (2,3,4,5,6)` rejects 1, so
+      // scrubbing it out causes 23514 on every fresh-row insert. PIN
+      // material (pin, pin_hash, pin_salt, pin_iterations, password_hash)
+      // is intentionally absent — local secret material.
     },
     'sessions': {
       'id',
@@ -1881,9 +1892,9 @@ class SupabaseSyncService {
   /// login boundaries where the resolver still returns null.
   ///
   /// Re-entrant calls are no-ops (early-return via `_fullPullRunning`).
-  /// setCurrentUser, the connectivity-recovery listener, a manual banner
-  /// retry, and a FirstSyncScreen retry all converge on this single entry
-  /// point and must not race each other.
+  /// setCurrentUser, the connectivity-recovery listener, and a manual
+  /// catch-up banner retry all converge on this single entry point and must
+  /// not race each other.
   ///
   /// One-time, device-wide backfill for tables that were added to the pull
   /// path AFTER devices had already advanced their per-business
@@ -3755,9 +3766,11 @@ class SupabaseSyncService {
           break;
         case 'stores':
           for (var r in rows) {
-            await _db
-                .into(_db.stores)
-                .insertOnConflictUpdate(StoreData.fromJson(r));
+            await _insertResilient('stores', r, fkSkipped, () async {
+              await _db
+                  .into(_db.stores)
+                  .insertOnConflictUpdate(StoreData.fromJson(r));
+            });
           }
           break;
         case 'users':
@@ -3832,9 +3845,11 @@ class SupabaseSyncService {
         // all after businesses/users/stores.
         case 'roles':
           for (var r in rows) {
-            await _db
-                .into(_db.roles)
-                .insertOnConflictUpdate(RoleData.fromJson(r));
+            await _insertResilient('roles', r, fkSkipped, () async {
+              await _db
+                  .into(_db.roles)
+                  .insertOnConflictUpdate(RoleData.fromJson(r));
+            });
           }
           break;
         case 'role_permissions':
@@ -3849,14 +3864,19 @@ class SupabaseSyncService {
             // key but a different id first, so the incoming cloud row applies
             // cleanly and the device converges on the cloud's id. Restore path
             // — local only, never enqueue (§5 exception #1; re-pushing loops).
-            await (_db.delete(_db.rolePermissions)..where(
-                  (t) =>
-                      t.roleId.equals(row.roleId) &
-                      t.permissionKey.equals(row.permissionKey) &
-                      t.id.equals(row.id).not(),
-                ))
-                .go();
-            await _db.into(_db.rolePermissions).insertOnConflictUpdate(row);
+            // FK-resilient: role_id → roles. A partial pull dropping the roles
+            // slice would FK-abort here; skip-and-defer instead. (The delete is
+            // FK-safe; on retry the whole body re-runs once roles arrives.)
+            await _insertResilient('role_permissions', r, fkSkipped, () async {
+              await (_db.delete(_db.rolePermissions)..where(
+                    (t) =>
+                        t.roleId.equals(row.roleId) &
+                        t.permissionKey.equals(row.permissionKey) &
+                        t.id.equals(row.id).not(),
+                  ))
+                  .go();
+              await _db.into(_db.rolePermissions).insertOnConflictUpdate(row);
+            });
           }
           break;
         case 'user_permission_overrides':
@@ -3870,17 +3890,26 @@ class SupabaseSyncService {
             // but a different id first, so the incoming cloud row applies
             // cleanly and the device converges on the cloud's id. Restore path
             // — local only, never enqueue (§5 exception #1; re-pushing loops).
-            await (_db.delete(_db.userPermissionOverrides)..where(
-                  (t) =>
-                      t.businessId.equals(row.businessId) &
-                      t.userId.equals(row.userId) &
-                      t.permissionKey.equals(row.permissionKey) &
-                      t.id.equals(row.id).not(),
-                ))
-                .go();
-            await _db
-                .into(_db.userPermissionOverrides)
-                .insertOnConflictUpdate(row);
+            // FK-resilient: business_id → businesses, user_id → users. A partial
+            // pull dropping either parent would FK-abort here; skip-and-defer.
+            await _insertResilient(
+              'user_permission_overrides',
+              r,
+              fkSkipped,
+              () async {
+                await (_db.delete(_db.userPermissionOverrides)..where(
+                      (t) =>
+                          t.businessId.equals(row.businessId) &
+                          t.userId.equals(row.userId) &
+                          t.permissionKey.equals(row.permissionKey) &
+                          t.id.equals(row.id).not(),
+                    ))
+                    .go();
+                await _db
+                    .into(_db.userPermissionOverrides)
+                    .insertOnConflictUpdate(row);
+              },
+            );
           }
           break;
         case 'store_role_permissions':
@@ -3895,38 +3924,63 @@ class SupabaseSyncService {
             // incoming cloud row applies cleanly and the device converges on the
             // cloud's id. Restore path — local only, never enqueue (§5 exception
             // #1; re-pushing loops).
-            await (_db.delete(_db.storeRolePermissions)..where(
-                  (t) =>
-                      t.storeId.equals(row.storeId) &
-                      t.roleId.equals(row.roleId) &
-                      t.permissionKey.equals(row.permissionKey) &
-                      t.id.equals(row.id).not(),
-                ))
-                .go();
-            await _db
-                .into(_db.storeRolePermissions)
-                .insertOnConflictUpdate(row);
+            // FK-resilient: store_id → stores, role_id → roles. A partial pull
+            // dropping either parent would FK-abort here; skip-and-defer.
+            await _insertResilient(
+              'store_role_permissions',
+              r,
+              fkSkipped,
+              () async {
+                await (_db.delete(_db.storeRolePermissions)..where(
+                      (t) =>
+                          t.storeId.equals(row.storeId) &
+                          t.roleId.equals(row.roleId) &
+                          t.permissionKey.equals(row.permissionKey) &
+                          t.id.equals(row.id).not(),
+                    ))
+                    .go();
+                await _db
+                    .into(_db.storeRolePermissions)
+                    .insertOnConflictUpdate(row);
+              },
+            );
           }
           break;
         case 'role_settings':
+          // role_settings.role_id → roles. A partial pull that dropped the
+          // roles slice would FK-abort here; skip-and-defer instead.
           for (var r in rows) {
-            await _db
-                .into(_db.roleSettings)
-                .insertOnConflictUpdate(RoleSettingData.fromJson(r));
+            await _insertResilient('role_settings', r, fkSkipped, () async {
+              await _db
+                  .into(_db.roleSettings)
+                  .insertOnConflictUpdate(RoleSettingData.fromJson(r));
+            });
           }
           break;
         case 'user_businesses':
+          // user_businesses.role_id → roles (must already be present).
+          // user_businesses.user_id  → users (must already be present).
+          // If either parent is absent on this device, catch the FK-787 via
+          // _insertResilient so the whole pull doesn't crash; the cursor is
+          // held and the next full pull retries once the parent arrives.
           for (var r in rows) {
-            await _db
-                .into(_db.userBusinesses)
-                .insertOnConflictUpdate(UserBusinessData.fromJson(r));
+            await _insertResilient('user_businesses', r, fkSkipped, () async {
+              await _db
+                  .into(_db.userBusinesses)
+                  .insertOnConflictUpdate(UserBusinessData.fromJson(r));
+            });
           }
           break;
         case 'user_stores':
+          // Same partial-pull guard as user_businesses: user_stores.user_id →
+          // users and .store_id → stores. If either parent slice dropped
+          // mid-stream, skip-and-defer instead of aborting the whole pull.
           for (var r in rows) {
-            await _db
-                .into(_db.userStores)
-                .insertOnConflictUpdate(UserStoreData.fromJson(r));
+            await _insertResilient('user_stores', r, fkSkipped, () async {
+              await _db
+                  .into(_db.userStores)
+                  .insertOnConflictUpdate(UserStoreData.fromJson(r));
+            });
           }
           break;
         // invite_codes (master plan §6/§9.3). Plain synced tenant table — no
@@ -3935,10 +3989,15 @@ class SupabaseSyncService {
         // stores/users). Realtime delivery routes here too via the public:*
         // wildcard, so codes also appear live on other devices.
         case 'invite_codes':
+          // invite_codes references business/role/store/generated-by-user. A
+          // partial pull dropping any of those parents would FK-abort the whole
+          // restore; skip-and-defer the orphaned code instead.
           for (var r in rows) {
-            await _db
-                .into(_db.inviteCodes)
-                .insertOnConflictUpdate(InviteCodeData.fromJson(r));
+            await _insertResilient('invite_codes', r, fkSkipped, () async {
+              await _db
+                  .into(_db.inviteCodes)
+                  .insertOnConflictUpdate(InviteCodeData.fromJson(r));
+            });
           }
           break;
         case 'products':
@@ -3955,23 +4014,29 @@ class SupabaseSyncService {
           break;
         case 'crate_size_groups':
           for (var r in rows) {
-            await _db
-                .into(_db.crateSizeGroups)
-                .insertOnConflictUpdate(CrateSizeGroupData.fromJson(r));
+            await _insertResilient('crate_size_groups', r, fkSkipped, () async {
+              await _db
+                  .into(_db.crateSizeGroups)
+                  .insertOnConflictUpdate(CrateSizeGroupData.fromJson(r));
+            });
           }
           break;
         case 'manufacturers':
           for (var r in rows) {
-            await _db
-                .into(_db.manufacturers)
-                .insertOnConflictUpdate(ManufacturerData.fromJson(r));
+            await _insertResilient('manufacturers', r, fkSkipped, () async {
+              await _db
+                  .into(_db.manufacturers)
+                  .insertOnConflictUpdate(ManufacturerData.fromJson(r));
+            });
           }
           break;
         case 'categories':
           for (var r in rows) {
-            await _db
-                .into(_db.categories)
-                .insertOnConflictUpdate(CategoryData.fromJson(r));
+            await _insertResilient('categories', r, fkSkipped, () async {
+              await _db
+                  .into(_db.categories)
+                  .insertOnConflictUpdate(CategoryData.fromJson(r));
+            });
           }
           break;
         case 'inventory':
@@ -4023,9 +4088,11 @@ class SupabaseSyncService {
           break;
         case 'suppliers':
           for (var r in rows) {
-            await _db
-                .into(_db.suppliers)
-                .insertOnConflictUpdate(SupplierData.fromJson(r));
+            await _insertResilient('suppliers', r, fkSkipped, () async {
+              await _db
+                  .into(_db.suppliers)
+                  .insertOnConflictUpdate(SupplierData.fromJson(r));
+            });
           }
           break;
         case 'orders':

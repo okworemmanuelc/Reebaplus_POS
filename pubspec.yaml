@@ -21,6 +21,20 @@ version: 1.0.1+3
 environment:
   sdk: ^3.10.7
 
+# Build-hook config for package:sqlite3 (3.x).
+# sqlite3 3.x added a Dart "build hook" that, by default, DOWNLOADS a
+# precompiled libsqlite3 from github.com at build time. On a flaky/offline
+# network that fails the whole release build:
+#   SocketException: Failed host lookup: 'github.com'
+# We already ship the native library via `sqlite3_flutter_libs` (bundled in
+# the APK and loaded with dlopen("libsqlite3.so")). `source: system` tells the
+# hook to skip the GitHub download and resolve SQLite from that bundled lib —
+# no network needed, matching the pre-3.x DynamicLibrary path the app used.
+hooks:
+  user_defines:
+    sqlite3:
+      source: system
+
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
 # consider running `flutter pub upgrade --major-versions`. Alternatively,

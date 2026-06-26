@@ -6,11 +6,13 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
+import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/features/payments/widgets/supplier_form_sheet.dart';
 
@@ -40,10 +42,16 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
   SupplierData? _selectedSupplier;
   DateTime _dateReceived = DateTime.now();
 
-  /// Store captured when the checkout opened (§15.7). The receipt is committed
-  /// against THIS store; if the active store changes before confirm we abort
-  /// rather than silently re-stamp.
+  /// Destination store for this receipt. Defaults to the active store (or the
+  /// first selectable store) when the checkout opens, but the user can
+  /// re-allocate it via the "Stocking into" dropdown — so stock can be received
+  /// into any store the user has access to, independent of the app-wide active
+  /// store. (This supersedes the old §15.7 active-store-change abort, which
+  /// assumed the destination was implicit.)
   String? _flowStoreId;
+
+  /// Stores the user may receive into (already access-scoped upstream).
+  List<StoreData> _stores = const [];
 
   // manufacturerId → empty crates returned to the supplier on this receipt.
   // Empties are a per-manufacturer figure (the manufacturer owns the crate
@@ -74,13 +82,15 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
     final db = ref.read(databaseProvider);
     // getAllSuppliers() already excludes soft-deleted suppliers (§17.8).
     final suppliers = await db.catalogDao.getAllSuppliers();
-
-    _flowStoreId = ref.read(lockedStoreProvider).value ??
-        ref.read(selectableStoresProvider).firstOrNull?.id;
+    final stores = ref.read(selectableStoresProvider);
 
     if (!mounted) return;
     setState(() {
       _suppliers = suppliers;
+      _stores = stores;
+      // Default to the active store, falling back to the first store the user
+      // can access. The dropdown lets them change it before confirming.
+      _flowStoreId = ref.read(lockedStoreProvider).value ?? stores.firstOrNull?.id;
       _isLoading = false;
     });
 
@@ -155,19 +165,11 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
       return;
     }
 
-    // §15.7 — the store must not have silently changed since checkout opened.
-    final currentStore = ref.read(lockedStoreProvider).value ??
-        ref.read(selectableStoresProvider).firstOrNull?.id;
+    // The destination store is chosen explicitly via the "Stocking into"
+    // dropdown, so we only need to ensure one is selected (no active-store
+    // revalidation — the receipt lands wherever the user allocated it).
     if (_flowStoreId == null) {
-      AppNotification.showError(context, 'No active store to receive into');
-      return;
-    }
-    if (currentStore != _flowStoreId) {
-      AppNotification.showError(
-        context,
-        'The active store changed during this receipt. Please restart the '
-        'flow so stock lands in the right store.',
-      );
+      AppNotification.showError(context, 'Please select a store to receive into');
       return;
     }
 
@@ -403,28 +405,24 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
                   ),
                   SizedBox(height: context.getRSize(12)),
 
-                  // Receiving for: [store] (read-only)
-                  Row(
-                    children: [
-                      Icon(FontAwesomeIcons.store.data,
-                          size: context.getRSize(13), color: subtext),
-                      SizedBox(width: context.getRSize(8)),
-                      Text(
-                        'Receiving for: ',
-                        style: TextStyle(
-                            color: subtext, fontSize: context.getRFontSize(13)),
-                      ),
-                      Expanded(
-                        child: Text(
-                          _storeName(),
-                          style: TextStyle(
-                            color: textColor,
-                            fontWeight: FontWeight.w600,
-                            fontSize: context.getRFontSize(13),
-                          ),
-                        ),
-                      ),
+                  // Stocking into: destination store (the receipt commits stock
+                  // to THIS store). Defaults to the active store; the user can
+                  // re-allocate to any store they can access.
+                  _fieldLabel('STOCKING INTO *', subtext),
+                  SizedBox(height: context.getRSize(8)),
+                  AppDropdown<String>(
+                    value: _flowStoreId,
+                    hintText: 'Select store',
+                    prefixIcon: Icon(
+                      FontAwesomeIcons.store.data,
+                      size: context.getRSize(16),
+                      color: subtext,
+                    ),
+                    items: [
+                      for (final s in _stores)
+                        DropdownMenuItem(value: s.id, child: Text(s.name)),
                     ],
+                    onChanged: (v) => setState(() => _flowStoreId = v),
                   ),
                   SizedBox(height: context.getRSize(24)),
 
@@ -471,6 +469,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
                             labelText: 'Amount Paid Now',
                             hintText: '0.00',
                             keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            inputFormatters: [CurrencyInputFormatter()],
                           ),
                         ),
                         SizedBox(width: context.getRSize(12)),
@@ -576,7 +575,9 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
               child: AppButton(
                 text: 'Confirm Receipt',
                 onPressed:
-                    _selectedSupplier == null || _isSaving ? null : _confirm,
+                    _selectedSupplier == null || _flowStoreId == null || _isSaving
+                        ? null
+                        : _confirm,
                 isLoading: _isSaving,
                 isFullWidth: true,
               ),

@@ -7,6 +7,7 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/widgets/app_fab.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
+import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/menu_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
 import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
@@ -604,19 +605,30 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                 final stores = _stores;
 
                 if (stores.isEmpty) {
-                  return _buildEmptyState(context);
+                  return AppRefreshWrapper(
+                    child: SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      child: SizedBox(
+                        height: MediaQuery.of(context).size.height * 0.6,
+                        child: _buildEmptyState(context),
+                      ),
+                    ),
+                  );
                 }
 
-                return ListView.builder(
-                  padding: EdgeInsets.fromLTRB(
-                    rSize(context, 16),
-                    rSize(context, 16),
-                    rSize(context, 16),
-                    rSize(context, 100) + context.deviceBottomPadding,
+                return AppRefreshWrapper(
+                  child: ListView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: EdgeInsets.fromLTRB(
+                      rSize(context, 16),
+                      rSize(context, 16),
+                      rSize(context, 16),
+                      rSize(context, 100) + context.deviceBottomPadding,
+                    ),
+                    itemCount: stores.length,
+                    itemBuilder: (context, index) =>
+                        _buildStoreCard(context, stores[index]),
                   ),
-                  itemCount: stores.length,
-                  itemBuilder: (context, index) =>
-                      _buildStoreCard(context, stores[index]),
                 );
               },
             ),

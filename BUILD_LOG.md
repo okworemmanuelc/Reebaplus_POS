@@ -2,6 +2,635 @@
 
 ---
 
+## 2026-06-25 — Release build: stop sqlite3 hook downloading from GitHub
+
+**Why:** `flutter run --release` failed during `assembleRelease` with
+`SocketException: Failed host lookup: 'github.com'` inside the `package:sqlite3`
+build step. `sqlite3` 3.x (3.1.7, pulled in transitively by `drift`) added a Dart
+**build hook** that, by default (`source: sqlite3`), *downloads* a precompiled
+`libsqlite3` from `github.com` at build time. On a flaky/offline network the host
+lookup fails and the whole release build aborts. (The KGP warning printed just
+above — `print_bluetooth_thermal`, `share_plus` — is an unrelated future-deprecation
+notice, not the failure.) The app never needed that download: we already ship the
+native library via `sqlite3_flutter_libs` (bundled in the APK, loaded with
+`dlopen("libsqlite3.so")`), which is the pre-3.x path.
+
+**Fix** — [pubspec.yaml](file:///Users/solomonizu/flutter_projects/drinkPosApp/pubspec.yaml):
+added a top-level `hooks.user_defines` block pointing the sqlite3 hook at the
+system/bundled library instead of the GitHub download:
+```yaml
+hooks:
+  user_defines:
+    sqlite3:
+      source: system
+```
+The `system` branch in the hook
+(`.pub-cache/.../sqlite3-3.1.7/lib/src/hook/description.dart`) returns a
+`LookupSystem` (a `dlopen` resolver) and **never calls the fetch routine** — so the
+build is network-free. This resolves SQLite from the `sqlite3_flutter_libs` lib,
+matching the runtime path the app used before sqlite3 3.x.
+
+**Verification:** cleared the stale hook cache
+(`.dart_tool/hooks_runner/sqlite3`), `flutter pub get` (config accepted), then
+`flutter build apk --release --target-platform android-arm64` →
+`✓ Built app-release.apk (38.4MB)`, exit 0. Build log has **no** `github.com`
+fetch, `SocketException`, or `native assets failed` lines.
+
+---
+
+## 2026-06-25 — Pull-to-refresh: one animation, no content drag-down
+
+**Why:** On-device, pulling to refresh showed **two** sync animations at once and
+visibly dragged the whole screen down (large empty gap). Root cause: the
+uncommitted working-tree version of `AppRefreshWrapper` had been changed to render
+a custom branded `_PullOrb` (a glassy spinning circle) **and** to `await`
+`pullChanges`. But `SyncPullBanner` (mounted once in `main_layout.dart`) already
+shows a thin top progress bar for the same `background → completed/failed` pull
+lifecycle. So a single pull fired both indicators (orb + top bar = "two rotating
+animations"), and the awaited refresh + descending orb overlay held the content
+displaced for the whole pull ("pulls everything down"). This contradicted the
+documented design (progress-tracker 2026-06-25 + architecture): the wrapper hides
+its spinner and fires `pullChanges` fire-and-forget so `SyncPullBanner` is the
+**sole** animation.
+
+**Fix** — [app_refresh_wrapper.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/shared/widgets/app_refresh_wrapper.dart):
+reverted to the documented behavior. Back to a lean `ConsumerWidget` wrapping a
+`RefreshIndicator` with transparent `color`/`backgroundColor` (gesture only, no
+visible spinner); removed `_PullOrb` and all overscroll-tracking
+`NotificationListener` state. `pullChanges` is now fired **fire-and-forget**
+(`unawaited`) so the indicator releases immediately — no content drag-down — while
+`SyncPullBanner` reflects the real pull lifecycle. Kept the optional `onRefresh`
+(customer detail / orders / activity log) and the `ScrollConfiguration` forcing
+`AlwaysScrollableScrollPhysics` so the gesture still fires on short screens.
+
+**Verification:** `flutter analyze` on the file → clean. On-device pull-gesture
+recheck pending (expect: single thin top bar, brief "Synced ✓" pill, no orb, no
+gap).
+
+## 2026-06-25 — Monthly expense budget now reaches the snapshot pull (cross-device + reinstall)
+
+**Why:** Setting a monthly budget (§20.1/§20.3) worked on the device that set it
+and pushed to the cloud, but other devices — and the same device after a fresh
+install / cold start — never showed it. The budget lives in the synced
+`expense_budgets` table, which is correctly wired in RLS (0075), the realtime
+publication + channel loop, and the client pull/restore loops — **but it was
+never added to the `pos_pull_snapshot` RPC**, the authoritative load/restore path
+(first login, cold start, reinstall, any `since=NULL` full pull). So a peer that
+loaded via snapshot (offline-at-the-time, fresh install, cold start) never
+received it, and a reinstall silently dropped the budget even though it sat in
+the cloud. Realtime only delivered it to a peer that happened to be online at the
+exact moment it was set. `expenses`/`expense_categories` were already in the RPC,
+so expense records themselves synced — only `expense_budgets` was missing.
+
+**Fix** — [0127_add_expense_budgets_to_pull_snapshot.sql](file:///Users/solomonizu/flutter_projects/drinkPosApp/supabase/migrations/0127_add_expense_budgets_to_pull_snapshot.sql):
+`CREATE OR REPLACE` of `pos_pull_snapshot` based on the **live** function body
+(carries forward the 0108 `error_logs` and 0117 `supplier_crate_*` additions, so
+no replace-race drop), with `'expense_budgets'` inserted right after
+`'expense_categories'`. FK-safe — references businesses + stores, both pulled
+earlier in the array.
+
+**Deploy:** applied directly to the live DB via `CREATE OR REPLACE` (pure
+idempotent function redeploy, no schema/data change) because the remote migration
+history is divergent (local `0125`/`0126` vs three timestamped `2026-06-23`
+remote entries). The 0127 file stays in the repo and re-applies harmlessly once
+history is reconciled. Verified live: snapshot now contains `expense_budgets`
+with `expenses` + `supplier_crate_balances` still present (nothing dropped).
+
+**Note:** the cloud currently holds 0 expenses / 0 expense_categories for the one
+business while products/orders/sale-payments synced normally — the expense
+*record* path looks correct (already in the snapshot array, RLS matches the
+working tables), so this is likely "none recorded-and-pushed yet" or local
+orphans; check the in-app Sync Issues screen on the device if expenses also fail
+to appear elsewhere.
+
+---
+
+## 2026-06-25 — Custom theme-aware pull-to-refresh indicator; works on all screens
+
+**Why:** After hiding the default spinner, pull-to-refresh had two problems: (1)
+no visible pull animation at all, and (2) it only fired on screens long enough to
+overscroll (effectively just Home) because the wrapped scrollables didn't use
+`AlwaysScrollableScrollPhysics`. The user wanted a redesigned, **theme-aware**
+pull animation that matches the app and works everywhere.
+
+**Fix** — [app_refresh_wrapper.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/shared/widgets/app_refresh_wrapper.dart)
+(now a `ConsumerStatefulWidget`):
+- **Custom indicator (`_PullOrb`):** a glassy `colorScheme.surface` circle with a
+  `colorScheme.primary` progress arc (determinate fill while dragging →
+  indeterminate spin while syncing) and a primary-glow shadow. Scales + fades in
+  with the pull and descends slightly to follow the finger. **Every colour comes
+  from `Theme.of(context)`**, so it adapts to all five themes (light + dark). The
+  real `RefreshIndicator` is kept (spinner hidden) purely for rock-solid
+  cross-platform trigger physics; a `NotificationListener` reads the same
+  depth-0 overscroll stream (active-drag only) to drive the orb identically on
+  iOS bounce / Android clamp.
+- **Works on every screen:** the wrapper wraps its child in
+  `ScrollConfiguration.of(context).copyWith(physics: AlwaysScrollableScrollPhysics())`,
+  so the primary scrollable always overscrolls and the gesture fires even when
+  content is shorter than the viewport — one central change, no per-screen edits
+  (inner grids that set `NeverScrollableScrollPhysics` keep theirs).
+- `_onRefresh` awaits `onRefresh?.call()` then `pullChanges`, so the orb spins
+  for the real pull duration; `SyncPullBanner` still surfaces the "Synced ✓" /
+  "Sync failed · Retry" result.
+
+**Verification:** `flutter analyze` on the wrapper + all 13 `AppRefreshWrapper`
+consumer screens → No issues found. On-device pull-gesture / per-theme visual
+check pending.
+
+---
+
+## 2026-06-25 — Pull-to-refresh now drives the SyncPullBanner (old spinner + SnackBars removed) app-wide
+
+**Why:** Pulling down to sync showed the default Material [RefreshIndicator]
+circular spinner at the top (plus, on the `AppRefreshWrapper` screens, green/red
+"Sync completed" / "Sync failed" SnackBars) — a different, competing animation
+from the recently-added `SyncPullBanner` (thin top progress bar + "Synced ✓" /
+"Sync failed · Retry" pill). The user wanted a single, consistent sync animation
+on pull-to-refresh, everywhere.
+
+**Fix:**
+- [app_refresh_wrapper.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/shared/widgets/app_refresh_wrapper.dart)
+  rewritten: the `RefreshIndicator` spinner is made invisible (`color`/
+  `backgroundColor: Colors.transparent`), the SnackBars are gone, and the pull
+  now fires `pullChanges` **fire-and-forget** (re-entrancy-guarded) so the
+  invisible indicator collapses at once and `SyncPullBanner` (driven by
+  `pullStatus` background → completed/failed) is the sole feedback. New optional
+  `onRefresh` runs screen-specific work (provider invalidation / local reload)
+  alongside the sync. Switched from `syncAll` to `pullChanges` for a guaranteed
+  clean banner cycle (matches the banner's own Retry button); uploads stay
+  covered by the always-on auto-push.
+- Converted every **raw `RefreshIndicator`** to `AppRefreshWrapper`: orders,
+  activity log (×2), staff management (×2 — dropped the redundant
+  `_pullStaffRoster` since the wrapper pulls), customer detail (kept `_loadData`
+  as `onRefresh`). `RefreshIndicator` now exists in exactly one place.
+- Added pull-to-refresh to the two main tabs that lacked it — **Payments** and
+  **Stores** — wrapping their lists with `AlwaysScrollableScrollPhysics` and
+  making the empty states scrollable so the gesture works even when short/empty.
+
+**Result:** 13 screens, one consistent behavior — pull down → thin top bar →
+"Synced ✓" or "Sync failed · Retry", no spinner, no SnackBars.
+
+**Verification:** `flutter analyze` on all 7 changed screens + the wrapper → No
+issues found. On-device pull-gesture check pending.
+
+---
+
+## 2026-06-25 — Partial pull FK-787 on `user_businesses` blanks the whole app + sync-status UX
+
+**Why:** On a flaky link the initial pull aborted with `SqliteException(787):
+FOREIGN KEY constraint failed` on the `user_businesses` INSERT, leaving the app
+stuck on a blank MainLayout — no data, no loading indicator, no failure notice.
+Logs also showed `Connection reset by peer` mid-pull (the trigger).
+
+**Root cause:** Two layers.
+1. **Restore (the crash).** Every table *after* `products` in `_pullOrder`
+   already restored via `_insertResilient` (skip-and-defer on FK-787, hold the
+   cursor, re-pull when the parent arrives). But the entire **bootstrap cluster
+   before `products`** — `stores, roles, role_settings, role_permissions,
+   user_permission_overrides, store_role_permissions, user_businesses,
+   user_stores, invite_codes, crate_size_groups, manufacturers, categories,
+   suppliers` — used plain `insertOnConflictUpdate`. A partial pull that dropped
+   a parent slice (e.g. `roles` reset mid-stream) made `user_businesses`'
+   `role_id` FK fail, which threw out of `_restoreTableData`'s transaction and
+   propagated up through `pullInitialData` → `pullChanges`, aborting the pull.
+   Because the failing table sits early in `_pullOrder`, **every table after it
+   (products/inventory/orders) never restored → blank app.**
+2. **UX (the silence).** Nothing surfaced the in-flight pull or its failure.
+
+**Fix:**
+- [supabase_sync_service.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/core/services/supabase_sync_service.dart)
+  — wrapped the whole pre-`products` bootstrap cluster in `_insertResilient`
+  (matching the demonstrated `user_businesses` wrap a parallel change had already
+  added). For the three permission tables the delete-then-insert body is wrapped
+  together (the delete is FK-safe; on retry the full body re-runs once the parent
+  arrives). An orphaned bootstrap row now skips-and-defers instead of aborting,
+  so the rest of the snapshot lands and the row self-heals on the next full pull.
+- [sync_pull_banner.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/shared/widgets/sync_pull_banner.dart)
+  mounted in [main_layout.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/shared/widgets/main_layout.dart)
+  — non-blocking sync status: thin top `LinearProgressIndicator` during the
+  background pull, a "Sync failed / Retry" pill (dismissible) on failure, and a
+  brief "Synced ✓" pill on success. Driven by `pullStatus` (`background` →
+  `completed`/`failed`); never gates app entry (offline-first invariant).
+
+**Verification:** `flutter analyze` on the sync service, banner, main_layout,
+main.dart, auth_service → No issues found. Repro is network-timing dependent
+(partial mid-stream pull); fix is a mechanical application of the existing
+`_insertResilient` skip-and-defer pattern already proven on the post-`products`
+tables.
+
+---
+
+## 2026-06-24 — Existing-account screen shows "Member" — client push nulled cloud `users.auth_user_id`
+
+**Why:** On a fresh device, the "Welcome back" (existing-account) screen showed
+the business with role **"Member"** instead of the user's real role (a CEO read
+as "Member"). [ExistingAccountScreen](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/features/auth/screens/existing_account_screen.dart)
+renders `account.roleName ?? 'Member'`, and `roleName` was null because
+[fetchSupabaseAccount](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/shared/services/auth_service.dart)
+resolves the role via `users → user_businesses → roles`, keyed on
+`.eq('auth_user_id', authUser.id)`. The cloud `users.auth_user_id` was **null**,
+so the chain short-circuited. (Same null also breaks
+`upsertLocalUserFromProfile`'s canonical-id lookup → tapping Continue would fail
+with "Could not load your account.")
+
+**Root cause:** `complete_onboarding` (cloud RPC) stamps `users.auth_user_id =
+auth.uid()` correctly, but the client's `users` sync push then clobbered it back
+to null. `Users.authUserId` is never written by any Drift path (it's
+cloud-authoritative), so the local value is always null — yet `auth_user_id` was
+in `_pushableColumns['users']`, so every users upsert (onboarding mirror,
+profile edits, biometric toggle…) pushed `auth_user_id: null`, landing in the
+cloud upsert's SET clause and overwriting the RPC-stamped uid.
+
+**Fix:** [supabase_sync_service.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/core/services/supabase_sync_service.dart)
+— removed `'auth_user_id'` from `_pushableColumns['users']`. The push now omits
+the column, so it never enters the upsert SET clause and the cloud value
+survives; the pull restores the correct uid locally. The onboarding RPC remains
+the sole writer (insert + `ON CONFLICT (business_id,email) DO UPDATE SET
+auth_user_id`), robust to push ordering.
+
+**Verification:**
+- `flutter analyze lib/core/services/supabase_sync_service.dart` → No issues.
+- Traced in cloud: the lone affected row (Testing Business CEO) had
+  `auth_user_id IS NULL` while `user_businesses`/`roles` correctly said CEO.
+
+**Follow-up (manual):** existing rows already nulled need a one-time backfill
+`UPDATE users SET auth_user_id = <owner profile id> WHERE auth_user_id IS NULL`
+(matched via `businesses.owner_id` / `profiles.id`); the code fix only prevents
+future clobbering.
+
+---
+
+## 2026-06-24 — Fix Quick Sale modal crash on close (deactivated-ancestor)
+
+**Why:** Opening the Quick Sale modal and closing it (e.g. the CEO/Manager
+"Send to Cart" path, or cancelling) crashed with *"Looking up a deactivated
+widget's ancestor is unsafe."* The `_pulse` AnimationController was a
+`late final` with an inline initializer, and it is only ever accessed in the
+cashier "Awaiting Approval" state (`_buildWaiting`). On the common path the
+modal closes without entering that state, so `_pulse` was never initialized —
+then `dispose()` calling `_pulse.dispose()` fired the `late` initializer for
+the first time, constructing an `AnimationController(vsync: this)` *during
+unmount*. The controller's constructor does a `TickerMode` ancestor lookup on
+the already-deactivated element, which throws. Confirmed via the runtime stack
+(`_pulse` ← `dispose` ← `StatefulElement.unmount`).
+
+**Fix:** [quick_sale_modal.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/features/pos/widgets/quick_sale_modal.dart)
+— made `_pulse` a nullable field created lazily only via the `_pulseAnim`
+getter inside `_buildWaiting()` (always called while the element is active),
+and changed dispose to `_pulse?.dispose()`. The controller is now never
+constructed during `dispose()`, so the ancestor lookup can't run on a
+deactivated element. Lazy intent (only spin up the pulse when waiting) is
+preserved.
+
+**Verification:**
+- `flutter analyze lib/features/pos/widgets/quick_sale_modal.dart` → No issues.
+- Hot-reloaded into the running emulator session; runtime errors cleared.
+
+**Follow-up — Quick Sale cart line was not JSON-serializable:** `_buildProduct`
+stored a raw `IconData` (`FontAwesomeIcons.bolt`) and `Color`
+(`Theme.colorScheme.primary`) on the cart map. A real product stores an int
+`iconCodePoint` + a `#RRGGBB` `colorHex` string, so saving a **held cart**
+(§13.5) that contained a Quick Sale line threw on `jsonEncode` — caught and
+surfaced as "Could not save cart", but the cart couldn't be saved. Fix:
+store the bolt's int codepoint and a null colour (both the cart and checkout
+icon/colour readers already fall back to the theme primary for a null colour,
+so the look is unchanged), and added a bolt mapping to
+[productIconFromCodePoint](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/shared/utils/product_icon_helper.dart)
+so the codepoint resolves back to the bolt instead of the box fallback.
+`flutter analyze` on both files → No issues; hot-reloaded.
+
+## 2026-06-24 — Reconciliation: treat supplier account as a wallet (fix "owed" sign)
+
+**Why:** The daily reconciliation "Business worth right now" card showed
+*"Owed to suppliers (now)"* with a hardcoded `−` prefix over `supplierPayableKobo`
+(= goods received − payments). When payments exceeded the cost of goods supplied
+the supplier wallet is actually in **credit**, but the card still rendered it as a
+double-negative liability and labelled it "owed" — the opposite of reality. The
+supplier account is a wallet (payments minus goods received), not a one-way
+payable. (The Supplier Accounts report already had the correct red-"Owed" /
+green-"Credit" convention; only reconciliation was wrong.)
+
+**Fix:**
+- Added `ReconData.supplierWalletBalanceKobo` (= `-supplierPayableKobo`,
+  identical to `SupplierLedgerDao.getBalanceKobo`): positive = credit we hold
+  with the supplier, negative = amount we owe. [recon_data.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/features/dashboard/reconciliation/recon_data.dart)
+- Made the net-position line sign-aware in [daily_reconciliation_detail_screen.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/features/dashboard/screens/daily_reconciliation_detail_screen.dart):
+  balance `< 0` → "Owed to suppliers (now)" `−₦X` in red; otherwise
+  "Supplier credit held (now)" `+₦X` in green. Matches the Supplier Accounts
+  report convention.
+- CSV export now emits a single signed "Supplier account balance (now)"
+  (negative = owed, positive = credit) instead of the always-inverted
+  "Owed to suppliers".
+- `businessNetPositionKobo` math was already correct (`- supplierPayableKobo`),
+  so it was left untouched; only the display/labels changed.
+
+**Verification:**
+- `flutter analyze` on both files → No issues found.
+- `flutter test test/suppliers/supplier_ledger_test.dart` → 4 pass (confirms
+  `balance = SUM(payments) − SUM(invoices); negative = we owe`).
+
+## 2026-06-24 — Stop preloading product categories; wipe cloud test data
+
+**Why:** Product categories should not ship as a fixed preset. The category field
+in the Add/Update product forms is already a searchable dropdown that creates a
+category on the fly, so the preset list was redundant and polluted every fresh
+business with 5 categories nobody chose.
+
+**Fix (app):**
+- Removed the `if (cats.isEmpty) { … insert default categories … }` seed block in
+  `_loadData` of [add_product_screen.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/features/inventory/screens/add_product_screen.dart)
+  (was seeding `Alcoholic`, `Non-Alcoholic`, `Energy Drinks`, `Wines`, `Spirits`).
+  `cats` is now just whatever exists locally (empty on a fresh business).
+- Left the create-as-we-go paths intact: `_createNewCategory` /
+  `_getOrCreateCategory` (add screen) and `_getOrCreateCategory`
+  (`update_product_sheet.dart`) still mint a category from the searchable field.
+- Confirmed no other product-category seed site exists (no SQL seed migration, no
+  onboarding/business-creation seed). Expense-category seeding is a separate
+  feature and was left untouched.
+
+**Cloud wipe (project `ewwyofbvfjyqqirrcaou`):** Cleared all business/test data so
+the test emails can re-onboard fresh.
+- `TRUNCATE … RESTART IDENTITY CASCADE` on every tenant table (businesses,
+  profiles, users, sessions, stores, products, categories, orders, roles,
+  role_permissions, ledgers, tombstones, error/console logs, …).
+- `DELETE FROM auth.users` (7 rows) to free the test emails for re-use.
+- **Preserved** global reference data: `permissions` (43 rows), `system_config`,
+  schema/migrations/RPCs. `console_admins` was already empty (the web-console
+  email allowlist) — not touched.
+
+**Verification:**
+- `flutter analyze lib/features/inventory/screens/add_product_screen.dart` → No issues found.
+- Post-wipe row counts: auth.users=0, businesses=0, users=0, profiles=0,
+  products=0, categories=0, orders=0, roles=0, role_permissions=0,
+  deleted_businesses=0; permissions=43 (kept).
+
+## 2026-06-24 — Removed the blocking "Syncing Your Store" loader; entry is now fully offline-first
+
+**Why:** A full-screen loading screen ("Syncing Your Store / Setting up your
+store… / This only happens once on your fresh device login. Please keep the app
+open.") gated entry on a network pull, contradicting the offline-first promise.
+It was rendered by two router gates in `_HomeRouter._resolve` (`lib/main.dart`):
+`FirstSyncScreen` (shown while the local `businesses` table was empty) and
+`_BackgroundPullLoading` (shown for up to a 5 s grace cap while the full pull
+ran and no products were local yet). Both held the user on the `InitialLoadAnimation`
+before `MainLayout`.
+
+**Fix:**
+- `lib/main.dart` `_HomeRouter._resolve`: removed both gates. A logged-in device
+  now falls straight through to `MainLayout`. The only remaining pre-`MainLayout`
+  step is the `_BrandedSplash` shown while the **local** `businesses` query is
+  still resolving (a SQLite read, not a network call). Dropped the now-dead
+  `_BackgroundPullLoading` widget, `initialLoaderTimedOutProvider`,
+  `_initialLoaderMaxWait`, and the `pullStatus` / `hasLocalProducts` /
+  `loaderTimedOut` watches + `_resolve` params.
+- Deleted `lib/features/sync/screens/first_sync_screen.dart` and
+  `lib/features/sync/widgets/initial_load_animation.dart` (no remaining
+  references) and their now-unused imports.
+
+**Why it's still correct:** Sync triggers are untouched — the 4 render-critical
+tables (`profiles`/`businesses`/`stores`/`users`) are still pulled **inline at
+the sign-in boundary** (`syncOnLogin` → `syncMinimumLogin`, behind the
+existing-account screen's own small inline spinner), and the full pull
+(`pullChanges`) still fires non-blocking from `setCurrentUser`, streaming the
+catalogue and everything else in live. A fresh sign-in with no local business
+row hits the subscription gate as `grace` (not locked), so it falls through to
+`MainLayout`; `currentBusinessProvider` returns null safely and `MainLayout`
+renders an empty-but-functional shell that fills reactively. Returning users
+(fresh or offline) reach `MainLayout` immediately.
+
+**Verification:** `flutter analyze` clean (whole project). `flutter test
+test/auth test/sync` → 161 passing. Updated `context/architecture.md`
+(Invariant #11 + the onboarding-pull section) to document the offline-first,
+non-blocking entry.
+
+---
+
+## 2026-06-24 — Onboarding could strand the new CEO in a permission-less shell (H1)
+
+**Why:** `completeOnboarding`'s local Drift mirror writes only `businesses` +
+`stores` + `users` (`lib/shared/services/auth_service.dart`). The CEO's role
+binding — the `user_businesses` membership, its `roles` row, and the
+`role_permissions` grants — is cloud-seeded by `seed_default_roles_for_business`
+and reaches the device only via the post-onboarding pull. In `_commit`
+(`ceo_sign_up_screen.dart`) that pull was wrapped in a swallowed try/catch
+("non-fatal"): on a flaky link right after the commit it failed silently, the
+draft was already cleared, and the CEO was handed straight to the app shell with
+`currentUserRoleProvider == null` → empty permission set → POS "no access",
+empty drawer (hide-don't-block), hidden buying-price field — with no retry
+affordance (the error was only `debugPrint`-ed). It self-healed only if a later
+background pull happened to land.
+
+**Fix:**
+- `auth_service.dart`: new `hasLocalRoleBinding(userId, businessId)` — verifies
+  the membership + its roles row + ≥1 `role_permissions` grant are actually
+  local. Queries by explicit `businessId` (not the business-scoped resolver,
+  which is null at the onboarding boundary).
+- `ceo_sign_up_screen.dart` `_commit`: the post-onboarding pull is now
+  authoritative — retry the pull up to 3× and verify `hasLocalRoleBinding`
+  before handing off. If it still hasn't landed, **don't enter the app**: keep
+  the draft, reset to the PIN step, and show a clear retryable message
+  ("Your business was created, but we could not finish loading it on this
+  device. Check your connection and re-enter your PIN to retry."). Moved
+  `draftNotifier.clear()` to *after* the binding is verified so the idempotent
+  (ON CONFLICT) commit can safely re-run on a PIN-re-entry retry.
+
+**Also fixed (M2) — misleading onboarding error for a re-used email:**
+`complete_onboarding` rejects an email that already belongs to a business with a
+typed P0001 ("already linked to another business", invariant #9). `_commit`'s
+catch surfaced this as the generic "Something went wrong. Please re-enter your
+PIN." — a dead-end loop, since re-entering the PIN just re-runs the same doomed
+RPC (the email is permanently bound). The catch now detects that case
+(`e.toString()` contains "already linked to another business", with the raw
+`users_auth_user_id_key` constraint name as a backstop) and shows "This email
+already belongs to a business. Go back and use a different email to create a new
+one." — mirroring `staff_sign_up_screen`'s handling of the same P0001 from
+`redeem_invite_code`. Non-matching errors keep the generic retry copy.
+
+**Also fixed (M3) — Add Product save button hidden behind the keyboard:**
+`AddProductScreen` set `resizeToAvoidBottomInset: false` on the (incorrect)
+assumption it is always nested under `MainLayout` (whose Scaffold zeroes the
+keyboard inset for descendants). True for the Inventory FAB (pushed on the tab's
+nested navigator), but the post-onboarding auto-show
+(`main_layout.dart`, `Navigator.of(mainScaffoldKey.currentContext)`) pushes it
+on the **root** navigator, ABOVE MainLayout — there nothing resizes for the
+keyboard, so the save button and the bottom Quantity/Store fields are occluded.
+That's the brand-new CEO's first product (the auto-shown sheet). Changed to
+`resizeToAvoidBottomInset: true`, which is correct in BOTH placements: nested,
+MainLayout already removed the bottom viewInsets so it's a no-op; on the root
+navigator it lifts the body + bottomNavigationBar above the keyboard. Save-button
+padding stays `deviceBottomPadding` (nav-only) — harmless while the keyboard
+occludes the system nav bar.
+
+**Also fixed (M4) — OTP spent before the one-email check (create-business):**
+On "Create a new business", `email_entry_screen._submit` always sent the OTP,
+then revealed an existing account only post-verify. Added a pre-OTP short-circuit
+*scoped to `createBusinessIntent`*: if the email already has a fully-set-up
+account ON THIS DEVICE (real local PIN), route straight to `LoginScreen` with no
+OTP ("This email already belongs to a business — sign in instead."). Deliberately
+**not** extended to a pre-auth cross-device existence check: account existence is
+revealed only after the user proves email ownership via OTP, and a pre-auth oracle
+would enable email enumeration. The local check leaks nothing (the row is already
+on-device); cloud-only / cross-device accounts still resolve post-OTP as before.
+
+**Scope note:** M1 from the same QA pass (a new product saving with 0 stock) was
+confirmed **by design** by the product owner — not changed.
+
+**Verification:** `flutter analyze` clean on all touched files;
+`test/auth/onboarding_role_binding_test.dart` (4 cases: no membership /
+membership+role but no grant / full binding present / cross-business isolation)
+green; `test/auth/` + `test/inventory/` + `test/receiving/` suites green (64).
+On-device walkthrough pending (H1 retry, M2 message, M3 keyboard, M4 short-circuit).
+
+---
+
+## 2026-06-24 — Initial-load loader blocked offline app entry (offline-first regression)
+
+**Why:** The Session 151 fresh-device loading screens in `_HomeRouter._resolve`
+(`lib/main.dart`) gated entry to `MainLayout` on a *network* pull. The
+background-pull gate fired whenever `!hasLocalProducts &&
+pullStatus.stage != PullStage.completed`. Offline the full pull never reaches
+`completed` (fails → `failed`, or never runs → `idle`), so any logged-in user
+with an empty local product table (new business, staff/stock-keeper device, or
+a business that legitimately has zero products) was **permanently** stuck on the
+loading animation / "Could Not Load Your Store" retry screen with no way into
+the app while offline. Even on a *slow-but-working* connection the loader held
+the user for as long as the pull took. This tied app open to connectivity,
+breaking offline-first.
+
+**Fix (`lib/main.dart`, `_HomeRouter._resolve`):**
+- Minimum-pull gate now waits for the local businesses query to **resolve**
+  before deciding: while it has no value yet, show `_BrandedSplash` (no network
+  call); only mount `FirstSyncScreen` once resolved AND the list is genuinely
+  empty (a true fresh sign-in, which legitimately needs the network once). Stops
+  a spurious network `syncMinimumLogin` + "No internet" flash for returning
+  offline users (previously `valueOrNull == null` conflated loading with empty).
+- Background loader engages **only** for an in-flight pull
+  (`stage == PullStage.background`) **and only until a 5 s grace cap**. Offline
+  (`idle`/`failed`) a logged-in user with local data falls through to
+  `MainLayout` immediately. On a slow connection the loader self-dismisses after
+  `_initialLoaderMaxWait` (5 s): `_BackgroundPullLoading` (now a
+  `ConsumerStatefulWidget`) arms a one-shot timer that flips
+  `initialLoaderTimedOutProvider`, the router stops gating, and the user enters
+  the app while the pull keeps running in the background — products stream into
+  MainLayout live. Returning users with products never see it.
+- Removed the now-unreachable `_BackgroundPullFailed` blocking screen (and its
+  font_awesome / app_decorations / responsive imports). Pull failures are
+  surfaced non-blockingly by the existing MainLayout sync banner.
+
+**Verification:** `flutter analyze lib/main.dart
+lib/features/sync/screens/first_sync_screen.dart` → "No issues found!".
+
+---
+
+## 2026-06-24 — Receive Stock checkout: explicit store-allocation dropdown
+
+**Why:** The receive checkout committed stock to an *implicit* store (the active
+store, or first selectable as fallback), shown read-only as "Receiving for:
+[store]". In All-Stores scope this meant the user couldn't choose which store
+the stock landed in. Requirement: allocate the destination store with a dropdown
+at checkout.
+
+**Changes:** `lib/features/receiving/screens/receive_checkout_screen.dart`
+- Replaced the read-only "Receiving for: [store]" row with an `AppDropdown<String>`
+  ("STOCKING INTO *") listing `selectableStoresProvider` (already access-scoped).
+  `_flowStoreId` still defaults to `lockedStore ?? firstSelectable` but is now
+  user-mutable; `onChanged` re-allocates the destination.
+- Dropped the §15.7 active-store-change abort in `_confirm()` — the destination
+  is now an explicit choice, so revalidating against the app-wide active store
+  would wrongly block a deliberate cross-store receipt. Kept a "a store must be
+  selected" guard; Confirm button also disables while `_flowStoreId == null`.
+- Added `app_dropdown.dart` import + `_stores` field; `_storeName()` (confirm
+  dialog) unchanged and still resolves the chosen store.
+
+**Verification:** `flutter analyze` clean on the file; `flutter test
+test/receiving/` green (17/17).
+
+---
+
+## 2026-06-24 — Receive Stock grid showed wrong on-hand count in All-Stores scope
+
+**Why:** Each Receive Stock product card shows a "Current: X" on-hand figure.
+It diverged from the Inventory tab whenever the active scope was "All Stores"
+(`lockedStoreProvider.value == null`): Inventory aggregates stock across every
+store (`watchAllProductDatasWithStock`), but Receive fell back to
+`selectableStoresProvider.firstOrNull` and showed only the **first** store's
+stock. So a product with 120 units across stores read "Current: 40" on the
+receive grid — the reported "not reading the accurate number of items in
+inventory" bug. (Concrete-store scope already matched — both used
+`watchProductDatasWithStockByStore`.)
+
+**Fix:** `lib/features/receiving/screens/receive_stock_screen.dart`,
+`_initStreams()` now mirrors the Inventory tab's display semantics exactly:
+locked store → `watchProductDatasWithStockByStore(storeId)`; no lock ("All
+Stores") → `watchAllProductDatasWithStock()`. Removed the first-selectable-store
+fallback used only for the display count. The receive WRITE target is still
+resolved independently at checkout (now an explicit dropdown — see above), so
+receiving semantics are unchanged.
+
+**Verification:** `flutter analyze` clean on the changed file; `flutter test
+test/receiving/` green (17/17).
+
+---
+
+## 2026-06-24 — Initial-load loader blocked offline app entry (offline-first regression)
+
+**Why:** The fresh-device loading screens in `_HomeRouter._resolve`
+(`lib/main.dart`) gated entry to `MainLayout` on a *network* pull. The
+background-pull gate engaged whenever `!hasLocalProducts &&
+pullStatus.stage != PullStage.completed`. Offline, the full pull can never
+reach `completed` (it fails → `failed`, or never runs → `idle`), so:
+- any logged-in user whose local product table is empty (new business, staff/
+  stock-keeper device, or a business that legitimately has zero products) was
+  **permanently** stuck on the loading animation / "Could Not Load Your Store"
+  retry screen with no way into the app while offline;
+- the minimum-pull gate also conflated "local businesses query still loading"
+  with "no business row" (`valueOrNull == null`), so on cold start it could
+  flash `FirstSyncScreen` — which fires a network `syncMinimumLogin` — for a
+  returning offline user, briefly showing a spurious "No internet" error.
+
+This tied app open to connectivity, breaking the offline-first guarantee.
+
+**Fix (`lib/main.dart`, `_HomeRouter._resolve`):**
+- Minimum-pull gate now waits for the local businesses query to **resolve**
+  before deciding: while it has no value yet, show `_BrandedSplash` (no network
+  call); only mount `FirstSyncScreen` once the query has resolved and the
+  business list is genuinely empty (a true fresh sign-in, which legitimately
+  needs the network once).
+- Background-pull loader now engages **only** for an in-flight pull
+  (`pullStatus.stage == PullStage.background`). Offline (`idle`/`failed`) a
+  logged-in user with local data always falls through to `MainLayout` — even
+  with zero products. Returning users with products never see it
+  (`hasLocalProducts` already true).
+- Removed the now-unreachable `_BackgroundPullFailed` blocking screen (and its
+  font_awesome / app_decorations / responsive imports). Pull failures are
+  surfaced non-blockingly by the existing MainLayout sync banner.
+
+**Verification:** `flutter analyze lib/main.dart
+lib/features/sync/screens/first_sync_screen.dart` → "No issues found!".
+
+## 2026-06-24 — Receive Stock grid showed wrong on-hand count in All-Stores scope
+
+**Why:** Each Receive Stock product card shows a "Current: X" on-hand figure.
+It diverged from the Inventory tab whenever the active scope was "All Stores"
+(`lockedStoreProvider.value == null`): Inventory aggregates stock across every
+store (`watchAllProductDatasWithStock`), but Receive fell back to
+`selectableStoresProvider.firstOrNull` and showed only the **first** store's
+stock. So a product with 120 units across stores read "Current: 40" on the
+receive grid — the reported "not reading the accurate number of items in
+inventory" bug. (Concrete-store scope already matched — both used
+`watchProductDatasWithStockByStore`.)
+
+**Fix:** `lib/features/receiving/screens/receive_stock_screen.dart`,
+`_initStreams()` now mirrors the Inventory tab's display semantics exactly:
+locked store → `watchProductDatasWithStockByStore(storeId)`; no lock ("All
+Stores") → `watchAllProductDatasWithStock()`. Removed the first-selectable-store
+fallback used only for the display count. The receive WRITE target is still
+resolved independently at checkout (§15.7, `lockedStore ?? firstSelectable`) and
+shown read-only there, so receiving semantics are unchanged.
+
+**Verification:** `flutter analyze` clean on the changed file; `flutter test
+test/receiving/` green (17/17).
+
 ## 2026-06-23 — Active store never auto-defaults to "All Stores"
 
 **Why:** Multi-store users (notably the CEO / all-stores Manager) landed on

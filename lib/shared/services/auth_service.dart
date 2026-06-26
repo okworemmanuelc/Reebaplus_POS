@@ -1361,6 +1361,49 @@ class AuthService extends ValueNotifier<UserData?> {
     }
   }
 
+  /// Verifies that the CEO's role binding seeded by `complete_onboarding`
+  /// (the `user_businesses` membership + its `roles` row + at least one
+  /// `role_permissions` grant) has actually landed in local Drift.
+  ///
+  /// The onboarding mirror in [completeOnboarding] writes only businesses +
+  /// stores + users; the role/permission/membership rows are cloud-seeded by
+  /// `seed_default_roles_for_business` and arrive via the post-onboarding
+  /// pull. Until they do, `currentUserRoleProvider` resolves to null and the
+  /// CEO enters a permission-less shell (no POS access, empty drawer). The
+  /// onboarding commit blocks on this check so it never hands off early.
+  ///
+  /// Queries by explicit businessId (not the business-scoped resolver) because
+  /// [AuthService.value] is still null at the onboarding boundary.
+  Future<bool> hasLocalRoleBinding(String userId, String businessId) async {
+    final membership =
+        await (_db.select(_db.userBusinesses)..where(
+              (t) =>
+                  t.userId.equals(userId) & t.businessId.equals(businessId),
+            ))
+            .getSingleOrNull();
+    if (membership == null) return false;
+
+    final role =
+        await (_db.select(_db.roles)..where(
+              (t) =>
+                  t.id.equals(membership.roleId) &
+                  t.businessId.equals(businessId),
+            ))
+            .getSingleOrNull();
+    if (role == null) return false;
+
+    final grant =
+        await (_db.select(_db.rolePermissions)
+              ..where(
+                (t) =>
+                    t.roleId.equals(role.id) &
+                    t.businessId.equals(businessId),
+              )
+              ..limit(1))
+            .getSingleOrNull();
+    return grant != null;
+  }
+
   // ── Initialisation ──────────────────────────────────────────────────────
   Future<void> init() async {}
 

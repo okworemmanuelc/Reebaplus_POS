@@ -219,7 +219,11 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
           floatingActionButton: context.isPhone ? _buildCartFab(context) : null,
           body: SafeArea(
             top: false,
-            child: Column(
+            // Pull-to-refresh wraps the WHOLE body (above the header) so the
+            // gesture + spinner work from the very top of the screen, over the
+            // dropdowns and category bar — not just on the product grid.
+            child: AppRefreshWrapper(
+              child: Column(
               children: [
                 _buildHeader(
                   context,
@@ -273,22 +277,21 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
                           duration: const Duration(milliseconds: 250),
                           builder: (_, v, child) =>
                               Opacity(opacity: v, child: child),
-                          child: AppRefreshWrapper(
-                            child: ProductGrid(
-                              products: _controller!.filteredProducts,
-                              onProductTap: (item) => _addToCart(context, item),
-                              cardCol: cardCol,
-                              textCol: textCol,
-                              subtextCol: subtextCol,
-                              borderCol: borderCol,
-                              controller: _controller!,
-                              isListView: _isListView,
-                              gridColumns: _gridColumns,
-                            ),
+                          child: ProductGrid(
+                            products: _controller!.filteredProducts,
+                            onProductTap: (item) => _addToCart(context, item),
+                            cardCol: cardCol,
+                            textCol: textCol,
+                            subtextCol: subtextCol,
+                            borderCol: borderCol,
+                            controller: _controller!,
+                            isListView: _isListView,
+                            gridColumns: _gridColumns,
                           ),
                         ),
                 ),
               ],
+              ),
             ),
           ),
         );

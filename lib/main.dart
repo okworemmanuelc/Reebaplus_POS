@@ -31,13 +31,7 @@ import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/features/auth/screens/success_dashboard_entry_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/access_granted_screen.dart';
 import 'package:reebaplus_pos/features/diagnostics/screens/schema_error_screen.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
-import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
-import 'package:reebaplus_pos/core/theme/app_decorations.dart';
-import 'package:reebaplus_pos/core/utils/responsive.dart';
-import 'package:reebaplus_pos/features/sync/screens/first_sync_screen.dart';
-import 'package:reebaplus_pos/features/sync/widgets/initial_load_animation.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_thanks.dart';
 import 'package:reebaplus_pos/features/subscription/screens/thank_you_subscription_screen.dart';
@@ -598,9 +592,6 @@ class _HomeRouter extends ConsumerWidget {
     final auth = ref.watch(authProvider);
     final user = auth.value;
     final localBusinessesAsync = ref.watch(localBusinessesProvider);
-    final pullStatus = ref.watch(pullStatusProvider).value;
-    final hasLocalProducts =
-        ref.watch(hasLocalProductsProvider).valueOrNull ?? false;
     final subAccess = ref.watch(currentBusinessSubscriptionProvider);
     final subBusiness = ref.watch(currentBusinessProvider);
     final subThanks = ref.watch(subscriptionThanksProvider);
@@ -609,8 +600,6 @@ class _HomeRouter extends ConsumerWidget {
       auth: auth,
       user: user,
       localBusinessesAsync: localBusinessesAsync,
-      pullStatus: pullStatus,
-      hasLocalProducts: hasLocalProducts,
       subAccess: subAccess,
       subBusiness: subBusiness,
       subThanks: subThanks,
@@ -631,8 +620,6 @@ class _HomeRouter extends ConsumerWidget {
     required AuthService auth,
     required UserData? user,
     required AsyncValue<List<BusinessData>> localBusinessesAsync,
-    required PullStatus pullStatus,
-    required bool hasLocalProducts,
     required SubscriptionAccess subAccess,
     required BusinessData? subBusiness,
     required SubscriptionThanksService subThanks,
@@ -671,22 +658,22 @@ class _HomeRouter extends ConsumerWidget {
       return _SessionExpiredScreen(user: user);
     }
 
-    // Minimum-pull gate: no businesses row yet → run the 4-table minimum pull.
-    final localBusinesses = localBusinessesAsync.valueOrNull;
-    if (localBusinesses == null || localBusinesses.isEmpty) {
-      return FirstSyncScreen(businessId: user.businessId);
-    }
-
-    // Fresh-device background-pull gate (Invariant #11).
-    // Hold the loading screen until products exist locally.
-    // hasLocalProducts flips false → true exactly once per fresh device
-    // install, then this gate never re-engages (returning users pass straight
-    // through since hasLocalProducts is already true).
-    if (!hasLocalProducts && pullStatus.stage != PullStage.completed) {
-      if (pullStatus.stage == PullStage.failed) {
-        return _BackgroundPullFailed(businessId: user.businessId);
-      }
-      return _BackgroundPullLoading(pullStatus: pullStatus);
+    // Offline-first entry (Invariant #1): a logged-in device ALWAYS reaches
+    // MainLayout — entry is never gated on a network pull. We only wait for the
+    // local `businesses` query to RESOLVE (a SQLite read that completes in
+    // milliseconds, never a network call) so MainLayout doesn't flash before
+    // the local read lands; while it's still loading show the branded splash.
+    //
+    // We deliberately do NOT block on whether a `businesses` row or any
+    // products exist yet. A fresh sign-in's data streams in live: the minimum
+    // pull (4 tables) runs at the sign-in boundary (`syncOnLogin`) and the full
+    // pull fires non-blocking from `setCurrentUser`. MainLayout renders an
+    // empty-but-functional shell that reactively fills as rows land — exactly
+    // the same way a returning device opens instantly offline. No "Syncing Your
+    // Store" loader ever holds the user out; sync progress/failures surface
+    // non-blockingly (online indicator + Sync Issues screen).
+    if (!localBusinessesAsync.hasValue && !localBusinessesAsync.hasError) {
+      return const _BrandedSplash();
     }
 
     // Check for special post-login screens set by BiometricSetupScreen.
@@ -714,95 +701,5 @@ class _HomeRouter extends ConsumerWidget {
     }
 
     return const MainLayout();
-  }
-}
-
-/// Shown while the background full-pull is running on a fresh device.
-/// Reads pullStatus directly from the provider so the progress label
-/// updates without rebuilding the parent.
-class _BackgroundPullLoading extends ConsumerWidget {
-  final PullStatus pullStatus;
-
-  const _BackgroundPullLoading({required this.pullStatus});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final live = ref.watch(pullStatusProvider).value;
-    return InitialLoadAnimation(
-      done: live.tablesDone > 0 ? live.tablesDone : null,
-      total: live.tablesTotal > 0 ? live.tablesTotal : null,
-    );
-  }
-}
-
-/// Shown when the background full-pull fails before products are available.
-class _BackgroundPullFailed extends ConsumerWidget {
-  final String businessId;
-
-  const _BackgroundPullFailed({required this.businessId});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final t = Theme.of(context);
-    final cs = t.colorScheme;
-
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: AppDecorations.glassyBackground(context),
-        child: SafeArea(
-          child: Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: context.getRSize(24),
-              vertical: context.getRSize(32),
-            ),
-            child: Column(
-              children: [
-                const Spacer(),
-                FaIcon(
-                  FontAwesomeIcons.triangleExclamation,
-                  size: context.getRSize(56),
-                  color: cs.error,
-                ),
-                SizedBox(height: context.getRSize(24)),
-                Text(
-                  'Could Not Load Your Store',
-                  textAlign: TextAlign.center,
-                  style: t.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: cs.onSurface,
-                  ),
-                ),
-                SizedBox(height: context.getRSize(12)),
-                Text(
-                  'There was a problem downloading your store data.\n'
-                  'Please check your connection and try again.',
-                  textAlign: TextAlign.center,
-                  style: t.textTheme.bodyMedium?.copyWith(
-                    color: cs.onSurface.withValues(alpha: 0.65),
-                    height: 1.5,
-                  ),
-                ),
-                const Spacer(),
-                AppButton(
-                  text: 'Retry',
-                  variant: AppButtonVariant.primary,
-                  icon: FontAwesomeIcons.arrowsRotate.data,
-                  onPressed: () {
-                    ref
-                        .read(supabaseSyncServiceProvider)
-                        .pullChanges(businessId)
-                        .ignore();
-                  },
-                ),
-                SizedBox(height: context.getRSize(16)),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
   }
 }

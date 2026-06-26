@@ -508,6 +508,12 @@ final pullStatusProvider = ChangeNotifierProvider<ValueNotifier<PullStatus>>((
   return ref.watch(supabaseSyncServiceProvider).pullStatus;
 });
 
+/// True while a user-initiated pull-to-refresh is in flight. The
+/// `AppRefreshWrapper` orb is the sole animation for a manual pull, so
+/// `SyncPullBanner` suppresses its top progress bar while this is set (the
+/// banner's bar still drives automatic/background pulls, where there is no orb).
+final manualPullActiveProvider = StateProvider<bool>((ref) => false);
+
 /// True once the local Drift database has at least one product row — used as
 /// the fresh-device gate signal. Distinct-filtered so it only notifies when
 /// the boolean flips (empty → non-empty), keeping rebuilds cheap.

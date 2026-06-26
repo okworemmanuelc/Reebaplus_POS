@@ -17,6 +17,7 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/widgets/tab_navigator.dart';
+import 'package:reebaplus_pos/shared/widgets/sync_pull_banner.dart';
 
 // The LazyIndexedStack has been replaced with the direct Offstage + Set approach
 // requested for eliminating mount jank on cold start.
@@ -242,27 +243,35 @@ class _MainLayoutState extends ConsumerState<MainLayout>
             // Offstage keeps the widget alive and mounted for streams/scroll,
             // while `_initializedTabs` ensures exactly zero unused tabs are mounted initially.
             body: Stack(
-              children: List.generate(_tabWidgets.length, (i) {
-                if (!_initializedTabs.contains(i)) {
-                // Not yet visited — render nothing
-                return const SizedBox.shrink();
-              }
-              final tab = Offstage(
-                offstage: i != currentIndex,
-                // TickerMode guarantees animations on offstage tabs don't tick
-                child: TickerMode(
-                  enabled: i == currentIndex,
-                  child: TabNavigator(
-                    navigatorKey: _navigatorKeys[i],
-                    rootScreen: _tabWidgets[i],
-                    observer: _observers[i],
-                  ),
+              children: [
+                // Tab content
+                ...List.generate(_tabWidgets.length, (i) {
+                  if (!_initializedTabs.contains(i)) {
+                    // Not yet visited — render nothing
+                    return const SizedBox.shrink();
+                  }
+                  final tab = Offstage(
+                    offstage: i != currentIndex,
+                    // TickerMode guarantees animations on offstage tabs don't tick
+                    child: TickerMode(
+                      enabled: i == currentIndex,
+                      child: TabNavigator(
+                        navigatorKey: _navigatorKeys[i],
+                        rootScreen: _tabWidgets[i],
+                        observer: _observers[i],
+                      ),
+                    ),
+                  );
+                  if (i != currentIndex) return tab;
+                  return FadeTransition(opacity: _tabFadeAnimation, child: tab);
+                }),
+                // Non-blocking sync pull status overlay — progress bar at
+                // top, error/success pill above the bottom nav.
+                const Positioned.fill(
+                  child: SyncPullBanner(),
                 ),
-              );
-              if (i != currentIndex) return tab;
-              return FadeTransition(opacity: _tabFadeAnimation, child: tab);
-            }),
-          ),
+              ],
+            ),
           bottomNavigationBar: Builder(
             builder: (context) {
               final iconColor =

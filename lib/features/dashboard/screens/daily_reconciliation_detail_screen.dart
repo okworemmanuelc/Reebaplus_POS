@@ -273,7 +273,12 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
             if (d.showCrates)
               _line(context, theme, 'Empty crates held (now)', '+ ${formatCurrency(d.crateDepositKobo / 100.0)}'),
             _line(context, theme, 'Outstanding customer debt (at risk)', '+ ${formatCurrency(d.totalOwedKobo / 100.0)}', color: d.totalOwedKobo > 0 ? dangerColor : null),
-            _line(context, theme, 'Owed to suppliers (now)', '− ${formatCurrency(d.supplierPayableKobo / 100.0)}'),
+            // Supplier account is a wallet: a negative balance means we owe them
+            // (− red); a positive balance is credit we hold with them (+ green).
+            if (d.supplierWalletBalanceKobo < 0)
+              _line(context, theme, 'Owed to suppliers (now)', '− ${formatCurrency(d.supplierWalletBalanceKobo.abs() / 100.0)}', color: dangerColor)
+            else
+              _line(context, theme, 'Supplier credit held (now)', '+ ${formatCurrency(d.supplierWalletBalanceKobo / 100.0)}', color: d.supplierWalletBalanceKobo > 0 ? successColor : null),
             _divider(theme),
             _line(context, theme, 'Business net position (now)', formatCurrency(d.businessNetPositionKobo / 100.0), strong: true, color: positionColor),
             if (d.uncostedInventoryItems > 0) ...[
@@ -683,7 +688,8 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
         ['Net result for period', money(d.periodNetResultKobo)],
         ['Net profit (excludes shortages)', money(d.netProfitKobo)],
         ['Inventory on hand (at cost)', money(d.inventoryOnHandKobo)],
-        ['Owed to suppliers (now)', money(d.supplierPayableKobo)],
+        // Supplier wallet balance: negative = we owe, positive = credit held.
+        ['Supplier account balance (now)', money(d.supplierWalletBalanceKobo)],
         ['Business net position (now)', money(d.businessNetPositionKobo)],
         ['Goods received', money(d.goodsReceivedKobo)],
         ['Paid to suppliers', money(d.supplierPaidKobo)],
