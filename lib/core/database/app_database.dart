@@ -3818,11 +3818,42 @@ class AppDatabase extends _$AppDatabase {
         this,
         migratorFactory: () => createMigrator(),
       ).run(attemptHeal: true);
+
+      // Heal a device whose global `permissions` catalogue was emptied by a
+      // prior clearAllData (logout / business-delete / onboarding reset). The
+      // catalogue is static config that is deliberately never synced from the
+      // cloud, so an empty table has no other recovery path — Roles &
+      // Permissions would show "N of 0" and the per-role editor would render no
+      // toggles. Idempotent: a no-op once the catalogue is populated.
+      await ensurePermissionsSeeded();
     },
   );
 
   SchemaAuditResult? _lastSchemaAudit;
   SchemaAuditResult? get lastSchemaAudit => _lastSchemaAudit;
+
+  /// Re-seed the global `permissions` catalogue when it is empty.
+  ///
+  /// The catalogue is static config, identical on every device and the cloud,
+  /// seeded at DB-create (`_postCreateStatements`) and the v13 upgrade, and is
+  /// intentionally never pulled by the sync service. [clearAllData] wipes EVERY
+  /// table — including this one — on logout, business-delete, and the
+  /// onboarding reset; a subsequent login only re-pulls the tenant tables, so
+  /// without this heal the catalogue stays empty forever. Called from
+  /// `beforeOpen` (heals an already-broken device on next launch) and from
+  /// [clearAllData] (re-seeds immediately so a same-session logout→login is
+  /// fine). Plain INSERT is safe because we only seed when the table is empty.
+  Future<void> ensurePermissionsSeeded() async {
+    final row = await customSelect(
+      'SELECT COUNT(*) AS c FROM permissions',
+    ).getSingle();
+    if (row.read<int>('c') > 0) return;
+    await transaction(() async {
+      for (final stmt in _permissionsSeedStatements) {
+        await customStatement(stmt);
+      }
+    });
+  }
 
   Future<void> clearAllData() async {
     // Append-only ledger tables carry BEFORE DELETE triggers that RAISE(ABORT)
@@ -3871,6 +3902,13 @@ class AppDatabase extends _$AppDatabase {
       }
       await customStatement('PRAGMA foreign_keys = ON');
     }
+
+    // The wipe above emptied the global `permissions` catalogue along with
+    // everything else. It is static config that is never re-pulled by sync, so
+    // re-seed it now — otherwise a same-session logout→login (which only
+    // re-pulls tenant tables) lands on an empty catalogue and Roles &
+    // Permissions shows "N of 0". Idempotent.
+    await ensurePermissionsSeeded();
   }
 
   Future<void> resetDatabase() async {

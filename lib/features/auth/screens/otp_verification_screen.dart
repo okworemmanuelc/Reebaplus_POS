@@ -45,6 +45,10 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
 
   bool _loading = false;
   bool _verified = false;
+  // True while the post-verify account resolution runs (network work that can
+  // take several seconds on a weak link). Drives the centered spinner so the
+  // screen never looks frozen on "Verified ✓".
+  bool _resolving = false;
   String? _errorMessage;
 
   // Resend cooldown: 60 seconds after each send
@@ -197,6 +201,11 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
     await Future.delayed(const Duration(milliseconds: 800));
     if (!mounted) return;
 
+    // Account resolution below does network work (fetchSupabaseAccount and, for
+    // a returning device, the minimum-login pull) that can take several seconds
+    // on a weak link. Show the centered spinner so the screen never looks frozen.
+    setState(() => _resolving = true);
+
     try {
       // Mark this session as email-authenticated (triggers second OTP after PIN).
       await auth.saveAuthMethod('email');
@@ -232,6 +241,7 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
+        _resolving = false;
         _loading = false;
         _verified = false;
         _otpController.clear();
@@ -359,7 +369,7 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
                             ),
                           )
                         : TextButton(
-                            onPressed: (_loading || _isLockedOut)
+                            onPressed: (_loading || _isLockedOut || _verified)
                                 ? null
                                 : _resend,
                             child: const Text('Resend code'),
@@ -367,6 +377,42 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
                   ),
                 ],
               ),
+
+              // Post-verify resolution overlay: centered spinner over a faint
+              // scrim. Last child so it paints above the form and absorbs taps
+              // (the OTP field can't be edited mid-resolve).
+              if (_resolving)
+                Positioned.fill(
+                  child: Container(
+                    color: Theme.of(context)
+                        .scaffoldBackgroundColor
+                        .withValues(alpha: 0.7),
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 40,
+                            height: 40,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 3,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Setting up your account…',
+                            style: TextStyle(
+                              color: textColor,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),

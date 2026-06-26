@@ -769,6 +769,21 @@ final supplierHistoryStatsProvider = StreamProvider.autoDispose.family<
 
 // ── Stores ──────────────────────────────────────────────────────────────────
 final allStoresProvider = StreamProvider<List<StoreData>>((ref) {
+  // Rebuild whenever the active business binds/changes. watchActiveStores()
+  // bakes the businessId into its query at build time via requireBusinessId(),
+  // which THROWS when no business is bound yet. Because this provider's only
+  // other dependency (databaseProvider) never changes, a build during the brief
+  // null-businessId window (e.g. the post-onboarding handoff, where
+  // setCurrentUser binds `value` only AFTER the post-onboarding pull + the
+  // "business ready" delay) would error and STICK for the whole session — every
+  // store picker (Receive checkout, Request Stock, POS scope) then renders empty
+  // until an app restart. Watching the businessId lets the provider re-run the
+  // instant it binds, and the null-guard returns an empty stream rather than
+  // poisoning on the throw — mirroring usersByBusinessProvider's guard.
+  final businessId = ref.watch(
+    authProvider.select((a) => a.currentUser?.businessId),
+  );
+  if (businessId == null) return Stream.value(const <StoreData>[]);
   return ref.watch(databaseProvider).storesDao.watchActiveStores();
 });
 

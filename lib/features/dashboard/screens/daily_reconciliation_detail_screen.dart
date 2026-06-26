@@ -90,12 +90,16 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
           context.spacingM,
         ).copyWith(bottom: context.spacingM + context.deviceBottomPadding),
         children: [
+          if (isCeo) ...[
+            _netResultCard(context, theme, d),
+            SizedBox(height: context.spacingM),
+          ],
           _salesCard(context, theme, d),
           if (isCeo) ...[
             SizedBox(height: context.spacingM),
             _plCard(context, theme, d),
             SizedBox(height: context.spacingM),
-            _statementCard(context, theme, d),
+            _businessWorthCard(context, theme, d),
           ],
           SizedBox(height: context.spacingM),
           _shrinkageCard(context, theme, d, retail: !isCeo),
@@ -229,87 +233,71 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _statementCard(BuildContext context, ThemeData theme, ReconData d) {
+  /// Period flow: the inventory-on-hand asset plus supplier flows, netted of the
+  /// period's expenses and losses. Renders [ReconData.periodNetResultKobo]
+  /// line-for-line so the breakdown sums to the bold total.
+  Widget _netResultCard(BuildContext context, ThemeData theme, ReconData d) {
     final successColor = theme.extension<AppSemanticColors>()!.success;
     final dangerColor = theme.colorScheme.error;
-
     final periodNetColor = d.periodNetResultKobo >= 0 ? successColor : dangerColor;
+
+    return _card(
+      context,
+      theme,
+      'Net result for this period (flow)',
+      FontAwesomeIcons.moneyBillTrendUp.data,
+      periodNetColor,
+      [
+        _line(context, theme, 'Inventory on hand (at cost)', '+ ${formatCurrency(d.inventoryOnHandKobo / 100.0)}'),
+        _line(context, theme, 'Goods received', '+ ${formatCurrency(d.goodsReceivedKobo / 100.0)}'),
+        _line(context, theme, 'Paid to suppliers', '− ${formatCurrency(d.supplierPaidKobo / 100.0)}'),
+        _line(context, theme, 'Refunds', '− ${formatCurrency(d.refundsKobo / 100.0)}'),
+        _line(context, theme, 'Expenses', '− ${formatCurrency(d.expensesKobo / 100.0)}'),
+        _line(context, theme, 'Damages (at cost)', '− ${formatCurrency(d.damageCostKobo / 100.0)}'),
+        if (d.crateDamageDepositKobo > 0)
+          _line(context, theme, 'Crate deposit loss', '− ${formatCurrency(d.crateDamageDepositKobo / 100.0)}'),
+        _line(context, theme, 'Stock shortages (at cost)', '− ${formatCurrency(d.shortageCostKobo / 100.0)}'),
+        _divider(theme),
+        _line(context, theme, 'Net result for period', formatCurrency(d.periodNetResultKobo / 100.0), strong: true, color: periodNetColor),
+      ],
+    );
+  }
+
+  /// Point-in-time net worth: the inventory-on-hand asset, held empty-crate
+  /// deposits, money owed to us and the supplier-wallet position.
+  Widget _businessWorthCard(BuildContext context, ThemeData theme, ReconData d) {
+    final successColor = theme.extension<AppSemanticColors>()!.success;
+    final dangerColor = theme.colorScheme.error;
     final positionColor = d.businessNetPositionKobo >= 0 ? successColor : dangerColor;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _card(
-          context,
-          theme,
-          'Net result for this period (flow)',
-          FontAwesomeIcons.moneyBillTrendUp.data,
-          periodNetColor,
-          [
-            _line(context, theme, 'Revenue (costed)', '+ ${formatCurrency(d.costedRevenueKobo / 100.0)}'),
-            _line(context, theme, 'Cost of goods sold', '− ${formatCurrency(d.cogsKobo / 100.0)}'),
-            _divider(theme),
-            _line(context, theme, 'Gross profit', formatCurrency(d.grossProfitKobo / 100.0), strong: true),
-            _line(context, theme, 'Expenses', '− ${formatCurrency(d.expensesKobo / 100.0)}'),
-            _line(context, theme, 'Damages (at cost)', '− ${formatCurrency(d.damageCostKobo / 100.0)}'),
-            if (d.crateDamageDepositKobo > 0)
-              _line(context, theme, 'Crate deposit loss', '− ${formatCurrency(d.crateDamageDepositKobo / 100.0)}'),
-            _line(context, theme, 'Stock shortages (at cost)', '− ${formatCurrency(d.shortageCostKobo / 100.0)}'),
-            _divider(theme),
-            _line(context, theme, 'Net result for period', formatCurrency(d.periodNetResultKobo / 100.0), strong: true, color: periodNetColor),
-            const SizedBox(height: 6),
-            Text('Gross margin: ${d.grossMarginPct}%', style: context.bodySmall.copyWith(color: theme.hintColor)),
-          ],
-        ),
-        SizedBox(height: context.spacingM),
-        _card(
-          context,
-          theme,
-          'Business worth right now (point-in-time)',
-          FontAwesomeIcons.vault.data,
-          positionColor,
-          [
-            _line(context, theme, 'Inventory on hand (at cost)', '+ ${formatCurrency(d.inventoryOnHandKobo / 100.0)}'),
-            if (d.showCrates)
-              _line(context, theme, 'Empty crates held (now)', '+ ${formatCurrency(d.crateDepositKobo / 100.0)}'),
-            _line(context, theme, 'Outstanding customer debt (at risk)', '+ ${formatCurrency(d.totalOwedKobo / 100.0)}', color: d.totalOwedKobo > 0 ? dangerColor : null),
-            // Supplier account is a wallet: a negative balance means we owe them
-            // (− red); a positive balance is credit we hold with them (+ green).
-            if (d.supplierWalletBalanceKobo < 0)
-              _line(context, theme, 'Owed to suppliers (now)', '− ${formatCurrency(d.supplierWalletBalanceKobo.abs() / 100.0)}', color: dangerColor)
-            else
-              _line(context, theme, 'Supplier credit held (now)', '+ ${formatCurrency(d.supplierWalletBalanceKobo / 100.0)}', color: d.supplierWalletBalanceKobo > 0 ? successColor : null),
-            _divider(theme),
-            _line(context, theme, 'Business net position (now)', formatCurrency(d.businessNetPositionKobo / 100.0), strong: true, color: positionColor),
-            if (d.uncostedInventoryItems > 0) ...[
-              const SizedBox(height: 6),
-              Text(
-                'Excludes ${fmtNumber(d.uncostedInventoryItems)} inventory item(s) with no recorded buying price.',
-                style: context.bodySmall.copyWith(color: theme.hintColor),
-              ),
-            ],
-            const SizedBox(height: 6),
-            Text('Point-in-time net position. Not a cash balance.', style: context.bodySmall.copyWith(color: theme.hintColor)),
-          ],
-        ),
-        SizedBox(height: context.spacingM),
-        _card(
-          context,
-          theme,
-          'Other context flows (informational)',
-          FontAwesomeIcons.circleInfo.data,
-          theme.colorScheme.primary,
-          [
-            _line(context, theme, 'Goods received', formatCurrency(d.goodsReceivedKobo / 100.0)),
-            _line(context, theme, 'Paid to suppliers', formatCurrency(d.supplierPaidKobo / 100.0)),
-            _line(context, theme, 'Refunds', formatCurrency(d.refundsKobo / 100.0)),
-            const SizedBox(height: 6),
-            Text(
-              'Recorded money flows — not a balanced cash ledger. Goods received is an asset purchase, not a P&L cost.',
-              style: context.bodySmall.copyWith(color: theme.hintColor),
-            ),
-          ],
-        ),
+    return _card(
+      context,
+      theme,
+      'Business worth right now (point-in-time)',
+      FontAwesomeIcons.vault.data,
+      positionColor,
+      [
+        _line(context, theme, 'Inventory on hand (at cost)', '+ ${formatCurrency(d.inventoryOnHandKobo / 100.0)}'),
+        if (d.showCrates)
+          _line(context, theme, 'Empty crates held (now)', '+ ${formatCurrency(d.crateDepositKobo / 100.0)}'),
+        _line(context, theme, 'Outstanding customer debt (at risk)', '+ ${formatCurrency(d.totalOwedKobo / 100.0)}', color: d.totalOwedKobo > 0 ? dangerColor : null),
+        // Supplier account is a wallet: a negative balance means we owe them
+        // (− red); a positive balance is credit we hold with them (+ green).
+        if (d.supplierWalletBalanceKobo < 0)
+          _line(context, theme, 'Owed to suppliers (now)', '− ${formatCurrency(d.supplierWalletBalanceKobo.abs() / 100.0)}', color: dangerColor)
+        else
+          _line(context, theme, 'Supplier credit held (now)', '+ ${formatCurrency(d.supplierWalletBalanceKobo / 100.0)}', color: d.supplierWalletBalanceKobo > 0 ? successColor : null),
+        _divider(theme),
+        _line(context, theme, 'Business net position (now)', formatCurrency(d.businessNetPositionKobo / 100.0), strong: true, color: positionColor),
+        if (d.uncostedInventoryItems > 0) ...[
+          const SizedBox(height: 6),
+          Text(
+            'Excludes ${fmtNumber(d.uncostedInventoryItems)} inventory item(s) with no recorded buying price.',
+            style: context.bodySmall.copyWith(color: theme.hintColor),
+          ),
+        ],
+        const SizedBox(height: 6),
+        Text('Point-in-time net position. Not a cash balance.', style: context.bodySmall.copyWith(color: theme.hintColor)),
       ],
     );
   }
@@ -676,24 +664,27 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
       ['Products (SKUs) sold', '${d.skus}'],
       ['Total sales', money(d.totalRevenueKobo)],
       if (isCeo) ...[
+        // Net result for this period (flow) — mirrors _netResultCard.
+        ['Inventory on hand (at cost)', money(d.inventoryOnHandKobo)],
+        ['Goods received', money(d.goodsReceivedKobo)],
+        ['Paid to suppliers', money(d.supplierPaidKobo)],
+        ['Refunds', money(d.refundsKobo)],
+        ['Expenses', money(d.expensesKobo)],
+        ['Damages (at cost)', money(d.damageCostKobo)],
+        if (d.crateDamageDepositKobo > 0)
+          ['Crate deposit loss (at deposit)', money(d.crateDamageDepositKobo)],
+        ['Stock shortages (at cost)', money(d.shortageCostKobo)],
+        ['Net result for period', money(d.periodNetResultKobo)],
+        // Profit & Loss — mirrors _plCard.
         ['Revenue (costed)', money(d.costedRevenueKobo)],
         ['Cost of goods sold', money(d.cogsKobo)],
         ['Gross profit', money(d.grossProfitKobo)],
         ['Gross margin %', d.grossMarginPct],
-        ['Expenses', money(d.expensesKobo)],
-        ['Damages (at cost)', money(d.damageCostKobo)],
-        if (d.showCrates)
-          ['Crate deposit loss (at deposit)', money(d.crateDamageDepositKobo)],
-        ['Stock shortages (at cost)', money(d.shortageCostKobo)],
-        ['Net result for period', money(d.periodNetResultKobo)],
-        ['Net profit (excludes shortages)', money(d.netProfitKobo)],
-        ['Inventory on hand (at cost)', money(d.inventoryOnHandKobo)],
+        ['Net profit', money(d.netProfitKobo)],
+        // Business worth right now (point-in-time) — mirrors _businessWorthCard.
         // Supplier wallet balance: negative = we owe, positive = credit held.
         ['Supplier account balance (now)', money(d.supplierWalletBalanceKobo)],
         ['Business net position (now)', money(d.businessNetPositionKobo)],
-        ['Goods received', money(d.goodsReceivedKobo)],
-        ['Paid to suppliers', money(d.supplierPaidKobo)],
-        ['Refunds', money(d.refundsKobo)],
         ['Stock shortages (units)', '${d.shortageUnits}'],
       ] else ...[
         ['Stock shortages (units)', '${d.shortageUnits}'],

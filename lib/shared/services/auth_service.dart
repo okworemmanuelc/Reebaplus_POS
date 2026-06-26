@@ -271,7 +271,18 @@ class AuthService extends ValueNotifier<UserData?> {
           .eq('id', authUser.id)
           .maybeSingle();
       final businessId = profile?['business_id'] as String?;
-      if (profile == null || businessId == null) return null;
+      if (profile == null || businessId == null) {
+        // profiles has no linked business for this identity, yet the §9
+        // one-email-one-business guard in complete_onboarding keys off
+        // public.users.auth_user_id — which can be linked even when this
+        // session's profiles.business_id is null/unreadable (cross-device
+        // account; users.tenant_select RLS is profiles-scoped, so a direct
+        // users read also returns nothing here). Ask the authoritative
+        // SECURITY DEFINER RPC that mirrors that guard so a cross-device
+        // existing account is detected NOW (→ ExistingAccountRoute) instead
+        // of slipping through to CeoSignUp and failing late at PIN commit.
+        return _fetchAccountViaLinkedBusinessRpc();
+      }
 
       final business = await _supabase
           .from('businesses')
@@ -328,6 +339,37 @@ class AuthService extends ValueNotifier<UserData?> {
       );
     } catch (e) {
       debugPrint('[AuthService] fetchSupabaseAccount error: $e');
+      // The profiles/businesses/role reads are several sequential round-trips;
+      // any one failing here returns null, which the router reads as "no
+      // account" and routes a real existing account into CeoSignUp. Fall back
+      // to the single authoritative RPC before giving up so a transient REST
+      // failure can't masquerade as a brand-new email.
+      return _fetchAccountViaLinkedBusinessRpc();
+    }
+  }
+
+  /// Authoritative "is this auth identity already linked to a business?" check,
+  /// backed by the `current_user_linked_business` SECURITY DEFINER RPC (migration
+  /// 0128). Mirrors complete_onboarding's §9 guard exactly (keyed on
+  /// public.users.auth_user_id) so post-verify detection and onboarding
+  /// enforcement can never disagree. Returns null when the identity is not
+  /// linked, unauthenticated, or on error.
+  Future<SupabaseAccountInfo?> _fetchAccountViaLinkedBusinessRpc() async {
+    try {
+      final result = await _supabase.rpc('current_user_linked_business');
+      if (result is! List || result.isEmpty) return null;
+      final row = result.first as Map<String, dynamic>;
+      final businessId = row['business_id'] as String?;
+      final businessName = row['business_name'] as String?;
+      if (businessId == null || businessName == null) return null;
+      return SupabaseAccountInfo(
+        businessId: businessId,
+        businessName: businessName,
+        roleName: row['role_name'] as String?,
+        roleSlug: row['role_slug'] as String?,
+      );
+    } catch (e) {
+      debugPrint('[AuthService] current_user_linked_business RPC error: $e');
       return null;
     }
   }

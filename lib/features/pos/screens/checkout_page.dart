@@ -104,6 +104,13 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   double _amountPaid = 0;
   String _currentOrderId = '';
 
+  /// Payment label captured at confirm time. The receipt + thermal print read
+  /// THIS, never the live [_paymentLabel] getter: clearing the cart after a
+  /// successful sale resets `_mode` (via [_onCustomerChanged]) and the cash
+  /// field is empty, so recomputing live would mislabel a wallet sale as a
+  /// Credit Sale on the receipt (the screenshot bug).
+  String _receiptPaymentLabel = '';
+
   /// Customer's wallet balance (Naira) AFTER the sale's two legs, captured at
   /// confirm time and shown on the receipt. Snapshotting avoids the pre-sale
   /// projection double-counting the just-posted dual-leg rows (§14.3, bug #5/#6).
@@ -150,7 +157,10 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   }
 
   void _onCustomerChanged() {
-    if (mounted) {
+    // After a sale is confirmed we're on the receipt view; clearing the cart
+    // (setActiveCustomer(null)) must NOT reset the payment mode — that would
+    // recompute the receipt's payment label against an empty cash field.
+    if (mounted && !_paymentConfirmed) {
       setState(() => _mode = PayMode.cashTransfer);
     }
   }
@@ -203,16 +213,16 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       case PayMode.wallet:
         return 'Wallet Payment';
       case PayMode.credit:
-        if (!_isWalkIn && _currentCustomerWalletKobo >= _totalKobo) {
-          return 'Wallet Payment';
-        }
+        // Always a Credit Sale when explicitly chosen — even if the wallet
+        // could cover it, the cashier opted to book the whole total as debt.
         return 'Credit Sale';
       case PayMode.cashTransfer:
         if (_isWalkIn) return 'Cash / Transfer';
         final paidKobo = (_cashReceivedValue * 100).round();
-        if (paidKobo <= 0) return 'Credit Sale';
-        if (paidKobo < _totalKobo) return 'Partial Payment';
-        return 'Cash / Transfer';
+        if (paidKobo >= _totalKobo) return 'Cash / Transfer';
+        // Partial cash now; the shortfall books to the wallet as debt. (A zero
+        // amount is blocked by validation, so we never reach here paid = 0.)
+        return 'Cash / Transfer / Wallet';
     }
   }
 
@@ -457,7 +467,8 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                           builder: (_) {
                             final w = _walletBalanceFor(widget.customer!.id);
                             return Text(
-                              'Wallet Balance: ${formatCurrency(w)} ${w < 0 ? "(debt)" : "(credit)"}',
+                              // Sign + colour convey credit vs debt — no suffix.
+                              'Wallet Balance: ${formatCurrency(w)}',
                               style: TextStyle(
                                 fontSize: context.getRFontSize(12),
                                 color: w < 0
@@ -946,50 +957,27 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
   // ── Confirm payment logic ──────────────────────────────────────────────────
   Future<void> _confirmPayment() async {
-    // Pre-flight: detect price/version drift since items were added to cart.
-    // Cashier accepts new prices or cancels back to the cart. This runs before
-    // the main try below, so guard it on its own — a thrown DB error here must
-    // flash, not silently kill the checkout button.
-    final List<CartStaleItem> stale;
-    try {
-      stale = await _detectCartStaleness();
-    } catch (e, st) {
-      // §33.4: record the crash so it's visible across devices, then keep the
-      // existing recoverable message — the sale flow must never blank-crash.
-      CrashReporter.record(e, st, context: 'pos.checkout.verify_prices');
-      if (mounted) {
-        AppNotification.showError(context, 'Could not verify cart prices: $e');
-      }
-      return;
-    }
-    if (!mounted) return;
-    if (stale.isNotEmpty) {
-      final accepted = await _showStalenessDialog(stale);
-      if (!accepted) return;
-      ref.read(cartProvider).acceptStaleness({
-        for (final s in stale)
-          s.productId: (
-            unitPriceKobo: s.newPriceKobo,
-            version: s.currentVersion,
-          ),
-      });
-      // The cart provider now holds the new prices, but THIS page's totals were
-      // snapshotted at construction — `widget.cart` / `widget.total` are
-      // immutable and `acceptStaleness` rebuilt the cart with fresh map
-      // instances, so they never update here. Re-confirming on this page would
-      // re-flag the same lines forever. Return to the cart (its totals are
-      // live) so the cashier reviews the new prices and checks out again.
-      if (mounted) {
+    // ── Auto-switch to Wallet when credit covers the bill ────────────────────
+    // If the cashier left the amount blank and the customer's wallet credit
+    // already covers the whole payable, book it as a wallet payment instead of
+    // erroring "enter the amount". An explicit amount is respected (it may be a
+    // deliberate split cash + wallet), so only switch when the field is empty.
+    if (_mode == PayMode.cashTransfer && !_isWalkIn) {
+      final entered = (_cashReceivedValue * 100).round();
+      if (entered <= 0 && _currentCustomerWalletKobo >= _totalKobo) {
+        setState(() => _mode = PayMode.wallet);
         AppNotification.showInfo(
           context,
-          'Prices updated. Review the cart and check out again.',
+          'Switched to Wallet Payment — $_customerDisplayName has enough '
+          'credit to cover this sale.',
         );
-        Navigator.of(context).pop();
       }
-      return;
     }
 
     // ── Validate by mode ──────────────────────────────────────────────────
+    // Synchronous and runs BEFORE the async staleness check below so the
+    // "enter an amount" feedback is immediate (the staleness check is a DB
+    // round-trip that could otherwise delay or swallow the error).
     final paidKobo = _mode == PayMode.cashTransfer
         ? (_cashReceivedValue * 100).round()
         : 0;
@@ -1012,14 +1000,18 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       // debt, the cashier picks "Register as Credit Sale" instead.
       if (_mode == PayMode.cashTransfer && paidKobo <= 0) {
         if (_currentCustomerWalletKobo > 0) {
+          // Credit exists but doesn't cover the bill (a covering balance would
+          // already have auto-switched to Wallet above).
           AppNotification.showError(
             context,
-            'This customer has wallet credit available. Please select the Wallet payment method.',
+            'This customer has ${formatCurrency(_currentCustomerWalletKobo / 100.0)} '
+            'in wallet credit. Tap "Pay from Wallet" to use it, or enter the '
+            'cash amount.',
           );
         } else {
           AppNotification.showError(
             context,
-            'Enter the amount paid, or choose Register as Credit Sale.',
+            'Please enter the amount paid, or choose Register as Credit Sale.',
           );
         }
         return;
@@ -1071,6 +1063,50 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       }
     }
 
+    // ── Pre-flight: detect price/version drift since items were added to the
+    // cart. Runs AFTER the synchronous validation above (so empty-amount
+    // feedback is instant) but before processing. Cashier accepts new prices or
+    // cancels back to the cart. Guard it on its own — a thrown DB error here
+    // must flash, not silently kill the checkout button. ─────────────────────
+    final List<CartStaleItem> stale;
+    try {
+      stale = await _detectCartStaleness();
+    } catch (e, st) {
+      // §33.4: record the crash so it's visible across devices, then keep the
+      // existing recoverable message — the sale flow must never blank-crash.
+      CrashReporter.record(e, st, context: 'pos.checkout.verify_prices');
+      if (mounted) {
+        AppNotification.showError(context, 'Could not verify cart prices: $e');
+      }
+      return;
+    }
+    if (!mounted) return;
+    if (stale.isNotEmpty) {
+      final accepted = await _showStalenessDialog(stale);
+      if (!accepted) return;
+      ref.read(cartProvider).acceptStaleness({
+        for (final s in stale)
+          s.productId: (
+            unitPriceKobo: s.newPriceKobo,
+            version: s.currentVersion,
+          ),
+      });
+      // The cart provider now holds the new prices, but THIS page's totals were
+      // snapshotted at construction — `widget.cart` / `widget.total` are
+      // immutable and `acceptStaleness` rebuilt the cart with fresh map
+      // instances, so they never update here. Re-confirming on this page would
+      // re-flag the same lines forever. Return to the cart (its totals are
+      // live) so the cashier reviews the new prices and checks out again.
+      if (mounted) {
+        AppNotification.showInfo(
+          context,
+          'Prices updated. Review the cart and check out again.',
+        );
+        Navigator.of(context).pop();
+      }
+      return;
+    }
+
     setState(() => _isProcessing = true);
 
     try {
@@ -1083,6 +1119,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       // the full total debits the wallet, going into debt if credit can't cover.
       final amountPaidKobo = _isWalkIn ? totalKobo : paidKobo;
       final paymentSubType = _mode == PayMode.wallet ? 'wallet' : 'cash';
+
+      // Capture the payment label NOW, while `_mode` and the cash field still
+      // reflect the cashier's choice. Clearing the cart on success resets the
+      // mode, so the live getter would mislabel the receipt (Issue 1).
+      final paymentLabel = _paymentLabel;
 
       // Snapshot the wallet balance BEFORE the legs post so the receipt shows
       // the true post-sale net (old + paid − total) instead of the pre-sale
@@ -1119,7 +1160,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             cart: widget.cart,
             totalAmountKobo: totalKobo,
             amountPaidKobo: amountPaidKobo,
-            paymentType: _paymentLabel,
+            paymentType: paymentLabel,
             staffId: auth.currentUser?.id,
             storeId: storeId,
             // §13.4 Ring 3/6 — the per-brand deposit captured above. The total
@@ -1150,6 +1191,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           _receiptWalletBalance = _isWalkIn
               ? null
               : (oldWalletKobo + amountPaidKobo - totalKobo) / 100.0;
+          _receiptPaymentLabel = paymentLabel;
           _paymentConfirmed = true;
           _currentOrderId = orderNo;
         });
@@ -1209,7 +1251,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                 subtotal: widget.subtotal,
                 crateDeposit: _depositTotalKobo / 100.0,
                 total: _totalKobo / 100.0,
-                paymentMethod: _paymentLabel,
+                paymentMethod: _receiptPaymentLabel,
                 customerName: _customerDisplayName,
                 customerAddress: _initialCustomer?.addressText ?? 'N/A',
                 customerPhone: _initialCustomer?.phone,
@@ -1409,7 +1451,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         subtotal: widget.subtotal,
         crateDeposit: _depositTotalKobo / 100.0,
         total: _totalKobo / 100.0,
-        paymentMethod: _paymentLabel,
+        paymentMethod: _receiptPaymentLabel,
         customerName: _customerDisplayName,
         customerAddress: widget.customer?.addressText,
         customerPhone: widget.customer?.phone,
@@ -1757,7 +1799,6 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           'Resulting Wallet Balance',
           projected,
           isDebt ? danger : (projected > 0 ? success : _text),
-          isDebt ? ' (debt)' : (projected > 0 ? ' (credit)' : ''),
         ),
         SizedBox(height: context.getRSize(6)),
         Padding(
@@ -1793,14 +1834,12 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           'Wallet Balance',
           balance,
           balance < 0 ? danger : (balance > 0 ? success : _text),
-          balance < 0 ? ' (debt)' : (balance > 0 ? ' (credit)' : ''),
         ),
         SizedBox(height: context.getRSize(8)),
         _previewBox(
           'After This Sale',
           projected,
           isDebt ? danger : (projected > 0 ? success : _text),
-          isDebt ? ' (debt)' : (projected > 0 ? ' (credit)' : ''),
         ),
         SizedBox(height: context.getRSize(6)),
         Padding(
@@ -1836,7 +1875,6 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           'Resulting Wallet Balance',
           projected,
           isDebt ? danger : (projected > 0 ? success : _text),
-          isDebt ? ' (debt)' : (projected > 0 ? ' (credit)' : ''),
         ),
         if (_overDebtLimit)
           _debtLimitWarning(_currentCustomerWalletLimitKobo, projectedKobo),
@@ -1844,13 +1882,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     );
   }
 
-  /// A label / value box used by the payment previews.
-  Widget _previewBox(
-    String label,
-    double value,
-    Color valueColor,
-    String suffix,
-  ) {
+  /// A label / value box used by the payment previews. The value's sign and
+  /// colour distinguish credit from debt — no "(credit)/(debt)" suffix.
+  Widget _previewBox(String label, double value, Color valueColor) {
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: context.getRSize(16),
@@ -1877,7 +1911,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             ),
           ),
           Text(
-            '${formatCurrency(value)}$suffix',
+            formatCurrency(value),
             style: TextStyle(
               fontSize: context.getRFontSize(15),
               fontWeight: FontWeight.w800,

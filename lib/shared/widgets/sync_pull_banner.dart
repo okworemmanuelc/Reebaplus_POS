@@ -97,6 +97,19 @@ class _SyncPullBannerState extends ConsumerState<SyncPullBanner> {
       builder: (context, status, _) {
         _onStageChanged(status.stage);
 
+        // Live percentage from the pull's table-restore progress. Null until
+        // the snapshot's table count is known (the brief initial-fetch window),
+        // so the UI shows a spinning indeterminate state, then fills in.
+        final total = status.tablesTotal;
+        final done = status.tablesDone;
+        final int? percent =
+            total > 0 ? ((done / total) * 100).clamp(0, 100).round() : null;
+
+        // Prominent (but non-blocking) first-load indicator: shown while the
+        // background catch-up pull streams data into the empty MainLayout shell.
+        final bool showLoading =
+            status.stage == PullStage.background && !manualPull;
+
         final children = <Widget>[];
 
         // ── Top: thin progress bar while syncing ────────────────────────
@@ -111,6 +124,10 @@ class _SyncPullBannerState extends ConsumerState<SyncPullBanner> {
                   ? LinearProgressIndicator(
                       key: const ValueKey('progress'),
                       minHeight: 2.5,
+                      // Determinate once the table count is known so the bar
+                      // fills in lock-step with the percentage pill; falls back
+                      // to indeterminate during the initial fetch window.
+                      value: percent != null ? percent / 100 : null,
                       backgroundColor: Theme.of(context)
                           .colorScheme
                           .primary
@@ -121,7 +138,28 @@ class _SyncPullBannerState extends ConsumerState<SyncPullBanner> {
           ),
         );
 
-        // ── Bottom: floating pill for error or success ──────────────────
+        // ── Center: prominent first-load indicator (non-blocking) ───────
+        // First login / fresh business: data streams into the empty MainLayout
+        // shell. A centered spinner + percentage tells the user something is
+        // happening. Wrapped in IgnorePointer so it never gates interaction —
+        // the drawer and everything beneath stay tappable (invariant #11).
+        children.add(
+          Positioned.fill(
+            child: IgnorePointer(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 250),
+                child: showLoading
+                    ? _LoadingOverlay(
+                        key: const ValueKey('loading'),
+                        percent: percent,
+                      )
+                    : const SizedBox.shrink(key: ValueKey('no-loading')),
+              ),
+            ),
+          ),
+        );
+
+        // ── Bottom: floating pill — error / success ─────────────────────
         final Widget? bottomPill;
         if (status.stage == PullStage.failed && !_errorDismissed) {
           bottomPill = _ErrorPill(
@@ -260,6 +298,54 @@ class _ErrorPill extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Prominent (but non-blocking) first-load indicator. Centered in the empty
+/// MainLayout shell while the background catch-up pull streams data in. A
+/// spinner plus a live percentage derived from how many tables have been
+/// restored. [percent] is null during the brief window before the table count
+/// is known — it then shows a neutral "getting ready" line under the spinner.
+class _LoadingOverlay extends StatelessWidget {
+  const _LoadingOverlay({super.key, required this.percent});
+
+  final int? percent;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final primary = t.colorScheme.primary;
+
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 36,
+            height: 36,
+            child: CircularProgressIndicator(strokeWidth: 3, color: primary),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Loading your store',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: t.colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            percent != null ? '$percent%' : 'Getting things ready…',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: percent != null ? primary : t.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
       ),
     );
   }

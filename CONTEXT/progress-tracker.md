@@ -10,6 +10,95 @@ The human updates it when resolving open questions or making architectural decis
 
 150 sessions logged. Codebase is live and being verified on-device.
 
+### Post-OTP "Setting up your account…" centered spinner (2026-06-26)
+- **Gap:** after the 6-digit code was accepted, the OTP screen showed a static
+  "Verified ✓" button while `saveAuthMethod` + `resolvePostVerifyRoute`
+  (`fetchSupabaseAccount` RPC, and for returning devices the minimum-login pull +
+  `upsertLocalUserFromProfile`) ran with **no indicator** — looked frozen for
+  several seconds on poor connections.
+- **Fix:** [otp_verification_screen.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/features/auth/screens/otp_verification_screen.dart)
+  `_resolving` flag drives a **centered spinner over a faint scrim** ("Setting up
+  your account…") during the post-verify resolution; the verified-but-load-failed
+  `catch` resets it. The CEO/staff sign-up OTP steps only advance a wizard step
+  (`_goTo`) after OTP, so they have no gap and were left untouched.
+- **Verification:** `flutter analyze` clean; on-device check pending.
+
+### First-login / fresh-business loading indicator — spinner + % (2026-06-26)
+- **Gap (not a bug):** after creating a business or first login, the device drops
+  straight into the empty `MainLayout` shell (correct per invariant #11) while the
+  background catalogue pull streams in, but the only cue was `SyncPullBanner`'s
+  near-invisible 2.5px top bar — users saw a blank screen and didn't know data was
+  loading.
+- **Fix (UI-only, non-blocking):** [sync_pull_banner.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/shared/widgets/sync_pull_banner.dart)
+  now derives a live `percent` from the already-wired `PullStatus.tablesDone /
+  tablesTotal` (advanced per restored table in `pullInitialData`). The top
+  progress bar became **determinate**; a new **centered** `_LoadingOverlay`
+  (spinner + "Loading your store" + `NN%`) shows during `PullStage.background`,
+  wrapped in `IgnorePointer` so it never gates interaction; the existing
+  "Synced ✓" / "Sync failed · Retry" pills keep the bottom slot. Suppressed
+  during pull-to-refresh. No blocking loader reintroduced (invariant #11
+  preserved; `MainLayout` renders underneath and stays tappable throughout).
+- **Verification:** `flutter analyze` on the banner clean; no public API change
+  (the `main_layout.dart` mount is untouched). On-device emulator check pending.
+
+### Daily Reconciliation — `_statementCard` deconstructed into two cards (2026-06-26)
+- **Change:** split the monolithic `_statementCard` (which stacked three cards in
+  a Column) into standalone `_netResultCard` and `_businessWorthCard` widgets and
+  **deleted** the "Other context flows (informational)" card entirely.
+- **New net-result formula:** `_netResultCard` now renders an additive breakdown
+  that sums to the bold total — `+ Inventory on hand (at cost)`,
+  `+ Goods received`, `− Paid to suppliers`, `− Refunds`, `− Expenses`,
+  `− Damages (at cost)`, `− Crate deposit loss` (only when
+  `crateDamageDepositKobo > 0`), `− Stock shortages (at cost)`, divider, then
+  **Net result for period**. `ReconData.periodNetResultKobo` was redefined to
+  this exact formula (was `grossProfit − expenses − damages − crateDeposit −
+  shortages`) so the displayed lines reconcile to the total. Gross-margin note
+  dropped from this card (still in CSV + P&L).
+- **Card order** (CEO cost-wall preserved): `_netResultCard` (CEO) →
+  `_salesCard` (all) → `_plCard` (CEO) → `_businessWorthCard` (CEO) →
+  `_shrinkageCard` → `_stockCard` → (`_debtsExpensesCard` non-CEO) →
+  `_cratesCard` → `_breakdown`.
+- **CSV:** `_exportCsv` CEO block regrouped to mirror the three cards (net-result
+  lines, then P&L, then business-worth); crate-loss row now gated on
+  `crateDamageDepositKobo > 0`. `dart analyze` clean on both touched files.
+
+### Roles & Permissions stuck at "N of 0" after logout→login (2026-06-26)
+- **Bug:** logged in as CEO, Roles & Permissions showed "All 0 permissions" /
+  "29 of 0" etc. and each role's detail page rendered no toggles. The grant
+  counts were right; only the catalogue **denominator** was 0 — the local
+  global `permissions` table was empty.
+- **Root cause:** the `permissions` catalogue is static config seeded only at
+  DB-create + the v13 upgrade and is deliberately never synced. But
+  `AppDatabase.clearAllData()` wipes EVERY table (`for table in allTables`) —
+  including `permissions` — on logout/business-delete/onboarding reset, and a
+  later login re-pulls only the tenant tables, so the catalogue stayed empty
+  with no recovery path.
+- **Fix:** new idempotent `ensurePermissionsSeeded()` re-seeds when
+  `COUNT(*)==0`, called from `beforeOpen` (heals already-broken devices on next
+  launch) and the end of `clearAllData()` (same-session logout→login). Bumped
+  the stale loading-fallback denominator 30→38. `dart analyze` clean. See
+  BUILD_LOG 2026-06-26.
+
+### Fresh-onboarding empty store dropdowns fixed (2026-06-26)
+- **Bug:** after creating a new account + business, the Receive-Stock Invoice
+  "STOCKING INTO" dropdown and the Request Stock pickers showed zero stores;
+  restarting the app fixed it. Root cause was `allStoresProvider` poisoning on a
+  `StateError`: `watchActiveStores()` bakes the businessId into its query at
+  build time (`requireBusinessId()` throws on null), and the provider only
+  depended on the never-changing `databaseProvider`, so a first-subscribe during
+  the create-business null-businessId window (`CeoSignUpScreen._commit` pulls +
+  3 s delay BEFORE `setCurrentUser`) stuck for the whole session. Same provider
+  feeds the stock-transfer pickers.
+- **Fix:** `allStoresProvider` now watches `authProvider.select((a) =>
+  a.currentUser?.businessId)` and returns an empty stream while null instead of
+  throwing — self-heals the instant the business binds. `flutter analyze` clean;
+  `test/receiving`+`test/sync`+`test/auth` 178 green. See BUILD_LOG 2026-06-26.
+
+### Create-business: cross-device existing email caught at OTP, not at PIN (2026-06-26)
+- **Bug:** "Create a new business" with an email already linked to a business on **another device / the web** (no local row here) passed the whole onboarding wizard and was only rejected at **Create PIN**, where `complete_onboarding` raised P0001 *"already linked to another business"* (dead-end `_pinError`). The post-OTP router's detection (`fetchSupabaseAccount`) read **`profiles.business_id`** over several sequential REST calls; a null/unseeded profile, the profiles-scoped `users` RLS, or a transient failure (caught → null) made it report "no account" → `NoAccountFoundRoute` → `CeoSignUpScreen`. Enforcement (migration 0121) keys off **`users.auth_user_id`**, so detection and enforcement could disagree.
+- **Fix:** detection now uses the same authority as enforcement. New `SECURITY DEFINER` RPC [0128_current_user_linked_business_rpc.sql](file:///Users/solomonizu/flutter_projects/drinkPosApp/supabase/migrations/0128_current_user_linked_business_rpc.sql) (`current_user_linked_business()`, mirrors the §9 guard exactly, one round-trip, bypasses profiles-scoped RLS) — **deployed live** via MCP `apply_migration`, file kept for repo. `fetchSupabaseAccount()` falls back to it when the profiles path yields no business and in its outer catch, so a cross-device account → `ExistingAccountRoute` → `ExistingAccountScreen` right after OTP (before any onboarding step); fixes both OTP and Google entry points. Safety-net `_commit()` catch now shows a clear `AppNotification` + `popUntil(isFirst)` instead of trapping the user on the PIN step.
+- **By design (not done):** no pre-OTP email-existence oracle — invariant #9 + the `email_entry_screen` comment defer existence disclosure until OTP proves ownership (anti-enumeration), and `sendOtp` uses `shouldCreateUser: true`. Post-OTP detection already blocks before any form field. `flutter analyze` clean; RPC verified live.
+
 ### Monthly expense budget now reaches the snapshot pull (2026-06-25)
 - **Bug:** the monthly budget (§20.1/§20.3, `expense_budgets` table) saved + pushed fine but never appeared on other devices, and was lost on a fresh install / cold start. The table was wired everywhere on the client (RLS 0075, realtime publication + channel loop, `_pullOrder`, `_restoreTableData`) **except the cloud `pos_pull_snapshot` RPC's `v_tenant_tables` array** — the authoritative load/restore path for every `since=NULL` full pull. `expenses`/`expense_categories` were already in the RPC, so expense records synced; only the budget was missing. (Textbook case of the "register a synced table at the cloud pull RPC too" rule.)
 - **Fix:** [0127_add_expense_budgets_to_pull_snapshot.sql](file:///Users/solomonizu/flutter_projects/drinkPosApp/supabase/migrations/0127_add_expense_budgets_to_pull_snapshot.sql) — `CREATE OR REPLACE pos_pull_snapshot` off the **live** body (carries forward 0108/0117 additions), `'expense_budgets'` inserted after `'expense_categories'` (FK-safe). Applied directly to the live DB (idempotent function redeploy) since remote migration history is divergent; file kept in repo for reconciliation. Verified live: snapshot now contains `expense_budgets`, nothing dropped.
@@ -1317,6 +1406,27 @@ with correct code → Copy/SMS/WhatsApp still work → re-sync does NOT re-send.
   `ewwyofbvfjyqqirrcaou` (`TRUNCATE … CASCADE` every tenant table +
   `DELETE FROM auth.users`) so previously-used test emails can re-onboard.
   Preserved the global `permissions` catalogue and schema/migrations/RPCs.
+
+---
+
+## Checkout payment-label + wallet-display fixes (2026-06-26)
+
+- **Wallet sale mislabeled "Credit Sale" on the receipt (root cause).** The
+  receipt/print read `_paymentLabel` live; clearing the cart on success resets
+  `_mode` (via `_onCustomerChanged`) so a wallet sale recomputed as a credit
+  sale. Now captured into `_receiptPaymentLabel` at confirm and read from there;
+  `_onCustomerChanged` no-ops after confirm.
+- **`_paymentLabel` rewritten:** wallet→"Wallet Payment", credit→always "Credit
+  Sale", registered partial cash→"Cash / Transfer / Wallet"; dropped the
+  `paid ≤ 0 → Credit Sale` fallback.
+- **Mode validation moved before the async staleness check** (instant
+  empty-amount feedback); messages clarified.
+- **Auto-switch to Wallet** when Cash/Transfer is chosen with an empty amount and
+  wallet credit covers the bill.
+- **Removed `(credit)/(debt)` suffixes** from the checkout customer card, payment
+  previews, and both receipt builders (sign + colour already differentiate).
+- Debt-limit gate on partials and walk-in-only Cash/Transfer verified unchanged.
+- `flutter analyze` clean on the touched files.
 
 ---
 

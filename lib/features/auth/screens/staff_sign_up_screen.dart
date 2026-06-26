@@ -1058,7 +1058,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
                   ),
                 )
               : TextButton(
-                  onPressed: (_sendingOtp || _otpLockedOut) ? null : _resendOtp,
+                  onPressed: (_sendingOtp || _otpLockedOut || _otpVerified) ? null : _resendOtp,
                   child: const Text('Resend code'),
                 ),
         ),

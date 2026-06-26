@@ -267,13 +267,13 @@ class ThermalReceiptService {
       formatCurrency(cashReceived ?? total).replaceAll('₦', 'N'),
     );
 
-    // §15.1 — wallet info, only when ticked at checkout.
+    // §15.1 — wallet info, only when ticked at checkout. Sign conveys credit
+    // vs debt — no "(credit)/(debt)" suffix.
     if (showWalletInfo && walletBalance != null) {
-      final tag = walletBalance < 0 ? '(debt)' : '(credit)';
       bytes += _buildTwoColumnRow(
         generator,
         'Wallet Balance:',
-        '${formatCurrency(walletBalance).replaceAll('₦', 'N')} $tag',
+        formatCurrency(walletBalance).replaceAll('₦', 'N'),
       );
     }
 

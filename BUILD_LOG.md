@@ -2,6 +2,250 @@
 
 ---
 
+## 2026-06-26 — Post-OTP "Setting up your account…" spinner (frozen "Verified ✓" gap)
+
+**Symptom:** After entering the 6-digit code, the screen showed a static
+**"Verified ✓"** button and then appeared to hang for a few seconds (worse on
+poor connections) before moving on — users thought it had frozen.
+
+**Root cause:** [otp_verification_screen.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/features/auth/screens/otp_verification_screen.dart)
+`_submit()` showed a spinner only during `auth.verifyOtp()`. On success it set
+`_loading=false; _verified=true`, paused 800ms, then ran the **post-verify
+account resolution with no indicator**: `saveAuthMethod` + `resolvePostVerifyRoute`
+([auth_post_verify_route.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/features/auth/auth_post_verify_route.dart)),
+which does network work — `fetchSupabaseAccount()` (profiles + the
+`current_user_linked_business` RPC) and, for a returning device,
+`syncOnLogin()` (the 4-table minimum-login pull) + `upsertLocalUserFromProfile()`.
+On a weak link that's several seconds of an apparently-frozen "Verified ✓".
+
+**Fix** — [otp_verification_screen.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/features/auth/screens/otp_verification_screen.dart):
+new `_resolving` flag set true right before the post-verify resolution; a
+**centered spinner over a faint scrim** with "Setting up your account…" paints
+as the last Stack child (absorbs taps so the OTP field can't be edited
+mid-resolve). The existing verified-but-load-failed `catch` resets `_resolving`
+so the error message + retry path is unchanged.
+
+**Scope:** the two embedded OTP steps ([ceo_sign_up_screen.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/features/auth/screens/ceo_sign_up_screen.dart),
+[staff_sign_up_screen.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/features/auth/screens/staff_sign_up_screen.dart))
+only `_goTo` the next wizard step after OTP (fast, local) — no gap, left
+untouched. Their heavy network is later at commit (already has `_committing`).
+
+**Verification:** `flutter analyze` on the screen clean. On-device check pending
+(throttle the connection → confirm the centered spinner shows after the last digit).
+
+---
+
+## 2026-06-26 — First-login / fresh-business loading indicator (spinner + %)
+
+**Symptom:** Right after creating a business or logging in for the first time on
+a device, the app drops straight into `MainLayout` (correct, per the offline-first
+invariant #11) but the shell is **blank** while the background catalogue pull
+streams data in — just a hamburger menu over empty white. The only existing cue
+was `SyncPullBanner`'s near-invisible 2.5px top progress bar, so users had no idea
+anything was happening.
+
+**Root cause:** Not a bug — a UX gap. The data side was already fully wired:
+`pullChanges` runs the full pull as `PullStage.background`, and `pullInitialData`
+advances `PullStatus.tablesDone` / `tablesTotal` per restored table
+([supabase_sync_service.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/core/services/supabase_sync_service.dart) ~2337-2360).
+`SyncPullBanner` already watched that status but only rendered the thin top bar —
+no spinner, no count.
+
+**Fix** — [sync_pull_banner.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/shared/widgets/sync_pull_banner.dart):
+purely additive, non-blocking UI. (1) Compute a live `percent` from
+`tablesDone / tablesTotal` (null until the snapshot's table count is known).
+(2) Make the top `LinearProgressIndicator` **determinate** off that percent
+(indeterminate during the initial fetch window). (3) Add a centered
+`_LoadingOverlay` (spinner + "Loading your store" + `NN%`) shown during
+`PullStage.background`, wrapped in `IgnorePointer` so it never gates interaction;
+the existing error/success pills still occupy the bottom slot. Suppressed during
+pull-to-refresh (`manualPullActiveProvider`) like the top bar.
+**No blocking loader reintroduced** — `MainLayout` renders its functional shell
+underneath and stays tappable the whole time.
+
+**Verification:** `flutter analyze lib/shared/widgets/sync_pull_banner.dart` clean
+(no public API change; `MainLayout` mount is untouched). On-device check pending:
+fresh login → centered spinner + climbing % → "Synced ✓".
+
+---
+
+## 2026-06-26 — Roles & Permissions stuck at "N of 0" after logout→login (empty catalogue)
+
+**Symptom:** Logged in as CEO, the **Roles & Permissions** screen showed
+"All **0** permissions" for CEO and "29 of **0**", "6 of **0**", "3 of **0**"
+for Manager/Cashier/Stock keeper. Opening a role's detail page rendered the
+intro text but **no permission toggles** (empty Business/Store tabs). The
+per-role grant counts (29/6/3) were correct — only the **denominator** (the
+global catalogue size) was zero.
+
+**Root cause:** The global `permissions` catalogue is static config, seeded
+**only** at DB-create (`_postCreateStatements`) and the v13 upgrade block, and
+is **deliberately never pulled by the sync service** (it's identical on every
+device). But `AppDatabase.clearAllData()` ([app_database.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/core/database/app_database.dart))
+wipes **every** table via `for (final table in allTables) delete(table)` —
+including `permissions` — and it runs on **logout** (`logOutCurrentUser`),
+business-delete, and the onboarding reset. A subsequent login only re-pulls the
+**tenant** tables (roles, role_permissions, role_settings), so the catalogue
+stayed empty with **no recovery path**. `allPermissionsProvider` then resolved
+to a non-null **empty** list → `total = 0`, and the detail screen grouped zero
+perms → empty body.
+
+**Fix** — [app_database.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/core/database/app_database.dart):
+new idempotent `ensurePermissionsSeeded()` re-runs `_permissionsSeedStatements`
+when `SELECT COUNT(*) FROM permissions == 0`. Called from **`beforeOpen`**
+(heals an already-broken device on next app launch — fixes existing installs)
+and from the end of **`clearAllData()`** (re-seeds immediately so a same-session
+logout→login is fine). Plain INSERT is safe since it only runs on an empty
+table; the v37-removed funds keys are absent from `_defaultPermissionRows`, so
+the re-seed won't reintroduce the Funds category. Also bumped the stale loading
+fallback in [roles_permissions_screen.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/core/settings/roles_permissions_screen.dart)
+from `30` → `38` (current catalogue size) so the one-frame placeholder reads
+right. **Verification:** `dart analyze` clean. On-device re-walk
+(logout→login→open Roles & Permissions) pending.
+
+---
+
+## 2026-06-26 — Fresh-onboarding: empty store dropdowns (Receive checkout + Stock transfer)
+
+**Symptom:** Right after creating a new account + business and completing
+onboarding, the Receive-Stock **Invoice** screen's "STOCKING INTO" dropdown and
+the **Request Stock** store pickers showed **zero stores** despite the business
+having a store. **Closing and reopening the app made the store appear** — the
+tell-tale of a provider poisoned at build time, not missing data (cloud
+confirmed: `active_stores=1`, membership + `user_stores` link both present).
+
+**Root cause:** `allStoresProvider` ([stream_providers.dart:771](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/core/providers/stream_providers.dart))
+— the single source feeding every store picker via `selectableStoresProvider` —
+called `storesDao.watchActiveStores()`, which bakes the businessId into its
+Drift query **at build time** through `whereBusiness()` → `requireBusinessId()`,
+and that **throws `StateError` when no business is bound**. The provider's only
+dependency was `databaseProvider` (never changes), so a first-subscribe during
+the brief **null-businessId window** errored and **stuck for the whole session**
+→ `valueOrNull` null → `selectableStoresProvider` → `[]` → every store dropdown
+empty until restart. The window is unique to the **create-business path**:
+`CeoSignUpScreen._commit` runs the post-onboarding pull + a 3 s "business ready"
+delay **before** `setCurrentUser` binds `value`. Returning users bind the
+businessId first, so it never reproduced for them (and a restart healed it).
+Same poison hit the stock-transfer flow (same provider). Sibling providers
+(`usersByBusinessProvider`) already guard the null window; `allStoresProvider`
+was the odd one out — it neither guarded nor reacted to the businessId.
+
+**Fix** — [stream_providers.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/core/providers/stream_providers.dart):
+`allStoresProvider` now `ref.watch(authProvider.select((a) => a.currentUser?.businessId))`
+and returns `Stream.value(const [])` while it's null (no throw → no poison),
+re-running the live query the instant the business binds. `.select` rebuilds
+only on businessId change (not on every profile-edit republish). Type/signature
+unchanged, so all callers (`selectableStoresProvider`, POS scope, Receive,
+Request Stock, reports) are unaffected. **Verification:** `flutter analyze`
+clean; `test/receiving` + `test/sync` + `test/auth` → 178 passing. On-device
+re-walk of the fresh-onboarding → add product → receive → invoice flow pending.
+
+---
+
+## 2026-06-26 — Create-business: cross-device existing email caught at OTP, not at PIN
+
+**Why (root cause):** "Create a new business" with an email already linked to a
+business (registered on another device / the web, no local row here) slipped
+through the entire onboarding wizard and was only rejected at the **Create-PIN**
+step, where `complete_onboarding` raised P0001 *"already linked to another
+business"* — shown as a dead-end `_pinError`. The post-OTP router
+(`resolvePostVerifyRoute` → `fetchSupabaseAccount`) is supposed to catch this and
+route to `ExistingAccountScreen`, but its detection read **`profiles.business_id`**
+across several sequential REST round-trips; any of (null/unseeded profile,
+profiles-scoped `users` RLS, a transient failure caught → null) made it report
+"no account" → `NoAccountFoundRoute` → `CeoSignUpScreen`. Enforcement
+(`complete_onboarding`, migration 0121) keys off **`public.users.auth_user_id`**,
+so detection and enforcement could disagree.
+
+**Fix** — detection now uses the *same authority* as enforcement:
+- **New RPC** [0128_current_user_linked_business_rpc.sql](file:///Users/solomonizu/flutter_projects/drinkPosApp/supabase/migrations/0128_current_user_linked_business_rpc.sql)
+  — `public.current_user_linked_business()`, `SECURITY DEFINER`, mirrors the §9
+  guard exactly (`users.auth_user_id = auth.uid()`), returns the linked business
+  + role in one round-trip (bypasses the profiles-scoped RLS that hid the row).
+  **Deployed** to remote via MCP `apply_migration` (idempotent
+  `CREATE OR REPLACE`); local file numbered 0128 for the repo. Mirrors the
+  `am_i_a_member` pattern (0038).
+- [auth_service.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/shared/services/auth_service.dart)
+  — `fetchSupabaseAccount()` falls back to the RPC (new
+  `_fetchAccountViaLinkedBusinessRpc`) when the profiles path yields no business
+  **and** in its outer catch, so a cross-device account (or a transient REST
+  failure) is detected → `ExistingAccountRoute` → `ExistingAccountScreen` right
+  after OTP, before any onboarding step. Common path (profiles.business_id set)
+  is unchanged. Fixes both the OTP and Google sign-in entry points (shared
+  resolver).
+- [ceo_sign_up_screen.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/features/auth/screens/ceo_sign_up_screen.dart)
+  — safety-net `_commit()` catch (now a rare OTP→commit race): on
+  `alreadyLinkedElsewhere`, instead of trapping the user on the PIN step, show a
+  clear `AppNotification` ("…Sign in instead, or use a different email…") and
+  `popUntil(isFirst)` back to Welcome. The notification rides the root overlay so
+  it survives the pop; the draft is kept for reuse.
+
+**Not done (by design):** no pre-OTP cloud email-existence oracle was added. The
+security model (invariant #9 + the explicit comment in `email_entry_screen`)
+deliberately defers existence disclosure until **after** OTP proves ownership, to
+prevent email enumeration; `sendOtp` uses `shouldCreateUser: true`, so existence
+can't be inferred from it either. The post-OTP detection blocks the user before
+any onboarding form field, which satisfies the "stop before wasted onboarding"
+goal without the enumeration vector.
+
+**Verified:** `flutter analyze` clean (full project); RPC signature + null-auth
+(0 rows) confirmed on remote.
+
+---
+
+## 2026-06-26 — Checkout: wallet sale mislabeled "Credit Sale" on receipt (+ 5 related)
+
+**Why (root cause):** The receipt and thermal print read `_paymentLabel`
+**live**, not a snapshot. On a successful sale the success flow calls
+`cart.setActiveCustomer(null)`, which fires `_onCustomerChanged` →
+`setState(_mode = PayMode.cashTransfer)`. So by the time the receipt rebuilt, a
+**wallet** payment had its mode reset to cashTransfer with an empty cash field,
+and the old `_paymentLabel` returned `'Credit Sale'` for `paidKobo <= 0`. That's
+the screenshot bug (Wallet sale → "Payment Method: Credit Sale", "Amount Paid:
+₦0"). `_amountPaid` / `_receiptWalletBalance` were already snapshotted at confirm;
+the label was not.
+
+**Fix** — [checkout_page.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/features/pos/screens/checkout_page.dart):
+- **Snapshot the label.** New `_receiptPaymentLabel` field, set in the confirm
+  success `setState` from a `paymentLabel` captured before the cart clears; the
+  receipt widget + `_printReceipt` now read it instead of the live getter. Also
+  guarded `_onCustomerChanged` to no-op once `_paymentConfirmed` (defensive).
+- **`_paymentLabel` rewrite (Issue 1):** `wallet`→"Wallet Payment";
+  `credit`→always "Credit Sale" (dropped the wallet-covers special case);
+  `cashTransfer` registered partial (`0 < paid < total`)→"Cash / Transfer /
+  Wallet" (was "Partial Payment"); removed the `paidKobo <= 0 → 'Credit Sale'`
+  fallback (now blocked by validation).
+- **Validation moved before the async staleness check (Issue 2)** so empty-amount
+  feedback is immediate; clearer messages ("Please enter the amount paid…" / the
+  insufficient-credit message now shows the credit amount + "Tap 'Pay from
+  Wallet'"). `_isProcessing` was never set pre-validation, so no stuck-button
+  reset was needed.
+- **Auto-switch to Wallet (Issue 6):** when Cash/Transfer is selected, the amount
+  is empty, and wallet credit ≥ total, switch to `PayMode.wallet` with an info
+  toast (only when the field is empty — an explicit amount is respected).
+- **Removed `(credit)/(debt)` suffixes (Issue 5)** from the customer-info card,
+  all four `_previewBox` calls (dropped the now-dead `suffix` param), the
+  [receipt_widget.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/shared/widgets/receipt_widget.dart)
+  wallet line, and the
+  [receipt_builder.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/features/pos/services/receipt_builder.dart)
+  thermal wallet line. Sign + colour already convey credit vs debt.
+- **Issues 3 & 4 (debt-limit gate on partials; walk-in sees only Cash/Transfer)**
+  verified already correct — no change.
+- **Follow-up from code review:** the new "Cash / Transfer / Wallet" label
+  collided with the Orders-screen badge categorizers
+  ([orders_screen.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/features/orders/screens/orders_screen.dart)
+  `_paymentColor` / `_paymentLabel`), which tested `contains('wallet')` before
+  `contains('partial')` — so a partial cash sale badged as "Wallet". Added a
+  `contains('wallet') && contains('cash')` → Partial check ahead of the plain
+  wallet check. (The `== 'Wallet Payment'` exact-match sites that pick
+  cashReceived are unaffected: the combined label != 'Wallet Payment', so they
+  correctly use the actual cash paid.)
+
+**Verification:** `flutter analyze` on all four touched files — no issues.
+Behavioural verification on emulator pending.
+
+---
+
 ## 2026-06-25 — Release build: stop sqlite3 hook downloading from GitHub
 
 **Why:** `flutter run --release` failed during `assembleRelease` with

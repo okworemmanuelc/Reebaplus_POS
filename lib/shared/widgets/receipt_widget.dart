@@ -420,8 +420,8 @@ class ReceiptWidget extends StatelessWidget {
             Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                'Wallet Balance: ${formatCurrency(walletBalance!)}'
-                ' ${walletBalance! < 0 ? '(debt)' : '(credit)'}',
+                // Sign conveys credit vs debt — no "(credit)/(debt)" suffix.
+                'Wallet Balance: ${formatCurrency(walletBalance!)}',
                 style: TextStyle(
                   fontSize: context.getRFontSize(13),
                   fontWeight: FontWeight.w600,

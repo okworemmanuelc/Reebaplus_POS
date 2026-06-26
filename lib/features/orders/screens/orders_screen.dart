@@ -1410,6 +1410,10 @@ class _OrderCard extends ConsumerWidget {
   // Returns a color for the payment type badge
   Color _paymentColor(String paymentType, Color primaryColor) {
     final lower = paymentType.toLowerCase();
+    // Mixed cash + wallet (e.g. 'Cash / Transfer / Wallet') is a partial
+    // payment — cash now, the shortfall booked to the wallet as debt. Match it
+    // before the plain 'wallet' check, which would otherwise claim it.
+    if (lower.contains('wallet') && lower.contains('cash')) return primaryColor;
     if (lower.contains('wallet')) return blueMain;
     if (lower.contains('partial')) return primaryColor;
     if (lower.contains('credit')) return danger;
@@ -1419,6 +1423,10 @@ class _OrderCard extends ConsumerWidget {
   // Returns a short label for the payment type badge
   String _paymentLabel(String paymentType) {
     final lower = paymentType.toLowerCase();
+    // Mixed cash + wallet (e.g. 'Cash / Transfer / Wallet') → Partial. Checked
+    // before plain 'wallet' so the combined label isn't badged as a pure wallet
+    // payment.
+    if (lower.contains('wallet') && lower.contains('cash')) return 'Partial';
     if (lower.contains('wallet')) return 'Wallet';
     if (lower.contains('partial')) return 'Partial';
     if (lower.contains('credit')) return 'Credit';

@@ -327,8 +327,17 @@ class ReconData {
   int get grossProfitKobo => costedRevenueKobo - cogsKobo;
   int get netProfitKobo =>
       grossProfitKobo - expensesKobo - damageCostKobo - crateDamageDepositKobo;
+
+  /// Net result for the period (flow). Folds the inventory-on-hand asset and the
+  /// supplier flows (goods received / paid to suppliers / refunds) that used to
+  /// sit in the separate "Business worth" and "Other context flows" cards into a
+  /// single roll-up, then nets out the period's expenses and losses. The
+  /// _netResultCard renders this exact breakdown line-for-line.
   int get periodNetResultKobo =>
-      grossProfitKobo -
+      inventoryOnHandKobo +
+      goodsReceivedKobo -
+      supplierPaidKobo -
+      refundsKobo -
       expensesKobo -
       damageCostKobo -
       crateDamageDepositKobo -

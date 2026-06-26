@@ -719,18 +719,35 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
           msg.contains('already linked to another business') ||
           msg.contains('users_auth_user_id_key');
 
-      if (mounted) {
-        setState(() {
-          _committing = false;
-          _pin = '';
-          _firstPin = '';
-          _pinError = alreadyLinkedElsewhere
-              ? 'This email already belongs to a business. Go back and use a '
-                    'different email to create a new one.'
-              : 'Something went wrong. Please re-enter your PIN.';
-          _step = 6;
-        });
+      if (!mounted) return;
+
+      if (alreadyLinkedElsewhere) {
+        // The email is permanently bound to another business — re-entering the
+        // PIN can never clear it, so holding the user on the PIN step is a
+        // dead-end loop. With the post-OTP detection fix (fetchSupabaseAccount
+        // → ExistingAccountRoute) an existing email is now caught right after
+        // OTP, before any onboarding step, so reaching here is a rare race (the
+        // link appeared between OTP verify and this commit). Route the user out
+        // of onboarding entirely with a clear message instead of trapping them.
+        // AppNotification lives in the root overlay, so it survives the pop; the
+        // draft is left intact so a restart with a different email can reuse it.
+        setState(() => _committing = false);
+        AppNotification.showError(
+          context,
+          'This email already belongs to a business. Sign in instead, or use a '
+          'different email to create a new one.',
+        );
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        return;
       }
+
+      setState(() {
+        _committing = false;
+        _pin = '';
+        _firstPin = '';
+        _pinError = 'Something went wrong. Please re-enter your PIN.';
+        _step = 6;
+      });
     }
   }
 
@@ -1186,7 +1203,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
                   ),
                 )
               : TextButton(
-                  onPressed: (_sendingOtp || _otpLockedOut) ? null : _resendOtp,
+                  onPressed: (_sendingOtp || _otpLockedOut || _otpVerified) ? null : _resendOtp,
                   child: const Text('Resend code'),
                 ),
         ),
