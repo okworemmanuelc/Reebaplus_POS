@@ -2,6 +2,32 @@
 
 ---
 
+## 2026-06-27 — Auth Screen Desktop and Tablet Redesign
+
+**Change:** Centered and constrained the maximum width of all authentication screens (Welcome, Sign-In, OTP, SignUp, Lock Screen) to `480.0` dp on desktop and tablet viewports.
+
+**Fix details:**
+1. Modified [branded_auth_background.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/features/auth/widgets/branded_auth_background.dart) and [auth_background.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/features/auth/widgets/auth_background.dart).
+2. Wrapped the content child widget of the auth backgrounds in a `Center` and a `Container` with a maximum width constraint of `480.0` dp on all non-phone viewports (`!context.isPhone`).
+3. Dotted grid and background gradient glows still cover the full viewport width and height.
+4. Verified that forms do not stretch across wide desktop/tablet screens.
+
+---
+
+## 2026-06-27 — Layout Responsiveness for Tablet and Desktop Viewports
+
+**Change:** Implemented a persistent fixed-width navigation sidebar on desktop, a collapsed rail on tablet, simplified layout selector sheets, and proportionate grid calculations.
+
+**Fix details:**
+1. Modified [main_layout.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/shared/widgets/main_layout.dart) to display a persistent 280dp `AppDrawer` sidebar on the left and hide the bottom nav bar on desktop.
+2. Updated [app_drawer.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/shared/widgets/app_drawer.dart) to render as a flat container on desktop and push settings/management routes onto the active tab's sub-navigator to keep the sidebar visible.
+3. Updated [shared_scaffold.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/shared/widgets/shared_scaffold.dart) to hide the slide-out drawer on desktop.
+4. Conditionally hid the leading hamburger menu button on desktop inside AppBars across all primary screens: `pos_home_screen.dart`, `inventory_screen.dart`, `orders_screen.dart`, `cart_screen.dart`, `home_screen.dart`, `stores_screen.dart`, `staff_management_screen.dart`.
+5. Updated [view_selector_sheet.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/shared/widgets/view_selector_sheet.dart) to only show "Grid View" and "List View" layout options on tablet and desktop.
+6. Updated [product_grid.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/features/pos/widgets/product_grid.dart) and [receive_product_grid.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/features/receiving/widgets/receive_product_grid.dart) to subtract the 280dp sidebar width from screen width calculations on desktop to prevent grid items from squishing or overflowing.
+
+---
+
 ## 2026-06-27 — Wallet to Credits Balance / Ledger Entries terminology alignment
 
 **Change:** Renamed all user-facing "Wallet" vocabulary to "Credits Balance" / "Ledger Entries" across the POS application to mitigate regulatory and compliance risks associated with e-money and wallet definitions.
