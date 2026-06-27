@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
 
 class AuthBackground extends StatelessWidget {
   final Widget child;
@@ -61,7 +62,14 @@ class AuthBackground extends StatelessWidget {
               ],
             ),
           ),
-          child,
+          Center(
+            child: Container(
+              constraints: BoxConstraints(
+                maxWidth: context.isDesktop ? 480.0 : double.infinity,
+              ),
+              child: child,
+            ),
+          ),
         ],
       ),
     );
