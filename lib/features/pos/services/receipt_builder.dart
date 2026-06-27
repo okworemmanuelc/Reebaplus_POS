@@ -257,7 +257,7 @@ class ThermalReceiptService {
 
     // --- 5. PAYMENT SECTION ---
     bytes += generator.text(
-      'Payment Method: $paymentMethod',
+      'Payment Method: ${paymentMethod.toLowerCase() == 'wallet payment' || paymentMethod.toLowerCase() == 'wallet' ? 'Credit Payment' : paymentMethod}',
       styles: const PosStyles(bold: true),
     );
 
@@ -272,7 +272,7 @@ class ThermalReceiptService {
     if (showWalletInfo && walletBalance != null) {
       bytes += _buildTwoColumnRow(
         generator,
-        'Wallet Balance:',
+        'Credits Balance:',
         formatCurrency(walletBalance).replaceAll('₦', 'N'),
       );
     }

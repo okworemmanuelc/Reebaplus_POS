@@ -183,10 +183,10 @@ final customerServiceProvider = ChangeNotifierProvider<CustomerService>((ref) {
   );
 });
 
-/// Map of customerId → signed wallet balance (kobo), computed live from the
+/// Map of customerId → signed credits balance (kobo), computed live from the
 /// WalletTransactions ledger. Replaces the cached `customers.wallet_balance_kobo`
 /// column that PR 2a removed.
-final walletBalancesKoboProvider = StreamProvider.autoDispose<Map<String, int>>(
+final creditBalancesKoboProvider = StreamProvider.autoDispose<Map<String, int>>(
   (ref) {
     return ref.read(databaseProvider).customersDao.watchAllWalletBalancesKobo();
   },

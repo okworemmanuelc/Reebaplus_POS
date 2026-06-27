@@ -398,7 +398,7 @@ class ReceiptWidget extends StatelessWidget {
           Align(
             alignment: Alignment.centerLeft,
             child: Text(
-              'Payment Method: $paymentMethod',
+              'Payment Method: ${paymentMethod.toLowerCase() == 'wallet payment' || paymentMethod.toLowerCase() == 'wallet' ? 'Credit Payment' : paymentMethod}',
               style: TextStyle(
                 fontSize: context.getRFontSize(13),
                 fontWeight: FontWeight.w600,
@@ -421,7 +421,7 @@ class ReceiptWidget extends StatelessWidget {
               alignment: Alignment.centerLeft,
               child: Text(
                 // Sign conveys credit vs debt — no "(credit)/(debt)" suffix.
-                'Wallet Balance: ${formatCurrency(walletBalance!)}',
+                'Credits Balance: ${formatCurrency(walletBalance!)}',
                 style: TextStyle(
                   fontSize: context.getRFontSize(13),
                   fontWeight: FontWeight.w600,

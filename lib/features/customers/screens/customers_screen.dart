@@ -69,7 +69,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
               builder: (context) {
                 final customers = ref.watch(customerServiceProvider).value;
                 final balances =
-                    ref.watch(walletBalancesKoboProvider).valueOrNull ??
+                    ref.watch(creditBalancesKoboProvider).valueOrNull ??
                     const <String, int>{};
                 if (_isFirstLoad) {
                   return const Center(child: CircularProgressIndicator());
@@ -377,7 +377,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    'Balance',
+                    'Credits Balance',
                     style: TextStyle(
                       fontSize: context.getRFontSize(11),
                       color: subtextCol,

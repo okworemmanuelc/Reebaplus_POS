@@ -5,15 +5,15 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 
-class WalletService {
+class CreditLedgerService {
   final AppDatabase _db;
 
-  WalletService(this._db);
+  CreditLedgerService(this._db);
 
   WalletTransactionsDao get _walletTxDao => _db.walletTransactionsDao;
   CustomerWalletsDao get _customerWalletsDao => _db.customerWalletsDao;
 
-  /// Top up a customer's wallet (§18 Add Funds).
+  /// Add credit to a customer's credit balance (§18 Add Credit).
   ///
   /// Creates a WalletTransaction (credit) and a corresponding PaymentTransaction
   /// (wallet_topup), atomically in one transaction.
@@ -27,7 +27,7 @@ class WalletService {
     final wallet = await _customerWalletsDao.getByCustomerId(customerId);
 
     if (wallet == null) {
-      throw StateError('Customer $customerId has no wallet');
+      throw StateError('Customer $customerId has no credits balance');
     }
 
     final flagValue = await _db.systemConfigDao.get(
@@ -135,16 +135,16 @@ class WalletService {
 
   /// §18.3 Refund (CEO / Manager only — the UI gates on
   /// `customers.wallet.withdraw`). Pays the customer back money the business
-  /// HOLDS for them: their held crate deposit and/or positive spendable wallet
-  /// credit. [amountKobo] is drawn from the held deposit FIRST, then from
+  /// HOLDS for them: their held crate deposit and/or positive spendable credit
+  /// balance. [amountKobo] is drawn from the held deposit FIRST, then from
   /// spendable credit, capped at what's available (a debt is never "refundable").
   ///
-  /// **Destination is decided by the wallet's debt status (user, 2026-06-05):**
-  ///   • Wallet IN DEBT (spendable < 0) → the held deposit is refunded TO THE
-  ///     WALLET (a `crate_refund` spendable credit) so it REDUCES the debt — no
+  /// **Destination is decided by the credit balance's debt status (user, 2026-06-05):**
+  ///   • Credit balance IN DEBT (spendable < 0) → the held deposit is refunded TO THE
+  ///     CREDITS BALANCE (a `crate_refund` spendable credit) so it REDUCES the debt — no
   ///     cash leaves. (Spendable credit is 0 when in debt, so the deposit is the
   ///     only thing refunded.) [method] is ignored on this path.
-  ///   • Wallet NOT in debt → paid out as CASH: a `payment_transactions` refund
+  ///   • Credit balance NOT in debt → paid out as CASH: a `payment_transactions` refund
   ///     row per portion via [method].
   /// Both paths post a `crate_deposit_refunded` debit for the deposit portion,
   /// which clears "held". The credit portion (only > 0 when not in debt) is a
@@ -165,7 +165,7 @@ class WalletService {
     final businessId = _walletTxDao.requireBusinessId();
     final wallet = await _customerWalletsDao.getByCustomerId(customerId);
     if (wallet == null) {
-      throw StateError('Customer $customerId has no wallet');
+      throw StateError('Customer $customerId has no credits balance');
     }
 
     // Available = held deposit + positive spendable credit. A debt contributes 0.
@@ -229,7 +229,7 @@ class WalletService {
           'crate_deposit_refunded',
         );
         if (inDebt) {
-          // To wallet: a spendable crate_refund credit reduces the debt. No cash.
+          // To credit balance: a spendable crate_refund credit reduces the debt. No cash.
           await postWalletLeg(depositPortion, 'crate_refund');
         } else {
           // Cash out.
@@ -244,7 +244,7 @@ class WalletService {
       }
 
       // §24 money movement / §26.4 refund issued — audit + notify CEO/Manager.
-      final dest = inDebt ? 'to wallet (reduces debt)' : 'cash';
+      final dest = inDebt ? 'to credit balance (reduces debt)' : 'cash';
       final parts = <String>[
         if (depositPortion > 0)
           'deposit ${formatCurrency(depositPortion / 100)}',
@@ -253,7 +253,7 @@ class WalletService {
       await _db.activityLogDao.logActivity(
         action: 'customer.wallet.refund',
         description:
-            'Refunded ${formatCurrency(refundKobo / 100)} $dest from wallet'
+            'Refunded ${formatCurrency(refundKobo / 100)} $dest from credit balance'
             '${parts.isNotEmpty ? ' (${parts.join(', ')})' : ''}'
             '${note != null && note.trim().isNotEmpty ? ' — ${note.trim()}' : ''}',
         staffId: staffId,
@@ -264,7 +264,7 @@ class WalletService {
         type: 'wallet_refund',
         message:
             'Refund of ${formatCurrency(refundKobo / 100)} ($dest) issued from a '
-            'customer wallet',
+            'customer credit balance',
         severity: 'info',
         linkedRecordId: customerId,
       );

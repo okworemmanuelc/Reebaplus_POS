@@ -78,7 +78,7 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
   bool _loading = true;
   bool _saving = false;
   // §13.4 Ring 5 — how to give back a money-track deposit refund. Default to a
-  // wallet credit (spendable); the cashier can switch to cash (paid out of the
+  // credit balance (spendable); the cashier can switch to cash (paid out of the
   // till). Only shown/used when the order has a money-track (deposit-paid) brand.
   bool _refundAsCash = false;
 
@@ -134,7 +134,7 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
       // order's bottle items by manufacturer, then RECONCILE the deposit. If the
       // order recorded a crate deposit (`crateDepositPaidKobo`) but the per-brand
       // lines were never written (created on an older build), the held
-      // `crate_deposit` wallet credit would otherwise have NO settlement path —
+      // `crate_deposit` credit balance would otherwise have NO settlement path —
       // the deposit would stay "held" forever and never refund/forfeit. We
       // rebuild per-brand deposit info from the order total + current
       // manufacturer rates so Confirm can settle it and the held nets to 0. With
@@ -258,7 +258,7 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
           }
 
           if (row.isMoneyTrack) {
-            // §13.4 Ring 5 money-track: the obligation lived in the wallet as a
+            // §13.4 Ring 5 money-track: the obligation lived in the credit balance as a
             // held deposit — settle it in money (refund / forfeit / shortfall).
             // No crate balance was issued for this brand, so DON'T touch the
             // crate ledger (that would create a phantom credit).
@@ -302,7 +302,7 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
   }
 
   /// §13.4 Ring 5 — choose where a money-track deposit refund goes: back to the
-  /// customer's wallet (spendable credit) or out of the till as cash.
+  /// customer's credit balance (spendable credit) or out of the till as cash.
   Widget _buildRefundModeToggle() {
     Widget chip(
       String label,
@@ -371,7 +371,7 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
           Row(
             children: [
               chip(
-                'Wallet',
+                'Credit',
                 FontAwesomeIcons.wallet.data,
                 !_refundAsCash,
                 () => setState(() => _refundAsCash = false),

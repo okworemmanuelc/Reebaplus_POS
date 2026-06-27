@@ -3,6 +3,9 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/data/countries.dart';
+import 'package:reebaplus_pos/core/data/nigerian_lgas.dart';
+import 'package:reebaplus_pos/core/data/nigerian_states.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/widgets/app_fab.dart';
@@ -58,181 +61,262 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
   void _showAddSheet(BuildContext context) {
     final nameCtrl = TextEditingController();
     final addressCtrl = TextEditingController();
-    final cityStateCtrl = TextEditingController();
-    final countryCtrl = TextEditingController();
+    final statePlainCtrl = TextEditingController();
+    final lgaPlainCtrl = TextEditingController();
     final formKey = GlobalKey<FormState>();
     bool saving = false;
+    String countryValue = kDefaultCountry;
+    String stateValue = '';
+    String lgaValue = '';
+    String? stateError;
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheet) => Padding(
-          padding: EdgeInsets.only(bottom: ctx.deviceBottomPadding),
-          child: Container(
-            decoration: BoxDecoration(
-              color: _surface,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(24),
+        builder: (ctx, setSheet) {
+          final isNigeria = countryValue.trim().toLowerCase() == 'nigeria';
+          final lgaOptions =
+              isNigeria ? (kNigerianLgas[stateValue] ?? <String>[]) : <String>[];
+
+          return Padding(
+            padding: EdgeInsets.only(bottom: ctx.deviceBottomPadding),
+            child: Container(
+              decoration: BoxDecoration(
+                color: _surface,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(24),
+                ),
               ),
-            ),
-            padding: EdgeInsets.fromLTRB(
-              rSize(ctx, 24),
-              rSize(ctx, 20),
-              rSize(ctx, 24),
-              rSize(ctx, 32),
-            ),
-            child: Form(
-              key: formKey,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Handle
-                    Center(
-                      child: Container(
-                        width: 40,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: _border,
-                          borderRadius: BorderRadius.circular(2),
+              padding: EdgeInsets.fromLTRB(
+                rSize(ctx, 24),
+                rSize(ctx, 20),
+                rSize(ctx, 24),
+                rSize(ctx, 32),
+              ),
+              child: Form(
+                key: formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Handle
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: _border,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
                         ),
                       ),
-                    ),
-                    SizedBox(height: rSize(ctx, 20)),
+                      SizedBox(height: rSize(ctx, 20)),
 
-                    // Title
-                    Row(
-                      children: [
-                        Container(
-                          padding: EdgeInsets.all(rSize(ctx, 10)),
-                          decoration: BoxDecoration(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.primary.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(12),
+                      // Title
+                      Row(
+                        children: [
+                          Container(
+                            padding: EdgeInsets.all(rSize(ctx, 10)),
+                            decoration: BoxDecoration(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.primary.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(
+                              FontAwesomeIcons.store.data,
+                              color: Theme.of(context).colorScheme.primary,
+                              size: rSize(ctx, 18),
+                            ),
                           ),
-                          child: Icon(
-                            FontAwesomeIcons.store.data,
-                            color: Theme.of(context).colorScheme.primary,
-                            size: rSize(ctx, 18),
+                          SizedBox(width: rSize(ctx, 12)),
+                          Text(
+                            'New Store',
+                            style: TextStyle(
+                              fontSize: rFontSize(ctx, 18),
+                              fontWeight: FontWeight.bold,
+                              color: _text,
+                            ),
                           ),
+                        ],
+                      ),
+                      SizedBox(height: rSize(ctx, 24)),
+
+                      AppInput(
+                        controller: nameCtrl,
+                        labelText: 'Store Name',
+                        hintText: 'e.g. Main Store, Annex B',
+                        prefixIcon:
+                            const Icon(Icons.store_outlined, size: 20),
+                        validator: (v) => v == null || v.trim().isEmpty
+                            ? 'Name is required'
+                            : null,
+                      ),
+                      SizedBox(height: rSize(ctx, 16)),
+
+                      AppInput(
+                        controller: addressCtrl,
+                        labelText: 'Street Address',
+                        hintText: 'e.g. 14 Market Road',
+                        prefixIcon: const Icon(Icons.map_outlined, size: 20),
+                        validator: (v) => v == null || v.trim().isEmpty
+                            ? 'Street Address is required'
+                            : null,
+                      ),
+                      SizedBox(height: rSize(ctx, 16)),
+
+                      _AppAutocompleteField(
+                        label: 'Country',
+                        icon: Icons.public_outlined,
+                        initial: countryValue,
+                        options: kCountries,
+                        onChanged: (v) => setSheet(() {
+                          countryValue = v;
+                          stateValue = '';
+                          lgaValue = '';
+                          statePlainCtrl.clear();
+                          lgaPlainCtrl.clear();
+                        }),
+                      ),
+                      SizedBox(height: rSize(ctx, 16)),
+
+                      if (isNigeria)
+                        _AppAutocompleteField(
+                          key: ValueKey('add_state_$countryValue'),
+                          label: 'State / Region',
+                          icon: Icons.map_outlined,
+                          initial: stateValue,
+                          options: kNigerianStates,
+                          onChanged: (v) => setSheet(() {
+                            stateValue = v;
+                            lgaValue = '';
+                            lgaPlainCtrl.clear();
+                            stateError = null;
+                          }),
+                        )
+                      else
+                        AppInput(
+                          key: ValueKey('add_state_plain_$countryValue'),
+                          controller: statePlainCtrl,
+                          labelText: 'State / Region',
+                          prefixIcon:
+                              const Icon(Icons.map_outlined, size: 20),
+                          onChanged: (v) {
+                            stateValue = v;
+                            if (stateError != null) {
+                              setSheet(() => stateError = null);
+                            }
+                          },
                         ),
-                        SizedBox(width: rSize(ctx, 12)),
-                        Text(
-                          'New Store',
-                          style: TextStyle(
-                            fontSize: rFontSize(ctx, 18),
-                            fontWeight: FontWeight.bold,
-                            color: _text,
+
+                      if (stateError != null) ...[
+                        SizedBox(height: rSize(ctx, 4)),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 4),
+                          child: Text(
+                            stateError!,
+                            style: TextStyle(
+                              color: Theme.of(ctx).colorScheme.error,
+                              fontSize: 12,
+                            ),
                           ),
                         ),
                       ],
-                    ),
-                    SizedBox(height: rSize(ctx, 24)),
+                      SizedBox(height: rSize(ctx, 16)),
 
-                    AppInput(
-                      controller: nameCtrl,
-                      labelText: 'Store Name',
-                      hintText: 'e.g. Main Store, Annex B',
-                      prefixIcon: const Icon(Icons.store_outlined, size: 20),
-                      validator: (v) => v == null || v.trim().isEmpty
-                          ? 'Name is required'
-                          : null,
-                    ),
-                    SizedBox(height: rSize(ctx, 16)),
+                      if (isNigeria)
+                        _AppAutocompleteField(
+                          key: ValueKey('add_lga_${stateValue}_$countryValue'),
+                          label: 'Local Government / District (optional)',
+                          icon: Icons.account_balance_outlined,
+                          initial: lgaValue,
+                          options: lgaOptions,
+                          onChanged: (v) => lgaValue = v,
+                        )
+                      else
+                        AppInput(
+                          key: ValueKey('add_lga_plain_$countryValue'),
+                          controller: lgaPlainCtrl,
+                          labelText: 'District (optional)',
+                          prefixIcon: const Icon(
+                            Icons.account_balance_outlined,
+                            size: 20,
+                          ),
+                          onChanged: (v) => lgaValue = v,
+                        ),
+                      SizedBox(height: rSize(ctx, 28)),
 
-                    AppInput(
-                      controller: addressCtrl,
-                      labelText: 'Street Address',
-                      hintText: 'e.g. 14 Market Road',
-                      prefixIcon: const Icon(Icons.map_outlined, size: 20),
-                      validator: (v) => v == null || v.trim().isEmpty
-                          ? 'Street Address is required'
-                          : null,
-                    ),
-                    SizedBox(height: rSize(ctx, 16)),
-
-                    AppInput(
-                      controller: cityStateCtrl,
-                      labelText: 'City and State',
-                      hintText: 'e.g. Lagos Island, Lagos',
-                      prefixIcon: const Icon(
-                        Icons.location_city_outlined,
-                        size: 20,
-                      ),
-                      validator: (v) => v == null || v.trim().isEmpty
-                          ? 'City and State are required'
-                          : null,
-                    ),
-                    SizedBox(height: rSize(ctx, 16)),
-
-                    AppInput(
-                      controller: countryCtrl,
-                      labelText: 'Country',
-                      hintText: 'e.g. Nigeria',
-                      prefixIcon: const Icon(Icons.public_outlined, size: 20),
-                      validator: (v) => v == null || v.trim().isEmpty
-                          ? 'Country is required'
-                          : null,
-                    ),
-                    SizedBox(height: rSize(ctx, 28)),
-
-                    // Save button
-                    AppButton(
-                      text: 'Save Store',
-                      onPressed: saving
-                          ? null
-                          : () async {
-                              if (!formKey.currentState!.validate()) return;
-                              // Re-check at the write boundary (hard rule #6) in
-                              // case `stores.manage` was revoked while the
-                              // sheet was open.
-                              if (!ref
-                                  .read(currentUserPermissionsProvider)
-                                  .contains('stores.manage')) {
-                                return;
-                              }
-                              setSheet(() => saving = true);
-                              try {
-                                final db = ref.read(databaseProvider);
-                                final combinedLocation =
-                                    '${addressCtrl.text.trim()}, ${cityStateCtrl.text.trim()}, ${countryCtrl.text.trim()}';
-
-                                final whBusinessId = ref
-                                    .read(authProvider)
-                                    .currentUser
-                                    ?.businessId;
-                                if (whBusinessId == null) return;
-                                final whComp = StoresCompanion.insert(
-                                  id: Value(UuidV7.generate()),
-                                  name: nameCtrl.text.trim(),
-                                  businessId: whBusinessId,
-                                  location: Value(combinedLocation),
-                                  lastUpdatedAt: Value(DateTime.now()),
-                                );
-                                await db.into(db.stores).insert(whComp);
-                                await db.syncDao.enqueueUpsert(
-                                  'stores',
-                                  whComp,
-                                );
-                                if (ctx.mounted) Navigator.pop(ctx);
-                              } catch (e) {
-                                setSheet(() => saving = false);
-                                if (ctx.mounted) {
-                                  AppNotification.showError(ctx, 'Error: $e');
+                      // Save button
+                      AppButton(
+                        text: 'Save Store',
+                        onPressed: saving
+                            ? null
+                            : () async {
+                                if (!formKey.currentState!.validate()) return;
+                                if (stateValue.trim().isEmpty) {
+                                  setSheet(
+                                    () => stateError =
+                                        'State / Region is required',
+                                  );
+                                  return;
                                 }
-                              }
-                            },
-                    ),
-                  ],
+                                // Re-check at the write boundary (hard rule #6).
+                                if (!ref
+                                    .read(currentUserPermissionsProvider)
+                                    .contains('stores.manage')) {
+                                  return;
+                                }
+                                setSheet(() => saving = true);
+                                try {
+                                  final db = ref.read(databaseProvider);
+                                  final combinedLocation = [
+                                    addressCtrl.text.trim(),
+                                    lgaValue.trim(),
+                                    stateValue.trim(),
+                                    countryValue.trim(),
+                                  ]
+                                      .where((p) => p.isNotEmpty)
+                                      .join(', ');
+
+                                  final whBusinessId = ref
+                                      .read(authProvider)
+                                      .currentUser
+                                      ?.businessId;
+                                  if (whBusinessId == null) return;
+                                  final whComp = StoresCompanion.insert(
+                                    id: Value(UuidV7.generate()),
+                                    name: nameCtrl.text.trim(),
+                                    businessId: whBusinessId,
+                                    location: Value(combinedLocation),
+                                    lastUpdatedAt: Value(DateTime.now()),
+                                  );
+                                  await db.into(db.stores).insert(whComp);
+                                  await db.syncDao.enqueueUpsert(
+                                    'stores',
+                                    whComp,
+                                  );
+                                  if (ctx.mounted) Navigator.pop(ctx);
+                                } catch (e) {
+                                  setSheet(() => saving = false);
+                                  if (ctx.mounted) {
+                                    AppNotification.showError(
+                                      ctx,
+                                      'Error: $e',
+                                    );
+                                  }
+                                }
+                              },
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
@@ -241,179 +325,276 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
   void _showEditSheet(BuildContext context, StoreData store) {
     final nameCtrl = TextEditingController(text: store.name);
 
-    // Parse location: "Street, City/State, Country"
+    // Parse location — new format: "street, lga, state, country" (4 parts)
+    // Old format: "street, cityState, country" (3 parts). Handle both.
     final locParts = (store.location ?? '').split(', ');
     final addressCtrl = TextEditingController(
       text: locParts.isNotEmpty ? locParts[0] : '',
     );
-    final cityStateCtrl = TextEditingController(
-      text: locParts.length > 1 ? locParts[1] : '',
-    );
-    final countryCtrl = TextEditingController(
-      text: locParts.length > 2 ? locParts[2] : '',
-    );
+    String initLga = '';
+    String initState = '';
+    String initCountry = kDefaultCountry;
+    if (locParts.length >= 4) {
+      initLga = locParts[1];
+      initState = locParts[2];
+      initCountry = locParts[3];
+    } else if (locParts.length == 3) {
+      initState = locParts[1];
+      initCountry = locParts[2];
+    } else if (locParts.length == 2) {
+      initState = locParts[1];
+    }
 
+    final statePlainCtrl = TextEditingController(text: initState);
+    final lgaPlainCtrl = TextEditingController(text: initLga);
     final formKey = GlobalKey<FormState>();
     bool saving = false;
+    String countryValue = initCountry;
+    String stateValue = initState;
+    String lgaValue = initLga;
+    String? stateError;
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheet) => Padding(
-          padding: EdgeInsets.only(bottom: ctx.deviceBottomPadding),
-          child: Container(
-            decoration: BoxDecoration(
-              color: _surface,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(24),
+        builder: (ctx, setSheet) {
+          final isNigeria = countryValue.trim().toLowerCase() == 'nigeria';
+          final lgaOptions =
+              isNigeria ? (kNigerianLgas[stateValue] ?? <String>[]) : <String>[];
+
+          return Padding(
+            padding: EdgeInsets.only(bottom: ctx.deviceBottomPadding),
+            child: Container(
+              decoration: BoxDecoration(
+                color: _surface,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(24),
+                ),
               ),
-            ),
-            padding: EdgeInsets.fromLTRB(
-              rSize(ctx, 24),
-              rSize(ctx, 20),
-              rSize(ctx, 24),
-              rSize(ctx, 32),
-            ),
-            child: Form(
-              key: formKey,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 40,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: _border,
-                          borderRadius: BorderRadius.circular(2),
+              padding: EdgeInsets.fromLTRB(
+                rSize(ctx, 24),
+                rSize(ctx, 20),
+                rSize(ctx, 24),
+                rSize(ctx, 32),
+              ),
+              child: Form(
+                key: formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: _border,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
                         ),
                       ),
-                    ),
-                    SizedBox(height: rSize(ctx, 20)),
-                    Row(
-                      children: [
-                        Container(
-                          padding: EdgeInsets.all(rSize(ctx, 10)),
-                          decoration: BoxDecoration(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.primary.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(12),
+                      SizedBox(height: rSize(ctx, 20)),
+                      Row(
+                        children: [
+                          Container(
+                            padding: EdgeInsets.all(rSize(ctx, 10)),
+                            decoration: BoxDecoration(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.primary.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(
+                              FontAwesomeIcons.penToSquare.data,
+                              color: Theme.of(context).colorScheme.primary,
+                              size: rSize(ctx, 18),
+                            ),
                           ),
-                          child: Icon(
-                            FontAwesomeIcons.penToSquare.data,
-                            color: Theme.of(context).colorScheme.primary,
-                            size: rSize(ctx, 18),
+                          SizedBox(width: rSize(ctx, 12)),
+                          Text(
+                            'Edit Store',
+                            style: TextStyle(
+                              fontSize: rFontSize(ctx, 18),
+                              fontWeight: FontWeight.bold,
+                              color: _text,
+                            ),
                           ),
+                        ],
+                      ),
+                      SizedBox(height: rSize(ctx, 24)),
+
+                      AppInput(
+                        controller: nameCtrl,
+                        labelText: 'Store Name',
+                        hintText: 'e.g. Main Store',
+                        prefixIcon:
+                            const Icon(Icons.store_outlined, size: 20),
+                        validator: (v) => v == null || v.trim().isEmpty
+                            ? 'Name is required'
+                            : null,
+                      ),
+                      SizedBox(height: rSize(ctx, 16)),
+
+                      AppInput(
+                        controller: addressCtrl,
+                        labelText: 'Street Address',
+                        hintText: 'e.g. 14 Market Road',
+                        prefixIcon: const Icon(Icons.map_outlined, size: 20),
+                        validator: (v) => v == null || v.trim().isEmpty
+                            ? 'Street Address is required'
+                            : null,
+                      ),
+                      SizedBox(height: rSize(ctx, 16)),
+
+                      _AppAutocompleteField(
+                        label: 'Country',
+                        icon: Icons.public_outlined,
+                        initial: countryValue,
+                        options: kCountries,
+                        onChanged: (v) => setSheet(() {
+                          countryValue = v;
+                          stateValue = '';
+                          lgaValue = '';
+                          statePlainCtrl.clear();
+                          lgaPlainCtrl.clear();
+                        }),
+                      ),
+                      SizedBox(height: rSize(ctx, 16)),
+
+                      if (isNigeria)
+                        _AppAutocompleteField(
+                          key: ValueKey('edit_state_$countryValue'),
+                          label: 'State / Region',
+                          icon: Icons.map_outlined,
+                          initial: stateValue,
+                          options: kNigerianStates,
+                          onChanged: (v) => setSheet(() {
+                            stateValue = v;
+                            lgaValue = '';
+                            lgaPlainCtrl.clear();
+                            stateError = null;
+                          }),
+                        )
+                      else
+                        AppInput(
+                          key: ValueKey('edit_state_plain_$countryValue'),
+                          controller: statePlainCtrl,
+                          labelText: 'State / Region',
+                          prefixIcon:
+                              const Icon(Icons.map_outlined, size: 20),
+                          onChanged: (v) {
+                            stateValue = v;
+                            if (stateError != null) {
+                              setSheet(() => stateError = null);
+                            }
+                          },
                         ),
-                        SizedBox(width: rSize(ctx, 12)),
-                        Text(
-                          'Edit Store',
-                          style: TextStyle(
-                            fontSize: rFontSize(ctx, 18),
-                            fontWeight: FontWeight.bold,
-                            color: _text,
+
+                      if (stateError != null) ...[
+                        SizedBox(height: rSize(ctx, 4)),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 4),
+                          child: Text(
+                            stateError!,
+                            style: TextStyle(
+                              color: Theme.of(ctx).colorScheme.error,
+                              fontSize: 12,
+                            ),
                           ),
                         ),
                       ],
-                    ),
-                    SizedBox(height: rSize(ctx, 24)),
-                    AppInput(
-                      controller: nameCtrl,
-                      labelText: 'Store Name',
-                      hintText: 'e.g. Main Store',
-                      prefixIcon: const Icon(Icons.store_outlined, size: 20),
-                      validator: (v) => v == null || v.trim().isEmpty
-                          ? 'Name is required'
-                          : null,
-                    ),
-                    SizedBox(height: rSize(ctx, 16)),
-                    AppInput(
-                      controller: addressCtrl,
-                      labelText: 'Street Address',
-                      hintText: 'e.g. 14 Market Road',
-                      prefixIcon: const Icon(Icons.map_outlined, size: 20),
-                      validator: (v) => v == null || v.trim().isEmpty
-                          ? 'Street Address is required'
-                          : null,
-                    ),
-                    SizedBox(height: rSize(ctx, 16)),
-                    AppInput(
-                      controller: cityStateCtrl,
-                      labelText: 'City and State',
-                      hintText: 'e.g. Lagos Island, Lagos',
-                      prefixIcon: const Icon(
-                        Icons.location_city_outlined,
-                        size: 20,
-                      ),
-                      validator: (v) => v == null || v.trim().isEmpty
-                          ? 'City and State are required'
-                          : null,
-                    ),
-                    SizedBox(height: rSize(ctx, 16)),
-                    AppInput(
-                      controller: countryCtrl,
-                      labelText: 'Country',
-                      hintText: 'e.g. Nigeria',
-                      prefixIcon: const Icon(Icons.public_outlined, size: 20),
-                      validator: (v) => v == null || v.trim().isEmpty
-                          ? 'Country is required'
-                          : null,
-                    ),
-                    SizedBox(height: rSize(ctx, 28)),
-                    AppButton(
-                      text: 'Save Changes',
-                      onPressed: saving
-                          ? null
-                          : () async {
-                              if (!formKey.currentState!.validate()) return;
-                              // Re-check at the write boundary (hard rule #6).
-                              if (!ref
-                                  .read(currentUserPermissionsProvider)
-                                  .contains('stores.manage')) {
-                                return;
-                              }
-                              setSheet(() => saving = true);
-                              final db = ref.read(databaseProvider);
-                              final combinedLocation =
-                                  '${addressCtrl.text.trim()}, ${cityStateCtrl.text.trim()}, ${countryCtrl.text.trim()}';
+                      SizedBox(height: rSize(ctx, 16)),
 
-                              final whComp = StoresCompanion(
-                                id: Value(store.id),
-                                name: Value(nameCtrl.text.trim()),
-                                location: Value(combinedLocation),
-                                lastUpdatedAt: Value(DateTime.now()),
-                              );
-                              try {
-                                await (db.update(db.stores)
-                                      ..where((t) => t.id.equals(store.id)))
-                                    .write(whComp);
-                                await db.syncDao.enqueueUpsert(
-                                  'stores',
-                                  whComp,
-                                );
-                                if (ctx.mounted) Navigator.pop(ctx);
-                              } catch (e) {
-                                setSheet(() => saving = false);
-                                if (ctx.mounted) {
-                                  AppNotification.showError(
-                                    ctx,
-                                    'Could not save store. Please try again.',
+                      if (isNigeria)
+                        _AppAutocompleteField(
+                          key: ValueKey(
+                            'edit_lga_${stateValue}_$countryValue',
+                          ),
+                          label: 'Local Government / District (optional)',
+                          icon: Icons.account_balance_outlined,
+                          initial: lgaValue,
+                          options: lgaOptions,
+                          onChanged: (v) => lgaValue = v,
+                        )
+                      else
+                        AppInput(
+                          key: ValueKey('edit_lga_plain_$countryValue'),
+                          controller: lgaPlainCtrl,
+                          labelText: 'District (optional)',
+                          prefixIcon: const Icon(
+                            Icons.account_balance_outlined,
+                            size: 20,
+                          ),
+                          onChanged: (v) => lgaValue = v,
+                        ),
+                      SizedBox(height: rSize(ctx, 28)),
+
+                      AppButton(
+                        text: 'Save Changes',
+                        onPressed: saving
+                            ? null
+                            : () async {
+                                if (!formKey.currentState!.validate()) return;
+                                if (stateValue.trim().isEmpty) {
+                                  setSheet(
+                                    () => stateError =
+                                        'State / Region is required',
                                   );
+                                  return;
                                 }
-                              }
-                            },
-                    ),
-                  ],
+                                // Re-check at the write boundary (hard rule #6).
+                                if (!ref
+                                    .read(currentUserPermissionsProvider)
+                                    .contains('stores.manage')) {
+                                  return;
+                                }
+                                setSheet(() => saving = true);
+                                final db = ref.read(databaseProvider);
+                                final combinedLocation = [
+                                  addressCtrl.text.trim(),
+                                  lgaValue.trim(),
+                                  stateValue.trim(),
+                                  countryValue.trim(),
+                                ]
+                                    .where((p) => p.isNotEmpty)
+                                    .join(', ');
+
+                                final whComp = StoresCompanion(
+                                  id: Value(store.id),
+                                  name: Value(nameCtrl.text.trim()),
+                                  location: Value(combinedLocation),
+                                  lastUpdatedAt: Value(DateTime.now()),
+                                );
+                                try {
+                                  await (db.update(db.stores)
+                                        ..where((t) => t.id.equals(store.id)))
+                                      .write(whComp);
+                                  await db.syncDao.enqueueUpsert(
+                                    'stores',
+                                    whComp,
+                                  );
+                                  if (ctx.mounted) Navigator.pop(ctx);
+                                } catch (e) {
+                                  setSheet(() => saving = false);
+                                  if (ctx.mounted) {
+                                    AppNotification.showError(
+                                      ctx,
+                                      'Could not save store. Please try again.',
+                                    );
+                                  }
+                                }
+                              },
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
@@ -999,6 +1180,111 @@ class _StoreCardState extends ConsumerState<_StoreCard> {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ── Autocomplete field styled to match AppInput for use in store sheets ────
+class _AppAutocompleteField extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final String initial;
+  final List<String> options;
+  final ValueChanged<String> onChanged;
+
+  const _AppAutocompleteField({
+    super.key,
+    required this.label,
+    required this.icon,
+    required this.initial,
+    required this.options,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final subtextColor = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: subtextColor,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Autocomplete<String>(
+          initialValue: TextEditingValue(text: initial),
+          optionsBuilder: (value) {
+            final q = value.text.trim().toLowerCase();
+            if (q.isEmpty) return options;
+            return options.where((o) => o.toLowerCase().contains(q));
+          },
+          onSelected: onChanged,
+          fieldViewBuilder: (ctx, controller, focusNode, onSubmitted) {
+            return TextField(
+              controller: controller,
+              focusNode: focusNode,
+              textCapitalization: TextCapitalization.words,
+              onChanged: onChanged,
+              onSubmitted: (_) => onSubmitted(),
+              style: TextStyle(
+                color: t.colorScheme.onSurface,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+              decoration: InputDecoration(
+                prefixIcon: Icon(icon, size: 20),
+                fillColor: t.inputDecorationTheme.fillColor,
+                filled: true,
+              ),
+            );
+          },
+          optionsViewBuilder: (ctx, onSelected, opts) {
+            return Align(
+              alignment: Alignment.topLeft,
+              child: Material(
+                color: t.colorScheme.surface,
+                elevation: 4,
+                borderRadius: BorderRadius.circular(10),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxHeight: 220,
+                    maxWidth: 320,
+                  ),
+                  child: ListView(
+                    padding: EdgeInsets.zero,
+                    shrinkWrap: true,
+                    children: opts
+                        .map(
+                          (o) => InkWell(
+                            onTap: () => onSelected(o),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
+                              child: Text(
+                                o,
+                                style: TextStyle(color: t.colorScheme.onSurface),
+                              ),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ],
     );
   }
 }

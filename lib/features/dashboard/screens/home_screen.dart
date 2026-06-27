@@ -196,7 +196,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final showStockValue =
         isCeo || (isManager && hasPermission(ref, 'stock.view'));
     final showTotalSkus = isCashier || isStockKeeper;
-    final showWallet =
+    final showCreditBalance =
         isCeo ||
         ((isManager || isCashier) && hasPermission(ref, 'customers.add'));
     final showStaffSales = isCeo || isManager;
@@ -291,7 +291,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         .length;
 
     final balances =
-        ref.watch(walletBalancesKoboProvider).valueOrNull ?? const <int, int>{};
+        ref.watch(creditBalancesKoboProvider).valueOrNull ?? const <int, int>{};
     final totalCredit = _customers.fold<double>(0, (sum, c) {
       final b = balances[c.id] ?? 0;
       return sum + (b > 0 ? b / 100.0 : 0);
@@ -369,7 +369,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               showExpenses: showExpenses,
               showStockValue: showStockValue,
               showTotalSkus: showTotalSkus,
-              showWallet: showWallet,
+              showCreditBalance: showCreditBalance,
               showStaffSales: showStaffSales,
             ),
             SizedBox(height: context.spacingL),
@@ -578,7 +578,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     required bool showExpenses,
     required bool showStockValue,
     required bool showTotalSkus,
-    required bool showWallet,
+    required bool showCreditBalance,
     required bool showStaffSales,
   }) {
     // Cards are gated by role (§11.4). Build a list so hidden/loading cards
@@ -683,8 +683,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     if (showTotalSkus && !_inventoryLoading) {
       add(_buildTotalSkusCard());
     }
-    if (showWallet && !_customersLoading) {
-      add(_buildWalletCard(credit, debt));
+    if (showCreditBalance && !_customersLoading) {
+      add(_buildCreditsBalanceCard(credit, debt));
     }
 
     return Column(
@@ -1061,7 +1061,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildWalletCard(double credit, double debt) {
+  Widget _buildCreditsBalanceCard(double credit, double debt) {
     final theme = Theme.of(context);
     final color = theme.colorScheme.primary;
 
@@ -1090,7 +1090,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
               SizedBox(width: context.spacingM),
               Text(
-                'Customer Wallet',
+                'Customer Credits Balance',
                 style: TextStyle(
                   fontSize: context.getRFontSize(14),
                   color: _text,

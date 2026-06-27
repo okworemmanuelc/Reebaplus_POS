@@ -3,17 +3,17 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
-import 'package:reebaplus_pos/shared/services/wallet_service.dart';
+import 'package:reebaplus_pos/shared/services/credit_ledger_service.dart';
 
 void main() {
   late AppDatabase db;
-  late WalletService walletService;
+  late CreditLedgerService creditLedgerService;
   late String businessId;
   late String customerId;
 
   setUp(() async {
     db = AppDatabase.forTesting(NativeDatabase.memory());
-    walletService = WalletService(db);
+    creditLedgerService = CreditLedgerService(db);
     businessId = UuidV7.generate();
     db.businessIdResolver = () => businessId;
 
@@ -43,7 +43,7 @@ void main() {
   });
 
   test('Topup increases balance by amount', () async {
-    await walletService.topup(
+    await creditLedgerService.topup(
       customerId: customerId,
       amountKobo: 5000,
       method: 'cash',
@@ -62,7 +62,7 @@ void main() {
 
   test('Wallet debit on order creation decreases balance', () async {
     // 1. Topup first
-    await walletService.topup(
+    await creditLedgerService.topup(
       customerId: customerId,
       amountKobo: 10000,
       method: 'cash',
@@ -131,7 +131,7 @@ void main() {
   test(
       'Voiding a transaction (via compensating entry) returns balance to pre-transaction state',
       () async {
-    await walletService.topup(
+    await creditLedgerService.topup(
       customerId: customerId,
       amountKobo: 5000,
       method: 'cash',
@@ -146,7 +146,7 @@ void main() {
         equals(5000));
 
     // Void it
-    await walletService.voidTransaction(
+    await creditLedgerService.voidTransaction(
       transactionId: topupTxId,
       voidedBy: 'staff1',
       reason: 'mistake',
@@ -195,7 +195,7 @@ void main() {
 
   // §18.3 Refund Cash — pay the customer back, in cash, money the business holds
   // for them (held crate deposit and/or positive spendable credit).
-  group('refundCash (§18.3 wallet cash refund)', () {
+  group('refundCash (§18.3 credit balance cash refund)', () {
     // Posts a raw wallet row (to set up held deposit / debt without a full sale).
     Future<void> postRaw(int signed, String type, String refType) async {
       final wallet = await db.customerWalletsDao.getByCustomerId(customerId);
@@ -220,7 +220,7 @@ void main() {
       expect(await db.walletTransactionsDao.getDepositsHeldKobo(customerId),
           250000);
 
-      final refunded = await walletService.refundCash(
+      final refunded = await creditLedgerService.refundCash(
         customerId: customerId,
         amountKobo: 250000,
         method: 'cash',
@@ -240,14 +240,14 @@ void main() {
     });
 
     test('refunds spendable CREDIT → spendable drops, held unchanged', () async {
-      await walletService.topup(
+      await creditLedgerService.topup(
         customerId: customerId,
         amountKobo: 5000,
         method: 'cash',
         staffId: 'staff1',
       );
 
-      final refunded = await walletService.refundCash(
+      final refunded = await creditLedgerService.refundCash(
         customerId: customerId,
         amountKobo: 5000,
         method: 'transfer',
@@ -267,14 +267,14 @@ void main() {
     test('combined held + credit, full refund → both legs, both net to 0',
         () async {
       await postRaw(250000, 'credit', 'crate_deposit'); // held 250000
-      await walletService.topup(
+      await creditLedgerService.topup(
         customerId: customerId,
         amountKobo: 5000,
         method: 'cash',
         staffId: 'staff1',
       ); // spendable 5000
 
-      final refunded = await walletService.refundCash(
+      final refunded = await creditLedgerService.refundCash(
         customerId: customerId,
         amountKobo: 255000,
         method: 'cash',
@@ -288,7 +288,7 @@ void main() {
           reason: '1 topup + 2 refund payment rows (deposit + credit)');
     });
 
-    test('White Pages case: in debt → held deposit refunded TO WALLET (reduces '
+    test('White Pages case: in debt → held deposit refunded TO CREDIT BALANCE (reduces '
         'debt), no cash', () async {
       await postRaw(-3010000, 'debit', 'order_payment'); // spendable -30,100.00
       await postRaw(1200000, 'credit', 'crate_deposit'); // held 12,000.00
@@ -296,7 +296,7 @@ void main() {
 
       // Ask for far more than is available — caps at the held deposit, and
       // because the wallet is in debt it goes to the wallet (no cash option).
-      final refunded = await walletService.refundCash(
+      final refunded = await creditLedgerService.refundCash(
         customerId: customerId,
         amountKobo: 99999999,
         method: 'cash', // ignored on the to-wallet path
@@ -322,7 +322,7 @@ void main() {
     test('nothing to refund (pure debt) → returns 0, no rows written', () async {
       await postRaw(-5000, 'debit', 'order_payment');
 
-      final refunded = await walletService.refundCash(
+      final refunded = await creditLedgerService.refundCash(
         customerId: customerId,
         amountKobo: 5000,
         method: 'cash',

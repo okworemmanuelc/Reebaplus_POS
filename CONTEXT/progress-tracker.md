@@ -8,7 +8,40 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
-150 sessions logged. Codebase is live and being verified on-device.
+151 sessions logged. Codebase is live and being verified on-device.
+
+### Wallet → Credits Balance / Ledger Entries terminology alignment (2026-06-27)
+- **Change:** Aligned all user-facing terminology to refer to "Credits Balance", "Ledger Entries", "Add Credit", and related non-e-money terms, avoiding regulatory/compliance risks of "Wallet" or e-money vocabulary.
+- **Details:**
+  - Renamed `WalletService` -> `CreditLedgerService` and `wallet_service.dart` -> `credit_ledger_service.dart`.
+  - Renamed test files `wallet_logic_test.dart` -> `credit_ledger_logic_test.dart` and `wallet_service_dispatch_test.dart` -> `credit_ledger_service_dispatch_test.dart`.
+  - Renamed Riverpod provider `walletBalancesKoboProvider` -> `creditBalancesKoboProvider` in `app_providers.dart`.
+  - Renamed view-model/local properties: `supplierWalletBalanceKobo` -> `supplierAccountBalanceKobo` in `recon_data.dart` and `customerWallet` -> `customerCreditBalance` in `cart_screen.dart`.
+  - Wording updates on: `customer_detail_screen.dart`, `customers_screen.dart`, `checkout_page.dart`, `cart_screen.dart`, `home_screen.dart`, `orders_screen.dart`, `crate_return_modal.dart`, `receipt_widget.dart`, `receipt_builder.dart`, `daily_reconciliation_detail_screen.dart`, `crate_deposits_report_screen.dart`, `invite_staff_screen.dart`, and permission description strings in `app_database.dart`.
+- **Deferred: Tier C — full physical schema/cloud rename of wallet_transactions/customer_wallets, RPCs, RLS, realtime, 'wallet' CHECK enum, permission keys — MUST be done later**
+  - **Rationale:** Stored payment type / reference type strings, database table names, SQL migrations, cloud/RPC hooks, and RLS/realtime policies are kept unchanged to avoid breaking historical order records, client-side sync protocols, and tenant isolation policies during this transition. These invisible, non-user-facing items are deferred to Tier C.
+
+### Add/Edit Store — state/LGA autocomplete (2026-06-27)
+- **Gap:** Add Store and Edit Store bottom sheets used plain free-text fields for
+  "City and State" + "Country", offering no guidance. The onboarding flow already
+  uses searchable autocomplete backed by `kCountries`, `kNigerianStates`, and
+  `kNigerianLgas`.
+- **Fix:** [stores_screen.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/features/stores/screens/stores_screen.dart)
+  — replaced the two plain fields with three structured fields in both `_showAddSheet`
+  and `_showEditSheet`:
+  1. **Country** — `_AppAutocompleteField` with `kCountries`, default Nigeria.
+  2. **State / Region** — `_AppAutocompleteField` with `kNigerianStates` when
+     Nigeria is selected; plain `AppInput` otherwise.
+  3. **LGA / District (optional)** — `_AppAutocompleteField` keyed on selected
+     state (auto-resets on state change) when Nigeria; plain `AppInput` otherwise.
+  - State field validates on save (required); LGA is optional.
+  - Location string format changed to `street, lga, state, country` (matching
+    `OnboardingDraft.locationCombined`). Edit sheet parses both old 3-part and new
+    4-part formats for backward compat.
+  - New private `_AppAutocompleteField` widget at bottom of file: filled-style
+    `Autocomplete<String>` matching `AppInput` visual style.
+  - Branch: `fix/store-address-state-dropdown`
+- **Verification:** `dart analyze` clean; on-device check pending.
 
 ### Post-OTP "Setting up your account…" centered spinner (2026-06-26)
 - **Gap:** after the 6-digit code was accepted, the OTP screen showed a static

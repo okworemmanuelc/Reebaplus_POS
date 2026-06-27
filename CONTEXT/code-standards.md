@@ -197,6 +197,10 @@ onTap: () {
   - Wrong: `button1`, `proceed`, `confirm_payment`
 - Plurals and parameterised strings use the ICU message format in the ARB file.
 
+### Vocabulary and Terminology
+
+- Do not use e-money or regulatory-flagged vocabulary like "wallet", "top-up", "add funds" in user-facing text. Use "credits balance", "ledger entries", "add credit", and "credit history" instead.
+
 ---
 
 ## Riverpod (State Management)

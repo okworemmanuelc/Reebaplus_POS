@@ -586,10 +586,10 @@ class _CartScreenState extends ConsumerState<CartScreen>
     final name = customer?.name ?? 'Walk-in Customer';
     final balanceKobo = customer == null
         ? 0
-        : (ref.watch(walletBalancesKoboProvider).valueOrNull?[customer.id] ??
+        : (ref.watch(creditBalancesKoboProvider).valueOrNull?[customer.id] ??
               0);
-    final customerWallet = balanceKobo / 100.0;
-    final isOwe = customerWallet < 0;
+    final customerCreditBalance = balanceKobo / 100.0;
+    final isOwe = customerCreditBalance < 0;
 
     return InkWell(
       onTap: () {
@@ -650,15 +650,15 @@ class _CartScreenState extends ConsumerState<CartScreen>
                         Icon(
                           FontAwesomeIcons.nairaSign.data,
                           size: modalCtx.getRSize(10),
-                          color: customerWallet == 0
+                          color: customerCreditBalance == 0
                               ? success
                               : (isOwe ? danger : success),
                         ),
                         Text(
-                          ' Bal: ${formatCurrency(customerWallet)}',
+                          ' Bal: ${formatCurrency(customerCreditBalance)}',
                           style: TextStyle(
                             fontSize: modalCtx.getRFontSize(12),
-                            color: customerWallet == 0
+                            color: customerCreditBalance == 0
                                 ? success
                                 : (isOwe ? danger : success),
                             fontWeight: FontWeight.w600,
@@ -925,11 +925,11 @@ class _CartScreenState extends ConsumerState<CartScreen>
     final activeBalanceKobo = _activeCustomer == null
         ? 0
         : (ref
-                  .watch(walletBalancesKoboProvider)
+                  .watch(creditBalancesKoboProvider)
                   .valueOrNull?[_activeCustomer!.id] ??
               0);
-    final customerWallet = activeBalanceKobo / 100.0;
-    final isOwe = customerWallet < 0;
+    final customerCreditBalance = activeBalanceKobo / 100.0;
+    final isOwe = customerCreditBalance < 0;
 
     return SharedScaffold(
       activeRoute: 'cart',
@@ -1050,16 +1050,16 @@ class _CartScreenState extends ConsumerState<CartScreen>
                               Icon(
                                 FontAwesomeIcons.nairaSign.data,
                                 size: context.getRSize(11),
-                                color: customerWallet == 0
+                                color: customerCreditBalance == 0
                                     ? success
                                     : (isOwe ? danger : success),
                               ),
                               Flexible(
                                 child: Text(
-                                  ' Bal: $activeCurrencySymbol${customerWallet.abs().toStringAsFixed(0)} ${customerWallet == 0 ? "clear" : (isOwe ? "overdue" : "credit")}',
+                                  ' Bal: $activeCurrencySymbol${customerCreditBalance.abs().toStringAsFixed(0)} ${customerCreditBalance == 0 ? "clear" : (isOwe ? "overdue" : "credit")}',
                                   style: TextStyle(
                                     fontSize: context.getRFontSize(12),
-                                    color: customerWallet == 0
+                                    color: customerCreditBalance == 0
                                         ? success
                                         : (isOwe ? danger : success),
                                     fontWeight: FontWeight.w600,

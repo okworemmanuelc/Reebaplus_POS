@@ -2,7 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:drift/drift.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/shared/services/activity_log_service.dart';
-import 'package:reebaplus_pos/shared/services/wallet_service.dart';
+import 'package:reebaplus_pos/shared/services/credit_ledger_service.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/customers/data/models/payment.dart';
@@ -139,8 +139,8 @@ class CustomerService extends ValueNotifier<List<Customer>> {
     }
   }
 
-  /// §18 Add Funds — top up a registered customer's wallet. The wallet + payment
-  /// ledger writes are atomic via WalletService.topup.
+  /// §18 Add Credit — top up a registered customer's credit balance. The credit + payment
+  /// ledger writes are atomic via CreditLedgerService.topup.
   Future<void> topUpWallet({
     required String customerId,
     required int amountKobo,
@@ -149,7 +149,7 @@ class CustomerService extends ValueNotifier<List<Customer>> {
     String? note,
   }) async {
     final customer = getById(customerId);
-    await WalletService(_db).topup(
+    await CreditLedgerService(_db).topup(
       customerId: customerId,
       amountKobo: amountKobo,
       method: method,
@@ -158,7 +158,7 @@ class CustomerService extends ValueNotifier<List<Customer>> {
     final naira = (amountKobo / 100).round();
     await _log.logAction(
       'Payment Added',
-      'Topped up ${formatCurrency(naira)} to ${customer?.name ?? customerId}\'s wallet'
+      'Added credit of ${formatCurrency(naira)} to ${customer?.name ?? customerId}\'s balance'
           '${note != null && note.isNotEmpty ? '. Note: $note' : ''}',
       customerId: customerId,
     );
@@ -166,7 +166,7 @@ class CustomerService extends ValueNotifier<List<Customer>> {
 
   /// §18.3 Refund Cash (CEO/Manager only) — pay the customer back, in cash,
   /// money the business holds for them (held crate deposit and/or positive
-  /// spendable credit). Delegates to WalletService.refundCash, which writes the
+  /// spendable credit). Delegates to CreditLedgerService.refundCash, which writes the
   /// wallet + payment ledger, the activity log, and the notification atomically.
   /// Returns the amount actually refunded after capping at what's available.
   Future<int> refundCashFromWallet({
@@ -176,7 +176,7 @@ class CustomerService extends ValueNotifier<List<Customer>> {
     required String staffId,
     String? note,
   }) {
-    return WalletService(_db).refundCash(
+    return CreditLedgerService(_db).refundCash(
       customerId: customerId,
       amountKobo: amountKobo,
       method: method,
@@ -196,7 +196,7 @@ class CustomerService extends ValueNotifier<List<Customer>> {
 
     await _log.logAction(
       'Limit Updated',
-      'Updated wallet limit to ${formatCurrency(newLimit.abs())} for ${customer.name}',
+      'Updated credit limit to ${formatCurrency(newLimit.abs())} for ${customer.name}',
       customerId: customer.id,
     );
   }
@@ -220,8 +220,8 @@ class CustomerService extends ValueNotifier<List<Customer>> {
     );
 
     await _log.logAction(
-      'Wallet Refunded',
-      'Refunded ${formatCurrency(amount)} to ${customer.name}. Note: $note',
+      'Credit Balance Refunded',
+      'Refunded ${formatCurrency(amount)} to ${customer.name}\'s credit balance. Note: $note',
       customerId: customer.id,
     );
   }
@@ -245,8 +245,8 @@ class CustomerService extends ValueNotifier<List<Customer>> {
     );
 
     await _log.logAction(
-      'Wallet Updated',
-      'Added ${formatCurrency(amount)} to ${customer.name}\'s wallet. Note: $note',
+      'Credit Balance Updated',
+      'Added ${formatCurrency(amount)} to ${customer.name}\'s credit balance. Note: $note',
       customerId: customer.id,
     );
   }

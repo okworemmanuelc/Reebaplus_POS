@@ -2239,7 +2239,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                   trackInventory: true,
                   contactDetails: contactCtrl.text.trim(),
                   amountPaid: 0.0,
-                  supplierWallet: 0.0,
+                  supplierAccountBalance: 0.0,
                 );
                 ref.read(supplierServiceProvider).addSupplier(newSupplier);
                 await ref

@@ -3288,7 +3288,7 @@ class AppDatabase extends _$AppDatabase {
         await customStatement(
           "INSERT OR IGNORE INTO permissions (key, description, category) "
           "VALUES ('customers.wallet.withdraw', "
-          "'Refund cash from a customer wallet', 'Customers')",
+          "'Refund cash from a customer credit balance', 'Customers')",
         );
       }
       if (from < 41) {
@@ -4141,16 +4141,16 @@ const List<List<String>> _defaultPermissionRows = [
   ['customers.add', 'Add a new customer', 'Customers'],
   ['customers.update', 'Update customer details', 'Customers'],
   ['customers.delete', 'Soft-delete a customer', 'Customers'],
-  ['customers.wallet.update', 'Add funds to customer wallets', 'Customers'],
+  ['customers.wallet.update', 'Add credit to customer credit balances', 'Customers'],
   ['customers.set_debt_limit', 'Set a customer\'s debt limit', 'Customers'],
   [
     'customers.wallet.withdraw',
-    'Refund cash from a customer wallet',
+    'Refund cash from a customer credit balance',
     'Customers',
   ],
   [
     'customers.wallet.totals.view',
-    'View wallet Total In / Total Out on a customer',
+    'View credit balance Total In / Total Out on a customer',
     'Customers',
   ],
   // Suppliers / Shipments

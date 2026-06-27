@@ -264,7 +264,7 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
   }
 
   /// Point-in-time net worth: the inventory-on-hand asset, held empty-crate
-  /// deposits, money owed to us and the supplier-wallet position.
+  /// deposits, money owed to us and the supplier-account position.
   Widget _businessWorthCard(BuildContext context, ThemeData theme, ReconData d) {
     final successColor = theme.extension<AppSemanticColors>()!.success;
     final dangerColor = theme.colorScheme.error;
@@ -281,12 +281,12 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
         if (d.showCrates)
           _line(context, theme, 'Empty crates held (now)', '+ ${formatCurrency(d.crateDepositKobo / 100.0)}'),
         _line(context, theme, 'Outstanding customer debt (at risk)', '+ ${formatCurrency(d.totalOwedKobo / 100.0)}', color: d.totalOwedKobo > 0 ? dangerColor : null),
-        // Supplier account is a wallet: a negative balance means we owe them
+        // Supplier account position: a negative balance means we owe them
         // (− red); a positive balance is credit we hold with them (+ green).
-        if (d.supplierWalletBalanceKobo < 0)
-          _line(context, theme, 'Owed to suppliers (now)', '− ${formatCurrency(d.supplierWalletBalanceKobo.abs() / 100.0)}', color: dangerColor)
+        if (d.supplierAccountBalanceKobo < 0)
+          _line(context, theme, 'Owed to suppliers (now)', '− ${formatCurrency(d.supplierAccountBalanceKobo.abs() / 100.0)}', color: dangerColor)
         else
-          _line(context, theme, 'Supplier credit held (now)', '+ ${formatCurrency(d.supplierWalletBalanceKobo / 100.0)}', color: d.supplierWalletBalanceKobo > 0 ? successColor : null),
+          _line(context, theme, 'Supplier credit held (now)', '+ ${formatCurrency(d.supplierAccountBalanceKobo / 100.0)}', color: d.supplierAccountBalanceKobo > 0 ? successColor : null),
         _divider(theme),
         _line(context, theme, 'Business net position (now)', formatCurrency(d.businessNetPositionKobo / 100.0), strong: true, color: positionColor),
         if (d.uncostedInventoryItems > 0) ...[
@@ -682,8 +682,8 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
         ['Gross margin %', d.grossMarginPct],
         ['Net profit', money(d.netProfitKobo)],
         // Business worth right now (point-in-time) — mirrors _businessWorthCard.
-        // Supplier wallet balance: negative = we owe, positive = credit held.
-        ['Supplier account balance (now)', money(d.supplierWalletBalanceKobo)],
+        // Supplier account position: negative = we owe, positive = credit held.
+        ['Supplier account balance (now)', money(d.supplierAccountBalanceKobo)],
         ['Business net position (now)', money(d.businessNetPositionKobo)],
         ['Stock shortages (units)', '${d.shortageUnits}'],
       ] else ...[

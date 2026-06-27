@@ -862,7 +862,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                 children: [
                   Text(
                     'A full refund of $refundLabel goes back out and the stock '
-                    'is restored. The customer\'s wallet returns to its pre-sale '
+                    'is restored. The customer\'s credit balance returns to its pre-sale '
                     'balance, and the cash leaves today\'s till. The order then '
                     'moves to Cancelled.',
                     style: TextStyle(color: subtextCol, fontSize: 13),
@@ -1427,7 +1427,7 @@ class _OrderCard extends ConsumerWidget {
     // before plain 'wallet' so the combined label isn't badged as a pure wallet
     // payment.
     if (lower.contains('wallet') && lower.contains('cash')) return 'Partial';
-    if (lower.contains('wallet')) return 'Wallet';
+    if (lower.contains('wallet')) return 'Credit Payment';
     if (lower.contains('partial')) return 'Partial';
     if (lower.contains('credit')) return 'Credit';
     return 'Cash';
@@ -1493,19 +1493,19 @@ class _OrderCard extends ConsumerWidget {
     }
 
     // Financial values. No per-order "owes" figure (§19.2): the sale is settled
-    // at checkout — received, or charged through the wallet (§14.3) — so the
-    // order never carries a balance. Customer debt lives on the wallet (rule #4)
-    // and shows via the wallet-debt badge below, only when the balance is < 0.
+    // at checkout — received, or charged through the credit balance (§14.3) — so the
+    // order never carries a balance. Customer debt lives on the credit balance (rule #4)
+    // and shows via the credit-debt badge below, only when the balance is < 0.
     final hasDiscount = order.discountKobo > 0;
 
-    // Wallet badge — only for named customers with a negative balance (debt).
-    // Balance comes from the live ledger via walletBalancesKoboProvider.
+    // Credit badge — only for named customers with a negative balance (debt).
+    // Balance comes from the live ledger via creditBalancesKoboProvider.
     final balances =
-        ref.watch(walletBalancesKoboProvider).valueOrNull ?? const <int, int>{};
-    final walletBalanceKobo = customer == null
+        ref.watch(creditBalancesKoboProvider).valueOrNull ?? const <int, int>{};
+    final creditBalanceKobo = customer == null
         ? 0
         : (balances[customer.id] ?? 0);
-    final showWalletDebt = customer != null && walletBalanceKobo < 0;
+    final showCreditDebt = customer != null && creditBalanceKobo < 0;
 
     // §19.4: who created the order (staffId → user name). Not a monetary value,
     // so it shows for every role (the §19.3 money-hiding rule does not apply).
@@ -1887,9 +1887,9 @@ class _OrderCard extends ConsumerWidget {
                                       ],
                                     ),
                                     // Debt badge (named customers, negative balance)
-                                    if (showWalletDebt)
-                                      _WalletDebtBadge(
-                                        balanceKobo: walletBalanceKobo,
+                                    if (showCreditDebt)
+                                      _CreditDebtBadge(
+                                        balanceKobo: creditBalanceKobo,
                                       ),
                                   ],
                                 ),
@@ -2118,9 +2118,9 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
   bool shouldRebuild(_PinnedHeaderDelegate oldDelegate) => true;
 }
 
-class _WalletDebtBadge extends StatelessWidget {
+class _CreditDebtBadge extends StatelessWidget {
   final int balanceKobo;
-  const _WalletDebtBadge({required this.balanceKobo});
+  const _CreditDebtBadge({required this.balanceKobo});
 
   @override
   Widget build(BuildContext context) {

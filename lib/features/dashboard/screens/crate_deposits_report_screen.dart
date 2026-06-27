@@ -18,7 +18,7 @@ import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 ///
 /// where Taken is every deposit collected, Refunded is what was given back,
 /// Kept is what was forfeited (income), and Held is what's still owed back to
-/// customers right now. All four come from the one wallet ledger (the
+/// customers right now. All four come from the one credit ledger (the
 /// `crate_deposit` / `crate_deposit_refunded` / `crate_deposit_forfeited`
 /// family) — there is no separate deposit money store. Role visibility (§25.3)
 /// is enforced upstream: only CEO/Manager reach the Reports hub.
@@ -170,7 +170,7 @@ class CrateDepositsReportScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'Refundable money you are holding for customers.',
+            'Returnable crate deposits recorded for customers.',
             style: context.bodySmall.copyWith(
               color: Theme.of(context).hintColor,
             ),

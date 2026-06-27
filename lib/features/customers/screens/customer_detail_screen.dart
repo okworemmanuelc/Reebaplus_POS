@@ -25,6 +25,7 @@ import 'package:reebaplus_pos/core/widgets/status_badge.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/customers/widgets/edit_customer_sheet.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_builder.dart';
+import 'package:reebaplus_pos/shared/models/order_status.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
@@ -49,9 +50,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
   final ScreenshotController _screenshotCtrl = ScreenshotController();
 
   CustomerData? _customerData;
-  int _walletBalance = 0;
+  int _creditBalance = 0;
   int _depositsHeld = 0; // §13.4 — refundable crate deposit held (kobo)
-  List<WalletTransactionData> _walletHistory = [];
+  List<WalletTransactionData> _creditHistory = [];
   String _selectedPeriod = 'To Date'; // §30.11 canonical chip set
   DateTimeRange? _customRange;
   List<OrderData> _orders = [];
@@ -86,7 +87,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     });
 
     _balanceSub = db.customersDao.watchWalletBalance(id).listen((bal) {
-      if (mounted) setState(() => _walletBalance = bal);
+      if (mounted) setState(() => _creditBalance = bal);
     });
 
     _depositsHeldSub = db.customersDao.watchWalletDepositsHeldKobo(id).listen((
@@ -96,7 +97,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     });
 
     _historySub = db.customersDao.watchWalletHistory(id).listen((hist) {
-      if (mounted) setState(() => _walletHistory = hist);
+      if (mounted) setState(() => _creditHistory = hist);
     });
 
     _ordersSub = db.ordersDao.watchOrdersByCustomer(id).listen((orders) {
@@ -154,7 +155,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
   }
 
   List<WalletTransactionData> get _filteredHistory {
-    return _walletHistory
+    return _creditHistory
         .where((txn) => isDateInPeriod(txn.createdAt, _effectivePeriod))
         .toList();
   }
@@ -169,9 +170,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
   String _friendlyRefType(String ref) {
     switch (ref) {
       case 'topup_cash':
-        return 'Cash top-up';
+        return 'Cash credit added';
       case 'topup_transfer':
-        return 'Transfer top-up';
+        return 'Transfer credit added';
       case 'order_payment':
         return 'Order charge';
       case 'cash_received':
@@ -223,7 +224,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     if (staffId == null) {
       AppNotification.showError(
         context,
-        'Could not start a top-up yet — no active session.',
+        'Could not add credit yet — no active session.',
       );
       return;
     }
@@ -253,7 +254,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                   children: [
                     const _SheetHandle(),
                     Text(
-                      'Add Funds',
+                      'Add Credit',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: ctx.getRFontSize(18),
@@ -262,7 +263,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                     ),
                     SizedBox(height: ctx.getRSize(4)),
                     Text(
-                      'Top up $_name\'s wallet',
+                      'Add credit for $_name',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: ctx.getRFontSize(13),
@@ -346,7 +347,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                     ),
                     SizedBox(height: ctx.getRSize(24)),
                     AmberButton(
-                      label: 'Add Funds',
+                      label: 'Add Credit',
                       icon: Icons.add,
                       onPressed: () async {
                         if (!formKey.currentState!.validate()) return;
@@ -386,7 +387,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                           messenger.showSnackBar(
                             SnackBar(
                               content: Text(
-                                '₦${amount.toStringAsFixed(0)} added to wallet',
+                                '₦${amount.toStringAsFixed(0)} added to credit balance',
                               ),
                               backgroundColor: success,
                             ),
@@ -394,7 +395,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                         } catch (_) {
                           messenger.showSnackBar(
                             const SnackBar(
-                              content: Text('Could not add funds'),
+                              content: Text('Could not add credit'),
                             ),
                           );
                         }
@@ -446,7 +447,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     if (availableKobo <= 0) {
       AppNotification.showInfo(
         context,
-        'Nothing to refund — this customer has no wallet credit or held '
+        'Nothing to refund — this customer has no credit balance or held '
         'deposit. (Refunds can\'t be drawn from a debt.)',
       );
       return;
@@ -491,7 +492,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                     SizedBox(height: ctx.getRSize(4)),
                     Text(
                       inDebt
-                          ? 'Refund to $_name\'s wallet — reduces what they owe'
+                          ? 'Refund to $_name\'s credit balance — reduces what they owe'
                           : 'Pay $_name back in cash',
                       textAlign: TextAlign.center,
                       style: TextStyle(
@@ -513,7 +514,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                           if (creditAvail > 0)
                             _refundAvailRow(
                               ctx,
-                              'Wallet credit',
+                              'Credit balance',
                               creditAvail,
                               onSurface,
                             ),
@@ -632,7 +633,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                             Expanded(
                               child: Text(
                                 'This customer is in debt, so the deposit is '
-                                'added to their wallet to reduce what they owe — '
+                                'added to their credit balance to reduce what they owe — '
                                 'no cash is paid out.',
                                 style: TextStyle(
                                   fontSize: ctx.getRFontSize(12),
@@ -652,7 +653,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                     ),
                     SizedBox(height: ctx.getRSize(24)),
                     AmberButton(
-                      label: inDebt ? 'Refund to Wallet' : 'Refund Cash',
+                      label: inDebt ? 'Refund to Credit Balance' : 'Refund Cash',
                       icon: FontAwesomeIcons.moneyBillTransfer.data,
                       onPressed: () async {
                         if (!formKey.currentState!.validate()) return;
@@ -698,7 +699,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                                 : SnackBar(
                                     content: Text(
                                       '${formatCurrency(refundedKobo / 100)} refunded'
-                                      '${inDebt ? ' to wallet' : ''}',
+                                      '${inDebt ? ' to credit balance' : ''}',
                                     ),
                                     backgroundColor: success,
                                   ),
@@ -860,7 +861,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
         title: const Text('Delete customer?'),
         content: Text(
           '$_name will be removed from your customer list. '
-          'Their sales and wallet history stay intact.',
+          'Their sales and credit history stay intact.',
         ),
         actions: [
           TextButton(
@@ -1004,7 +1005,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                               100.0,
                           crateDeposit: order.crateDepositPaidKobo / 100.0,
                           total: order.totalAmountKobo / 100.0,
-                          paymentMethod: order.paymentType,
+                          paymentMethod: paymentMethodLabel(order.paymentType),
                           customerName: _name,
                           customerPhone: _phone,
                           customerAddress: _address,
@@ -1108,7 +1109,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
         subtotal: (order.totalAmountKobo - order.crateDepositPaidKobo) / 100.0,
         crateDeposit: order.crateDepositPaidKobo / 100.0,
         total: order.totalAmountKobo / 100.0,
-        paymentMethod: order.paymentType,
+        paymentMethod: paymentMethodLabel(order.paymentType),
         customerName: _name,
         customerAddress: _address,
         cashReceived: order.amountPaidKobo / 100.0,
@@ -1325,7 +1326,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
       headerSliverBuilder: (context, innerBoxIsScrolled) {
         return [
           SliverToBoxAdapter(child: _buildHeader(theme)),
-          SliverToBoxAdapter(child: _buildWalletCard(theme)),
+          SliverToBoxAdapter(child: _buildCreditCard(theme)),
           SliverPersistentHeader(
             pinned: true,
             delegate: _SliverTabBarDelegate(
@@ -1341,7 +1342,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
       },
       body: TabBarView(
         children: [
-          _buildWalletHistoryTab(theme),
+          _buildCreditHistoryTab(theme),
           _buildOrdersTab(theme),
           if (showCrates) _buildCratesTab(theme),
         ],
@@ -1452,10 +1453,10 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     );
   }
 
-  // ── Wallet Card ─────────────────────────────────────────────────────────────
+  // ── Credit Balance Card ─────────────────────────────────────────────────────
 
-  Widget _buildWalletCard(ThemeData theme) {
-    final balance = _walletBalance / 100.0;
+  Widget _buildCreditCard(ThemeData theme) {
+    final balance = _creditBalance / 100.0;
     final limit = _limitKobo / 100.0;
 
     return _GlassyCard(
@@ -1482,7 +1483,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                         ),
                         SizedBox(width: context.getRSize(8)),
                         Text(
-                          'Wallet Balance',
+                          'Credits Balance',
                           style: TextStyle(
                             fontSize: context.getRFontSize(12),
                             fontWeight: FontWeight.w600,
@@ -1669,7 +1670,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                       if (canAddFunds)
                         Expanded(
                           child: AmberButton(
-                            label: 'Add Funds',
+                            label: 'Add Credit',
                             icon: FontAwesomeIcons.plus.data,
                             height: 42,
                             onPressed: _showAddFundsSheet,
@@ -1759,7 +1760,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
       tabs: [
         Tab(
           icon: Icon(FontAwesomeIcons.clockRotateLeft.data, size: 16),
-          text: 'Wallet',
+          text: 'Credits',
         ),
         Tab(
           icon: Icon(FontAwesomeIcons.fileLines.data, size: 16),
@@ -1813,7 +1814,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     );
   }
 
-  Widget _buildWalletSummaryRow(ThemeData theme) {
+  Widget _buildCreditSummaryRow(ThemeData theme) {
     int totalInKobo = 0, totalOutKobo = 0;
     for (final txn in _filteredHistory) {
       // §13.4 decision 13 — Total In/Out is spendable money; the refundable
@@ -1856,13 +1857,13 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     );
   }
 
-  // ── Tab: Wallet History ─────────────────────────────────────────────────────
+  // ── Tab: Credit History ─────────────────────────────────────────────────────
 
-  Widget _buildWalletHistoryTab(ThemeData theme) {
-    if (_walletHistory.isEmpty) {
+  Widget _buildCreditHistoryTab(ThemeData theme) {
+    if (_creditHistory.isEmpty) {
       return _EmptyState(
         icon: FontAwesomeIcons.hourglass.data,
-        message: 'No wallet transactions yet',
+        message: 'No ledger entries yet',
         theme: theme,
       );
     }
@@ -1876,7 +1877,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
         // member). Read the effective permission — no role-tier bypass — so a
         // per-user override actually takes effect.
         if (hasPermission(ref, 'customers.wallet.totals.view')) ...[
-          _buildWalletSummaryRow(theme),
+          _buildCreditSummaryRow(theme),
           SizedBox(height: context.getRSize(4)),
         ],
         Expanded(

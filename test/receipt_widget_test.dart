@@ -39,26 +39,27 @@ void main() {
     );
   }
 
-  testWidgets('wallet info is hidden by default (checkbox off)', (tester) async {
+  testWidgets('credits info is hidden by default (checkbox off)', (tester) async {
     await tester.pumpWidget(host(showWalletInfo: false, walletBalance: -500));
-    expect(find.textContaining('Wallet Balance'), findsNothing);
+    expect(find.textContaining('Credits Balance'), findsNothing);
   });
 
-  testWidgets('wallet info shows when ticked, with debt tag', (tester) async {
+  testWidgets('credits info shows when ticked, with negative amount for debt', (tester) async {
     await tester.pumpWidget(host(showWalletInfo: true, walletBalance: -500));
-    expect(find.textContaining('Wallet Balance'), findsOneWidget);
-    expect(find.textContaining('(debt)'), findsOneWidget);
+    expect(find.textContaining('Credits Balance'), findsOneWidget);
+    expect(find.textContaining('-₦500'), findsOneWidget);
   });
 
-  testWidgets('wallet info shows credit tag for positive balance',
+  testWidgets('credits info shows positive amount for credit',
       (tester) async {
     await tester.pumpWidget(host(showWalletInfo: true, walletBalance: 1500));
-    expect(find.textContaining('(credit)'), findsOneWidget);
+    expect(find.textContaining('Credits Balance'), findsOneWidget);
+    expect(find.textContaining('₦1,500'), findsOneWidget);
   });
 
   testWidgets('ticked but null balance renders nothing', (tester) async {
     await tester.pumpWidget(host(showWalletInfo: true, walletBalance: null));
-    expect(find.textContaining('Wallet Balance'), findsNothing);
+    expect(find.textContaining('Credits Balance'), findsNothing);
   });
 
   testWidgets('store address shows and the old "Branch:" line is gone (§15.1)',

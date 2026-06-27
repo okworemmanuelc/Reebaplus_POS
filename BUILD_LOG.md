@@ -2,6 +2,22 @@
 
 ---
 
+## 2026-06-27 — Wallet to Credits Balance / Ledger Entries terminology alignment
+
+**Change:** Renamed all user-facing "Wallet" vocabulary to "Credits Balance" / "Ledger Entries" across the POS application to mitigate regulatory and compliance risks associated with e-money and wallet definitions.
+
+**Root cause/Rationale:** To comply with regulatory standards, the application must avoid using terms like "Wallet", "Top-up", and "Add Funds" in public or user-facing screens. Instead, the application uses "Credits Balance", "Ledger Entries", "Add Credit", and "Credit history". At the same time, we must maintain full compatibility with stored order payment types, permission keys, local database schema columns, and Supabase RLS/RPC interfaces to avoid breaking live/offline operations and cloud sync protocols. 
+
+**Fix details:**
+1. Renamed `WalletService` -> `CreditLedgerService` and `wallet_service.dart` -> `credit_ledger_service.dart`.
+2. Renamed test files `wallet_logic_test.dart` -> `credit_ledger_logic_test.dart` and `wallet_service_dispatch_test.dart` -> `credit_ledger_service_dispatch_test.dart`.
+3. Renamed Riverpod provider `walletBalancesKoboProvider` -> `creditBalancesKoboProvider` in `app_providers.dart`.
+4. Renamed view-model/local properties: `supplierWalletBalanceKobo` -> `supplierAccountBalanceKobo` in `recon_data.dart` and `customerWallet` -> `customerCreditBalance` in `cart_screen.dart`.
+5. Wording updates on: `customer_detail_screen.dart`, `customers_screen.dart`, `checkout_page.dart`, `cart_screen.dart`, `home_screen.dart`, `orders_screen.dart`, `crate_return_modal.dart`, `receipt_widget.dart`, `receipt_builder.dart`, `daily_reconciliation_detail_screen.dart`, `crate_deposits_report_screen.dart`, `invite_staff_screen.dart`, and permission description strings in `app_database.dart`.
+6. Deferred Tier C: Database schema table names (`wallet_transactions`, `customer_wallets`), RLS policies, cloud RPCs, permission key values, and order payment type enum values (`'wallet'`) were kept unchanged to maintain synchronization compatibility.
+
+---
+
 ## 2026-06-26 — Post-OTP "Setting up your account…" spinner (frozen "Verified ✓" gap)
 
 **Symptom:** After entering the 6-digit code, the screen showed a static

@@ -2,12 +2,12 @@ import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
-import 'package:reebaplus_pos/shared/services/wallet_service.dart';
+import 'package:reebaplus_pos/shared/services/credit_ledger_service.dart';
 
 import '../../helpers/dispatch_test_utils.dart';
 
 /// Bootstraps a staff user (so performed_by FKs resolve) plus a customer +
-/// wallet (so WalletService.topup has a wallet to write against).
+/// wallet (so CreditLedgerService.topup has a wallet to write against).
 /// Returns (customerId, staffId).
 Future<({String customerId, String staffId})> _seedTopupFixtures(
   AppDatabase db,
@@ -45,23 +45,23 @@ Future<({String customerId, String staffId})> _seedTopupFixtures(
 void main() {
   late AppDatabase db;
   late String businessId;
-  late WalletService walletService;
+  late CreditLedgerService creditLedgerService;
 
   setUp(() async {
     final boot = await bootstrapTestDb();
     db = boot.db;
     businessId = boot.businessId;
-    walletService = WalletService(db);
+    creditLedgerService = CreditLedgerService(db);
   });
 
   tearDown(() => db.close());
 
-  group('WalletService.topup dispatch', () {
+  group('CreditLedgerService.topup dispatch', () {
     test('flag OFF: enqueues two upsert rows, no domain envelope', () async {
       await setFlag(db, 'feature.domain_rpcs_v2.wallet_topup', on: false);
       final fx = await _seedTopupFixtures(db, businessId);
 
-      await walletService.topup(
+      await creditLedgerService.topup(
         customerId: fx.customerId,
         amountKobo: 50000,
         method: 'cash',
@@ -86,7 +86,7 @@ void main() {
       await setFlag(db, 'feature.domain_rpcs_v2.wallet_topup', on: true);
       final fx = await _seedTopupFixtures(db, businessId);
 
-      await walletService.topup(
+      await creditLedgerService.topup(
         customerId: fx.customerId,
         amountKobo: 25000,
         method: 'cash',
@@ -122,7 +122,7 @@ void main() {
       await setFlag(db, 'feature.domain_rpcs_v2.wallet_topup', on: true);
       final fx = await _seedTopupFixtures(db, businessId);
 
-      await walletService.topup(
+      await creditLedgerService.topup(
         customerId: fx.customerId,
         amountKobo: 100000,
         method: 'transfer',
@@ -144,7 +144,7 @@ void main() {
 
       Object? caught;
       try {
-        await walletService.topup(
+        await creditLedgerService.topup(
           customerId: UuidV7.generate(),
           amountKobo: 1000,
           method: 'cash',

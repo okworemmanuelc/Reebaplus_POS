@@ -3,7 +3,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 
-/// §21.10 — records activity on a supplier's ledger. Mirrors [WalletService]
+/// §21.10 — records activity on a supplier's ledger. Mirrors [CreditLedgerService]
 /// but inverted: an Invoice Total is a debit (we owe the supplier, red/negative),
 /// a Payment is a credit (we paid them). Both append one append-only ledger row,
 /// enqueue it for sync, and write an activity-log entry. Payments also fire a

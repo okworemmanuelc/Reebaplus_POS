@@ -527,8 +527,8 @@ class OrderService {
     return _ordersDao.markCompleted(orderId, staffId);
   }
 
-  /// Refund/cancel an order (§19.7): reverses stock, payments, and the wallet
-  /// legs so the customer's wallet returns to its pre-sale balance.
+  /// Refund/cancel an order (§19.7): reverses stock, payments, and the credit balance
+  /// legs so the customer's credit balance returns to its pre-sale balance.
   Future<void> markAsCancelled(String orderId, String reason, String staffId) {
     return _ordersDao.markCancelled(orderId, reason, staffId);
   }

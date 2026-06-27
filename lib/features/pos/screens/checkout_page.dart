@@ -76,9 +76,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   // wallet default would book a full-total debt on a thoughtless confirm when
   // the customer has no credit, so the cashier opts into Wallet / Credit Sale.
   PayMode _mode = PayMode.cashTransfer;
-  // §14.1 — opt in to printing wallet info on the receipt. Off by default;
-  // only meaningful for registered customers (walk-ins have no wallet, §14.3).
-  bool _addWalletInfoToReceipt = false;
+  // §14.1 — opt in to printing credit info on the receipt. Off by default;
+  // only meaningful for registered customers (walk-ins have no credit balance, §14.3).
+  bool _addCreditInfoToReceipt = false;
   final TextEditingController _cashReceivedCtrl = TextEditingController();
   final ScreenshotController _screenshotCtrl = ScreenshotController();
   bool _paymentConfirmed = false;
@@ -111,11 +111,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   /// Credit Sale on the receipt (the screenshot bug).
   String _receiptPaymentLabel = '';
 
-  /// Customer's wallet balance (Naira) AFTER the sale's two legs, captured at
+  /// Customer's credit balance (Naira) AFTER the sale's two legs, captured at
   /// confirm time and shown on the receipt. Snapshotting avoids the pre-sale
   /// projection double-counting the just-posted dual-leg rows (§14.3, bug #5/#6).
-  /// Null for walk-ins (no wallet).
-  double? _receiptWalletBalance;
+  /// Null for walk-ins (no credit balance).
+  double? _receiptCreditBalance;
 
   late final CartService _cart;
   bool get _isWalkIn => _initialCustomer == null || _initialCustomer.isWalkIn;
@@ -211,7 +211,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   String get _paymentLabel {
     switch (_mode) {
       case PayMode.wallet:
-        return 'Wallet Payment';
+        return 'Credit Payment';
       case PayMode.credit:
         // Always a Credit Sale when explicitly chosen — even if the wallet
         // could cover it, the cashier opted to book the whole total as debt.
@@ -222,7 +222,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         if (paidKobo >= _totalKobo) return 'Cash / Transfer';
         // Partial cash now; the shortfall books to the wallet as debt. (A zero
         // amount is blocked by validation, so we never reach here paid = 0.)
-        return 'Cash / Transfer / Wallet';
+        return 'Cash / Transfer / Credit';
     }
   }
 
@@ -237,22 +237,22 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   double _walletBalanceFor(String? customerId) {
     if (customerId == null) return 0.0;
     final balances =
-        ref.watch(walletBalancesKoboProvider).valueOrNull ??
+        ref.watch(creditBalancesKoboProvider).valueOrNull ??
         const <String, int>{};
     return (balances[customerId] ?? 0) / 100.0;
   }
 
-  double get _currentCustomerWallet =>
+  double get _currentCustomerCredit =>
       _isWalkIn ? 0.0 : _walletBalanceFor(_initialCustomer?.id);
 
-  /// Wallet balance (kobo) the customer would land on AFTER this sale in the
+  /// Credit balance (kobo) the customer would land on AFTER this sale in the
   /// current mode. Negative = debt. For Cash / Transfer the entered amount
   /// counts; Wallet / Credit Sale pay nothing now, so the full total is charged.
-  int get _projectedWalletKobo {
+  int get _projectedCreditKobo {
     final paidKobo = _mode == PayMode.cashTransfer
         ? (_cashReceivedValue * 100).round()
         : 0;
-    return _currentCustomerWalletKobo + paidKobo - _totalKobo;
+    return _currentCustomerCreditKobo + paidKobo - _totalKobo;
   }
 
   /// True when this sale would book debt that breaches the customer's limit (or
@@ -265,20 +265,20 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         ? (_cashReceivedValue * 100).round()
         : 0;
     if (paidKobo >= _totalKobo) return false;
-    final projectedKobo = _projectedWalletKobo;
+    final projectedKobo = _projectedCreditKobo;
     if (projectedKobo >= 0) return false;
-    final limitKobo = _currentCustomerWalletLimitKobo;
+    final limitKobo = _currentCustomerCreditLimitKobo;
     return limitKobo <= 0 || projectedKobo < -limitKobo;
   }
 
-  /// Live wallet balance (kobo) for the current customer (0 for walk-ins).
+  /// Live credit balance (kobo) for the current customer (0 for walk-ins).
   /// Used for the apply-credit math and the debt-limit check so they avoid a
   /// fresh awaited DB read (which made the over-limit error fire too late, #7).
-  int get _currentCustomerWalletKobo {
+  int get _currentCustomerCreditKobo {
     final id = _initialCustomer?.id;
     if (_isWalkIn || id == null) return 0;
     final balances =
-        ref.watch(walletBalancesKoboProvider).valueOrNull ??
+        ref.watch(creditBalancesKoboProvider).valueOrNull ??
         const <String, int>{};
     return balances[id] ?? 0;
   }
@@ -286,11 +286,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   /// Live debt limit (kobo) for the current customer. Reads from the live
   /// CustomerService list so a limit raised before/while this checkout was open
   /// is honoured — the `_initialCustomer` snapshot captured at init (and the
-  /// Customer carried through the cart) can be stale. The wallet *balance* is
+  /// Customer carried through the cart) can be stale. The credit balance is
   /// already read live, so reading the limit live too keeps the two sides of
   /// the debt-limit check consistent. Falls back to the snapshot if the
   /// customer isn't in the live list yet.
-  int get _currentCustomerWalletLimitKobo {
+  int get _currentCustomerCreditLimitKobo {
     final id = _initialCustomer?.id;
     if (id == null) return _initialCustomer?.walletLimitKobo ?? 0;
     final live = ref.read(customerServiceProvider).getById(id);
@@ -468,7 +468,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                             final w = _walletBalanceFor(widget.customer!.id);
                             return Text(
                               // Sign + colour convey credit vs debt — no suffix.
-                              'Wallet Balance: ${formatCurrency(w)}',
+                              'Credits Balance: ${formatCurrency(w)}',
                               style: TextStyle(
                                 fontSize: context.getRFontSize(12),
                                 color: w < 0
@@ -957,18 +957,18 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
   // ── Confirm payment logic ──────────────────────────────────────────────────
   Future<void> _confirmPayment() async {
-    // ── Auto-switch to Wallet when credit covers the bill ────────────────────
-    // If the cashier left the amount blank and the customer's wallet credit
-    // already covers the whole payable, book it as a wallet payment instead of
+    // ── Auto-switch to Credit Payment when credit covers the bill ────────────
+    // If the cashier left the amount blank and the customer's credit balance
+    // already covers the whole payable, book it as a credit payment instead of
     // erroring "enter the amount". An explicit amount is respected (it may be a
-    // deliberate split cash + wallet), so only switch when the field is empty.
+    // deliberate split cash + credit), so only switch when the field is empty.
     if (_mode == PayMode.cashTransfer && !_isWalkIn) {
       final entered = (_cashReceivedValue * 100).round();
-      if (entered <= 0 && _currentCustomerWalletKobo >= _totalKobo) {
+      if (entered <= 0 && _currentCustomerCreditKobo >= _totalKobo) {
         setState(() => _mode = PayMode.wallet);
         AppNotification.showInfo(
           context,
-          'Switched to Wallet Payment — $_customerDisplayName has enough '
+          'Switched to Credit Payment — $_customerDisplayName has enough '
           'credit to cover this sale.',
         );
       }
@@ -983,7 +983,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         : 0;
 
     if (_isWalkIn) {
-      // Walk-ins have no wallet (hard rule 14): Cash / Transfer only, paid in
+      // Walk-ins have no credit balance (hard rule 14): Cash / Transfer only, paid in
       // full — any shortfall has nowhere to go. An empty amount means "paid the
       // full total" (one-tap), so only a positive entry NOT EQUAL TO the total is a
       // genuine over/underpayment to block.
@@ -999,13 +999,13 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       // Cash / Transfer needs an amount entered. To book the whole total as
       // debt, the cashier picks "Register as Credit Sale" instead.
       if (_mode == PayMode.cashTransfer && paidKobo <= 0) {
-        if (_currentCustomerWalletKobo > 0) {
+        if (_currentCustomerCreditKobo > 0) {
           // Credit exists but doesn't cover the bill (a covering balance would
           // already have auto-switched to Wallet above).
           AppNotification.showError(
             context,
-            'This customer has ${formatCurrency(_currentCustomerWalletKobo / 100.0)} '
-            'in wallet credit. Tap "Pay from Wallet" to use it, or enter the '
+            'This customer has ${formatCurrency(_currentCustomerCreditKobo / 100.0)} '
+            'in credit balance. Tap "Pay with Credit" to use it, or enter the '
             'cash amount.',
           );
         } else {
@@ -1037,10 +1037,10 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       // over-limit message always flashes (#7).
       if (paidKobo < _totalKobo) {
         final projectedKobo =
-            _currentCustomerWalletKobo + paidKobo - _totalKobo;
+            _currentCustomerCreditKobo + paidKobo - _totalKobo;
         if (projectedKobo < 0) {
           final customer = _initialCustomer!;
-          final limitKobo = _currentCustomerWalletLimitKobo;
+          final limitKobo = _currentCustomerCreditLimitKobo;
           if (limitKobo <= 0) {
             AppNotification.showError(
               context,
@@ -1125,10 +1125,10 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       // mode, so the live getter would mislabel the receipt (Issue 1).
       final paymentLabel = _paymentLabel;
 
-      // Snapshot the wallet balance BEFORE the legs post so the receipt shows
+      // Snapshot the credit balance BEFORE the legs post so the receipt shows
       // the true post-sale net (old + paid − total) instead of the pre-sale
       // projection re-applied on top of the just-written rows (#5/#6).
-      final oldWalletKobo = _currentCustomerWalletKobo;
+      final oldWalletKobo = _currentCustomerCreditKobo;
 
       // ── Call atomic transaction ──────────────────────────────────────
       final auth = ref.read(authProvider);
@@ -1186,9 +1186,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       if (mounted) {
         setState(() {
           _amountPaid = amountPaidKobo / 100.0;
-          // True post-sale wallet net = old + credit(paid) − debit(total).
-          // Walk-ins have no wallet (§14.3).
-          _receiptWalletBalance = _isWalkIn
+          // True post-sale credit balance net = old + credit(paid) − debit(total).
+          // Walk-ins have no credit balance (§14.3).
+          _receiptCreditBalance = _isWalkIn
               ? null
               : (oldWalletKobo + amountPaidKobo - totalKobo) / 100.0;
           _receiptPaymentLabel = paymentLabel;
@@ -1256,8 +1256,8 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                 customerAddress: _initialCustomer?.addressText ?? 'N/A',
                 customerPhone: _initialCustomer?.phone,
                 cashReceived: _amountPaid,
-                walletBalance: _receiptWalletBalance,
-                showWalletInfo: !_isWalkIn && _addWalletInfoToReceipt,
+                walletBalance: _receiptCreditBalance,
+                showWalletInfo: !_isWalkIn && _addCreditInfoToReceipt,
                 riderName: 'Pick-up Order',
                 manufacturerNames: _manufacturerNames,
                 storeAddress: _storeAddress,
@@ -1458,8 +1458,8 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         cashReceived: _amountPaid,
         // Use the post-sale snapshot (set at confirm) — the live provider has
         // already updated, so recomputing here would double-count the legs.
-        walletBalance: _receiptWalletBalance,
-        showWalletInfo: !_isWalkIn && _addWalletInfoToReceipt,
+        walletBalance: _receiptCreditBalance,
+        showWalletInfo: !_isWalkIn && _addCreditInfoToReceipt,
         riderName: 'Pick-up Order',
         storeAddress: _storeAddress,
         businessName: ref.read(currentBusinessNameProvider),
@@ -1548,15 +1548,15 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     );
   }
 
-  // ── Wallet sub-options (shown under Full Cash when customer is named) ───────
+  // ── Credit sub-options (shown under Full Cash when customer is named) ───────
 
-  /// §14.1 — "Add wallet info to receipt" toggle. When ticked, the customer's
-  /// resulting wallet balance is printed on the receipt (§15.1). Off by default.
-  Widget _buildWalletInfoCheckbox() {
-    final on = _addWalletInfoToReceipt;
+  /// §14.1 — "Add credit balance to receipt" toggle. When ticked, the customer's
+  /// resulting credit balance is printed on the receipt (§15.1). Off by default.
+  Widget _buildCreditInfoCheckbox() {
+    final on = _addCreditInfoToReceipt;
     return GestureDetector(
       onTap: () =>
-          setState(() => _addWalletInfoToReceipt = !_addWalletInfoToReceipt),
+          setState(() => _addCreditInfoToReceipt = !_addCreditInfoToReceipt),
       child: Container(
         padding: EdgeInsets.all(context.getRSize(14)),
         decoration: BoxDecoration(
@@ -1577,7 +1577,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             SizedBox(width: context.getRSize(12)),
             Expanded(
               child: Text(
-                'Add wallet info to receipt',
+                'Add credit balance to receipt',
                 style: TextStyle(
                   fontSize: context.getRFontSize(14),
                   fontWeight: FontWeight.w600,
@@ -1614,7 +1614,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
               SizedBox(width: context.getRSize(10)),
               Expanded(
                 child: _methodChip(
-                  'Pay from Wallet',
+                  'Pay with Credit',
                   FontAwesomeIcons.wallet.data,
                   _mode == PayMode.wallet,
                   () => setState(() => _mode = PayMode.wallet),
@@ -1627,8 +1627,8 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         // Cash / Transfer → amount input + live resulting-balance preview.
         if (_mode == PayMode.cashTransfer) _buildCashTransferInput(),
 
-        // Pay from Wallet → balance + resulting debt preview (no input).
-        if (_mode == PayMode.wallet) _buildWalletPreview(),
+        // Pay with Credit → balance + resulting debt preview (no input).
+        if (_mode == PayMode.wallet) _buildPayWithCreditPreview(),
 
         // Register as Credit Sale — retained card. Registered customers only.
         if (!_isWalkIn) ...[
@@ -1640,10 +1640,10 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           ],
         ],
 
-        // §14.1 — "Add wallet info to receipt" (off by default, registered only).
+        // §14.1 — "Add credit balance to receipt" (off by default, registered only).
         if (!_isWalkIn) ...[
           SizedBox(height: context.getRSize(20)),
-          _buildWalletInfoCheckbox(),
+          _buildCreditInfoCheckbox(),
         ],
       ],
     );
@@ -1703,8 +1703,8 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   /// preview (registered) or a pay-in-full reminder (walk-in).
   Widget _buildCashTransferInput() {
     int suggestedKobo = _totalKobo;
-    if (!_isWalkIn && _currentCustomerWalletKobo > 0) {
-      suggestedKobo = _totalKobo - _currentCustomerWalletKobo;
+    if (!_isWalkIn && _currentCustomerCreditKobo > 0) {
+      suggestedKobo = _totalKobo - _currentCustomerCreditKobo;
       if (suggestedKobo < _depositTotalKobo) {
         suggestedKobo = _depositTotalKobo;
       }
@@ -1774,7 +1774,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   /// Registered Cash / Transfer preview: resulting wallet balance + a hint
   /// (shortfall → debt, excess → wallet, or fully paid) + a debt-limit warning.
   Widget _resultPreview() {
-    final projectedKobo = _projectedWalletKobo; // negative = debt
+    final projectedKobo = _projectedCreditKobo; // negative = debt
     final projected = projectedKobo / 100.0;
     final isDebt = projectedKobo < 0;
     final diffKobo = (_cashReceivedValue * 100).round() - _totalKobo;
@@ -1783,20 +1783,20 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     if (diffKobo < 0) {
       hint =
           'Shortfall ${formatCurrency(-diffKobo / 100.0)} added to '
-          '$_customerDisplayName\'s wallet as debt.';
+          '$_customerDisplayName\'s credit balance as debt.';
     } else if (diffKobo > 0) {
       hint =
           'Excess ${formatCurrency(diffKobo / 100.0)} added to '
-          '$_customerDisplayName\'s wallet.';
+          '$_customerDisplayName\'s credit balance.';
     } else {
-      hint = 'Fully paid — no change to the wallet.';
+      hint = 'Fully paid — no change to the credit balance.';
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _previewBox(
-          'Resulting Wallet Balance',
+          'Resulting Credits Balance',
           projected,
           isDebt ? danger : (projected > 0 ? success : _text),
         ),
@@ -1813,16 +1813,16 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           ),
         ),
         if (_overDebtLimit)
-          _debtLimitWarning(_currentCustomerWalletLimitKobo, projectedKobo),
+          _debtLimitWarning(_currentCustomerCreditLimitKobo, projectedKobo),
       ],
     );
   }
 
-  /// Pay from Wallet preview: current balance, the balance after this sale, a
+  /// Pay with Credit preview: current balance, the balance after this sale, a
   /// short explanation, and a debt-limit warning if the credit can't cover it.
-  Widget _buildWalletPreview() {
-    final balance = _currentCustomerWallet;
-    final projectedKobo = _projectedWalletKobo; // current − total
+  Widget _buildPayWithCreditPreview() {
+    final balance = _currentCustomerCredit;
+    final projectedKobo = _projectedCreditKobo; // current − total
     final projected = projectedKobo / 100.0;
     final isDebt = projectedKobo < 0;
 
@@ -1831,13 +1831,13 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       children: [
         SizedBox(height: context.getRSize(12)),
         _previewBox(
-          'Wallet Balance',
+          'Credits Balance',
           balance,
           balance < 0 ? danger : (balance > 0 ? success : _text),
         ),
         SizedBox(height: context.getRSize(8)),
         _previewBox(
-          'After This Sale',
+          'Resulting Credits Balance',
           projected,
           isDebt ? danger : (projected > 0 ? success : _text),
         ),
@@ -1846,9 +1846,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           padding: EdgeInsets.symmetric(horizontal: context.getRSize(4)),
           child: Text(
             isDebt
-                ? 'Wallet credit can\'t cover the order — the shortfall is added '
+                ? 'Credit balance can\'t cover the order — the shortfall is added '
                       'as debt.'
-                : 'The order is charged to the wallet credit.',
+                : 'The order is charged to the credit balance.',
             style: TextStyle(
               fontSize: context.getRFontSize(12),
               color: _subtext,
@@ -1857,14 +1857,14 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           ),
         ),
         if (_overDebtLimit)
-          _debtLimitWarning(_currentCustomerWalletLimitKobo, projectedKobo),
+          _debtLimitWarning(_currentCustomerCreditLimitKobo, projectedKobo),
       ],
     );
   }
 
   /// Credit Sale preview: the resulting (debt) balance + debt-limit warning.
   Widget _buildCreditPreview() {
-    final projectedKobo = _projectedWalletKobo; // current − total
+    final projectedKobo = _projectedCreditKobo; // current − total
     final projected = projectedKobo / 100.0;
     final isDebt = projectedKobo < 0;
 
@@ -1872,12 +1872,12 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _previewBox(
-          'Resulting Wallet Balance',
+          'Resulting Credits Balance',
           projected,
           isDebt ? danger : (projected > 0 ? success : _text),
         ),
         if (_overDebtLimit)
-          _debtLimitWarning(_currentCustomerWalletLimitKobo, projectedKobo),
+          _debtLimitWarning(_currentCustomerCreditLimitKobo, projectedKobo),
       ],
     );
   }
@@ -2014,7 +2014,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                   ),
                   SizedBox(height: context.getRSize(2)),
                   Text(
-                    'Nothing paid now — full amount added to the wallet as debt',
+                    'Nothing paid now — full amount added to the credit balance as debt',
                     style: TextStyle(
                       fontSize: context.getRFontSize(12),
                       color: _subtext,

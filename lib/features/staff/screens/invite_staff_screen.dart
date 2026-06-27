@@ -36,14 +36,14 @@ const Map<String, List<String>> _roleCapabilities = {
   ],
   'cashier': [
     'Access Point of Sale (POS) to create orders and process checkouts.',
-    'Add new customers, manage customer wallets, and record payments.',
+    'Add new customers, manage customer credit balances, and record payments.',
     'View basic sales history and print receipts.',
     'Restricted from editing prices, viewing profit reports, or managing stock.'
   ],
   'stock_keeper': [
     'Add stock, record product damages, and count inventory.',
     'Initiate stock transfers between stores.',
-    'Restricted from making sales, viewing customer wallets, or accessing financial reports.'
+    'Restricted from making sales, viewing customer credit balances, or accessing financial reports.'
   ],
 };
 
