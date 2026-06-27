@@ -59,7 +59,7 @@ class BrandedAuthBackground extends StatelessWidget {
           Center(
             child: Container(
               constraints: BoxConstraints(
-                maxWidth: context.isDesktop ? 480.0 : double.infinity,
+                maxWidth: !context.isPhone ? 480.0 : double.infinity,
               ),
               child: child,
             ),
