@@ -370,7 +370,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     return AppBar(
       backgroundColor: _surface,
       elevation: 0,
-      leading: const MenuButton(),
+      leading: context.isDesktop ? null : const MenuButton(),
       title: AppBarHeader(
         icon: FontAwesomeIcons.boxesStacked.data,
         title: 'Inventory',

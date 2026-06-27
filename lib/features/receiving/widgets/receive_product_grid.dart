@@ -43,18 +43,19 @@ class ReceiveProductGrid extends ConsumerWidget {
     // quantity — they just don't get the "New Product" card.
     final canAddProduct = hasPermission(ref, 'products.add');
     final screenWidth = MediaQuery.of(context).size.width;
+    final availableWidth = context.isDesktop ? (screenWidth - 280.0) : screenWidth;
     int effectiveColumns = gridColumns;
 
-    if (screenWidth < 380) {
+    if (availableWidth < 380) {
       if (effectiveColumns > 2) effectiveColumns = 2;
-    } else if (screenWidth > 600) {
-      final dynamicColumns = (screenWidth / 180).floor();
+    } else if (availableWidth > 600) {
+      final dynamicColumns = (availableWidth / 180).floor();
       effectiveColumns = max(effectiveColumns, dynamicColumns);
     }
 
     final totalPadding = context.getRSize(16);
     final totalSpacing = context.getRSize(8) * (effectiveColumns - 1);
-    final cellWidth = (screenWidth - totalPadding - totalSpacing) / effectiveColumns;
+    final cellWidth = (availableWidth - totalPadding - totalSpacing) / effectiveColumns;
     final aspect = cellWidth / context.getRSize(210);
 
     // Add 1 for the NewProductCard

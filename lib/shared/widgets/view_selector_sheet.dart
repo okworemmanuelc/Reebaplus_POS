@@ -63,23 +63,34 @@ class ViewSelectorSheet extends StatelessWidget {
             isSelected: currentIsList,
             onTap: () => onSelect(true, currentColumns),
           ),
-          SizedBox(height: context.getRSize(12)),
-          _buildOption(
-            context: context,
-            icon: FontAwesomeIcons.tableCellsLarge.data,
-            label: '2 Columns Grid',
-            isSelected: !currentIsList && currentColumns == 2,
-            onTap: () => onSelect(false, 2),
-          ),
-          if (screenWidth >= 380) ...[
+          if (context.isTablet || context.isDesktop) ...[
             SizedBox(height: context.getRSize(12)),
             _buildOption(
               context: context,
               icon: FontAwesomeIcons.tableCells.data,
-              label: '3 Columns Grid',
-              isSelected: !currentIsList && currentColumns == 3,
-              onTap: () => onSelect(false, 3),
+              label: 'Grid View',
+              isSelected: !currentIsList,
+              onTap: () => onSelect(false, currentColumns),
             ),
+          ] else ...[
+            SizedBox(height: context.getRSize(12)),
+            _buildOption(
+              context: context,
+              icon: FontAwesomeIcons.tableCellsLarge.data,
+              label: '2 Columns Grid',
+              isSelected: !currentIsList && currentColumns == 2,
+              onTap: () => onSelect(false, 2),
+            ),
+            if (screenWidth >= 380) ...[
+              SizedBox(height: context.getRSize(12)),
+              _buildOption(
+                context: context,
+                icon: FontAwesomeIcons.tableCells.data,
+                label: '3 Columns Grid',
+                isSelected: !currentIsList && currentColumns == 3,
+                onTap: () => onSelect(false, 3),
+              ),
+            ],
           ],
         ],
       ),

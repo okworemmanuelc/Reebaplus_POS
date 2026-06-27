@@ -323,7 +323,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         appBar: AppBar(
           backgroundColor: _isScrolled ? theme.colorScheme.surface.withValues(alpha: 0.8) : Colors.transparent,
           elevation: 0,
-          leading: const MenuButton(),
+          leading: context.isDesktop ? null : const MenuButton(),
           title: AppBarHeader(
             icon: FontAwesomeIcons.chartLine.data,
             title: bizName.isNotEmpty ? bizName : 'Reebaplus POS',

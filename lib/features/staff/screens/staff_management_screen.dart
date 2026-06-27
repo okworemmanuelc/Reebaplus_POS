@@ -92,7 +92,7 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen>
         appBar: AppBar(
           backgroundColor: _surface,
           elevation: 0,
-          leading: const MenuButton(),
+          leading: context.isDesktop ? null : const MenuButton(),
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -170,7 +170,7 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen>
       backgroundColor: _surface,
       elevation: 0,
       iconTheme: IconThemeData(color: _text),
-      leading: const MenuButton(),
+      leading: context.isDesktop ? null : const MenuButton(),
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,

@@ -27,17 +27,39 @@ class AppDrawer extends ConsumerWidget {
 
   const AppDrawer({super.key, required this.activeRoute});
 
+  void _pushRoute(BuildContext context, WidgetRef ref, Widget screen) {
+    if (!context.isDesktop) {
+      Navigator.pop(context);
+    }
+    final nav = ref.read(navigationProvider);
+    if (context.isDesktop) {
+      final tabState = nav.tabNavigatorKeys[nav.currentIndex.value].currentState;
+      tabState?.push(MaterialPageRoute(builder: (_) => screen));
+    } else {
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = Theme.of(context);
+    final content = Column(
+      children: [
+        _buildHeader(context, ref),
+        Expanded(child: _buildNavList(context, ref)),
+      ],
+    );
+
+    if (context.isDesktop) {
+      return Container(
+        color: t.colorScheme.surface,
+        child: content,
+      );
+    }
+
     return Drawer(
       backgroundColor: t.colorScheme.surface,
-      child: Column(
-        children: [
-          _buildHeader(context, ref),
-          Expanded(child: _buildNavList(context, ref)),
-        ],
-      ),
+      child: content,
     );
   }
 
@@ -85,12 +107,7 @@ class AppDrawer extends ConsumerWidget {
                 color: Colors.transparent,
                 child: InkWell(
                   borderRadius: BorderRadius.circular(14),
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const ProfileScreen()),
-                    );
-                  },
+                  onTap: () => _pushRoute(context, ref, const ProfileScreen()),
                   child: Container(
                     width: context.getRSize(56),
                     height: context.getRSize(56),
@@ -127,7 +144,7 @@ class AppDrawer extends ConsumerWidget {
                     // Pop the drawer first — mirrors the Log Out pattern below
                     // so the watched currentUser flipping to null doesn't trip
                     // tenant-scoped widgets while the drawer is still painting.
-                    Navigator.pop(context);
+                    if (!context.isDesktop) Navigator.pop(context);
                     // Drop any stale paused-time marker so a rapid
                     // background→resume right after lock doesn't double-fire
                     // the auto-lock branch.
@@ -178,14 +195,7 @@ class AppDrawer extends ConsumerWidget {
                             : 'Syncing $pending file${pending == 1 ? '' : 's'}…';
                         return InkWell(
                           borderRadius: BorderRadius.circular(10),
-                          onTap: () {
-                            Navigator.pop(context);
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => const SyncIssuesScreen(),
-                              ),
-                            );
-                          },
+                          onTap: () => _pushRoute(context, ref, const SyncIssuesScreen()),
                           child: Container(
                             margin: const EdgeInsets.only(bottom: 12),
                             padding: const EdgeInsets.symmetric(
@@ -380,14 +390,7 @@ class AppDrawer extends ConsumerWidget {
             FontAwesomeIcons.userGroup.data,
             'Staff Management',
             active: false,
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const StaffManagementScreen(),
-                ),
-              );
-            },
+            onTap: () => _pushRoute(context, ref, const StaffManagementScreen()),
           ),
         // Supplier Accounts — CEO always; Manager only if the CEO granted
         // suppliers.manage ("if toggled", §27.3); hidden for Cashier/Stock keeper.
@@ -450,12 +453,7 @@ class AppDrawer extends ConsumerWidget {
             FontAwesomeIcons.gear.data,
             'CEO Settings',
             active: false,
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.of(
-                context,
-              ).push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
-            },
+            onTap: () => _pushRoute(context, ref, const SettingsScreen()),
           ),
         // Staff Settings (§10.5) — self-service settings home for roles BELOW
         // CEO (profile edit, change PIN, Display mode). Mutually exclusive with
@@ -467,12 +465,7 @@ class AppDrawer extends ConsumerWidget {
             FontAwesomeIcons.gear.data,
             'Settings',
             active: false,
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const StaffSettingsScreen()),
-              );
-            },
+            onTap: () => _pushRoute(context, ref, const StaffSettingsScreen()),
           ),
         // Sync Issues — troubleshooting screen gated on sync.view (CEO always +
         // whoever the CEO granted it via Sync Issues access). Hidden entirely
@@ -483,12 +476,7 @@ class AppDrawer extends ConsumerWidget {
             FontAwesomeIcons.cloudArrowUp.data,
             'Sync Issues',
             active: false,
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const SyncIssuesScreen()),
-              );
-            },
+            onTap: () => _pushRoute(context, ref, const SyncIssuesScreen()),
           ),
         // Pro Tips removed from the sidebar (decision Q7 — not surfaced in
         // Phase 1; UserTipsModal stays in code for Phase 2).
@@ -548,7 +536,7 @@ class AppDrawer extends ConsumerWidget {
               ),
             );
             if (confirmed != true) return;
-            if (context.mounted) Navigator.pop(context); // close the drawer
+            if (context.mounted && !context.isDesktop) Navigator.pop(context); // close the drawer
             try {
               await auth.logOutCurrentUser(); // → main.dart routes to Welcome
             } on LogoutWipeException catch (e) {
@@ -577,7 +565,7 @@ class AppDrawer extends ConsumerWidget {
 
   // ── Navigation logic — now uses NavigationService shell ────────────────────
   void _navigateTo(BuildContext context, WidgetRef ref, String route) {
-    Navigator.pop(context);
+    if (!context.isDesktop) Navigator.pop(context);
     final nav = ref.read(navigationProvider);
 
     if (route == 'dashboard') {

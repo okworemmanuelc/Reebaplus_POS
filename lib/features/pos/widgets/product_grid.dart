@@ -94,21 +94,22 @@ class ProductGrid extends StatelessWidget {
     }
 
     final screenWidth = MediaQuery.of(context).size.width;
+    final availableWidth = context.isDesktop ? (screenWidth - 280.0) : screenWidth;
     int effectiveColumns = gridColumns;
 
-    if (screenWidth < 380) {
+    if (availableWidth < 380) {
       // Small phone: maximum 2 columns
       if (effectiveColumns > 2) effectiveColumns = 2;
-    } else if (screenWidth > 600) {
-      // Tablet: dynamically increase contents per row
-      final dynamicColumns = (screenWidth / 180).floor();
+    } else if (availableWidth > 600) {
+      // Tablet/Desktop: dynamically increase contents per row
+      final dynamicColumns = (availableWidth / 180).floor();
       effectiveColumns = max(effectiveColumns, dynamicColumns);
     }
 
     // Calculate aspect ratio dynamically to guarantee a minimum height and avoid overflow
     final totalPadding = context.getRSize(16); // 8 padding on each side
     final totalSpacing = context.getRSize(8) * (effectiveColumns - 1);
-    final cellWidth = (screenWidth - totalPadding - totalSpacing) / effectiveColumns;
+    final cellWidth = (availableWidth - totalPadding - totalSpacing) / effectiveColumns;
     // We need roughly 210px (scaled) of height for the image, name, price, stock
     final aspect = cellWidth / context.getRSize(210);
 

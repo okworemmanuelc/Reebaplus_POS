@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/app_drawer.dart';
 import 'package:reebaplus_pos/shared/widgets/menu_button.dart';
 
@@ -33,12 +34,12 @@ class SharedScaffold extends StatelessWidget {
 
     return Scaffold(
       appBar:
-          appBar ?? AppBar(leading: isPrimaryRoute ? const MenuButton() : null),
+          appBar ?? AppBar(leading: (isPrimaryRoute && !context.isDesktop) ? const MenuButton() : null),
       backgroundColor: backgroundColor,
       floatingActionButton: floatingActionButton,
       floatingActionButtonLocation: floatingActionButtonLocation,
       bottomNavigationBar: bottomNavigationBar,
-      drawer: AppDrawer(activeRoute: activeRoute),
+      drawer: context.isDesktop ? null : AppDrawer(activeRoute: activeRoute),
       body: body,
     );
   }
