@@ -25,6 +25,8 @@ import 'package:reebaplus_pos/shared/widgets/store_picker_sheet.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reebaplus_pos/shared/services/ui_hint_service.dart';
+import 'package:reebaplus_pos/features/sync/controllers/first_load_overlay_controller.dart';
+import 'package:reebaplus_pos/shared/widgets/skeletons/first_load_skeletons.dart';
 
 class PosHomeScreen extends ConsumerStatefulWidget {
   const PosHomeScreen({super.key});
@@ -144,6 +146,17 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
             ),
           ),
         ),
+      );
+    }
+
+    // First load: while the store is empty and the catalogue is still streaming
+    // in, show the POS skeleton (brief §4.4) instead of a blank grid / "pick a
+    // store" placeholder. It resolves to the real grid the moment products land.
+    if (ref.watch(firstLoadSkeletonActiveProvider)) {
+      return SharedScaffold(
+        activeRoute: 'pos',
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        body: const SafeArea(child: PosSkeleton()),
       );
     }
 

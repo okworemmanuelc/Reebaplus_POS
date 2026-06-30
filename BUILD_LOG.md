@@ -2,6 +2,71 @@
 
 ---
 
+## 2026-06-30 — First-Load "Loading your store" Overlay Redesign
+
+**Change:** Replaced the open-ended post-login "Loading your store" full-pull
+loader with a brief (≤ ~2 s) reassurance that hands off to background sync +
+skeletons, plus a prominent retry path and a faster restore. Spec:
+[brief-first-load-store-overlay.md](file:///Users/solomonizu/flutter_projects/drinkPosApp/context/specs/brief-first-load-store-overlay.md).
+
+**Implementation (the single seam + supporting pieces):**
+1. **Overlay controller (§4.1–4.3, 4.7)** — new
+   [first_load_overlay_controller.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/features/sync/controllers/first_load_overlay_controller.dart):
+   a `StateNotifier<FirstLoadOverlayState>` ({hidden, loading, retryNeeded}) that
+   is the sole source of truth. Owns all timing (400 ms min floor / 2 s max cap),
+   the retry counter, and eligibility, derived from five injected inputs (pull
+   stage, connectivity, store-empty, per-business marker, landing-ready). Input
+   providers (`firstLoadOnlineProvider`, `firstLoadStoreEmptyProvider`,
+   `firstPullCompletedProvider`, `firstLoadLandingReadyProvider`,
+   `pullStageProvider`) + `firstLoadActiveProvider` / `firstLoadSkeletonActiveProvider`
+   are co-located and overridable.
+2. **Per-business marker (§4.2)** — wired the pre-existing
+   [first_load_marker_service.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/core/services/first_load_marker_service.dart):
+   `markPullCompleted` on a clean (`skipped.isEmpty`) `pullChanges` completion,
+   and **`clearAllMarkers()` inside `AppDatabase.clearAllData()`** (best-effort) so
+   a re-onboarded device re-shows the overlay — the highest-risk wipe trap.
+3. **Row-weighted progress (§4.5)** — `PullStatus.rowsTotal/rowsDone/rowPercent`
+   (already added to the pull loop) now drives the determinate top line and the
+   overlay percentage. Copy changed to **"Setting up ‹Business›…"** (falls back to
+   "Setting up your store…").
+4. **Restore batching (§4.6)** — `pullInitialData` now wraps each table's restore
+   in **one Drift transaction** (one commit per table instead of one per row — the
+   dominant first-pull cost). Per-row FK/unique resilience is unchanged (caught,
+   not rethrown, so good rows still commit and the cursor-hold/defer semantics are
+   preserved exactly).
+5. **Skeletons (§4.4)** — one reusable themed shimmer primitive
+   ([skeleton.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/shared/widgets/skeletons/skeleton.dart),
+   single `ShaderMask` per subtree, no `shimmer` dependency) + four tab skeletons
+   ([first_load_skeletons.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/shared/widgets/skeletons/first_load_skeletons.dart)).
+   Wired into POS, Home, Inventory, and the Reports hub via a guarded early-return
+   gated on `firstLoadSkeletonActiveProvider` (preserves each screen's permission
+   gates + app bar / drawer button).
+6. **Rendering (§4.7)** — [sync_pull_banner.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/shared/widgets/sync_pull_banner.dart)
+   now renders the controller: non-interactive centered "Setting up…" for
+   `loading`, a prominent **interactive** retry card for `retryNeeded`. The compact
+   error pill is suppressed during a genuine first load (retry card / skeletons own
+   it); the "Synced ✓" pill is unchanged. Invariants #1/#11 preserved (entry never
+   gated; nav/drawer stay tappable).
+
+**Tests:**
+- Seam A — [first_load_overlay_controller_test.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/test/sync/first_load_overlay_controller_test.dart)
+  (13 cases via `fake_async`): eligibility, min-floor/max-cap/ready dismiss,
+  established-empty suppression, wipe-path re-enable, offline-immediate vs
+  online-N-silent-retries-then-retryNeeded, manual retry.
+- Seam B — [first_load_restore_batching_test.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/test/sync/first_load_restore_batching_test.dart):
+  `rowPercent` math + transaction-wrapped restore parity (orphan skipped without
+  rolling back the good rows; `fkSkipped` still held). `restore_fk_resilience_test`
+  stays green.
+- Added `fake_async` to dev_dependencies.
+
+**Verification:** `flutter analyze` clean (lib + test). `flutter test test/sync/`
+(143) + new first-load tests (21) + `test/inventory/` + `test/receiving/` green.
+Pre-existing, unrelated failure: `test/auth/who_is_working_screen_test.dart` fails
+identically on the clean baseline (network `deleted_businesses` 400 + widget settle
+timing) — confirmed via `git stash`. On-device emulator walkthrough pending.
+
+---
+
 ## 2026-06-27 — Auth Screen Desktop and Tablet Redesign
 
 **Change:** Centered and constrained the maximum width of all authentication screens (Welcome, Sign-In, OTP, SignUp, Lock Screen) to `480.0` dp on desktop and tablet viewports.

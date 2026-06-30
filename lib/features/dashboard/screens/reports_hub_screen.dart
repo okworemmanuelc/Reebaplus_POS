@@ -12,6 +12,8 @@ import 'package:reebaplus_pos/features/dashboard/screens/stock_approvals_screen.
 import 'package:reebaplus_pos/features/dashboard/screens/crate_deposits_report_screen.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/supplier_accounts_report_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
+import 'package:reebaplus_pos/features/sync/controllers/first_load_overlay_controller.dart';
+import 'package:reebaplus_pos/shared/widgets/skeletons/first_load_skeletons.dart';
 
 class ReportsHubScreen extends ConsumerStatefulWidget {
   const ReportsHubScreen({super.key});
@@ -120,6 +122,23 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
           ),
         ),
     ];
+
+    // First load: show the reports skeleton (brief §4.4) while data streams in.
+    if (ref.watch(firstLoadSkeletonActiveProvider)) {
+      return SharedScaffold(
+        activeRoute: 'dashboard',
+        appBar: AppBar(
+          title: Text(
+            'Business Reports',
+            style: context.h3.copyWith(fontWeight: FontWeight.bold),
+          ),
+          elevation: 0,
+          backgroundColor: context.backgroundColor,
+          leading: BackButton(color: context.primaryColor),
+        ),
+        body: const SafeArea(child: ReportsSkeleton()),
+      );
+    }
 
     return SharedScaffold(
       activeRoute: 'dashboard',

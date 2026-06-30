@@ -10,6 +10,36 @@ The human updates it when resolving open questions or making architectural decis
 
 151 sessions logged. Codebase is live and being verified on-device.
 
+### First-Load "Loading your store" Overlay Redesign (2026-06-30)
+- **Change:** the post-login full-pull loader is now a brief (≤ ~2 s) "Setting up
+  ‹Business›…" reassurance that hands off to per-tab skeletons + a thin top sync
+  line, with a prominent retry path and a faster restore. Spec:
+  `context/specs/brief-first-load-store-overlay.md`. Invariants #1/#11 preserved.
+- **Single seam:** new `FirstLoadOverlayController`
+  ([first_load_overlay_controller.dart](file:///Users/solomonizu/flutter_projects/drinkPosApp/lib/features/sync/controllers/first_load_overlay_controller.dart))
+  — a `StateNotifier<FirstLoadOverlayState>` ({hidden, loading, retryNeeded})
+  owning all timing (400 ms floor / 2 s cap), the retry counter (2 silent retries
+  online → retryNeeded; offline → retryNeeded immediately), and eligibility,
+  derived from five injected/overridable input providers. `SyncPullBanner` and the
+  tab screens only render it.
+- **Marker (§4.2):** wired `FirstLoadMarkerService` — `markPullCompleted` on a
+  clean `pullChanges` completion; **`clearAllMarkers()` inside `clearAllData()`**
+  (best-effort) so a wiped/re-onboarded device re-shows the overlay (the documented
+  highest-risk wipe trap).
+- **Restore batching (§4.6):** `pullInitialData` wraps each table's restore in one
+  Drift transaction (one commit/table) — per-row FK/unique resilience unchanged.
+- **Progress (§4.5):** row-weighted `PullStatus.rowsDone/rowsTotal/rowPercent`
+  drives the determinate top line + overlay %; copy "Setting up ‹Business›…".
+- **Skeletons (§4.4):** one themed shimmer primitive (no `shimmer` dep) + POS /
+  Home / Inventory / Reports skeletons, gated on `firstLoadSkeletonActiveProvider`.
+- **Out of scope (unchanged):** the deferred-pull repeated-full-pull loop (§6),
+  `syncMinimumLogin` time-boxing, schema/DAO/pull-ordering. The two-pass batch-insert
+  fast path was implemented as the safer single-transaction-per-table form.
+- **Tests:** Seam A (13, `fake_async`) + Seam B (parity + `rowPercent`). `flutter
+  analyze` clean; `test/sync/` (143) + new (21) + inventory/receiving green.
+  Pre-existing unrelated baseline failure: `who_is_working_screen_test`. On-device
+  emulator walkthrough pending.
+
 ### Auth Screen Desktop/Tablet Redesign (2026-06-27)
 - **Change:** Redesigned the authentication screen layouts (Welcome, Sign-In, OTP, SignUp, Lock Screen, etc.) to suit tablet and desktop viewports by constraining and centering forms.
 - **Details:**

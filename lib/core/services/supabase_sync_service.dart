@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
+import 'package:reebaplus_pos/core/services/first_load_marker_service.dart';
 import 'package:reebaplus_pos/core/utils/order_number.dart';
 import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -72,26 +73,42 @@ class PullStatus {
   final PullStage stage;
   final int tablesDone;
   final int tablesTotal;
+  /// Row-weighted progress: total rows across all non-empty restore tables.
+  /// Zero until the snapshot row counts are known (the brief initial-fetch window).
+  final int rowsTotal;
+  /// Row-weighted progress: rows restored so far. Advances per table (by that
+  /// table's row count) as each restore completes.
+  final int rowsDone;
   final String? failedReason;
 
   const PullStatus({
     required this.stage,
     this.tablesDone = 0,
     this.tablesTotal = 0,
+    this.rowsTotal = 0,
+    this.rowsDone = 0,
     this.failedReason,
   });
 
   static const idle = PullStatus(stage: PullStage.idle);
 
+  /// Row-weighted percentage [0, 100] or null if rowsTotal is not yet known.
+  int? get rowPercent =>
+      rowsTotal > 0 ? ((rowsDone / rowsTotal) * 100).clamp(0, 100).round() : null;
+
   PullStatus copyWith({
     PullStage? stage,
     int? tablesDone,
     int? tablesTotal,
+    int? rowsTotal,
+    int? rowsDone,
     String? failedReason,
   }) => PullStatus(
     stage: stage ?? this.stage,
     tablesDone: tablesDone ?? this.tablesDone,
     tablesTotal: tablesTotal ?? this.tablesTotal,
+    rowsTotal: rowsTotal ?? this.rowsTotal,
+    rowsDone: rowsDone ?? this.rowsDone,
     failedReason: failedReason ?? this.failedReason,
   );
 }
@@ -1965,6 +1982,13 @@ class SupabaseSyncService {
         // record so the SyncIssues UI stops surfacing stale "catching up" state.
         await prefs.setString(key, DateTime.now().toUtc().toIso8601String());
         await prefs.remove(deferredKey);
+        // First-load overlay marker: a clean full pull means this business has
+        // fully landed on this device. Set the per-business "first full pull
+        // completed" marker so the first-load overlay never re-shows for an
+        // established-but-empty store on later launches. Lives in
+        // SharedPreferences (not Drift) so it survives clearAllData(); it is
+        // explicitly cleared there on a wipe/re-onboard. See §4.2.
+        await FirstLoadMarkerService.markPullCompleted(businessId);
       } else {
         // Deferred pull (leaf-deferred and/or FK-orphan skips). CLEAR the
         // incremental cursor so the NEXT pull is a true full pull
@@ -2340,10 +2364,21 @@ class SupabaseSyncService {
     ];
     final restoreTotal = restoreList.length;
     var restoreDone = 0;
+    // Row-weighted progress: sum all row counts before starting the loop so
+    // the overlay percentage advances in proportion to actual data restored,
+    // not per table (which parks the bar on large tables).
+    var rowsTotal = 0;
+    for (final t in restoreList) {
+      rowsTotal += snapshot[t]!.length;
+    }
+    var rowsDone = 0;
     // Only update tablesTotal if we're inside an outer stage (background);
     // the minimum-pull path uses a different stage with a fixed total.
     if (pullStatus.value.stage == PullStage.background) {
-      pullStatus.value = pullStatus.value.copyWith(tablesTotal: restoreTotal);
+      pullStatus.value = pullStatus.value.copyWith(
+        tablesTotal: restoreTotal,
+        rowsTotal: rowsTotal,
+      );
     }
     // Collects tables that skipped one or more orphaned rows (a referenced
     // parent slice was absent from this snapshot). Merged into `skipped`
@@ -2353,10 +2388,27 @@ class SupabaseSyncService {
     for (final table in restoreList) {
       final data = snapshot[table]!;
       debugPrint('[SyncService] Syncing $table: ${data.length} rows');
-      await _restoreTableData(table, data, fkSkipped: fkSkipped);
+      // §4.6 restore batching: wrap the whole table's row loop in ONE
+      // transaction so SQLite commits once per table instead of once per row.
+      // On a full first pull this is the dominant cost — thousands of orders /
+      // order-items / ledger rows each autocommitting is what makes the
+      // first-load overlay overstay even on a fast link. The per-row resilience
+      // is UNCHANGED: `_restoreTableData` still calls `_insertResilient` per
+      // row, which CATCHES FK / unique violations (no rethrow), so a skipped
+      // orphan does not abort the transaction — the good rows still commit and
+      // the cursor-hold/defer semantics are byte-for-byte preserved. Only a
+      // genuinely fatal (rethrown) error rolls the table back, which already
+      // aborts the pull and forces a full re-pull next time, so no row is lost.
+      await _db.transaction(
+        () => _restoreTableData(table, data, fkSkipped: fkSkipped),
+      );
       restoreDone++;
+      rowsDone += data.length;
       if (pullStatus.value.stage == PullStage.background) {
-        pullStatus.value = pullStatus.value.copyWith(tablesDone: restoreDone);
+        pullStatus.value = pullStatus.value.copyWith(
+          tablesDone: restoreDone,
+          rowsDone: rowsDone,
+        );
       }
     }
     if (fkSkipped.isNotEmpty) {

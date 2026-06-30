@@ -27,6 +27,8 @@ import 'package:reebaplus_pos/features/orders/screens/orders_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
+import 'package:reebaplus_pos/features/sync/controllers/first_load_overlay_controller.dart';
+import 'package:reebaplus_pos/shared/widgets/skeletons/first_load_skeletons.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -172,6 +174,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       currencySymbolProvider,
     ); // rebuild money displays when currency changes
     final bizName = ref.watch(currentBusinessNameProvider);
+
+    // First load: show the dashboard skeleton (brief §4.4) while the store is
+    // empty and data is still streaming in, so a stock keeper landing here sees
+    // placeholder cards rather than a blank dashboard. The drawer stays
+    // reachable via the menu button. Resolves to real content as data arrives.
+    if (ref.watch(firstLoadSkeletonActiveProvider)) {
+      return Container(
+        decoration: AppDecorations.glassyBackground(context),
+        child: SharedScaffold(
+          activeRoute: 'dashboard',
+          backgroundColor: Colors.transparent,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            leading: context.isDesktop ? null : const MenuButton(),
+            title: Text(bizName.isNotEmpty ? bizName : 'Reebaplus POS'),
+          ),
+          body: const SafeArea(child: HomeSkeleton()),
+        ),
+      );
+    }
+
     // ── Role resolution & §11.4 card visibility ─────────────────────────────
     final role = ref.watch(currentUserRoleProvider);
     final slug = role?.slug;

@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:reebaplus_pos/core/database/daos.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/diagnostics/schema_audit.dart';
+import 'package:reebaplus_pos/core/services/first_load_marker_service.dart';
 export 'daos.dart';
 
 part 'app_database.g.dart';
@@ -3909,6 +3910,17 @@ class AppDatabase extends _$AppDatabase {
     // re-pulls tenant tables) lands on an empty catalogue and Roles &
     // Permissions shows "N of 0". Idempotent.
     await ensurePermissionsSeeded();
+
+    // First-load overlay markers live in SharedPreferences (outside this DB) so
+    // they survive the wipe above — which is exactly why they MUST be cleared
+    // here. A logout / business-delete / onboarding-reset means the next pull is
+    // a genuine first load again; a stale "first full pull completed" marker
+    // would wrongly suppress the first-load overlay on the re-onboarded device.
+    // See the documented clearAllData wipe-trap pattern (§4.2 / §7). Best-effort:
+    // never let a prefs hiccup abort the wipe.
+    try {
+      await FirstLoadMarkerService.clearAllMarkers();
+    } catch (_) {}
   }
 
   Future<void> resetDatabase() async {

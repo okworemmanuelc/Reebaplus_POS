@@ -37,6 +37,8 @@ import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 import 'package:reebaplus_pos/shared/utils/product_icon_helper.dart';
 import 'package:reebaplus_pos/core/widgets/app_fab.dart';
 import 'package:reebaplus_pos/features/receiving/screens/receive_stock_screen.dart';
+import 'package:reebaplus_pos/features/sync/controllers/first_load_overlay_controller.dart';
+import 'package:reebaplus_pos/shared/widgets/skeletons/first_load_skeletons.dart';
 
 class InventoryScreen extends ConsumerStatefulWidget {
   const InventoryScreen({super.key});
@@ -303,6 +305,17 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         ),
       );
     }
+    // First load: show the inventory skeleton (brief §4.4) while the store is
+    // empty and products are still streaming in, then resolve to the real list.
+    if (ref.watch(firstLoadSkeletonActiveProvider)) {
+      return SharedScaffold(
+        activeRoute: 'inventory',
+        backgroundColor: _bg,
+        appBar: _buildAppBar(context),
+        body: const SafeArea(child: InventorySkeleton()),
+      );
+    }
+
     // Resolve the visible tabs (role / permission / business-type guards).
     // Null = the gating data hasn't loaded yet → show a static loading state
     // and don't touch the TabController, so the tab bar reveals its final set
