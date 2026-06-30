@@ -2,6 +2,61 @@
 
 ---
 
+## 2026-06-30 — Sync Data-Safety & Efficiency ("the outbox is sacred", Invariant #12)
+
+**Change:** Made offline activity impossible to lose silently, and stopped the
+app re-downloading the whole store on every launch. Spec:
+[brief-sync-data-safety-and-efficiency.md](context/specs/brief-sync-data-safety-and-efficiency.md).
+Adds **Invariant #12 — the outbox is sacred** to `architecture.md`. Branch:
+`feat/sync-data-safety-and-efficiency`.
+
+**Enforcement primitive:** `SyncDao.pendingRowIds(table, {businessId})` — the set
+of row ids for a table that still have an un-uploaded `<table>:upsert` entry in
+EITHER `sync_queue` (`status != 'completed'`) or `sync_queue_orphans`. Every fix
+is an application of it.
+
+**Bucket 1 — data safety:**
+- **(C) Clobber prevention** — `_restoreTableData` removes incoming cloud rows
+  whose id is in `pendingRowIds` before applying, so a pending local edit is
+  never overwritten regardless of `last_updated_at`. Timestamp-LWW demoted to a
+  tiebreaker for non-pending rows (same-second ties still cloud-wins). Fixes the
+  silent clobber of un-bumped tables (e.g. `businesses`).
+- **(B) Reconcile exclusion** — `_reconcileHardDeletes` skips ids in
+  `pendingRowIds`, and skips any table whose slice was deferred/failed
+  (`incompleteTables`) so a truncated/short slice is never read as "deleted".
+- **(E) Wipe gate** — `logOutCurrentUser` (sole user) now push-and-CONFIRMs the
+  outbox is empty before wiping; retryable rows ⇒ refuse (`LogoutWipeException`);
+  un-pushable orphans ⇒ `LogoutBlockedByUnsyncedDataException` → the new
+  **"Resolve unsynced data"** dialog (export CSV via `unsyncedExportRows` →
+  typed-confirm → `discardUnsyncedAndLogout`). Business-deleted wipes (the only
+  carve-out) record a durable `_recordWipeLoss` breadcrumb (survives
+  `clearAllData` via SharedPreferences) at all three sites.
+- **(D) Upload-before-download** — new `pushThenPull` (best-effort push via the
+  `_pushing`-guarded `_runPushOnce`, then pull) wired into reconnect
+  (`_onOnlineChanged`), pull-to-refresh (`AppRefreshWrapper`), and login
+  background pull. `pullChanges` stays standalone-safe.
+- **(F) Uploader check-up** — `_auditDrainIntegrity` confirms every row a drain
+  handled is still in `sync_queue` or moved to orphans; a vanished row writes a
+  `sync.outbox_shrinkage` `error_logs` breadcrumb.
+
+**Bucket 2 — efficiency:**
+- **(A1) Per-table backfill cursors** — a deferred pull no longer clears the
+  whole cursor (which forced a re-download/re-restore of EVERY table). The global
+  cursor keeps advancing; only **leaf** fetch-failures are recorded in a
+  per-business `backfill_tables::<id>` set and re-pulled `since=null` next time.
+  FK-orphan skips still take the conservative full re-pull (parents may be
+  unchanged + below the cursor). Snapshot RPC bypassed when a backfill set is
+  active (it can't express per-table `since`).
+- **(A2) Targeted parent fetch** — when a child FK-orphans on a
+  supplier/category/manufacturer id, `_targetedParentFetchAndRetry` fetches just
+  those parent rows by id (bounded at 50, capped round-trips) and retries the
+  child from the in-hand snapshot — healing inline instead of a full re-pull.
+
+**Verification:** `flutter analyze` clean on all touched files; new tests under
+`test/sync/` (see below) pass; existing `test/sync/` suite green.
+
+---
+
 ## 2026-06-30 — First-Load "Loading your store" Overlay Redesign
 
 **Change:** Replaced the open-ended post-login "Loading your store" full-pull

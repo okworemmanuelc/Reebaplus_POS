@@ -16,6 +16,7 @@ import 'package:reebaplus_pos/features/subscription/widgets/subscription_badge.d
 import 'package:reebaplus_pos/features/settings/screens/staff_settings_screen.dart';
 import 'package:reebaplus_pos/features/staff/screens/staff_management_screen.dart';
 import 'package:reebaplus_pos/features/sync/screens/sync_issues_screen.dart';
+import 'package:reebaplus_pos/features/sync/widgets/resolve_unsynced_data_dialog.dart';
 import 'package:reebaplus_pos/shared/utils/role_display.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/shared/widgets/store_picker_sheet.dart';
@@ -539,6 +540,18 @@ class AppDrawer extends ConsumerWidget {
             if (context.mounted && !context.isDesktop) Navigator.pop(context); // close the drawer
             try {
               await auth.logOutCurrentUser(); // → main.dart routes to Welcome
+            } on LogoutBlockedByUnsyncedDataException catch (e) {
+              // §3.1 two-tier resolution: un-pushable orphans block the wipe but
+              // must never trap the user. Route to the export → typed-confirm
+              // discard → logout flow instead of refusing outright.
+              if (context.mounted) {
+                await showResolveUnsyncedDataDialog(
+                  context,
+                  ref,
+                  pendingCount: e.pendingCount,
+                  orphanCount: e.orphanCount,
+                );
+              }
             } on LogoutWipeException catch (e) {
               if (context.mounted) {
                 AppNotification.showError(context, e.message);

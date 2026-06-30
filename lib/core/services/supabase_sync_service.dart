@@ -278,6 +278,30 @@ class SupabaseSyncService {
   /// given business.
   String? _currentBusinessId;
 
+  /// §3.7 (A2) per-pull collector of FK-orphaned restore rows, keyed by child
+  /// table. Non-null ONLY during a `pullInitialData` restore loop;
+  /// `_insertResilient` records each skipped row here so the post-restore
+  /// targeted-parent fetch can pull just the missing parent by id and retry the
+  /// child — instead of forcing a whole full re-pull. Reset per pull; left null
+  /// on the realtime / single-row restore paths so they never collect.
+  Map<String, List<Map<String, dynamic>>>? _fkOrphanedRows;
+
+  /// §3.7 (A2) allowlist of FK fields whose missing parent can be fetched by id
+  /// and back-filled inline — the common "CEO created a supplier / category /
+  /// manufacturer on another device and a child references it before its slice
+  /// arrived" case. Maps the child row's camelCase FK field to the parent table.
+  static const Map<String, String> _targetedParentFkFields = {
+    'supplierId': 'suppliers',
+    'categoryId': 'categories',
+    'manufacturerId': 'manufacturers',
+  };
+
+  /// §3.7 (A2) hard cap on targeted parent fetches per pull, so a flaky link or
+  /// a genuinely-absent parent can't turn the heal into an unbounded round-trip
+  /// storm. Beyond this, the affected children stay skipped and fall back to the
+  /// conservative full re-pull (A1's FK-orphan branch).
+  static const _maxTargetedParentFetch = 50;
+
   /// Persistent failure-count key. Per-business so multi-tenant device
   /// switching doesn't conflate counts.
   static String _consecutiveFailuresKey(String businessId) =>
@@ -317,8 +341,10 @@ class SupabaseSyncService {
       // throws again; swallow it so it can't escape to the top-level zone as an
       // unhandled error. pullStatus stays `failed` and the next connectivity
       // flip retries (offline-first — a failed background pull is not a crash).
+      // §3.4: push the outbox first so a device that was offline uploads its
+      // work before re-downloading.
       unawaited(
-        pullChanges(_currentBusinessId!).catchError((Object e) {
+        pushThenPull(_currentBusinessId!).catchError((Object e) {
           debugPrint('[SyncService] connectivity-retry pull failed: $e');
         }),
       );
@@ -653,8 +679,13 @@ class SupabaseSyncService {
   @visibleForTesting
   Future<void> reconcileHardDeletesForTesting(
     String businessId,
-    Map<String, List<dynamic>> snapshot,
-  ) => _reconcileHardDeletes(businessId, snapshot);
+    Map<String, List<dynamic>> snapshot, {
+    Set<String> incompleteTables = const <String>{},
+  }) => _reconcileHardDeletes(
+    businessId,
+    snapshot,
+    incompleteTables: incompleteTables,
+  );
 
   /// Applies an incoming realtime DELETE locally. The cloud is the source of
   /// truth for the removal, so this deletes the local row WITHOUT enqueueing
@@ -774,6 +805,13 @@ class SupabaseSyncService {
       businessId: sessionBusinessId,
     );
     if (rawItems.isEmpty) return;
+
+    // §3.5 uploader check-up: remember exactly which queue rows this drain set
+    // out to handle. After the drain, [_auditDrainIntegrity] confirms each one
+    // either stayed in `sync_queue` (uploaded → 'completed', or still pending)
+    // or moved to `sync_queue_orphans`. A row in NEITHER vanished silently — the
+    // "third path" Invariant #12 forbids — and earns an `error_logs` breadcrumb.
+    final intendedIds = rawItems.map((i) => i.id).toList();
 
     // Coalesce duplicates: a burst of writes to the same row (e.g. five
     // inventory adjustments to the same product before the queue drains)
@@ -1132,12 +1170,72 @@ class SupabaseSyncService {
     // the first-drain grace so subsequent drains fail fast as designed.
     if (!isLinkDegraded) _didWarmUpThisSession = true;
 
+    // §3.5 uploader check-up: every row this drain handled must now be either
+    // still in `sync_queue` (uploaded/completed, or pending for retry) or moved
+    // to `sync_queue_orphans`. Anything missing from both vanished silently.
+    await _auditDrainIntegrity(intendedIds, sessionBusinessId);
+
     // If the raw select hit the page limit, more is waiting — drain in the
     // next tick rather than recursing (avoids stack growth on huge backlogs).
     // Not while link-degraded: continuing to hammer a bad link just stalls;
     // the next connectivity / periodic trigger resumes the drain.
     if (rawItems.length == 200 && !isLinkDegraded) {
       Future.microtask(pushPending);
+    }
+  }
+
+  /// §3.5 uploader check-up — the two-ways-only invariant detector. A row may
+  /// leave `sync_queue` ONLY by (a) confirmed upload (`markDone`, the row stays
+  /// present as `completed`) or (b) moving to `sync_queue_orphans` (visible).
+  /// After a drain this re-checks every id the drain set out to push: each must
+  /// still be present in `sync_queue` (under any status) OR exist as an orphan
+  /// keyed on its original id. An id in NEITHER vanished silently — the third,
+  /// silent path the brief warns about (vector F) — so we record an `error_logs`
+  /// breadcrumb instead of losing the row without trace.
+  ///
+  /// Best-effort and fully defensive: the integrity check must never itself
+  /// break or block a drain.
+  Future<void> _auditDrainIntegrity(
+    List<String> intendedIds,
+    String businessId,
+  ) async {
+    if (intendedIds.isEmpty) return;
+    try {
+      final present = <String>{
+        for (final r
+            in await (_db.select(
+              _db.syncQueue,
+            )..where((t) => t.id.isIn(intendedIds))).get())
+          r.id,
+      };
+      final orphaned = <String>{
+        for (final r
+            in await (_db.select(
+              _db.syncQueueOrphans,
+            )..where((t) => t.originalId.isIn(intendedIds))).get())
+          r.originalId,
+      };
+      final vanished = intendedIds
+          .where((id) => !present.contains(id) && !orphaned.contains(id))
+          .toList();
+      if (vanished.isEmpty) return;
+      debugPrint(
+        '[SyncService] OUTBOX INTEGRITY: ${vanished.length} queue row(s) left '
+        'the outbox without uploading or orphaning — '
+        'ids=${vanished.take(5).join(",")}',
+      );
+      await _db.errorLogDao.logError(
+        errorType: 'sync.outbox_shrinkage',
+        message:
+            'Invariant #12: ${vanished.length} sync_queue row(s) vanished '
+            'during a drain without markDone or an orphan move. '
+            'ids=${vanished.join(",")}',
+        context: 'pushPending._auditDrainIntegrity',
+        businessId: businessId,
+      );
+    } catch (e) {
+      // The integrity check must never itself break a drain. Swallow.
+      debugPrint('[SyncService] drain integrity check failed: $e');
     }
   }
 
@@ -1827,6 +1925,24 @@ class SupabaseSyncService {
     }
   }
 
+  /// §3.4 upload-before-download. The reconnect, pull-to-refresh, and login
+  /// triggers route through this instead of calling [pullChanges] directly: it
+  /// drains the outbox first (best-effort, through the `_pushing`-guarded
+  /// [_runPushOnce] so it can't double-run against the auto-push loop) and only
+  /// then pulls. A freshly-recovered device uploads its offline work before
+  /// downloading, avoiding a wasted pull/restore right where the loss window
+  /// used to be widest (vector D).
+  ///
+  /// [pullChanges] stays callable standalone and safe on its own — the
+  /// Invariant #12 guards (3.2/3.3) make this ordering an efficiency choice, not
+  /// a safety requirement. The push is best-effort: [_runPushOnce] already
+  /// swallows push failures, so a rejected row or a mid-flight disconnect never
+  /// blocks the pull.
+  Future<void> pushThenPull(String businessId) async {
+    await _runPushOnce();
+    await pullChanges(businessId);
+  }
+
   /// Minimum-login pull: fetches only the tables required for `MainLayout`
   /// to render. Designed to complete in ~1-6 seconds depending on link
   /// speed (math in the plan file). Throws [PartialPullException] on
@@ -1973,15 +2089,29 @@ class SupabaseSyncService {
       since = DateTime.tryParse(lastSyncStr);
     }
 
+    // §3.6 per-table backfill cursors: tables that deferred on a PRIOR pull and
+    // still owe a full (since=null) catch-up. They are pulled with since=null
+    // this run while every other table stays incremental on the global cursor.
+    final backfillKey = backfillTablesKey(businessId);
+    final backfillStr = prefs.getString(backfillKey);
+    final backfillTables = (backfillStr == null || backfillStr.isEmpty)
+        ? const <String>{}
+        : backfillStr.split(',').toSet();
+
     try {
-      final skipped = await pullInitialData(businessId, since: since);
+      final skipped = await pullInitialData(
+        businessId,
+        since: since,
+        fullPullTables: backfillTables,
+      );
 
       final deferredKey = pendingDeferredTablesKey(businessId);
       if (skipped.isEmpty) {
-        // Clean pull — advance the cursor and clear any prior deferred-tables
+        // Clean pull — advance the cursor and clear any prior deferred/backfill
         // record so the SyncIssues UI stops surfacing stale "catching up" state.
         await prefs.setString(key, DateTime.now().toUtc().toIso8601String());
         await prefs.remove(deferredKey);
+        await prefs.remove(backfillKey);
         // First-load overlay marker: a clean full pull means this business has
         // fully landed on this device. Set the per-business "first full pull
         // completed" marker so the first-load overlay never re-shows for an
@@ -1990,22 +2120,53 @@ class SupabaseSyncService {
         // explicitly cleared there on a wipe/re-onboard. See §4.2.
         await FirstLoadMarkerService.markPullCompleted(businessId);
       } else {
-        // Deferred pull (leaf-deferred and/or FK-orphan skips). CLEAR the
-        // incremental cursor so the NEXT pull is a true full pull
-        // (`since == null`). A held non-null cursor would keep the next pull
-        // incremental and only re-send rows changed after it — so a parent
-        // created before the cursor (e.g. an unchanged categories /
-        // crate_size_groups row) is never re-fetched, and an FK-orphaned
-        // child (a product referencing it) could never catch up no matter how
-        // many times the user taps Retry. A full pull re-fetches every current
-        // cloud row, including those parents, after which the skipped child
-        // inserts cleanly. Persist the deferred set so SyncIssues can show
-        // what's still pending.
-        debugPrint(
-          '[SyncService] Forcing full re-pull (cleared cursor); '
-          '${skipped.length} deferred table(s): ${skipped.join(", ")}',
-        );
-        await prefs.remove(key);
+        // §3.6 per-table backfill cursors (vector A1). A deferred pull no longer
+        // clears the WHOLE cursor — that forced the next pull to re-download and
+        // re-restore EVERY table (orders, order_items, ledgers — thousands of
+        // rows) merely because one small table deferred, which is the slow-sync
+        // root cause. Instead we split by skip kind:
+        //
+        //   • FK-orphan skips (a child whose parent slice was absent — table NOT
+        //     in `_deferrableTables`) STILL need the conservative full re-pull,
+        //     because the missing parent may be an UNCHANGED row sitting below
+        //     the cursor that an incremental pull would never re-fetch. Clear the
+        //     cursor for those so every current cloud row (parents included) is
+        //     re-pulled and the child finally inserts. (A2 heals the common
+        //     inline-created-parent case inline so this path is rarely hit.)
+        //
+        //   • Leaf fetch-failures (tables in `_deferrableTables`: nothing
+        //     FK-references them, and their own parents already arrived) just
+        //     need THEMSELVES re-fetched. Advance the global cursor so the big
+        //     tables stay incremental, and record only the deferred leaf tables
+        //     in the backfill set — the next pull runs since=null for exactly
+        //     those and stays incremental for the rest.
+        final fkOrphanSkips = skipped
+            .where((t) => !_deferrableTables.contains(t))
+            .toSet();
+        if (fkOrphanSkips.isNotEmpty) {
+          debugPrint(
+            '[SyncService] FK-orphan skip(s) ${fkOrphanSkips.join(", ")} — '
+            'clearing cursor to force a full re-pull (parents may be unchanged '
+            'and below the cursor).',
+          );
+          await prefs.remove(key);
+          await prefs.remove(backfillKey);
+        } else {
+          // Only leaf fetch-failures deferred — advance the cursor and backfill
+          // just those tables next time. The backfill set is exactly this pull's
+          // deferred set: a table that successfully backfilled this run is no
+          // longer in `skipped`, so it drops out automatically.
+          await prefs.setString(
+            key,
+            DateTime.now().toUtc().toIso8601String(),
+          );
+          await prefs.setString(backfillKey, skipped.join(','));
+          debugPrint(
+            '[SyncService] Per-table backfill: advanced global cursor; '
+            '${skipped.length} leaf table(s) flagged for full re-pull next '
+            'time: ${skipped.join(", ")}',
+          );
+        }
         await prefs.setString(deferredKey, skipped.join(','));
       }
       // Clean run — reset consecutive-failure count and signal completion.
@@ -2169,6 +2330,14 @@ class SupabaseSyncService {
   static String pendingDeferredTablesKey(String businessId) =>
       'pending_deferred_tables::$businessId';
 
+  /// SharedPreferences key (per-business) for the §3.6 per-table backfill set:
+  /// the comma-separated tables that deferred on a prior pull and still owe a
+  /// full (`since=null`) catch-up. The global cursor keeps advancing; only these
+  /// tables are re-pulled in full on the next pull, so a small table deferring
+  /// can no longer force a re-download of the whole dataset (vector A1).
+  static String backfillTablesKey(String businessId) =>
+      'backfill_tables::$businessId';
+
   /// Returns `true` when `pullInitialData` should call the monolithic
   /// `pos_pull_snapshot` RPC; `false` when it should use the paginated
   /// `_pullViaPostgRest` path.
@@ -2215,6 +2384,7 @@ class SupabaseSyncService {
   Future<Set<String>> pullInitialData(
     String businessId, {
     DateTime? since,
+    Set<String> fullPullTables = const <String>{},
   }) async {
     // Force a full sync if the business is not found locally.
     final localBusiness = await (_db.select(
@@ -2242,10 +2412,18 @@ class SupabaseSyncService {
     Map<String, List<dynamic>>? snapshot;
     Set<String> skipped = const <String>{};
 
-    if (SupabaseSyncService.shouldUseSnapshotRpc(
-      isSlow: isSlow,
-      since: since,
-    )) {
+    // §3.6: a non-empty backfill set needs PER-TABLE `since` (null for the
+    // backfill tables, the cursor for the rest). The monolithic snapshot RPC
+    // takes a single `p_since` for every table, so it can't express that —
+    // bypass it and use the paginated path, which fetches each table with its
+    // own `since`.
+    final hasPerTableBackfill = fullPullTables.isNotEmpty;
+
+    if (!hasPerTableBackfill &&
+        SupabaseSyncService.shouldUseSnapshotRpc(
+          isSlow: isSlow,
+          since: since,
+        )) {
       try {
         final result = await _supabase
             .rpc(
@@ -2290,6 +2468,7 @@ class SupabaseSyncService {
         businessId,
         since,
         pageSize: pageSize,
+        fullPullTables: fullPullTables,
       );
       snapshot = fallback.data;
       skipped = fallback.skipped;
@@ -2385,31 +2564,58 @@ class SupabaseSyncService {
     // below so the caller holds the sync cursor and the next full pull
     // retries those rows once their parent has arrived.
     final fkSkipped = <String>{};
-    for (final table in restoreList) {
-      final data = snapshot[table]!;
-      debugPrint('[SyncService] Syncing $table: ${data.length} rows');
-      // §4.6 restore batching: wrap the whole table's row loop in ONE
-      // transaction so SQLite commits once per table instead of once per row.
-      // On a full first pull this is the dominant cost — thousands of orders /
-      // order-items / ledger rows each autocommitting is what makes the
-      // first-load overlay overstay even on a fast link. The per-row resilience
-      // is UNCHANGED: `_restoreTableData` still calls `_insertResilient` per
-      // row, which CATCHES FK / unique violations (no rethrow), so a skipped
-      // orphan does not abort the transaction — the good rows still commit and
-      // the cursor-hold/defer semantics are byte-for-byte preserved. Only a
-      // genuinely fatal (rethrown) error rolls the table back, which already
-      // aborts the pull and forces a full re-pull next time, so no row is lost.
-      await _db.transaction(
-        () => _restoreTableData(table, data, fkSkipped: fkSkipped),
-      );
-      restoreDone++;
-      rowsDone += data.length;
-      if (pullStatus.value.stage == PullStage.background) {
-        pullStatus.value = pullStatus.value.copyWith(
-          tablesDone: restoreDone,
-          rowsDone: rowsDone,
+    // §3.7 (A2): arm the per-pull orphaned-row collector so `_insertResilient`
+    // records the rows it skips; the targeted-parent fetch below uses them.
+    // Captured + disarmed in the finally so a fatal restore error can't leave
+    // the field armed for the realtime path to append into.
+    _fkOrphanedRows = <String, List<Map<String, dynamic>>>{};
+    Map<String, List<Map<String, dynamic>>>? orphanedRows;
+    try {
+      for (final table in restoreList) {
+        final data = snapshot[table]!;
+        debugPrint('[SyncService] Syncing $table: ${data.length} rows');
+        // §4.6 restore batching: wrap the whole table's row loop in ONE
+        // transaction so SQLite commits once per table instead of once per row.
+        // On a full first pull this is the dominant cost — thousands of orders /
+        // order-items / ledger rows each autocommitting is what makes the
+        // first-load overlay overstay even on a fast link. The per-row
+        // resilience is UNCHANGED: `_restoreTableData` still calls
+        // `_insertResilient` per row, which CATCHES FK / unique violations (no
+        // rethrow), so a skipped orphan does not abort the transaction — the
+        // good rows still commit and the cursor-hold/defer semantics are
+        // byte-for-byte preserved. Only a genuinely fatal (rethrown) error rolls
+        // the table back, which already aborts the pull and forces a full
+        // re-pull next time, so no row is lost.
+        await _db.transaction(
+          () => _restoreTableData(table, data, fkSkipped: fkSkipped),
         );
+        restoreDone++;
+        rowsDone += data.length;
+        if (pullStatus.value.stage == PullStage.background) {
+          pullStatus.value = pullStatus.value.copyWith(
+            tablesDone: restoreDone,
+            rowsDone: rowsDone,
+          );
+        }
       }
+    } finally {
+      orphanedRows = _fkOrphanedRows;
+      _fkOrphanedRows = null;
+    }
+    // §3.7 targeted parent fetch (A2): before holding the cursor for a full
+    // re-pull, try to heal FK-orphans inline — fetch just the missing
+    // supplier/category/manufacturer parents by id and retry the affected
+    // children. Bounded round-trips; anything it can't heal stays in fkSkipped
+    // and falls back to the conservative full re-pull. Runs only on a network
+    // pull (the realtime path leaves `_fkOrphanedRows` null).
+    if (fkSkipped.isNotEmpty && orphanedRows != null) {
+      final healed = await _targetedParentFetchAndRetry(
+        businessId,
+        fkSkipped,
+        orphanedRows,
+        snapshot,
+      );
+      fkSkipped.removeAll(healed);
     }
     if (fkSkipped.isNotEmpty) {
       debugPrint(
@@ -2434,9 +2640,143 @@ class SupabaseSyncService {
     // after the cursor, where "absent" means "unchanged" — reconciling it would
     // wipe live rows. We therefore gate strictly on `since == null`.
     if (since == null) {
-      await _reconcileHardDeletes(businessId, snapshot);
+      // §3.2 completeness guard: pass the tables whose slice did NOT fully
+      // arrive (fetch-failed/leaf-deferred + FK-orphan skips, merged into
+      // `skipped` above) so reconcile never reads a truncated slice as
+      // "the rest were deleted".
+      await _reconcileHardDeletes(
+        businessId,
+        snapshot,
+        incompleteTables: skipped,
+      );
     }
     return skipped;
+  }
+
+  /// §3.7 targeted parent fetch (A2). For child rows that FK-orphaned during the
+  /// restore, fetch ONLY the specific missing parent rows by id — the common
+  /// inline-created supplier / category / manufacturer case — restore them, then
+  /// re-run restore for the affected child tables from the [snapshot] already in
+  /// hand. Bounded: total parent fetches are capped at [_maxTargetedParentFetch]
+  /// so a flaky link or a genuinely-absent parent can't trigger a round-trip
+  /// storm; beyond the cap (or on any fetch error) the children are left skipped
+  /// and the caller falls back to A1's conservative full re-pull.
+  ///
+  /// Returns the set of child tables that healed (no longer orphan), so the
+  /// caller can drop them from `fkSkipped`.
+  Future<Set<String>> _targetedParentFetchAndRetry(
+    String businessId,
+    Set<String> fkSkipped,
+    Map<String, List<Map<String, dynamic>>> orphanedRows,
+    Map<String, List<dynamic>> snapshot,
+  ) async {
+    // 1. Collect candidate missing parents (parentTable → ids) from the
+    //    allowlisted FK fields present on the orphaned rows.
+    final wantByParent = <String, Set<String>>{};
+    for (final rows in orphanedRows.values) {
+      for (final r in rows) {
+        for (final entry in _targetedParentFkFields.entries) {
+          final value = r[entry.key];
+          if (value is String && value.isNotEmpty) {
+            wantByParent.putIfAbsent(entry.value, () => <String>{}).add(value);
+          }
+        }
+      }
+    }
+    if (wantByParent.isEmpty) return const <String>{};
+
+    // 2. Keep only ids that aren't already local (only genuinely-missing parents
+    //    need a round-trip) and enforce the bound.
+    var totalToFetch = 0;
+    final missingByParent = <String, List<String>>{};
+    for (final entry in wantByParent.entries) {
+      final present = await _localExistingIds(entry.key, entry.value);
+      final missing = entry.value.difference(present).toList();
+      if (missing.isEmpty) continue;
+      missingByParent[entry.key] = missing;
+      totalToFetch += missing.length;
+    }
+    if (missingByParent.isEmpty) {
+      // Parents are already local — the orphan was a transient ordering blip
+      // within this pull. Retry the children straight away.
+      return _retryOrphanedChildren(orphanedRows.keys, snapshot);
+    }
+    if (totalToFetch > _maxTargetedParentFetch) {
+      debugPrint(
+        '[SyncService] A2 skipped: $totalToFetch missing parents exceeds cap '
+        '($_maxTargetedParentFetch) — falling back to full re-pull.',
+      );
+      return const <String>{};
+    }
+
+    // 3. Fetch each parent table's missing rows by id (one batched round-trip
+    //    per parent table) and restore them. Any fetch failure aborts A2 so the
+    //    caller falls back to the full re-pull.
+    for (final entry in missingByParent.entries) {
+      try {
+        final List<dynamic> rows = await _supabase
+            .from(entry.key)
+            .select()
+            .eq('business_id', businessId)
+            .inFilter('id', entry.value)
+            .timeout(const Duration(seconds: 15));
+        if (rows.isNotEmpty) {
+          await _restoreTableData(entry.key, rows);
+        }
+        debugPrint(
+          '[SyncService] A2 fetched ${rows.length}/${entry.value.length} '
+          'missing ${entry.key} parent(s) by id.',
+        );
+      } catch (e) {
+        debugPrint('[SyncService] A2 parent fetch failed for ${entry.key}: $e');
+        return const <String>{};
+      }
+    }
+
+    // 4. Retry the affected children from the snapshot now that parents exist.
+    return _retryOrphanedChildren(orphanedRows.keys, snapshot);
+  }
+
+  /// Re-runs restore for the previously-orphaned child tables from the
+  /// [snapshot] already in hand (snake_case rows). Returns the set that healed
+  /// cleanly (no second-pass FK skip). `_fkOrphanedRows` is null here, so the
+  /// second pass does not re-collect.
+  Future<Set<String>> _retryOrphanedChildren(
+    Iterable<String> childTables,
+    Map<String, List<dynamic>> snapshot,
+  ) async {
+    final healed = <String>{};
+    for (final table in childTables) {
+      final data = snapshot[table];
+      if (data == null || data.isEmpty) continue;
+      final secondPass = <String>{};
+      await _db.transaction(
+        () => _restoreTableData(table, data, fkSkipped: secondPass),
+      );
+      if (!secondPass.contains(table)) {
+        healed.add(table);
+        debugPrint(
+          '[SyncService] A2 healed child table $table after parent fetch.',
+        );
+      }
+    }
+    return healed;
+  }
+
+  /// Returns the subset of [ids] for [table] that already exist locally. Used by
+  /// the A2 targeted parent fetch to avoid round-tripping for parents already on
+  /// the device. [table] comes from the static [_targetedParentFkFields]
+  /// allowlist, so the interpolation carries no injection risk.
+  Future<Set<String>> _localExistingIds(String table, Set<String> ids) async {
+    if (ids.isEmpty) return const <String>{};
+    final placeholders = List.filled(ids.length, '?').join(',');
+    final rows = await _db
+        .customSelect(
+          'SELECT id FROM $table WHERE id IN ($placeholders)',
+          variables: ids.map(Variable.withString).toList(),
+        )
+        .get();
+    return {for (final r in rows) r.read<String>('id')};
   }
 
   /// Hard-delete tables (the only `enqueueDelete` call sites): a revoke/delete
@@ -2471,16 +2811,44 @@ class SupabaseSyncService {
   ///   business's data — see the business-scoping invariant).
   Future<void> _reconcileHardDeletes(
     String businessId,
-    Map<String, List<dynamic>> snapshot,
-  ) async {
+    Map<String, List<dynamic>> snapshot, {
+    Set<String> incompleteTables = const <String>{},
+  }) async {
     for (final table in _hardDeleteReconcileTables) {
       // Absent key ⇒ slice didn't arrive ⇒ do not reconcile (no wipe).
       if (!snapshot.containsKey(table)) continue;
+      // §3.2 completeness guard: a table whose fetch failed or was leaf-deferred
+      // arrives as an empty/short list (`_pullViaPostgRest` stores `[]` for a
+      // failed table). Reading that as "every local row was deleted" is the
+      // truncation-wipe bug — a server-side cap/timeout must never trigger
+      // deletions. Only reconcile a slice known to be complete.
+      if (incompleteTables.contains(table)) {
+        debugPrint(
+          '[SyncService] Reconcile skipped $table — slice incomplete '
+          '(deferred/failed fetch); not reading a short slice as deletions.',
+        );
+        continue;
+      }
       final cloudIds = <String>{
         for (final r in snapshot[table]!)
           if (r is Map && r['id'] != null) r['id'].toString(),
       };
-      final removed = await _deleteLocalRowsNotIn(table, businessId, cloudIds);
+      // §3.2 / Invariant #12: a local row that still has an un-uploaded outbox
+      // entry is offline-created/edited data the cloud has not seen yet — its
+      // absence from the snapshot means "not pushed", NOT "deleted". Protect it
+      // by treating its id as present.
+      final pendingIds = await _db.syncDao.pendingRowIds(
+        table,
+        businessId: businessId,
+      );
+      final protectedIds = pendingIds.isEmpty
+          ? cloudIds
+          : <String>{...cloudIds, ...pendingIds};
+      final removed = await _deleteLocalRowsNotIn(
+        table,
+        businessId,
+        protectedIds,
+      );
       if (removed > 0) {
         debugPrint(
           '[SyncService] Reconcile $table: removed $removed local row(s) '
@@ -2560,8 +2928,14 @@ class SupabaseSyncService {
     String businessId,
     DateTime? since, {
     required int pageSize,
+    Set<String> fullPullTables = const <String>{},
   }) async {
     final isSlow = pageSize <= _pullPageSizeCellular;
+
+    // §3.6 per-table backfill cursors: a table owed a full catch-up is fetched
+    // with `since=null`; every other table stays incremental on the cursor.
+    DateTime? sinceFor(String table) =>
+        fullPullTables.contains(table) ? null : since;
 
     if (isSlow) {
       // On cellular / poor connections, fetch tables SEQUENTIALLY in _pullOrder
@@ -2578,7 +2952,7 @@ class SupabaseSyncService {
           final data = await _fetchOneTable(
             table,
             businessId,
-            since,
+            sinceFor(table),
             pageSize: pageSize,
           );
           results[table] = data;
@@ -2610,7 +2984,12 @@ class SupabaseSyncService {
         try {
           return _FetchOutcome(
             table,
-            await _fetchOneTable(table, businessId, since, pageSize: pageSize),
+            await _fetchOneTable(
+              table,
+              businessId,
+              sinceFor(table),
+              pageSize: pageSize,
+            ),
             null,
           );
         } catch (e) {
@@ -2647,7 +3026,7 @@ class SupabaseSyncService {
         final data = await _fetchOneTable(
           outcome.table,
           businessId,
-          since,
+          sinceFor(outcome.table),
           pageSize: pageSize,
         );
         results[outcome.table] = data;
@@ -3685,6 +4064,10 @@ class SupabaseSyncService {
       }
       if (!_isForeignKeyViolation(e)) rethrow;
       fkSkipped?.add(table);
+      // §3.7 (A2): record the orphaned row so the post-restore targeted-parent
+      // fetch can pull its missing parent by id and retry it inline. Collector
+      // is non-null only during a pullInitialData restore loop.
+      _fkOrphanedRows?.putIfAbsent(table, () => []).add(r);
       // Surface the row's FK references (every camelCase key ending in `Id`,
       // minus the row's own `id`) so triage can see which parent is missing
       // without re-deriving it from logs. SQLite's FK error doesn't name the
@@ -3766,6 +4149,35 @@ class SupabaseSyncService {
       debugPrint(
         '[SyncService] LWW filtered $filtered/${allRows.length} rows for $table',
       );
+    }
+
+    // §3.3 / Invariant #12 — clobber prevention. A local row that still has an
+    // un-uploaded outbox entry (`sync_queue` or `sync_queue_orphans`) is
+    // sacred: an incoming cloud row must NEVER overwrite it, regardless of
+    // `last_updated_at`. The timestamp-LWW above is therefore demoted to a
+    // tiebreaker for NON-pending rows only (same-second cross-device ties stay
+    // cloud-wins for those). This makes correctness independent of whether the
+    // DAO write bumped `last_updated_at` — the bug that silently clobbered
+    // `businesses` edits (vector C). Scoped to the bound business when known;
+    // unscoped during the pre-setCurrentUser bootstrap window (row ids are
+    // globally-unique UUIDv7, so the unscoped match is still exact).
+    final pendingIds = await _db.syncDao.pendingRowIds(
+      table,
+      businessId: _db.currentBusinessId,
+    );
+    if (pendingIds.isNotEmpty) {
+      final before = rows.length;
+      rows.removeWhere((r) {
+        final id = r['id'];
+        return id is String && pendingIds.contains(id);
+      });
+      final protected = before - rows.length;
+      if (protected > 0) {
+        debugPrint(
+          '[SyncService] Invariant #12 protected $protected un-pushed '
+          '$table row(s) from cloud overwrite',
+        );
+      }
     }
 
     // Defense-in-depth business isolation: when a session is bound, never write

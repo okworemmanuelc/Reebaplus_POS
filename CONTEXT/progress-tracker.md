@@ -1511,6 +1511,40 @@ with correct code → Copy/SMS/WhatsApp still work → re-sync does NOT re-send.
 
 ---
 
+## Sync Data-Safety & Efficiency — Invariant #12 "the outbox is sacred" (2026-06-30)
+
+Spec: `context/specs/brief-sync-data-safety-and-efficiency.md`. Branch
+`feat/sync-data-safety-and-efficiency`. Added **Invariant #12** to
+`architecture.md`. Full detail in `BUILD_LOG.md` (2026-06-30 entry).
+
+**Shipped — Bucket 1 (data safety):**
+- Enforcement primitive `SyncDao.pendingRowIds(table, {businessId})` +
+  `countOrphans` + `unsyncedExportRows` / `discardUnsyncedForBusiness`.
+- (C) clobber prevention in `_restoreTableData`; (B) reconcile exclusion +
+  completeness guard in `_reconcileHardDeletes`; (E) hardened wipe gate in
+  `AuthService.logOutCurrentUser` + `LogoutBlockedByUnsyncedDataException` +
+  `ResolveUnsyncedDataDialog` + `_recordWipeLoss` breadcrumb at the three
+  business-deleted carve-outs; (D) `SupabaseSyncService.pushThenPull` on
+  reconnect/refresh/login; (F) `_auditDrainIntegrity` self-count breadcrumb.
+
+**Shipped — Bucket 2 (efficiency):**
+- (A1) per-table backfill cursors (`backfill_tables::<id>` pref) so a deferred
+  leaf table no longer forces a re-pull of every table; FK-orphans keep the
+  conservative full re-pull.
+- (A2) `_targetedParentFetchAndRetry` — bounded inline fetch of missing
+  supplier/category/manufacturer parents by id + child retry.
+
+**Open follow-ups (logged, not blocking):**
+- Proactive "sync blocked — this device's access changed" banner + elevating the
+  Sync Issues screen from operator-only to user-visible (brief §3.1 last bullet)
+  — the never-trap-logout export/discard flow is shipped; the always-on banner is
+  deferred. The wipe-loss breadcrumbs land in SharedPreferences
+  (`wipe_data_loss_breadcrumbs`) with no surfacing UI yet.
+- `last_updated_at`-bump DAO audit (brief §3.3 "hygiene") — correctness no longer
+  depends on it (clobber prevention covers it), so deferred as cleanup.
+
+---
+
 ## Session Notes
 
 **To resume in a new session:**
