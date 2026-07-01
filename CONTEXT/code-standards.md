@@ -285,6 +285,7 @@ These rules implement the storage model defined in `architecture.md`. They are n
 - Wallet and supplier ledger rows are **append-only**. No code may issue an `UPDATE` or `DELETE` on a ledger row. Corrections are new compensating rows. The balance is always derived by summing the ledger, never stored as a single field.
 - No Supabase client call may appear in `lib/features/` or `lib/data/repositories/`. All network calls go through `lib/data/remote/`. All SQL goes through `lib/data/local/`.
 - IDs for all business-data rows are **UUIDv7**, generated on the client at write time in `lib/core/`. Do not use auto-increment integers or UUIDv4 for rows that pass through the outbox.
+- Money is stored in **minor units (kobo)** as integers, never floats. In the **cloud (Postgres) every `*_kobo` column MUST be `bigint`, never `integer`** — int4 caps at ₦21,474,836.47 and any larger amount is rejected on push with `22003 out of range`, permanently jamming the outbox (the value stores fine locally, since SQLite/Dart ints are 64-bit, so the row becomes silently un-pushable). This bit us once and was fixed wholesale in migration `0130`; any new `_kobo` column added to a synced table must be declared `bigint` in its migration.
 
 ---
 

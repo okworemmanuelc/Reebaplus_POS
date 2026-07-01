@@ -10,6 +10,19 @@ The human updates it when resolving open questions or making architectural decis
 
 151 sessions logged. Codebase is live and being verified on-device.
 
+### Fix: cloud money columns widened to `bigint` (2026-07-01)
+- **Symptom:** Sync Issues showed `supplier_ledger_entries:upsert` stuck at 42
+  attempts — `PostgrestException 22003 "value 12360040000 out of range for type
+  integer"` (₦123.6M in kobo overflows int4's ₦21.5M ceiling), permanently jamming
+  the outbox. Local value stored fine (64-bit), so it was un-pushable, not lost.
+- **Fix (cloud-only, migration `0130`):** `ALTER TYPE bigint` on all 34 int4 money
+  columns (30 `*_kobo` + 4 crate-count `balance`) across 22 tables — none were
+  bigint before. Verified 0 remain. No Drift migration (already 64-bit);
+  `pos_pull_snapshot` returns jsonb so the pull path is untouched. Stuck row pushes
+  on next retry, no data lost.
+- **Prevention:** `code-standards.md` now mandates every cloud `*_kobo` column be
+  `bigint`. See BUILD_LOG 2026-07-01.
+
 ### First-Load "Loading your store" Overlay Redesign (2026-06-30)
 - **Change:** the post-login full-pull loader is now a brief (≤ ~2 s) "Setting up
   ‹Business›…" reassurance that hands off to per-tab skeletons + a thin top sync

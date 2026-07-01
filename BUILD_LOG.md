@@ -2,6 +2,36 @@
 
 ---
 
+## 2026-07-01 — Fix: widen all cloud money (`*_kobo`) columns to `bigint` — outbox jam (22003 overflow)
+
+**Symptom:** Sync Issues showed a pending `supplier_ledger_entries:upsert` stuck at
+**42 attempts** with
+`PostgrestException(22003): value "12360040000" is out of range for type integer`.
+₦123,600,400.00 in kobo overflows Postgres `int4` (max 2,147,483,647 = ₦21,474,836.47).
+
+**Root cause (systemic, not one column):** every monetary column in the cloud stores
+minor units (kobo) but was typed **`integer`**. A census found **34 int4 money
+columns across 22 tables** and **zero** already `bigint`. Any legitimate amount above
+~₦21.5M is rejected on push with 22003 and **permanently jams the outbox** — an
+"outbox is sacred" (Invariant #12) row that a schema mismatch, not the client, made
+un-pushable. Locally the value stores fine (SQLite INTEGER + Dart `int` are 64-bit),
+so the row sits un-uploadable rather than being lost.
+
+**Fix — cloud-only, migration `0130_widen_money_columns_to_bigint.sql`:**
+- `ALTER TYPE bigint` on all 30 `*_kobo` columns + the 4 crate-COUNT `balance`
+  columns (widened for uniformity so a future "any money-ish int4 left?" audit
+  returns zero). Verified 0 int4 money columns remain post-push.
+- **No Drift migration** — local schema is already 64-bit; this was purely the
+  cloud narrowing the pipe. `pos_pull_snapshot` returns `jsonb`, so widening is
+  transparent to the pull path. Pre-checked: none of the columns are GENERATED and
+  no view/matview/RPC depends on their int4 type, so plain `ALTER TYPE` is safe.
+- The stuck row(s) push successfully on the next retry — **no data lost**.
+
+**Prevention:** `code-standards.md` → Data and Storage now mandates every cloud
+`*_kobo` column be `bigint`, never `integer`, with the overflow rationale.
+
+---
+
 ## 2026-07-01 — Feature: device registry for console analytics (make/model + last-seen)
 
 **Goal:** let the operator console see the phone make/model, OS, app version, and
