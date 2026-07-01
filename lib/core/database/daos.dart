@@ -4254,8 +4254,8 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
     if (!kEnqueueableTables.contains(tableName)) {
       throw StateError(
         'enqueueUpsert("$tableName"): not a registered synced/cache/businesses '
-        'table. Add it to _syncedTenantTables (or kSyncCacheTables) or fix the '
-        'table name — CLAUDE.md §5.',
+        'table. Add a SyncedTable entry (tenantScoped: true, or isCache: true) '
+        'in sync_registry.dart, or fix the table name — CLAUDE.md §5.',
       );
     }
     final payloadMap = serializeInsertable(row);
@@ -4351,7 +4351,8 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
     if (!kSyncedTenantTables.contains(tableName)) {
       throw StateError(
         'enqueueDelete("$tableName"): not a registered synced table — '
-        'fix the table name or add it to _syncedTenantTables (CLAUDE.md §5).',
+        'fix the table name or add a tenantScoped SyncedTable entry in '
+        'sync_registry.dart (CLAUDE.md §5).',
       );
     }
     final payloadMap = {

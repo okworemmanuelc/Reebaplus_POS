@@ -209,6 +209,39 @@ A new device joining a mature store has no stored cursor. The absence of a curso
 
 **Table group order:** the sync service pulls in priority order: (1) roles and permissions, (2) staff, (3) products and categories, (4) active customer profiles, (5) suppliers and wallets, (6) historical orders and expenses, (7) activity logs. Progress is written to `sync_progress` per group and reflected by the non-blocking sync indicators (it no longer drives a blocking onboarding screen).
 
+### The `SyncedTable` registry — one source of truth per table
+
+Every per-table sync fact lives in **one ordered `List<SyncedTable>`**, the
+**sync registry** (`lib/core/database/sync_registry.dart`, part of the
+`AppDatabase` library so both the schema-builder and the sync engine can share
+it without an upward dependency — invariant #8). Each entry is the complete
+truth about one table: its name, its **restore** function (how a pulled page is
+written into Drift), its optional **push-column whitelist** (absent ⇒
+pass-through), an optional **hard-delete** rule (absent ⇒ append-only /
+soft-delete), a **`scrubCreatedAt`** flag (the immutable-`created_at` ledgers),
+and **`tenantScoped` / `isCache`** flags.
+
+The six constructs that used to hold this knowledge separately — the
+synced-tenant-table list, the pull order, the push-column whitelist, the
+`created_at`-scrub set, and the two hard-delete switches — now **derive** from
+the registry (`kSyncPullOrder`, `kSyncedTenantTables`, `kSyncCacheTables`,
+`kSyncPushColumns`, `kSyncScrubCreatedAtTables`, `kHardDeleteReconcileTables`),
+so they can never disagree. **Adding a synced table is one registry entry**,
+placed after its parent(s) in the ordered list; a reflection test turns the
+build red if a sync-fingerprinted table has no entry, and a golden-equivalence
+test pins the derived accessors against their frozen historical values. This
+retires the recurring "forgot to register the table in one of the switches →
+peer devices silently drop its rows" bug-class.
+
+Restore strategies are built from helpers (`Restore.plain` / `.naturalKey` /
+`.dedup` / `.ledger`, with a hand-written closure for the genuinely bespoke
+tables like `users`). The central pre-insert guards — timestamp-LWW, the
+invariant #12 clobber-guard, and the business-isolation guard — still run once
+for all tables in the sync service **before** dispatch; only the per-table body
+became a registry lookup. **List order governs pull / restore / hard-delete
+reconcile only** — push drains the outbox row-by-row and never iterates tables
+in order.
+
 ### Ordering, idempotency, and crash capture
 
 - **Ordering & idempotency:** outbox entries are ordered and carry client-generated UUIDv7 IDs so replays are idempotent — re-sending a batch after a dropped connection can never double-apply a sale.

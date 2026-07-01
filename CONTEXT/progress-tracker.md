@@ -10,6 +10,32 @@ The human updates it when resolving open questions or making architectural decis
 
 151 sessions logged. Codebase is live and being verified on-device.
 
+### Refactor: `SyncedTable` registry — one source of truth per synced table (2026-07-01, issue #15)
+- **Problem:** a synced table's knowledge was smeared across six constructs (the
+  synced-tenant-table list, pull order, push whitelist, `created_at`-scrub set,
+  and two hard-delete switches) + a ~50-case restore switch. Wiring five of six
+  and forgetting one compiled and worked locally but **silently dropped that
+  table's rows on peer devices** — the recurring "wire ALL client apply sites"
+  trap in the most safety-critical subsystem.
+- **Fix:** one ordered `List<SyncedTable>` in the database layer
+  (`lib/core/database/sync_registry.dart`, `part of` app_database.dart — no
+  import cycle). Each entry is the whole per-table truth (restore fn, optional
+  push columns / hard-delete rule, scrub flag, tenant/cache flags); the six
+  constructs now **derive** from it and the literal lists + restore switch are
+  deleted. Restore helpers (`Restore.plain/.naturalKey/.dedup/.ledger` + a
+  bespoke `users` closure) and a database-layer `SyncRestoreExecutor` (FK-resilient
+  helper + ledger restore) keep the registry dependency-free; the two hard-delete
+  switches collapsed into one `SyncHardDelete` per entry.
+- **Behaviour-neutral:** no schema / cloud / wire-protocol change; the central
+  pre-insert guards (LWW, invariant #12, business isolation) are unchanged.
+- **Tests:** new golden-equivalence test freezes the six constructs' pre-collapse
+  values; the reflection test now asserts registry membership. Behavioural seams
+  (outbox-sacred, FK-resilience, hard-delete reconcile, realtime DELETE, dispatch,
+  scrub) stayed green unchanged. `test/sync/` + `test/database/` = 233 green,
+  `flutter analyze` clean. See BUILD_LOG 2026-07-01.
+- **Note:** `test/auth/who_is_working_screen_test.dart` fails **pre-existing**
+  (identical with this refactor stashed) — unrelated parallel-work / widget timing.
+
 ### Fix: cloud money columns widened to `bigint` (2026-07-01)
 - **Symptom:** Sync Issues showed `supplier_ledger_entries:upsert` stuck at 42
   attempts — `PostgrestException 22003 "value 12360040000 out of range for type

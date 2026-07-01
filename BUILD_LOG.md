@@ -2,6 +2,69 @@
 
 ---
 
+## 2026-07-01 — Refactor: collapse the per-table sync smear into a `SyncedTable` registry (issue #15)
+
+**Problem:** adding or changing a synced table meant editing the same table's
+knowledge in **six scattered constructs** — the synced-tenant-table list
+(`_syncedTenantTables`, app_database.dart), the pull order (`_pullOrder`), the
+push-column whitelist (`_pushableColumns`), the `created_at`-scrub set
+(`_ledgerCreatedAtScrubTables`), and **two** hard-delete switches
+(`_deleteLocalRowById` + `_deleteLocalRowsNotIn`, gated by
+`_hardDeleteReconcileTables`) — plus a ~50-case `_restoreTableData` switch. Wire
+five of six and forget one and it compiles, works on the device that created the
+data, and **never reaches peer devices** — the documented recurring "new synced
+table: wire ALL client apply sites" trap, living in the most safety-critical
+subsystem.
+
+**Fix — one ordered `List<SyncedTable>` in the database layer**
+(`lib/core/database/sync_registry.dart`, a `part of` app_database.dart so it
+shares the generated Drift types with no import cycle — invariant #8):
+- Each entry is the complete per-table truth: `name`, `restore` (a
+  helper-built or bespoke closure), optional `pushColumns`, optional
+  `hardDelete` (the two former switches reconciled into one `SyncHardDelete`
+  with `deleteById` + `deleteByIdsNotIn`), `scrubCreatedAt`, and
+  `tenantScoped` / `isCache` flags.
+- Restore helpers `Restore.plain` / `.naturalKey` / `.dedup` / `.ledger` (+ a
+  hand-written closure for `users`, which must never clobber device-local PIN /
+  biometric columns) each capture the concrete Drift row type at the call site —
+  no dynamic casts. The FK-resilient helper + ledger restore + FK/UNIQUE
+  classifiers moved to a database-layer `SyncRestoreExecutor` so the registry
+  has no upward dependency; the sync service injects the §30.8.1 order-number
+  heal (needs secure storage) as a callback.
+- The six constructs now **derive** from the registry (`kSyncPullOrder`,
+  `kSyncedTenantTables`, `kSyncCacheTables`, `kSyncPushColumns`,
+  `kSyncScrubCreatedAtTables`, `kHardDeleteReconcileTables`). The literal lists
+  and the `_restoreTableData` switch are **deleted**.
+- The central pre-insert guards (timestamp-LWW, the invariant #12 clobber-guard,
+  the business-isolation guard) are unchanged and still run once for all tables
+  in the sync service **before** dispatch; only the switch body became a
+  registry lookup. List order governs pull / restore / reconcile only — push
+  still drains the outbox row-by-row.
+
+**Behaviour-neutral by construction.** No schema change, no cloud migration, no
+wire-protocol change. Root tables (`businesses`, `customers`) stay
+non-FK-resilient exactly as before; every FK-resilience / natural-key / dedup /
+ledger fact reproduces today's behaviour.
+
+**Tests:**
+- New **golden equivalence test** (`test/sync/sync_registry_golden_test.dart`):
+  freezes the six constructs' pre-collapse values and asserts the derived
+  accessors reproduce each (pull-order byte-for-byte; the rest set/map-for).
+- Extended the **reflection/registration test**: every sync-fingerprinted Drift
+  table must have a registry entry; every registry name resolves to a real Drift
+  table (or the declared `profiles` cloud-only exemption); no duplicate entries.
+- The behavioural seams stayed **green and unchanged**: outbox-sacred restore,
+  FK-resilience restore, snapshot hard-delete reconcile, realtime DELETE,
+  per-table dispatch, and the payload-whitelist scrub. `replica_identity_full`
+  now reads `kHardDeleteReconcileTables` at runtime instead of regex-parsing the
+  deleted literal. Full `test/sync/` + `test/database/` = 233 green;
+  `flutter analyze` clean.
+- (Unrelated pre-existing failure noted: `test/auth/who_is_working_screen_test.dart`
+  fails identically with my changes stashed — a parallel-work / widget-timing
+  issue, not this refactor.)
+
+---
+
 ## 2026-07-01 — Fix: widen all cloud money (`*_kobo`) columns to `bigint` — outbox jam (22003 overflow)
 
 **Symptom:** Sync Issues showed a pending `supplier_ledger_entries:upsert` stuck at

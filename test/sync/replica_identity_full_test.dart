@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:reebaplus_pos/core/database/app_database.dart';
 
 /// Sync safeguard — realtime DELETE propagation for hard-delete tables.
 ///
@@ -14,17 +15,17 @@ import 'package:flutter_test/flutter_test.dart';
 /// propagates but toggle OFF doesn't revert" bug (migration 0090), and the
 /// `role_permissions` / `saved_carts` / `notifications` bug before it (0064).
 ///
-/// Rule: every table the client hard-deletes — `_hardDeleteReconcileTables` in
-/// `supabase_sync_service.dart` (the `enqueueDelete` + realtime-DELETE +
-/// snapshot-reconcile set) — must have an `ALTER TABLE … REPLICA IDENTITY FULL`
-/// in some migration. Add a new hard-delete table and forget the migration and
-/// this goes red.
+/// Rule: every table the client hard-deletes — the registry entries carrying a
+/// `hardDelete` rule, exposed as `kHardDeleteReconcileTables` (the
+/// `enqueueDelete` + realtime-DELETE + snapshot-reconcile set) — must have an
+/// `ALTER TABLE … REPLICA IDENTITY FULL` in some migration. Add a new
+/// hard-delete table and forget the migration and this goes red.
 void main() {
   test('every hard-delete table is REPLICA IDENTITY FULL in a migration', () {
-    final tables = _hardDeleteTables();
+    final tables = kHardDeleteReconcileTables;
     expect(tables, isNotEmpty,
-        reason: 'Failed to parse _hardDeleteReconcileTables from '
-            'supabase_sync_service.dart');
+        reason: 'kHardDeleteReconcileTables is empty — the SyncedTable registry '
+            'has no hard-delete entries?');
 
     final migrations = StringBuffer();
     final dir = Directory('supabase/migrations');
@@ -54,20 +55,4 @@ void main() {
           'migration and deploy it.',
     );
   });
-}
-
-/// The quoted entries of the `_hardDeleteReconcileTables` set literal in
-/// `supabase_sync_service.dart`.
-Set<String> _hardDeleteTables() {
-  final src =
-      File('lib/core/services/supabase_sync_service.dart').readAsStringSync();
-  final start = src.indexOf('_hardDeleteReconcileTables = {');
-  if (start < 0) return const {};
-  final end = src.indexOf('}', start);
-  if (end < 0) return const {};
-  final block = src.substring(start, end);
-  return RegExp(r"'([^']+)'")
-      .allMatches(block)
-      .map((m) => m.group(1)!)
-      .toSet();
 }
