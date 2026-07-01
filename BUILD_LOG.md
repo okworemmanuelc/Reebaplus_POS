@@ -2,6 +2,59 @@
 
 ---
 
+## 2026-07-01 — Feature: device registry for console analytics (make/model + last-seen)
+
+**Goal:** let the operator console see the phone make/model, OS, app version, and
+last-seen of every device that has ever logged into a business — for analytics
+only. **No in-app screen.**
+
+**What existed already:** a stable opaque per-device UUID
+(`SecureStorageService.getOrCreateDeviceId`, plain SharedPreferences, survives
+`fullLogout`) already reached the cloud via `sessions.device_id`. But **make/model
+was never captured** (no `device_info_plus`; the `sessions.user_agent` column was
+dead and excluded from sync).
+
+**Change (cloud-only, direct upsert — no offline sync-queue wiring):**
+- New cloud-only table `public.devices` (migration `0129_devices.sql`, applied via
+  the Management API — see divergence note below). One row per
+  `(business_id, device_id)`; columns: platform, manufacturer, model, device_name,
+  os_version, app_version, is_physical_device, last_user_id/email/name,
+  first_seen_at, last_seen_at. **Rows survive business deletion** (business_id +
+  last_user_id are plain uuids, no FK), so `delete_business`'s cascade keeps churn
+  history. RLS: `devices_tenant_rw` via `current_user_business_ids()`; console
+  reads via `service_role`.
+- `last_seen_at` is server-stamped by a `BEFORE INSERT OR UPDATE` trigger
+  (`_devices_stamp_last_seen`, `SET search_path = pg_catalog`) so a wrong device
+  clock can't skew it; `first_seen_at` keeps its insert-time default (never in the
+  client payload).
+- New `DeviceRegistryService` (`lib/shared/services/device_registry_service.dart`)
+  reads metadata via `device_info_plus` (Android: manufacturer/model/name/version;
+  iOS: `utsname.machine` + `modelName` marketing label) + `package_info_plus`, and
+  does a fire-and-forget `supabase.from('devices').upsert(..., onConflict:
+  'business_id,device_id')`. Never throws — analytics must not break login/sync.
+- Wired in `AuthService`: `_recordDevicePresence()` fires from `setCurrentUser`'s
+  session microtask (covers fresh sign-in **and** app-open re-auth via
+  PIN/biometric/who's-working) and from an `isOnline` false→true listener (covers
+  reconnect + a device that logged in offline).
+
+**Trade-off (by design):** a device that logs in offline and never reconnects
+won't appear until it next has internet (inherent to the cloud-only model).
+
+**Verified:** `flutter analyze` clean; remote table/RLS/trigger/unique-index
+present; security advisor clean after the search_path fix; upsert smoke-test
+confirmed first_seen fixed + last_seen advancing + column updates on conflict.
+
+**⚠️ Pre-existing migration divergence (NOT introduced here):** remote applied
+0125/0126/0128 under timestamp versions and has a remote-only `enable_pg_cron`;
+local labels 0125–0128 therefore read as "unapplied", and **0127
+(add_expense_budgets_to_pull_snapshot) appears genuinely un-deployed remotely**. A
+blind `supabase db push` would replay 0126's `CREATE TRIGGER` and fail — which is
+why 0129 was applied surgically via the Management API. Recommend a
+`migration repair` reconciliation (per the divergence-repair memory) + deploying
+0127 as separate follow-up work.
+
+---
+
 ## 2026-07-01 — Fix: empty store / missing nav after existing-CEO re-login (clearAllData cursor-survival trap)
 
 **Symptom:** an existing CEO logs in on a wiped/re-onboarded device and lands on

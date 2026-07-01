@@ -1557,6 +1557,16 @@ to the unit being picked up.
 - Cloud migrations deployed through: **0118** (0117 supplier crate tracking +
   0118 `sales.set_custom_price` pushed 2026-06-19; verified: catalogue row
   present, granted to all CEO roles, 0 non-CEO grants).
+- **2026-07-01 — `0129_devices` deployed (device registry for console analytics).**
+  Cloud-only `public.devices` table (make/model/os/app_version/is_physical_device/
+  last-seen per `(business_id, device_id)`), written by a direct authenticated
+  `supabase.upsert` from `DeviceRegistryService` on sign-in / app-open / reconnect
+  (no offline sync-queue wiring; no in-app screen). Deps `device_info_plus` +
+  `package_info_plus` added. Applied via the Management API (see divergence note).
+  ⚠️ **Migration-history divergence:** remote applied 0125/0126/0128 under
+  timestamp versions + a remote-only `enable_pg_cron`; **0127 appears un-deployed**.
+  A blind `supabase db push` would fail on 0126's `CREATE TRIGGER`. Reconcile with
+  `migration repair` + deploy 0127 as follow-up.
 - `flutter test test/sync/` — **115 pass** (Session 141 baseline).
 - Full suite last confirmed: 452 pass / 58 skipped / 1 pre-existing unrelated
   failure (`invite_staff_sheet_test`) (2026-06-19).
