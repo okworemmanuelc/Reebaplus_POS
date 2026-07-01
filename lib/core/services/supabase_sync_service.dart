@@ -310,7 +310,15 @@ class SupabaseSyncService {
   /// Device-wide one-shot flag for the invite_codes backfill (see
   /// [ensureBackfillOnce]). Bumping the suffix re-arms the backfill for a
   /// future table that lands in the pull path after devices have synced.
-  static const _backfillCursorResetKey = 'sync_backfill_done::invite_codes_v2';
+  ///
+  /// Bumped v2 → v3 to auto-heal devices left in the "empty store after
+  /// re-login" state by the clearAllData cursor-survival trap (a wipe left a
+  /// stale `last_sync_timestamp::<biz>` behind, so the next login ran an
+  /// incremental pull that skipped the catalogue / customers / roles). This
+  /// one-shot clears every surviving cursor once on the new build, so the next
+  /// pull runs full and rebuilds the store. `clearAllData` now clears the cursor
+  /// too, so the trap can't recur — this only recovers already-affected devices.
+  static const _backfillCursorResetKey = 'sync_backfill_done::cursor_reset_v3';
 
   /// Prefix of the per-business incremental-pull cursor keys written by
   /// [pullChanges]. Kept as a named constant so [ensureBackfillOnce] and

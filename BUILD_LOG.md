@@ -2,6 +2,39 @@
 
 ---
 
+## 2026-07-01 — Fix: empty store / missing nav after existing-CEO re-login (clearAllData cursor-survival trap)
+
+**Symptom:** an existing CEO logs in on a wiped/re-onboarded device and lands on
+an almost-empty store — navigation shows only Home + Orders (no POS, Inventory,
+Customers…) and no customer/product data. Log signature: the background pull runs
+**incremental** (`Pulling data … (since: 2026-07-01T07:58:37Z)`) and the snapshot
+RPC returns only 6 rows.
+
+**Root cause:** `AppDatabase.clearAllData()` (logout / business-delete / onboarding
+reset) wipes the Drift DB but the per-business pull cursor
+`last_sync_timestamp::<biz>` lives in SharedPreferences and **survives the wipe** —
+the same wipe-trap `FirstLoadMarkerService` was built for, but the cursor was never
+wired in. On the next login `pullChanges` reads the stale cursor → incremental pull
+→ every row created before the cursor (catalogue, customers, and
+roles/permissions, which gate the whole navigation) is never re-downloaded. The
+§3.6 per-table backfill change widened the window (it advances the cursor on a
+leaf-deferred pull where the old code cleared it), but the clean-pull + wipe case
+was always broken.
+
+**Fix:**
+- New `SyncCursorResetService.clearAll()` (mirrors `FirstLoadMarkerService`) clears
+  every per-business pull-state key (`last_sync_timestamp::`, `backfill_tables::`,
+  `pending_deferred_tables::`, `consecutive_pull_failures::`); called from
+  `clearAllData()` so the next login runs a **full** pull like a brand-new device.
+  Closes the trap for all future wipes.
+- Bumped the one-shot device-wide cursor-reset flag (`_backfillCursorResetKey`
+  `invite_codes_v2` → `cursor_reset_v3`) so `ensureBackfillOnce` clears surviving
+  cursors **once** on the new build — auto-healing devices already stuck in the
+  empty-store state without requiring a manual logout.
+- Regression tests: `test/sync/clear_all_data_resets_cursor_test.dart`.
+
+---
+
 ## 2026-06-30 — Sync Data-Safety & Efficiency ("the outbox is sacred", Invariant #12)
 
 **Change:** Made offline activity impossible to lose silently, and stopped the

@@ -10,6 +10,7 @@ import 'package:reebaplus_pos/core/database/daos.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/diagnostics/schema_audit.dart';
 import 'package:reebaplus_pos/core/services/first_load_marker_service.dart';
+import 'package:reebaplus_pos/core/services/sync_cursor_reset_service.dart';
 export 'daos.dart';
 
 part 'app_database.g.dart';
@@ -3920,6 +3921,18 @@ class AppDatabase extends _$AppDatabase {
     // never let a prefs hiccup abort the wipe.
     try {
       await FirstLoadMarkerService.clearAllMarkers();
+    } catch (_) {}
+
+    // Same wipe-trap: the per-business pull cursor (`last_sync_timestamp::<biz>`)
+    // and the other pull-state prefs live in SharedPreferences and survive the
+    // Drift wipe above. If left behind, the next login reads the stale cursor
+    // and runs an INCREMENTAL pull that skips every row created before it — the
+    // catalogue, customers, and roles/permissions (and therefore the whole
+    // permission-gated navigation) never re-download, leaving a re-onboarded
+    // device on an almost-empty store. Reset them so the next pull runs full,
+    // exactly like a brand-new device. Best-effort: never abort the wipe.
+    try {
+      await SyncCursorResetService.clearAll();
     } catch (_) {}
   }
 
