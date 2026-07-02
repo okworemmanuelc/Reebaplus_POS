@@ -12,6 +12,7 @@ import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:reebaplus_pos/features/auth/onboarding/onboarding_draft.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
+import 'package:reebaplus_pos/shared/services/device_registry_service.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 import 'package:reebaplus_pos/shared/services/pin_hasher.dart';
 
@@ -89,6 +90,13 @@ class AuthService extends ValueNotifier<UserData?> {
   final SupabaseClient _supabase;
   final String googleWebClientId;
 
+  /// Upserts this device's make/model + last-seen to the cloud-only `devices`
+  /// table for the console's analytics (no in-app screen). Fire-and-forget.
+  late final DeviceRegistryService _deviceRegistry = DeviceRegistryService(
+    _supabase,
+    _secure,
+  );
+
   AuthService(
     this._db,
     this._nav,
@@ -127,6 +135,32 @@ class AuthService extends ValueNotifier<UserData?> {
     _sync.onActiveBusinessDeleted = _handleActiveBusinessDeleted;
 
     _sync.currentUserIdResolver = () => value?.id;
+
+    // Record this device's make/model + last-seen for the console whenever
+    // connectivity recovers, so a device that signed in offline (or was offline
+    // at app-open) still lands its analytics the moment it can reach the cloud.
+    // isOnline only notifies on change, so this fires once per false→true edge.
+    _sync.isOnline.addListener(_onOnlineRecordDevice);
+  }
+
+  void _onOnlineRecordDevice() {
+    if (_sync.isOnline.value) _recordDevicePresence();
+  }
+
+  /// Upserts this device's row in the cloud `devices` table for the console's
+  /// device analytics (§ device registry). No-op if no user is bound yet.
+  /// Fire-and-forget — [DeviceRegistryService.recordPresence] never throws.
+  void _recordDevicePresence() {
+    final user = value;
+    if (user == null) return;
+    unawaited(
+      _deviceRegistry.recordPresence(
+        businessId: user.businessId,
+        userId: user.id,
+        userEmail: user.email,
+        userName: user.name,
+      ),
+    );
   }
 
   /// Notifies listeners whenever the device-level user ID changes.
@@ -730,6 +764,11 @@ class AuthService extends ValueNotifier<UserData?> {
         } catch (e) {
           debugPrint('[AuthService] createSession error: $e');
         }
+        // Record this device's make/model + last-seen for the console. Separate
+        // from the session try above so a session-create failure doesn't skip
+        // it (and vice versa). Covers fresh sign-in AND app-open re-auth, since
+        // PIN/biometric/who's-working unlock all route through setCurrentUser.
+        _recordDevicePresence();
       });
     } catch (e, stack) {
       debugPrint('[AuthService] CRITICAL ERROR in setCurrentUser: $e\n$stack');
