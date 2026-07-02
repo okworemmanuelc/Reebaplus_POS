@@ -16,6 +16,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/services/supabase_cloud_transport.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 
 void main() {
@@ -31,7 +32,7 @@ void main() {
       'https://placeholder.supabase.co',
       'placeholder-anon-key',
     );
-    sync = SupabaseSyncService(db, supabase);
+    sync = SupabaseSyncService(db, SupabaseCloudTransport(supabase));
     SharedPreferences.setMockInitialValues({});
   });
 

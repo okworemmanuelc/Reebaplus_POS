@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/services/cloud_transport.dart';
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:reebaplus_pos/core/services/first_load_marker_service.dart';
 import 'package:reebaplus_pos/core/utils/order_number.dart';
@@ -134,15 +135,16 @@ class JwtClaimSnapshot {
 
 class SupabaseSyncService {
   final AppDatabase _db;
-  final SupabaseClient _supabase;
+  final CloudTransport _transport;
   // Resolves this device's order-number tag for the legacy-collision self-heal
   // (§30.8.1). Optional so existing test constructions keep working; when null,
   // the heal is skipped and the row classifies as a normal permanent failure.
   final SecureStorageService? _secureStorage;
-  final List<RealtimeChannel> _tableChannels = [];
-  RealtimeChannel? _businessesChannel;
+  // Realtime channel lifecycle lives in the CloudTransport adapter; the engine
+  // only tracks whether a subscription is currently active (for restart).
+  bool _realtimeActive = false;
   StreamSubscription<int>? _autoPushSub;
-  StreamSubscription<AuthState>? _authStateSub;
+  StreamSubscription<TransportAuthEvent>? _authStateSub;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
   Timer? _autoPushDebounce;
   Timer? _autoPushPeriodic;
@@ -201,11 +203,6 @@ class SupabaseSyncService {
   /// Rows per page when the connection quality is poor or unknown. Aggressive
   /// floor to maximise the chance each page completes within a 15s timeout.
   static const int _pullPageSizePoor = 50;
-
-  /// Absolute floor: a page-level timeout halves the current page size, but
-  /// never below this value. Below 10 rows per page the per-request overhead
-  /// dominates and throughput collapses.
-  static const int _minPullPageSize = 10;
 
   /// Per-chunk network timeout, escalating with how many times this row has
   /// already been retried (`SyncQueueData.attempts`). A fresh row gets a
@@ -360,7 +357,7 @@ class SupabaseSyncService {
     _wasOnline = nowOnline;
   }
 
-  SupabaseSyncService(this._db, this._supabase, [this._secureStorage]) {
+  SupabaseSyncService(this._db, this._transport, [this._secureStorage]) {
     isOnline.addListener(_onOnlineChanged);
   }
 
@@ -630,7 +627,7 @@ class SupabaseSyncService {
     // Without an authenticated session the server sees auth.uid() as NULL,
     // so RLS denies every insert. Skip rather than burn `attempts` and rack
     // up false negatives — startAutoPush retriggers as soon as sign-in lands.
-    final currentAuthUid = _supabase.auth.currentUser?.id;
+    final currentAuthUid = _transport.currentAuthUserId;
     if (currentAuthUid == null) {
       debugPrint('[SyncService] Skipping push: no auth session.');
       return;
@@ -931,12 +928,13 @@ class SupabaseSyncService {
             final conflictTarget =
                 group.conflictTarget ??
                 _naturalKeyPushConflictTargets[group.table];
-            final upsert = conflictTarget != null
-                ? _supabase
-                      .from(group.table)
-                      .upsert(chunkPayloads, onConflict: conflictTarget)
-                : _supabase.from(group.table).upsert(chunkPayloads);
-            await upsert.timeout(chunkTimeout);
+            await _transport
+                .upsertRows(
+                  group.table,
+                  chunkPayloads,
+                  onConflict: conflictTarget,
+                )
+                .timeout(chunkTimeout);
           } else if (group.action == 'delete') {
             // Hard delete only used for tombstones the cloud needs to forget.
             // Soft delete (is_deleted=true) goes through the upsert path above.
@@ -945,10 +943,8 @@ class SupabaseSyncService {
                 .whereType<String>()
                 .toList();
             if (deleteIds.isNotEmpty) {
-              await _supabase
-                  .from(group.table)
-                  .delete()
-                  .inFilter('id', deleteIds)
+              await _transport
+                  .deleteRowsById(group.table, deleteIds)
                   .timeout(chunkTimeout);
             }
           }
@@ -1144,11 +1140,8 @@ class SupabaseSyncService {
   /// backstop, and the next drain simply warms again.
   Future<void> _warmUpConnection(String sessionBusinessId) async {
     try {
-      await _supabase
-          .from('businesses')
-          .select('id')
-          .eq('id', sessionBusinessId)
-          .limit(1)
+      await _transport
+          .warmUp(sessionBusinessId)
           .timeout(_firstDrainTimeoutFloor);
       _didWarmUpThisSession = true;
       debugPrint('[SyncService] Connection warm-up ok (cold start paid).');
@@ -1217,7 +1210,7 @@ class SupabaseSyncService {
 
       final rpcName = item.actionType.substring('domain:'.length);
       try {
-        final response = await _supabase.rpc(rpcName, params: payload);
+        final response = await _transport.callRpc(rpcName, payload);
         await _applyDomainResponse(rpcName, response);
         await _db.syncDao.markDone(item.id);
         final replayed = response is Map && response['replayed'] == true;
@@ -1320,7 +1313,7 @@ class SupabaseSyncService {
       final payload = payloads[i];
       final queueId = queueIds[i];
       try {
-        await _supabase.from('orders').upsert([payload]);
+        await _transport.upsertRows('orders', [payload]);
         await _db.syncDao.markDoneBatch([queueId]);
       } catch (e) {
         if (deviceTag != null &&
@@ -1759,7 +1752,7 @@ class SupabaseSyncService {
   ///   - the device is offline (the row stays pending and will drain later), OR
   ///   - the RPC fails with a transient error (queued for backoff retry).
   Future<void> flushSale(String orderId) async {
-    final currentAuthUid = _supabase.auth.currentUser?.id;
+    final currentAuthUid = _transport.currentAuthUserId;
     if (currentAuthUid == null) return;
     if (!isOnline.value) return;
     final sessionBusinessId = _db.currentBusinessId;
@@ -2223,14 +2216,11 @@ class SupabaseSyncService {
           since: since,
         )) {
       try {
-        final result = await _supabase
-            .rpc(
-              'pos_pull_snapshot',
-              params: {
-                'p_business_id': businessId,
-                'p_since': since?.toIso8601String(),
-              },
-            )
+        final result = await _transport
+            .callRpc('pos_pull_snapshot', {
+              'p_business_id': businessId,
+              'p_since': since?.toIso8601String(),
+            })
             .timeout(const Duration(seconds: 60));
         if (result is Map) {
           snapshot = <String, List<dynamic>>{
@@ -2280,12 +2270,8 @@ class SupabaseSyncService {
     // returns it inline.
     if (snapshot['users'] == null || snapshot['users']!.isEmpty) {
       try {
-        var q = _supabase.from('users').select().eq('business_id', businessId);
-        if (since != null) {
-          q = q.gt('last_updated_at', since.toIso8601String());
-        }
-        final List<dynamic> users = await q.timeout(
-          const Duration(seconds: 15),
+        final List<dynamic> users = await _transport.fetchTable(
+          TableQuery('users', businessId, since, pageSize: pageSize),
         );
         snapshot['users'] = users;
         // Loud canary: matches the businesses canary below. A full pull that
@@ -2298,7 +2284,7 @@ class SupabaseSyncService {
             '[SyncService] WARN supplementary users fetch returned 0 rows '
             'for $businessId — FK-to-users tables will fail restore. RLS '
             'denial or empty cloud users? auth.uid()='
-            '${_supabase.auth.currentUser?.id}',
+            '${_transport.currentAuthUserId}',
           );
         }
       } catch (e) {
@@ -2325,7 +2311,7 @@ class SupabaseSyncService {
         debugPrint(
           '[SyncService] WARN pull returned 0 businesses rows for '
           '$businessId — likely RLS denial (missing profiles row for '
-          'auth.uid()=${_supabase.auth.currentUser?.id}). Subsequent '
+          'auth.uid()=${_transport.currentAuthUserId}). Subsequent '
           'tenant tables will also be empty.',
         );
       }
@@ -2512,12 +2498,11 @@ class SupabaseSyncService {
     //    caller falls back to the full re-pull.
     for (final entry in missingByParent.entries) {
       try {
-        final List<dynamic> rows = await _supabase
-            .from(entry.key)
-            .select()
-            .eq('business_id', businessId)
-            .inFilter('id', entry.value)
-            .timeout(const Duration(seconds: 15));
+        final List<dynamic> rows = await _transport.fetchRowsByIds(
+          entry.key,
+          businessId,
+          entry.value,
+        );
         if (rows.isNotEmpty) {
           await _restoreTableData(entry.key, rows);
         }
@@ -2802,97 +2787,18 @@ class SupabaseSyncService {
     return (data: results, skipped: failed);
   }
 
-  /// Single-table PostgREST fetch with cursor-based pagination.
-  ///
-  /// Fetches rows in pages of [pageSize] rows, ordered by `last_updated_at`
-  /// ascending (and `id` ascending as a secondary tie-break for all tables
-  /// except `system_config`). This ordering guarantees stable pagination —
-  /// no row is skipped or double-counted across page boundaries.
-  ///
-  /// On a page-level [TimeoutException] the page size is halved (floored at
-  /// [_minPullPageSize]) and the same offset is retried once. A second
-  /// timeout at the floor propagates so the caller can classify the failure.
-  ///
-  /// `system_config` is global (no tenant filter, no `id` column, tiny
-  /// dataset) — it is fetched in a single unpaginated call.
+  /// Single-table pull slice, delegated to the [CloudTransport] adapter (which
+  /// owns the paginate/halve-on-timeout loop and the per-table filter quirks).
+  /// Kept as a thin engine-side helper so the existing pull callers stay
+  /// unchanged; see [CloudTransport.fetchTable] / ADR 0001.
   Future<List<dynamic>> _fetchOneTable(
     String table,
     String businessId,
     DateTime? since, {
     int pageSize = _pullPageSizeWifi,
-  }) async {
-    final isGlobal = table == 'system_config';
-    var query = _supabase.from(table).select();
-
-    if (!isGlobal) {
-      // The cloud `businesses` table has no `business_id` column — its `id`
-      // IS the business id. All other tables filter by `business_id`.
-      final filterColumn = table == 'businesses' ? 'id' : 'business_id';
-      query = query.eq(filterColumn, businessId);
-    }
-
-    // The `businesses` row is the FK target for almost everything local.
-    // Always fetch it unconditionally so a stale `since` can't produce a
-    // sync where children try to insert against a missing parent.
-    if (since != null && table != 'businesses') {
-      query = query.gt('last_updated_at', since.toIso8601String());
-    }
-
-    // system_config: global, tiny, no `id` column — single unpaginated call.
-    if (isGlobal) {
-      final List<dynamic> data = await query.timeout(
-        const Duration(seconds: 25),
-      );
-      return data;
-    }
-
-    // Stable ordering required for pagination: rows must not shift across
-    // page boundaries as new rows arrive mid-pull. `last_updated_at` alone
-    // is not unique (multiple rows can share a second boundary); `id` breaks
-    // ties deterministically.
-    //
-    // `.order()` returns PostgrestTransformBuilder, which is a subtype of
-    // PostgrestBuilder but NOT PostgrestFilterBuilder — declare a new variable
-    // so the type annotation stays correct.
-    final orderedQuery = query
-        .order('last_updated_at', ascending: true)
-        .order('id', ascending: true);
-
-    final allRows = <dynamic>[];
-    int offset = 0;
-    int currentPageSize = pageSize;
-
-    while (true) {
-      try {
-        final List<dynamic> page = await orderedQuery
-            .range(offset, offset + currentPageSize - 1)
-            .timeout(const Duration(seconds: 15));
-
-        if (page.isEmpty) break;
-        allRows.addAll(page);
-        offset += page.length;
-        if (page.length < currentPageSize) break; // last page
-      } on TimeoutException catch (e) {
-        final halved = currentPageSize ~/ 2;
-        if (halved < _minPullPageSize) {
-          // Already at floor — surface so the caller can classify failure.
-          debugPrint(
-            '[SyncService] Pull page timeout at min size for $table '
-            '(offset=$offset, size=$currentPageSize): $e',
-          );
-          rethrow;
-        }
-        currentPageSize = halved;
-        debugPrint(
-          '[SyncService] Pull page timeout for $table '
-          '(offset=$offset) — shrinking page to $currentPageSize and retrying.',
-        );
-        // Retry the same offset with the smaller page size (offset unchanged).
-      }
-    }
-
-    return allRows;
-  }
+  }) => _transport.fetchTable(
+    TableQuery(table, businessId, since, pageSize: pageSize),
+  );
 
   /// Cheap single-row refresh of the `businesses` row from the cloud, applied
   /// locally through the normal restore path (LWW guard included). Used by the
@@ -2912,101 +2818,60 @@ class SupabaseSyncService {
     }
   }
 
-  /// Subscribes to real-time changes from Supabase for this business.
+  /// Subscribes to real-time changes for this business through the
+  /// [CloudTransport] adapter, which owns the per-table channel lifecycle, the
+  /// `businesses`-by-`id` filter quirk, and subscribe-status logging (ADR 0001).
+  /// The engine keeps the dispatch: `businesses` events route to
+  /// [_handleBusinessesRealtime]; everything else to [_applyRealtimeEvent].
+  ///
+  /// `businesses` is passed explicitly so the adapter always sets up its
+  /// id-filtered channel regardless of `_pullOrder` membership; `system_config`
+  /// is global and skipped by the adapter.
   void startRealtimeSync(String businessId) {
-    if (_tableChannels.isNotEmpty) return;
+    if (_realtimeActive) return;
 
     debugPrint(
       '[SyncService] Starting real-time sync for business $businessId',
     );
 
-    // One channel per synced tenant table, each with an explicit `table:` +
-    // `business_id` filter. The previous single `channel('public:*')` set a
-    // `business_id` filter but no `table:`; Supabase Realtime cannot honour a
-    // filtered postgres_changes binding without a table, so the server↔client
-    // binding reconciliation mismatched and the whole channel silently failed —
-    // no inbound realtime events for ANY tenant table (changes only ever landed
-    // via the snapshot pull). Per-table channels also isolate a bad table (e.g.
-    // one not in the `supabase_realtime` publication) to its own channel instead
-    // of tearing down every subscription. The permanent subscribe-status
-    // callback surfaces SUBSCRIBED / CHANNEL_ERROR / TIMED_OUT — the old
-    // `..subscribe()` had none, so the failure was invisible.
-    //
-    // `businesses` (no `business_id` column — its `id` IS the business id) is
-    // handled by the separate channel below; `system_config` is global (no
-    // `business_id`), so both are skipped here.
-    for (final table in _pullOrder) {
-      if (table == 'businesses' || table == 'system_config') continue;
-      try {
-        final channel =
-            _supabase
-                .channel('public:$table')
-                .onPostgresChanges(
-                  event: PostgresChangeEvent.all,
-                  schema: 'public',
-                  table: table,
-                  filter: PostgresChangeFilter(
-                    type: PostgresChangeFilterType.eq,
-                    column: 'business_id',
-                    value: businessId,
-                  ),
-                  callback: (payload) => _applyRealtimeEvent(payload),
-                )
-              ..subscribe((status, error) {
-                if (status == RealtimeSubscribeStatus.channelError ||
-                    status == RealtimeSubscribeStatus.timedOut) {
-                  debugPrint(
-                    '[SyncService] Realtime channel "$table" $status'
-                    '${error != null ? ' — $error' : ''}',
-                  );
-                } else if (status == RealtimeSubscribeStatus.subscribed) {
-                  debugPrint('[SyncService] Realtime subscribed: $table');
-                }
-              });
-        _tableChannels.add(channel);
-      } catch (e) {
-        debugPrint('[SyncService] Realtime subscribe failed for "$table": $e');
-      }
-    }
+    _transport.startRealtime(
+      {..._pullOrder, 'businesses'},
+      businessId,
+      onChange: (payload) {
+        if (payload.table == 'businesses') {
+          _handleBusinessesRealtime(businessId, payload);
+        } else {
+          _applyRealtimeEvent(payload);
+        }
+      },
+    );
+    _realtimeActive = true;
+  }
 
-    // Separate channel for `businesses` filtered by `id` (no business_id column).
-    try {
-      _businessesChannel =
-          _supabase
-              .channel('public:businesses')
-              .onPostgresChanges(
-                event: PostgresChangeEvent.all,
-                schema: 'public',
-                table: 'businesses',
-                filter: PostgresChangeFilter(
-                  type: PostgresChangeFilterType.eq,
-                  column: 'id',
-                  value: businessId,
-                ),
-                callback: (payload) async {
-                  debugPrint(
-                    '[SyncService] Realtime Event: ${payload.eventType} on businesses',
-                  );
-                  // The owner permanently deleted this business (§10.3). On a
-                  // staff device the cascade-DELETE event arrives here: confirm
-                  // via the tombstone, then wipe + sign out (instant path; the
-                  // login pull + reconnect backstops cover offline devices).
-                  if (payload.eventType == PostgresChangeEvent.delete) {
-                    final id = payload.oldRecord['id'] as String?;
-                    if (id == businessId) {
-                      await _wipeIfBusinessDeleted(businessId);
-                    }
-                    return;
-                  }
-                  final newRecord = payload.newRecord;
-                  if (newRecord.isNotEmpty) {
-                    await _restoreTableData('businesses', [newRecord]);
-                  }
-                },
-              )
-            ..subscribe();
-    } catch (e) {
-      debugPrint('[SyncService] Businesses realtime subscribe failed: $e');
+  /// Realtime dispatch for the `businesses` row (its own id-filtered channel).
+  /// A DELETE is the owner's §10.3 cascade — confirm via the tombstone, then
+  /// wipe + sign out; any other event restores the row through the normal path.
+  Future<void> _handleBusinessesRealtime(
+    String businessId,
+    PostgresChangePayload payload,
+  ) async {
+    debugPrint(
+      '[SyncService] Realtime Event: ${payload.eventType} on businesses',
+    );
+    // The owner permanently deleted this business (§10.3). On a staff device the
+    // cascade-DELETE event arrives here: confirm via the tombstone, then wipe +
+    // sign out (instant path; the login pull + reconnect backstops cover offline
+    // devices).
+    if (payload.eventType == PostgresChangeEvent.delete) {
+      final id = payload.oldRecord['id'] as String?;
+      if (id == businessId) {
+        await _wipeIfBusinessDeleted(businessId);
+      }
+      return;
+    }
+    final newRecord = payload.newRecord;
+    if (newRecord.isNotEmpty) {
+      await _restoreTableData('businesses', [newRecord]);
     }
   }
 
@@ -3078,12 +2943,7 @@ class SupabaseSyncService {
   /// authenticated caller, so this succeeds even after membership is gone.
   Future<bool> _confirmBusinessDeleted(String businessId) async {
     try {
-      final rows = await _supabase
-          .from('deleted_businesses')
-          .select('business_id')
-          .eq('business_id', businessId)
-          .limit(1);
-      return rows.isNotEmpty;
+      return await _transport.businessDeletedTombstoneExists(businessId);
     } catch (e) {
       debugPrint('[SyncService] deleted_businesses check failed: $e');
       return false;
@@ -3120,16 +2980,11 @@ class SupabaseSyncService {
   }
 
   /// Removes the active realtime channels without touching auto-push. Shared by
-  /// [stopRealtimeSync] (logout) and [restartRealtimeSync] (resubscribe).
+  /// [stopRealtimeSync] (logout) and [restartRealtimeSync] (resubscribe). The
+  /// channel teardown is fire-and-forget (as the old `removeChannel` calls were).
   void _tearDownRealtimeChannels() {
-    for (final channel in _tableChannels) {
-      _supabase.removeChannel(channel);
-    }
-    _tableChannels.clear();
-    if (_businessesChannel != null) {
-      _supabase.removeChannel(_businessesChannel!);
-      _businessesChannel = null;
-    }
+    unawaited(_transport.stopRealtime());
+    _realtimeActive = false;
   }
 
   /// Re-establishes the realtime subscriptions after they may have been
@@ -3145,7 +3000,7 @@ class SupabaseSyncService {
   /// few channels); a no-op when there were no channels to begin with (not yet
   /// signed in) — `startRealtimeSync` itself requires a logged-in business.
   void restartRealtimeSync(String businessId) {
-    if (_tableChannels.isEmpty && _businessesChannel == null) return;
+    if (!_realtimeActive) return;
     debugPrint('[SyncService] Re-subscribing realtime for $businessId.');
     _tearDownRealtimeChannels();
     startRealtimeSync(businessId);
@@ -3204,7 +3059,7 @@ class SupabaseSyncService {
         await prefs.setBool(purgeFlag, true);
       }
 
-      if (_supabase.auth.currentUser != null) {
+      if (_transport.currentAuthUserId != null) {
         await _db.syncDao.clearFailureBackoff();
       }
 
@@ -3223,11 +3078,11 @@ class SupabaseSyncService {
         }
       });
 
-      _authStateSub ??= _supabase.auth.onAuthStateChange.listen(
-        (state) async {
-          if (state.event == AuthChangeEvent.signedIn ||
-              state.event == AuthChangeEvent.tokenRefreshed ||
-              state.event == AuthChangeEvent.initialSession) {
+      _authStateSub ??= _transport.authEvents.listen(
+        (event) async {
+          if (event == TransportAuthEvent.signedIn ||
+              event == TransportAuthEvent.tokenRefreshed ||
+              event == TransportAuthEvent.initialSession) {
             _loggedJwtClaimsThisSession = false;
             // Re-warm on every fresh session: a logout→re-login (or token
             // refresh after a long idle) starts from a cold connection again.
@@ -3241,7 +3096,7 @@ class SupabaseSyncService {
               await _db.syncDao.clearFailureBackoff();
             }
             _scheduleDebouncedPush();
-          } else if (state.event == AuthChangeEvent.signedOut) {
+          } else if (event == TransportAuthEvent.signedOut) {
             _loggedJwtClaimsThisSession = false;
             _didWarmUpThisSession = false;
           }

@@ -1586,6 +1586,24 @@ Spec: `context/specs/brief-sync-data-safety-and-efficiency.md`. Branch
 
 ## Session Notes
 
+**2026-07-02 — Cloud-transport seam SHIPPED (commit 3ec07cb).**
+Extracted a `CloudTransport` interface (11 members: `upsertRows`/`deleteRowsById`/
+`callRpc`/`fetchTable`/`fetchRowsByIds`/`warmUp`/`businessDeletedTombstoneExists`/
+`startRealtime`/`stopRealtime`/`currentAuthUserId`+`authEvents`) out of
+`SupabaseSyncService`, with `SupabaseCloudTransport` (real, `lib/core/services/`)
+and a fully-featured `InMemoryCloudTransport` (test fake, `test/helpers/`). Design
+recorded in [`docs/adr/0001-cloud-transport-seam.md`](../docs/adr/0001-cloud-transport-seam.md)
++ root `CONTEXT.md` (Sync glossary). **Pure behaviour-preserving extraction** — the
+engine now holds zero injected-`_supabase` refs on its sync-I/O paths; `pushPending`/
+`pullChanges` are testable against the fake, unblocking the sync data-safety brief's
+A–F vectors. Settled: seam throws `PostgrestException`/`TimeoutException` verbatim,
+leaks `PostgresChangePayload`, neutralizes auth to `TransportAuthEvent`; push
+chunk-loop stays engine-side, pull page-loop moved into the adapter; users-supplement
+now paginates (accepted delta, see ADR). `flutter analyze` clean; 170 sync + 8 new
+characterization tests pass; full suite 613 pass / 1 pre-existing unrelated fail
+(`who_is_working_screen_test`, fails identically at HEAD). Two-axis `/code-review`
+clean. NEXT: the brief's Bucket 1 (A–F) data-safety fixes, built on this seam.
+
 **To resume in a new session:**
 Read this file first, then `CLAUDE.md`, then the master plan section relevant
 to the unit being picked up.

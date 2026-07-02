@@ -25,6 +25,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
+import 'package:reebaplus_pos/core/services/supabase_cloud_transport.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 
 import '../helpers/dispatch_test_utils.dart';
@@ -47,7 +48,7 @@ void main() {
       'https://placeholder.supabase.co',
       'placeholder-anon-key',
     );
-    sync = SupabaseSyncService(db, supabase);
+    sync = SupabaseSyncService(db, SupabaseCloudTransport(supabase));
 
     roleId = UuidV7.generate();
     await db.into(db.roles).insert(

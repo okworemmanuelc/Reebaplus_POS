@@ -19,6 +19,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/services/supabase_cloud_transport.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
@@ -112,7 +113,7 @@ void main() {
       db,
       NavigationService(),
       SecureStorageService(),
-      SupabaseSyncService(db, client),
+      SupabaseSyncService(db, SupabaseCloudTransport(client)),
       client,
     );
     // Scope the session providers to the seeded business (overriding the

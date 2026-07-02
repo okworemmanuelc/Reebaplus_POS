@@ -11,6 +11,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:reebaplus_pos/core/services/supabase_cloud_transport.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
@@ -91,7 +92,7 @@ void main() {
   setUp(() async {
     db = AppDatabase.forTesting(NativeDatabase.memory());
     nav = NavigationService();
-    syncService = _FakeSyncService(db, Supabase.instance.client);
+    syncService = _FakeSyncService(db, SupabaseCloudTransport(Supabase.instance.client));
     secureStorage = _FakeSecureStorageService();
     auth = AuthService(
       db,
