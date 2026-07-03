@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' as drift;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
@@ -833,7 +834,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         Theme.of(context).iconTheme.color!;
     final border = Theme.of(context).dividerColor;
     final isExisting = _selectedExistingProduct != null;
-    final canEditBuying = hasPermission(ref, 'products.edit_buying_price');
+    final canEditBuying = Gates.editBuyingPrice.allows(ref);
     final manufacturerRequired = _unit.toLowerCase() == 'bottle' && _isCrateBusiness && _trackEmpties;
 
     return Scaffold(
@@ -1287,7 +1288,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                       card: card,
                       border: border,
                     ),
-                  if (hasPermission(ref, 'suppliers.manage')) ...[
+                  if (Gates.manageSuppliers.allows(ref)) ...[
                     const SizedBox(height: 8),
                     AppButton(
                       text: 'Add new supplier',

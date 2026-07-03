@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permission_dependencies.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
@@ -141,14 +142,11 @@ class _RolePermissionsDetailScreenState
     }
   }
 
-  /// True if the current viewer may still manage settings. ref.read (callback,
-  /// not build) — matches the convention in the other settings sub-pages.
+  /// True if the current viewer may still manage settings. Fire-time form
+  /// (allowsNow — callback, not build), matching the other settings sub-pages.
   bool _guard() {
-    if (!ref.read(currentUserPermissionsProvider).contains('settings.manage')) {
-      AppNotification.showError(
-        context,
-        'You don\'t have permission to do that.',
-      );
+    if (!Gates.manageSettings.allowsNow(ref)) {
+      showGateDenied(context, Gates.manageSettings);
       return false;
     }
     return true;
@@ -269,7 +267,7 @@ class _RolePermissionsDetailScreenState
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    final canManage = hasPermission(ref, 'settings.manage');
+    final canManage = Gates.manageSettings.allows(ref);
 
     return GlassyScaffold(
       title: role.name,

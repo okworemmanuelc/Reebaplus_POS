@@ -12,6 +12,7 @@ import 'package:reebaplus_pos/features/expenses/screens/expenses_screen.dart';
 import 'package:reebaplus_pos/features/stores/screens/stores_screen.dart';
 import 'package:reebaplus_pos/features/pos/screens/cart_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/activity_log_screen.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -240,7 +241,7 @@ class _MainLayoutState extends ConsumerState<MainLayout>
     // a non-seller to Home (0) here instead. Gated on the permission set being
     // RESOLVED (not the transient empty-while-loading state) so a seller isn't
     // wrongly redirected before their grants stream in.
-    final canSell = hasPermission(ref, 'sales.make');
+    final canSell = Gates.makeSale.allows(ref);
     final role = ref.watch(currentUserRoleProvider);
     final permsResolved =
         role != null && ref.watch(rolePermissionsProvider(role.id)).hasValue;
@@ -322,13 +323,14 @@ class _MainLayoutState extends ConsumerState<MainLayout>
                   t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
 
               // Nav tabs in bar order. Stock (Inventory, tab 2) is gated on
-              // stock.view (§16.7); POS (tab 1) and Cart (tab 8) are gated on
-              // sales.make (hard rule #7 — hide what the role can't use, e.g.
-              // the stock keeper). Driving the index math AND the items list
-              // from one list keeps a hidden tab from desyncing them.
-              // Home(0), Stock(2), POS(1), Orders(3), Cart(8).
-              final showStock = hasPermission(ref, 'stock.view');
-              final showPos = hasPermission(ref, 'sales.make');
+              // Gates.viewInventory (§16.7); POS (tab 1) and Cart (tab 8) are
+              // gated on Gates.makeSale (hard rule #7 — hide what the role
+              // can't use, e.g. the stock keeper) — the same entries as the
+              // drawer items and destination screens. Driving the index math
+              // AND the items list from one list keeps a hidden tab from
+              // desyncing them. Home(0), Stock(2), POS(1), Orders(3), Cart(8).
+              final showStock = Gates.viewInventory.allows(ref);
+              final showPos = Gates.makeSale.allows(ref);
               final tabOrder = <int>[
                 0,
                 if (showStock) 2,

@@ -28,7 +28,7 @@ final gateContextProvider = Provider<GateContext>((ref) {
 /// a multi-step flow. All three cite the named gate — none re-derive the rule.
 extension GateEvaluation on NamedGate {
   /// Reactive check for a `build` method — rebuilds when the permission set
-  /// changes. The drop-in for `hasPermission(ref, key)` in a build.
+  /// changes. The replacement for the removed bare single-key check in a build.
   bool allows(WidgetRef ref) => rule.evaluate(ref.watch(gateContextProvider));
 
   /// One-shot check for a callback or flow — the current decision without

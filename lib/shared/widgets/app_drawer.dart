@@ -5,6 +5,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/theme/theme_settings_screen.dart';
 import 'package:reebaplus_pos/core/settings/settings_screen.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -159,12 +160,13 @@ class AppDrawer extends ConsumerWidget {
           SizedBox(height: context.getRSize(16)),
           // Sync status indicator. Three signals nested so the badge reflects
           // pending, failed, and online state; tap opens Sync Issues.
-          // Gated on sync.view (CEO always + whoever the CEO granted it), so
-          // non-permitted roles never tap into a screen they can't open (hard
-          // rule #7). Skip while logged out — the inline DAO streams below build
-          // a fresh tenant-scoped query on every rebuild and would otherwise hit
-          // requireBusinessId() with no current business.
-          if (user == null || !canViewSyncIssues(ref))
+          // Gated on Gates.viewSyncIssues — the same entry as the sidebar item
+          // and the screen's body-guard — so non-permitted roles never tap into
+          // a screen they can't open (hard rule #7). Skip while logged out —
+          // the inline DAO streams below build a fresh tenant-scoped query on
+          // every rebuild and would otherwise hit requireBusinessId() with no
+          // current business.
+          if (user == null || !Gates.viewSyncIssues.allows(ref))
             const SizedBox.shrink()
           else
             StreamBuilder<int>(
@@ -344,9 +346,10 @@ class AppDrawer extends ConsumerWidget {
           active: activeRoute == 'dashboard',
           onTap: () => _navigateTo(context, ref, 'dashboard'),
         ),
-        // Point of Sale — hidden for Stock keeper (§27.3 / §12). sales.make is
-        // held by CEO, Manager, Cashier — not Stock keeper.
-        if (hasPermission(ref, 'sales.make'))
+        // Point of Sale — hidden for Stock keeper (§27.3 / §12). Same gate as
+        // the POS screen's body-guard and bottom-nav tab. sales.make is held
+        // by CEO, Manager, Cashier — not Stock keeper.
+        if (Gates.makeSale.allows(ref))
           _navItem(
             context,
             FontAwesomeIcons.cashRegister.data,
@@ -354,9 +357,10 @@ class AppDrawer extends ConsumerWidget {
             active: activeRoute == 'pos',
             onTap: () => _navigateTo(context, ref, 'pos'),
           ),
-        // Inventory — gated on stock.view (§16.7). Held by all four roles by
-        // default, so visible to all unless the CEO revokes it for a role.
-        if (hasPermission(ref, 'stock.view'))
+        // Inventory — gated on stock.view (§16.7) via the same entry as the
+        // Stock tab and screen. Held by all four roles by default, so visible
+        // to all unless the CEO revokes it for a role.
+        if (Gates.viewInventory.allows(ref))
           _navItem(
             context,
             FontAwesomeIcons.boxesStacked.data,
@@ -374,7 +378,7 @@ class AppDrawer extends ConsumerWidget {
         ),
         // Customers — hidden for Stock keeper (§27.3). customers.add is held by
         // CEO, Manager, Cashier — not Stock keeper.
-        if (hasPermission(ref, 'customers.add'))
+        if (Gates.viewCustomers.allows(ref))
           _navItem(
             context,
             FontAwesomeIcons.users.data,
@@ -385,7 +389,7 @@ class AppDrawer extends ConsumerWidget {
         // Gated to roles that can invite staff (CEO + Manager). Hidden
         // entirely for Cashier / Stock keeper (hard rule #7 — hide, don't
         // grey out). Routes to a pushed screen, like CEO Settings below.
-        if (hasPermission(ref, 'staff.invite'))
+        if (Gates.manageStaff.allows(ref))
           _navItem(
             context,
             FontAwesomeIcons.userGroup.data,
@@ -395,7 +399,7 @@ class AppDrawer extends ConsumerWidget {
           ),
         // Supplier Accounts — CEO always; Manager only if the CEO granted
         // suppliers.manage ("if toggled", §27.3); hidden for Cashier/Stock keeper.
-        if (hasPermission(ref, 'suppliers.manage'))
+        if (Gates.manageSuppliers.allows(ref))
           _navItem(
             context,
             FontAwesomeIcons.moneyBillWave.data,
@@ -404,10 +408,11 @@ class AppDrawer extends ConsumerWidget {
                 activeRoute == 'supplier_accounts' || activeRoute == 'payments',
             onTap: () => _navigateTo(context, ref, 'supplier_accounts'),
           ),
-        // Expenses — opens the expense report/list, so gate on the viewing key
-        // `reports.see_expenses` (hard rule #6), not `expenses.create` (that's
-        // only the Add-Expense action). Neither is held by Cashier/Stock keeper.
-        if (hasPermission(ref, 'reports.see_expenses'))
+        // Expenses — opens the expense report/list, so it gates on the viewing
+        // entry (Gates.viewExpenses = reports.see_expenses, hard rule #6), not
+        // expenses.create (that's only the Add-Expense action). Neither key is
+        // held by Cashier/Stock keeper.
+        if (Gates.viewExpenses.allows(ref))
           _navItem(
             context,
             FontAwesomeIcons.fileInvoiceDollar.data,
@@ -419,10 +424,7 @@ class AppDrawer extends ConsumerWidget {
         // the store-scoped transfer flow (§16.8.2): request / dispatch / receive.
         // The store list itself is read-only browsing for non-CEOs; full
         // per-store actions are gated inside the store details screen.
-        if (hasPermission(ref, 'stores.manage') ||
-            hasPermission(ref, 'stores.request_transfer') ||
-            hasPermission(ref, 'stores.dispatch_transfer') ||
-            hasPermission(ref, 'stores.receive_transfer'))
+        if (Gates.viewStores.allows(ref))
           _navItem(
             context,
             FontAwesomeIcons.store.data,
@@ -435,7 +437,7 @@ class AppDrawer extends ConsumerWidget {
         SizedBox(height: context.getRSize(12)),
         // Activity Logs — CEO always; Manager only if the CEO granted
         // activity_logs.view ("if toggled", §27.3); hidden for Cashier/Stock keeper.
-        if (hasPermission(ref, 'activity_logs.view'))
+        if (Gates.viewActivityLogs.allows(ref))
           _navItem(
             context,
             FontAwesomeIcons.clockRotateLeft.data,
@@ -446,9 +448,10 @@ class AppDrawer extends ConsumerWidget {
         // Deliveries (Phase 3) and Cart (bottom nav only) removed from the
         // sidebar per master plan §27.5.
         // Gated to CEO (settings.manage is CEO-only by default; migration
-        // 0043). Hidden entirely for other roles (hard rule #7 — hide, don't
-        // grey out), mirroring the Staff Management gate above.
-        if (hasPermission(ref, 'settings.manage'))
+        // 0043) via the same entry as the settings screens' body-guards.
+        // Hidden entirely for other roles (hard rule #7 — hide, don't grey
+        // out), mirroring the Staff Management gate above.
+        if (Gates.manageSettings.allows(ref))
           _navItem(
             context,
             FontAwesomeIcons.gear.data,
@@ -468,10 +471,11 @@ class AppDrawer extends ConsumerWidget {
             active: false,
             onTap: () => _pushRoute(context, ref, const StaffSettingsScreen()),
           ),
-        // Sync Issues — troubleshooting screen gated on sync.view (CEO always +
-        // whoever the CEO granted it via Sync Issues access). Hidden entirely
-        // for other roles (hard rule #7).
-        if (canViewSyncIssues(ref))
+        // Sync Issues — troubleshooting screen gated on Gates.viewSyncIssues
+        // (sync.view OR CEO — whoever the CEO granted it via Sync Issues
+        // access), the same entry as the header badge and the screen's
+        // body-guard. Hidden entirely for other roles (hard rule #7).
+        if (Gates.viewSyncIssues.allows(ref))
           _navItem(
             context,
             FontAwesomeIcons.cloudArrowUp.data,

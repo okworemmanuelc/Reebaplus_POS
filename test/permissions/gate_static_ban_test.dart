@@ -1,56 +1,29 @@
 // Static enforcement seam (issue #17, ADR 0002). A source scan that bans the
-// bare `hasPermission(ref, …)` check outside the permissions module, carrying a
-// **shrinking allowlist** of the sites not yet migrated. Prior art: the
-// sync-registry golden/registration tests.
+// bare `hasPermission(ref, …)` check outside the permissions module. Prior art:
+// the sync-registry golden/registration tests.
 //
-// The allowlist is a ratchet:
-//   • a bare check in a file above its allowed count fails (cite a Gate);
-//   • migrating a site without shrinking the allowlist fails (keep it honest).
-// Each migration batch (#18–21) deletes exactly the sites it lifts; the flip
-// issue (#22) empties this map and a planted bare check then fails the suite.
+// The finish-line flip (issue #22) is now in force: **the allowlist is empty**.
+// Every gated action cites a named `Gates.x` entry, and the bare single-key
+// helper (`hasPermission`) plus the tier helper (`isManagerOrAbove`) have been
+// removed from the app. A bare `hasPermission(ref, …)` reappearing anywhere in
+// `lib/` outside `lib/core/permissions/` fails this suite — cite a named Gate.
 
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-/// Bare-check call sites still permitted, `path → count`. Seeded post the
-/// Receive-Stock tracer migration (issue #17). SHRINK this — never grow it.
-const _allowlist = <String, int>{
-  'lib/core/settings/activity_logs_access_screen.dart': 1,
-  'lib/core/settings/appearance_settings_screen.dart': 1,
-  'lib/core/settings/business_info_screen.dart': 1,
-  'lib/core/settings/delete_business_screen.dart': 1,
-  'lib/core/settings/role_permissions_detail_screen.dart': 1,
-  'lib/core/settings/roles_permissions_screen.dart': 1,
-  'lib/core/settings/security_settings_screen.dart': 1,
-  'lib/core/settings/settings_screen.dart': 2,
-  'lib/core/settings/stores_settings_screen.dart': 1,
-  'lib/core/settings/subscription_screen.dart': 1,
-  'lib/core/settings/sync_issues_access_screen.dart': 1,
-  'lib/features/customers/screens/customer_detail_screen.dart': 8,
-  'lib/features/customers/screens/customers_screen.dart': 1,
-  'lib/features/customers/widgets/edit_customer_sheet.dart': 1,
-  'lib/features/expenses/screens/expenses_screen.dart': 3,
-  'lib/features/inventory/screens/add_product_screen.dart': 2,
-  'lib/features/inventory/screens/inventory_screen.dart': 3,
-  'lib/features/orders/screens/orders_screen.dart': 2,
-  'lib/features/staff/screens/staff_detail_screen.dart': 6,
-  'lib/features/staff/screens/staff_permissions_screen.dart': 1,
-  'lib/features/stores/screens/store_details_screen.dart': 1,
-  'lib/features/stores/screens/stores_screen.dart': 5,
-  'lib/features/stores/widgets/store_transfer_hub.dart': 2,
-  'lib/shared/widgets/activity_log_screen.dart': 1,
-  'lib/shared/widgets/app_drawer.dart': 12,
-  'lib/shared/widgets/main_layout.dart': 3,
-};
+/// EMPTY — the flip landed (issue #22). No bare-check site is permitted outside
+/// `lib/core/permissions/`. This map only ever stayed at empty; do not add to it
+/// (that would re-open the leak class the registry retired). Cite a named Gate.
+const _allowlist = <String, int>{};
 
-/// Matches a call `hasPermission(ref …` (single- or multi-line) but NOT the
-/// helper definition `hasPermission(WidgetRef ref …`, so the helper's own home
-/// is never flagged.
+/// Matches a call `hasPermission(ref …` (single- or multi-line). The bare helper
+/// no longer exists, so any match is a re-introduced inline permission check.
 final _bareCheck = RegExp(r'hasPermission\s*\(\s*ref');
 
 void main() {
-  test('no bare hasPermission(ref, …) survives outside the allowlist', () {
+  test('no bare hasPermission(ref, …) survives outside lib/core/permissions/',
+      () {
     final actual = <String, int>{};
     for (final entity in Directory('lib').listSync(recursive: true)) {
       if (entity is! File) continue;
@@ -63,7 +36,7 @@ void main() {
       if (count > 0) actual[path] = count;
     }
 
-    // Grown or wholly new offenders → cite a named Gate instead.
+    // With an empty allowlist, ANY bare check is an offender → cite a named Gate.
     final offenders = <String>[];
     actual.forEach((path, count) {
       final allowed = _allowlist[path] ?? 0;
@@ -76,12 +49,15 @@ void main() {
       isEmpty,
       reason:
           'A bare hasPermission(ref, …) check appeared outside lib/core/permissions/.\n'
-          'Cite a named Gate — Gates.x.allows(ref) / .allowsNow(ref) / '
-          '.require(ref) — never re-derive the rule inline.\n'
-          '${offenders.join('\n')}',
+          'The allowlist is empty (issue #22 flip) — cite a named Gate instead: '
+          'Gates.x.allows(ref) / .allowsNow(ref) / .require(ref). Never re-derive '
+          'the rule inline.\n${offenders.join('\n')}',
     );
 
-    // Shrunk/removed sites → the allowlist must shrink to match (the ratchet).
+    // Ratchet backstop: the allowlist may only ever shrink toward empty. If a
+    // path is listed above its actual count the map is stale — but it is empty
+    // now, so this only fires if someone re-adds an entry without a matching
+    // (undesired) bare check.
     final stale = <String>[];
     _allowlist.forEach((path, allowed) {
       final count = actual[path] ?? 0;
@@ -89,13 +65,23 @@ void main() {
         stale.add('$path: allowlist expects $allowed, found $count');
       }
     });
-    expect(
-      stale,
-      isEmpty,
-      reason:
-          'The static-ban allowlist is stale — a site was migrated without '
-          'shrinking it. Update _allowlist to match (it only ever shrinks '
-          'toward empty at issue #22).\n${stale.join('\n')}',
-    );
+    expect(stale, isEmpty,
+        reason: 'The static-ban allowlist is empty and must stay empty '
+            '(issue #22). Remove the stale entry.\n${stale.join('\n')}');
+  });
+
+  test('the scan is strict — a planted bare check would be caught', () {
+    // Durable proof that emptying the allowlist gave the ban teeth (the AC's
+    // "a deliberately-planted bare check fails the suite"): a synthetic bare
+    // check matches the scanner, so a real one anywhere in lib/ outside the
+    // permissions module would land in `offenders` above and fail the test.
+    const planted = "final ok = hasPermission(ref, 'sales.make');";
+    expect(_bareCheck.hasMatch(planted), isTrue,
+        reason: 'the scanner must catch a re-introduced bare check');
+
+    // …and the migrated form is never flagged, so gate citations are safe.
+    const migrated = 'final ok = Gates.makeSale.allows(ref);';
+    expect(_bareCheck.hasMatch(migrated), isFalse,
+        reason: 'a named-gate citation must not trip the ban');
   });
 }

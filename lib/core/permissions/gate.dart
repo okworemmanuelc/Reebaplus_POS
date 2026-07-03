@@ -83,6 +83,12 @@ sealed class Gate {
   /// legacy lifts and the §19.3 money-visibility class (ADR 0002).
   const factory Gate.tierAtLeast(int minRank) = TierAtLeastGate;
 
+  /// Grants iff the role rank is **one of** [ranks] — the set-membership form
+  /// for legacy role-set checks that skip a tier (e.g. Daily Stock Count:
+  /// CEO/Manager/Stock keeper but *not* Cashier, which no `tierAtLeast` cutoff
+  /// can express). Convention-bound exactly like [Gate.tierAtLeast].
+  const factory Gate.tierIn(List<int> ranks) = TierInGate;
+
   /// Grants iff the current role is the CEO (owner). Used for composite gates
   /// where the owner passes without holding the specific grant.
   const factory Gate.ceo() = CeoGate;
@@ -133,6 +139,19 @@ final class TierAtLeastGate extends Gate {
   bool evaluate(GateContext ctx) {
     final rank = ctx.roleRank;
     return rank != null && rank <= minRank;
+  }
+}
+
+/// Grants iff the role rank is one of [ranks]. Fails closed while the role is
+/// unresolved (null rank is never a member).
+final class TierInGate extends Gate {
+  const TierInGate(this.ranks);
+  final List<int> ranks;
+
+  @override
+  bool evaluate(GateContext ctx) {
+    final rank = ctx.roleRank;
+    return rank != null && ranks.contains(rank);
   }
 }
 

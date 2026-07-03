@@ -28,8 +28,9 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
   Widget build(BuildContext context) {
     // §25.3 role gating — the Reports hub is CEO + Manager only (§11.3). Each
     // card is additionally guarded so it is hidden (never greyed — rule #7) for
-    // any role lacking it. The CEO-only Profit card lands in the §25 Profit pass.
-    final isMgrUp = isManagerOrAbove(ref);
+    // any role lacking it. Each manager-up card now cites its own named registry
+    // gate (issue #22) — tier lives only in the atoms, never inline here. The
+    // CEO-only Profit card lands in the §25 Profit pass.
     // §13.4 / rule #13 — crate-deposit features only exist for Bar & Beer
     // distributor businesses. Gate the Crate Deposits report card on the same
     // business-type check the Inventory Empty Crates tab uses (case-insensitive).
@@ -48,7 +49,7 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
       // AND cashier Quick Sale requests await the affected store's Manager / the
       // CEO here. Shown first as an action item; the badge counts the combined
       // outstanding total.
-      if (isMgrUp)
+      if (Gates.viewApprovals.allows(ref))
         _buildReportCard(
           context,
           title: 'Approvals',
@@ -65,7 +66,7 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
       // groupable Day/Week/Month/Year (Manager capped at Month), with the CEO P&L
       // + statement of account folded in. Its own period grouping drives it, so it
       // does not read the hub period.
-      if (isMgrUp)
+      if (Gates.dailyReconciliation.allows(ref))
         _buildReportCard(
           context,
           title: 'Daily Reconciliation',
@@ -79,7 +80,7 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
         ),
       // §13.4 Ring 7 — Crate Deposits balancing report. Crate-only (rule #13) +
       // CEO/Manager (§25.3, role-gated like Customer Ledger).
-      if (isMgrUp && isCrate)
+      if (Gates.crateDepositsReport.allows(ref) && isCrate)
         _buildReportCard(
           context,
           title: 'Crate Deposits',

@@ -531,7 +531,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildPeriodDropdown() {
-    final options = datePeriodLabelsForRole(managerUp: isManagerOrAbove(ref));
+    final options =
+        datePeriodLabelsForRole(managerUp: Gates.seeExtendedDateRanges.allows(ref));
     final isCustom = _selectedPeriod.startsWith('Custom:');
     final dropdownValue = isCustom ? 'Custom' : _selectedPeriod;
     final selected = options.contains(dropdownValue) ? dropdownValue : options.first;

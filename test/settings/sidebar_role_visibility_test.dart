@@ -4,8 +4,9 @@
 // matching permission (hard rules #6/#7: hide, don't grey out). The real
 // AppDrawer pulls in SVG assets, responsive sizing, and several sync stream
 // providers, so — like settings_menu_gating_test — we exercise the exact gate
-// expressions through the same provider chain (hasPermission(ref, key)) in a
-// minimal harness rather than pumping the whole drawer.
+// rules through the same provider chain (each key resolved through
+// `currentUserPermissionsProvider`, the set the named gates read) in a minimal
+// harness rather than pumping the whole drawer.
 //
 // Each role is seeded with the default permission grants from migration
 // 0043 (the subset that drives a sidebar gate) and we assert which items
@@ -153,7 +154,8 @@ void main() {
                   const Text('Inventory'),
                   const Text('Orders'),
                   for (final g in gates)
-                    if (hasPermission(ref, g.$1)) Text(g.$2),
+                    if (ref.watch(currentUserPermissionsProvider).contains(g.$1))
+                      Text(g.$2),
                 ],
               ),
             ),

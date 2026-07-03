@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
-import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
@@ -69,13 +69,10 @@ class _StoresSettingsScreenState extends ConsumerState<StoresSettingsScreen> {
 
   Future<void> _save(StoreData store) async {
     // Defense-in-depth (hard rule #6): the drawer hides the entry, but the
-    // write site re-checks too. ref.read (not hasPermission/watch) — this is a
-    // callback, matching staff_detail_screen.dart.
-    if (!ref.read(currentUserPermissionsProvider).contains('stores.manage')) {
-      AppNotification.showError(
-        context,
-        'You don\'t have permission to do that.',
-      );
+    // write site re-checks too. Fire-time form (allowsNow) — this is a
+    // callback, not a build.
+    if (!Gates.manageStores.allowsNow(ref)) {
+      showGateDenied(context, Gates.manageStores);
       return;
     }
     final name = _nameControllers[store.id]!.text.trim();
@@ -112,8 +109,9 @@ class _StoresSettingsScreenState extends ConsumerState<StoresSettingsScreen> {
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     // Screen-level gate (hard rule #6) + keeps the permission chain warm for
-    // the save-site guard.
-    final canManage = hasPermission(ref, 'stores.manage');
+    // the save-site guard. stores.manage (via Gates.manageStores), not
+    // settings.manage — verbatim.
+    final canManage = Gates.manageStores.allows(ref);
 
     // Scaffold wrapper handles body resizing under MainLayout correctly.
     return GlassyScaffold(

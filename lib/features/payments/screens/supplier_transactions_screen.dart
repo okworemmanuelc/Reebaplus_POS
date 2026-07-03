@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
@@ -30,7 +31,7 @@ class _SupplierTransactionsScreenState
   bool _isScrolled = false;
 
   List<String> get _periodOptions =>
-      datePeriodLabelsForRole(managerUp: isManagerOrAbove(ref));
+      datePeriodLabelsForRole(managerUp: Gates.seeExtendedDateRanges.allows(ref));
 
   String get _effectivePeriod {
     final isCustom = _periodFilter.startsWith('Custom:');

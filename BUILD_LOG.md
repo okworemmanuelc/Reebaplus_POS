@@ -2,6 +2,168 @@
 
 ---
 
+## 2026-07-03 — Flip the gate enforcement: empty the allowlist, remove the bare helpers (issue #22)
+
+**Scope:** the epic #16 finish line. The named-gate migration's shrinking
+static-ban allowlist is now **empty**, the bare single-key helper and the
+manager-tier helper are **removed** from the app, and the leak class (permission
+enforcement re-typed inline across ~89 sites) is retired the way the
+`SyncedTable` registry (#15) retired the sync smear.
+
+**Last 10 bare `hasPermission(ref, …)` sites → named gates (verbatim):**
+- `staff_detail_screen` (6): assign-stores, change-role ×2, suspend ×2,
+  permission-editor visibility → `assignStaffStores`, `changeStaffRole`,
+  `suspendStaff`, `manageSettings`.
+- `staff_permissions_screen` (1): `settings.manage` → `manageSettings`.
+- `orders_screen` (2): both Pending-tab Refund checks (`sales.cancel`) →
+  `refundOrder`.
+- `activity_log_screen` (1): body-guard (`activity_logs.view`) →
+  `viewActivityLogs`.
+
+**Bare + tier helpers removed from `stream_providers.dart`:**
+- `hasPermission(WidgetRef, String)` — **deleted**. Nothing outside the
+  permissions module reads the effective set directly for gating now; the
+  single-key primitive lives only as `Gate.key` behind `Gates.x.allows(ref)`.
+- `isManagerOrAbove(WidgetRef)` — **deleted** (user-approved scope). Its ~12
+  feature call sites now cite named tier atoms so the tier rule
+  (`roleRank(slug) <= 1`) exists ONLY in registry atoms:
+  - `seeOrderMoney` (§19.3 — order money columns + per-tab money stats;
+    `orders_screen` ×4). The completed/cancelled tabs split the single
+    `managerUp` into `seeOrderMoney` (money) + `seeExtendedDateRanges` (filter).
+  - `seeExtendedDateRanges` (§19.2 — the This Year / To Date presets;
+    `orders_screen`, `customer_detail`, `supplier_transactions`, `expenses`,
+    `home`, `supplier_detail`).
+  - `viewApprovals` / `dailyReconciliation` / `crateDepositsReport` — the
+    reports-hub manager-up cards (`isMgrUp` → `tierAtLeast(manager)`; Crate
+    Deposits keeps its `&& isCrate` business-type check inline).
+
+**Registry (`Gates`, Staff/Orders/finish-line cluster):** 9 new entries
+(4 key-based staff/order gates, 5 tier-based §19-class render-only gates,
+all carrying the ADR-0002 review flag). `Gates.all` = 48; every gate cited in
+production (membership test strict).
+
+**Static-ban test flipped strict:** `_allowlist` is now `{}`. Any bare
+`hasPermission(ref, …)` in `lib/` outside `lib/core/permissions/` fails the
+suite. Added a durable scanner self-test (a synthetic bare check must match,
+a `Gates.x.allows(ref)` citation must not). The AC's plant-and-verify was run:
+a temporary bare check in a lib file failed the scan; the plant was removed.
+
+**Left as-is (out of approved scope):** per-screen `slug=='ceo'` CEO cost-wall
+money-visibility checks (deliberately tier-based per ADR 0002, never in any
+batch) and the drawer `isBelowCeo` UI-placement split (chooses self-service vs
+CEO settings — not a permission gate, and the Gate algebra has no negation atom
+by design).
+
+**Tests:** the two settings harnesses (`settings_menu_gating`,
+`sidebar_role_visibility`) drop the deleted helper for a direct
+`currentUserPermissionsProvider.contains(key)` — identical semantics through the
+same provider chain the named gates read.
+
+**Verification:** whole-project `flutter analyze` clean; `test/permissions` +
+`test/settings` 80/80; full suite green except `who_is_working_screen_test` —
+**pre-existing** (widget-timing + a live Supabase `PostgrestException`;
+untouched by this work, uses neither removed helper, flagged in prior logs).
+
+---
+
+## 2026-07-03 — Migrate Settings & sidebar to named gates, incl. the Sync Issues composite (issue #21)
+
+**Scope:** the Settings/nav batch of epic #16 — all 11 `lib/core/settings/`
+screens, `app_drawer.dart`, `main_layout.dart`, and the Sync Issues screen
+guard lifted **verbatim** onto named registry gates; the static-ban allowlist
+shrinks by exactly those 13 files. Also migrated (beyond the ratchet's regex):
+the 7 fire-time `ref.read(currentUserPermissionsProvider).contains(…)` write
+re-checks in settings sub-screens → `.allowsNow` + standard `showGateDenied`
+feedback.
+
+**Registry (`Gates`, Settings & sidebar/nav cluster):**
+- `viewSyncIssues` — `sync.view` OR CEO (the issue's flagship composite). ONE
+  entry now cited by all its surfaces: the screen body-guard, the sidebar
+  item, and the drawer header's sync status badge/banner pill. The standalone
+  `canViewSyncIssues` helper is **retired** (deleted from
+  `stream_providers.dart`) — CEO access without the grant still works via the
+  `Gate.ceo()` disjunct.
+- `manageSettings` — `settings.manage` (drawer CEO Settings entry + settings
+  home + every sub-screen's body-guard and write re-check)
+- `deleteBusiness` — `settings.delete_business` (Danger Zone entry, compound
+  with its non-permission search-match kept at the call site, + delete screen
+  body-guard)
+- Render-only nav gates: `viewCustomers` (`customers.add` — distinct action
+  from `addCustomer`), `manageStaff` (`staff.invite`), `viewActivityLogs`
+  (`activity_logs.view`), `viewStores` (any-of the four stores/transfer keys,
+  the drawer's old four-way OR)
+
+**Same-gate pairing (nav entry ↔ destination):** POS drawer entry, bottom-nav
+POS/Cart tabs, and the no-POS-landing bounce guard all cite `makeSale`;
+Inventory drawer entry + Stock tab cite `viewInventory`; Supplier Accounts →
+`manageSuppliers`; Expenses → `viewExpenses`; CEO Settings > Stores
+body-guards on `manageStores` (`stores.manage`, deliberately not
+`settings.manage` — verbatim).
+
+**Unchanged by design:** Roles & Permissions editors migrate like any other
+screen — the write-time dependency-cascade (`descendantsOf`) and the
+role-settings limits are untouched. `SettingsNoAccess` bodies kept (verbatim
+lift, no scaffold swap). The drawer's staff-vs-CEO `isBelowCeo` slug split is
+a UI split, not a permission gate — left for the #22 tier-check sweep.
+
+**Verification:** `flutter analyze` clean on all touched files;
+`test/permissions` 45/45 (ratchet + membership green); full suite green except
+`who_is_working_screen_test` — **pre-existing**, verified by running it at
+HEAD in a clean worktree (fails identically; it makes a live Supabase call).
+
+---
+
+## 2026-07-03 — Migrate Inventory, Stores, Customers & Expenses to named gates (issue #20)
+
+**Scope:** the mechanical operations batch of epic #16 — 26 bare
+`hasPermission(ref, …)` sites across 9 files lifted **verbatim** into named
+registry gates; the static-ban allowlist shrinks by exactly those files.
+
+**New algebra atom:** `Gate.tierIn(ranks)` (set membership over role ranks,
+fails closed on null). Needed for exactly one lift: Daily Stock Count's legacy
+role set {CEO, Manager, Stock keeper} **skips Cashier**, so no `tierAtLeast`
+cutoff can express it. Convention-bound like the other tier atoms (ADR 0002);
+unit-tested in `gate_test.dart`.
+
+**Registry (`Gates`, Operations cluster):**
+- `viewInventory` — `stock.view` (Inventory tab body-guard, §16.7)
+- `dailyStockCount` — `tierIn{ceo,manager,stockKeeper} && stock.adjust`
+  (tier-based legacy — review flag)
+- `manageStores` — `stores.manage`; `requestStoreTransfer` /
+  `dispatchStoreTransfer` / `receiveStoreTransfer` — the three transfer keys
+- `editCustomer` — `customers.update`; `deleteCustomer` — `customers.delete`
+- `addCustomerCredit` — `customers.wallet.update`; `setDebtLimit` —
+  `customers.set_debt_limit`; `refundCustomerWallet` — `customers.wallet.withdraw`;
+  `seeWalletTotals` — `customers.wallet.totals.view` (§18.4)
+- `recordCrateReturn` — `sales.make` (same key as `makeSale`, distinct action
+  with its own denial text)
+- `viewExpenses` — `reports.see_expenses`; `addExpense` — `expenses.create`;
+  `approveExpenses` — `expenses.approve`
+
+Reused entries (docs broadened): `addCustomer` (Customers FAB),
+`editProductPrice` (Inventory long-press editor), `editBuyingPrice` +
+`manageSuppliers` (Add Product screen).
+
+**Screen guards:** Inventory and Expenses hand-rolled denial scaffolds replaced
+by `Guarded.screen` (wait-for-ready → no denial flash). Both are MainLayout
+tabs, so — per the POS precedent — the `loading`/`denied` overrides keep their
+chrome (SharedScaffold / drawer + app-bar) so nav stays reachable. The Stores
+browse composite stays inline (its all-stores-viewer leg is a store-assignment
+provider, not a permission key) but cites the named gates for each key leg.
+Write boundaries (`_openEditSheet`, EditCustomerSheet save) use `.allowsNow(ref)`
+with behaviour preserved (silent pop/return, as before).
+
+**Verification:** `dart analyze` clean on all touched dirs; `gate_test` +
+`guarded_test` green (incl. the new `tierIn` + `dailyStockCount` semantics);
+full suite 641 passing. The `gate_registry_membership_test` /
+`gate_static_ban_test` failures at run time belong to the **parallel #21
+settings batch** (its six gates declared but not yet cited; its six settings
+allowlist rows not yet shrunk) — none of this batch's files or gates appear in
+either failure. `who_is_working_screen_test` fails on a live-network
+PostgrestException, unrelated to gates.
+
+---
+
 ## 2026-07-03 — Migrate Dashboard & Reports composite gates to named gates (issue #18)
 
 **Scope:** the messiest composite permission expressions in the app — the

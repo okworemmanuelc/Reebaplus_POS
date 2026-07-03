@@ -57,6 +57,19 @@ void main() {
       expect(gate.evaluate(ctx(rank: GateTier.ceo)), isTrue);
       expect(gate.evaluate(ctx(rank: GateTier.manager)), isFalse);
     });
+
+    test('tierIn grants only for ranks in the set (the skipped-tier form)', () {
+      // Daily Stock Count's shape: CEO/Manager/Stock keeper but NOT Cashier —
+      // a member set no tierAtLeast cutoff can express.
+      const gate = Gate.tierIn(
+          [GateTier.ceo, GateTier.manager, GateTier.stockKeeper]);
+      expect(gate.evaluate(ctx(rank: GateTier.ceo)), isTrue);
+      expect(gate.evaluate(ctx(rank: GateTier.manager)), isTrue);
+      expect(gate.evaluate(ctx(rank: GateTier.stockKeeper)), isTrue);
+      expect(gate.evaluate(ctx(rank: GateTier.cashier)), isFalse);
+      expect(gate.evaluate(ctx(rank: null)), isFalse,
+          reason: 'fails closed while the role is unresolved');
+    });
   });
 
   group('composition', () {
@@ -137,6 +150,22 @@ void main() {
           isTrue);
       expect(Gates.receiveStock.evaluate(ctx(keys: {'sales.make'}, rank: 2)),
           isFalse);
+    });
+
+    test('dailyStockCount needs stock.adjust AND a non-cashier tier (§17.4)', () {
+      expect(
+          Gates.dailyStockCount.evaluate(
+              ctx(keys: {'stock.adjust'}, rank: GateTier.stockKeeper)),
+          isTrue);
+      expect(
+          Gates.dailyStockCount
+              .evaluate(ctx(keys: {'stock.adjust'}, rank: GateTier.cashier)),
+          isFalse,
+          reason: 'Cashier is excluded even while holding the key');
+      expect(
+          Gates.dailyStockCount.evaluate(ctx(rank: GateTier.manager)),
+          isFalse,
+          reason: 'the key is independently revocable');
     });
   });
 

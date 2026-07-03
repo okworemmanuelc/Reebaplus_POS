@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
@@ -543,7 +544,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
     final canAssignStores =
         !widget.readOnly &&
         role?.slug != 'ceo' &&
-        hasPermission(ref, 'staff.assign_stores');
+        Gates.assignStaffStores.allows(ref);
 
     return Scaffold(
       backgroundColor: t.scaffoldBackgroundColor,
@@ -650,12 +651,12 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                 // greyed (hard rule #7). The manageable→readOnly logic already
                 // restricts which staff a viewer can act on.
                 if (!widget.readOnly &&
-                    ((hasPermission(ref, 'staff.change_role') &&
+                    ((Gates.changeStaffRole.allows(ref) &&
                             !isTargetOwner) ||
-                        (hasPermission(ref, 'staff.suspend') &&
+                        (Gates.suspendStaff.allows(ref) &&
                             !isTargetOwner))) ...[
                   SizedBox(height: context.getRSize(24)),
-                  if (hasPermission(ref, 'staff.change_role') &&
+                  if (Gates.changeStaffRole.allows(ref) &&
                       !isTargetOwner) ...[
                     AppButton(
                       text: 'Change role',
@@ -666,7 +667,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                     ),
                     SizedBox(height: context.getRSize(12)),
                   ],
-                  if (hasPermission(ref, 'staff.suspend') && !isTargetOwner)
+                  if (Gates.suspendStaff.allows(ref) && !isTargetOwner)
                     AppButton(
                       text: suspended ? 'Reactivate' : 'Suspend',
                       icon: suspended
@@ -719,7 +720,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
 
     if (!widget.readOnly &&
         role != null &&
-        hasPermission(ref, 'settings.manage')) {
+        Gates.manageSettings.allows(ref)) {
       final isCeo = role.slug == 'ceo';
       final overrideCount = isCeo
           ? 0

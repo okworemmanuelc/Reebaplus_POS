@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
@@ -21,7 +22,7 @@ class ActivityLogsAccessScreen extends ConsumerWidget {
     final t = Theme.of(context);
     // Screen-level gate (hard rule #6) — also keeps the permission chain warm
     // so the per-row toggle's guard reads a resolved value.
-    final canManage = hasPermission(ref, 'settings.manage');
+    final canManage = Gates.manageSettings.allows(ref);
     final roles = ref.watch(allRolesProvider);
 
     return GlassyScaffold(
@@ -94,12 +95,9 @@ class _RoleToggle extends ConsumerWidget {
   }
 
   Future<void> _toggle(BuildContext context, WidgetRef ref, bool enable) async {
-    // ref.read (not hasPermission/watch) — callback, matches staff_detail_screen.
-    if (!ref.read(currentUserPermissionsProvider).contains('settings.manage')) {
-      AppNotification.showError(
-        context,
-        'You don\'t have permission to do that.',
-      );
+    // Fire-time re-check (allowsNow, not allows) — callback, not a build.
+    if (!Gates.manageSettings.allowsNow(ref)) {
+      showGateDenied(context, Gates.manageSettings);
       return;
     }
     final db = ref.read(databaseProvider);

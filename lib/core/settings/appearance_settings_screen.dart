@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
@@ -49,7 +50,7 @@ class AppearanceSettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = Theme.of(context);
-    final canManage = hasPermission(ref, 'settings.manage');
+    final canManage = Gates.manageSettings.allows(ref);
     // Synced value when set; otherwise reflect what this device is showing.
     final current =
         ref.watch(businessDesignSystemProvider).valueOrNull ??
@@ -116,12 +117,9 @@ class AppearanceSettingsScreen extends ConsumerWidget {
     WidgetRef ref,
     DesignSystem ds,
   ) async {
-    // Callback re-check (ref.read), matching the other settings sub-pages.
-    if (!ref.read(currentUserPermissionsProvider).contains('settings.manage')) {
-      AppNotification.showError(
-        context,
-        'You don\'t have permission to do that.',
-      );
+    // Fire-time re-check (allowsNow), matching the other settings sub-pages.
+    if (!Gates.manageSettings.allowsNow(ref)) {
+      showGateDenied(context, Gates.manageSettings);
       return;
     }
     themeController.setDesignSystem(ds); // immediate, this device

@@ -1434,7 +1434,9 @@ final currentBusinessSubscriptionProvider = Provider<SubscriptionAccess>((ref) {
 
 /// The set of permission keys granted to the current user's role (e.g.
 /// `staff.invite`, `sales.make`). Empty until the role + its grants are
-/// resolved locally. Use [hasPermission] for a single-key check.
+/// resolved locally. Feature code never reads this set directly for gating —
+/// it cites a named gate (`Gates.x.allows(ref)`); this provider backs the
+/// gate-context seam (ADR 0002).
 /// Pure permission resolution (§10.2.1), most-specific wins:
 /// **User > Store > Business**. Start from the role's business grants, then
 /// apply the active store's overrides, then the user's overrides. CEO is all-on
@@ -1546,33 +1548,13 @@ final currentUserPermissionsReadyProvider = Provider<bool>((ref) {
   return ref.watch(rolePermissionsProvider(role.id)).valueOrNull != null;
 });
 
-/// True if the current user's role grants [key]. Thin reader over
-/// [currentUserPermissionsProvider] — reused by every role-gated screen,
-/// button, and action (CLAUDE.md hard rule #6). Hide, don't disable, when
-/// this returns false (hard rule #7).
-bool hasPermission(WidgetRef ref, String key) {
-  return ref.watch(currentUserPermissionsProvider).contains(key);
-}
-
-/// True if the current user is Manager or above (CEO or Manager), by [roleRank].
-/// Roles below Manager (Cashier, Stock keeper) don't see monetary values in
-/// Orders (§19.3) and have the wallet Total In/Out tiles hidden by default
-/// (§18.4). **Fails closed**: returns false while the role is still resolving
-/// locally, so money stays hidden rather than flashing into view for a low role.
-bool isManagerOrAbove(WidgetRef ref) {
-  final role = ref.watch(currentUserRoleProvider);
-  return role != null && roleRank(role.slug) <= 1;
-}
-
-/// True if the current user may open the Sync Issues troubleshooting screen.
-/// The CEO always can (implicit owner of this infra screen — they may not hold
-/// the `sync.view` grant itself); other roles only if the CEO has granted them
-/// `sync.view` via CEO Settings → Sync Issues access. Used by the screen guard,
-/// the sidebar item, the sync badge, and the sync banner.
-bool canViewSyncIssues(WidgetRef ref) {
-  return ref.watch(currentUserPermissionsProvider).contains('sync.view') ||
-      ref.watch(currentUserRoleProvider)?.slug == 'ceo';
-}
+// Permission gating is expressed exclusively through the named-gate registry
+// (ADR 0002, issue #22 flip). The bare single-key permission helper and the
+// manager-tier helper (`isManagerOrAbove`) were REMOVED here: feature code
+// cites `Gates.x.allows(ref)` / `.allowsNow(ref)` / `.require(ref)`, so both the
+// permission-key axis (`Gate.key`) and the role-tier axis (`Gate.tierAtLeast`,
+// e.g. §19.3 money-visibility) live only in registry atoms — never inline in a
+// screen. The Sync Issues rule (sync.view OR CEO) is `Gates.viewSyncIssues`.
 
 // ── Discount cap (master plan §12.6 / §13.2) ─────────────────────────────────
 

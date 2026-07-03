@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
@@ -565,8 +566,8 @@ class _TransferActionCardState extends ConsumerState<_TransferActionCard> {
     final subtext = Theme.of(context).textTheme.bodySmall?.color;
     final primary = Theme.of(context).colorScheme.primary;
 
-    final canDispatch = hasPermission(ref, 'stores.dispatch_transfer');
-    final canReceive = hasPermission(ref, 'stores.receive_transfer');
+    final canDispatch = Gates.dispatchStoreTransfer.allows(ref);
+    final canReceive = Gates.receiveStoreTransfer.allows(ref);
 
     final subtitle = switch (widget.mode) {
       _CardMode.fulfil =>
