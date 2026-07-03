@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/business_scoped_stream.dart';
 import 'package:reebaplus_pos/core/services/first_load_marker_service.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 
@@ -313,9 +314,7 @@ final firstLoadLandingReadyProvider = Provider<bool>((ref) {
 /// fresh device, and is corrected to true on a returning device (whose store is
 /// non-empty anyway, so the overlay stays hidden).
 final firstPullCompletedProvider = FutureProvider<bool>((ref) async {
-  final businessId = ref.watch(
-    authProvider.select((a) => a.currentUser?.businessId),
-  );
+  final businessId = ref.watch(currentBusinessIdProvider);
   if (businessId == null) return false;
   return FirstLoadMarkerService.hasCompletedPull(businessId);
 });

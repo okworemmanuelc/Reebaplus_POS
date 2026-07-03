@@ -8,9 +8,50 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 
-151 sessions logged. Codebase is live and being verified on-device.
+152 sessions logged. Codebase is live and being verified on-device.
 
-### Design landed (not yet built): Business-Scoped Stream primitive (2026-07-03, PRD #23 → issues #24, #25)
+### SHIPPED: Business-Scoped Stream primitive — factory + full migration (2026-07-03, PRD #23 = issues #24 + #25)
+- **Built both slices in one pass.** New `lib/core/providers/business_scoped_stream.dart`:
+  the `currentBusinessIdProvider` seam (`authProvider.select(currentUser?.businessId)`)
+  plus four guarded factories — `businessScopedStream` /
+  `businessScopedStreamFamily` and their `…AutoDispose` twins (Riverpod types
+  keep-alive and autoDispose streams distinctly, so preserving each provider's
+  lifecycle needs the twin). Each watches the seam, emits a required `whenAbsent`
+  while unbound, and hands the closure **`(ref, db, businessId)`** with a
+  guaranteed non-null id. `ref` is passed (a small, documented deviation from the
+  ADR's `(db, businessId)`) because several tenant feeds must compose
+  `lockedStoreProvider` to derive store scope; the guarantee is unchanged.
+- **Migration surface was bigger than the "~41" estimate: 62 session-scoped
+  declarations** migrated across `stream_providers.dart` (all order/expense/
+  transfer/product/category/manufacturer/supplier/role/permission/crate/stock
+  feeds, incl. the `allStoresProvider` throw-poison tracer + the
+  `storeInventoryCountsProvider` silent-empty custom-SQL tracer) and
+  `app_providers.dart` (supplier ledger/crate feeds, customer credit, the
+  business-scoped `sync_queue` feeds, `hasLocalProductsProvider`). Each is a
+  behaviour-preserving lift — `whenAbsent` equals what it emitted before
+  (`[]` / `{}` / `0` / `null` / `kDefaultCurrency` / a `.empty()` stats zero).
+  **Consumers untouched.** Prefactor also repointed the FutureProvider
+  `firstPullCompletedProvider` onto the seam (no inline `.select` left).
+- **Final allowlist = 11 genuinely non-session-scoped streams** (not just the 2
+  globals): the permissions catalogue + unscoped roles; 4 explicit-id feeds
+  resolved *before* bind (`_userMemberships`, `myUserStores`, `activeStaff`,
+  `deviceStaff` — the shared-PIN / Who's-Working pickers); 2 device-local engine
+  feeds (`orphanQueueItems`, `orphanQueueCount` — `sync_queue_orphans` has no
+  `business_id`); 3 intentionally-unscoped selects (`localBusinesses`,
+  `pendingCrateReturns`, `pendingReturnsWithDetails`). Forcing any through the
+  factory would break pre-bind resolution or change device-local semantics.
+- **Enforcement:** `test/providers/business_scoped_stream_ban_test.dart` bans a
+  raw `StreamProvider` declaration anywhere in `lib/` (allowlist = the 11 above,
+  shrink-only ratchet) + a companion strictness test (planted raw caught,
+  multi-line caught, all four factory forms not flagged). Unit test
+  `test/providers/business_scoped_stream_test.dart` drives the factory
+  `null → bound → switched → unbound` via the seam override and proves it never
+  runs the closure in the null window — no database needed.
+- **Verified:** `flutter analyze` clean; full suite 652 passed / 58 skipped /
+  1 pre-existing failure (`who_is_working_screen_test.dart` "Carol" — confirmed
+  failing identically with these changes stashed, unrelated).
+
+### Design landed (superseded by the SHIPPED entry above): Business-Scoped Stream primitive (2026-07-03, PRD #23 → issues #24, #25)
 - **Planning only — no app code shipped this session.** Grilled the design
   (`/grill-with-docs`), wrote the paper trail, and filed the work.
 - **Problem:** business-scoped `StreamProvider`s bake the current businessId at

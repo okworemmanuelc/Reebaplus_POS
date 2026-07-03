@@ -42,11 +42,16 @@ files; consumers (`ref.watch(xProvider)`) are untouched.
 
 ## Key boundary decisions
 
-- **The closure receives the resolved, non-null businessId.** So
-  `requireBusinessId()` can never throw from a factory-built provider, and
+- **The closure receives `(ref, db, businessId)` with a resolved, non-null id.**
+  So `requireBusinessId()` can never throw from a factory-built provider, and
   custom-SQL providers (`WHERE business_id = ?`) migrate too — the primitive
   subsumes **both** the throw-poison and the silent-empty families, not just the
-  DAO-watch ones.
+  DAO-watch ones. A DAO-watch closure ignores the id (the DAO reads it from the
+  session); a custom-SQL closure binds it directly. The closure is also handed
+  the provider `ref`, because several tenant-scoped feeds must still compose a
+  sibling provider — the active-store `lockedStoreProvider` — to derive their
+  store scope; the guarantee (non-null `businessId`, guarded null window) is
+  unchanged, `ref` is purely additive.
 - **`whenAbsent` is required, never inferred.** The null-window value genuinely
   varies across sites (`[]`, `{}`, `0`, `null`, `kDefaultCurrency`), so there is
   no default to guess. Requiring it forces a conscious choice and keeps the
@@ -68,8 +73,12 @@ files; consumers (`ref.watch(xProvider)`) are untouched.
 - **Family gets a second factory, not a hand-written carve-out.** Riverpod won't
   let one function emit both plain and family providers, so the `.family` cases
   get `businessScopedStreamFamily`. Leaving them hand-written would re-open the
-  hole for the next family provider someone adds; two guarded front doors keep
-  the invariant total.
+  hole for the next family provider someone adds; guarded front doors keep the
+  invariant total. Riverpod likewise types keep-alive and `autoDispose` streams
+  distinctly, so each has an `AutoDispose` twin
+  (`businessScopedStreamAutoDispose` / `…AutoDisposeFamily`) — four functions,
+  one guard — preserving each migrated provider's original lifecycle exactly
+  (an autoDispose family that tears down per-key state stays autoDispose).
 
 ## Consequences
 
@@ -81,7 +90,19 @@ files; consumers (`ref.watch(xProvider)`) are untouched.
 - Staged in two independently-grabbable issues: (1) the factories +
   `currentBusinessIdProvider` + tests + a ban test whose allowlist temporarily
   names every current raw provider (CI green); (2) the mechanical migration of
-  ~41 sites, shrinking the allowlist to just the globals, plus the companion
-  "planted violation is caught / migrated form is not flagged" strictness test.
+  the session-scoped sites, shrinking the allowlist to the genuinely
+  non-tenant-scoped streams, plus the companion "planted violation is caught /
+  migrated form is not flagged" strictness test. The real surface is larger than
+  the issue's "~41" estimate — **62 session-scoped declarations** migrated across
+  the two provider files. The final allowlist is the **11** streams that are not
+  session-scoped and must stay raw: the two globals (permissions catalogue,
+  unscoped roles), four keyed by an explicit id resolved *before* a business
+  binds (`_userMemberships`, `myUserStores`, `activeStaff`, `deviceStaff` — the
+  shared-PIN / Who's-Working pickers), two device-local sync-engine feeds
+  (`orphanQueueItems`, `orphanQueueCount` — `sync_queue_orphans` has no
+  `business_id`), and three intentionally-unscoped selects (`localBusinesses`,
+  `pendingCrateReturns`, `pendingReturnsWithDetails`). Forcing any of these
+  through the factory would break pre-bind resolution or change device-local
+  semantics, so "off the factory" is correct, not a shortfall.
 - The `whenAbsent`-vs-`AsyncLoading` behaviour choice is deferred, not decided:
   revisit if a provider genuinely wants a loading state during the null window.

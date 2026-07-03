@@ -61,8 +61,9 @@ is baked and sticks stale/empty for the session).
 
 **Business-Scoped Stream**:
 A live-query provider declared through the `businessScopedStream` factory (or
-`businessScopedStreamFamily` for keyed ones). It watches the Current Business
-Id, emits its required `whenAbsent` value until a business is bound, hands the
-closure the resolved non-null id, and rebuilds on bind or switch — so a
-tenant-scoped read cannot be baked to a missing or stale business at build time.
+`businessScopedStreamFamily` for keyed ones, plus `…AutoDispose` twins). It
+watches the Current Business Id, emits its required `whenAbsent` value until a
+business is bound, hands the closure `(ref, db, businessId)` with the resolved
+non-null id, and rebuilds on bind or switch — so a tenant-scoped read cannot be
+baked to a missing or stale business at build time.
 _Avoid_: raw `StreamProvider` over a DAO `watch*`, inline businessId guards.
