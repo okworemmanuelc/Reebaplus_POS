@@ -6,6 +6,20 @@ offline and converges when connectivity returns.
 
 ## Language
 
+### Permissions
+
+**Gate**:
+A named yes/no rule deciding whether the current user may see or perform a
+gated action (e.g. *receive stock*, *see profit*). May combine permission keys
+and role tier, but is always declared once, by name, in the Gate Registry —
+call sites cite the name, never re-derive the rule.
+_Avoid_: check, guard condition, inline `hasPermission` expressions.
+
+**Gate Registry**:
+The single file declaring every Gate in the app. One gated action = one named
+entry; the render layer, the screen guard, and the write boundary all cite the
+same entry, so the rule cannot drift between layers.
+
 ### Sync
 
 **Sync Engine**:

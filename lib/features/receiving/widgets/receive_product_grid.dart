@@ -6,11 +6,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
 import 'package:reebaplus_pos/features/receiving/widgets/new_product_card.dart';
-import 'package:reebaplus_pos/core/providers/stream_providers.dart';
-import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/update_product_sheet.dart';
 
@@ -38,10 +37,10 @@ class ReceiveProductGrid extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Creating a NEW product from the receive grid needs `products.add`.
+    // Creating a NEW product from the receive grid is the Add Product gate.
     // Stock keepers without it can still tap existing products to receive
     // quantity — they just don't get the "New Product" card.
-    final canAddProduct = hasPermission(ref, 'products.add');
+    final canAddProduct = Gates.addProduct.allows(ref);
     final screenWidth = MediaQuery.of(context).size.width;
     final availableWidth = context.isDesktop ? (screenWidth - 280.0) : screenWidth;
     int effectiveColumns = gridColumns;
@@ -139,8 +138,10 @@ class _ReceiveProductCard extends ConsumerWidget {
         GestureDetector(
           onLongPress: () {
             HapticFeedback.mediumImpact();
-            if (!hasPermission(ref, 'products.edit_price')) {
-              AppNotification.showError(context, 'You lack permission to edit products.');
+            // Fire-time re-check: a stale card can't open the edit sheet after
+            // the grant was revoked mid-session.
+            if (!Gates.editProductPrice.allowsNow(ref)) {
+              showGateDenied(context, Gates.editProductPrice);
               return;
             }
             showModalBottomSheet(

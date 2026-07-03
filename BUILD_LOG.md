@@ -2,6 +2,117 @@
 
 ---
 
+## 2026-07-03 — Migrate Dashboard & Reports composite gates to named gates (issue #18)
+
+**Scope:** the messiest composite permission expressions in the app — the
+home-screen §11.4 money/report tiles (CEO-or-Manager-with-key patterns) and the
+Reports hub / Profit report entries — lifted **verbatim** into named registry
+gates. No key-ification, no semantic cleanup; each tier+key expression moves
+exactly as written so the registry now makes every tier dependence visible in
+one place (ADR 0002).
+
+**Registry (`Gates`, tier-based / §19.3-class, render-only — `.allows(ref)`):**
+- `seeSalesMetric` — `ceo || (tierAtLeast(cashier) && reports.see_sales)`
+- `seeProfitMetric` — `ceo || reports.see_profit`
+- `seeExpensesMetric` — `ceo || (tierAtLeast(manager) && reports.see_expenses)`
+- `seeStockValueMetric` — `ceo || (tierAtLeast(manager) && stock.view)`
+- `seeCreditBalanceMetric` — `ceo || (tierAtLeast(cashier) && customers.add)`
+- `seeStaffSales` — `tierAtLeast(manager)` (money-visibility, pure tier)
+- `supplierAccountsReport` — `tierAtLeast(manager) && suppliers.manage`
+- `profitReportEntry` — `tierAtLeast(manager) && reports.see_profit`
+- `seeReportCostPrices` — `reports.see_cost_prices`
+
+The `(isManager || isCashier)` halves became `tierAtLeast(cashier)` and
+`isManagerOrAbove`/`isMgrUp` became `tierAtLeast(manager)` — both provably
+identical under the CEO disjunct across all four ranks + the null-rank
+(fail-closed) case, so behaviour is neutral by construction.
+
+**Call sites:**
+- `home_screen.dart` — 5 tile flags + Staff Sales now cite `Gates.*.allows(ref)`.
+  `showPending` (`slug != null`) and `showTotalSkus` (`isCashier || isStockKeeper`,
+  not expressible with `tierAtLeast`) stay inline — not permission checks, out of
+  this key-focused batch.
+- `reports_hub_screen.dart` — Supplier Accounts + Profit Report entries cite the
+  two hub gates; the pure-tier `if (isMgrUp)` cards (Approvals / Daily Recon /
+  Crate Deposits) stay inline (cross-cutting role helper, not a bare check).
+- `profit_report_screen.dart` — the on-screen headline (`.allows`) and the CSV
+  export path (`.allowsNow`, previously a raw `currentUserPermissionsProvider.contains`)
+  now cite the SAME `seeReportCostPrices` gate, so the "mirror the on-screen gate"
+  comment is provably true instead of comment-enforced.
+
+**Ratchet:** the static-ban allowlist shrank by exactly these three files
+(home_screen 5, reports_hub 2, profit_report 1 → removed). `flutter analyze`
+clean; `test/permissions/` green (static-ban + membership + pure/widget seams),
+no behavioural test edits.
+
+---
+
+## 2026-07-02 — Tracer: named-gate registry + `Guarded`, proven on Receive Stock (issue #17)
+
+**Problem:** permission enforcement is hand-typed at ~89 `hasPermission(ref, key)`
+sites across 22+ files in three layers (hide the button / guard the screen /
+re-check before the write), their equivalence maintained only by code comments.
+A forgotten or drifted layer is the documented recurring leak (the Session 81
+audit fixed nine, one at a time). Issue #16's plan retires the class the way the
+`SyncedTable` registry (#15) retired the per-table sync smear: one declaration,
+generic machinery, a test that makes the old pattern impossible. This issue is
+the **tracer** — the whole module + one gate migrated end-to-end.
+
+**Module (`lib/core/permissions/`, ADR 0002 + CONTEXT.md glossary):**
+- `gate.dart` — the **pure** Gate algebra: `Gate` sealed predicate over a
+  `GateContext` (`grantedKeys`, `roleRank?`, `isReady`), atoms `key` / `anyKey` /
+  `allKeys` / `tierAtLeast` / `ceo` composed with `.and` / `.or`. No Riverpod, no
+  Flutter — unit-testable as a function. **Fails closed** while the role is
+  unresolved (empty set + null rank ⇒ every atom false); **CEO all-on** holds via
+  the seeded CEO grants (key atoms) plus the explicit `ceo` atom for composites.
+  Plus `GateDeniedError` (carries the gate name → error-log telemetry).
+- `gate_registry.dart` — `NamedGate` (name + human action + rule) and `Gates`,
+  the single declaration site. Tracer gates: `receiveStock` (any-of `stock.add` /
+  `products.add`), `addProduct`, `editProductPrice`, `editBuyingPrice`,
+  `manageSuppliers`. Tier atoms are convention-bound (legacy lifts + §19.3 only).
+- `guarded.dart` — the Riverpod glue: `gateContextProvider` (the one seam onto
+  `currentUserPermissionsProvider` / `currentUserRoleProvider` /
+  `currentUserPermissionsReadyProvider`), the `GateEvaluation` extension
+  (`allows` reactive-watch for `build`, `allowsNow` one-shot for callbacks,
+  `require` throwing for flows), the `Guarded` widget (render-gate + the `allow`
+  fire-time re-check wrapper — hide-don't-disable, reactive so revocation removes
+  the child live) and `Guarded.screen` (body-guard that waits for readiness — no
+  denial flash — then renders one standard no-access scaffold naming the gate).
+- `permissions.dart` — barrel; call sites need one import.
+
+**Receive Stock migrated verbatim (12 sites, 5 files):** the Inventory FAB
+(`inventory_screen.dart`) and the screen guard (`receive_stock_screen.dart` →
+`Guarded.screen`) now cite the **same** `Gates.receiveStock` (was
+comment-enforced); the New Product card → `Gates.addProduct`, price edits →
+`Gates.editProductPrice` (incl. the long-press **fire-time** re-check via
+`allowsNow` + `showGateDenied`), buying-price → `Gates.editBuyingPrice`,
+supplier-payment section → `Gates.manageSuppliers`. Behaviour unchanged — a
+stock keeper with only `stock.add` still receives quantities but sees no New
+Product card, price edits, or supplier payments. `hasPermission` count fell
+86 → 74; `lib/features/receiving/` is now bare-check-free.
+
+**Tests (`test/permissions/`):**
+- `gate_test.dart` (14) — every atom, and/or, fail-closed unresolved, CEO all-on,
+  fed by `resolveEffectivePermissions` fixtures; tier ranks locked to
+  `roleRank()`; `GateDeniedError` payload carries the gate name.
+- `guarded_test.dart` (10) — hide-while-loading, fallback, live revocation, the
+  `allow` fire-time block + standard feedback, `allow` runs when granted,
+  `Guarded.screen` no-flash / body / no-access, `require()` throwing.
+- `gate_static_ban_test.dart` — scans `lib/` for `hasPermission(ref …)` outside
+  the module against a **full 74-site allowlist ratchet** (a grown/new site fails
+  → cite a Gate; a migrated-but-not-shrunk site fails → shrink the allowlist).
+  Verified a planted bare check fails the suite, then removed it.
+- `gate_registry_membership_test.dart` — every registry gate cited ≥1, each
+  `name` matches its `Gates.<name>` field, names unique.
+
+**Verification:** `flutter analyze lib` clean; `test/permissions/` (43),
+`test/receiving/` + `test/inventory/` + `test/settings/` (63) green with no
+behavioural test edits. Emulator walkthrough (stock keeper vs cashier; FAB +
+screen guard + live revocation) pending. Next: batches #18–21 shrink the
+allowlist; #22 empties it and privatizes the helper.
+
+---
+
 ## 2026-07-01 — Refactor: collapse the per-table sync smear into a `SyncedTable` registry (issue #15)
 
 **Problem:** adding or changing a synced table meant editing the same table's

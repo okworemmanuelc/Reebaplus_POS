@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
@@ -91,11 +92,11 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
           ),
         ),
       // §25.2 Supplier Accounts Report — outstanding balance, total paid and
-      // total received per supplier, store-scoped. Gated on suppliers.manage so
-      // it tracks Supplier Accounts access: CEO by default, Manager only when the
-      // CEO toggles it on; hidden for Cashier / Stock keeper (Reports hub itself
-      // is Manager-up only).
-      if (isMgrUp && hasPermission(ref, 'suppliers.manage'))
+      // total received per supplier, store-scoped. Manager-up AND suppliers.manage
+      // (CEO by default, Manager only when the CEO toggles it on; hidden for
+      // Cashier / Stock keeper). The isMgrUp && key composite is lifted verbatim
+      // into Gates.supplierAccountsReport (issue #18).
+      if (Gates.supplierAccountsReport.allows(ref))
         _buildReportCard(
           context,
           title: 'Supplier Accounts',
@@ -108,8 +109,9 @@ class _ReportsHubScreenState extends ConsumerState<ReportsHubScreen> {
           ),
         ),
       // Profit Report — CEO only (§25.2/§25.3); reports.see_profit is granted to
-      // the CEO alone by default.
-      if (isMgrUp && hasPermission(ref, 'reports.see_profit'))
+      // the CEO alone by default. The isMgrUp && key composite is lifted verbatim
+      // into Gates.profitReportEntry (issue #18).
+      if (Gates.profitReportEntry.allows(ref))
         _buildReportCard(
           context,
           title: 'Profit Report',

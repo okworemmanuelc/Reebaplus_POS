@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 
@@ -328,13 +329,12 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         tabsReady &&
         _currentTab < _tabKeys.length &&
         _tabKeys[_currentTab] == 'products';
-    // Receive Stock FAB — open to anyone who can add stock (stock keepers, §16.7)
-    // or add products. Inside the flow, creating a NEW product is separately
-    // gated on `products.add` (the New Product card) and price edits on their own
-    // permissions, so a stock keeper with only `stock.add` can receive/update
-    // quantities but can't create products or change prices.
-    final canReceiveStock =
-        hasPermission(ref, 'stock.add') || hasPermission(ref, 'products.add');
+    // Receive Stock FAB — cites the same named gate as the Receive Stock screen
+    // guard (their equivalence used to be comment-enforced). Inside the flow,
+    // creating a NEW product is separately gated (Gates.addProduct) and price
+    // edits on their own gates, so a stock keeper with only `stock.add` can
+    // receive/update quantities but can't create products or change prices.
+    final canReceiveStock = Gates.receiveStock.allows(ref);
 
     return SharedScaffold(
       activeRoute: 'inventory',

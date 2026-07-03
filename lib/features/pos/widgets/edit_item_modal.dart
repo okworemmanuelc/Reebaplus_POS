@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -210,7 +211,7 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
 
     final maxPercent = ref.watch(currentUserMaxDiscountPercentProvider);
     final canDiscount = maxPercent > 0;
-    final canSetCustomPrice = hasPermission(ref, 'sales.set_custom_price');
+    final canSetCustomPrice = Gates.setCustomPrice.allows(ref);
     // Designated selling price for the line — the immutable catalog reference.
     final catalogUnitPriceKobo =
         (widget.item['catalogPriceKobo'] as int?) ??

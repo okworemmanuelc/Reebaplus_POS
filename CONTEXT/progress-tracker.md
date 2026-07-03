@@ -10,6 +10,82 @@ The human updates it when resolving open questions or making architectural decis
 
 151 sessions logged. Codebase is live and being verified on-device.
 
+### Batch: POS & Checkout named-gate migration (2026-07-03, issue #19)
+- **Goal (epic #16):** migrate the POS + Checkout gates verbatim into named
+  registry gates, and land the flagship use of the imperative `require` form.
+- **New gates (`gate_registry.dart`, POS & Checkout cluster):** `Gates.makeSale`
+  (`sales.make`), `Gates.addCustomer` (`customers.add`), `Gates.setCustomPrice`
+  (`sales.set_custom_price`) — plain key lifts.
+- **Sites migrated (verbatim, behaviour-neutral):** POS home screen's hand-rolled
+  perms-ready + `sales.make` denial → the standard `Guarded.screen(gate: makeSale)`
+  (waits for readiness = no CEO-lands-on-POS denial flash; keeps the SharedScaffold
+  nav chrome via the `loading`/`denied` params since POS is a bottom-nav tab). Cart
+  "New customer" → `Gates.addCustomer.allows(ref)`; edit-item Custom Price →
+  `Gates.setCustomPrice.allows(ref)`. **Checkout confirm path** now guards its
+  write boundary with `Gates.makeSale.require(ref)` at the top of `_confirmPayment`,
+  catching `GateDeniedError` into the standard `showGateDenied` feedback and
+  returning before any write (the imperative-form flagship). Sale semantics
+  untouched — revenue-at-checkout, the discount *cap*, and the unenforced
+  discount-give permission all unchanged.
+- **Static-ban allowlist** shrunk by exactly the 3 POS sites (pos_home_screen,
+  cart_screen, edit_item_modal → removed). `flutter analyze` clean; permissions +
+  pos + checkout + settings-gating suites green, no behavioural test edits.
+
+### Batch: Dashboard & Reports named-gate migration (2026-07-03, issue #18)
+- **Goal (epic #16):** lift the app's messiest composite gates — the home-screen
+  §11.4 money/report tiles (CEO-or-Manager-with-key) and the Reports hub / Profit
+  report entries — verbatim into named registry gates, so every tier dependence
+  is visible in one file. No key-ification, no cleanup (ADR 0002).
+- **New gates (`gate_registry.dart`, Dashboard & Reports cluster — tier-based /
+  §19.3-class, render-only via `.allows(ref)`):** `seeSalesMetric`,
+  `seeProfitMetric`, `seeExpensesMetric`, `seeStockValueMetric`,
+  `seeCreditBalanceMetric`, `seeStaffSales`, `supplierAccountsReport`,
+  `profitReportEntry`, `seeReportCostPrices`. `(isManager||isCashier)` →
+  `tierAtLeast(cashier)` and `isMgrUp`/`isManagerOrAbove` → `tierAtLeast(manager)`,
+  both identical under the CEO disjunct across all ranks + fail-closed null rank.
+- **Sites migrated (verbatim, behaviour-neutral):** `home_screen` 5 tile flags +
+  Staff Sales → `Gates.*.allows(ref)`; `reports_hub` Supplier Accounts + Profit
+  Report entries → the two hub gates; `profit_report` on-screen headline
+  (`.allows`) + CSV export (`.allowsNow`, was a raw provider `.contains`) now cite
+  the SAME `seeReportCostPrices` gate. Pure-tier `showPending`/`showTotalSkus` and
+  the `if (isMgrUp)` cards stay inline (not permission checks / cross-cutting
+  helper / `isCashier||isStockKeeper` needs no `tierAtMost` atom).
+- **Static-ban allowlist** shrunk by exactly the 3 files (home_screen 5,
+  reports_hub 2, profit_report 1 → removed). `flutter analyze` clean;
+  `test/permissions/` green (static-ban ratchet + membership + seams), no
+  behavioural test edits. This batch removes 8 `hasPermission(ref)` sites.
+
+### Tracer: named-gate registry + `Guarded` (2026-07-02, issue #17)
+- **Goal (epic #16):** retire the recurring permission-leak class — enforcement
+  hand-typed at ~89 `hasPermission(ref, key)` sites in three comment-equated
+  layers — the way the `SyncedTable` registry (#15) retired the sync smear. This
+  issue is the **tracer**: the whole module + one gate migrated end-to-end.
+- **Module (`lib/core/permissions/`, ADR 0002):** `gate.dart` (pure `Gate`
+  algebra over a `GateContext` — atoms `key`/`anyKey`/`allKeys`/`tierAtLeast`/`ceo`
+  + `.and`/`.or`, fails closed unresolved, CEO all-on, + `GateDeniedError`);
+  `gate_registry.dart` (`NamedGate` + `Gates` single declaration site);
+  `guarded.dart` (`gateContextProvider` seam, the `allows`/`allowsNow`/`require`
+  extension, the `Guarded` render+`allow`-fire-time widget, and `Guarded.screen`
+  body-guard with the no-flash policy + standard no-access scaffold);
+  `permissions.dart` barrel.
+- **Receive Stock migrated verbatim (12 sites, 5 files):** Inventory FAB + the
+  screen guard (`Guarded.screen`) now cite the same `Gates.receiveStock`;
+  New Product → `Gates.addProduct`, price edits → `Gates.editProductPrice` (incl.
+  the long-press fire-time re-check), buying-price → `Gates.editBuyingPrice`,
+  supplier payments → `Gates.manageSuppliers`. Behaviour-neutral. `hasPermission`
+  86 → 74; `lib/features/receiving/` bare-check-free.
+- **Tests (`test/permissions/`, 26 new):** pure algebra (14), `Guarded`/`.screen`/
+  `require` widget seam (10), static-ban scan with a **full 74-site allowlist
+  ratchet** (planted-check-fails verified), registry membership. `flutter analyze
+  lib` clean; permissions + receiving + inventory + settings suites green, no
+  behavioural test edits. **Full-run note:** `test/sync/order_collision_heal_test`
+  flaked once in the combined run (passes in isolation and as a group — the
+  documented cross-suite flake, unrelated).
+- **Next:** batches #18–21 migrate the remaining 74 sites (each shrinks the
+  allowlist); #22 empties it, privatizes the bare helper, goes strict.
+- **Pending:** emulator walkthrough (stock keeper vs cashier — FAB + screen guard
+  reachability + live revocation).
+
 ### Refactor: `SyncedTable` registry — one source of truth per synced table (2026-07-01, issue #15)
 - **Problem:** a synced table's knowledge was smeared across six constructs (the
   synced-tenant-table list, pull order, push whitelist, `created_at`-scrub set,
