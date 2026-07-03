@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/widgets/app_fab.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
@@ -144,7 +145,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
           ),
         ],
       ),
-      floatingActionButton: hasPermission(ref, 'customers.add')
+      floatingActionButton: Gates.addCustomer.allows(ref)
           ? AppFAB(
               heroTag: 'customers_fab',
               onPressed: () => AddCustomerSheet.show(context),

@@ -17,6 +17,7 @@ import 'package:reebaplus_pos/features/expenses/screens/add_expense_screen.dart'
 import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
@@ -88,7 +89,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
   /// Period labels this viewer may choose (§19.2/§30.11 — roles below Manager
   /// are capped to Today/This Week/This Month).
   List<String> get _periodOptions =>
-      datePeriodLabelsForRole(managerUp: isManagerOrAbove(ref));
+      datePeriodLabelsForRole(managerUp: Gates.seeExtendedDateRanges.allows(ref));
 
   /// [_periodFilter] clamped into [_periodOptions], so the dropdown value and
   /// the list filter agree for capped viewers.
@@ -115,12 +116,23 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
       currencySymbolProvider,
     ); // rebuild money displays when currency changes
     // Hard rule #6 (load-bearing): the Expenses screen IS the expense
-    // report/list, so it requires `reports.see_expenses`. The drawer item and
-    // the Home "Total Expenses" card are gated on the same key, but guard the
-    // screen body too so no alternate route exposes the report. The Add-Expense
-    // FAB additionally checks `expenses.create`.
-    if (!hasPermission(ref, 'reports.see_expenses')) {
-      return Scaffold(
+    // report/list, so it is body-guarded on Gates.viewExpenses
+    // (`reports.see_expenses`) — the drawer item and the Home "Total Expenses"
+    // card gate on the same key, but no alternate route may expose the report.
+    // Guarded.screen waits for the permission set to resolve first (no denial
+    // flash), and — Expenses being a MainLayout tab — the loading/denied
+    // surfaces keep the drawer + app-bar chrome (nav stays reachable) instead
+    // of the default full-screen scaffold. The Add-Expense FAB additionally
+    // cites Gates.addExpense.
+    return Guarded.screen(
+      gate: Gates.viewExpenses,
+      loading: Scaffold(
+        backgroundColor: _bg,
+        drawer: const AppDrawer(activeRoute: 'expenses'),
+        appBar: _buildAppBar(context),
+        body: const SizedBox.shrink(),
+      ),
+      denied: Scaffold(
         backgroundColor: _bg,
         drawer: const AppDrawer(activeRoute: 'expenses'),
         appBar: _buildAppBar(context),
@@ -128,7 +140,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
           child: Padding(
             padding: const EdgeInsets.all(32),
             child: Text(
-              'You don’t have access to expense reports.',
+              'You don’t have access to Expenses.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: _subtext,
@@ -137,8 +149,15 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
             ),
           ),
         ),
-      );
-    }
+      ),
+      builder: _buildExpenses,
+    );
+  }
+
+  /// The Expenses body, shown once [Gates.viewExpenses] has resolved and
+  /// granted. Split out of [build] so the `Guarded.screen` guard above owns
+  /// the permissions-ready / denial decision.
+  Widget _buildExpenses(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg,
       drawer: const AppDrawer(activeRoute: 'expenses'),
@@ -227,7 +246,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
           );
         },
       ),
-      floatingActionButton: hasPermission(ref, 'expenses.create')
+      floatingActionButton: Gates.addExpense.allows(ref)
           ? AppFAB(
               heroTag: 'expenses_fab',
               onPressed: () => AddExpenseScreen.show(context),
@@ -776,7 +795,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen>
     required Map<String, String> storeNameById,
     required bool showRowStore,
   }) {
-    final canApprove = hasPermission(ref, 'expenses.approve');
+    final canApprove = Gates.approveExpenses.allows(ref);
     final pending = canApprove
         ? allExpenses.where((e) => e.expense.status == 'pending').toList()
         : const <ExpenseWithCategory>[];

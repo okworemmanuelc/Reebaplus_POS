@@ -7,8 +7,8 @@ import 'package:image_picker/image_picker.dart';
 
 import 'package:reebaplus_pos/core/data/business_types.dart';
 import 'package:reebaplus_pos/core/data/currencies.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
-import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/result.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
@@ -138,13 +138,10 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
 
   Future<void> _save() async {
     // Defense-in-depth (hard rule #6): the drawer hides the entry, but the
-    // write site re-checks too. ref.read (not hasPermission/watch) — this is a
-    // callback, matching staff_detail_screen.dart.
-    if (!ref.read(currentUserPermissionsProvider).contains('settings.manage')) {
-      AppNotification.showError(
-        context,
-        'You don\'t have permission to do that.',
-      );
+    // write site re-checks too. Fire-time form (allowsNow) — this is a
+    // callback, not a build.
+    if (!Gates.manageSettings.allowsNow(ref)) {
+      showGateDenied(context, Gates.manageSettings);
       return;
     }
     final name = _nameController.text.trim();
@@ -226,7 +223,7 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
   Widget build(BuildContext context) {
     // Screen-level gate (hard rule #6) + keeps the permission chain warm for
     // the save-site guard.
-    final canManage = hasPermission(ref, 'settings.manage');
+    final canManage = Gates.manageSettings.allows(ref);
     return GlassyScaffold(
       title: 'Business Info',
       body: !canManage

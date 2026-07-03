@@ -4,6 +4,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permission_dependencies.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/role_permissions_detail_screen.dart'
@@ -192,7 +193,7 @@ class _StaffPermissionsScreenState
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    final canManage = hasPermission(ref, 'settings.manage');
+    final canManage = Gates.manageSettings.allows(ref);
 
     return Scaffold(
       backgroundColor: t.scaffoldBackgroundColor,

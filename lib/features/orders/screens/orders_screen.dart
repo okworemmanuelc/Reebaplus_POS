@@ -18,6 +18,7 @@ import 'package:reebaplus_pos/core/utils/date_period.dart';
 import 'package:reebaplus_pos/core/utils/store_address.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
@@ -407,7 +408,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       error: (e, _) => Center(child: Text('Error: $e')),
       data: (allPending) {
         final list = _applySearch(allPending);
-        final managerUp = isManagerOrAbove(ref);
+        final canSeeMoney = Gates.seeOrderMoney.allows(ref);
 
         // Compute summary stats
         final totalValue = list.fold<int>(
@@ -424,7 +425,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
             value: '${list.length}',
             color: Theme.of(context).colorScheme.primary,
           ),
-          if (managerUp)
+          if (canSeeMoney)
             _StatItem(
               label: 'Total Value',
               value: formatCurrency(totalValue / 100.0),
@@ -452,7 +453,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
   }
 
   Widget _buildCompletedTab(BuildContext context, String? activeStoreId) {
-    final managerUp = isManagerOrAbove(ref);
+    final canSeeMoney = Gates.seeOrderMoney.allows(ref);
+    final canSeeExtendedRanges = Gates.seeExtendedDateRanges.allows(ref);
     final key = (
       status: 'completed',
       storeId: activeStoreId,
@@ -469,7 +471,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       data: (stats) {
         final statItems = [
           _StatItem(label: 'Completed', value: '${stats.count}', color: success),
-          if (managerUp) ...[
+          if (canSeeMoney) ...[
             _StatItem(
               label: 'Revenue',
               value: formatCurrency(stats.totalAmountKobo / 100.0),
@@ -504,7 +506,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                   context,
                   selectedFilter: _completedFilter,
                   onSelectFilter: (f) => _changeFilter('completed', f),
-                  filterOptions: _periodOptions(managerUp),
+                  filterOptions: _periodOptions(canSeeExtendedRanges),
                 ),
               ),
             ),
@@ -523,7 +525,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
   }
 
   Widget _buildCancelledTab(BuildContext context, String? activeStoreId) {
-    final managerUp = isManagerOrAbove(ref);
+    final canSeeMoney = Gates.seeOrderMoney.allows(ref);
+    final canSeeExtendedRanges = Gates.seeExtendedDateRanges.allows(ref);
     final key = (
       status: 'cancelled',
       storeId: activeStoreId,
@@ -540,7 +543,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       data: (stats) {
         final statItems = [
           _StatItem(label: 'Cancelled', value: '${stats.count}', color: danger),
-          if (managerUp)
+          if (canSeeMoney)
             _StatItem(
               label: 'Value Forfeited',
               value: formatCurrency(stats.totalAmountKobo / 100.0),
@@ -569,7 +572,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                   context,
                   selectedFilter: _cancelledFilter,
                   onSelectFilter: (f) => _changeFilter('cancelled', f),
-                  filterOptions: _periodOptions(managerUp),
+                  filterOptions: _periodOptions(canSeeExtendedRanges),
                 ),
               ),
             ),
@@ -635,7 +638,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       ];
     }
 
-    final canRefund = hasPermission(ref, 'sales.cancel');
+    final canRefund = Gates.refundOrder.allows(ref);
 
     // We add 1 to the child count if we are loading more to render the spinner.
     final childCount = list.length + (isLoadingMore ? 1 : 0);
@@ -742,7 +745,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     }
 
     // §19.7: the Pending-tab Refund is gated to CEO + Manager (sales.cancel).
-    final canRefund = hasPermission(ref, 'sales.cancel');
+    final canRefund = Gates.refundOrder.allows(ref);
 
     return [
       SliverPadding(
@@ -1473,7 +1476,7 @@ class _OrderCard extends ConsumerWidget {
     // §19.3: roles below Manager see items + quantities only — no monetary
     // values (line prices, total, paid, discount, wallet-debt) anywhere on the
     // card. The printed receipt (onViewReceipt) is unchanged.
-    final canSeeMoney = isManagerOrAbove(ref);
+    final canSeeMoney = Gates.seeOrderMoney.allows(ref);
     // The footer block (divider + money rows) is replaced by just the
     // cancellation reason when money is hidden — so a low role still sees why a
     // cancelled order was cancelled, with no money.

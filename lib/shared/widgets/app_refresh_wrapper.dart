@@ -146,7 +146,11 @@ class _AppRefreshWrapperState extends ConsumerState<AppRefreshWrapper> {
     if (user != null) {
       // Awaited so the spinner keeps spinning for the real duration of the
       // pull; SyncPullBanner independently reflects pullStatus → completed/failed.
-      await ref.read(supabaseSyncServiceProvider).pullChanges(user.businessId);
+      // §3.4 upload-before-download: pull-to-refresh drains the outbox first,
+      // then pulls, so a manual refresh uploads pending work before downloading.
+      await ref
+          .read(supabaseSyncServiceProvider)
+          .pushThenPull(user.businessId);
     }
   }
 

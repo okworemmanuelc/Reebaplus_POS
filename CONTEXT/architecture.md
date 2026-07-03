@@ -209,6 +209,39 @@ A new device joining a mature store has no stored cursor. The absence of a curso
 
 **Table group order:** the sync service pulls in priority order: (1) roles and permissions, (2) staff, (3) products and categories, (4) active customer profiles, (5) suppliers and wallets, (6) historical orders and expenses, (7) activity logs. Progress is written to `sync_progress` per group and reflected by the non-blocking sync indicators (it no longer drives a blocking onboarding screen).
 
+### The `SyncedTable` registry — one source of truth per table
+
+Every per-table sync fact lives in **one ordered `List<SyncedTable>`**, the
+**sync registry** (`lib/core/database/sync_registry.dart`, part of the
+`AppDatabase` library so both the schema-builder and the sync engine can share
+it without an upward dependency — invariant #8). Each entry is the complete
+truth about one table: its name, its **restore** function (how a pulled page is
+written into Drift), its optional **push-column whitelist** (absent ⇒
+pass-through), an optional **hard-delete** rule (absent ⇒ append-only /
+soft-delete), a **`scrubCreatedAt`** flag (the immutable-`created_at` ledgers),
+and **`tenantScoped` / `isCache`** flags.
+
+The six constructs that used to hold this knowledge separately — the
+synced-tenant-table list, the pull order, the push-column whitelist, the
+`created_at`-scrub set, and the two hard-delete switches — now **derive** from
+the registry (`kSyncPullOrder`, `kSyncedTenantTables`, `kSyncCacheTables`,
+`kSyncPushColumns`, `kSyncScrubCreatedAtTables`, `kHardDeleteReconcileTables`),
+so they can never disagree. **Adding a synced table is one registry entry**,
+placed after its parent(s) in the ordered list; a reflection test turns the
+build red if a sync-fingerprinted table has no entry, and a golden-equivalence
+test pins the derived accessors against their frozen historical values. This
+retires the recurring "forgot to register the table in one of the switches →
+peer devices silently drop its rows" bug-class.
+
+Restore strategies are built from helpers (`Restore.plain` / `.naturalKey` /
+`.dedup` / `.ledger`, with a hand-written closure for the genuinely bespoke
+tables like `users`). The central pre-insert guards — timestamp-LWW, the
+invariant #12 clobber-guard, and the business-isolation guard — still run once
+for all tables in the sync service **before** dispatch; only the per-table body
+became a registry lookup. **List order governs pull / restore / hard-delete
+reconcile only** — push drains the outbox row-by-row and never iterates tables
+in order.
+
 ### Ordering, idempotency, and crash capture
 
 - **Ordering & idempotency:** outbox entries are ordered and carry client-generated UUIDv7 IDs so replays are idempotent — re-sending a batch after a dropped connection can never double-apply a sale.
@@ -239,3 +272,9 @@ These are rules, not guidelines. Code that breaks one of these is wrong even if 
 10. **The pull cursor never advances past an uncommitted page.** The cursor stored in `sync_meta` is updated only after a pull page is fully reconciled into Drift and the transaction commits successfully. A failed or partial reconciliation must retry that page before the cursor moves. This rule is what makes both regular pulls and onboarding pulls resumable after an app kill.
 
 11. **Entry is never blocked on a network pull — the catalogue streams in live (supersedes the old "gate the POS until the dataset is local" rule, 2026-06-24).** A logged-in device must always reach `MainLayout` immediately, whether fresh, returning, online, or offline — no full-screen "Syncing Your Store" loader may hold the user out (that would violate invariant #1). The 4 render-critical tables (`profiles`, `businesses`, `stores`, `users`) are pulled **inline during the sign-in flow** so the user's business/role is known before PIN setup; everything else (products, customers, suppliers, history) streams in **live via the background pull** while `MainLayout` is already rendering its empty-but-functional shell. A brand-new device that is offline at sign-in simply shows an empty store that fills the moment a connection returns — it is never trapped on a loader. Render-critical UI must therefore tolerate a not-yet-populated business/catalogue (null business ⇒ render an empty shell, never crash).
+
+12. **The outbox is sacred (offline activity is impossible to lose silently).** A local row that has an unconfirmed `sync_queue` **or** `sync_queue_orphans` entry is **inviolable**: no pull, reconcile, restore-overwrite, or `clearAllData` may delete or overwrite it until its push is **confirmed by the server**. *Sacred means never destroyed silently — not frozen forever.* Un-pushable data must remain **visible and exportable**, and may leave the device **only** by a deliberate, confirmed user action. The enforcement primitive is `SyncDao.pendingRowIds(table, businessId)` — the set of un-uploaded ids for a table across both outbox tables — and every protection is an application of it:
+    - **Wipe gate (E):** every `clearAllData` caller checks the outbox first. A salvageable wipe (sole-user logout) with retryable rows is **refused** ("connect and sync first"); with only un-pushable orphans it routes to the **"Resolve unsynced data"** flow (export → typed-confirm discard → logout) and is never trapped. The only carve-out is a **business-deleted** wipe (the tenant no longer exists cloud-side, so the data is unsalvageable) — it proceeds but records a durable loss breadcrumb (count of rows discarded) so it is never silent.
+    - **Reconcile exclusion (B):** `_reconcileHardDeletes` deletes a local row only if its id is absent from the cloud snapshot **and** absent from `pendingRowIds`, and only reconciles a table whose slice is **known-complete** (never a deferred/failed/truncated slice).
+    - **Clobber prevention (C):** in `_restoreTableData`, a row with a pending outbox entry is never overwritten by an incoming cloud row regardless of `last_updated_at`. Timestamp-LWW (`incoming >= local`, cloud-wins on same-second ties) is the tiebreaker for **non-pending** rows only — correctness no longer depends on a DAO write bumping `last_updated_at`.
+    - **Two-ways-only uploader rule (F):** a row leaves `sync_queue` **only** by confirmed upload (`markDone`) or by moving to `sync_queue_orphans` (visible) — never silently. A per-drain self-count check writes an `error_logs` breadcrumb if any handled row vanishes from both tables.

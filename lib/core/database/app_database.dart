@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart';
@@ -10,9 +11,11 @@ import 'package:reebaplus_pos/core/database/daos.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/diagnostics/schema_audit.dart';
 import 'package:reebaplus_pos/core/services/first_load_marker_service.dart';
+import 'package:reebaplus_pos/core/services/sync_cursor_reset_service.dart';
 export 'daos.dart';
 
 part 'app_database.g.dart';
+part 'sync_registry.dart';
 
 /// Sentinel stored in `users.pin` for rows that exist locally but have no PIN
 /// configured on this device yet — e.g. staff seeded from a cloud sync who
@@ -3921,6 +3924,18 @@ class AppDatabase extends _$AppDatabase {
     try {
       await FirstLoadMarkerService.clearAllMarkers();
     } catch (_) {}
+
+    // Same wipe-trap: the per-business pull cursor (`last_sync_timestamp::<biz>`)
+    // and the other pull-state prefs live in SharedPreferences and survive the
+    // Drift wipe above. If left behind, the next login reads the stale cursor
+    // and runs an INCREMENTAL pull that skips every row created before it — the
+    // catalogue, customers, and roles/permissions (and therefore the whole
+    // permission-gated navigation) never re-download, leaving a re-onboarded
+    // device on an almost-empty store. Reset them so the next pull runs full,
+    // exactly like a brand-new device. Best-effort: never abort the wipe.
+    try {
+      await SyncCursorResetService.clearAll();
+    } catch (_) {}
   }
 
   Future<void> resetDatabase() async {
@@ -3968,115 +3983,24 @@ LazyDatabase _openConnection() {
 // Indexes + triggers — applied in onCreate after createAll().
 // ---------------------------------------------------------------------------
 
-// Phase D §6.3: caches (`inventory`, `customer_crate_balances`,
-// `manufacturer_crate_balances`) are no longer pushed — domain RPCs are
-// the sole writers cloud-side, and `_applyDomainResponse` /
-// `_restoreTableData` write the cloud-authoritative values back locally.
-// They're still real Drift tables (UI reads from them); they're just
-// not in this set, so:
-//   * no per-row `<table>:upsert` outbox rows are pushed,
-//   * no `(business_id, last_updated_at)` index is created on
-//     onCreate (caches don't drive incremental cursor pulls — they
-//     arrive via snapshot or domain response),
-//   * no `bump_<table>_last_updated_at` trigger is created (the only
-//     local writers — _applyDomainResponse / _restoreTableData — set
-//     last_updated_at explicitly to the cloud's value).
-// `crates` is dropped entirely in v5; not in the set going forward.
-const List<String> _syncedTenantTables = [
-  'users',
-  'sessions',
-  'stores',
-  'manufacturers',
-  'crate_size_groups',
-  'categories',
-  'suppliers',
-  // v42 (master plan §21.10) — append-only supplier ledger (invoices + payments).
-  'supplier_ledger_entries',
-  // v53 (§3.13) — append-only supplier empty-crate ledger (receipts + returns).
-  'supplier_crate_ledger',
-  'products',
-  'price_lists',
-  'customers',
-  'customer_wallets',
-  'wallet_transactions',
-  'crate_ledger',
-  'stock_transfers',
-  'stock_adjustments',
-  'stock_transactions',
-  // v34 (master plan §16.6.1) — stock-keeper adjustment approval queue.
-  'stock_adjustment_requests',
-  // v45 (master plan §12.3.1) — cashier Quick Sale approval queue.
-  'quick_sale_requests',
-  'orders',
-  'order_items',
-  // §13.4 crate deposits — per-order, per-brand crate count + deposit snapshot.
-  'order_crate_lines',
-  'shipments',
-  'purchase_items',
-  'drivers',
-  'delivery_receipts',
-  'saved_carts',
-  'pending_crate_returns',
-  'payment_transactions',
-  // v30 (master plan §17 Daily Stock Count) — per-session stock-audit snapshot.
-  'stock_counts',
-  'expense_categories',
-  'expenses',
-  // v31 (master plan §20.1/§20.3) — monthly budget goal, per business / store.
-  'expense_budgets',
-  'activity_logs',
-  // v46 (master plan §33) — append-only crash/error diagnostic log.
-  'error_logs',
-  'notifications',
-  'settings',
-  // v13 (master plan §2.4). `permissions` is intentionally absent —
-  // it's global static config, identical on every device and seeded
-  // by migration on both client and cloud.
-  'roles',
-  'role_permissions',
-  // v33 (master plan §10.2.1) — per-staff permission overrides.
-  'user_permission_overrides',
-  // v41 (master plan §10.2.1, Store scope) — per-store role permission overrides.
-  'store_role_permissions',
-  'role_settings',
-  'user_businesses',
-  'invite_codes',
-  'user_stores',
-];
-
 // ---------------------------------------------------------------------------
-// Sync safeguard constants (CLAUDE.md §5). Public, derived from the single
-// source of truth above so the three guardrail layers — the SyncDao enqueue
-// guard, the registration-completeness test, and the raw-write leak scanner —
-// cannot drift apart.
-// ---------------------------------------------------------------------------
+// Sync safeguard constants (CLAUDE.md §5). `kSyncedTenantTables`,
+// `kSyncCacheTables`, and `kEnqueueableTables` are now DERIVED from the
+// `SyncedTable` registry (see sync_registry.dart, part of this library) — the
+// single ordered source of truth for every per-table sync fact (issue #15).
+// The three guardrail layers (the SyncDao enqueue guard, the registration
+// test, the raw-write leak scanner) read those derived accessors, so they
+// cannot drift from the pull order / restore / push-whitelist facts.
+//
+// Phase D §6.3: caches (`inventory`, the `*_crate_balances`) are real Drift
+// tables (UI reads from them) but are NOT tenant-scoped — domain RPCs are the
+// sole cloud writers and the restore path writes the cloud-authoritative value
+// back locally, so they get no `(business_id, last_updated_at)` cursor index
+// and no `bump_<table>_last_updated_at` trigger at onCreate. In the registry
+// they carry `isCache: true` (⇒ `kSyncCacheTables`); tenant tables carry
+// `tenantScoped: true` (⇒ `kSyncedTenantTables`). `crates` was dropped in v5.
 
-/// Public, read-only view of the synced-tenant-table set, for the sync
-/// guardrails (SyncDao enqueue guard + the registration/leak tests).
-const List<String> kSyncedTenantTables = _syncedTenantTables;
-
-/// Phase D §6.3 caches: enqueued + pushed, but deliberately NOT in
-/// `_syncedTenantTables` (no cursor index / bump trigger). They carry the
-/// sync fingerprint (`business_id` + `last_updated_at`), so the registration
-/// test exempts them explicitly.
-const List<String> kSyncCacheTables = [
-  'inventory',
-  'customer_crate_balances',
-  'manufacturer_crate_balances',
-  'store_crate_balances',
-  // v53 (§3.13) — per-(supplier, manufacturer) empty-crate balance cache.
-  'supplier_crate_balances',
-];
-
-/// Every table name a DAO may legitimately enqueue. `businesses` syncs via
-/// its own realtime channel and has no `business_id`, so it is listed by name.
-const List<String> kEnqueueableTables = [
-  ..._syncedTenantTables,
-  ...kSyncCacheTables,
-  'businesses',
-];
-
-// Subset of `_syncedTenantTables` introduced in schema v13. Used by
+// Subset of `kSyncedTenantTables` introduced in schema v13. Used by
 // the v13 upgrade block to create the matching indexes + bump triggers
 // for devices upgrading from v12. Fresh installs get the same shape
 // via the global `_syncedTenantTables` loop in `_postCreateStatements`.
@@ -4360,7 +4284,7 @@ List<String> get _postCreateStatements {
   stmts.add(
     'CREATE INDEX idx_businesses_last_updated_at ON businesses (last_updated_at)',
   );
-  for (final t in _syncedTenantTables) {
+  for (final t in kSyncedTenantTables) {
     stmts.add(
       'CREATE INDEX idx_${t}_business_lua ON $t (business_id, last_updated_at)',
     );
@@ -4432,7 +4356,7 @@ List<String> get _postCreateStatements {
     "UPDATE businesses SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
     'END',
   );
-  for (final t in _syncedTenantTables) {
+  for (final t in kSyncedTenantTables) {
     stmts.add(
       'CREATE TRIGGER bump_${t}_last_updated_at '
       'AFTER UPDATE ON $t '

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
-import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
@@ -78,8 +78,9 @@ class _DeleteBusinessScreenState extends ConsumerState<DeleteBusinessScreen> {
     final error = t.colorScheme.error;
 
     // Defense in depth (hard rule #6): the Danger Zone entry that opens this
-    // screen is already gated, but re-check at the screen boundary.
-    final canDelete = hasPermission(ref, 'settings.delete_business');
+    // screen is already gated on the same entry, but re-check at the screen
+    // boundary.
+    final canDelete = Gates.deleteBusiness.allows(ref);
     final business = ref.watch(currentBusinessProvider);
 
     if (!canDelete || business == null) {

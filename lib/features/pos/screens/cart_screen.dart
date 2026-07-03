@@ -14,6 +14,7 @@ import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/customers/widgets/add_customer_sheet.dart';
 import 'package:reebaplus_pos/core/utils/stock_calculator.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
@@ -427,7 +428,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                             // (hard rule #6/#7) — hide "New" otherwise.
                             // The AddCustomerSheet save handler re-checks
                             // the same key at the write boundary.
-                            if (hasPermission(ref, 'customers.add')) ...[
+                            if (Gates.addCustomer.allows(ref)) ...[
                               AppButton(
                                 text: 'New',
                                 variant: AppButtonVariant.secondary,

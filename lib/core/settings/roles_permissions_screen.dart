@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/role_permissions_detail_screen.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
@@ -19,7 +20,7 @@ class RolesPermissionsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = Theme.of(context);
-    final canManage = hasPermission(ref, 'settings.manage');
+    final canManage = Gates.manageSettings.allows(ref);
     final roles = ref.watch(allRolesProvider);
 
     return GlassyScaffold(

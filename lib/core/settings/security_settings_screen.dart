@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
-import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -59,12 +59,9 @@ class _SecuritySettingsScreenState
   }
 
   Future<void> _saveAutoLock(int seconds) async {
-    // ref.read (not hasPermission/watch) — callback, matches staff_detail_screen.
-    if (!ref.read(currentUserPermissionsProvider).contains('settings.manage')) {
-      AppNotification.showError(
-        context,
-        'You don\'t have permission to do that.',
-      );
+    // Fire-time re-check (allowsNow, not allows) — callback, not a build.
+    if (!Gates.manageSettings.allowsNow(ref)) {
+      showGateDenied(context, Gates.manageSettings);
       return;
     }
     setState(() => _autoLockSeconds = seconds);
@@ -142,7 +139,7 @@ class _SecuritySettingsScreenState
     final t = Theme.of(context);
     // Screen-level gate (hard rule #6) + keeps the permission chain warm for
     // the save-site guard.
-    final canManage = hasPermission(ref, 'settings.manage');
+    final canManage = Gates.manageSettings.allows(ref);
     return GlassyScaffold(
       title: 'Security',
       body: !canManage

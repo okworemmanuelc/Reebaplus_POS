@@ -13,6 +13,7 @@ import 'package:reebaplus_pos/features/stores/data/models/store.dart';
 import 'package:reebaplus_pos/shared/widgets/app_drawer.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 
 class ActivityLogScreen extends ConsumerStatefulWidget {
@@ -30,7 +31,7 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
     // The sidebar item is already hidden without it; this is defense-in-depth
     // against deep-links / direct navigation. Message style mirrors
     // pos_home_screen's no-access block.
-    if (!hasPermission(ref, 'activity_logs.view')) {
+    if (!Gates.viewActivityLogs.allows(ref)) {
       return Scaffold(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         body: SafeArea(

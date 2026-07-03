@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 
@@ -277,11 +278,20 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       currencySymbolProvider,
     ); // rebuild money displays when currency changes
     // Defense-in-depth (hard rules #6/#7): Inventory is gated on stock.view
-    // (§16.7). The drawer item and bottom-nav Stock tab already hide without it;
-    // this guards a deep-link / programmatic switch to the tab. SharedScaffold
-    // keeps the drawer + bottom nav so the user can navigate away.
-    if (!hasPermission(ref, 'stock.view')) {
-      return SharedScaffold(
+    // (§16.7) — Gates.viewInventory. The drawer item and bottom-nav Stock tab
+    // already hide without it; Guarded.screen covers a deep-link / programmatic
+    // switch to the tab and waits for the permission set to resolve first (no
+    // denial flash). Inventory is a bottom-nav tab, so the loading/denied
+    // surfaces keep the SharedScaffold chrome (nav stays reachable) instead of
+    // the default full-screen scaffold.
+    return Guarded.screen(
+      gate: Gates.viewInventory,
+      loading: SharedScaffold(
+        activeRoute: 'inventory',
+        backgroundColor: _bg,
+        body: const SizedBox.shrink(),
+      ),
+      denied: SharedScaffold(
         activeRoute: 'inventory',
         backgroundColor: _bg,
         appBar: AppBar(
@@ -303,8 +313,15 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
             ),
           ),
         ),
-      );
-    }
+      ),
+      builder: _buildInventory,
+    );
+  }
+
+  /// The Inventory body, shown once [Gates.viewInventory] has resolved and
+  /// granted. Split out of [build] so the `Guarded.screen` guard above owns
+  /// the permissions-ready / denial decision.
+  Widget _buildInventory(BuildContext context) {
     // First load: show the inventory skeleton (brief §4.4) while the store is
     // empty and products are still streaming in, then resolve to the real list.
     if (ref.watch(firstLoadSkeletonActiveProvider)) {
@@ -328,13 +345,12 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         tabsReady &&
         _currentTab < _tabKeys.length &&
         _tabKeys[_currentTab] == 'products';
-    // Receive Stock FAB — open to anyone who can add stock (stock keepers, §16.7)
-    // or add products. Inside the flow, creating a NEW product is separately
-    // gated on `products.add` (the New Product card) and price edits on their own
-    // permissions, so a stock keeper with only `stock.add` can receive/update
-    // quantities but can't create products or change prices.
-    final canReceiveStock =
-        hasPermission(ref, 'stock.add') || hasPermission(ref, 'products.add');
+    // Receive Stock FAB — cites the same named gate as the Receive Stock screen
+    // guard (their equivalence used to be comment-enforced). Inside the flow,
+    // creating a NEW product is separately gated (Gates.addProduct) and price
+    // edits on their own gates, so a stock keeper with only `stock.add` can
+    // receive/update quantities but can't create products or change prices.
+    final canReceiveStock = Gates.receiveStock.allows(ref);
 
     return SharedScaffold(
       activeRoute: 'inventory',
@@ -407,12 +423,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         // keeper, Manager, CEO — AND the `stock.adjust` permission, since the
         // count/damage actions decrement stock and the key is independently
         // revocable. Otherwise hide the icon entirely (hard rule #7).
-        if (const {
-              'ceo',
-              'manager',
-              'stock_keeper',
-            }.contains(ref.watch(currentUserRoleProvider)?.slug) &&
-            hasPermission(ref, 'stock.adjust'))
+        if (Gates.dailyStockCount.allows(ref))
           IconButton(
             tooltip: 'Daily Stock Count',
             icon: const Icon(Icons.fact_check_outlined),
@@ -1049,7 +1060,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       // is gated on `products.edit_price` (hard rule #6/#7 — hide, don't
       // disable). Stock-only roles add stock via the product-detail Update
       // Stock sheet instead, never this editor.
-      onLongPress: hasPermission(ref, 'products.edit_price')
+      onLongPress: Gates.editProductPrice.allows(ref)
           ? () {
               HapticFeedback.mediumImpact();
               showModalBottomSheet(

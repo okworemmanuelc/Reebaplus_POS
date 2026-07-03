@@ -5,12 +5,14 @@ import 'package:drift/drift.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:reebaplus_pos/features/auth/onboarding/onboarding_draft.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
+import 'package:reebaplus_pos/shared/services/device_registry_service.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 import 'package:reebaplus_pos/shared/services/pin_hasher.dart';
 
@@ -42,6 +44,28 @@ class LogoutWipeException implements Exception {
   String toString() => message;
 }
 
+/// §3.1 wipe gate (E), two-tier resolution. Thrown by [AuthService.logOutCurrentUser]
+/// when the sole device user tries to log out (a wipe) while the outbox still
+/// holds **un-pushable** rows — orphans the cloud is actively rejecting
+/// (42501 / P0001 / auth-uid drift) that no amount of waiting will drain. Unlike
+/// [LogoutWipeException] (transient rows → "wait and retry"), this must NOT trap
+/// the user: the UI routes to the "Resolve unsynced data" flow (export the stuck
+/// records, then typed-confirm discard) and calls
+/// [AuthService.discardUnsyncedAndLogout] to complete the logout.
+class LogoutBlockedByUnsyncedDataException implements Exception {
+  final int pendingCount;
+  final int orphanCount;
+  const LogoutBlockedByUnsyncedDataException({
+    required this.pendingCount,
+    required this.orphanCount,
+  });
+  int get totalCount => pendingCount + orphanCount;
+  @override
+  String toString() =>
+      'LogoutBlockedByUnsyncedDataException(pending=$pendingCount, '
+      'orphans=$orphanCount)';
+}
+
 /// Thrown by [AuthService.signInWithGoogle] when the native Google sign-in
 /// fails for a real reason (not a user cancel). Callers can catch this to show
 /// a more specific error message than the generic "cancelled or failed" text.
@@ -65,6 +89,13 @@ class AuthService extends ValueNotifier<UserData?> {
   final SupabaseSyncService _sync;
   final SupabaseClient _supabase;
   final String googleWebClientId;
+
+  /// Upserts this device's make/model + last-seen to the cloud-only `devices`
+  /// table for the console's analytics (no in-app screen). Fire-and-forget.
+  late final DeviceRegistryService _deviceRegistry = DeviceRegistryService(
+    _supabase,
+    _secure,
+  );
 
   AuthService(
     this._db,
@@ -104,6 +135,32 @@ class AuthService extends ValueNotifier<UserData?> {
     _sync.onActiveBusinessDeleted = _handleActiveBusinessDeleted;
 
     _sync.currentUserIdResolver = () => value?.id;
+
+    // Record this device's make/model + last-seen for the console whenever
+    // connectivity recovers, so a device that signed in offline (or was offline
+    // at app-open) still lands its analytics the moment it can reach the cloud.
+    // isOnline only notifies on change, so this fires once per false→true edge.
+    _sync.isOnline.addListener(_onOnlineRecordDevice);
+  }
+
+  void _onOnlineRecordDevice() {
+    if (_sync.isOnline.value) _recordDevicePresence();
+  }
+
+  /// Upserts this device's row in the cloud `devices` table for the console's
+  /// device analytics (§ device registry). No-op if no user is bound yet.
+  /// Fire-and-forget — [DeviceRegistryService.recordPresence] never throws.
+  void _recordDevicePresence() {
+    final user = value;
+    if (user == null) return;
+    unawaited(
+      _deviceRegistry.recordPresence(
+        businessId: user.businessId,
+        userId: user.id,
+        userEmail: user.email,
+        userName: user.name,
+      ),
+    );
   }
 
   /// Notifies listeners whenever the device-level user ID changes.
@@ -666,8 +723,11 @@ class AuthService extends ValueNotifier<UserData?> {
       // pullStatus to `failed` (the MainLayout catch-up banner reflects it) and
       // the connectivity-recovery listener retries on reconnect. Swallow here —
       // being offline is expected, not a crash.
+      // §3.4 upload-before-download: drain the outbox first, then pull, so a
+      // device coming online at login uploads its offline work before
+      // re-downloading.
       unawaited(
-        _sync.pullChanges(user.businessId).catchError((Object e) {
+        _sync.pushThenPull(user.businessId).catchError((Object e) {
           debugPrint('[AuthService] background pull failed (offline?): $e');
         }),
       );
@@ -704,6 +764,11 @@ class AuthService extends ValueNotifier<UserData?> {
         } catch (e) {
           debugPrint('[AuthService] createSession error: $e');
         }
+        // Record this device's make/model + last-seen for the console. Separate
+        // from the session try above so a session-create failure doesn't skip
+        // it (and vice versa). Covers fresh sign-in AND app-open re-auth, since
+        // PIN/biometric/who's-working unlock all route through setCurrentUser.
+        _recordDevicePresence();
       });
     } catch (e, stack) {
       debugPrint('[AuthService] CRITICAL ERROR in setCurrentUser: $e\n$stack');
@@ -776,6 +841,8 @@ class AuthService extends ValueNotifier<UserData?> {
   /// false-positive wipe, same guarantee as [_handleActiveBusinessDeleted].
   Future<bool> wipeOrphanedLocalBusiness(String businessId) async {
     if (!await _sync.confirmBusinessDeleted(businessId)) return false;
+    // §3.1 business-deleted carve-out: record any un-synced loss before wiping.
+    await _recordWipeLoss(businessId, 'business_deleted:orphaned_local');
     try {
       await _db.clearAllData();
     } catch (e) {
@@ -827,6 +894,15 @@ class AuthService extends ValueNotifier<UserData?> {
     _handlingBusinessDeleted = true;
     try {
       businessDeletedRemotely = true;
+      // §3.1 business-deleted carve-out: this wipe is allowed to proceed with a
+      // non-empty outbox (the business is gone cloud-side; the data is
+      // unsalvageable), but the loss must never be silent — record the count
+      // first. Resolve the tenant from the active user, falling back to the
+      // single local business.
+      final lostBiz = value?.businessId ?? await _soleLocalBusinessId();
+      if (lostBiz != null) {
+        await _recordWipeLoss(lostBiz, 'business_deleted:active');
+      }
       // clearAllData failing must NOT block logout — the cloud already
       // destroyed the business; we just need this device off it.
       try {
@@ -837,6 +913,48 @@ class AuthService extends ValueNotifier<UserData?> {
       await fullLogout();
     } finally {
       _handlingBusinessDeleted = false;
+    }
+  }
+
+  /// Returns the id of the lone local business, or null when the device holds
+  /// zero or more than one. Used to resolve the tenant for diagnostics when no
+  /// session is bound.
+  Future<String?> _soleLocalBusinessId() async {
+    final businesses = await _db.select(_db.businesses).get();
+    return businesses.length == 1 ? businesses.first.id : null;
+  }
+
+  /// SharedPreferences key for the durable wipe-data-loss breadcrumb ring
+  /// buffer. Lives in prefs (not Drift) precisely so it SURVIVES the
+  /// `clearAllData` wipe that destroys everything else — the only way a
+  /// business-deleted wipe's lost-count record can outlive the wipe.
+  static const _wipeLossBreadcrumbsKey = 'wipe_data_loss_breadcrumbs';
+
+  /// §3.1 business-deleted carve-out breadcrumb. Records the number of
+  /// un-synced outbox rows (`sync_queue` + `sync_queue_orphans`) about to be
+  /// destroyed by a business-deleted wipe, so the loss is never silent. Writes
+  /// a compact entry to a capped SharedPreferences ring buffer (survives
+  /// `clearAllData`) and a `debugPrint`. Best-effort: never throws.
+  Future<void> _recordWipeLoss(String businessId, String reason) async {
+    try {
+      final pending = await _db.syncDao.countPending(businessId: businessId);
+      final orphans = await _db.syncDao.countOrphans(businessId: businessId);
+      if (pending + orphans == 0) return;
+      final entry =
+          '${DateTime.now().toUtc().toIso8601String()} $reason '
+          'business=$businessId lost=${pending + orphans} '
+          '(pending=$pending orphans=$orphans)';
+      debugPrint('[AuthService] WIPE DATA LOSS: $entry');
+      final prefs = await SharedPreferences.getInstance();
+      final list =
+          prefs.getStringList(_wipeLossBreadcrumbsKey) ?? <String>[];
+      list.add(entry);
+      while (list.length > 20) {
+        list.removeAt(0);
+      }
+      await prefs.setStringList(_wipeLossBreadcrumbsKey, list);
+    } catch (e) {
+      debugPrint('[AuthService] _recordWipeLoss failed: $e');
     }
   }
 
@@ -1011,9 +1129,13 @@ class AuthService extends ValueNotifier<UserData?> {
       );
     }
 
-    // The cloud confirmed the business is gone. Wipe local data, then full
-    // logout to Welcome. clearAllData failing must NOT block logout — the
-    // authoritative delete already succeeded server-side.
+    // The cloud confirmed the business is gone. §3.1 business-deleted carve-out:
+    // record any un-synced loss before wiping (the CEO deliberately deleted the
+    // business, so this is expected, but it must never be silent).
+    await _recordWipeLoss(businessId, 'business_deleted:owner_delete');
+
+    // Wipe local data, then full logout to Welcome. clearAllData failing must
+    // NOT block logout — the authoritative delete already succeeded server-side.
     try {
       await _db.clearAllData();
     } catch (e) {
@@ -1069,22 +1191,53 @@ class AuthService extends ValueNotifier<UserData?> {
     final isSoleUser = count <= 1;
 
     if (isSoleUser) {
-      final pendingCount = await _db.syncDao.countPending(businessId: businessId);
-      if (pendingCount > 0 && !_sync.isOnline.value) {
-        throw LogoutWipeException(
-          'You have $pendingCount change${pendingCount == 1 ? "" : "s"} not yet synced. '
-          'Connect to the internet and let it sync before logging out.',
-        );
-      }
+      // §3.1 wipe gate (E) / Invariant #12: a sole-user logout WIPES the device,
+      // so it may never destroy a committed local row that still has an
+      // un-uploaded outbox entry. The outbox is the union of retryable pending
+      // rows (`sync_queue`) and un-pushable orphans (`sync_queue_orphans`).
+      var pendingCount = await _db.syncDao.countPending(businessId: businessId);
+      var orphanCount = await _db.syncDao.countOrphans(businessId: businessId);
 
-      if (pendingCount > 0 && _sync.isOnline.value) {
-        try {
-          await _sync.pushPending();
-        } catch (e) {
-          debugPrint('[AuthService] logOutCurrentUser final push before wipe failed: $e');
+      if (pendingCount + orphanCount > 0) {
+        // E3: online → push-and-CONFIRM the queue is empty before wiping. A
+        // partial/failed push must not let the wipe proceed on the remainder,
+        // so we re-count AFTER the drain and decide on the confirmed state.
+        if (_sync.isOnline.value) {
+          try {
+            await _sync.pushPending();
+          } catch (e) {
+            debugPrint(
+              '[AuthService] logOutCurrentUser final push before wipe failed: $e',
+            );
+          }
+          pendingCount = await _db.syncDao.countPending(businessId: businessId);
+          orphanCount = await _db.syncDao.countOrphans(businessId: businessId);
+        }
+
+        // Two-tier resolution on whatever remains after the (possible) drain.
+        if (pendingCount > 0) {
+          // Retryable rows remain (transient — offline, or a row mid-flight, or
+          // a mix that still includes pending). Refuse and keep the user logged
+          // in; it resolves itself on reconnect / the next drain (E1).
+          throw LogoutWipeException(
+            'You have ${pendingCount + orphanCount} change'
+            '${pendingCount + orphanCount == 1 ? "" : "s"} not yet synced. '
+            'Connect to the internet and let it sync before logging out.',
+          );
+        }
+        if (orphanCount > 0) {
+          // Un-pushable orphans ONLY (the cloud is actively rejecting them).
+          // Do NOT trap the user — route to the "Resolve unsynced data" flow
+          // (export → typed-confirm discard → logout) via the dedicated
+          // exception. The wipe does not run here.
+          throw LogoutBlockedByUnsyncedDataException(
+            pendingCount: pendingCount,
+            orphanCount: orphanCount,
+          );
         }
       }
 
+      // Outbox confirmed empty — safe to wipe.
       try {
         await _db.clearAllData();
       } catch (e) {
@@ -1129,6 +1282,34 @@ class AuthService extends ValueNotifier<UserData?> {
     _nav.clearStoreLock();
     _nav.resetNavigation();
     value = null;
+  }
+
+  /// §3.1 "Resolve unsynced data" terminal step. Called by the UI ONLY after a
+  /// [LogoutBlockedByUnsyncedDataException] was surfaced, the user exported the
+  /// stuck records, and they typed-confirmed the discard. Records the loss as a
+  /// breadcrumb, discards the business's un-pushable outbox, then wipes and logs
+  /// out — the deliberate, confirmed user action Invariant #12 permits.
+  Future<void> discardUnsyncedAndLogout() async {
+    final user = value;
+    if (user == null) return;
+    final businessId = user.businessId;
+    await _recordWipeLoss(businessId, 'logout:user_discarded_unsynced');
+    try {
+      final discarded =
+          await _db.syncDao.discardUnsyncedForBusiness(businessId);
+      debugPrint(
+        '[AuthService] discardUnsyncedAndLogout: discarded $discarded '
+        'outbox row(s) for $businessId',
+      );
+    } catch (e) {
+      debugPrint('[AuthService] discardUnsyncedAndLogout discard error: $e');
+    }
+    try {
+      await _db.clearAllData();
+    } catch (e) {
+      debugPrint('[AuthService] discardUnsyncedAndLogout clearAllData error: $e');
+    }
+    await fullLogout();
   }
 
   /// Returns true if [pin] matches at least one local user. The lone

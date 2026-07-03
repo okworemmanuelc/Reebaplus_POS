@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/database/daos.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/utils/csv_export.dart';
@@ -111,10 +112,10 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
 
   Future<void> _exportCsv(_ProfitData data) async {
     // Mirror the on-screen gate: omit the raw Cost-of-goods column unless the
-    // viewer holds `reports.see_cost_prices`.
-    final canSeeCost = ref
-        .read(currentUserPermissionsProvider)
-        .contains('reports.see_cost_prices');
+    // viewer holds `reports.see_cost_prices`. Cites the SAME named gate as the
+    // on-screen headline (`.allowsNow` — a one-shot read in this export path),
+    // so the two can't drift (issue #18).
+    final canSeeCost = Gates.seeReportCostPrices.allowsNow(ref);
     final rows = <List<String>>[
       for (final p in data.products)
         [
@@ -171,7 +172,7 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
     // Cost-of-goods figure on top of the screen's upstream `reports.see_profit`
     // gate — so a CEO can grant someone the Profit Report yet withhold the raw
     // cost. Revenue / Gross Profit / Margin stay (they're `reports.see_profit`).
-    final canSeeCost = hasPermission(ref, 'reports.see_cost_prices');
+    final canSeeCost = Gates.seeReportCostPrices.allows(ref);
     final orders = ref.watch(allOrdersProvider).valueOrNull ?? const [];
     final data = _compute(orders, _period);
     final hasCostedData = data.products.isNotEmpty;

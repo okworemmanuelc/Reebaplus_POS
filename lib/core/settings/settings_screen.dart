@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/activity_logs_access_screen.dart';
 import 'package:reebaplus_pos/core/settings/appearance_settings_screen.dart';
@@ -99,7 +100,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    final canManage = hasPermission(ref, 'settings.manage');
+    final canManage = Gates.manageSettings.allows(ref);
 
     final q = _query.trim().toLowerCase();
     final filtered = q.isEmpty
@@ -175,10 +176,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     const SizedBox(height: 16),
                   ],
                   // Danger Zone (§10.3) — CEO-only, visually separated, pinned
-                  // at the bottom. Gated on settings.delete_business (only the
-                  // CEO holds it). Surfaces for an empty search or one that
-                  // matches its keywords.
-                  if (hasPermission(ref, 'settings.delete_business') &&
+                  // at the bottom. Gated on Gates.deleteBusiness (only the
+                  // CEO holds settings.delete_business), compounded with the
+                  // search-match condition: it surfaces for an empty search or
+                  // one that matches its keywords.
+                  if (Gates.deleteBusiness.allows(ref) &&
                       (q.isEmpty ||
                           'danger zone delete business account'.contains(q)))
                     _buildDangerZone(context),

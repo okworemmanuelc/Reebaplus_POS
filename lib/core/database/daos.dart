@@ -3803,6 +3803,56 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
     return row.read(countExp) ?? 0;
   }
 
+  /// Invariant #12 (the outbox is sacred) — the enforcement primitive.
+  ///
+  /// Returns the set of row ids for [table] that still have an *un-uploaded*
+  /// `<table>:upsert` entry in EITHER outbox table:
+  ///   • `sync_queue` rows the server has not yet confirmed
+  ///     (`status != 'completed'`), and
+  ///   • every `sync_queue_orphans` row — an orphan is still un-uploaded local
+  ///     data the invariant protects (the cloud is rejecting it, not that the
+  ///     device already converged).
+  ///
+  /// No pull, reconcile, or restore-overwrite may delete or overwrite a local
+  /// row whose id is in this set, regardless of timestamp. The id is read from
+  /// `payload->>'$.id'`, exactly as the dedup index keys it.
+  ///
+  /// [businessId] scopes the `sync_queue` lookup (and the orphan lookup via the
+  /// `business_id` embedded in each orphan payload). Pass null to match across
+  /// every business — row ids are globally-unique UUIDv7, so an unscoped match
+  /// is still exact; the restore path uses the unscoped form during the
+  /// pre-`setCurrentUser` bootstrap window when no tenant is bound yet.
+  Future<Set<String>> pendingRowIds(String table, {String? businessId}) async {
+    final upsertAction = '$table:upsert';
+    final scoped = businessId != null;
+    final queueRows = await customSelect(
+      "SELECT json_extract(payload, '\$.id') AS rid FROM sync_queue "
+      "WHERE action_type = ?1 AND status != 'completed' "
+      "  AND json_extract(payload, '\$.id') IS NOT NULL "
+      "${scoped ? "AND business_id = ?2" : ""}",
+      variables: [
+        Variable.withString(upsertAction),
+        if (scoped) Variable.withString(businessId),
+      ],
+      readsFrom: {syncQueue},
+    ).get();
+    final orphanRows = await customSelect(
+      "SELECT json_extract(payload, '\$.id') AS rid FROM sync_queue_orphans "
+      "WHERE action_type = ?1 "
+      "  AND json_extract(payload, '\$.id') IS NOT NULL "
+      "${scoped ? "AND json_extract(payload, '\$.business_id') = ?2" : ""}",
+      variables: [
+        Variable.withString(upsertAction),
+        if (scoped) Variable.withString(businessId),
+      ],
+      readsFrom: {syncQueueOrphans},
+    ).get();
+    return <String>{
+      for (final r in queueRows) r.read<String>('rid'),
+      for (final r in orphanRows) r.read<String>('rid'),
+    };
+  }
+
   Future<void> resetStuckInProgress() async {
     // Items stuck in 'syncing' for more than 5 minutes are reset to 'pending'
     // so a later push tick retries them (e.g. after an app kill mid-push).
@@ -4050,6 +4100,31 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
         .map((row) => row.read(syncQueueOrphans.id.count()) ?? 0);
   }
 
+  /// Count of un-pushable orphan rows. `sync_queue_orphans` carries no
+  /// `business_id` column, so a tenant filter scopes via the `business_id`
+  /// embedded in each orphan's payload (`p_business_id` for domain envelopes).
+  /// Used by the wipe gate (§3.1) to decide the two-tier resolution: a logout
+  /// with orphans present routes to the export + typed-discard flow rather than
+  /// being trapped, because orphans are the cloud actively rejecting this
+  /// device's writes (42501 / P0001 / auth-uid drift).
+  Future<int> countOrphans({String? businessId}) async {
+    if (businessId == null) {
+      final row = await (selectOnly(syncQueueOrphans)
+            ..addColumns([syncQueueOrphans.id.count()]))
+          .getSingle();
+      return row.read(syncQueueOrphans.id.count()) ?? 0;
+    }
+    final row = await customSelect(
+      "SELECT COUNT(*) AS c FROM sync_queue_orphans "
+      "WHERE COALESCE("
+      "  json_extract(payload, '\$.business_id'), "
+      "  json_extract(payload, '\$.p_business_id')) = ?1",
+      variables: [Variable.withString(businessId)],
+      readsFrom: {syncQueueOrphans},
+    ).getSingle();
+    return row.read<int>('c');
+  }
+
   /// Re-enqueues an orphan into sync_queue with cleared backoff and removes
   /// it from the orphans table. The original action_type and payload are
   /// preserved verbatim. Caller must ensure the underlying cause has been
@@ -4179,8 +4254,8 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
     if (!kEnqueueableTables.contains(tableName)) {
       throw StateError(
         'enqueueUpsert("$tableName"): not a registered synced/cache/businesses '
-        'table. Add it to _syncedTenantTables (or kSyncCacheTables) or fix the '
-        'table name — CLAUDE.md §5.',
+        'table. Add a SyncedTable entry (tenantScoped: true, or isCache: true) '
+        'in sync_registry.dart, or fix the table name — CLAUDE.md §5.',
       );
     }
     final payloadMap = serializeInsertable(row);
@@ -4276,7 +4351,8 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
     if (!kSyncedTenantTables.contains(tableName)) {
       throw StateError(
         'enqueueDelete("$tableName"): not a registered synced table — '
-        'fix the table name or add it to _syncedTenantTables (CLAUDE.md §5).',
+        'fix the table name or add a tenantScoped SyncedTable entry in '
+        'sync_registry.dart (CLAUDE.md §5).',
       );
     }
     final payloadMap = {
@@ -4369,6 +4445,96 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
           (t) => t.status.equals('pending') & t.attempts.isBiggerThanValue(0),
         ))
         .go();
+  }
+
+  // ── §3.1 "Resolve unsynced data" — export & discard ────────────────────────
+  // Invariant #12 lets un-pushable data leave the device ONLY by a deliberate,
+  // confirmed user action, and only after it has been made exportable. The two
+  // methods below back that flow: [unsyncedExportRows] renders the outbox to a
+  // printable/CSV record (money recoverable on paper), and
+  // [discardUnsyncedForBusiness] removes it once the user has typed-confirmed.
+
+  /// Flattens every un-synced outbox row for [businessId] — un-uploaded
+  /// `sync_queue` entries (`status != 'completed'`) plus all
+  /// `sync_queue_orphans` — into CSV body rows. Columns:
+  /// `[source, table, action, row_id, reason, created_at, payload]`.
+  /// `source` is `queue` or `orphan`; orphans carry their rejection `reason`.
+  /// Newest first so the most recent lost activity is at the top.
+  Future<List<List<String>>> unsyncedExportRows(String businessId) async {
+    final queueRows =
+        await (select(syncQueue)
+              ..where(
+                (t) => t.businessId.equals(businessId) & t.isSynced.not(),
+              )
+              ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+            .get();
+    final orphanRows = await customSelect(
+      "SELECT id, action_type, payload, reason, created_at FROM "
+      "sync_queue_orphans WHERE COALESCE("
+      "  json_extract(payload, '\$.business_id'), "
+      "  json_extract(payload, '\$.p_business_id')) = ?1 "
+      "ORDER BY moved_at DESC",
+      variables: [Variable.withString(businessId)],
+      readsFrom: {syncQueueOrphans},
+    ).get();
+
+    String tableOf(String actionType) =>
+        actionType.contains(':') ? actionType.split(':').first : actionType;
+    String actionOf(String actionType) {
+      final parts = actionType.split(':');
+      return parts.length > 1 ? parts.sublist(1).join(':') : '';
+    }
+
+    final out = <List<String>>[];
+    for (final r in queueRows) {
+      out.add([
+        'queue',
+        tableOf(r.actionType),
+        actionOf(r.actionType),
+        r.id,
+        r.errorMessage ?? '',
+        r.createdAt.toIso8601String(),
+        r.payload,
+      ]);
+    }
+    for (final r in orphanRows) {
+      final actionType = r.read<String>('action_type');
+      final createdMs = r.read<int>('created_at') * 1000;
+      out.add([
+        'orphan',
+        tableOf(actionType),
+        actionOf(actionType),
+        r.read<String>('id'),
+        r.read<String?>('reason') ?? '',
+        DateTime.fromMillisecondsSinceEpoch(createdMs).toIso8601String(),
+        r.read<String>('payload'),
+      ]);
+    }
+    return out;
+  }
+
+  /// Discards every un-synced outbox row for [businessId] — un-uploaded
+  /// `sync_queue` entries and `sync_queue_orphans`. The deliberate, confirmed
+  /// user action of Invariant #12: callers MUST have exported the rows and
+  /// obtained a typed confirmation first (the "Resolve unsynced data" flow).
+  /// Returns the total number of rows discarded.
+  Future<int> discardUnsyncedForBusiness(String businessId) async {
+    return transaction(() async {
+      final queueDeleted =
+          await (delete(syncQueue)..where(
+                (t) => t.businessId.equals(businessId) & t.isSynced.not(),
+              ))
+              .go();
+      final orphanDeleted = await customUpdate(
+        "DELETE FROM sync_queue_orphans WHERE COALESCE("
+        "  json_extract(payload, '\$.business_id'), "
+        "  json_extract(payload, '\$.p_business_id')) = ?1",
+        variables: [Variable.withString(businessId)],
+        updates: {syncQueueOrphans},
+        updateKind: UpdateKind.delete,
+      );
+      return queueDeleted + orphanDeleted;
+    });
   }
 }
 

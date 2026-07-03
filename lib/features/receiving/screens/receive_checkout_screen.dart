@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
@@ -191,7 +192,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
     final note = _noteCtrl.text.trim();
 
     try {
-      final canManageSuppliers = hasPermission(ref, 'suppliers.manage');
+      final canManageSuppliers = Gates.manageSuppliers.allowsNow(ref);
       final amountPaid = (canManageSuppliers && _amountPaidCtrl.text.isNotEmpty)
           ? (double.tryParse(_amountPaidCtrl.text.replaceAll(',', '')) ?? 0)
           : 0;
@@ -456,7 +457,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
                   ),
                   SizedBox(height: context.getRSize(24)),
 
-                  if (hasPermission(ref, 'suppliers.manage')) ...[
+                  if (Gates.manageSuppliers.allows(ref)) ...[
                     // Payment (optional)
                     _fieldLabel('PAYMENT', subtext),
                     SizedBox(height: context.getRSize(8)),
@@ -800,7 +801,7 @@ class _SupplierPickerSheetState extends ConsumerState<_SupplierPickerSheet> {
               prefixIcon: Icon(FontAwesomeIcons.magnifyingGlass.data,
                   size: context.getRSize(16)),
             ),
-            if (hasPermission(ref, 'suppliers.manage')) ...[
+            if (Gates.manageSuppliers.allows(ref)) ...[
               SizedBox(height: context.getRSize(12)),
               AppButton(
                 text: 'Add Supplier',

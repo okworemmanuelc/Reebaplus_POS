@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/widgets/app_fab.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -113,25 +114,23 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
       currencySymbolProvider,
     ); // rebuild money displays when currency changes
     // §12 / hard rule #6: POS is gated to roles that hold `sales.make` (CEO,
-    // Manager, Cashier). Stock keeper is already hidden in the sidebar; this is
-    // defense-in-depth against deep-links / bottom-nav.
-    //
-    // Wait for permissions to resolve before rendering the denial: on a fresh
-    // login the role + grant rows arrive a frame or two after this builds, and
-    // an empty permission set reads the same as "denied". Showing the denial
-    // unconditionally flashes "You don't have access to Point of Sale." for a
-    // moment even for the CEO before the grants land. While unresolved, show the
-    // same neutral placeholder POS uses before its controller is ready.
-    final permsReady = ref.watch(currentUserPermissionsReadyProvider);
-    if (!permsReady) {
-      return SharedScaffold(
+    // Manager, Cashier); Stock keeper is already hidden in the sidebar, so this
+    // is defense-in-depth against deep-links / bottom-nav. Guarded.screen owns
+    // the whole decision now: it waits for the permission set to resolve before
+    // rendering (no denial flash — on a fresh login the grants arrive a frame or
+    // two late, and an empty set reads the same as "denied"; the CEO must never
+    // see "You don't have access to Point of Sale." flash), then shows the body
+    // or the standard no-access. POS is a bottom-nav tab, so the loading/denied
+    // surfaces keep the SharedScaffold chrome (nav stays reachable) instead of
+    // the default full-screen scaffold.
+    return Guarded.screen(
+      gate: Gates.makeSale,
+      loading: SharedScaffold(
         activeRoute: 'pos',
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         body: const SafeArea(child: SizedBox.shrink()),
-      );
-    }
-    if (!hasPermission(ref, 'sales.make')) {
-      return SharedScaffold(
+      ),
+      denied: SharedScaffold(
         activeRoute: 'pos',
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         body: SafeArea(
@@ -146,9 +145,15 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
             ),
           ),
         ),
-      );
-    }
+      ),
+      builder: _buildPos,
+    );
+  }
 
+  /// The POS body, shown once [Gates.makeSale] has resolved and granted. Split
+  /// out of [build] so the `Guarded.screen` guard above owns the
+  /// permissions-ready / denial decision (no denial flash on fresh login).
+  Widget _buildPos(BuildContext context) {
     // First load: while the store is empty and the catalogue is still streaming
     // in, show the POS skeleton (brief §4.4) instead of a blank grid / "pick a
     // store" placeholder. It resolves to the real grid the moment products land.

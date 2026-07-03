@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
-import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/pos/widgets/category_filter_bar.dart';
 import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
@@ -123,33 +123,18 @@ class _ReceiveStockScreenState extends ConsumerState<ReceiveStockScreen> {
     final subtextCol = Theme.of(context).textTheme.bodySmall?.color ?? Theme.of(context).iconTheme.color!;
     final borderCol = Theme.of(context).dividerColor;
 
-    // §14.7 / §16.7 — defense-in-depth route guard. Matches the FAB that opens
-    // this screen: anyone who can add stock (`stock.add`, e.g. stock keepers) or
-    // add products (`products.add`) may receive. Inside the flow the New Product
-    // card is separately gated on `products.add`, price edits on their own
-    // permissions, and the supplier-payment section on `suppliers.manage`, so a
-    // stock keeper with only `stock.add` can update quantities but can't create
-    // products, change prices, or record payments. This still blocks any
+    // §14.7 / §16.7 — defense-in-depth route guard citing the same named gate
+    // as the Inventory FAB that opens this screen (Gates.receiveStock). The
+    // screen form waits for permissions to resolve (no denial flash) and renders
+    // the standard no-access scaffold when denied — still blocking any
     // back-stack / deep-link reach for a Cashier (or Manager without either key).
-    if (!hasPermission(ref, 'stock.add') && !hasPermission(ref, 'products.add')) {
-      return Scaffold(
-        backgroundColor: surfaceCol,
-        appBar: AppBar(
-          title: const Text('Receive Stock'),
-          backgroundColor: surfaceCol,
-          elevation: 0,
-          centerTitle: true,
-        ),
-        body: Center(
-          child: Text(
-            "You don't have access to Receive Stock.",
-            style: TextStyle(color: subtextCol),
-          ),
-        ),
-      );
-    }
-
-    return Scaffold(
+    // Inside the flow the New Product card, price edits, and the supplier-payment
+    // section are separately gated, so a stock keeper with only `stock.add` can
+    // update quantities but can't create products, change prices, or record
+    // payments.
+    return Guarded.screen(
+      gate: Gates.receiveStock,
+      builder: (context) => Scaffold(
       backgroundColor: surfaceCol,
       appBar: AppBar(
         title: const Text('Receive Stock', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -193,7 +178,7 @@ class _ReceiveStockScreenState extends ConsumerState<ReceiveStockScreen> {
               ),
             if (!_isLoading &&
                 _showReceiveHint &&
-                hasPermission(ref, 'products.edit_price'))
+                Gates.editProductPrice.allows(ref))
               _buildReceiveHint(),
             Expanded(
               child: _isLoading
@@ -210,6 +195,7 @@ class _ReceiveStockScreenState extends ConsumerState<ReceiveStockScreen> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

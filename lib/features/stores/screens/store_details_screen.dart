@@ -5,6 +5,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
@@ -95,7 +96,7 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
             .toSet() ??
             const <String>{};
     final hasFullAccess = canViewAll || assignedIds.contains(widget.store.id);
-    final canRequest = hasPermission(ref, 'stores.request_transfer');
+    final canRequest = Gates.requestStoreTransfer.allows(ref);
 
     final totalStock = _inventory.fold<int>(0, (sum, p) => sum + p.totalStock);
     final totalValue = _inventory.fold<double>(

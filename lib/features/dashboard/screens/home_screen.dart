@@ -14,6 +14,7 @@ import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
@@ -209,21 +210,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     // §11.4 card visibility also respects the report permissions (hard rule
     // #6): these cards open the full Sales / Expenses breakdowns, so a
     // Manager/Cashier whose report key is revoked must not see the card. CEO is
-    // always-on.
-    final showTotalSales =
-        isCeo ||
-        ((isManager || isCashier) && hasPermission(ref, 'reports.see_sales'));
-    final showNetProfit = isCeo || hasPermission(ref, 'reports.see_profit');
+    // always-on. Each tile's composite tier+key rule is lifted verbatim into a
+    // named gate (Gates.*, issue #18); `.allows(ref)` is the reactive render
+    // check, so a mid-session revocation hides the tile live.
+    final showTotalSales = Gates.seeSalesMetric.allows(ref);
+    final showNetProfit = Gates.seeProfitMetric.allows(ref);
     final showPending = slug != null; // all four roles
-    final showExpenses =
-        isCeo || (isManager && hasPermission(ref, 'reports.see_expenses'));
-    final showStockValue =
-        isCeo || (isManager && hasPermission(ref, 'stock.view'));
+    final showExpenses = Gates.seeExpensesMetric.allows(ref);
+    final showStockValue = Gates.seeStockValueMetric.allows(ref);
     final showTotalSkus = isCashier || isStockKeeper;
-    final showCreditBalance =
-        isCeo ||
-        ((isManager || isCashier) && hasPermission(ref, 'customers.add'));
-    final showStaffSales = isCeo || isManager;
+    final showCreditBalance = Gates.seeCreditBalanceMetric.allows(ref);
+    final showStaffSales = Gates.seeStaffSales.allows(ref);
 
     // ── Store filter (§12.1) ─────────────────────────────────────────────────
     // The store filter follows the nav-drawer store picker (null = "All
@@ -534,7 +531,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildPeriodDropdown() {
-    final options = datePeriodLabelsForRole(managerUp: isManagerOrAbove(ref));
+    final options =
+        datePeriodLabelsForRole(managerUp: Gates.seeExtendedDateRanges.allows(ref));
     final isCustom = _selectedPeriod.startsWith('Custom:');
     final dropdownValue = isCustom ? 'Custom' : _selectedPeriod;
     final selected = options.contains(dropdownValue) ? dropdownValue : options.first;

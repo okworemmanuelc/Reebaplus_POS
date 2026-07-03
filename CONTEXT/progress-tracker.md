@@ -10,6 +10,193 @@ The human updates it when resolving open questions or making architectural decis
 
 151 sessions logged. Codebase is live and being verified on-device.
 
+### Flip: gate enforcement made permanent — allowlist emptied, bare helpers removed (2026-07-03, issue #22)
+- **Goal (epic #16 finish line):** flip the named-gate enforcement from a
+  shrinking ratchet to a permanent ban, retire the last cross-cutting permission
+  helpers, and close the leak class the way the `SyncedTable` registry (#15)
+  retired the sync smear.
+- **Last bare `hasPermission(ref, …)` sites migrated (10, verbatim):**
+  staff_detail (assign-stores / change-role / suspend / permission-editor),
+  staff_permissions (settings.manage), orders (two Pending-tab Refund checks),
+  activity_log (screen body-guard). New gates `assignStaffStores`,
+  `changeStaffRole`, `suspendStaff`, `refundOrder`; reused `manageSettings` +
+  `viewActivityLogs`.
+- **Bare helper removed:** `hasPermission(WidgetRef, String)` is **deleted** from
+  `stream_providers.dart` — feature code cites `Gates.x.allows(ref)` and the
+  single-key primitive (`Gate.key`) now lives only inside the permissions module.
+- **Direct feature-level tier checks removed (user-approved scope):** the
+  `isManagerOrAbove(ref)` cross-cutting helper is **deleted**; its ~12 sites now
+  cite named tier atoms — `seeOrderMoney` (§19.3 order money, orders ×4),
+  `seeExtendedDateRanges` (§19.2 date-range breadth: orders + customer_detail,
+  supplier_transactions, expenses, home, supplier_detail), and the reports-hub
+  manager-up cards `viewApprovals` / `dailyReconciliation` / `crateDepositsReport`.
+  Tier now lives **only** in registry atoms. Left as-is (out of the approved
+  scope): per-screen `slug=='ceo'` CEO cost-wall money-visibility checks
+  (deliberately tier-based per ADR 0002, never in any batch) and the drawer's
+  `isBelowCeo` UI-placement split (picks self-service vs CEO settings — not a
+  permission gate; no negation atom by design).
+- **Static ban flipped strict:** `_allowlist` is now **empty**; any bare
+  `hasPermission(ref, …)` anywhere in `lib/` outside `lib/core/permissions/`
+  fails the suite. Added a durable scanner self-test; the plant-and-verify
+  (temp bare check → suite fails → removed) was run and confirmed. Registry
+  membership test stays strict (every one of the 48 gates cited; the 9 new
+  gates all cited in production code).
+- **Tests updated:** the two settings harnesses (`settings_menu_gating`,
+  `sidebar_role_visibility`) drop the deleted helper for a direct
+  `currentUserPermissionsProvider.contains(key)` (identical semantics).
+- **Verification:** whole-project `flutter analyze` clean; `test/permissions` +
+  `test/settings` 80/80; full suite green except the documented pre-existing
+  `who_is_working_screen_test` flake (widget-timing + a live Supabase call;
+  untouched by this work, uses neither removed helper).
+
+### Batch: Operations named-gate migration — Inventory, Stores, Customers, Expenses (2026-07-03, issue #20)
+- **Goal (epic #16):** migrate the operations screens' gates verbatim into named
+  registry gates — the mechanical batch (mostly single-key lifts), 26 bare sites
+  across 9 files.
+- **New algebra atom:** `Gate.tierIn(ranks)` (set membership, fails closed on
+  null rank) — needed because Daily Stock Count's legacy role set
+  {CEO, Manager, Stock keeper} *skips* Cashier, which no `tierAtLeast` cutoff can
+  express. Convention-bound exactly like `tierAtLeast` (ADR 0002).
+- **New gates (`gate_registry.dart`, Operations cluster):** `viewInventory`
+  (`stock.view`), `dailyStockCount` (tierIn{ceo,mgr,sk} AND `stock.adjust` —
+  tier-based legacy, review flag), `manageStores`, `requestStoreTransfer`,
+  `dispatchStoreTransfer`, `receiveStoreTransfer`, `editCustomer`,
+  `deleteCustomer`, `addCustomerCredit` (`customers.wallet.update`),
+  `setDebtLimit`, `refundCustomerWallet` (`customers.wallet.withdraw`),
+  `seeWalletTotals` (`customers.wallet.totals.view`, §18.4), `recordCrateReturn`
+  (`sales.make` — same key as `makeSale`, distinct action), `viewExpenses`
+  (`reports.see_expenses`), `addExpense`, `approveExpenses`. Reused: `addCustomer`
+  (Customers FAB), `editProductPrice` (Inventory long-press editor),
+  `editBuyingPrice` + `manageSuppliers` (Add Product screen).
+- **Screen guards:** Inventory and Expenses hand-rolled denial scaffolds →
+  `Guarded.screen` (wait-for-ready, no denial flash). Both are MainLayout tabs,
+  so the loading/denied surfaces keep their chrome (SharedScaffold / drawer +
+  app-bar) via the `loading`/`denied` params — the POS precedent. Stores' browse
+  composite stays inline (its all-stores-viewer leg is a provider, not a key)
+  but cites the named gates for each key leg. Write boundaries (`_openEditSheet`,
+  EditCustomerSheet save) → `.allowsNow(ref)`, behaviour preserved.
+- **Static-ban allowlist** shrunk by exactly the 9 files (customer_detail 8,
+  customers 1, edit_customer_sheet 1, expenses 3, add_product 2, inventory 3,
+  store_details 1, stores 5, store_transfer_hub 2). `dart analyze` clean;
+  permissions suites green for this batch's files (two in-flight failures belong
+  to the parallel #21 settings batch: its six gates declared-not-yet-cited + its
+  six settings allowlist rows), no behavioural test edits.
+
+### Batch: POS & Checkout named-gate migration (2026-07-03, issue #19)
+- **Goal (epic #16):** migrate the POS + Checkout gates verbatim into named
+  registry gates, and land the flagship use of the imperative `require` form.
+- **New gates (`gate_registry.dart`, POS & Checkout cluster):** `Gates.makeSale`
+  (`sales.make`), `Gates.addCustomer` (`customers.add`), `Gates.setCustomPrice`
+  (`sales.set_custom_price`) — plain key lifts.
+- **Sites migrated (verbatim, behaviour-neutral):** POS home screen's hand-rolled
+  perms-ready + `sales.make` denial → the standard `Guarded.screen(gate: makeSale)`
+  (waits for readiness = no CEO-lands-on-POS denial flash; keeps the SharedScaffold
+  nav chrome via the `loading`/`denied` params since POS is a bottom-nav tab). Cart
+  "New customer" → `Gates.addCustomer.allows(ref)`; edit-item Custom Price →
+  `Gates.setCustomPrice.allows(ref)`. **Checkout confirm path** now guards its
+  write boundary with `Gates.makeSale.require(ref)` at the top of `_confirmPayment`,
+  catching `GateDeniedError` into the standard `showGateDenied` feedback and
+  returning before any write (the imperative-form flagship). Sale semantics
+  untouched — revenue-at-checkout, the discount *cap*, and the unenforced
+  discount-give permission all unchanged.
+- **Static-ban allowlist** shrunk by exactly the 3 POS sites (pos_home_screen,
+  cart_screen, edit_item_modal → removed). `flutter analyze` clean; permissions +
+  pos + checkout + settings-gating suites green, no behavioural test edits.
+
+### Batch: Dashboard & Reports named-gate migration (2026-07-03, issue #18)
+- **Goal (epic #16):** lift the app's messiest composite gates — the home-screen
+  §11.4 money/report tiles (CEO-or-Manager-with-key) and the Reports hub / Profit
+  report entries — verbatim into named registry gates, so every tier dependence
+  is visible in one file. No key-ification, no cleanup (ADR 0002).
+- **New gates (`gate_registry.dart`, Dashboard & Reports cluster — tier-based /
+  §19.3-class, render-only via `.allows(ref)`):** `seeSalesMetric`,
+  `seeProfitMetric`, `seeExpensesMetric`, `seeStockValueMetric`,
+  `seeCreditBalanceMetric`, `seeStaffSales`, `supplierAccountsReport`,
+  `profitReportEntry`, `seeReportCostPrices`. `(isManager||isCashier)` →
+  `tierAtLeast(cashier)` and `isMgrUp`/`isManagerOrAbove` → `tierAtLeast(manager)`,
+  both identical under the CEO disjunct across all ranks + fail-closed null rank.
+- **Sites migrated (verbatim, behaviour-neutral):** `home_screen` 5 tile flags +
+  Staff Sales → `Gates.*.allows(ref)`; `reports_hub` Supplier Accounts + Profit
+  Report entries → the two hub gates; `profit_report` on-screen headline
+  (`.allows`) + CSV export (`.allowsNow`, was a raw provider `.contains`) now cite
+  the SAME `seeReportCostPrices` gate. Pure-tier `showPending`/`showTotalSkus` and
+  the `if (isMgrUp)` cards stay inline (not permission checks / cross-cutting
+  helper / `isCashier||isStockKeeper` needs no `tierAtMost` atom).
+- **Static-ban allowlist** shrunk by exactly the 3 files (home_screen 5,
+  reports_hub 2, profit_report 1 → removed). `flutter analyze` clean;
+  `test/permissions/` green (static-ban ratchet + membership + seams), no
+  behavioural test edits. This batch removes 8 `hasPermission(ref)` sites.
+
+### Tracer: named-gate registry + `Guarded` (2026-07-02, issue #17)
+- **Goal (epic #16):** retire the recurring permission-leak class — enforcement
+  hand-typed at ~89 `hasPermission(ref, key)` sites in three comment-equated
+  layers — the way the `SyncedTable` registry (#15) retired the sync smear. This
+  issue is the **tracer**: the whole module + one gate migrated end-to-end.
+- **Module (`lib/core/permissions/`, ADR 0002):** `gate.dart` (pure `Gate`
+  algebra over a `GateContext` — atoms `key`/`anyKey`/`allKeys`/`tierAtLeast`/`ceo`
+  + `.and`/`.or`, fails closed unresolved, CEO all-on, + `GateDeniedError`);
+  `gate_registry.dart` (`NamedGate` + `Gates` single declaration site);
+  `guarded.dart` (`gateContextProvider` seam, the `allows`/`allowsNow`/`require`
+  extension, the `Guarded` render+`allow`-fire-time widget, and `Guarded.screen`
+  body-guard with the no-flash policy + standard no-access scaffold);
+  `permissions.dart` barrel.
+- **Receive Stock migrated verbatim (12 sites, 5 files):** Inventory FAB + the
+  screen guard (`Guarded.screen`) now cite the same `Gates.receiveStock`;
+  New Product → `Gates.addProduct`, price edits → `Gates.editProductPrice` (incl.
+  the long-press fire-time re-check), buying-price → `Gates.editBuyingPrice`,
+  supplier payments → `Gates.manageSuppliers`. Behaviour-neutral. `hasPermission`
+  86 → 74; `lib/features/receiving/` bare-check-free.
+- **Tests (`test/permissions/`, 26 new):** pure algebra (14), `Guarded`/`.screen`/
+  `require` widget seam (10), static-ban scan with a **full 74-site allowlist
+  ratchet** (planted-check-fails verified), registry membership. `flutter analyze
+  lib` clean; permissions + receiving + inventory + settings suites green, no
+  behavioural test edits. **Full-run note:** `test/sync/order_collision_heal_test`
+  flaked once in the combined run (passes in isolation and as a group — the
+  documented cross-suite flake, unrelated).
+- **Next:** batches #18–21 migrate the remaining 74 sites (each shrinks the
+  allowlist); #22 empties it, privatizes the bare helper, goes strict.
+- **Pending:** emulator walkthrough (stock keeper vs cashier — FAB + screen guard
+  reachability + live revocation).
+
+### Refactor: `SyncedTable` registry — one source of truth per synced table (2026-07-01, issue #15)
+- **Problem:** a synced table's knowledge was smeared across six constructs (the
+  synced-tenant-table list, pull order, push whitelist, `created_at`-scrub set,
+  and two hard-delete switches) + a ~50-case restore switch. Wiring five of six
+  and forgetting one compiled and worked locally but **silently dropped that
+  table's rows on peer devices** — the recurring "wire ALL client apply sites"
+  trap in the most safety-critical subsystem.
+- **Fix:** one ordered `List<SyncedTable>` in the database layer
+  (`lib/core/database/sync_registry.dart`, `part of` app_database.dart — no
+  import cycle). Each entry is the whole per-table truth (restore fn, optional
+  push columns / hard-delete rule, scrub flag, tenant/cache flags); the six
+  constructs now **derive** from it and the literal lists + restore switch are
+  deleted. Restore helpers (`Restore.plain/.naturalKey/.dedup/.ledger` + a
+  bespoke `users` closure) and a database-layer `SyncRestoreExecutor` (FK-resilient
+  helper + ledger restore) keep the registry dependency-free; the two hard-delete
+  switches collapsed into one `SyncHardDelete` per entry.
+- **Behaviour-neutral:** no schema / cloud / wire-protocol change; the central
+  pre-insert guards (LWW, invariant #12, business isolation) are unchanged.
+- **Tests:** new golden-equivalence test freezes the six constructs' pre-collapse
+  values; the reflection test now asserts registry membership. Behavioural seams
+  (outbox-sacred, FK-resilience, hard-delete reconcile, realtime DELETE, dispatch,
+  scrub) stayed green unchanged. `test/sync/` + `test/database/` = 233 green,
+  `flutter analyze` clean. See BUILD_LOG 2026-07-01.
+- **Note:** `test/auth/who_is_working_screen_test.dart` fails **pre-existing**
+  (identical with this refactor stashed) — unrelated parallel-work / widget timing.
+
+### Fix: cloud money columns widened to `bigint` (2026-07-01)
+- **Symptom:** Sync Issues showed `supplier_ledger_entries:upsert` stuck at 42
+  attempts — `PostgrestException 22003 "value 12360040000 out of range for type
+  integer"` (₦123.6M in kobo overflows int4's ₦21.5M ceiling), permanently jamming
+  the outbox. Local value stored fine (64-bit), so it was un-pushable, not lost.
+- **Fix (cloud-only, migration `0130`):** `ALTER TYPE bigint` on all 34 int4 money
+  columns (30 `*_kobo` + 4 crate-count `balance`) across 22 tables — none were
+  bigint before. Verified 0 remain. No Drift migration (already 64-bit);
+  `pos_pull_snapshot` returns jsonb so the pull path is untouched. Stuck row pushes
+  on next retry, no data lost.
+- **Prevention:** `code-standards.md` now mandates every cloud `*_kobo` column be
+  `bigint`. See BUILD_LOG 2026-07-01.
+
 ### First-Load "Loading your store" Overlay Redesign (2026-06-30)
 - **Change:** the post-login full-pull loader is now a brief (≤ ~2 s) "Setting up
   ‹Business›…" reassurance that hands off to per-tab skeletons + a thin top sync
@@ -1511,7 +1698,83 @@ with correct code → Copy/SMS/WhatsApp still work → re-sync does NOT re-send.
 
 ---
 
+## Sync Data-Safety & Efficiency — Invariant #12 "the outbox is sacred" (2026-06-30)
+
+Spec: `context/specs/brief-sync-data-safety-and-efficiency.md`. Branch
+`feat/sync-data-safety-and-efficiency`. Added **Invariant #12** to
+`architecture.md`. Full detail in `BUILD_LOG.md` (2026-06-30 entry).
+
+**Shipped — Bucket 1 (data safety):**
+- Enforcement primitive `SyncDao.pendingRowIds(table, {businessId})` +
+  `countOrphans` + `unsyncedExportRows` / `discardUnsyncedForBusiness`.
+- (C) clobber prevention in `_restoreTableData`; (B) reconcile exclusion +
+  completeness guard in `_reconcileHardDeletes`; (E) hardened wipe gate in
+  `AuthService.logOutCurrentUser` + `LogoutBlockedByUnsyncedDataException` +
+  `ResolveUnsyncedDataDialog` + `_recordWipeLoss` breadcrumb at the three
+  business-deleted carve-outs; (D) `SupabaseSyncService.pushThenPull` on
+  reconnect/refresh/login; (F) `_auditDrainIntegrity` self-count breadcrumb.
+
+**Shipped — Bucket 2 (efficiency):**
+- (A1) per-table backfill cursors (`backfill_tables::<id>` pref) so a deferred
+  leaf table no longer forces a re-pull of every table; FK-orphans keep the
+  conservative full re-pull.
+- (A2) `_targetedParentFetchAndRetry` — bounded inline fetch of missing
+  supplier/category/manufacturer parents by id + child retry.
+
+**Open follow-ups (logged, not blocking):**
+- Proactive "sync blocked — this device's access changed" banner + elevating the
+  Sync Issues screen from operator-only to user-visible (brief §3.1 last bullet)
+  — the never-trap-logout export/discard flow is shipped; the always-on banner is
+  deferred. The wipe-loss breadcrumbs land in SharedPreferences
+  (`wipe_data_loss_breadcrumbs`) with no surfacing UI yet.
+- `last_updated_at`-bump DAO audit (brief §3.3 "hygiene") — correctness no longer
+  depends on it (clobber prevention covers it), so deferred as cleanup.
+
+---
+
 ## Session Notes
+
+**2026-07-03 — Settings & sidebar migrated to named gates (issue #21, epic #16).**
+The Settings/nav batch: all 11 `lib/core/settings/` screens, `app_drawer.dart`,
+`main_layout.dart`, and the Sync Issues screen guard now cite named registry
+gates — no bare `hasPermission` or raw permission-set reads remain in them.
+Registry additions (Settings & sidebar/nav cluster): `viewSyncIssues`
+(`sync.view` OR CEO — the ONE entry cited by the screen body-guard, the sidebar
+item, and the drawer header sync badge/banner pill; the standalone
+`canViewSyncIssues` helper in `stream_providers.dart` is RETIRED),
+`manageSettings` (`settings.manage` — drawer entry + every settings sub-screen
+body-guard and write re-check), `deleteBusiness` (`settings.delete_business` —
+Danger Zone entry compound lifted verbatim + delete screen), and render-only
+nav gates `viewCustomers`, `manageStaff`, `viewActivityLogs`, `viewStores`
+(the four-way stores/transfer any-of). Nav entries whose destination gates
+already existed cite those: POS/Cart tabs + drawer → `makeSale`, Stock tab +
+drawer → `viewInventory`, Supplier Accounts → `manageSuppliers`, Expenses →
+`viewExpenses`; CEO Settings > Stores body-guards on `manageStores`
+(`stores.manage`, verbatim). Fire-time write re-checks moved to
+`.allowsNow` + the standard `showGateDenied` feedback. Roles & Permissions
+editor behaviour (write-time dependency cascade) untouched. Static-ban
+allowlist shrank by exactly these 13 files (4 files remain: orders, staff ×2,
+activity_log_screen). `flutter analyze` clean; `test/permissions` 45/45; full
+suite green except the pre-existing `who_is_working_screen_test` failure
+(verified again: fails identically at HEAD in a clean worktree).
+
+**2026-07-02 — Cloud-transport seam SHIPPED (commit 3ec07cb).**
+Extracted a `CloudTransport` interface (11 members: `upsertRows`/`deleteRowsById`/
+`callRpc`/`fetchTable`/`fetchRowsByIds`/`warmUp`/`businessDeletedTombstoneExists`/
+`startRealtime`/`stopRealtime`/`currentAuthUserId`+`authEvents`) out of
+`SupabaseSyncService`, with `SupabaseCloudTransport` (real, `lib/core/services/`)
+and a fully-featured `InMemoryCloudTransport` (test fake, `test/helpers/`). Design
+recorded in [`docs/adr/0001-cloud-transport-seam.md`](../docs/adr/0001-cloud-transport-seam.md)
++ root `CONTEXT.md` (Sync glossary). **Pure behaviour-preserving extraction** — the
+engine now holds zero injected-`_supabase` refs on its sync-I/O paths; `pushPending`/
+`pullChanges` are testable against the fake, unblocking the sync data-safety brief's
+A–F vectors. Settled: seam throws `PostgrestException`/`TimeoutException` verbatim,
+leaks `PostgresChangePayload`, neutralizes auth to `TransportAuthEvent`; push
+chunk-loop stays engine-side, pull page-loop moved into the adapter; users-supplement
+now paginates (accepted delta, see ADR). `flutter analyze` clean; 170 sync + 8 new
+characterization tests pass; full suite 613 pass / 1 pre-existing unrelated fail
+(`who_is_working_screen_test`, fails identically at HEAD). Two-axis `/code-review`
+clean. NEXT: the brief's Bucket 1 (A–F) data-safety fixes, built on this seam.
 
 **To resume in a new session:**
 Read this file first, then `CLAUDE.md`, then the master plan section relevant
@@ -1523,6 +1786,16 @@ to the unit being picked up.
 - Cloud migrations deployed through: **0118** (0117 supplier crate tracking +
   0118 `sales.set_custom_price` pushed 2026-06-19; verified: catalogue row
   present, granted to all CEO roles, 0 non-CEO grants).
+- **2026-07-01 — `0129_devices` deployed (device registry for console analytics).**
+  Cloud-only `public.devices` table (make/model/os/app_version/is_physical_device/
+  last-seen per `(business_id, device_id)`), written by a direct authenticated
+  `supabase.upsert` from `DeviceRegistryService` on sign-in / app-open / reconnect
+  (no offline sync-queue wiring; no in-app screen). Deps `device_info_plus` +
+  `package_info_plus` added. Applied via the Management API (see divergence note).
+  ⚠️ **Migration-history divergence:** remote applied 0125/0126/0128 under
+  timestamp versions + a remote-only `enable_pg_cron`; **0127 appears un-deployed**.
+  A blind `supabase db push` would fail on 0126's `CREATE TRIGGER`. Reconcile with
+  `migration repair` + deploy 0127 as follow-up.
 - `flutter test test/sync/` — **115 pass** (Session 141 baseline).
 - Full suite last confirmed: 452 pass / 58 skipped / 1 pre-existing unrelated
   failure (`invite_staff_sheet_test`) (2026-06-19).

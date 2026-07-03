@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:screenshot/screenshot.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
@@ -141,7 +142,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
   /// Period labels this viewer may choose (§19.2/§30.11 — roles below Manager
   /// are capped to Today/This Week/This Month).
   List<String> get _periodOptions =>
-      datePeriodLabelsForRole(managerUp: isManagerOrAbove(ref));
+      datePeriodLabelsForRole(managerUp: Gates.seeExtendedDateRanges.allows(ref));
 
   /// [_selectedPeriod] clamped into [_periodOptions], so the dropdown value and
   /// the filter agree for capped viewers (default is "To Date", out of their set).
@@ -901,7 +902,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     final id = _customerId;
     if (id == null || id == Customer.walkInId) return;
     // Defense-in-depth: re-check at the open boundary (hard rule #6).
-    if (!hasPermission(ref, 'customers.update')) return;
+    if (!Gates.editCustomer.allowsNow(ref)) return;
 
     var tier = PriceTier.retailer;
     try {
@@ -1283,7 +1284,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
             // for the synthetic walk-in (its id is non-null Customer.walkInId).
             if (_customerId != null &&
                 _customerId != Customer.walkInId &&
-                hasPermission(ref, 'customers.delete'))
+                Gates.deleteCustomer.allows(ref))
               IconButton(
                 icon: Icon(
                   FontAwesomeIcons.trashCan.data,
@@ -1401,7 +1402,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                     ),
                     if (_customerId != null &&
                         _customerId != Customer.walkInId &&
-                        hasPermission(ref, 'customers.update')) ...[
+                        Gates.editCustomer.allows(ref)) ...[
                       SizedBox(width: context.getRSize(6)),
                       InkWell(
                         onTap: _openEditSheet,
@@ -1660,9 +1661,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
           // Buttons
           Builder(
             builder: (context) {
-              final canAddFunds = hasPermission(ref, 'customers.wallet.update');
-              final canSetLimit = hasPermission(ref, 'customers.set_debt_limit');
-              final canRefund = hasPermission(ref, 'customers.wallet.withdraw');
+              final canAddFunds = Gates.addCustomerCredit.allows(ref);
+              final canSetLimit = Gates.setDebtLimit.allows(ref);
+              final canRefund = Gates.refundCustomerWallet.allows(ref);
               return Column(
                 children: [
                   Row(
@@ -1876,7 +1877,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
         // (granted to Manager + CEO by default; the CEO can revoke it per staff
         // member). Read the effective permission — no role-tier bypass — so a
         // per-user override actually takes effect.
-        if (hasPermission(ref, 'customers.wallet.totals.view')) ...[
+        if (Gates.seeWalletTotals.allows(ref)) ...[
           _buildCreditSummaryRow(theme),
           SizedBox(height: context.getRSize(4)),
         ],
@@ -2072,7 +2073,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     // sales.make (the till-side transaction permission); hidden otherwise
     // (rule #7). It shows even when there is no crate activity yet, so a return
     // can be recorded as a credit for a brand the customer doesn't owe.
-    final canRecord = hasPermission(ref, 'sales.make');
+    final canRecord = Gates.recordCrateReturn.allows(ref);
     return ListView(
       padding: EdgeInsets.fromLTRB(
         context.getRSize(20),

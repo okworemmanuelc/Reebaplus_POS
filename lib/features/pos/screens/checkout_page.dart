@@ -9,6 +9,7 @@ import 'package:screenshot/screenshot.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/receipt_widget.dart';
@@ -957,6 +958,20 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
   // ── Confirm payment logic ──────────────────────────────────────────────────
   Future<void> _confirmPayment() async {
+    // ── Write-boundary gate (ADR 0002) ───────────────────────────────────────
+    // The confirm is the sale's write boundary, so re-check the sale-making
+    // grant here with the imperative throwing form. POS entry already gates on
+    // `sales.make`, but a grant revoked mid-flow — or a checkout reached via a
+    // stale back-stack — must not be able to post a sale. A denial surfaces the
+    // one standard "you no longer have access" feedback and returns before any
+    // write; an uncaught GateDeniedError would otherwise reach the §33 net.
+    try {
+      Gates.makeSale.require(ref);
+    } on GateDeniedError {
+      showGateDenied(context, Gates.makeSale);
+      return;
+    }
+
     // ── Auto-switch to Credit Payment when credit covers the bill ────────────
     // If the cashier left the amount blank and the customer's credit balance
     // already covers the whole payable, book it as a credit payment instead of

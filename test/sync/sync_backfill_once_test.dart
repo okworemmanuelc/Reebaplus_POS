@@ -16,6 +16,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/services/supabase_cloud_transport.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 
 void main() {
@@ -31,7 +32,7 @@ void main() {
       'https://placeholder.supabase.co',
       'placeholder-anon-key',
     );
-    sync = SupabaseSyncService(db, supabase);
+    sync = SupabaseSyncService(db, SupabaseCloudTransport(supabase));
     SharedPreferences.setMockInitialValues({});
   });
 
@@ -55,7 +56,7 @@ void main() {
     expect(prefs.getString('last_sync_timestamp::biz2'), isNull);
     expect(prefs.getString('consecutive_pull_failures::biz1'), '0');
     expect(prefs.getString('some_other_key'), 'keep-me');
-    expect(prefs.getBool('sync_backfill_done::invite_codes_v2'), isTrue);
+    expect(prefs.getBool('sync_backfill_done::cursor_reset_v3'), isTrue);
   });
 
   test('is a no-op on the second call (runs exactly once per device)',
@@ -80,6 +81,6 @@ void main() {
 
     await sync.ensureBackfillOnce();
 
-    expect(prefs.getBool('sync_backfill_done::invite_codes_v2'), isTrue);
+    expect(prefs.getBool('sync_backfill_done::cursor_reset_v3'), isTrue);
   });
 }

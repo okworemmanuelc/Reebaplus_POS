@@ -5,9 +5,10 @@
 // roles without it.
 //
 // The real AppDrawer pulls in SVG assets, responsive sizing, SharedPreferences,
-// and several sync stream providers, so we exercise the actual gate expression
-// (`hasPermission(ref, 'settings.manage')`) through the same provider chain in
-// a minimal harness rather than pumping the whole drawer.
+// and several sync stream providers, so we exercise the actual gate rule
+// (`settings.manage` resolved through `currentUserPermissionsProvider`, the same
+// set `Gates.manageSettings` reads) in a minimal harness rather than pumping the
+// whole drawer.
 
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
@@ -103,9 +104,10 @@ void main() {
         child: MaterialApp(
           home: Scaffold(
             body: Consumer(
-              builder: (_, ref, __) => hasPermission(ref, 'settings.manage')
-                  ? const Text('CEO Settings')
-                  : const SizedBox.shrink(),
+              builder: (_, ref, __) =>
+                  ref.watch(currentUserPermissionsProvider).contains('settings.manage')
+                      ? const Text('CEO Settings')
+                      : const SizedBox.shrink(),
             ),
           ),
         ),

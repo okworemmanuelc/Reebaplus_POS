@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/services/cloud_transport.dart';
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:reebaplus_pos/core/services/first_load_marker_service.dart';
 import 'package:reebaplus_pos/core/utils/order_number.dart';
@@ -134,15 +135,16 @@ class JwtClaimSnapshot {
 
 class SupabaseSyncService {
   final AppDatabase _db;
-  final SupabaseClient _supabase;
+  final CloudTransport _transport;
   // Resolves this device's order-number tag for the legacy-collision self-heal
   // (§30.8.1). Optional so existing test constructions keep working; when null,
   // the heal is skipped and the row classifies as a normal permanent failure.
   final SecureStorageService? _secureStorage;
-  final List<RealtimeChannel> _tableChannels = [];
-  RealtimeChannel? _businessesChannel;
+  // Realtime channel lifecycle lives in the CloudTransport adapter; the engine
+  // only tracks whether a subscription is currently active (for restart).
+  bool _realtimeActive = false;
   StreamSubscription<int>? _autoPushSub;
-  StreamSubscription<AuthState>? _authStateSub;
+  StreamSubscription<TransportAuthEvent>? _authStateSub;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
   Timer? _autoPushDebounce;
   Timer? _autoPushPeriodic;
@@ -201,11 +203,6 @@ class SupabaseSyncService {
   /// Rows per page when the connection quality is poor or unknown. Aggressive
   /// floor to maximise the chance each page completes within a 15s timeout.
   static const int _pullPageSizePoor = 50;
-
-  /// Absolute floor: a page-level timeout halves the current page size, but
-  /// never below this value. Below 10 rows per page the per-request overhead
-  /// dominates and throughput collapses.
-  static const int _minPullPageSize = 10;
 
   /// Per-chunk network timeout, escalating with how many times this row has
   /// already been retried (`SyncQueueData.attempts`). A fresh row gets a
@@ -278,6 +275,30 @@ class SupabaseSyncService {
   /// given business.
   String? _currentBusinessId;
 
+  /// §3.7 (A2) per-pull collector of FK-orphaned restore rows, keyed by child
+  /// table. Non-null ONLY during a `pullInitialData` restore loop;
+  /// `_insertResilient` records each skipped row here so the post-restore
+  /// targeted-parent fetch can pull just the missing parent by id and retry the
+  /// child — instead of forcing a whole full re-pull. Reset per pull; left null
+  /// on the realtime / single-row restore paths so they never collect.
+  Map<String, List<Map<String, dynamic>>>? _fkOrphanedRows;
+
+  /// §3.7 (A2) allowlist of FK fields whose missing parent can be fetched by id
+  /// and back-filled inline — the common "CEO created a supplier / category /
+  /// manufacturer on another device and a child references it before its slice
+  /// arrived" case. Maps the child row's camelCase FK field to the parent table.
+  static const Map<String, String> _targetedParentFkFields = {
+    'supplierId': 'suppliers',
+    'categoryId': 'categories',
+    'manufacturerId': 'manufacturers',
+  };
+
+  /// §3.7 (A2) hard cap on targeted parent fetches per pull, so a flaky link or
+  /// a genuinely-absent parent can't turn the heal into an unbounded round-trip
+  /// storm. Beyond this, the affected children stay skipped and fall back to the
+  /// conservative full re-pull (A1's FK-orphan branch).
+  static const _maxTargetedParentFetch = 50;
+
   /// Persistent failure-count key. Per-business so multi-tenant device
   /// switching doesn't conflate counts.
   static String _consecutiveFailuresKey(String businessId) =>
@@ -286,7 +307,15 @@ class SupabaseSyncService {
   /// Device-wide one-shot flag for the invite_codes backfill (see
   /// [ensureBackfillOnce]). Bumping the suffix re-arms the backfill for a
   /// future table that lands in the pull path after devices have synced.
-  static const _backfillCursorResetKey = 'sync_backfill_done::invite_codes_v2';
+  ///
+  /// Bumped v2 → v3 to auto-heal devices left in the "empty store after
+  /// re-login" state by the clearAllData cursor-survival trap (a wipe left a
+  /// stale `last_sync_timestamp::<biz>` behind, so the next login ran an
+  /// incremental pull that skipped the catalogue / customers / roles). This
+  /// one-shot clears every surviving cursor once on the new build, so the next
+  /// pull runs full and rebuilds the store. `clearAllData` now clears the cursor
+  /// too, so the trap can't recur — this only recovers already-affected devices.
+  static const _backfillCursorResetKey = 'sync_backfill_done::cursor_reset_v3';
 
   /// Prefix of the per-business incremental-pull cursor keys written by
   /// [pullChanges]. Kept as a named constant so [ensureBackfillOnce] and
@@ -317,8 +346,10 @@ class SupabaseSyncService {
       // throws again; swallow it so it can't escape to the top-level zone as an
       // unhandled error. pullStatus stays `failed` and the next connectivity
       // flip retries (offline-first — a failed background pull is not a crash).
+      // §3.4: push the outbox first so a device that was offline uploads its
+      // work before re-downloading.
       unawaited(
-        pullChanges(_currentBusinessId!).catchError((Object e) {
+        pushThenPull(_currentBusinessId!).catchError((Object e) {
           debugPrint('[SyncService] connectivity-retry pull failed: $e');
         }),
       );
@@ -326,7 +357,7 @@ class SupabaseSyncService {
     _wasOnline = nowOnline;
   }
 
-  SupabaseSyncService(this._db, this._supabase, [this._secureStorage]) {
+  SupabaseSyncService(this._db, this._transport, [this._secureStorage]) {
     isOnline.addListener(_onOnlineChanged);
   }
 
@@ -482,116 +513,23 @@ class SupabaseSyncService {
     'supplier_crate_balances': 'business_id,supplier_id,manufacturer_id',
   };
 
-  /// Per-table whitelist of cloud-pushable columns. Any payload key NOT
-  /// in the table's whitelist is dropped before push. Fail-closed: a new
-  /// local-only column added to Drift won't leak to the cloud unless
-  /// it's explicitly added here.
-  ///
-  /// Only tables that diverge from cloud (auth/secret material, local-
-  /// only columns) are enumerated. Other synced tables fall through with
-  /// no scrubbing — their Drift column set IS the cloud column set, and
-  /// enumerating them adds maintenance burden with no leak surface.
-  /// Convert incrementally as new divergence appears.
-  static const _pushableColumns = <String, Set<String>>{
-    'profiles': {
-      'id',
-      'business_id',
-      'role',
-      'role_tier',
-      'name',
-      'created_at',
-      'last_updated_at',
-      // NOTE: `is_active` was removed — never existed on cloud profiles.
-      // No local Drift `Profiles` table enqueues profiles today, but if
-      // one ever does, dropping role_tier would trigger CHECK
-      // constraint 23514 (role_tier IN (2,3,4,5,6); cloud DEFAULT 1).
-    },
-    'users': {
-      'id',
-      'business_id',
-      'name',
-      'email',
-      'phone',
-      'address',
-      'role',
-      'role_tier',
-      'avatar_color',
-      'biometric_enabled',
-      'store_id',
-      'created_at',
-      'last_updated_at',
-      // NOTE: `auth_user_id` is intentionally ABSENT — it is cloud-
-      // authoritative (set server-side by `complete_onboarding` and
-      // `redeem_invite_code`), and the client never originates it: no
-      // Drift write sets `Users.authUserId`, so the local value is ALWAYS
-      // null. Including it here pushed `auth_user_id: null` on every users
-      // upsert (onboarding mirror, profile edits, biometric toggle…),
-      // clobbering the uid the onboarding RPC had just stamped. That null
-      // then broke the existing-account screen's role lookup (shown as
-      // "Member") and `upsertLocalUserFromProfile`'s canonical-id resolve
-      // (both key off cloud `users.auth_user_id`). Omitting it leaves the
-      // column out of the upsert SET clause so the cloud value survives;
-      // the pull restores the correct uid locally. See BUILD_LOG.
-      //
-      // `status`, `joined_at`, `is_deleted` were removed — they never
-      // existed on cloud users (those live on `business_members`), and
-      // `is_deleted` was dropped by migration 0035 in the staff-lifecycle
-      // hard-delete refactor. `role_tier` MUST be present: cloud DEFAULT is
-      // 1 and the CHECK constraint `role_tier IN (2,3,4,5,6)` rejects 1, so
-      // scrubbing it out causes 23514 on every fresh-row insert. PIN
-      // material (pin, pin_hash, pin_salt, pin_iterations, password_hash)
-      // is intentionally absent — local secret material.
-    },
-    'sessions': {
-      'id',
-      'business_id',
-      'user_id',
-      'expires_at',
-      'revoked_at',
-      'created_at',
-      'last_updated_at',
-      // NOTE: token, ip_address, user_agent intentionally absent —
-      // local secret material, never pushed.
-    },
-    'businesses': {
-      'id',
-      'name',
-      'type',
-      'phone',
-      'email',
-      'logo_url',
-      'owner_id',
-      'onboarding_complete',
-      'tracks_empty_crates',
-      'created_at',
-      'last_updated_at',
-      // NOTE: timezone is local-only (cloud schema doesn't have it).
-      // NOTE: subscription_status / subscription_plan / trial_ends_at /
-      // current_period_end are deliberately OMITTED (§32) — they are cloud-
-      // authoritative / app-read-only. The fail-closed scrub drops them so the
-      // device can never push them (only the admin console writes them). Do NOT
-      // add them here.
-    },
-  };
+  /// Per-table whitelist of cloud-pushable columns, DERIVED from the
+  /// `SyncedTable` registry (issue #15). Any payload key NOT in the table's
+  /// whitelist is dropped before push (fail-closed: a new local-only Drift
+  /// column never leaks unless added to that table's `pushColumns`). Only
+  /// tables that diverge from cloud (auth/secret material, local-only or
+  /// cloud-authoritative columns) declare a whitelist; the rest pass through
+  /// (their Drift column set IS the cloud column set).
+  static final Map<String, Set<String>> _pushableColumns = kSyncPushColumns;
 
-  /// Append-only ledger tables whose void path re-pushes the FULL local row to
-  /// stamp the void columns (payment_transactions §, wallet_transactions §6.x,
-  /// supplier_ledger_entries §21.10). `created_at` is immutable on the cloud
-  /// (`DEFAULT now()`, enforced by the BEFORE UPDATE append-only trigger) and
-  /// it diverges local↔cloud: the cloud stamps it server-side while Drift
-  /// stores the local value truncated to whole seconds. So a re-pushed row can
-  /// never byte-match the stored `created_at`, and the trigger rejects the
-  /// upsert (P0001, "column created_at is immutable") — the row then orphans.
-  /// Dropping `created_at` on EVERY push of these tables (insert AND void) keeps
-  /// the column out of all payloads: the cloud owns it, voids carry only the
-  /// mutable columns, and a mixed insert/void batch stays homogeneous (no
-  /// row gets its `created_at` NULL-ed by PostgREST's key-union). See the scrub
-  /// in [scrubForTesting].
-  static const _ledgerCreatedAtScrubTables = <String>{
-    'payment_transactions',
-    'wallet_transactions',
-    'supplier_ledger_entries',
-  };
+  /// Append-only ledger tables whose void path re-pushes the FULL local row
+  /// to stamp void columns; their `created_at` is cloud-owned + immutable and
+  /// diverges local↔cloud, so a re-push would trip the immutable-column
+  /// trigger (P0001) and orphan the row. Dropping `created_at` on every push
+  /// (insert AND void) keeps payloads legal. DERIVED from the `SyncedTable`
+  /// registry (issue #15) — the tables flagged `scrubCreatedAt: true`.
+  static final Set<String> _ledgerCreatedAtScrubTables =
+      kSyncScrubCreatedAtTables;
 
   /// Translates a locally-built payload into the column names the cloud schema
   /// actually exposes. Local Drift uses `lastUpdatedAt`; cloud uses `updated_at`
@@ -653,8 +591,13 @@ class SupabaseSyncService {
   @visibleForTesting
   Future<void> reconcileHardDeletesForTesting(
     String businessId,
-    Map<String, List<dynamic>> snapshot,
-  ) => _reconcileHardDeletes(businessId, snapshot);
+    Map<String, List<dynamic>> snapshot, {
+    Set<String> incompleteTables = const <String>{},
+  }) => _reconcileHardDeletes(
+    businessId,
+    snapshot,
+    incompleteTables: incompleteTables,
+  );
 
   /// Applies an incoming realtime DELETE locally. The cloud is the source of
   /// truth for the removal, so this deletes the local row WITHOUT enqueueing
@@ -664,39 +607,19 @@ class SupabaseSyncService {
   /// [_restoreTableData]. Typed deletes keep Drift stream queries (e.g. the
   /// role-permission toggle) reactive. Unknown tables are logged, not applied.
   Future<void> _deleteLocalRowById(String table, String id) async {
-    switch (table) {
-      case 'role_permissions':
-        await (_db.delete(
-          _db.rolePermissions,
-        )..where((t) => t.id.equals(id))).go();
-        break;
-      case 'user_permission_overrides':
-        await (_db.delete(
-          _db.userPermissionOverrides,
-        )..where((t) => t.id.equals(id))).go();
-        break;
-      case 'store_role_permissions':
-        await (_db.delete(
-          _db.storeRolePermissions,
-        )..where((t) => t.id.equals(id))).go();
-        break;
-      case 'user_stores':
-        await (_db.delete(_db.userStores)..where((t) => t.id.equals(id))).go();
-        break;
-      case 'saved_carts':
-        await (_db.delete(_db.savedCarts)..where((t) => t.id.equals(id))).go();
-        break;
-      case 'notifications':
-        await (_db.delete(
-          _db.notifications,
-        )..where((t) => t.id.equals(id))).go();
-        break;
-      default:
-        debugPrint(
-          '[SyncService] Realtime DELETE on "$table" id=$id not applied '
-          'locally (no hard-delete handler for this table)',
-        );
+    // The per-table typed delete is the registry entry's hard-delete rule
+    // (issue #15) — the same rule the full-snapshot reconcile uses, so the two
+    // paths can't encode different table sets. A table with no `hardDelete` is
+    // soft-delete/append-only: a realtime DELETE for it is logged, not applied.
+    final rule = syncedTableForName(table)?.hardDelete;
+    if (rule == null) {
+      debugPrint(
+        '[SyncService] Realtime DELETE on "$table" id=$id not applied '
+        'locally (no hard-delete handler for this table)',
+      );
+      return;
     }
+    await rule.deleteById(_db, id);
   }
 
   /// Pushes all pending local changes to Supabase.
@@ -704,7 +627,7 @@ class SupabaseSyncService {
     // Without an authenticated session the server sees auth.uid() as NULL,
     // so RLS denies every insert. Skip rather than burn `attempts` and rack
     // up false negatives — startAutoPush retriggers as soon as sign-in lands.
-    final currentAuthUid = _supabase.auth.currentUser?.id;
+    final currentAuthUid = _transport.currentAuthUserId;
     if (currentAuthUid == null) {
       debugPrint('[SyncService] Skipping push: no auth session.');
       return;
@@ -774,6 +697,13 @@ class SupabaseSyncService {
       businessId: sessionBusinessId,
     );
     if (rawItems.isEmpty) return;
+
+    // §3.5 uploader check-up: remember exactly which queue rows this drain set
+    // out to handle. After the drain, [_auditDrainIntegrity] confirms each one
+    // either stayed in `sync_queue` (uploaded → 'completed', or still pending)
+    // or moved to `sync_queue_orphans`. A row in NEITHER vanished silently — the
+    // "third path" Invariant #12 forbids — and earns an `error_logs` breadcrumb.
+    final intendedIds = rawItems.map((i) => i.id).toList();
 
     // Coalesce duplicates: a burst of writes to the same row (e.g. five
     // inventory adjustments to the same product before the queue drains)
@@ -998,12 +928,13 @@ class SupabaseSyncService {
             final conflictTarget =
                 group.conflictTarget ??
                 _naturalKeyPushConflictTargets[group.table];
-            final upsert = conflictTarget != null
-                ? _supabase
-                      .from(group.table)
-                      .upsert(chunkPayloads, onConflict: conflictTarget)
-                : _supabase.from(group.table).upsert(chunkPayloads);
-            await upsert.timeout(chunkTimeout);
+            await _transport
+                .upsertRows(
+                  group.table,
+                  chunkPayloads,
+                  onConflict: conflictTarget,
+                )
+                .timeout(chunkTimeout);
           } else if (group.action == 'delete') {
             // Hard delete only used for tombstones the cloud needs to forget.
             // Soft delete (is_deleted=true) goes through the upsert path above.
@@ -1012,10 +943,8 @@ class SupabaseSyncService {
                 .whereType<String>()
                 .toList();
             if (deleteIds.isNotEmpty) {
-              await _supabase
-                  .from(group.table)
-                  .delete()
-                  .inFilter('id', deleteIds)
+              await _transport
+                  .deleteRowsById(group.table, deleteIds)
                   .timeout(chunkTimeout);
             }
           }
@@ -1132,12 +1061,72 @@ class SupabaseSyncService {
     // the first-drain grace so subsequent drains fail fast as designed.
     if (!isLinkDegraded) _didWarmUpThisSession = true;
 
+    // §3.5 uploader check-up: every row this drain handled must now be either
+    // still in `sync_queue` (uploaded/completed, or pending for retry) or moved
+    // to `sync_queue_orphans`. Anything missing from both vanished silently.
+    await _auditDrainIntegrity(intendedIds, sessionBusinessId);
+
     // If the raw select hit the page limit, more is waiting — drain in the
     // next tick rather than recursing (avoids stack growth on huge backlogs).
     // Not while link-degraded: continuing to hammer a bad link just stalls;
     // the next connectivity / periodic trigger resumes the drain.
     if (rawItems.length == 200 && !isLinkDegraded) {
       Future.microtask(pushPending);
+    }
+  }
+
+  /// §3.5 uploader check-up — the two-ways-only invariant detector. A row may
+  /// leave `sync_queue` ONLY by (a) confirmed upload (`markDone`, the row stays
+  /// present as `completed`) or (b) moving to `sync_queue_orphans` (visible).
+  /// After a drain this re-checks every id the drain set out to push: each must
+  /// still be present in `sync_queue` (under any status) OR exist as an orphan
+  /// keyed on its original id. An id in NEITHER vanished silently — the third,
+  /// silent path the brief warns about (vector F) — so we record an `error_logs`
+  /// breadcrumb instead of losing the row without trace.
+  ///
+  /// Best-effort and fully defensive: the integrity check must never itself
+  /// break or block a drain.
+  Future<void> _auditDrainIntegrity(
+    List<String> intendedIds,
+    String businessId,
+  ) async {
+    if (intendedIds.isEmpty) return;
+    try {
+      final present = <String>{
+        for (final r
+            in await (_db.select(
+              _db.syncQueue,
+            )..where((t) => t.id.isIn(intendedIds))).get())
+          r.id,
+      };
+      final orphaned = <String>{
+        for (final r
+            in await (_db.select(
+              _db.syncQueueOrphans,
+            )..where((t) => t.originalId.isIn(intendedIds))).get())
+          r.originalId,
+      };
+      final vanished = intendedIds
+          .where((id) => !present.contains(id) && !orphaned.contains(id))
+          .toList();
+      if (vanished.isEmpty) return;
+      debugPrint(
+        '[SyncService] OUTBOX INTEGRITY: ${vanished.length} queue row(s) left '
+        'the outbox without uploading or orphaning — '
+        'ids=${vanished.take(5).join(",")}',
+      );
+      await _db.errorLogDao.logError(
+        errorType: 'sync.outbox_shrinkage',
+        message:
+            'Invariant #12: ${vanished.length} sync_queue row(s) vanished '
+            'during a drain without markDone or an orphan move. '
+            'ids=${vanished.join(",")}',
+        context: 'pushPending._auditDrainIntegrity',
+        businessId: businessId,
+      );
+    } catch (e) {
+      // The integrity check must never itself break a drain. Swallow.
+      debugPrint('[SyncService] drain integrity check failed: $e');
     }
   }
 
@@ -1151,11 +1140,8 @@ class SupabaseSyncService {
   /// backstop, and the next drain simply warms again.
   Future<void> _warmUpConnection(String sessionBusinessId) async {
     try {
-      await _supabase
-          .from('businesses')
-          .select('id')
-          .eq('id', sessionBusinessId)
-          .limit(1)
+      await _transport
+          .warmUp(sessionBusinessId)
           .timeout(_firstDrainTimeoutFloor);
       _didWarmUpThisSession = true;
       debugPrint('[SyncService] Connection warm-up ok (cold start paid).');
@@ -1224,7 +1210,7 @@ class SupabaseSyncService {
 
       final rpcName = item.actionType.substring('domain:'.length);
       try {
-        final response = await _supabase.rpc(rpcName, params: payload);
+        final response = await _transport.callRpc(rpcName, payload);
         await _applyDomainResponse(rpcName, response);
         await _db.syncDao.markDone(item.id);
         final replayed = response is Map && response['replayed'] == true;
@@ -1327,7 +1313,7 @@ class SupabaseSyncService {
       final payload = payloads[i];
       final queueId = queueIds[i];
       try {
-        await _supabase.from('orders').upsert([payload]);
+        await _transport.upsertRows('orders', [payload]);
         await _db.syncDao.markDoneBatch([queueId]);
       } catch (e) {
         if (deviceTag != null &&
@@ -1766,7 +1752,7 @@ class SupabaseSyncService {
   ///   - the device is offline (the row stays pending and will drain later), OR
   ///   - the RPC fails with a transient error (queued for backoff retry).
   Future<void> flushSale(String orderId) async {
-    final currentAuthUid = _supabase.auth.currentUser?.id;
+    final currentAuthUid = _transport.currentAuthUserId;
     if (currentAuthUid == null) return;
     if (!isOnline.value) return;
     final sessionBusinessId = _db.currentBusinessId;
@@ -1825,6 +1811,24 @@ class SupabaseSyncService {
       debugPrint('[SyncService] Sync failed: $e');
       rethrow;
     }
+  }
+
+  /// §3.4 upload-before-download. The reconnect, pull-to-refresh, and login
+  /// triggers route through this instead of calling [pullChanges] directly: it
+  /// drains the outbox first (best-effort, through the `_pushing`-guarded
+  /// [_runPushOnce] so it can't double-run against the auto-push loop) and only
+  /// then pulls. A freshly-recovered device uploads its offline work before
+  /// downloading, avoiding a wasted pull/restore right where the loss window
+  /// used to be widest (vector D).
+  ///
+  /// [pullChanges] stays callable standalone and safe on its own — the
+  /// Invariant #12 guards (3.2/3.3) make this ordering an efficiency choice, not
+  /// a safety requirement. The push is best-effort: [_runPushOnce] already
+  /// swallows push failures, so a rejected row or a mid-flight disconnect never
+  /// blocks the pull.
+  Future<void> pushThenPull(String businessId) async {
+    await _runPushOnce();
+    await pullChanges(businessId);
   }
 
   /// Minimum-login pull: fetches only the tables required for `MainLayout`
@@ -1973,15 +1977,29 @@ class SupabaseSyncService {
       since = DateTime.tryParse(lastSyncStr);
     }
 
+    // §3.6 per-table backfill cursors: tables that deferred on a PRIOR pull and
+    // still owe a full (since=null) catch-up. They are pulled with since=null
+    // this run while every other table stays incremental on the global cursor.
+    final backfillKey = backfillTablesKey(businessId);
+    final backfillStr = prefs.getString(backfillKey);
+    final backfillTables = (backfillStr == null || backfillStr.isEmpty)
+        ? const <String>{}
+        : backfillStr.split(',').toSet();
+
     try {
-      final skipped = await pullInitialData(businessId, since: since);
+      final skipped = await pullInitialData(
+        businessId,
+        since: since,
+        fullPullTables: backfillTables,
+      );
 
       final deferredKey = pendingDeferredTablesKey(businessId);
       if (skipped.isEmpty) {
-        // Clean pull — advance the cursor and clear any prior deferred-tables
+        // Clean pull — advance the cursor and clear any prior deferred/backfill
         // record so the SyncIssues UI stops surfacing stale "catching up" state.
         await prefs.setString(key, DateTime.now().toUtc().toIso8601String());
         await prefs.remove(deferredKey);
+        await prefs.remove(backfillKey);
         // First-load overlay marker: a clean full pull means this business has
         // fully landed on this device. Set the per-business "first full pull
         // completed" marker so the first-load overlay never re-shows for an
@@ -1990,22 +2008,53 @@ class SupabaseSyncService {
         // explicitly cleared there on a wipe/re-onboard. See §4.2.
         await FirstLoadMarkerService.markPullCompleted(businessId);
       } else {
-        // Deferred pull (leaf-deferred and/or FK-orphan skips). CLEAR the
-        // incremental cursor so the NEXT pull is a true full pull
-        // (`since == null`). A held non-null cursor would keep the next pull
-        // incremental and only re-send rows changed after it — so a parent
-        // created before the cursor (e.g. an unchanged categories /
-        // crate_size_groups row) is never re-fetched, and an FK-orphaned
-        // child (a product referencing it) could never catch up no matter how
-        // many times the user taps Retry. A full pull re-fetches every current
-        // cloud row, including those parents, after which the skipped child
-        // inserts cleanly. Persist the deferred set so SyncIssues can show
-        // what's still pending.
-        debugPrint(
-          '[SyncService] Forcing full re-pull (cleared cursor); '
-          '${skipped.length} deferred table(s): ${skipped.join(", ")}',
-        );
-        await prefs.remove(key);
+        // §3.6 per-table backfill cursors (vector A1). A deferred pull no longer
+        // clears the WHOLE cursor — that forced the next pull to re-download and
+        // re-restore EVERY table (orders, order_items, ledgers — thousands of
+        // rows) merely because one small table deferred, which is the slow-sync
+        // root cause. Instead we split by skip kind:
+        //
+        //   • FK-orphan skips (a child whose parent slice was absent — table NOT
+        //     in `_deferrableTables`) STILL need the conservative full re-pull,
+        //     because the missing parent may be an UNCHANGED row sitting below
+        //     the cursor that an incremental pull would never re-fetch. Clear the
+        //     cursor for those so every current cloud row (parents included) is
+        //     re-pulled and the child finally inserts. (A2 heals the common
+        //     inline-created-parent case inline so this path is rarely hit.)
+        //
+        //   • Leaf fetch-failures (tables in `_deferrableTables`: nothing
+        //     FK-references them, and their own parents already arrived) just
+        //     need THEMSELVES re-fetched. Advance the global cursor so the big
+        //     tables stay incremental, and record only the deferred leaf tables
+        //     in the backfill set — the next pull runs since=null for exactly
+        //     those and stays incremental for the rest.
+        final fkOrphanSkips = skipped
+            .where((t) => !_deferrableTables.contains(t))
+            .toSet();
+        if (fkOrphanSkips.isNotEmpty) {
+          debugPrint(
+            '[SyncService] FK-orphan skip(s) ${fkOrphanSkips.join(", ")} — '
+            'clearing cursor to force a full re-pull (parents may be unchanged '
+            'and below the cursor).',
+          );
+          await prefs.remove(key);
+          await prefs.remove(backfillKey);
+        } else {
+          // Only leaf fetch-failures deferred — advance the cursor and backfill
+          // just those tables next time. The backfill set is exactly this pull's
+          // deferred set: a table that successfully backfilled this run is no
+          // longer in `skipped`, so it drops out automatically.
+          await prefs.setString(
+            key,
+            DateTime.now().toUtc().toIso8601String(),
+          );
+          await prefs.setString(backfillKey, skipped.join(','));
+          debugPrint(
+            '[SyncService] Per-table backfill: advanced global cursor; '
+            '${skipped.length} leaf table(s) flagged for full re-pull next '
+            'time: ${skipped.join(", ")}',
+          );
+        }
         await prefs.setString(deferredKey, skipped.join(','));
       }
       // Clean run — reset consecutive-failure count and signal completion.
@@ -2030,107 +2079,10 @@ class SupabaseSyncService {
   }
 
   /// Tables fed into `_restoreTableData` after a pull, in FK-safe order.
-  /// `crates` removed — cloud schema has only `crate_size_groups`.
-  static const _pullOrder = [
-    'businesses',
-    'crate_size_groups',
-    'manufacturers',
-    'stores',
-    'users',
-    // Roles + membership (master plan §2.4). FK-safe order: roles before its
-    // dependents; user_businesses/user_stores after users + stores (above).
-    // `permissions` is global (seeded by migration on both sides, not pulled).
-    'roles',
-    'role_settings',
-    'role_permissions',
-    // v33 (§10.2.1) — per-staff permission overrides. References businesses +
-    // users (pulled above) and the global permissions catalogue, so FK-safe
-    // here. Without this entry the pull/restore/realtime loops never ingest it
-    // and an override set on one device never reaches the others.
-    'user_permission_overrides',
-    // v41 (§10.2.1 Store scope) — per-store role permission overrides.
-    // References businesses + stores + roles (all pulled above) and the global
-    // permissions catalogue, so FK-safe here. Without this entry the
-    // pull/restore/realtime loops never ingest it and a store override set on
-    // one device never reaches the others.
-    'store_role_permissions',
-    'user_businesses',
-    'user_stores',
-    // invite_codes references business/role/store/generated-by-user — all
-    // pulled above — so it's FK-safe here. Pulled so the Staff Management
-    // Invites tab (§9.3, CEO+Manager) shows codes created on any device in
-    // the business, not just the creator's device.
-    'invite_codes',
-    'profiles',
-    'categories',
-    'suppliers',
-    'products',
-    'inventory',
-    'customers',
-    'orders',
-    'order_items',
-    // §13.4 — per-order, per-brand crate deposit lines. References orders +
-    // manufacturers (both pulled above), so FK-safe here.
-    'order_crate_lines',
-    'shipments',
-    'purchase_items',
-    'expense_categories',
-    'expenses',
-    // expense_budgets references businesses + stores (both pulled above), so
-    // it's FK-safe here (§20.1/§20.3 monthly budget). Without this entry the
-    // pull/restore/realtime loops never ingest it and a budget set on one
-    // device never reaches the others.
-    'expense_budgets',
-    'customer_crate_balances',
-    'delivery_receipts',
-    'drivers',
-    'stock_transfers',
-    'stock_adjustments',
-    // v34 (§16.6.1) — references products/stores/users, all pulled above.
-    'stock_adjustment_requests',
-    // v45 (§12.3.1) — cashier Quick Sale approval queue. References stores +
-    // users (both pulled above), so FK-safe here. Without this entry the
-    // pull/restore/realtime loops never ingest it and an approve/reject flip on
-    // the approver's device never reaches the cashier's till.
-    'quick_sale_requests',
-    'activity_logs',
-    // v46 (§33) — crash/error log. References businesses + users (both pulled
-    // above), so FK-safe here. A leaf table (nothing FK-references it), so it
-    // is also in _deferrableTables below.
-    'error_logs',
-    'notifications',
-    'stock_transactions',
-    'customer_wallets',
-    'wallet_transactions',
-    // v42 (§21.10) — append-only supplier ledger. References suppliers + users
-    // (both pulled above), so FK-safe here. Without this entry the
-    // pull/restore/realtime loops never ingest it and a supplier invoice/payment
-    // recorded on one device never reaches the others.
-    'supplier_ledger_entries',
-    // v53 (§3.13) — append-only supplier empty-crate ledger. References
-    // suppliers + manufacturers + stores + users (all pulled above), so FK-safe
-    // here. Without this entry a supplier crate receipt/return on one device
-    // never reaches the others.
-    'supplier_crate_ledger',
-    'saved_carts',
-    'pending_crate_returns',
-    'manufacturer_crate_balances',
-    'store_crate_balances',
-    // v53 (§3.13) — per-(supplier, manufacturer) crate balance cache. References
-    // suppliers + manufacturers (both pulled above), so FK-safe here.
-    'supplier_crate_balances',
-    'crate_ledger',
-    'system_config',
-    'price_lists',
-    'payment_transactions',
-    // stock_counts references businesses + stores + users (all pulled above),
-    // so it's FK-safe here (§17 Daily Stock Count). Added in this pass — it was
-    // missing from the ingest loops since Session 58, so saved counts never
-    // reached other devices.
-    'stock_counts',
-    'sessions',
-    'settings',
-  ];
+  /// DERIVED from the `SyncedTable` registry (issue #15): the registry list
+  /// order IS the pull / restore / hard-delete-reconcile order (parents before
+  /// children). Push does NOT use this — it drains the outbox row-by-row.
+  static final List<String> _pullOrder = kSyncPullOrder;
 
   /// Tables we treat as "deferrable" on first-pull: leaf tables that nothing
   /// FK-references, so a missing slice can't trip restore-time FK violations
@@ -2168,6 +2120,14 @@ class SupabaseSyncService {
   /// full pull completes.
   static String pendingDeferredTablesKey(String businessId) =>
       'pending_deferred_tables::$businessId';
+
+  /// SharedPreferences key (per-business) for the §3.6 per-table backfill set:
+  /// the comma-separated tables that deferred on a prior pull and still owe a
+  /// full (`since=null`) catch-up. The global cursor keeps advancing; only these
+  /// tables are re-pulled in full on the next pull, so a small table deferring
+  /// can no longer force a re-download of the whole dataset (vector A1).
+  static String backfillTablesKey(String businessId) =>
+      'backfill_tables::$businessId';
 
   /// Returns `true` when `pullInitialData` should call the monolithic
   /// `pos_pull_snapshot` RPC; `false` when it should use the paginated
@@ -2215,6 +2175,7 @@ class SupabaseSyncService {
   Future<Set<String>> pullInitialData(
     String businessId, {
     DateTime? since,
+    Set<String> fullPullTables = const <String>{},
   }) async {
     // Force a full sync if the business is not found locally.
     final localBusiness = await (_db.select(
@@ -2242,19 +2203,24 @@ class SupabaseSyncService {
     Map<String, List<dynamic>>? snapshot;
     Set<String> skipped = const <String>{};
 
-    if (SupabaseSyncService.shouldUseSnapshotRpc(
-      isSlow: isSlow,
-      since: since,
-    )) {
+    // §3.6: a non-empty backfill set needs PER-TABLE `since` (null for the
+    // backfill tables, the cursor for the rest). The monolithic snapshot RPC
+    // takes a single `p_since` for every table, so it can't express that —
+    // bypass it and use the paginated path, which fetches each table with its
+    // own `since`.
+    final hasPerTableBackfill = fullPullTables.isNotEmpty;
+
+    if (!hasPerTableBackfill &&
+        SupabaseSyncService.shouldUseSnapshotRpc(
+          isSlow: isSlow,
+          since: since,
+        )) {
       try {
-        final result = await _supabase
-            .rpc(
-              'pos_pull_snapshot',
-              params: {
-                'p_business_id': businessId,
-                'p_since': since?.toIso8601String(),
-              },
-            )
+        final result = await _transport
+            .callRpc('pos_pull_snapshot', {
+              'p_business_id': businessId,
+              'p_since': since?.toIso8601String(),
+            })
             .timeout(const Duration(seconds: 60));
         if (result is Map) {
           snapshot = <String, List<dynamic>>{
@@ -2290,6 +2256,7 @@ class SupabaseSyncService {
         businessId,
         since,
         pageSize: pageSize,
+        fullPullTables: fullPullTables,
       );
       snapshot = fallback.data;
       skipped = fallback.skipped;
@@ -2303,12 +2270,8 @@ class SupabaseSyncService {
     // returns it inline.
     if (snapshot['users'] == null || snapshot['users']!.isEmpty) {
       try {
-        var q = _supabase.from('users').select().eq('business_id', businessId);
-        if (since != null) {
-          q = q.gt('last_updated_at', since.toIso8601String());
-        }
-        final List<dynamic> users = await q.timeout(
-          const Duration(seconds: 15),
+        final List<dynamic> users = await _transport.fetchTable(
+          TableQuery('users', businessId, since, pageSize: pageSize),
         );
         snapshot['users'] = users;
         // Loud canary: matches the businesses canary below. A full pull that
@@ -2321,7 +2284,7 @@ class SupabaseSyncService {
             '[SyncService] WARN supplementary users fetch returned 0 rows '
             'for $businessId — FK-to-users tables will fail restore. RLS '
             'denial or empty cloud users? auth.uid()='
-            '${_supabase.auth.currentUser?.id}',
+            '${_transport.currentAuthUserId}',
           );
         }
       } catch (e) {
@@ -2348,7 +2311,7 @@ class SupabaseSyncService {
         debugPrint(
           '[SyncService] WARN pull returned 0 businesses rows for '
           '$businessId — likely RLS denial (missing profiles row for '
-          'auth.uid()=${_supabase.auth.currentUser?.id}). Subsequent '
+          'auth.uid()=${_transport.currentAuthUserId}). Subsequent '
           'tenant tables will also be empty.',
         );
       }
@@ -2385,31 +2348,58 @@ class SupabaseSyncService {
     // below so the caller holds the sync cursor and the next full pull
     // retries those rows once their parent has arrived.
     final fkSkipped = <String>{};
-    for (final table in restoreList) {
-      final data = snapshot[table]!;
-      debugPrint('[SyncService] Syncing $table: ${data.length} rows');
-      // §4.6 restore batching: wrap the whole table's row loop in ONE
-      // transaction so SQLite commits once per table instead of once per row.
-      // On a full first pull this is the dominant cost — thousands of orders /
-      // order-items / ledger rows each autocommitting is what makes the
-      // first-load overlay overstay even on a fast link. The per-row resilience
-      // is UNCHANGED: `_restoreTableData` still calls `_insertResilient` per
-      // row, which CATCHES FK / unique violations (no rethrow), so a skipped
-      // orphan does not abort the transaction — the good rows still commit and
-      // the cursor-hold/defer semantics are byte-for-byte preserved. Only a
-      // genuinely fatal (rethrown) error rolls the table back, which already
-      // aborts the pull and forces a full re-pull next time, so no row is lost.
-      await _db.transaction(
-        () => _restoreTableData(table, data, fkSkipped: fkSkipped),
-      );
-      restoreDone++;
-      rowsDone += data.length;
-      if (pullStatus.value.stage == PullStage.background) {
-        pullStatus.value = pullStatus.value.copyWith(
-          tablesDone: restoreDone,
-          rowsDone: rowsDone,
+    // §3.7 (A2): arm the per-pull orphaned-row collector so `_insertResilient`
+    // records the rows it skips; the targeted-parent fetch below uses them.
+    // Captured + disarmed in the finally so a fatal restore error can't leave
+    // the field armed for the realtime path to append into.
+    _fkOrphanedRows = <String, List<Map<String, dynamic>>>{};
+    Map<String, List<Map<String, dynamic>>>? orphanedRows;
+    try {
+      for (final table in restoreList) {
+        final data = snapshot[table]!;
+        debugPrint('[SyncService] Syncing $table: ${data.length} rows');
+        // §4.6 restore batching: wrap the whole table's row loop in ONE
+        // transaction so SQLite commits once per table instead of once per row.
+        // On a full first pull this is the dominant cost — thousands of orders /
+        // order-items / ledger rows each autocommitting is what makes the
+        // first-load overlay overstay even on a fast link. The per-row
+        // resilience is UNCHANGED: `_restoreTableData` still calls
+        // `_insertResilient` per row, which CATCHES FK / unique violations (no
+        // rethrow), so a skipped orphan does not abort the transaction — the
+        // good rows still commit and the cursor-hold/defer semantics are
+        // byte-for-byte preserved. Only a genuinely fatal (rethrown) error rolls
+        // the table back, which already aborts the pull and forces a full
+        // re-pull next time, so no row is lost.
+        await _db.transaction(
+          () => _restoreTableData(table, data, fkSkipped: fkSkipped),
         );
+        restoreDone++;
+        rowsDone += data.length;
+        if (pullStatus.value.stage == PullStage.background) {
+          pullStatus.value = pullStatus.value.copyWith(
+            tablesDone: restoreDone,
+            rowsDone: rowsDone,
+          );
+        }
       }
+    } finally {
+      orphanedRows = _fkOrphanedRows;
+      _fkOrphanedRows = null;
+    }
+    // §3.7 targeted parent fetch (A2): before holding the cursor for a full
+    // re-pull, try to heal FK-orphans inline — fetch just the missing
+    // supplier/category/manufacturer parents by id and retry the affected
+    // children. Bounded round-trips; anything it can't heal stays in fkSkipped
+    // and falls back to the conservative full re-pull. Runs only on a network
+    // pull (the realtime path leaves `_fkOrphanedRows` null).
+    if (fkSkipped.isNotEmpty && orphanedRows != null) {
+      final healed = await _targetedParentFetchAndRetry(
+        businessId,
+        fkSkipped,
+        orphanedRows,
+        snapshot,
+      );
+      fkSkipped.removeAll(healed);
     }
     if (fkSkipped.isNotEmpty) {
       debugPrint(
@@ -2434,23 +2424,143 @@ class SupabaseSyncService {
     // after the cursor, where "absent" means "unchanged" — reconciling it would
     // wipe live rows. We therefore gate strictly on `since == null`.
     if (since == null) {
-      await _reconcileHardDeletes(businessId, snapshot);
+      // §3.2 completeness guard: pass the tables whose slice did NOT fully
+      // arrive (fetch-failed/leaf-deferred + FK-orphan skips, merged into
+      // `skipped` above) so reconcile never reads a truncated slice as
+      // "the rest were deleted".
+      await _reconcileHardDeletes(
+        businessId,
+        snapshot,
+        incompleteTables: skipped,
+      );
     }
     return skipped;
   }
 
-  /// Hard-delete tables (the only `enqueueDelete` call sites): a revoke/delete
-  /// is a true row removal the cloud forgets, so a delete that a device missed
-  /// has no upsert to self-heal it. Restricted to this set — soft-delete tables
-  /// carry `is_deleted` and must NEVER be hard-removed by a reconcile.
-  static const _hardDeleteReconcileTables = {
-    'role_permissions',
-    'user_permission_overrides',
-    'store_role_permissions',
-    'user_stores',
-    'saved_carts',
-    'notifications',
-  };
+  /// §3.7 targeted parent fetch (A2). For child rows that FK-orphaned during the
+  /// restore, fetch ONLY the specific missing parent rows by id — the common
+  /// inline-created supplier / category / manufacturer case — restore them, then
+  /// re-run restore for the affected child tables from the [snapshot] already in
+  /// hand. Bounded: total parent fetches are capped at [_maxTargetedParentFetch]
+  /// so a flaky link or a genuinely-absent parent can't trigger a round-trip
+  /// storm; beyond the cap (or on any fetch error) the children are left skipped
+  /// and the caller falls back to A1's conservative full re-pull.
+  ///
+  /// Returns the set of child tables that healed (no longer orphan), so the
+  /// caller can drop them from `fkSkipped`.
+  Future<Set<String>> _targetedParentFetchAndRetry(
+    String businessId,
+    Set<String> fkSkipped,
+    Map<String, List<Map<String, dynamic>>> orphanedRows,
+    Map<String, List<dynamic>> snapshot,
+  ) async {
+    // 1. Collect candidate missing parents (parentTable → ids) from the
+    //    allowlisted FK fields present on the orphaned rows.
+    final wantByParent = <String, Set<String>>{};
+    for (final rows in orphanedRows.values) {
+      for (final r in rows) {
+        for (final entry in _targetedParentFkFields.entries) {
+          final value = r[entry.key];
+          if (value is String && value.isNotEmpty) {
+            wantByParent.putIfAbsent(entry.value, () => <String>{}).add(value);
+          }
+        }
+      }
+    }
+    if (wantByParent.isEmpty) return const <String>{};
+
+    // 2. Keep only ids that aren't already local (only genuinely-missing parents
+    //    need a round-trip) and enforce the bound.
+    var totalToFetch = 0;
+    final missingByParent = <String, List<String>>{};
+    for (final entry in wantByParent.entries) {
+      final present = await _localExistingIds(entry.key, entry.value);
+      final missing = entry.value.difference(present).toList();
+      if (missing.isEmpty) continue;
+      missingByParent[entry.key] = missing;
+      totalToFetch += missing.length;
+    }
+    if (missingByParent.isEmpty) {
+      // Parents are already local — the orphan was a transient ordering blip
+      // within this pull. Retry the children straight away.
+      return _retryOrphanedChildren(orphanedRows.keys, snapshot);
+    }
+    if (totalToFetch > _maxTargetedParentFetch) {
+      debugPrint(
+        '[SyncService] A2 skipped: $totalToFetch missing parents exceeds cap '
+        '($_maxTargetedParentFetch) — falling back to full re-pull.',
+      );
+      return const <String>{};
+    }
+
+    // 3. Fetch each parent table's missing rows by id (one batched round-trip
+    //    per parent table) and restore them. Any fetch failure aborts A2 so the
+    //    caller falls back to the full re-pull.
+    for (final entry in missingByParent.entries) {
+      try {
+        final List<dynamic> rows = await _transport.fetchRowsByIds(
+          entry.key,
+          businessId,
+          entry.value,
+        );
+        if (rows.isNotEmpty) {
+          await _restoreTableData(entry.key, rows);
+        }
+        debugPrint(
+          '[SyncService] A2 fetched ${rows.length}/${entry.value.length} '
+          'missing ${entry.key} parent(s) by id.',
+        );
+      } catch (e) {
+        debugPrint('[SyncService] A2 parent fetch failed for ${entry.key}: $e');
+        return const <String>{};
+      }
+    }
+
+    // 4. Retry the affected children from the snapshot now that parents exist.
+    return _retryOrphanedChildren(orphanedRows.keys, snapshot);
+  }
+
+  /// Re-runs restore for the previously-orphaned child tables from the
+  /// [snapshot] already in hand (snake_case rows). Returns the set that healed
+  /// cleanly (no second-pass FK skip). `_fkOrphanedRows` is null here, so the
+  /// second pass does not re-collect.
+  Future<Set<String>> _retryOrphanedChildren(
+    Iterable<String> childTables,
+    Map<String, List<dynamic>> snapshot,
+  ) async {
+    final healed = <String>{};
+    for (final table in childTables) {
+      final data = snapshot[table];
+      if (data == null || data.isEmpty) continue;
+      final secondPass = <String>{};
+      await _db.transaction(
+        () => _restoreTableData(table, data, fkSkipped: secondPass),
+      );
+      if (!secondPass.contains(table)) {
+        healed.add(table);
+        debugPrint(
+          '[SyncService] A2 healed child table $table after parent fetch.',
+        );
+      }
+    }
+    return healed;
+  }
+
+  /// Returns the subset of [ids] for [table] that already exist locally. Used by
+  /// the A2 targeted parent fetch to avoid round-tripping for parents already on
+  /// the device. [table] comes from the static [_targetedParentFkFields]
+  /// allowlist, so the interpolation carries no injection risk.
+  Future<Set<String>> _localExistingIds(String table, Set<String> ids) async {
+    if (ids.isEmpty) return const <String>{};
+    final placeholders = List.filled(ids.length, '?').join(',');
+    final rows = await _db
+        .customSelect(
+          'SELECT id FROM $table WHERE id IN ($placeholders)',
+          variables: ids.map(Variable.withString).toList(),
+        )
+        .get();
+    return {for (final r in rows) r.read<String>('id')};
+  }
 
   /// Delete local rows of the hard-delete tables whose id is absent from a
   /// COMPLETE [snapshot] for [businessId]. LOCAL-ONLY: applies cloud truth, so
@@ -2471,16 +2581,48 @@ class SupabaseSyncService {
   ///   business's data — see the business-scoping invariant).
   Future<void> _reconcileHardDeletes(
     String businessId,
-    Map<String, List<dynamic>> snapshot,
-  ) async {
-    for (final table in _hardDeleteReconcileTables) {
+    Map<String, List<dynamic>> snapshot, {
+    Set<String> incompleteTables = const <String>{},
+  }) async {
+    // The hard-delete table set + each table's typed delete are the registry's
+    // per-table hard-delete rule (issue #15) — the same rule the realtime
+    // DELETE path uses, so the two can't encode different table sets.
+    for (final table in kHardDeleteReconcileTables) {
       // Absent key ⇒ slice didn't arrive ⇒ do not reconcile (no wipe).
       if (!snapshot.containsKey(table)) continue;
+      // §3.2 completeness guard: a table whose fetch failed or was leaf-deferred
+      // arrives as an empty/short list (`_pullViaPostgRest` stores `[]` for a
+      // failed table). Reading that as "every local row was deleted" is the
+      // truncation-wipe bug — a server-side cap/timeout must never trigger
+      // deletions. Only reconcile a slice known to be complete.
+      if (incompleteTables.contains(table)) {
+        debugPrint(
+          '[SyncService] Reconcile skipped $table — slice incomplete '
+          '(deferred/failed fetch); not reading a short slice as deletions.',
+        );
+        continue;
+      }
       final cloudIds = <String>{
         for (final r in snapshot[table]!)
           if (r is Map && r['id'] != null) r['id'].toString(),
       };
-      final removed = await _deleteLocalRowsNotIn(table, businessId, cloudIds);
+      // §3.2 / Invariant #12: a local row that still has an un-uploaded outbox
+      // entry is offline-created/edited data the cloud has not seen yet — its
+      // absence from the snapshot means "not pushed", NOT "deleted". Protect it
+      // by treating its id as present.
+      final pendingIds = await _db.syncDao.pendingRowIds(
+        table,
+        businessId: businessId,
+      );
+      final protectedIds = pendingIds.isEmpty
+          ? cloudIds
+          : <String>{...cloudIds, ...pendingIds};
+      // The registry rule is guaranteed present: `kHardDeleteReconcileTables` is
+      // exactly the set of registry entries that carry a `hardDelete`.
+      final removed =
+          await syncedTableForName(
+            table,
+          )!.hardDelete!.deleteByIdsNotIn(_db, businessId, protectedIds.toList());
       if (removed > 0) {
         debugPrint(
           '[SyncService] Reconcile $table: removed $removed local row(s) '
@@ -2490,54 +2632,6 @@ class SupabaseSyncService {
     }
   }
 
-  /// Business-scoped hard-delete of [table] rows whose id is not in [cloudIds].
-  /// Returns the number of rows removed. Typed deletes (not raw SQL) so Drift
-  /// stream queries refresh. LOCAL-ONLY (§5 exception #1 — never enqueues).
-  Future<int> _deleteLocalRowsNotIn(
-    String table,
-    String businessId,
-    Set<String> cloudIds,
-  ) async {
-    // Drift exposes `isIn`; negate with `.not()` for "not in" (same idiom as
-    // SavedCartsDao.pruneExcept). An empty `ids` makes `isIn([])` false, so
-    // `.not()` is true for every row → all of this business's rows are removed,
-    // which is exactly right when the cloud's slice for that table is empty.
-    final ids = cloudIds.toList();
-    switch (table) {
-      case 'role_permissions':
-        return (_db.delete(_db.rolePermissions)..where(
-              (t) => t.businessId.equals(businessId) & t.id.isIn(ids).not(),
-            ))
-            .go();
-      case 'user_permission_overrides':
-        return (_db.delete(_db.userPermissionOverrides)..where(
-              (t) => t.businessId.equals(businessId) & t.id.isIn(ids).not(),
-            ))
-            .go();
-      case 'store_role_permissions':
-        return (_db.delete(_db.storeRolePermissions)..where(
-              (t) => t.businessId.equals(businessId) & t.id.isIn(ids).not(),
-            ))
-            .go();
-      case 'user_stores':
-        return (_db.delete(_db.userStores)..where(
-              (t) => t.businessId.equals(businessId) & t.id.isIn(ids).not(),
-            ))
-            .go();
-      case 'saved_carts':
-        return (_db.delete(_db.savedCarts)..where(
-              (t) => t.businessId.equals(businessId) & t.id.isIn(ids).not(),
-            ))
-            .go();
-      case 'notifications':
-        return (_db.delete(_db.notifications)..where(
-              (t) => t.businessId.equals(businessId) & t.id.isIn(ids).not(),
-            ))
-            .go();
-      default:
-        return 0;
-    }
-  }
 
   /// Per-table parallel fetch — the original pull path. Used as a fallback
   /// when the snapshot RPC is unavailable.
@@ -2560,8 +2654,14 @@ class SupabaseSyncService {
     String businessId,
     DateTime? since, {
     required int pageSize,
+    Set<String> fullPullTables = const <String>{},
   }) async {
     final isSlow = pageSize <= _pullPageSizeCellular;
+
+    // §3.6 per-table backfill cursors: a table owed a full catch-up is fetched
+    // with `since=null`; every other table stays incremental on the cursor.
+    DateTime? sinceFor(String table) =>
+        fullPullTables.contains(table) ? null : since;
 
     if (isSlow) {
       // On cellular / poor connections, fetch tables SEQUENTIALLY in _pullOrder
@@ -2578,7 +2678,7 @@ class SupabaseSyncService {
           final data = await _fetchOneTable(
             table,
             businessId,
-            since,
+            sinceFor(table),
             pageSize: pageSize,
           );
           results[table] = data;
@@ -2610,7 +2710,12 @@ class SupabaseSyncService {
         try {
           return _FetchOutcome(
             table,
-            await _fetchOneTable(table, businessId, since, pageSize: pageSize),
+            await _fetchOneTable(
+              table,
+              businessId,
+              sinceFor(table),
+              pageSize: pageSize,
+            ),
             null,
           );
         } catch (e) {
@@ -2647,7 +2752,7 @@ class SupabaseSyncService {
         final data = await _fetchOneTable(
           outcome.table,
           businessId,
-          since,
+          sinceFor(outcome.table),
           pageSize: pageSize,
         );
         results[outcome.table] = data;
@@ -2682,97 +2787,18 @@ class SupabaseSyncService {
     return (data: results, skipped: failed);
   }
 
-  /// Single-table PostgREST fetch with cursor-based pagination.
-  ///
-  /// Fetches rows in pages of [pageSize] rows, ordered by `last_updated_at`
-  /// ascending (and `id` ascending as a secondary tie-break for all tables
-  /// except `system_config`). This ordering guarantees stable pagination —
-  /// no row is skipped or double-counted across page boundaries.
-  ///
-  /// On a page-level [TimeoutException] the page size is halved (floored at
-  /// [_minPullPageSize]) and the same offset is retried once. A second
-  /// timeout at the floor propagates so the caller can classify the failure.
-  ///
-  /// `system_config` is global (no tenant filter, no `id` column, tiny
-  /// dataset) — it is fetched in a single unpaginated call.
+  /// Single-table pull slice, delegated to the [CloudTransport] adapter (which
+  /// owns the paginate/halve-on-timeout loop and the per-table filter quirks).
+  /// Kept as a thin engine-side helper so the existing pull callers stay
+  /// unchanged; see [CloudTransport.fetchTable] / ADR 0001.
   Future<List<dynamic>> _fetchOneTable(
     String table,
     String businessId,
     DateTime? since, {
     int pageSize = _pullPageSizeWifi,
-  }) async {
-    final isGlobal = table == 'system_config';
-    var query = _supabase.from(table).select();
-
-    if (!isGlobal) {
-      // The cloud `businesses` table has no `business_id` column — its `id`
-      // IS the business id. All other tables filter by `business_id`.
-      final filterColumn = table == 'businesses' ? 'id' : 'business_id';
-      query = query.eq(filterColumn, businessId);
-    }
-
-    // The `businesses` row is the FK target for almost everything local.
-    // Always fetch it unconditionally so a stale `since` can't produce a
-    // sync where children try to insert against a missing parent.
-    if (since != null && table != 'businesses') {
-      query = query.gt('last_updated_at', since.toIso8601String());
-    }
-
-    // system_config: global, tiny, no `id` column — single unpaginated call.
-    if (isGlobal) {
-      final List<dynamic> data = await query.timeout(
-        const Duration(seconds: 25),
-      );
-      return data;
-    }
-
-    // Stable ordering required for pagination: rows must not shift across
-    // page boundaries as new rows arrive mid-pull. `last_updated_at` alone
-    // is not unique (multiple rows can share a second boundary); `id` breaks
-    // ties deterministically.
-    //
-    // `.order()` returns PostgrestTransformBuilder, which is a subtype of
-    // PostgrestBuilder but NOT PostgrestFilterBuilder — declare a new variable
-    // so the type annotation stays correct.
-    final orderedQuery = query
-        .order('last_updated_at', ascending: true)
-        .order('id', ascending: true);
-
-    final allRows = <dynamic>[];
-    int offset = 0;
-    int currentPageSize = pageSize;
-
-    while (true) {
-      try {
-        final List<dynamic> page = await orderedQuery
-            .range(offset, offset + currentPageSize - 1)
-            .timeout(const Duration(seconds: 15));
-
-        if (page.isEmpty) break;
-        allRows.addAll(page);
-        offset += page.length;
-        if (page.length < currentPageSize) break; // last page
-      } on TimeoutException catch (e) {
-        final halved = currentPageSize ~/ 2;
-        if (halved < _minPullPageSize) {
-          // Already at floor — surface so the caller can classify failure.
-          debugPrint(
-            '[SyncService] Pull page timeout at min size for $table '
-            '(offset=$offset, size=$currentPageSize): $e',
-          );
-          rethrow;
-        }
-        currentPageSize = halved;
-        debugPrint(
-          '[SyncService] Pull page timeout for $table '
-          '(offset=$offset) — shrinking page to $currentPageSize and retrying.',
-        );
-        // Retry the same offset with the smaller page size (offset unchanged).
-      }
-    }
-
-    return allRows;
-  }
+  }) => _transport.fetchTable(
+    TableQuery(table, businessId, since, pageSize: pageSize),
+  );
 
   /// Cheap single-row refresh of the `businesses` row from the cloud, applied
   /// locally through the normal restore path (LWW guard included). Used by the
@@ -2792,101 +2818,60 @@ class SupabaseSyncService {
     }
   }
 
-  /// Subscribes to real-time changes from Supabase for this business.
+  /// Subscribes to real-time changes for this business through the
+  /// [CloudTransport] adapter, which owns the per-table channel lifecycle, the
+  /// `businesses`-by-`id` filter quirk, and subscribe-status logging (ADR 0001).
+  /// The engine keeps the dispatch: `businesses` events route to
+  /// [_handleBusinessesRealtime]; everything else to [_applyRealtimeEvent].
+  ///
+  /// `businesses` is passed explicitly so the adapter always sets up its
+  /// id-filtered channel regardless of `_pullOrder` membership; `system_config`
+  /// is global and skipped by the adapter.
   void startRealtimeSync(String businessId) {
-    if (_tableChannels.isNotEmpty) return;
+    if (_realtimeActive) return;
 
     debugPrint(
       '[SyncService] Starting real-time sync for business $businessId',
     );
 
-    // One channel per synced tenant table, each with an explicit `table:` +
-    // `business_id` filter. The previous single `channel('public:*')` set a
-    // `business_id` filter but no `table:`; Supabase Realtime cannot honour a
-    // filtered postgres_changes binding without a table, so the server↔client
-    // binding reconciliation mismatched and the whole channel silently failed —
-    // no inbound realtime events for ANY tenant table (changes only ever landed
-    // via the snapshot pull). Per-table channels also isolate a bad table (e.g.
-    // one not in the `supabase_realtime` publication) to its own channel instead
-    // of tearing down every subscription. The permanent subscribe-status
-    // callback surfaces SUBSCRIBED / CHANNEL_ERROR / TIMED_OUT — the old
-    // `..subscribe()` had none, so the failure was invisible.
-    //
-    // `businesses` (no `business_id` column — its `id` IS the business id) is
-    // handled by the separate channel below; `system_config` is global (no
-    // `business_id`), so both are skipped here.
-    for (final table in _pullOrder) {
-      if (table == 'businesses' || table == 'system_config') continue;
-      try {
-        final channel =
-            _supabase
-                .channel('public:$table')
-                .onPostgresChanges(
-                  event: PostgresChangeEvent.all,
-                  schema: 'public',
-                  table: table,
-                  filter: PostgresChangeFilter(
-                    type: PostgresChangeFilterType.eq,
-                    column: 'business_id',
-                    value: businessId,
-                  ),
-                  callback: (payload) => _applyRealtimeEvent(payload),
-                )
-              ..subscribe((status, error) {
-                if (status == RealtimeSubscribeStatus.channelError ||
-                    status == RealtimeSubscribeStatus.timedOut) {
-                  debugPrint(
-                    '[SyncService] Realtime channel "$table" $status'
-                    '${error != null ? ' — $error' : ''}',
-                  );
-                } else if (status == RealtimeSubscribeStatus.subscribed) {
-                  debugPrint('[SyncService] Realtime subscribed: $table');
-                }
-              });
-        _tableChannels.add(channel);
-      } catch (e) {
-        debugPrint('[SyncService] Realtime subscribe failed for "$table": $e');
-      }
-    }
+    _transport.startRealtime(
+      {..._pullOrder, 'businesses'},
+      businessId,
+      onChange: (payload) {
+        if (payload.table == 'businesses') {
+          _handleBusinessesRealtime(businessId, payload);
+        } else {
+          _applyRealtimeEvent(payload);
+        }
+      },
+    );
+    _realtimeActive = true;
+  }
 
-    // Separate channel for `businesses` filtered by `id` (no business_id column).
-    try {
-      _businessesChannel =
-          _supabase
-              .channel('public:businesses')
-              .onPostgresChanges(
-                event: PostgresChangeEvent.all,
-                schema: 'public',
-                table: 'businesses',
-                filter: PostgresChangeFilter(
-                  type: PostgresChangeFilterType.eq,
-                  column: 'id',
-                  value: businessId,
-                ),
-                callback: (payload) async {
-                  debugPrint(
-                    '[SyncService] Realtime Event: ${payload.eventType} on businesses',
-                  );
-                  // The owner permanently deleted this business (§10.3). On a
-                  // staff device the cascade-DELETE event arrives here: confirm
-                  // via the tombstone, then wipe + sign out (instant path; the
-                  // login pull + reconnect backstops cover offline devices).
-                  if (payload.eventType == PostgresChangeEvent.delete) {
-                    final id = payload.oldRecord['id'] as String?;
-                    if (id == businessId) {
-                      await _wipeIfBusinessDeleted(businessId);
-                    }
-                    return;
-                  }
-                  final newRecord = payload.newRecord;
-                  if (newRecord.isNotEmpty) {
-                    await _restoreTableData('businesses', [newRecord]);
-                  }
-                },
-              )
-            ..subscribe();
-    } catch (e) {
-      debugPrint('[SyncService] Businesses realtime subscribe failed: $e');
+  /// Realtime dispatch for the `businesses` row (its own id-filtered channel).
+  /// A DELETE is the owner's §10.3 cascade — confirm via the tombstone, then
+  /// wipe + sign out; any other event restores the row through the normal path.
+  Future<void> _handleBusinessesRealtime(
+    String businessId,
+    PostgresChangePayload payload,
+  ) async {
+    debugPrint(
+      '[SyncService] Realtime Event: ${payload.eventType} on businesses',
+    );
+    // The owner permanently deleted this business (§10.3). On a staff device the
+    // cascade-DELETE event arrives here: confirm via the tombstone, then wipe +
+    // sign out (instant path; the login pull + reconnect backstops cover offline
+    // devices).
+    if (payload.eventType == PostgresChangeEvent.delete) {
+      final id = payload.oldRecord['id'] as String?;
+      if (id == businessId) {
+        await _wipeIfBusinessDeleted(businessId);
+      }
+      return;
+    }
+    final newRecord = payload.newRecord;
+    if (newRecord.isNotEmpty) {
+      await _restoreTableData('businesses', [newRecord]);
     }
   }
 
@@ -2958,12 +2943,7 @@ class SupabaseSyncService {
   /// authenticated caller, so this succeeds even after membership is gone.
   Future<bool> _confirmBusinessDeleted(String businessId) async {
     try {
-      final rows = await _supabase
-          .from('deleted_businesses')
-          .select('business_id')
-          .eq('business_id', businessId)
-          .limit(1);
-      return rows.isNotEmpty;
+      return await _transport.businessDeletedTombstoneExists(businessId);
     } catch (e) {
       debugPrint('[SyncService] deleted_businesses check failed: $e');
       return false;
@@ -3000,16 +2980,11 @@ class SupabaseSyncService {
   }
 
   /// Removes the active realtime channels without touching auto-push. Shared by
-  /// [stopRealtimeSync] (logout) and [restartRealtimeSync] (resubscribe).
+  /// [stopRealtimeSync] (logout) and [restartRealtimeSync] (resubscribe). The
+  /// channel teardown is fire-and-forget (as the old `removeChannel` calls were).
   void _tearDownRealtimeChannels() {
-    for (final channel in _tableChannels) {
-      _supabase.removeChannel(channel);
-    }
-    _tableChannels.clear();
-    if (_businessesChannel != null) {
-      _supabase.removeChannel(_businessesChannel!);
-      _businessesChannel = null;
-    }
+    unawaited(_transport.stopRealtime());
+    _realtimeActive = false;
   }
 
   /// Re-establishes the realtime subscriptions after they may have been
@@ -3025,7 +3000,7 @@ class SupabaseSyncService {
   /// few channels); a no-op when there were no channels to begin with (not yet
   /// signed in) — `startRealtimeSync` itself requires a logged-in business.
   void restartRealtimeSync(String businessId) {
-    if (_tableChannels.isEmpty && _businessesChannel == null) return;
+    if (!_realtimeActive) return;
     debugPrint('[SyncService] Re-subscribing realtime for $businessId.');
     _tearDownRealtimeChannels();
     startRealtimeSync(businessId);
@@ -3084,7 +3059,7 @@ class SupabaseSyncService {
         await prefs.setBool(purgeFlag, true);
       }
 
-      if (_supabase.auth.currentUser != null) {
+      if (_transport.currentAuthUserId != null) {
         await _db.syncDao.clearFailureBackoff();
       }
 
@@ -3103,11 +3078,11 @@ class SupabaseSyncService {
         }
       });
 
-      _authStateSub ??= _supabase.auth.onAuthStateChange.listen(
-        (state) async {
-          if (state.event == AuthChangeEvent.signedIn ||
-              state.event == AuthChangeEvent.tokenRefreshed ||
-              state.event == AuthChangeEvent.initialSession) {
+      _authStateSub ??= _transport.authEvents.listen(
+        (event) async {
+          if (event == TransportAuthEvent.signedIn ||
+              event == TransportAuthEvent.tokenRefreshed ||
+              event == TransportAuthEvent.initialSession) {
             _loggedJwtClaimsThisSession = false;
             // Re-warm on every fresh session: a logout→re-login (or token
             // refresh after a long idle) starts from a cold connection again.
@@ -3121,7 +3096,7 @@ class SupabaseSyncService {
               await _db.syncDao.clearFailureBackoff();
             }
             _scheduleDebouncedPush();
-          } else if (state.event == AuthChangeEvent.signedOut) {
+          } else if (event == TransportAuthEvent.signedOut) {
             _loggedJwtClaimsThisSession = false;
             _didWarmUpThisSession = false;
           }
@@ -3516,18 +3491,6 @@ class SupabaseSyncService {
     _connectivitySub = null;
   }
 
-  /// Cloud `jsonb` columns arrive as Map/List, but Drift stores them as TEXT.
-  /// Stringify so DataClass.fromJson<String?> can cast without throwing.
-  static dynamic _stringifyJsonb(dynamic v) {
-    // Cloud `jsonb` columns can hold any JSON shape, including primitives.
-    // Drift mirrors these as `text` (String?), so anything non-string must
-    // be JSON-encoded. Booleans in particular bite system_config flag rows
-    // (e.g. `feature.domain_rpcs_v2.* = true` as a jsonb boolean lands as
-    // Dart `bool` and crashes the `String?` cast in fromJson).
-    if (v == null || v is String) return v;
-    return jsonEncode(v);
-  }
-
   /// Converts snake_case Supabase JSON keys to camelCase for Drift's fromJson.
   Map<String, dynamic> _snakeToCamel(Map<String, dynamic> m) {
     return m.map((key, value) {
@@ -3599,145 +3562,6 @@ class SupabaseSyncService {
     }).toList();
   }
 
-  /// True if [e] is a SQLite FOREIGN KEY constraint violation (extended
-  /// result code 787 / SQLITE_CONSTRAINT_FOREIGNKEY). Matched by message so
-  /// we don't depend on the concrete `SqliteException` type, which drift
-  /// surfaces differently across executors.
-  static bool _isForeignKeyViolation(Object e) {
-    final s = e.toString().toLowerCase();
-    return s.contains('foreign key constraint failed') ||
-        s.contains('sqlite_constraint_foreignkey') ||
-        s.contains('(787)');
-  }
-
-  /// True if [e] is a SQLite UNIQUE constraint violation (extended result code
-  /// 2067 / SQLITE_CONSTRAINT_UNIQUE). Matched by message so we don't depend on
-  /// the concrete `SqliteException` type.
-  ///
-  /// This is the cross-device natural-key collision: two devices that were both
-  /// offline minted the SAME business-scoped sequence value (e.g. `ORD-000123`
-  /// order_number — `generateOrderNumber` is a local count), so the rows share
-  /// a UNIQUE key but carry different `id`s. `insertOnConflictUpdate` keys on
-  /// `id`, misses the existing local row, and trips the secondary UNIQUE. It is
-  /// permanent data (a re-pull can't reconcile it), so the restore skips the
-  /// incoming cloud row rather than crashing the pull / realtime apply.
-  static bool _isUniqueConstraintViolation(Object e) {
-    final s = e.toString().toLowerCase();
-    return s.contains('unique constraint failed') ||
-        s.contains('sqlite_constraint_unique') ||
-        s.contains('(2067)');
-  }
-
-  /// Inserts one restore row, isolating FOREIGN KEY violations so a single
-  /// orphaned child can't abort the whole restore transaction and crash the
-  /// pull. An FK violation here means the referenced parent slice is
-  /// genuinely absent from THIS snapshot — a supplier/manufacturer/category
-  /// the CEO created inline that this device's pull didn't carry, or a parent
-  /// still pending push. A second in-pull pass wouldn't help: parents restore
-  /// before their children in [_pullOrder], so the parent isn't arriving in
-  /// this pull at all. We skip-and-log the row and record its table in
-  /// [fkSkipped]; the caller (pullChanges) holds the sync cursor so the next
-  /// full pull retries it once the parent has arrived, and SyncIssues surfaces
-  /// it in the "Catching up" card. Non-FK errors rethrow unchanged.
-  /// See CLAUDE.md §5 — restore is sync-exception #1, so no enqueue concerns.
-  Future<void> _insertResilient(
-    String table,
-    Map<String, dynamic> r,
-    Set<String>? fkSkipped,
-    Future<void> Function() doInsert, {
-    Future<bool> Function()? healUniqueCollision,
-  }) async {
-    try {
-      await doInsert();
-    } catch (e) {
-      // Cross-device natural-key collision (e.g. two offline tills both minted
-      // ORD-000123). UNIQUE-skip BEFORE the FK check: this is permanent data, a
-      // re-pull can't reconcile it, so — unlike the FK case — we DON'T defer
-      // (no `fkSkipped` add, no forced full re-pull). We skip-and-log this one
-      // cloud row so the rest of the pull / realtime echo lands and a sale in
-      // progress isn't crashed. The row stays visible on its originating device
-      // and in the cloud. Root cause is client-side count-based numbering
-      // (`generateOrderNumber`) — fixing that is a master-plan change.
-      if (_isUniqueConstraintViolation(e)) {
-        // §30.8.1 legacy-collision self-heal: a caller (orders) can free the
-        // colliding natural key by renumbering the LOCAL blocker, then we retry
-        // so the cloud's authoritative row lands in THIS pull instead of
-        // orphaning its children forever.
-        if (healUniqueCollision != null) {
-          try {
-            if (await healUniqueCollision()) {
-              await doInsert();
-              return;
-            }
-          } catch (e2) {
-            debugPrint(
-              '[SyncService] unique-collision heal failed for $table '
-              '${r['id']}: $e2',
-            );
-          }
-        }
-        debugPrint(
-          '[SyncService] Skipped $table row ${r['id']} during restore — '
-          'natural-key UNIQUE collision (another device minted the same '
-          'business-scoped number). Cloud row not mirrored here. $e',
-        );
-        return;
-      }
-      if (!_isForeignKeyViolation(e)) rethrow;
-      fkSkipped?.add(table);
-      // Surface the row's FK references (every camelCase key ending in `Id`,
-      // minus the row's own `id`) so triage can see which parent is missing
-      // without re-deriving it from logs. SQLite's FK error doesn't name the
-      // offending column, so this is the closest we get to "which parent".
-      final fkRefs = r.entries
-          .where((e) => e.key != 'id' && e.key.endsWith('Id'))
-          .map((e) => '${e.key}=${e.value}')
-          .join(', ');
-      debugPrint(
-        '[SyncService] Skipped orphaned $table row ${r['id']} during restore '
-        '— a referenced parent is absent locally [$fkRefs]. Cleared cursor; '
-        'the next pull is a full re-pull to fetch the missing parent. $e',
-      );
-    }
-  }
-
-  /// Restore rows into an append-only ledger table (`_ledgerTables` in
-  /// app_database.dart). Pull is catch-up only: a full upsert would trip the
-  /// BEFORE UPDATE trigger because domain RPCs stamp `created_at` server-side,
-  /// so the cloud row always disagrees with the locally-written row on an
-  /// immutable column. Void columns (`voidedAt/voidedBy/voidReason` plus
-  /// `lastUpdatedAt`) are explicitly mutable, so they ride in a separate
-  /// targeted update gated by `t.voidedAt.isNull()` — a local-then-newer void
-  /// isn't clobbered by a stale cloud snapshot.
-  Future<void>
-  _restoreLedgerTable<TableT extends Table, RowT extends Insertable<RowT>>(
-    List<dynamic> rows, {
-    required String tableName,
-    required TableInfo<TableT, RowT> table,
-    required RowT Function(Map<String, dynamic>) fromJson,
-    required DateTime? Function(RowT data) voidedAtOf,
-    required Expression<bool> Function(TableT t, RowT data) whereNotYetVoided,
-    required UpdateCompanion<RowT> Function(RowT data) buildVoidCompanion,
-    Set<String>? fkSkipped,
-  }) async {
-    for (var r in rows) {
-      final map = r as Map<String, dynamic>;
-      final data = fromJson(map);
-      // INSERT OR IGNORE absorbs PK/UNIQUE conflicts but NOT foreign-key
-      // violations (SQLite's conflict algorithm never applies to FKs), so a
-      // ledger row referencing an absent parent (e.g. a stock_transaction for
-      // a product whose supplier slice didn't arrive) would still abort the
-      // pull. Wrap it in the same skip-and-log resilience as the upsert path.
-      await _insertResilient(tableName, map, fkSkipped, () async {
-        await _db.into(table).insert(data, mode: InsertMode.insertOrIgnore);
-        if (voidedAtOf(data) != null) {
-          await (_db.update(table)..where((t) => whereNotYetVoided(t, data)))
-              .write(buildVoidCompanion(data));
-        }
-      });
-    }
-  }
-
   Future<void> _restoreTableData(
     String table,
     List<dynamic> data, {
@@ -3766,6 +3590,35 @@ class SupabaseSyncService {
       debugPrint(
         '[SyncService] LWW filtered $filtered/${allRows.length} rows for $table',
       );
+    }
+
+    // §3.3 / Invariant #12 — clobber prevention. A local row that still has an
+    // un-uploaded outbox entry (`sync_queue` or `sync_queue_orphans`) is
+    // sacred: an incoming cloud row must NEVER overwrite it, regardless of
+    // `last_updated_at`. The timestamp-LWW above is therefore demoted to a
+    // tiebreaker for NON-pending rows only (same-second cross-device ties stay
+    // cloud-wins for those). This makes correctness independent of whether the
+    // DAO write bumped `last_updated_at` — the bug that silently clobbered
+    // `businesses` edits (vector C). Scoped to the bound business when known;
+    // unscoped during the pre-setCurrentUser bootstrap window (row ids are
+    // globally-unique UUIDv7, so the unscoped match is still exact).
+    final pendingIds = await _db.syncDao.pendingRowIds(
+      table,
+      businessId: _db.currentBusinessId,
+    );
+    if (pendingIds.isNotEmpty) {
+      final before = rows.length;
+      rows.removeWhere((r) {
+        final id = r['id'];
+        return id is String && pendingIds.contains(id);
+      });
+      final protected = before - rows.length;
+      if (protected > 0) {
+        debugPrint(
+          '[SyncService] Invariant #12 protected $protected un-pushed '
+          '$table row(s) from cloud overwrite',
+        );
+      }
     }
 
     // Defense-in-depth business isolation: when a session is bound, never write
@@ -3797,928 +3650,28 @@ class SupabaseSyncService {
     if (rows.isEmpty) return;
     debugPrint('[SyncService] restored $table: ${rows.length} rows');
 
-    await _db.transaction(() async {
-      switch (table) {
-        case 'businesses':
-          for (var r in rows) {
-            // Cloud `businesses` lacks `timezone` (local-only column with
-            // default 'UTC'). Without this, fromJson casts null → String and
-            // throws on every restore.
-            r.putIfAbsent('timezone', () => 'UTC');
-            r.putIfAbsent('onboardingComplete', () => false);
-            // §32: subscriptionStatus is NOT NULL in Drift; a row that predates
-            // the cloud column (brief migration window) would cast null→String
-            // and throw. The nullable subscription_plan / *_ends_at tolerate
-            // absent → null, so they need no default.
-            r.putIfAbsent('subscriptionStatus', () => 'trial');
-            await _db
-                .into(_db.businesses)
-                .insertOnConflictUpdate(BusinessData.fromJson(r));
-          }
-          break;
-        case 'stores':
-          for (var r in rows) {
-            await _insertResilient('stores', r, fkSkipped, () async {
-              await _db
-                  .into(_db.stores)
-                  .insertOnConflictUpdate(StoreData.fromJson(r));
-            });
-          }
-          break;
-        case 'users':
-          // Manual upsert: cloud doesn't carry device-local auth material
-          // (pin, pinHash, pinSalt, pinIterations, passwordHash) or per-device
-          // UI/biometric state (biometricEnabled, avatarColor). On existing
-          // rows touch only cloud-owned fields so a fresh pull never clobbers
-          // a PIN already set on this device; on new rows insert with the
-          // setup-required sentinel so the row exists for FK targets like
-          // orders.staff_id, and the OTP flow can later route the user into
-          // PIN setup if they sign in here.
-          //
-          // Cloud-owned fields mirrored here (keep in sync with app_database
-          // `Users` table and `0001_initial.sql public.users`):
-          //   businessId, authUserId, name, email, storeId,
-          //   createdAt, lastUpdatedAt.
-          // Device-local fields intentionally omitted (never overwrite from
-          // cloud):
-          //   pin, pinHash, pinSalt, pinIterations, passwordHash,
-          //   biometricEnabled, avatarColor.
-          for (var r in rows) {
-            final id = r['id'] as String;
-            final existing = await (_db.select(
-              _db.users,
-            )..where((u) => u.id.equals(id))).getSingleOrNull();
-
-            DateTime parseTs(Object? v, {DateTime? fallback}) {
-              if (v is String) return DateTime.parse(v);
-              if (v is DateTime) return v;
-              return fallback ?? DateTime.now().toUtc();
-            }
-
-            final lastUpdatedAt = parseTs(r['lastUpdatedAt']);
-            final createdAt = parseTs(r['createdAt'], fallback: lastUpdatedAt);
-
-            if (existing != null) {
-              await (_db.update(
-                _db.users,
-              )..where((u) => u.id.equals(id))).write(
-                UsersCompanion(
-                  businessId: Value(r['businessId'] as String),
-                  authUserId: Value(r['authUserId'] as String?),
-                  name: Value(r['name'] as String? ?? ''),
-                  email: Value(r['email'] as String?),
-                  storeId: Value(r['storeId'] as String?),
-                  lastUpdatedAt: Value(lastUpdatedAt),
-                ),
-              );
-            } else {
-              await _db
-                  .into(_db.users)
-                  .insert(
-                    UsersCompanion.insert(
-                      id: Value(id),
-                      businessId: r['businessId'] as String,
-                      authUserId: Value(r['authUserId'] as String?),
-                      name: r['name'] as String? ?? '',
-                      email: Value(r['email'] as String?),
-                      pin: kSetupRequiredPin,
-                      storeId: Value(r['storeId'] as String?),
-                      createdAt: Value(createdAt),
-                      lastUpdatedAt: Value(lastUpdatedAt),
-                    ),
-                  );
-            }
-          }
-          break;
-        // Roles + membership (master plan §2.4). Plain synced tenant tables —
-        // no device-local columns to protect, so the simple fromJson upsert
-        // (like stores) is correct. Restore order is FK-safe via _pullOrder:
-        // roles → role_settings/role_permissions → user_businesses/user_stores,
-        // all after businesses/users/stores.
-        case 'roles':
-          for (var r in rows) {
-            await _insertResilient('roles', r, fkSkipped, () async {
-              await _db
-                  .into(_db.roles)
-                  .insertOnConflictUpdate(RoleData.fromJson(r));
-            });
-          }
-          break;
-        case 'role_permissions':
-          for (var r in rows) {
-            final row = RolePermissionData.fromJson(r);
-            // `id` is a random per-grant UUID, but the LOGICAL identity is
-            // (role_id, permission_key) — enforced by UNIQUE(role_id,
-            // permission_key). A grant→revoke→re-grant cycle or two devices
-            // granting the same permission mint different ids for the same
-            // pair, so upserting on `id` alone trips that unique constraint
-            // (SqliteException 2067). Drop any local row with the same logical
-            // key but a different id first, so the incoming cloud row applies
-            // cleanly and the device converges on the cloud's id. Restore path
-            // — local only, never enqueue (§5 exception #1; re-pushing loops).
-            // FK-resilient: role_id → roles. A partial pull dropping the roles
-            // slice would FK-abort here; skip-and-defer instead. (The delete is
-            // FK-safe; on retry the whole body re-runs once roles arrives.)
-            await _insertResilient('role_permissions', r, fkSkipped, () async {
-              await (_db.delete(_db.rolePermissions)..where(
-                    (t) =>
-                        t.roleId.equals(row.roleId) &
-                        t.permissionKey.equals(row.permissionKey) &
-                        t.id.equals(row.id).not(),
-                  ))
-                  .go();
-              await _db.into(_db.rolePermissions).insertOnConflictUpdate(row);
-            });
-          }
-          break;
-        case 'user_permission_overrides':
-          for (var r in rows) {
-            final row = UserPermissionOverrideData.fromJson(r);
-            // Same shape as role_permissions: random `id`, logical identity
-            // (business_id, user_id, permission_key) enforced by UNIQUE. Two
-            // devices overriding the same (user, permission) mint different ids
-            // for the same triple, so upserting on `id` alone trips the unique
-            // constraint (2067). Drop any local row with the same logical key
-            // but a different id first, so the incoming cloud row applies
-            // cleanly and the device converges on the cloud's id. Restore path
-            // — local only, never enqueue (§5 exception #1; re-pushing loops).
-            // FK-resilient: business_id → businesses, user_id → users. A partial
-            // pull dropping either parent would FK-abort here; skip-and-defer.
-            await _insertResilient(
-              'user_permission_overrides',
-              r,
-              fkSkipped,
-              () async {
-                await (_db.delete(_db.userPermissionOverrides)..where(
-                      (t) =>
-                          t.businessId.equals(row.businessId) &
-                          t.userId.equals(row.userId) &
-                          t.permissionKey.equals(row.permissionKey) &
-                          t.id.equals(row.id).not(),
-                    ))
-                    .go();
-                await _db
-                    .into(_db.userPermissionOverrides)
-                    .insertOnConflictUpdate(row);
-              },
-            );
-          }
-          break;
-        case 'store_role_permissions':
-          for (var r in rows) {
-            final row = StoreRolePermissionData.fromJson(r);
-            // Same shape as role_permissions/user_permission_overrides: random
-            // `id`, logical identity (store_id, role_id, permission_key)
-            // enforced by UNIQUE. Two devices overriding the same (store, role,
-            // permission) mint different ids for the same triple, so upserting
-            // on `id` alone trips the unique constraint (2067). Drop any local
-            // row with the same logical key but a different id first, so the
-            // incoming cloud row applies cleanly and the device converges on the
-            // cloud's id. Restore path — local only, never enqueue (§5 exception
-            // #1; re-pushing loops).
-            // FK-resilient: store_id → stores, role_id → roles. A partial pull
-            // dropping either parent would FK-abort here; skip-and-defer.
-            await _insertResilient(
-              'store_role_permissions',
-              r,
-              fkSkipped,
-              () async {
-                await (_db.delete(_db.storeRolePermissions)..where(
-                      (t) =>
-                          t.storeId.equals(row.storeId) &
-                          t.roleId.equals(row.roleId) &
-                          t.permissionKey.equals(row.permissionKey) &
-                          t.id.equals(row.id).not(),
-                    ))
-                    .go();
-                await _db
-                    .into(_db.storeRolePermissions)
-                    .insertOnConflictUpdate(row);
-              },
-            );
-          }
-          break;
-        case 'role_settings':
-          // role_settings.role_id → roles. A partial pull that dropped the
-          // roles slice would FK-abort here; skip-and-defer instead.
-          for (var r in rows) {
-            await _insertResilient('role_settings', r, fkSkipped, () async {
-              await _db
-                  .into(_db.roleSettings)
-                  .insertOnConflictUpdate(RoleSettingData.fromJson(r));
-            });
-          }
-          break;
-        case 'user_businesses':
-          // user_businesses.role_id → roles (must already be present).
-          // user_businesses.user_id  → users (must already be present).
-          // If either parent is absent on this device, catch the FK-787 via
-          // _insertResilient so the whole pull doesn't crash; the cursor is
-          // held and the next full pull retries once the parent arrives.
-          for (var r in rows) {
-            await _insertResilient('user_businesses', r, fkSkipped, () async {
-              await _db
-                  .into(_db.userBusinesses)
-                  .insertOnConflictUpdate(UserBusinessData.fromJson(r));
-            });
-          }
-          break;
-        case 'user_stores':
-          // Same partial-pull guard as user_businesses: user_stores.user_id →
-          // users and .store_id → stores. If either parent slice dropped
-          // mid-stream, skip-and-defer instead of aborting the whole pull.
-          for (var r in rows) {
-            await _insertResilient('user_stores', r, fkSkipped, () async {
-              await _db
-                  .into(_db.userStores)
-                  .insertOnConflictUpdate(UserStoreData.fromJson(r));
-            });
-          }
-          break;
-        // invite_codes (master plan §6/§9.3). Plain synced tenant table — no
-        // device-local columns, so the simple fromJson upsert is correct.
-        // Restore order is FK-safe via _pullOrder (after businesses/roles/
-        // stores/users). Realtime delivery routes here too via the public:*
-        // wildcard, so codes also appear live on other devices.
-        case 'invite_codes':
-          // invite_codes references business/role/store/generated-by-user. A
-          // partial pull dropping any of those parents would FK-abort the whole
-          // restore; skip-and-defer the orphaned code instead.
-          for (var r in rows) {
-            await _insertResilient('invite_codes', r, fkSkipped, () async {
-              await _db
-                  .into(_db.inviteCodes)
-                  .insertOnConflictUpdate(InviteCodeData.fromJson(r));
-            });
-          }
-          break;
-        case 'products':
-          for (var r in rows) {
-            await _insertResilient(
-              'products',
-              r,
-              fkSkipped,
-              () => _db
-                  .into(_db.products)
-                  .insertOnConflictUpdate(ProductData.fromJson(r)),
-            );
-          }
-          break;
-        case 'crate_size_groups':
-          for (var r in rows) {
-            await _insertResilient('crate_size_groups', r, fkSkipped, () async {
-              await _db
-                  .into(_db.crateSizeGroups)
-                  .insertOnConflictUpdate(CrateSizeGroupData.fromJson(r));
-            });
-          }
-          break;
-        case 'manufacturers':
-          for (var r in rows) {
-            await _insertResilient('manufacturers', r, fkSkipped, () async {
-              await _db
-                  .into(_db.manufacturers)
-                  .insertOnConflictUpdate(ManufacturerData.fromJson(r));
-            });
-          }
-          break;
-        case 'categories':
-          for (var r in rows) {
-            await _insertResilient('categories', r, fkSkipped, () async {
-              await _db
-                  .into(_db.categories)
-                  .insertOnConflictUpdate(CategoryData.fromJson(r));
-            });
-          }
-          break;
-        case 'inventory':
-          for (var r in rows) {
-            // Inventory cache keyed by its NATURAL key (business_id, product_id,
-            // store_id), not its surrogate `id` — same dual-authority hazard as
-            // store_crate_balances. Two id-minting authorities exist for the
-            // same (business, product, store): the client (UuidV7, addProduct's
-            // initial-stock INSERT) and the cloud RPCs pos_create_product_v2 /
-            // pos_record_sale / pos_inventory_delta (gen_random_uuid). The two
-            // ids never match, and `_applyDomainResponse` only ever UPDATEs the
-            // local row by (product_id, store_id) — it never aligns the id. So a
-            // PK-keyed insertOnConflictUpdate misses the existing local row and
-            // trips UNIQUE(business_id, product_id, store_id) (2067). The result
-            // would be silent: a device that created a product never receives
-            // cloud stock updates for it (every echo collides and is skipped),
-            // so its stock drifts from reality. Upsert on the natural key and
-            // align the local `id` to the cloud's so pushes/pulls converge on
-            // one canonical row — same approach as store_crate_balances /
-            // settings. FK-resilient: references products + stores.
-            await _insertResilient('inventory', r, fkSkipped, () {
-              final parsed = InventoryData.fromJson(r);
-              return _db
-                  .into(_db.inventory)
-                  .insert(
-                    parsed,
-                    onConflict: DoUpdate(
-                      (_) => InventoryCompanion(
-                        id: Value(parsed.id),
-                        quantity: Value(parsed.quantity),
-                        lastUpdatedAt: Value(parsed.lastUpdatedAt),
-                      ),
-                      target: [
-                        _db.inventory.businessId,
-                        _db.inventory.productId,
-                        _db.inventory.storeId,
-                      ],
-                    ),
-                  );
-            });
-          }
-          break;
-        case 'customers':
-          for (var r in rows) {
-            await _db
-                .into(_db.customers)
-                .insertOnConflictUpdate(CustomerData.fromJson(r));
-          }
-          break;
-        case 'suppliers':
-          for (var r in rows) {
-            await _insertResilient('suppliers', r, fkSkipped, () async {
-              await _db
-                  .into(_db.suppliers)
-                  .insertOnConflictUpdate(SupplierData.fromJson(r));
-            });
-          }
-          break;
-        case 'orders':
-          for (var r in rows) {
-            // FK-resilient: an order references users(staff_id) /
-            // stores(store_id) / customers(customer_id). If a parent slice
-            // hasn't arrived yet, skip-and-defer instead of aborting the whole
-            // pull (the deferred set forces a full re-pull that catches it up).
-            final data = OrderData.fromJson(r);
-            await _insertResilient(
-              'orders',
-              r,
-              fkSkipped,
-              () => _db.into(_db.orders).insertOnConflictUpdate(data),
-              // §30.8.1: a legacy local order may hold this cloud order's number
-              // under a different id, blocking it (and orphaning its children)
-              // every pull. Renumber the local blocker so the cloud row lands.
-              healUniqueCollision: () => _healLocalOrderNumberBlocker(data),
-            );
-          }
-          break;
-        case 'order_items':
-          for (var r in rows) {
-            r['priceSnapshot'] = _stringifyJsonb(r['priceSnapshot']);
-            await _insertResilient(
-              'order_items',
-              r,
-              fkSkipped,
-              () => _db
-                  .into(_db.orderItems)
-                  .insertOnConflictUpdate(OrderItemData.fromJson(r)),
-            );
-          }
-          break;
-        case 'order_crate_lines':
-          for (var r in rows) {
-            // §13.4 — FK-resilient: references orders(order_id) +
-            // manufacturers(manufacturer_id). Skip-and-defer if a parent slice
-            // is late (a full re-pull catches it up). No JSON columns.
-            final data = OrderCrateLineData.fromJson(r);
-            await _insertResilient('order_crate_lines', r, fkSkipped, () async {
-              // Cloud is authoritative. Heal any stale local row that holds
-              // the same natural key (business_id, order_id, manufacturer_id)
-              // under a DIFFERENT id — left behind by the pre-fix insertLine
-              // that let local/cloud ids diverge. Without this the cloud row's
-              // insert would hit the UNIQUE constraint (2067) forever.
-              await (_db.delete(_db.orderCrateLines)..where(
-                    (t) =>
-                        t.businessId.equals(data.businessId) &
-                        t.orderId.equals(data.orderId) &
-                        t.manufacturerId.equals(data.manufacturerId) &
-                        t.id.equals(data.id).not(),
-                  ))
-                  .go();
-              await _db.into(_db.orderCrateLines).insertOnConflictUpdate(data);
-            });
-          }
-          break;
-        case 'expenses':
-          for (var r in rows) {
-            // FK-resilient: expenses reference users / stores / categories.
-            await _insertResilient(
-              'expenses',
-              r,
-              fkSkipped,
-              () => _db
-                  .into(_db.expenses)
-                  .insertOnConflictUpdate(ExpenseData.fromJson(r)),
-            );
-          }
-          break;
-        case 'error_logs':
-          // v46 (§33) — crash/error log. FK-resilient: references businesses +
-          // users (both nullable); skip-on-FK if a parent row isn't here yet.
-          for (var r in rows) {
-            await _insertResilient(
-              'error_logs',
-              r,
-              fkSkipped,
-              () => _db
-                  .into(_db.errorLogs)
-                  .insertOnConflictUpdate(ErrorLogData.fromJson(r)),
-            );
-          }
-          break;
-        case 'expense_categories':
-          for (var r in rows) {
-            await _db
-                .into(_db.expenseCategories)
-                .insertOnConflictUpdate(ExpenseCategoryData.fromJson(r));
-          }
-          break;
-        case 'expense_budgets':
-          for (var r in rows) {
-            // FK-resilient: references businesses / stores.
-            await _insertResilient(
-              'expense_budgets',
-              r,
-              fkSkipped,
-              () => _db
-                  .into(_db.expenseBudgets)
-                  .insertOnConflictUpdate(ExpenseBudgetData.fromJson(r)),
-            );
-          }
-          break;
-        case 'stock_counts':
-          for (var r in rows) {
-            // FK-resilient: references businesses / stores / users.
-            await _insertResilient(
-              'stock_counts',
-              r,
-              fkSkipped,
-              () => _db
-                  .into(_db.stockCounts)
-                  .insertOnConflictUpdate(StockCountData.fromJson(r)),
-            );
-          }
-          break;
-        case 'manufacturer_crate_balances':
-          for (var r in rows) {
-            // Natural-key cache (same rationale as store_crate_balances above):
-            // cloud RPC mints gen_random_uuid() while the client mints UuidV7,
-            // so reconcile on UNIQUE(business_id, manufacturer_id) to avoid a
-            // 2067 collision when the two ids diverge. FK-resilient: references
-            // manufacturers / crate_size_groups.
-            await _insertResilient(
-              'manufacturer_crate_balances',
-              r,
-              fkSkipped,
-              () {
-                final parsed = ManufacturerCrateBalance.fromJson(r);
-                return _db
-                    .into(_db.manufacturerCrateBalances)
-                    .insert(
-                      parsed,
-                      onConflict: DoUpdate(
-                        (_) => ManufacturerCrateBalancesCompanion(
-                          id: Value(parsed.id),
-                          balance: Value(parsed.balance),
-                          lastUpdatedAt: Value(parsed.lastUpdatedAt),
-                        ),
-                        target: [
-                          _db.manufacturerCrateBalances.businessId,
-                          _db.manufacturerCrateBalances.manufacturerId,
-                        ],
-                      ),
-                    );
-              },
-            );
-          }
-          break;
-        case 'store_crate_balances':
-          for (var r in rows) {
-            // Crate-balance cache keyed by its NATURAL key, not its surrogate
-            // `id`. Two id-minting authorities exist for the same
-            // (business, store, manufacturer): the client (UuidV7, via
-            // addEmptyCrates / updateManufacturerStock) and the cloud domain RPC
-            // pos_transfer_crates (gen_random_uuid). The two ids never match (see
-            // the note in _applyDomainResponse), so a PK-keyed
-            // insertOnConflictUpdate misses the existing local row and trips
-            // UNIQUE(business_id, store_id, manufacturer_id) (SqliteException
-            // 2067). Upsert on the natural key and align the local `id` to the
-            // cloud's so pushes/pulls converge on one canonical row — same
-            // approach as the `settings` case below. FK-resilient: references
-            // stores + manufacturers.
-            await _insertResilient('store_crate_balances', r, fkSkipped, () {
-              final parsed = StoreCrateBalanceData.fromJson(r);
-              return _db
-                  .into(_db.storeCrateBalances)
-                  .insert(
-                    parsed,
-                    onConflict: DoUpdate(
-                      (_) => StoreCrateBalancesCompanion(
-                        id: Value(parsed.id),
-                        balance: Value(parsed.balance),
-                        lastUpdatedAt: Value(parsed.lastUpdatedAt),
-                      ),
-                      target: [
-                        _db.storeCrateBalances.businessId,
-                        _db.storeCrateBalances.storeId,
-                        _db.storeCrateBalances.manufacturerId,
-                      ],
-                    ),
-                  );
-            });
-          }
-          break;
-        case 'crate_ledger':
-          await _restoreLedgerTable(
-            rows,
-            tableName: 'crate_ledger',
-            fkSkipped: fkSkipped,
-            table: _db.crateLedger,
-            fromJson: CrateLedgerData.fromJson,
-            voidedAtOf: (d) => d.voidedAt,
-            whereNotYetVoided: (t, d) =>
-                t.id.equals(d.id) & t.voidedAt.isNull(),
-            buildVoidCompanion: (d) => CrateLedgerCompanion(
-              voidedAt: Value(d.voidedAt),
-              voidedBy: Value(d.voidedBy),
-              voidReason: Value(d.voidReason),
-              lastUpdatedAt: Value(d.lastUpdatedAt),
-            ),
-          );
-          break;
-        case 'system_config':
-          for (var r in rows) {
-            r['value'] = _stringifyJsonb(r['value']);
-            await _db
-                .into(_db.systemConfig)
-                .insertOnConflictUpdate(SystemConfigData.fromJson(r));
-          }
-          break;
-        case 'shipments':
-          for (var r in rows) {
-            await _db
-                .into(_db.shipments)
-                .insertOnConflictUpdate(ShipmentData.fromJson(r));
-          }
-          break;
-        case 'purchase_items':
-          for (var r in rows) {
-            await _insertResilient(
-              'purchase_items',
-              r,
-              fkSkipped,
-              () => _db
-                  .into(_db.purchaseItems)
-                  .insertOnConflictUpdate(PurchaseItemData.fromJson(r)),
-            );
-          }
-          break;
-        case 'customer_crate_balances':
-          for (var r in rows) {
-            // Natural-key cache (same rationale as store_crate_balances above):
-            // cloud RPC mints gen_random_uuid() while the client mints UuidV7,
-            // so reconcile on UNIQUE(business_id, customer_id, manufacturer_id)
-            // to avoid a 2067 collision when the two ids diverge. FK-resilient:
-            // references customers / crate_size_groups.
-            await _insertResilient('customer_crate_balances', r, fkSkipped, () {
-              final parsed = CustomerCrateBalance.fromJson(r);
-              return _db
-                  .into(_db.customerCrateBalances)
-                  .insert(
-                    parsed,
-                    onConflict: DoUpdate(
-                      (_) => CustomerCrateBalancesCompanion(
-                        id: Value(parsed.id),
-                        balance: Value(parsed.balance),
-                        lastUpdatedAt: Value(parsed.lastUpdatedAt),
-                      ),
-                      target: [
-                        _db.customerCrateBalances.businessId,
-                        _db.customerCrateBalances.customerId,
-                        _db.customerCrateBalances.manufacturerId,
-                      ],
-                    ),
-                  );
-            });
-          }
-          break;
-        case 'delivery_receipts':
-          for (var r in rows) {
-            await _db
-                .into(_db.deliveryReceipts)
-                .insertOnConflictUpdate(DeliveryReceiptData.fromJson(r));
-          }
-          break;
-        case 'drivers':
-          for (var r in rows) {
-            await _db
-                .into(_db.drivers)
-                .insertOnConflictUpdate(DriverData.fromJson(r));
-          }
-          break;
-        case 'price_lists':
-          for (var r in rows) {
-            await _insertResilient(
-              'price_lists',
-              r,
-              fkSkipped,
-              () => _db
-                  .into(_db.priceLists)
-                  .insertOnConflictUpdate(PriceListData.fromJson(r)),
-            );
-          }
-          break;
-        case 'payment_transactions':
-          await _restoreLedgerTable(
-            rows,
-            tableName: 'payment_transactions',
-            fkSkipped: fkSkipped,
-            table: _db.paymentTransactions,
-            fromJson: PaymentTransactionData.fromJson,
-            voidedAtOf: (d) => d.voidedAt,
-            whereNotYetVoided: (t, d) =>
-                t.id.equals(d.id) & t.voidedAt.isNull(),
-            buildVoidCompanion: (d) => PaymentTransactionsCompanion(
-              voidedAt: Value(d.voidedAt),
-              voidedBy: Value(d.voidedBy),
-              voidReason: Value(d.voidReason),
-              lastUpdatedAt: Value(d.lastUpdatedAt),
-            ),
-          );
-          break;
-        case 'stock_transfers':
-          for (var r in rows) {
-            await _insertResilient(
-              'stock_transfers',
-              r,
-              fkSkipped,
-              () => _db
-                  .into(_db.stockTransfers)
-                  .insertOnConflictUpdate(StockTransferData.fromJson(r)),
-            );
-          }
-          break;
-        case 'stock_adjustments':
-          for (var r in rows) {
-            await _insertResilient(
-              'stock_adjustments',
-              r,
-              fkSkipped,
-              () => _db
-                  .into(_db.stockAdjustments)
-                  .insertOnConflictUpdate(StockAdjustmentData.fromJson(r)),
-            );
-          }
-          break;
-        case 'stock_adjustment_requests':
-          // §16.6.1 approval queue. FK-resilient: references products / stores /
-          // users. Plain id-keyed upsert (the client-minted id is preserved
-          // cloud-side), so an approve/reject status flip from one device
-          // overwrites the pending row on the others.
-          for (var r in rows) {
-            await _insertResilient(
-              'stock_adjustment_requests',
-              r,
-              fkSkipped,
-              () => _db
-                  .into(_db.stockAdjustmentRequests)
-                  .insertOnConflictUpdate(
-                    StockAdjustmentRequestData.fromJson(r),
-                  ),
-            );
-          }
-          break;
-        case 'quick_sale_requests':
-          // §12.3.1 Quick Sale approval queue. FK-resilient: references stores /
-          // users. Plain id-keyed upsert (the client-minted id is preserved
-          // cloud-side), so an approve/reject status flip from the approver's
-          // device overwrites the pending row on the cashier's till — which is
-          // exactly what releases the item into (or rejects it from) the cart.
-          for (var r in rows) {
-            await _insertResilient(
-              'quick_sale_requests',
-              r,
-              fkSkipped,
-              () => _db
-                  .into(_db.quickSaleRequests)
-                  .insertOnConflictUpdate(QuickSaleRequestData.fromJson(r)),
-            );
-          }
-          break;
-        case 'activity_logs':
-          await _restoreLedgerTable(
-            rows,
-            tableName: 'activity_logs',
-            fkSkipped: fkSkipped,
-            table: _db.activityLogs,
-            fromJson: ActivityLogData.fromJson,
-            voidedAtOf: (d) => d.voidedAt,
-            whereNotYetVoided: (t, d) =>
-                t.id.equals(d.id) & t.voidedAt.isNull(),
-            buildVoidCompanion: (d) => ActivityLogsCompanion(
-              voidedAt: Value(d.voidedAt),
-              voidedBy: Value(d.voidedBy),
-              voidReason: Value(d.voidReason),
-              lastUpdatedAt: Value(d.lastUpdatedAt),
-            ),
-          );
-          break;
-        case 'notifications':
-          for (var r in rows) {
-            await _db
-                .into(_db.notifications)
-                .insertOnConflictUpdate(NotificationData.fromJson(r));
-          }
-          break;
-        case 'settings':
-          // Settings rows are semantically keyed by (business_id, key),
-          // not by id. The cloud's `complete_onboarding` RPC mints its
-          // own gen_random_uuid() ids, and any flow that ever creates a
-          // local settings row with a different id (legacy local
-          // mirror, hypothetical future code) would collide here on the
-          // UNIQUE(business_id, key) constraint if we used the default
-          // PK-keyed ON CONFLICT.
-          //
-          // Upsert by (business_id, key): on conflict, also align the
-          // local row's `id` to the cloud's id so subsequent pushes and
-          // pulls converge on a single canonical row. Safe to overwrite
-          // `id` because nothing else FK-references settings.id.
-          for (var r in rows) {
-            final parsed = SettingData.fromJson(r);
-            await _db
-                .into(_db.settings)
-                .insert(
-                  parsed,
-                  onConflict: DoUpdate(
-                    (_) => SettingsCompanion(
-                      id: Value(parsed.id),
-                      value: Value(parsed.value),
-                      lastUpdatedAt: Value(parsed.lastUpdatedAt),
-                    ),
-                    target: [_db.settings.businessId, _db.settings.key],
-                  ),
-                );
-          }
-          break;
-        case 'sessions':
-          for (var r in rows) {
-            await _db
-                .into(_db.sessions)
-                .insertOnConflictUpdate(SessionData.fromJson(r));
-          }
-          break;
-        case 'stock_transactions':
-          await _restoreLedgerTable(
-            rows,
-            tableName: 'stock_transactions',
-            fkSkipped: fkSkipped,
-            table: _db.stockTransactions,
-            fromJson: StockTransactionData.fromJson,
-            voidedAtOf: (d) => d.voidedAt,
-            whereNotYetVoided: (t, d) =>
-                t.id.equals(d.id) & t.voidedAt.isNull(),
-            buildVoidCompanion: (d) => StockTransactionsCompanion(
-              voidedAt: Value(d.voidedAt),
-              voidedBy: Value(d.voidedBy),
-              voidReason: Value(d.voidReason),
-              lastUpdatedAt: Value(d.lastUpdatedAt),
-            ),
-          );
-          break;
-        case 'customer_wallets':
-          for (var r in rows) {
-            // FK-resilient: references customers.
-            await _insertResilient(
-              'customer_wallets',
-              r,
-              fkSkipped,
-              () => _db
-                  .into(_db.customerWallets)
-                  .insertOnConflictUpdate(CustomerWalletData.fromJson(r)),
-            );
-          }
-          break;
-        case 'wallet_transactions':
-          await _restoreLedgerTable(
-            rows,
-            tableName: 'wallet_transactions',
-            fkSkipped: fkSkipped,
-            table: _db.walletTransactions,
-            fromJson: WalletTransactionData.fromJson,
-            voidedAtOf: (d) => d.voidedAt,
-            whereNotYetVoided: (t, d) =>
-                t.id.equals(d.id) & t.voidedAt.isNull(),
-            buildVoidCompanion: (d) => WalletTransactionsCompanion(
-              voidedAt: Value(d.voidedAt),
-              voidedBy: Value(d.voidedBy),
-              voidReason: Value(d.voidReason),
-              lastUpdatedAt: Value(d.lastUpdatedAt),
-            ),
-          );
-          break;
-        case 'supplier_ledger_entries':
-          // v42 (§21.10) — append-only supplier ledger; restore via the ledger
-          // path (catch-up insert + targeted void update), like
-          // wallet_transactions. References suppliers(supplier_id) +
-          // users(performed_by), so FK-resilient.
-          await _restoreLedgerTable(
-            rows,
-            tableName: 'supplier_ledger_entries',
-            fkSkipped: fkSkipped,
-            table: _db.supplierLedgerEntries,
-            fromJson: SupplierLedgerEntryData.fromJson,
-            voidedAtOf: (d) => d.voidedAt,
-            whereNotYetVoided: (t, d) =>
-                t.id.equals(d.id) & t.voidedAt.isNull(),
-            buildVoidCompanion: (d) => SupplierLedgerEntriesCompanion(
-              voidedAt: Value(d.voidedAt),
-              voidedBy: Value(d.voidedBy),
-              voidReason: Value(d.voidReason),
-              lastUpdatedAt: Value(d.lastUpdatedAt),
-            ),
-          );
-          break;
-        case 'supplier_crate_ledger':
-          // v53 (§3.13) — append-only supplier empty-crate ledger; restore via
-          // the ledger path (catch-up insert + targeted void update), like
-          // supplier_ledger_entries. References suppliers(supplier_id) +
-          // manufacturers(manufacturer_id) + stores(store_id) +
-          // users(performed_by), so FK-resilient.
-          await _restoreLedgerTable(
-            rows,
-            tableName: 'supplier_crate_ledger',
-            fkSkipped: fkSkipped,
-            table: _db.supplierCrateLedger,
-            fromJson: SupplierCrateLedgerEntryData.fromJson,
-            voidedAtOf: (d) => d.voidedAt,
-            whereNotYetVoided: (t, d) =>
-                t.id.equals(d.id) & t.voidedAt.isNull(),
-            buildVoidCompanion: (d) => SupplierCrateLedgerCompanion(
-              voidedAt: Value(d.voidedAt),
-              voidedBy: Value(d.voidedBy),
-              voidReason: Value(d.voidReason),
-              lastUpdatedAt: Value(d.lastUpdatedAt),
-            ),
-          );
-          break;
-        case 'supplier_crate_balances':
-          for (var r in rows) {
-            // Natural-key cache (same rationale as store_crate_balances above):
-            // the client mints UuidV7 while a peer/cloud row may carry a
-            // different id, so reconcile on
-            // UNIQUE(business_id, supplier_id, manufacturer_id) to avoid a 2067
-            // collision when the two ids diverge. FK-resilient: references
-            // suppliers + manufacturers.
-            await _insertResilient('supplier_crate_balances', r, fkSkipped, () {
-              final parsed = SupplierCrateBalanceData.fromJson(r);
-              return _db
-                  .into(_db.supplierCrateBalances)
-                  .insert(
-                    parsed,
-                    onConflict: DoUpdate(
-                      (_) => SupplierCrateBalancesCompanion(
-                        id: Value(parsed.id),
-                        balance: Value(parsed.balance),
-                        lastUpdatedAt: Value(parsed.lastUpdatedAt),
-                      ),
-                      target: [
-                        _db.supplierCrateBalances.businessId,
-                        _db.supplierCrateBalances.supplierId,
-                        _db.supplierCrateBalances.manufacturerId,
-                      ],
-                    ),
-                  );
-            });
-          }
-          break;
-        case 'saved_carts':
-          for (var r in rows) {
-            r['cartData'] = _stringifyJsonb(r['cartData']);
-            await _db
-                .into(_db.savedCarts)
-                .insertOnConflictUpdate(SavedCartData.fromJson(r));
-          }
-          break;
-        case 'pending_crate_returns':
-          for (var r in rows) {
-            await _insertResilient(
-              'pending_crate_returns',
-              r,
-              fkSkipped,
-              () => _db
-                  .into(_db.pendingCrateReturns)
-                  .insertOnConflictUpdate(PendingCrateReturnData.fromJson(r)),
-            );
-          }
-          break;
-        default:
-          debugPrint('[SyncService] Restore logic not implemented for $table');
-      }
-    });
+    // Dispatch to the table's registry entry (issue #15). The per-table
+    // restore switch that used to live here is gone; each table's restore
+    // strategy is now the single source of truth in the `SyncedTable`
+    // registry (sync_registry.dart). The central pre-insert guards above
+    // (LWW / invariant #12 / business isolation) are unchanged.
+    final entry = syncedTableForName(table);
+    if (entry == null) {
+      debugPrint('[SyncService] Restore logic not implemented for \$table');
+      return;
+    }
+    // The executor carries the FK-resilient helper + ledger restore (moved to
+    // the database layer so the registry has no upward dependency). It reads
+    // `_fkOrphanedRows` (the §3.7/A2 collector — the same map object, so
+    // orphans propagate back) and the injected §30.8.1 order-number heal.
+    final executor = SyncRestoreExecutor(
+      _db,
+      fkOrphanedRows: _fkOrphanedRows,
+      healOrderBlocker: _healLocalOrderNumberBlocker,
+    );
+    await _db.transaction(
+      () => entry.restore(executor, table, rows, fkSkipped),
+    );
   }
 }
 

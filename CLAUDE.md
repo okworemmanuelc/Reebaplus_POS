@@ -22,3 +22,17 @@ meaningful implementation change.
 If implementation changes the architecture, scope, or
 standards documented in the context files, update the
 relevant file before continuing.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs are tracked in this repo's GitHub Issues (`okworemmanuelc/drinkPosApp`) via the `gh` CLI; external PRs are not a triage surface. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical triage roles map to identically-named labels (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout — `CONTEXT.md` + `docs/adr/` at the repo root (created lazily by the domain-modeling skills). See `docs/agents/domain.md`.

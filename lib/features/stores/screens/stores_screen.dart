@@ -6,6 +6,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:reebaplus_pos/core/data/countries.dart';
 import 'package:reebaplus_pos/core/data/nigerian_lgas.dart';
 import 'package:reebaplus_pos/core/data/nigerian_states.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/widgets/app_fab.dart';
@@ -737,12 +738,15 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
     // screen. Stock Transfer entry points have moved off this screen into the
     // store details. This tab is persistently mounted, so guard reactively: a
     // live grant change updates the FAB, the cards' Edit/Delete, and access.
-    final canManage = hasPermission(ref, 'stores.manage');
+    final canManage = Gates.manageStores.allows(ref);
+    // Browse composite: a named gate can't own this one — the all-stores
+    // viewer leg is a provider (store assignment), not a permission key — so
+    // the composition stays here, citing the named gates for each key leg.
     final canSeeStores = canManage ||
         ref.watch(canViewAllStoresProvider) ||
-        hasPermission(ref, 'stores.request_transfer') ||
-        hasPermission(ref, 'stores.dispatch_transfer') ||
-        hasPermission(ref, 'stores.receive_transfer');
+        Gates.requestStoreTransfer.allows(ref) ||
+        Gates.dispatchStoreTransfer.allows(ref) ||
+        Gates.receiveStoreTransfer.allows(ref);
     return SharedScaffold(
       activeRoute: 'store',
       backgroundColor: _bg,
@@ -1075,7 +1079,7 @@ class _StoreCardState extends ConsumerState<_StoreCard> {
 
           // Actions row — Edit/Delete a store is CEO-only (`stores.manage`).
           // Hidden entirely for browse-only viewers (hide-don't-block).
-          if (hasPermission(ref, 'stores.manage'))
+          if (Gates.manageStores.allows(ref))
             Container(
               decoration: BoxDecoration(
                 color: _stripe,

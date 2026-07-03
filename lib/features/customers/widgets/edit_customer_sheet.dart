@@ -3,8 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
-import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -332,9 +332,9 @@ class _EditCustomerSheetState extends ConsumerState<EditCustomerSheet> {
                     text: 'Save Details',
                     variant: AppButtonVariant.primary,
                     onPressed: () async {
-                      // Defense-in-depth (hard rule #6): re-check `customers.update`
-                      // at the write boundary, matching AddCustomerSheet's gate.
-                      if (!hasPermission(ref, 'customers.update')) {
+                      // Defense-in-depth (hard rule #6): re-check the gate at
+                      // the write boundary (fire-time decision, no subscribe).
+                      if (!Gates.editCustomer.allowsNow(ref)) {
                         Navigator.pop(context);
                         return;
                       }

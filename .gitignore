@@ -82,3 +82,8 @@ final_analysis.txt
 project_summary*.txt
 test.txt
 test_checkout.txt
+
+# Agent skills: reproducible dev-time tooling cache. The vendored skill files
+# are rebuilt from skills-lock.json (which IS committed), so we track the lock,
+# not the cache — the "commit the lockfile, ignore the install" pattern.
+.agents/

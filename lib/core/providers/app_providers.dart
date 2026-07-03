@@ -34,6 +34,7 @@ import 'package:reebaplus_pos/shared/services/supplier_crate_service.dart';
 import 'package:reebaplus_pos/shared/services/printer_service.dart';
 import 'package:reebaplus_pos/shared/services/reorder_alert_service.dart';
 import 'package:reebaplus_pos/core/diagnostics/sync_diagnostic.dart';
+import 'package:reebaplus_pos/core/services/supabase_cloud_transport.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 import 'package:reebaplus_pos/main.dart' show googleWebClientId;
 
@@ -357,7 +358,7 @@ final reorderAlertServiceProvider = Provider<ReorderAlertService>((ref) {
 final supabaseSyncServiceProvider = Provider<SupabaseSyncService>((ref) {
   return SupabaseSyncService(
     ref.read(databaseProvider),
-    ref.read(supabaseClientProvider),
+    SupabaseCloudTransport(ref.read(supabaseClientProvider)),
     ref.read(secureStorageProvider),
   );
 });

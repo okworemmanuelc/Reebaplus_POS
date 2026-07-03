@@ -9,8 +9,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/diagnostics/sync_diagnostic.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
-import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -231,12 +231,12 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    // Defense-in-depth (hard rules #6/#7): Sync Issues is gated on
-    // `sync.view` — the CEO always (implicit owner) plus any role the CEO has
-    // granted it via CEO Settings → Sync Issues access. The sidebar item, sync
-    // badge, and banner already hide the entry points without it; this guards a
-    // deep-link / direct push. Keep the AppBar so the back button still works.
-    if (!canViewSyncIssues(ref)) {
+    // Defense-in-depth (hard rules #6/#7): body-guard on Gates.viewSyncIssues
+    // (sync.view OR CEO — the implicit owner; other roles get it via CEO
+    // Settings → Sync Issues access), the same entry the sidebar item and the
+    // drawer sync badge/banner already hide on. This guards a deep-link /
+    // direct push. Keep the AppBar so the back button still works.
+    if (!Gates.viewSyncIssues.allows(ref)) {
       return Scaffold(
         backgroundColor: t.scaffoldBackgroundColor,
         appBar: AppBar(
