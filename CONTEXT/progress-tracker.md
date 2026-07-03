@@ -10,6 +10,30 @@ The human updates it when resolving open questions or making architectural decis
 
 151 sessions logged. Codebase is live and being verified on-device.
 
+### Design landed (not yet built): Business-Scoped Stream primitive (2026-07-03, PRD #23 → issues #24, #25)
+- **Planning only — no app code shipped this session.** Grilled the design
+  (`/grill-with-docs`), wrote the paper trail, and filed the work.
+- **Problem:** business-scoped `StreamProvider`s bake the current businessId at
+  first build via `requireBusinessId()`; a first subscribe in the create-business
+  null window either **throws + sticks errored** (e.g. `allStoresProvider`) or
+  **silent-empty-sticks** (custom-SQL providers reading `db.currentBusinessId`)
+  for the whole session → empty store pickers until restart. Hand-patched once
+  per provider (S153). See `project_business_scoped_provider_build_time_poison`.
+- **Decision (ADR 0003, `docs/adr/0003-business-scoped-stream.md`):** a guarded
+  factory `businessScopedStream<T>` (+ `businessScopedStreamFamily<T, Arg>`) that
+  **owns the declaration** — watches a new `currentBusinessIdProvider` seam,
+  emits a required `whenAbsent` value while unbound, hands the closure a non-null
+  businessId, rebuilds on bind/switch. Makes the bug unrepresentable by
+  construction; a source-scan ban test (modeled on `gate_static_ban_test.dart`)
+  keeps new providers on it, with a small non-empty allowlist for genuine globals
+  (permissions catalogue, unscoped roles). Glossary terms added to `CONTEXT.md`.
+- **Size correction:** the originating "257 providers" was a consumer count; the
+  real surface is **~41 declarations in 2 files** (`stream_providers.dart`,
+  `app_providers.dart`); consumers untouched.
+- **NEXT:** implement in a fresh session per issue — **#24** (factory + seam +
+  tracer trio + ban test, CI green) then **#25** (migrate remaining ~38 + shrink
+  allowlist to globals). #25 blocked by #24.
+
 ### Flip: gate enforcement made permanent — allowlist emptied, bare helpers removed (2026-07-03, issue #22)
 - **Goal (epic #16 finish line):** flip the named-gate enforcement from a
   shrinking ratchet to a permanent ban, retire the last cross-cutting permission

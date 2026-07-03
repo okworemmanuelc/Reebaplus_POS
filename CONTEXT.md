@@ -48,3 +48,21 @@ An outbox entry the cloud has *permanently* rejected (e.g. `42501` / `P0001` /
 identity drift), moved to `sync_queue_orphans`. Still un-uploaded local data the
 Outbox invariant protects: visible and exportable, never silently dropped.
 _Avoid_: failed row, dead-letter.
+
+### Scoping
+
+**Current Business Id**:
+The id of the tenant bound to the current session — null until a business binds
+(login, or the create-business handoff). A device may hold more than one
+business's data, so every tenant-scoped read filters to it. Exposed reactively
+by `currentBusinessIdProvider`, the single watchable source.
+_Avoid_: reading `db.currentBusinessId` at build time (non-reactive → the read
+is baked and sticks stale/empty for the session).
+
+**Business-Scoped Stream**:
+A live-query provider declared through the `businessScopedStream` factory (or
+`businessScopedStreamFamily` for keyed ones). It watches the Current Business
+Id, emits its required `whenAbsent` value until a business is bound, hands the
+closure the resolved non-null id, and rebuilds on bind or switch — so a
+tenant-scoped read cannot be baked to a missing or stale business at build time.
+_Avoid_: raw `StreamProvider` over a DAO `watch*`, inline businessId guards.
