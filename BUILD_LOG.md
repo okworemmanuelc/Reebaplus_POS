@@ -2,6 +2,54 @@
 
 ---
 
+## 2026-07-03 — Business-Scoped Stream primitive: guarded factory + full migration (PRD #23 = #24 + #25)
+
+**Scope:** retire the build-time-poison provider bug *by construction*. A
+business-scoped `StreamProvider` that calls a `requireBusinessId()`-backed DAO
+`watch*()` baked the session businessId at first build and, if first-subscribed
+in the create-business null window, either **threw + stuck errored** or
+**silent-empty-stuck** for the whole session (empty Receive/Transfer/POS store
+pickers until restart). Fixed once per provider before (S153); now unrepresentable.
+
+**New primitive — `lib/core/providers/business_scoped_stream.dart`:**
+- `currentBusinessIdProvider` — the single watchable businessId seam
+  (`authProvider.select(currentUser?.businessId)`). Nothing else re-derives the
+  tenant; tests flip it via `overrideWith`.
+- Four guarded factories: `businessScopedStream` / `businessScopedStreamFamily`
+  + `…AutoDispose` / `…AutoDisposeFamily` twins (Riverpod types keep-alive and
+  autoDispose distinctly, so lifecycle is preserved). Each watches the seam,
+  emits a required `whenAbsent` while unbound, and hands the closure
+  **`(ref, db, businessId)`** with a guaranteed non-null id (`ref` lets the few
+  store-scoped feeds compose `lockedStoreProvider`).
+
+**Migration:** 62 session-scoped stream declarations lifted onto the factory
+across `stream_providers.dart` + `app_providers.dart` — behaviour-preserving
+(`whenAbsent` = the prior null-window value). Consumers untouched. The
+FutureProvider `firstPullCompletedProvider` was repointed onto the seam so no
+inline `authProvider.select(...businessId)` remains.
+
+**Stayed raw (allowlist, 11):** permissions catalogue + unscoped roles (global);
+`_userMemberships` / `myUserStores` / `activeStaff` / `deviceStaff` (explicit-id,
+resolve before bind — routing them through the factory would break the shared-PIN
+picker); `orphanQueueItems` / `orphanQueueCount` (device-local, no `business_id`);
+`localBusinesses` / `pendingCrateReturns` / `pendingReturnsWithDetails`
+(intentionally unscoped selects).
+
+**Enforcement + tests:**
+- `test/providers/business_scoped_stream_ban_test.dart` — bans a raw
+  `StreamProvider` declaration anywhere in `lib/` (name-keyed allowlist,
+  shrink-only ratchet) + companion strictness test (planted raw caught, multi-line
+  caught, all four factory forms not flagged). Modeled on `gate_static_ban_test.dart`.
+- `test/providers/business_scoped_stream_test.dart` — drives the factory
+  `null → bound → switched → unbound` through the seam override and proves it never
+  runs the closure in the null window. No database required.
+
+**Verified:** `flutter analyze` clean. Full suite 652 passed / 58 skipped /
+1 pre-existing failure (`who_is_working_screen_test.dart` "Carol" — fails
+identically with these changes stashed, unrelated to this work).
+
+---
+
 ## 2026-07-03 — Flip the gate enforcement: empty the allowlist, remove the bare helpers (issue #22)
 
 **Scope:** the epic #16 finish line. The named-gate migration's shrinking

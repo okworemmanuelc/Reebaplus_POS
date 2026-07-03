@@ -12,6 +12,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:reebaplus_pos/core/data/business_types.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/providers/business_scoped_stream.dart';
 import 'package:reebaplus_pos/core/services/biometric_service.dart';
 import 'package:reebaplus_pos/core/services/business_logo_service.dart';
 import 'package:reebaplus_pos/core/theme/theme_notifier.dart';
@@ -187,30 +188,33 @@ final customerServiceProvider = ChangeNotifierProvider<CustomerService>((ref) {
 /// Map of customerId → signed credits balance (kobo), computed live from the
 /// WalletTransactions ledger. Replaces the cached `customers.wallet_balance_kobo`
 /// column that PR 2a removed.
-final creditBalancesKoboProvider = StreamProvider.autoDispose<Map<String, int>>(
-  (ref) {
-    return ref.read(databaseProvider).customersDao.watchAllWalletBalancesKobo();
-  },
+final creditBalancesKoboProvider =
+    businessScopedStreamAutoDispose<Map<String, int>>(
+  (ref, db, businessId) => db.customersDao.watchAllWalletBalancesKobo(),
+  whenAbsent: const {},
 );
 
 /// §13.4 Ring 7 — business-wide crate-deposit balancing figures
 /// (taken / refunded / kept / held). Held = taken − refunded − kept.
 final crateDepositSummaryProvider =
-    StreamProvider.autoDispose<CrateDepositSummary>((ref) {
-      return ref
-          .read(databaseProvider)
-          .walletTransactionsDao
-          .watchCrateDepositSummary();
-    });
+    businessScopedStreamAutoDispose<CrateDepositSummary>(
+  (ref, db, businessId) =>
+      db.walletTransactionsDao.watchCrateDepositSummary(),
+  whenAbsent: const CrateDepositSummary(
+    takenKobo: 0,
+    refundedKobo: 0,
+    keptKobo: 0,
+    heldKobo: 0,
+  ),
+);
 
 /// §13.4 Ring 7 — per-customer held deposit (kobo); only non-zero holders.
 final depositsHeldByCustomerProvider =
-    StreamProvider.autoDispose<Map<String, int>>((ref) {
-      return ref
-          .read(databaseProvider)
-          .walletTransactionsDao
-          .watchDepositsHeldByCustomer();
-    });
+    businessScopedStreamAutoDispose<Map<String, int>>(
+  (ref, db, businessId) =>
+      db.walletTransactionsDao.watchDepositsHeldByCustomer(),
+  whenAbsent: const {},
+);
 
 // ── Supplier ────────────────────────────────────────────────────────────────
 final supplierServiceProvider = ChangeNotifierProvider<SupplierService>((ref) {
@@ -235,54 +239,53 @@ final receiveStockServiceProvider = Provider<ReceiveStockService>((ref) {
 /// supplier. Drives the per-supplier balance chip on the Suppliers list.
 /// Scoped to the active store (§21.11); null lock = "All Stores" aggregate.
 final supplierBalancesKoboProvider =
-    StreamProvider.autoDispose<Map<String, int>>((ref) {
-      final storeId = ref.watch(lockedStoreProvider).value;
-      return ref
-          .read(databaseProvider)
-          .supplierLedgerDao
-          .watchAllBalancesKobo(storeId: storeId);
-    });
+    businessScopedStreamAutoDispose<Map<String, int>>(
+  (ref, db, businessId) {
+    final storeId = ref.watch(lockedStoreProvider).value;
+    return db.supplierLedgerDao.watchAllBalancesKobo(storeId: storeId);
+  },
+  whenAbsent: const {},
+);
 
 /// One supplier row, live (Supplier Details header). Null once soft-deleted.
-final supplierByIdProvider = StreamProvider.autoDispose
-    .family<SupplierData?, String>((ref, id) {
-      return ref.read(databaseProvider).catalogDao.watchSupplierById(id);
-    });
+final supplierByIdProvider =
+    businessScopedStreamAutoDisposeFamily<SupplierData?, String>(
+  (ref, db, businessId, id) => db.catalogDao.watchSupplierById(id),
+  whenAbsent: null,
+);
 
 /// One supplier's signed ledger balance (kobo), live. Active-store scoped (§21.11).
-final supplierBalanceProvider = StreamProvider.autoDispose.family<int, String>((
-  ref,
-  id,
-) {
-  final storeId = ref.watch(lockedStoreProvider).value;
-  return ref
-      .read(databaseProvider)
-      .supplierLedgerDao
-      .watchBalanceKobo(id, storeId: storeId);
-});
+final supplierBalanceProvider =
+    businessScopedStreamAutoDisposeFamily<int, String>(
+  (ref, db, businessId, id) {
+    final storeId = ref.watch(lockedStoreProvider).value;
+    return db.supplierLedgerDao.watchBalanceKobo(id, storeId: storeId);
+  },
+  whenAbsent: 0,
+);
 
 /// One supplier's full ledger history (invoices + payments + voids), newest
 /// first. Active-store scoped (§21.11).
-final supplierLedgerHistoryProvider = StreamProvider.autoDispose
-    .family<List<SupplierLedgerEntryData>, String>((ref, id) {
-      final storeId = ref.watch(lockedStoreProvider).value;
-      return ref
-          .read(databaseProvider)
-          .supplierLedgerDao
-          .watchHistory(id, storeId: storeId);
-    });
+final supplierLedgerHistoryProvider =
+    businessScopedStreamAutoDisposeFamily<List<SupplierLedgerEntryData>, String>(
+  (ref, db, businessId, id) {
+    final storeId = ref.watch(lockedStoreProvider).value;
+    return db.supplierLedgerDao.watchHistory(id, storeId: storeId);
+  },
+  whenAbsent: const [],
+);
 
 /// Every ledger entry (invoices + payments + voids) across all suppliers,
 /// newest first — drives the Transaction history screen. Active-store scoped
 /// (§21.11); null lock = "All Stores" aggregate.
 final supplierAllHistoryProvider =
-    StreamProvider.autoDispose<List<SupplierLedgerEntryData>>((ref) {
-      final storeId = ref.watch(lockedStoreProvider).value;
-      return ref
-          .read(databaseProvider)
-          .supplierLedgerDao
-          .watchAllHistory(storeId: storeId);
-    });
+    businessScopedStreamAutoDispose<List<SupplierLedgerEntryData>>(
+  (ref, db, businessId) {
+    final storeId = ref.watch(lockedStoreProvider).value;
+    return db.supplierLedgerDao.watchAllHistory(storeId: storeId);
+  },
+  whenAbsent: const [],
+);
 
 // ── Supplier empty-crate tracking (§3.13) ────────────────────────────────────
 /// Records crate receipts/returns against a supplier (with deposits).
@@ -293,42 +296,38 @@ final supplierCrateServiceProvider = Provider<SupplierCrateService>((ref) {
 /// One supplier's per-manufacturer crate balances, live. A positive balance =
 /// WE owe the supplier that many empties; negative = a crate credit.
 /// Business-wide (crate debt is between the store and the supplier, not a store).
-final supplierCrateBalancesProvider = StreamProvider.autoDispose
-    .family<List<SupplierCrateBalanceWithManufacturer>, String>((ref, id) {
-      return ref
-          .read(databaseProvider)
-          .supplierCrateBalancesDao
-          .watchBySupplier(id);
-    });
+final supplierCrateBalancesProvider =
+    businessScopedStreamAutoDisposeFamily<
+        List<SupplierCrateBalanceWithManufacturer>, String>(
+  (ref, db, businessId, id) => db.supplierCrateBalancesDao.watchBySupplier(id),
+  whenAbsent: const [],
+);
 
 /// One supplier's net refundable deposit still held by them (kobo), live.
-final supplierCrateDepositHeldProvider = StreamProvider.autoDispose
-    .family<int, String>((ref, id) {
-      return ref
-          .read(databaseProvider)
-          .supplierCrateLedgerDao
-          .watchDepositHeldKobo(id);
-    });
+final supplierCrateDepositHeldProvider =
+    businessScopedStreamAutoDisposeFamily<int, String>(
+  (ref, db, businessId, id) =>
+      db.supplierCrateLedgerDao.watchDepositHeldKobo(id),
+  whenAbsent: 0,
+);
 
 /// One supplier's cumulative crates received from / returned (sent back) to
 /// them — running totals, not the net balance.
-final supplierCrateMovementTotalsProvider = StreamProvider.autoDispose
-    .family<({int received, int returned}), String>((ref, id) {
-      return ref
-          .read(databaseProvider)
-          .supplierCrateLedgerDao
-          .watchMovementTotals(id);
-    });
+final supplierCrateMovementTotalsProvider =
+    businessScopedStreamAutoDisposeFamily<({int received, int returned}),
+        String>(
+  (ref, db, businessId, id) => db.supplierCrateLedgerDao.watchMovementTotals(id),
+  whenAbsent: (received: 0, returned: 0),
+);
 
 /// One supplier's empty-crate movement history (receipts + returns), newest
 /// first.
-final supplierCrateHistoryProvider = StreamProvider.autoDispose
-    .family<List<SupplierCrateLedgerEntryData>, String>((ref, id) {
-      return ref
-          .read(databaseProvider)
-          .supplierCrateLedgerDao
-          .watchHistory(id);
-    });
+final supplierCrateHistoryProvider =
+    businessScopedStreamAutoDisposeFamily<List<SupplierCrateLedgerEntryData>,
+        String>(
+  (ref, db, businessId, id) => db.supplierCrateLedgerDao.watchHistory(id),
+  whenAbsent: const [],
+);
 
 // ── Delivery receipts (rider hand-off on customer orders, §orders) ───────────
 final deliveryReceiptServiceProvider =
@@ -367,18 +366,30 @@ final supabaseSyncServiceProvider = Provider<SupabaseSyncService>((ref) {
 final syncDiagnosticProvider = Provider<SyncDiagnostic>((ref) {
   return SyncDiagnostic(ref.read(databaseProvider));
 });
-final failedQueueItemsProvider = StreamProvider.autoDispose((ref) {
-  return ref.read(databaseProvider).syncDao.watchFailedItems();
-});
-final failedQueueCountProvider = StreamProvider.autoDispose<int>((ref) {
-  return ref.read(databaseProvider).syncDao.watchFailedCount();
-});
-final pendingQueueCountProvider = StreamProvider.autoDispose<int>((ref) {
-  return ref.read(databaseProvider).syncDao.watchPendingCount();
-});
-final pendingQueueItemsProvider = StreamProvider.autoDispose((ref) {
-  return ref.read(databaseProvider).syncDao.watchPendingItems();
-});
+// The `sync_queue` feeds filter by the current business (`whereBusiness`), so
+// they are business-scoped and go through the factory. The `sync_queue_orphans`
+// feeds carry no business_id column (device-local engine state) and stay raw.
+final failedQueueItemsProvider =
+    businessScopedStreamAutoDispose<List<SyncQueueData>>(
+  (ref, db, businessId) => db.syncDao.watchFailedItems(),
+  whenAbsent: const [],
+);
+final failedQueueCountProvider = businessScopedStreamAutoDispose<int>(
+  (ref, db, businessId) => db.syncDao.watchFailedCount(),
+  whenAbsent: 0,
+);
+final pendingQueueCountProvider = businessScopedStreamAutoDispose<int>(
+  (ref, db, businessId) => db.syncDao.watchPendingCount(),
+  whenAbsent: 0,
+);
+final pendingQueueItemsProvider =
+    businessScopedStreamAutoDispose<List<SyncQueueData>>(
+  (ref, db, businessId) => db.syncDao.watchPendingItems(),
+  whenAbsent: const [],
+);
+// Device-local sync-engine state (no business_id column) — intentionally raw,
+// allowlisted in the ban test. Not tenant-scoped, so it must NOT be forced
+// through the factory.
 final orphanQueueItemsProvider = StreamProvider.autoDispose((ref) {
   return ref.read(databaseProvider).syncDao.watchOrphans();
 });
@@ -433,6 +444,9 @@ final pendingReturnsWithDetailsProvider =
       );
     });
 
+// Intentionally UNSCOPED — a device may hold more than one business's row and
+// [currentBusinessProvider] resolves the active one against the session id.
+// Not a business-scoped stream; stays raw (allowlisted in the ban test).
 final localBusinessesProvider = StreamProvider.autoDispose<List<BusinessData>>((
   ref,
 ) {
@@ -518,10 +532,10 @@ final manualPullActiveProvider = StateProvider<bool>((ref) => false);
 /// True once the local Drift database has at least one product row — used as
 /// the fresh-device gate signal. Distinct-filtered so it only notifies when
 /// the boolean flips (empty → non-empty), keeping rebuilds cheap.
-final hasLocalProductsProvider = StreamProvider<bool>((ref) {
-  final db = ref.watch(databaseProvider);
-  return db.inventoryDao
+final hasLocalProductsProvider = businessScopedStream<bool>(
+  (ref, db, businessId) => db.inventoryDao
       .watchAllProductDatasWithStock()
       .map((list) => list.isNotEmpty)
-      .distinct();
-});
+      .distinct(),
+  whenAbsent: false,
+);
