@@ -71,7 +71,7 @@ void main() {
 
     test(
         'flag OFF (with initial stock): enqueues products + adjustments + '
-        'stock_tx + inventory upserts', () async {
+        'stock_tx + inventory + cost_batches upserts', () async {
       await setFlag(db, 'feature.domain_rpcs_v2.create_product', on: false);
       final fx = await _seedCreateProductFixtures(db, businessId);
 
@@ -90,10 +90,13 @@ void main() {
       expect(await db.select(db.stockTransactions).get(), hasLength(1));
       final inv = await db.select(db.inventory).getSingle();
       expect(inv.quantity, 24);
+      // Epic 2 / #42: opening stock also creates one Cost Batch for the queue.
+      expect((await db.select(db.costBatches).getSingle()).qtyRemaining, 24);
 
       final pending = await getPendingQueue(db);
       final actionTypes = pending.map((r) => r.actionType).toList()..sort();
       expect(actionTypes, [
+        'cost_batches:upsert',
         'inventory:upsert',
         'products:upsert',
         'stock_adjustments:upsert',
@@ -102,8 +105,9 @@ void main() {
     });
 
     test(
-        'flag ON (with initial stock): one envelope, only products + '
-        'inventory mirrored locally', () async {
+        'flag ON (with initial stock): create envelope + client-owned cost '
+        'batch, only products + inventory + cost_batches mirrored locally',
+        () async {
       await setFlag(db, 'feature.domain_rpcs_v2.create_product', on: true);
       final fx = await _seedCreateProductFixtures(db, businessId);
 
@@ -130,13 +134,21 @@ void main() {
           reason: 'no local adjustment row until RPC response is applied');
       expect(await db.select(db.stockTransactions).get(), isEmpty,
           reason: 'no local stock_tx row until RPC response is applied');
+      // Epic 2 / #42: the opening Cost Batch is client-owned (the create RPC
+      // does not mint it), so it IS mirrored locally and pushed as its own row.
+      final batch = await db.select(db.costBatches).getSingle();
+      expect(batch.qtyRemaining, 50);
+      expect(batch.costKobo, 60000);
 
-      // Queue: exactly one envelope.
+      // Queue: the create envelope + the cost_batches upsert (enqueued after it
+      // so the batch's FK-to-product push resolves once the product is minted).
       final pending = await getPendingQueue(db);
-      expect(pending, hasLength(1));
-      expect(pending.first.actionType, 'domain:pos_create_product_v2');
+      expect(pending, hasLength(2));
+      final envelope = pending
+          .firstWhere((r) => r.actionType == 'domain:pos_create_product_v2');
+      expect(pending.any((r) => r.actionType == 'cost_batches:upsert'), isTrue);
 
-      final payload = decodePayload(pending.first);
+      final payload = decodePayload(envelope);
       expect(payload['p_business_id'], businessId);
       expect(payload['p_actor_id'], fx.staffId);
       // Idempotency key — must match the local product row id.

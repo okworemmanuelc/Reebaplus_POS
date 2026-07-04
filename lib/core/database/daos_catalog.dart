@@ -111,6 +111,11 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
     final useDomainRpc = flagValue == 'true' || flagValue == '"true"';
     final hasInitialStock =
         initialStock != null && initialStock > 0 && storeId != null;
+    // Epic 2 / #42: the opening Cost Batch's cost = the entered buying price
+    // (0 → an uncosted batch, consistent with F1/F2).
+    final openingCostKobo = productRow.buyingPriceKobo.present
+        ? productRow.buyingPriceKobo.value
+        : 0;
 
     await transaction(() async {
       // Product row goes in locally for both paths (UI immediate; the
@@ -190,6 +195,19 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
           'domain:pos_create_product_v2',
           jsonEncode(payload),
         );
+
+        // Epic 2 / #42: opening Cost Batch, enqueued AFTER the product-create
+        // envelope so the batch's push (which FK-references the product) lands
+        // once the server has minted the product. Same transaction as the
+        // inventory increment above → the queue can't drift from on-hand.
+        if (hasInitialStock) {
+          await db.costBatchesDao.recordInflowBatch(
+            productId: id,
+            storeId: storeId,
+            quantity: initialStock,
+            costKobo: openingCostKobo,
+          );
+        }
         return;
       }
 
@@ -249,6 +267,17 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
                 ))
                 .getSingle();
         await db.syncDao.enqueueUpsert('inventory', invRow);
+
+        // Epic 2 / #42: opening Cost Batch for the initial stock, enqueued after
+        // the products upsert above so its FK-to-product push resolves. Same
+        // transaction as the inventory increment → queue can't drift from
+        // on-hand.
+        await db.costBatchesDao.recordInflowBatch(
+          productId: id,
+          storeId: storeId,
+          quantity: initialStock,
+          costKobo: openingCostKobo,
+        );
       }
     });
     return id;

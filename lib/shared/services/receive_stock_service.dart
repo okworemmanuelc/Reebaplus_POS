@@ -103,6 +103,18 @@ class ReceiveStockService {
           retailerPriceKobo: line.retailKobo,
           wholesalerPriceKobo: line.wholesaleKobo,
         );
+
+        // Epic 2 / #42: each receipt is its own FIFO Cost Batch, at this
+        // line's buying price (0 → an uncosted batch), stamped with the receipt
+        // date so it sorts by when the stock actually arrived. Same transaction
+        // as the stock increment above → the queue can't drift from on-hand.
+        await _db.costBatchesDao.recordInflowBatch(
+          productId: line.productId,
+          storeId: storeId,
+          quantity: line.qty,
+          costKobo: line.buyingPriceKobo,
+          receivedAt: dateReceived,
+        );
       }
 
       // 3. Empty crates handed back to the supplier on this receipt, recorded

@@ -10,6 +10,40 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### SHIPPED: Batch-creation-on-inflow — Add Product + Receive Stock push a Cost Batch (2026-07-04, issue #42, ADR 0005)
+- **Epic 2, F6 (FIFO batch costing).** The **producer** for the queue: F1 (#37)
+  only seeded opening batches via the migration and F2 (#38) only consumed it, so
+  any product created or restocked after the migration (or out of stock at
+  migration time) drew from no batch and sold at **0 COGS** until backfilled. Both
+  inflow sites now write a `cost_batches` row in the **same transaction** as the
+  inventory increment (queue total for a (product, store) can't drift from
+  on-hand). Closes the coherence gap flagged in F2.
+- **`CostBatchesDao.recordInflowBatch(...)`
+  ([daos_costing.dart](lib/core/database/daos_costing.dart)):** inserts ONE fresh
+  batch (distinct `UuidV7` id — each inflow is its own FIFO layer, never merged)
+  at the entered cost (`0` → a valid **Uncosted** batch, resolved later by #41).
+  All synced/defaulted columns set explicitly (no second id minted on push,
+  `project_synced_write_explicit_id`), then `enqueueUpsert`. No new sync-registry
+  work (reuses F1's entry). No-op on non-positive quantity.
+- **Add Product opening stock
+  ([daos_catalog.dart](lib/core/database/daos_catalog.dart)):**
+  `insertProductWithInitialStock` creates the opening batch on **both** the v1 and
+  v2 (`pos_create_product_v2`) paths; on v2 the batch enqueues **after** the create
+  envelope so its FK-to-product push resolves once the server mints the product.
+- **Receive Stock
+  ([receive_stock_service.dart](lib/shared/services/receive_stock_service.dart)):**
+  each cart line pushes a new batch at that receipt's buying price, stamped with
+  the receipt date (its FIFO key). Existing batches untouched.
+- **Tests:** `test/costing/inflow_batch_creation_test.dart` (7) — opening-batch
+  shape + queue==on-hand; uncosted-0 resolved in place by #41 (no double-count);
+  no-stock→no-batch; push carries local id + all defaulted columns; v2 orders the
+  batch after the envelope; Receive adds a layer without mutating the opening one;
+  and the **regression** — a post-migration new product AND a restock of a
+  previously batchless product both draw NON-ZERO COGS at checkout. Two
+  `create_product_dispatch_test` assertions updated for the extra
+  `cost_batches:upsert` row. `flutter analyze` clean; costing/receiving/inventory/
+  sync/orders/database suites green.
+
 ### SHIPPED: Provisional→authoritative COGS correction + rolled-up audit (2026-07-04, issue #40, ADR 0005)
 - **Epic 2, F4 (FIFO batch costing).** The **client correction flow**: lands the
   server's authoritative COGS back on the device and audits it. Lives entirely in

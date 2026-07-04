@@ -2,6 +2,51 @@
 
 ---
 
+## 2026-07-04 — Batch-creation-on-inflow: Add Product + Receive Stock push a Cost Batch (Epic 2 / FIFO, issue #42, ADR 0005)
+
+**What shipped (Epic 2, F6).** The **producer** for the FIFO queue. F1 (#37) only
+seeded opening batches via the migration and F2 (#38) only *consumed* the queue —
+nothing wrote a batch when stock actually came in, so any product created or
+restocked after the migration (or out of stock at migration time) drew from no
+batch and sold at **0 COGS** until a cost was backfilled. Both inflow sites now
+create a `cost_batches` row, in the **same transaction** as the inventory
+increment (the queue total for a (product, store) can never drift from on-hand).
+
+- **`CostBatchesDao.recordInflowBatch({productId, storeId, quantity, costKobo, receivedAt})`
+  ([lib/core/database/daos_costing.dart](lib/core/database/daos_costing.dart)):**
+  inserts ONE fresh batch (distinct `UuidV7` id, never merged — each inflow is
+  its own FIFO layer) at the entered cost (`0` → a valid **Uncosted** batch,
+  consistent with F1/F2, later resolved by #41). Every synced-and-defaulted
+  column (id / received_at / created_at / last_updated_at) is set explicitly so
+  the pushed row carries the same id the cloud stores (no second id minted —
+  `project_synced_write_explicit_id`); then `enqueueUpsert('cost_batches', …)`.
+  No-op on a non-positive quantity. No new sync-registry work (F1's entry).
+- **Add Product opening stock
+  ([lib/core/database/daos_catalog.dart](lib/core/database/daos_catalog.dart)):**
+  `insertProductWithInitialStock` now creates the opening batch on **both** the
+  v1 (per-table) and the v2 (`pos_create_product_v2` envelope) paths whenever
+  there's opening stock. On the v2 path the batch is enqueued **after** the
+  create envelope so its FK-to-product push resolves once the server mints the
+  product (the batch is client-owned — the create RPC does not mint it).
+- **Receive Stock
+  ([lib/shared/services/receive_stock_service.dart](lib/shared/services/receive_stock_service.dart)):**
+  each cart line pushes a new batch at that receipt's buying price, stamped with
+  the receipt date (its FIFO ordering key). Existing batches are untouched — a
+  receipt is its own layer, not a merge.
+- **Tests
+  ([test/costing/inflow_batch_creation_test.dart](test/costing/inflow_batch_creation_test.dart),
+  7):** opening batch shape (`qty_remaining == qty_original == opening qty`, cost,
+  received_at≈now, queue==on-hand); uncosted-0 batch resolved in place by #41
+  (no double-count); no stock → no batch; the push carries the local id + all
+  defaulted columns; the v2 path creates the batch after the envelope; Receive
+  adds a new layer without mutating the opening one; and the **regression** — a
+  post-migration new product AND a restock of a previously batchless product both
+  draw NON-ZERO COGS at checkout. Two `create_product_dispatch_test` assertions
+  updated for the extra `cost_batches:upsert` row. `flutter analyze` clean;
+  costing/receiving/inventory/sync/orders/database suites green.
+
+---
+
 ## 2026-07-04 — Prompted cost backfill (0→real) + migration-era fallback (Epic 2 / FIFO, issue #41, ADR 0005)
 
 **What shipped (Epic 2, F5).** The explicit, one-time **Uncosted** backfill —
