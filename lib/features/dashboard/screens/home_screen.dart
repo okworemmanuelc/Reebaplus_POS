@@ -20,6 +20,7 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/shared/models/order_status.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
+import 'package:reebaplus_pos/features/dashboard/widgets/get_started_card.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/sales_detail_screen.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/reports_hub_screen.dart';
 import 'package:reebaplus_pos/features/customers/screens/customers_screen.dart';
@@ -373,6 +374,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 bottom: context.spacingM + context.bottomInset,
               ),
               children: [
+                // Get-started checklist (Home tab only, CEO only — issue #31).
+                // Self-hides for every other case, so it costs zero height when
+                // not applicable.
+                const GetStartedCard(),
                 _buildPeriodHeader(showReports: isCeo || isManager),
                 SizedBox(height: context.getRSize(24)),
             _buildMetricsList(

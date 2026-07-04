@@ -91,6 +91,43 @@ a separate concern.
 _Avoid_: treating a Cart as a draft/pending Order; folding cart logic into the
 Order Module.
 
+### Inventory & Costing
+
+**Add Product**:
+The act of creating something you sell and recording what's already on your
+shelf — writes stock straight to inventory with **no supplier, no invoice, no
+payable**. First-run catalogue building and any brand-new SKU. The felt test:
+*"new thing I sell / setting up shop" → Add Product.* Under FIFO costing it
+creates the opening Cost Batch (costed or Uncosted).
+_Avoid_: routing opening stock through Receive Stock; "add stock" (that's
+adding quantity to an existing product).
+
+**Receive Stock**:
+The act of logging a supplier delivery of things you already sell — increases
+stock **and** posts the supplier invoice, payment, and crate returns. Ongoing
+operations, not setup. The felt test: *"a delivery arrived" → Receive Stock.*
+Under FIFO costing it pushes a new Cost Batch at the delivery's per-line cost.
+_Avoid_: treating it as the general "add a product" entry point; renaming it
+(the label "Receive Stock" is locked).
+
+**Uncosted**:
+A sold line or held unit whose cost is unrecorded (`buyingPriceKobo == 0`).
+Reports never guess: uncosted units are excluded from COGS/valuation and
+counted transparently ("Excludes N item(s) with no recorded buying price").
+Healed by the prompted cost **backfill** (fires once per product/batch on the
+0→first-cost transition; fills gaps only, never overwrites a real snapshot).
+_Avoid_: silently substituting current cost at report time; treating zero cost
+as free goods.
+
+**Cost Batch** *(ships with the FIFO costing epic — ADR 0005)*:
+One receipt of units at one cost for one (product, store) —
+`{qty, costKobo, receivedAt}` — drawn down oldest-first by sale timestamp as
+sales happen. The unit of cost truth; the product's scalar `buyingPriceKobo`
+becomes a derived cache of the oldest remaining batch's cost. Selling price
+stays a single current value per product, independent of batches.
+_Avoid_: per-batch selling prices; treating a product-form buying-price edit
+as a batch record (a new batch at a new cost is a Receive Stock act).
+
 ### Scoping
 
 **Current Business Id**:

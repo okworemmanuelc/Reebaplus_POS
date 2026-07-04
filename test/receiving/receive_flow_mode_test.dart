@@ -82,7 +82,10 @@ void main() {
 
   tearDown(() => db.close());
 
-  testWidgets('AddProductScreen receiveMode = false renders Store and Supplier fields', (tester) async {
+  testWidgets('AddProductScreen receiveMode = false is a Fast-Add form: '
+      'single-store hides Store, Supplier lives under More details', (
+    tester,
+  ) async {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
@@ -109,8 +112,23 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('SUPPLIER (optional)'), findsOneWidget);
-    expect(find.text('STORE *'), findsOneWidget);
+    // The fast section carries the three required fields (ADR 0006).
+    expect(find.text('Product Name *'), findsOneWidget);
+    expect(find.textContaining('Selling Price'), findsOneWidget);
+    expect(find.text('Quantity *'), findsOneWidget);
+
+    // A single-store business is never asked which store to stock into.
+    expect(find.text('STORE *'), findsNothing);
+
+    // Supplier is collapsed under "More details" until the section is expanded.
+    expect(find.text('Supplier'), findsNothing);
+    expect(find.text('More details'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('More details'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('More details'));
+    await tester.pumpAndSettle();
+    expect(find.text('Supplier'), findsOneWidget);
 
     container.dispose();
     await tester.pump(Duration.zero);

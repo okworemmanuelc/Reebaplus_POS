@@ -46,6 +46,22 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         .watch();
   }
 
+  /// True once this business has at least one order row — the "Make a sale"
+  /// signal for the Get-started checklist (issue #31 / Seam 3). A cheap
+  /// COUNT(*) mapped to a bool and distinct-filtered so it only notifies on the
+  /// empty → non-empty flip, mirroring the products-exist feed. Any order
+  /// counts: a checkout recognizes revenue immediately, and even a later-voided
+  /// sale still means the user has been through a checkout at least once.
+  Stream<bool> watchAnyOrderExists() {
+    final countCol = orders.id.count();
+    return (selectOnly(orders)
+          ..addColumns([countCol])
+          ..where(whereBusiness(orders)))
+        .watchSingle()
+        .map((row) => (row.read(countCol) ?? 0) > 0)
+        .distinct();
+  }
+
   Stream<List<OrderData>> watchOrdersByStore(String? storeId) {
     return (select(orders)
           ..where((o) {

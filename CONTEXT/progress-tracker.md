@@ -10,6 +10,172 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### SHIPPED: Land on POS after onboarding — auto-push deleted (2026-07-04, issue #35, ADR 0006)
+- **Epic 1.** Onboarding now lands the device on **POS** — where the
+  persona-aware "Add your first product" CTA (#34) greets the user — instead of
+  force-pushing the Add Product form on `MainLayout`'s first frame. The one-shot
+  auto-push mechanism is removed entirely, no dead code left:
+  - `navigation_service.dart`: deleted `_autoShowAddProductPending` +
+    `requestAutoShowAddProductSheet()` / `consumeAutoShowAddProductSheet()`.
+  - `main_layout.dart`: removed the first-frame consumer that pushed
+    `AddProductScreen`, and its now-unused import.
+  - Both former call sites: `success_dashboard_entry_screen.dart` (now a plain
+    `StatefulWidget` — reads no provider; Riverpod imports dropped) and
+    `ceo_sign_up_screen.dart` (orphaned `nav` local dropped) no longer request
+    the auto-push.
+- The onboarding → `MainLayout` handoff is otherwise unchanged (1.5 s forward
+  from the success screen; 3 s "your business is ready" beat on the CEO path).
+  `flutter analyze` clean project-wide. This closes the Seam-2 auto-push item.
+
+### SHIPPED: Persona-aware first-run empty states (Seam 2) on POS + Inventory (2026-07-04, issue #34, ADR 0006)
+- **Epic 1.** The POS grid and Inventory Products tab empty states are now
+  persona-aware. A fresh CEO on a genuinely empty catalogue gets a primary
+  **"Add your first product"** CTA (opens the Fast-Add form, #30); a user
+  without `products.add` gets a neutral no-button *"No products yet — a manager
+  can add them"* message; and neither ever flashes while the catalogue is still
+  streaming in (invariant #11).
+- **Seam 2 — `lib/core/providers/first_run_surface_state.dart`:** the pure,
+  widget-free `computeFirstRunSurfaceState({hasProducts, firstLoadInProgress,
+  canAddProduct}) → {skeleton, addProductCta, neutralEmpty, hasContent}`.
+  Precedence: products present → `hasContent`; else still streaming →
+  `skeleton`; else settled + zero splits on the gate. Live wiring
+  (`firstRunSurfaceStateProvider`) composes `hasLocalProductsProvider`, the
+  shared `firstLoadSkeletonActiveProvider`, and `Gates.addProduct` via
+  `gateContextProvider` — all overridable, so the derivation is unit-tested in a
+  ProviderContainer with no widgets.
+- **Shared surface — `lib/shared/widgets/first_run_empty_state.dart`:** one
+  `FirstRunEmptyState` consumed by **both** screens (they can't drift). Each
+  screen only routes to it when its visible list is empty AND the catalogue is
+  genuinely zero (surface `!= hasContent`); a filter/search miss over a
+  populated catalogue keeps its own "No products found" copy.
+- **Tests:** `test/providers/first_run_surface_state_test.dart` — the pure
+  function exhaustive over inputs + precedence; the provider driven through all
+  four states via input overrides. `flutter analyze` clean; inventory/receiving/
+  pos suites green. On-device CTA/neutral/skeleton walkthrough pending.
+
+### SHIPPED: Speed-dial FAB splits Add Product from Receive Stock (2026-07-04, issue #33, ADR 0006)
+- **Epic 1.** The Inventory Products tab's single Receive Stock FAB is replaced
+  by a **permission-aware speed dial**: one "+" expands to two labelled options —
+  **Add Product** ("Create a product and set what's on your shelf" → Fast-Add
+  direct mode, #30) and **Receive Stock** ("Log a delivery from a supplier" →
+  the existing flow, untouched). Each option's one-line description doubles as a
+  teaching surface (ADR 0006).
+- **Seam 2 — `lib/core/widgets/app_speed_dial_fab.dart`:** a reusable,
+  permission-agnostic `AppSpeedDialFab` + `AppSpeedDialAction`. Callers gate-
+  filter the actions (citing the named registry — ADR 0002 — never a role); the
+  widget owns only the **collapse rendering**: zero actions → no FAB, exactly
+  one → a direct `AppFAB` (never a menu of one), two+ → the expandable dial
+  (Overlay-hosted pills + full-screen scrim, `+`→`×` toggle). Closes itself if
+  live revocation drops it below two actions mid-open.
+- **`inventory_screen.dart`:** the Products-tab FAB now builds the action list
+  from `Gates.addProduct.allows(ref)` / `Gates.receiveStock.allows(ref)`. A
+  stock keeper with only `stock.add` still gets a single direct Receive Stock
+  FAB; a CEO gets both; nobody with neither gate sees a FAB. `AppFAB` import
+  dropped (now reached transitively through the speed dial).
+- **Tests:** `test/inventory/speed_dial_fab_test.dart` — 4 widget tests over the
+  collapse contract (0/1/2 actions, expand→choose, scrim-dismiss). `flutter
+  analyze` clean. On-device dial walkthrough pending.
+
+### SHIPPED: POS "tap a product to add it to the cart" coach tip (2026-07-04, issue #32, ADR 0006)
+- **Epic 1.** A joining staff member landing on an **already-stocked** store now
+  sees a one-time inline coach tip on POS: **"Tap a product to add it to the
+  cart."** No new hint infrastructure — reuses `UiHintService` with a new key.
+- **New key `UiHintService.hintPosTapAdd` (`'hint_pos_tap_add'`):** same
+  view-count rule (shows < 2 times, dismissible), independent from the existing
+  long-press-to-edit key.
+- **`pos_home_screen.dart`:** the old `_buildPosHint()` is now the parameterized
+  `_buildInlineHint({message, onDismiss})`, shared by both POS banners. The
+  tap-to-add banner is gated on `_showPosTapHint && filteredProducts.isNotEmpty`
+  (only when the grid actually has products) and renders **above** the
+  long-press tip; both can co-exist and are dismissed/counted independently.
+- **Tests:** `ui_hint_service_test.dart` gains an independence test (dismissing
+  tap-add doesn't consume the long-press count). `flutter analyze` clean.
+
+### SHIPPED: Get-started checklist — derived state (Seam 3) + Home-tab card (2026-07-04, issue #31, ADR 0006)
+- **Epic 1.** A first-time CEO's Home tab shows a short **Get started** card
+  tracking three milestones (Add a product, Make a sale, Invite your team —
+  optional). Steps tick automatically and the card self-hides once done.
+- **Completion is derived from data, never stored as flags** → cross-device
+  correct for free (a reinstall reflects real progress). Only the manual
+  dismissal is persisted, device-local.
+- **Seam 3 — `lib/features/dashboard/get_started_checklist.dart`:**
+  `computeGetStartedChecklist({isCeo, hasProducts, hasOrders, hasTeam,
+  dismissed}) → {visible, steps[]}` (pure, widget-free). `visible = isCeo &&
+  !allDone && !dismissed`. Thresholds: products > 0, orders > 0, staff > 1
+  (active staff includes the CEO). `getStartedChecklistProvider` wires it to
+  `currentUserRoleProvider`, `hasLocalProductsProvider`, the new
+  `hasAnyOrderProvider` (`OrdersDao.watchAnyOrderExists()` — distinct COUNT(*)
+  bool via `businessScopedStream`), `activeStaffProvider(businessId)`, and the
+  device-local `getStartedChecklistDismissedProvider` (SharedPreferences latch,
+  mirrors `UiHintService`). Every input overridable → unit-testable.
+- **Card — `lib/features/dashboard/widgets/get_started_card.dart`:** Home tab
+  ONLY (never POS). Self-hides to zero height; deep-links each unticked step
+  (Add product → `AddProductScreen` direct mode; Make a sale → POS tab; Invite
+  team → `InviteStaffScreen`); ✕ dismisses. Mounted at the top of the Home list.
+- **Tests:** `test/dashboard/get_started_checklist_test.dart` — 14 tests (pure
+  role/threshold/dismissal + provider input-override wiring + dismissal
+  persisting across a simulated restart). `flutter analyze lib` clean; raw-
+  `StreamProvider` ban test still passes. On-device card walkthrough pending.
+- **Still out (Seam 2 / separate #29 issues):** post-onboarding auto-push
+  removal, speed-dial FAB, first-run empty-state CTAs, coach tip.
+
+### SHIPPED: Fast-Add Product form — pure model (Seam 1) + adaptive screen (2026-07-04, issue #30, ADR 0006)
+- **Epic 1, first issue.** The Add Product screen's **direct mode** is now a
+  short, adaptive **Fast-Add** form, with the save-time logic extracted into a
+  pure, widget-free **Fast-Add form model** (Seam 1).
+- **Seam 1 — `lib/features/inventory/models/fast_add_product_model.dart`:**
+  `resolveFastAdd(FastAddInput, FastAddContext) → FastAddResult` (sealed
+  `FastAddInvalid{field,message}` / `FastAddIntent`). Owns required-field
+  validation (Name / Selling Price / Quantity), the business-type-aware unit
+  default (`fastAddDefaultUnit(tracksCrates) → Bottle|Pack`), the wholesaler
+  mirror-on-save (blank ⇒ selling price, stored not read-time),
+  manufacturer-required-for-crate, target-store resolution (single-store silent
+  / multi-store required), the Uncosted rule (blank/unauthorized buying ⇒ 0),
+  and shaping the write intent (prices→kobo, effective trackEmpties, crate value
+  only on bottle, low-stock default 5). Pure — no widgets/DB/`BuildContext`.
+  Every `FastAddInvalid.field` names a **visible** field.
+- **Screen — `add_product_screen.dart`:** direct-mode new-product `_save`
+  delegates to `_saveFastAddNewProduct` → model → `_persistNewProduct` (existing
+  `insertProductWithInitialStock` + get-or-create FKs; unchanged write for a
+  fully-filled form; duplicate-name guard kept). New adaptive layout: fast
+  section (Name+size hint, Selling Price, skippable Buying Price+nudge, optional
+  Category+examples, crate-only required Manufacturer, Quantity) + collapsible
+  **More details** (Description, Wholesaler, Unit, track-empties+crate value,
+  fractional sales, Low Stock, Supplier, Expiry, Store). Store hidden for
+  single-store; a Store error auto-expands More details first.
+- **Untouched (per ADR 0006):** Receive Stock's mini-form (`receiveMode: true`)
+  and the add-stock-to-existing path keep the classic full layout + save path.
+- **Out of #30 (separate Epic 1 issues):** delete the post-onboarding auto-push,
+  speed-dial FAB, first-run empty-state CTAs (Seam 2), Get-started checklist
+  (Seam 3), coach tip.
+- **Tests:** `test/inventory/fast_add_product_model_test.dart` — 27 pure unit
+  tests per the #29 Testing Decisions. `flutter analyze` clean (whole project).
+  On-device Fast-Add walkthrough (layout, collapse, single-store hide) pending.
+
+### Design locked (no code yet): first-run onboarding redesign + FIFO batch costing (2026-07-04, ADRs 0005 + 0006)
+- **Grilled end-to-end** (grilling skill, all decisions user-confirmed). Two epics:
+- **Epic 1 — first-run onboarding redesign (ADR 0006, ships first, current scalar
+  cost model):** Add Product vs Receive Stock split into two named acts (glossary
+  in `CONTEXT.md` §Inventory & Costing; labels locked, no rename); speed-dial FAB
+  with permission-aware collapse on the Inventory Products tab; adaptive fast-add
+  form (required: Name/Selling Price/Qty; Buying Price visible-but-skippable;
+  Manufacturer surfaced+required only for crate businesses; Wholesaler mirrors
+  selling price on save when blank; Store hidden for single-store); unit default
+  business-type-aware (`businessTracksCrates ? Bottle : Pack`); persona-aware
+  empty-state CTAs (post-first-pull + `Gates.addProduct` gated); CEO-only Home-only
+  derived-state Get-started checklist; post-onboarding auto-push of the full form
+  DELETED (land on POS + CTA instead). Receive Stock flow itself untouched.
+- **Epic 2 — FIFO batch costing (ADR 0005, after Epic 1):** per-(product,store)
+  cost-batch queue drawn down FIFO by **sale timestamp** (not server arrival);
+  server-authoritative consumption extending the `pos_inventory_delta_v2` seam
+  (provisional local COGS corrected on sync, late-arrival cascade re-assignment,
+  rolled-up Activity Log audit rows); scalar `buyingPriceKobo` kept as derived
+  cache; migration seeds one opening batch per (product,store); prompted explicit
+  cost backfill (0→first-cost, fills gaps only, per-line date preserved). WAC and
+  FIFO-with-arrival-order explicitly rejected; selling price stays scalar.
+- **NEXT:** /to-prd → /to-issues for Epic 1 (same context window), then fresh
+  session per issue with /implement.
+
 ### SHIPPED: `daos.dart` split into 11 domain `part` files (2026-07-04, locality refactor)
 - **Pure refactor — no behaviour change, seams not moved.** The 9,820-line
   `lib/core/database/daos.dart` (47 DAOs) is now 11 domain-grouped

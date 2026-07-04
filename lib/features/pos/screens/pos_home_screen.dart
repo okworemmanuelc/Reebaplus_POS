@@ -28,6 +28,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reebaplus_pos/shared/services/ui_hint_service.dart';
 import 'package:reebaplus_pos/features/sync/controllers/first_load_overlay_controller.dart';
 import 'package:reebaplus_pos/shared/widgets/skeletons/first_load_skeletons.dart';
+import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
+import 'package:reebaplus_pos/shared/widgets/first_run_empty_state.dart';
 
 class PosHomeScreen extends ConsumerStatefulWidget {
   const PosHomeScreen({super.key});
@@ -43,6 +45,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
   bool _isListView = false;
   int _gridColumns = 3;
   bool _showPosHint = false;
+  bool _showPosTapHint = false;
 
   @override
   void initState() {
@@ -50,6 +53,9 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
     _loadViewPreferences();
     uiHintService.shouldShow(UiHintService.hintPosLongpress).then((show) {
       if (show && mounted) setState(() => _showPosHint = true);
+    });
+    uiHintService.shouldShow(UiHintService.hintPosTapAdd).then((show) {
+      if (show && mounted) setState(() => _showPosTapHint = true);
     });
     Future.microtask(() {
       if (!mounted) return;
@@ -281,8 +287,25 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
                         textCol: textCol,
                         borderCol: borderCol,
                       ),
+                if (!_controller!.isLoading &&
+                    _showPosTapHint &&
+                    !needsStoreSelection &&
+                    _controller!.filteredProducts.isNotEmpty)
+                  _buildInlineHint(
+                    message: 'Tap a product to add it to the cart.',
+                    onDismiss: () {
+                      setState(() => _showPosTapHint = false);
+                      uiHintService.markShown(UiHintService.hintPosTapAdd);
+                    },
+                  ),
                 if (!_controller!.isLoading && _showPosHint && !needsStoreSelection)
-                  _buildPosHint(),
+                  _buildInlineHint(
+                    message: 'Tap and hold a product to edit it.',
+                    onDismiss: () {
+                      setState(() => _showPosHint = false);
+                      uiHintService.markShown(UiHintService.hintPosLongpress);
+                    },
+                  ),
                 Expanded(
                   // ...
                   child: needsStoreSelection
@@ -295,17 +318,29 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
                           duration: const Duration(milliseconds: 250),
                           builder: (_, v, child) =>
                               Opacity(opacity: v, child: child),
-                          child: ProductGrid(
-                            products: _controller!.filteredProducts,
-                            onProductTap: (item) => _addToCart(context, item),
-                            cardCol: cardCol,
-                            textCol: textCol,
-                            subtextCol: subtextCol,
-                            borderCol: borderCol,
-                            controller: _controller!,
-                            isListView: _isListView,
-                            gridColumns: _gridColumns,
-                          ),
+                          // When the visible grid is empty AND the catalogue is
+                          // genuinely empty (not a category/search miss), hand
+                          // off to the persona-aware first-run empty state (the
+                          // "Add your first product" CTA / neutral message —
+                          // Seam 2, #34). A filter miss keeps ProductGrid's own
+                          // "No products found" copy.
+                          child:
+                              _controller!.filteredProducts.isEmpty &&
+                                  ref.watch(firstRunSurfaceStateProvider) !=
+                                      FirstRunSurfaceState.hasContent
+                              ? const FirstRunEmptyState()
+                              : ProductGrid(
+                                  products: _controller!.filteredProducts,
+                                  onProductTap: (item) =>
+                                      _addToCart(context, item),
+                                  cardCol: cardCol,
+                                  textCol: textCol,
+                                  subtextCol: subtextCol,
+                                  borderCol: borderCol,
+                                  controller: _controller!,
+                                  isListView: _isListView,
+                                  gridColumns: _gridColumns,
+                                ),
                         ),
                 ),
               ],
@@ -367,9 +402,13 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
   }
 
   // Inline dismissible hint shown above the product grid (first couple of
-  // visits) telling the operator how to edit a product. Mirrors the cart
-  // screen's "tap an item to edit" banner, but for the POS long-press gesture.
-  Widget _buildPosHint() {
+  // visits). Mirrors the cart screen's "tap an item to edit" banner. Drives
+  // both the POS long-press-to-edit tip and the joining-staff "tap to add"
+  // coach tip (issue #32); each is view-counted under its own hint key.
+  Widget _buildInlineHint({
+    required String message,
+    required VoidCallback onDismiss,
+  }) {
     final primary = Theme.of(context).colorScheme.primary;
     return Container(
       margin: EdgeInsets.fromLTRB(
@@ -393,7 +432,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
           SizedBox(width: context.getRSize(12)),
           Expanded(
             child: Text(
-              'Tap and hold a product to edit it.',
+              message,
               style: TextStyle(
                 fontSize: context.getRFontSize(13),
                 color: primary,
@@ -406,10 +445,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
               size: context.getRSize(16),
               color: primary,
             ),
-            onPressed: () {
-              setState(() => _showPosHint = false);
-              uiHintService.markShown(UiHintService.hintPosLongpress);
-            },
+            onPressed: onDismiss,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
           ),

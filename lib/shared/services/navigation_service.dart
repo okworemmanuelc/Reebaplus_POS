@@ -22,22 +22,6 @@ class NavigationService {
   final List<bool> _tabCanPop = List.filled(10, false);
   final ValueNotifier<bool> currentTabCanPop = ValueNotifier<bool>(false);
 
-  // One-shot flag set by SuccessDashboardEntryScreen and consumed once by
-  // MainLayout on first frame after mount. Replaces the previous nested
-  // Future.delayed in SuccessDashboardEntryScreen which used `ref` after
-  // pushAndRemoveUntil disposed the source widget. See plan §"Bug fix"
-  // Pattern 3.
-  bool _autoShowAddProductPending = false;
-  void requestAutoShowAddProductSheet() {
-    _autoShowAddProductPending = true;
-  }
-
-  bool consumeAutoShowAddProductSheet() {
-    final v = _autoShowAddProductPending;
-    _autoShowAddProductPending = false;
-    return v;
-  }
-
   void setTabCanPop(int tabIndex, bool canPop) {
     if (tabIndex < 0 || tabIndex >= _tabCanPop.length) return;
     _tabCanPop[tabIndex] = canPop;

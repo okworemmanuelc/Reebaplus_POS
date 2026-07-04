@@ -626,7 +626,6 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
     final auth = ref.read(authProvider);
     final db = ref.read(databaseProvider);
     final sync = ref.read(supabaseSyncServiceProvider);
-    final nav = ref.read(navigationProvider);
     final draftNotifier = ref.read(onboardingDraftProvider.notifier);
     final pin = _firstPin;
 
@@ -696,11 +695,10 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
       if (!mounted) return;
       setState(() => _step = 8);
 
-      // Let the user read "your business is ready" before landing on Home.
+      // Let the user read "your business is ready" before landing on POS,
+      // then hand off to the authed shell. Onboarding lands on POS with the
+      // empty-state "Add your first product" CTA (ADR 0006) — no auto-push.
       await Future.delayed(const Duration(seconds: 3));
-      // Auto-open the Add Product sheet on first Home frame (preserved from
-      // the old success screen), then hand off to the authed shell.
-      nav.requestAutoShowAddProductSheet();
       auth.setCurrentUser(updatedUser);
     } catch (e, stack) {
       debugPrint('[CeoSignUp] commit FAILED: ${e.runtimeType}: $e\n$stack');

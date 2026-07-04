@@ -1,31 +1,22 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/shared/widgets/main_layout.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_background.dart';
-import 'package:reebaplus_pos/core/providers/app_providers.dart';
-import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/widgets/smooth_route.dart';
 
-class SuccessDashboardEntryScreen extends ConsumerStatefulWidget {
+class SuccessDashboardEntryScreen extends StatefulWidget {
   const SuccessDashboardEntryScreen({super.key});
 
   @override
-  ConsumerState<SuccessDashboardEntryScreen> createState() =>
+  State<SuccessDashboardEntryScreen> createState() =>
       _SuccessDashboardEntryScreenState();
 }
 
 class _SuccessDashboardEntryScreenState
-    extends ConsumerState<SuccessDashboardEntryScreen> {
-  // Capture providers up front so the post-pushAndRemoveUntil work doesn't
-  // touch `ref` from a soon-to-be-disposed element. See plan §"Bug fix"
-  // Pattern 3.
-  late final NavigationService _nav;
-
+    extends State<SuccessDashboardEntryScreen> {
   @override
   void initState() {
     super.initState();
-    _nav = ref.read(navigationProvider);
     _startAutoForward();
   }
 
@@ -33,11 +24,8 @@ class _SuccessDashboardEntryScreenState
     Future.delayed(const Duration(milliseconds: 1500), () {
       if (!mounted) return;
 
-      // Set the one-shot flag BEFORE pushing — MainLayout consumes it on
-      // its first frame and opens AddProductSheet from a context that's
-      // guaranteed alive (its own).
-      _nav.requestAutoShowAddProductSheet();
-
+      // Onboarding lands on POS with the empty-state "Add your first product"
+      // CTA (ADR 0006) — no auto-push of the Add Product form.
       Navigator.of(context).pushAndRemoveUntil(
         SmoothRoute(page: const MainLayout()),
         (route) => false,

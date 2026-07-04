@@ -7,6 +7,10 @@ class UiHintService {
   static const hintPosLongpress = 'hint_pos_longpress_v2';
   static const hintReceiveLongpress = 'hint_receive_longpress_v2';
   static const hintCartTapEdit = 'hint_cart_tap_edit';
+  // Coach tip for a joining staff member landing on an already-stocked store
+  // (issue #32 / ADR 0006): "tap a product to add it to the cart". Only shown
+  // when the POS grid actually has products to tap.
+  static const hintPosTapAdd = 'hint_pos_tap_add';
 
   Future<int> viewCount(String hintKey) async {
     final prefs = await SharedPreferences.getInstance();

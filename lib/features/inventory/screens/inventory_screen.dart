@@ -36,10 +36,13 @@ import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
 import 'package:reebaplus_pos/shared/utils/product_icon_helper.dart';
-import 'package:reebaplus_pos/core/widgets/app_fab.dart';
+import 'package:reebaplus_pos/core/widgets/app_speed_dial_fab.dart';
+import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart';
 import 'package:reebaplus_pos/features/receiving/screens/receive_stock_screen.dart';
 import 'package:reebaplus_pos/features/sync/controllers/first_load_overlay_controller.dart';
 import 'package:reebaplus_pos/shared/widgets/skeletons/first_load_skeletons.dart';
+import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
+import 'package:reebaplus_pos/shared/widgets/first_run_empty_state.dart';
 
 class InventoryScreen extends ConsumerStatefulWidget {
   const InventoryScreen({super.key});
@@ -345,25 +348,41 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         tabsReady &&
         _currentTab < _tabKeys.length &&
         _tabKeys[_currentTab] == 'products';
-    // Receive Stock FAB — cites the same named gate as the Receive Stock screen
-    // guard (their equivalence used to be comment-enforced). Inside the flow,
-    // creating a NEW product is separately gated (Gates.addProduct) and price
-    // edits on their own gates, so a stock keeper with only `stock.add` can
-    // receive/update quantities but can't create products or change prices.
-    final canReceiveStock = Gates.receiveStock.allows(ref);
+    // Products-tab speed dial — one "+" splits the two distinct acts (ADR 0006):
+    // Add Product (create a product + record shelf stock, no supplier invoice)
+    // and Receive Stock (log a supplier delivery). Each option cites its own
+    // named gate (ADR 0002), never a role: Add Product is `products.add`, and
+    // Receive Stock is stock-keeper-or-adder. The widget collapses to a single
+    // direct FAB when only one gate passes and shows nothing when neither does,
+    // so a stock keeper with only `stock.add` still gets a direct Receive Stock
+    // FAB but never the Add Product option.
+    final speedDialActions = <AppSpeedDialAction>[
+      if (Gates.addProduct.allows(ref))
+        AppSpeedDialAction(
+          icon: FontAwesomeIcons.tag.data,
+          label: 'Add Product',
+          description: 'Create a product and set what’s on your shelf',
+          onPressed: () => Navigator.of(context)
+              .push(slideDownRoute(const AddProductScreen())),
+        ),
+      if (Gates.receiveStock.allows(ref))
+        AppSpeedDialAction(
+          icon: FontAwesomeIcons.truck.data,
+          label: 'Receive Stock',
+          description: 'Log a delivery from a supplier',
+          onPressed: () => Navigator.of(context)
+              .push(slideDownRoute(const ReceiveStockScreen())),
+        ),
+    ];
 
     return SharedScaffold(
       activeRoute: 'inventory',
       backgroundColor: _bg,
       appBar: _buildAppBar(context),
-      floatingActionButton: (onProductsTab && canReceiveStock)
-          ? AppFAB(
-              label: 'Receive Stock',
-              icon: FontAwesomeIcons.plus.data,
+      floatingActionButton: onProductsTab
+          ? AppSpeedDialFab(
+              actions: speedDialActions,
               reserveBottomInset: false,
-              onPressed: () {
-                Navigator.of(context).push(slideDownRoute(const ReceiveStockScreen()));
-              },
             )
           : null,
       body: SafeArea(
@@ -694,12 +713,19 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         _buildSupplierFilter(context),
         Expanded(
           child: list.isEmpty
-              ? Center(
-                  child: Text(
-                    'No products matching filters',
-                    style: TextStyle(color: _subtext),
-                  ),
-                )
+              // Genuinely empty catalogue (not a filter/search miss) hands off
+              // to the persona-aware first-run empty state — the "Add your first
+              // product" CTA / neutral message (Seam 2, #34). A filter miss over
+              // a populated catalogue keeps the "no products matching" copy.
+              ? ref.watch(firstRunSurfaceStateProvider) !=
+                        FirstRunSurfaceState.hasContent
+                    ? const FirstRunEmptyState()
+                    : Center(
+                        child: Text(
+                          'No products matching filters',
+                          style: TextStyle(color: _subtext),
+                        ),
+                      )
               : ListView.builder(
                   padding: EdgeInsets.fromLTRB(
                     context.getRSize(16),

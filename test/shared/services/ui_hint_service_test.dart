@@ -29,5 +29,17 @@ void main() {
       expect(await service.shouldShow(key), false);
       expect(await service.viewCount(key), 3);
     });
+
+    test('POS tap-add and long-press hints are view-counted independently',
+        () async {
+      // The two POS coach banners can co-exist; dismissing one must not
+      // consume the other's view count (issue #32).
+      await service.markShown(UiHintService.hintPosTapAdd);
+      await service.markShown(UiHintService.hintPosTapAdd);
+
+      expect(await service.shouldShow(UiHintService.hintPosTapAdd), false);
+      expect(await service.shouldShow(UiHintService.hintPosLongpress), true);
+      expect(await service.viewCount(UiHintService.hintPosLongpress), 0);
+    });
   });
 }

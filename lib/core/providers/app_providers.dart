@@ -539,3 +539,13 @@ final hasLocalProductsProvider = businessScopedStream<bool>(
       .distinct(),
   whenAbsent: false,
 );
+
+/// True once the local Drift database has at least one order row for the
+/// current business — the "Make a sale" milestone for the Get-started checklist
+/// (issue #31 / Seam 3). Distinct-filtered in the DAO so it only notifies on the
+/// empty → non-empty flip. Any order counts (see
+/// [OrdersDao.watchAnyOrderExists]).
+final hasAnyOrderProvider = businessScopedStream<bool>(
+  (ref, db, businessId) => db.ordersDao.watchAnyOrderExists(),
+  whenAbsent: false,
+);

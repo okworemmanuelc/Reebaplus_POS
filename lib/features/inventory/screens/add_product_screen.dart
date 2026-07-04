@@ -11,6 +11,7 @@ import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 
+import 'package:reebaplus_pos/features/inventory/models/fast_add_product_model.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/product_name.dart';
@@ -83,6 +84,20 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   bool _isSaving = false;
   String? _errorMessage;
 
+  /// Fast-Add: the "More details" section is collapsed by default (ADR 0006).
+  bool _showMoreDetails = false;
+
+  /// The required fields that live in the always-visible fast section. A
+  /// validation error naming anything else (only Store today) expands "More
+  /// details" first, so an error never points at a collapsed field.
+  static const _fastSectionFields = {
+    'Product Name',
+    'Selling Price',
+    'Quantity',
+    'Buying Price',
+    'Manufacturer',
+  };
+
   static const _units = kProductUnits;
   List<String> _dynamicUnits = _units;
 
@@ -98,6 +113,15 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   @override
   void initState() {
     super.initState();
+    // Fast-Add (direct mode) opens on the business-type-aware unit default so a
+    // crate business engages empty-crate tracking automatically (ADR 0006).
+    // Receive Stock's mini-form keeps its existing Bottle default, untouched.
+    if (!widget.receiveMode) {
+      _unit = fastAddDefaultUnit(
+        tracksCrates: businessTracksCrates(ref.read(currentBusinessProvider)),
+      );
+      _trackEmpties = _unit.toLowerCase() == 'bottle';
+    }
     _loadData();
   }
 
@@ -471,6 +495,12 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   bool get _isCrateBusiness =>
       businessTracksCrates(ref.read(currentBusinessProvider));
 
+  /// The adaptive Fast-Add layout is used for creating a brand-new product in
+  /// direct mode. Receive Stock's mini-form and the "add stock to an existing
+  /// product" path keep the full classic layout untouched.
+  bool get _useFastLayout =>
+      !widget.receiveMode && _selectedExistingProduct == null;
+
   /// trackEmpties as actually saved — forced off for non-crate businesses even
   /// if the (hidden) checkbox state is on.
   bool get _effectiveTrackEmpties => _isCrateBusiness && _trackEmpties;
@@ -639,6 +669,14 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     }
 
     // ── NEW PRODUCT ─────────────────────────────────────────────────────────
+    // Direct-mode (Fast-Add) creates run through the pure Fast-Add form model
+    // (Seam 1). Receive Stock's mini-form (receiveMode) keeps its classic
+    // validation + persist below, untouched.
+    if (!widget.receiveMode) {
+      await _saveFastAddNewProduct();
+      return;
+    }
+
     final name = _nameCtrl.text.trim();
 
     if (_selectedCategory == null && _categoryCtrl.text.trim().isNotEmpty) {
@@ -817,6 +855,160 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     }
   }
 
+  /// Fast-Add (direct mode) create: validate + shape through the pure Fast-Add
+  /// form model (Seam 1, ADR 0006), then persist via the existing DAOs.
+  Future<void> _saveFastAddNewProduct() async {
+    final businessId = ref.read(authProvider).currentUser?.businessId;
+    if (businessId == null) {
+      AppNotification.showError(context, 'Account not loaded yet.');
+      return;
+    }
+
+    final result = resolveFastAdd(
+      FastAddInput(
+        name: _nameCtrl.text,
+        sellingPrice: _retailPriceCtrl.text,
+        quantity: _initialStockCtrl.text,
+        buyingPrice: _buyingPriceCtrl.text,
+        wholesalePrice: _wholesalePriceCtrl.text,
+        lowStock: _lowStockCtrl.text,
+        unit: _unit,
+        trackEmpties: _trackEmpties,
+        emptyCrateValue: _emptyCrateValueCtrl.text,
+        hasManufacturer: _selectedManufacturer != null ||
+            _manufacturerCtrl.text.trim().isNotEmpty,
+        selectedStoreId: _selectedStore?.id,
+      ),
+      FastAddContext(
+        tracksCrates: _isCrateBusiness,
+        canEditBuying: _canEditBuying,
+        storeIds: _stores.map((s) => s.id).toList(),
+      ),
+    );
+
+    switch (result) {
+      case FastAddInvalid(:final field, :final message):
+        // Reveal a "More details" field before pointing at it, so an error
+        // never references a collapsed field (ADR 0006).
+        if (!_fastSectionFields.contains(field) && !_showMoreDetails) {
+          setState(() => _showMoreDetails = true);
+        }
+        AppNotification.showError(context, message);
+      case FastAddIntent():
+        await _persistNewProduct(result);
+    }
+  }
+
+  /// Persist a resolved Fast-Add write intent through the existing catalog /
+  /// inventory DAOs — the same path a fully-filled form has always used. Only
+  /// the shaped scalar values come from the model; the get-or-create foreign
+  /// keys and pass-through fields are attached here.
+  Future<void> _persistNewProduct(FastAddIntent intent) async {
+    final db = ref.read(databaseProvider);
+    final auth = ref.read(authProvider);
+    final businessId = auth.currentUser?.businessId;
+    if (businessId == null) return;
+
+    // Duplicate-name guard (unchanged behaviour).
+    final duplicate = await db.catalogDao.findByName(intent.name);
+    if (duplicate != null) {
+      if (mounted) {
+        AppNotification.showError(
+          context,
+          'A product named "${intent.name}" already exists.',
+        );
+      }
+      return;
+    }
+
+    setState(() => _isSaving = true);
+    try {
+      // Get-or-create the typed-but-unselected foreign keys, exactly as before.
+      if (_selectedManufacturer == null &&
+          _manufacturerCtrl.text.trim().isNotEmpty) {
+        _selectedManufacturer = await _getOrCreateManufacturer(
+          _manufacturerCtrl.text.trim(),
+        );
+      }
+      if (_selectedSupplier == null && _supplierCtrl.text.trim().isNotEmpty) {
+        _selectedSupplier = await _getOrCreateSupplier(
+          _supplierCtrl.text.trim(),
+        );
+      }
+      if (_selectedCategory == null && _categoryCtrl.text.trim().isNotEmpty) {
+        _selectedCategory = await _getOrCreateCategory(
+          _categoryCtrl.text.trim(),
+        );
+      }
+
+      final productId = await db.catalogDao.insertProductWithInitialStock(
+        ProductsCompanion.insert(
+          name: intent.name,
+          businessId: businessId,
+          subtitle: drift.Value(
+            _subtitleCtrl.text.trim().isEmpty
+                ? null
+                : _subtitleCtrl.text.trim(),
+          ),
+          retailerPriceKobo: drift.Value(intent.retailerPriceKobo),
+          wholesalerPriceKobo: drift.Value(intent.wholesalerPriceKobo),
+          buyingPriceKobo: drift.Value(intent.buyingPriceKobo),
+          unit: drift.Value(intent.unit),
+          trackEmpties: drift.Value(intent.trackEmpties),
+          emptyCrateValueKobo: intent.emptyCrateValueKobo == null
+              ? const drift.Value.absent()
+              : drift.Value(intent.emptyCrateValueKobo!),
+          allowFractionalSales: drift.Value(_allowFractionalSales),
+          colorHex: drift.Value(_colorHex),
+          size: drift.Value(_size),
+          expiryDate: drift.Value(_expiryDate),
+          lowStockThreshold: drift.Value(intent.lowStockThreshold),
+          manufacturerId: drift.Value(_selectedManufacturer?.id),
+          supplierId: drift.Value(_selectedSupplier?.id),
+          categoryId: drift.Value(_selectedCategory?.id),
+        ),
+        initialStock: intent.initialStock,
+        storeId: intent.storeId,
+        performedBy: auth.currentUser?.id,
+      );
+
+      // Persist the crate value at the manufacturer level so every product of
+      // this manufacturer shares one value (§16.5).
+      if (_selectedManufacturer != null && intent.emptyCrateValueKobo != null) {
+        await db.catalogDao.updateManufacturerEmptyCrateValue(
+          _selectedManufacturer!.id,
+          intent.emptyCrateValueKobo!,
+        );
+      }
+
+      final newProduct = await (db.select(
+        db.products,
+      )..where((t) => t.id.equals(productId))).getSingle();
+      if (mounted) {
+        AppNotification.showSuccess(context, '${intent.name} added to catalog');
+      }
+
+      await ref
+          .read(activityLogProvider)
+          .logAction(
+            'new_product',
+            '${auth.currentUser?.name ?? 'Unknown'} added product: ${intent.name}',
+            productId: productId,
+          );
+
+      if (mounted) Navigator.pop(context);
+      widget.onProductAdded?.call(newProduct);
+    } catch (e, st) {
+      CrashReporter.record(e, st, context: 'inventory.add_product');
+      debugPrint('AddProductScreen._persistNewProduct error: $e');
+      if (mounted) {
+        AppNotification.showError(context, 'Could not save product: $e');
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
   Future<void> _addSupplierViaForm() async {
     final created = await SupplierFormSheet.show(context);
     if (created == null || !mounted) return;
@@ -911,6 +1103,17 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                   ),
                 ),
               ],
+              // ── FAST-ADD (direct mode, new product) vs the classic full
+              // layout (Receive Stock mini-form / add-stock-to-existing). ─────
+              if (_useFastLayout)
+                ..._fastFormChildren(
+                  card: card,
+                  textColor: textColor,
+                  subtext: subtext,
+                  border: border,
+                  canEditBuying: canEditBuying,
+                )
+              else ...[
               // ── EXISTING PRODUCT BANNER ──────────────────────────────
               if (isExisting) ...[
                 Container(
@@ -1344,6 +1547,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                     onChanged: (v) => setState(() => _selectedStore = v),
                   ),
               ],
+              ], // end of the classic full layout (else branch)
             ],
           ),
         ),
@@ -1364,6 +1568,425 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       ),
     );
   }
+
+  // ── FAST-ADD LAYOUT (direct mode) ───────────────────────────────────────────
+
+  /// The adaptive Fast-Add form (ADR 0006): a short fast section — Name (with a
+  /// size hint), Selling Price, skippable Buying Price, optional Category, and
+  /// (crate businesses only) a required Manufacturer, then Quantity — followed
+  /// by a collapsible "More details" section holding everything else.
+  List<Widget> _fastFormChildren({
+    required Color card,
+    required Color textColor,
+    required Color subtext,
+    required Color border,
+    required bool canEditBuying,
+  }) {
+    return [
+      // ── NAME (include the size) ─────────────────────────────────────────
+      AppInput(
+        controller: _nameCtrl,
+        labelText: 'Product Name *',
+        hintText: _nameHint,
+        prefixIcon: Icon(Icons.search, size: 18, color: subtext),
+        onChanged: _onNameChanged,
+      ),
+      _fieldHelper('Include the size — e.g. Star 60cl, Eva Water 75cl', subtext),
+      if (_productSuggestions.isNotEmpty)
+        _suggestionList(
+          children: _productSuggestions
+              .map(
+                (p) => _suggestionTile(
+                  label: productDisplayName(p.name, p.size, unit: p.unit),
+                  textColor: textColor,
+                  card: card,
+                  border: border,
+                  onTap: () => _selectProduct(p),
+                ),
+              )
+              .toList(),
+          card: card,
+          border: border,
+        ),
+      const SizedBox(height: 16),
+
+      // ── SELLING PRICE ───────────────────────────────────────────────────
+      AppInput(
+        controller: _retailPriceCtrl,
+        labelText: 'Selling Price ($activeCurrencySymbol) *',
+        hintText: '0.00',
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        inputFormatters: [CurrencyInputFormatter()],
+      ),
+      const SizedBox(height: 14),
+
+      // ── BUYING PRICE (skippable) ────────────────────────────────────────
+      if (canEditBuying) ...[
+        AppInput(
+          controller: _buyingPriceCtrl,
+          labelText: 'Buying Price ($activeCurrencySymbol)',
+          hintText: '0.00',
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [CurrencyInputFormatter()],
+        ),
+        _fieldHelper(
+          'Add what you paid so profit shows correctly. You can add it later.',
+          subtext,
+        ),
+        const SizedBox(height: 14),
+      ],
+
+      // ── CATEGORY (optional, with examples) ──────────────────────────────
+      AppInput(
+        controller: _categoryCtrl,
+        labelText: 'Category',
+        hintText: 'Search or type category name…',
+        prefixIcon: Icon(Icons.search, size: 18, color: subtext),
+        onChanged: _onCategoryChanged,
+        suffixIcon: _selectedCategory != null
+            ? GestureDetector(
+                onTap: _clearCategory,
+                child: Icon(Icons.close, size: 16, color: subtext),
+              )
+            : null,
+      ),
+      _fieldHelper('e.g. Water, Beer, Wine', subtext),
+      if (_categorySuggestions.isNotEmpty ||
+          (_categoryCtrl.text.trim().isNotEmpty && _selectedCategory == null))
+        _categorySuggestionsList(card, textColor, border),
+      const SizedBox(height: 16),
+
+      // ── MANUFACTURER (crate businesses only, required) ──────────────────
+      if (_isCrateBusiness) ...[
+        AppInput(
+          controller: _manufacturerCtrl,
+          labelText: 'Manufacturer *',
+          hintText: 'Search or type manufacturer name…',
+          prefixIcon: Icon(Icons.search, size: 18, color: subtext),
+          onChanged: _onManufacturerChanged,
+          suffixIcon: _selectedManufacturer != null
+              ? GestureDetector(
+                  onTap: _clearManufacturer,
+                  child: Icon(Icons.close, size: 16, color: subtext),
+                )
+              : null,
+        ),
+        if (_manufacturerSuggestions.isNotEmpty ||
+            (_manufacturerCtrl.text.trim().isNotEmpty &&
+                _selectedManufacturer == null))
+          _manufacturerSuggestionsList(card, textColor, border),
+        const SizedBox(height: 16),
+      ],
+
+      // ── QUANTITY ────────────────────────────────────────────────────────
+      AppInput(
+        controller: _initialStockCtrl,
+        labelText: 'Quantity *',
+        hintText: '0',
+        keyboardType: TextInputType.number,
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+      ),
+      const SizedBox(height: 20),
+
+      // ── MORE DETAILS (collapsible) ──────────────────────────────────────
+      _moreDetailsHeader(subtext, textColor),
+      if (_showMoreDetails) ...[
+        const SizedBox(height: 16),
+        ..._moreDetailsChildren(
+          card: card,
+          textColor: textColor,
+          subtext: subtext,
+          border: border,
+        ),
+      ],
+    ];
+  }
+
+  /// The collapsed "More details" fields: everything optional or defaulted.
+  List<Widget> _moreDetailsChildren({
+    required Color card,
+    required Color textColor,
+    required Color subtext,
+    required Color border,
+  }) {
+    return [
+      // ── DESCRIPTION (optional) ──────────────────────────────────────────
+      AppInput(
+        controller: _subtitleCtrl,
+        labelText: 'Description',
+        hintText: _descriptionHint,
+      ),
+      const SizedBox(height: 14),
+
+      // ── WHOLESALER PRICE (optional; mirrors selling on save) ────────────
+      AppInput(
+        controller: _wholesalePriceCtrl,
+        labelText: 'Wholesaler Price ($activeCurrencySymbol)',
+        hintText: 'Defaults to the selling price',
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        inputFormatters: [CurrencyInputFormatter()],
+      ),
+      const SizedBox(height: 16),
+
+      // ── PRODUCT UNIT ────────────────────────────────────────────────────
+      _sectionLabel('PRODUCT UNIT', subtext),
+      const SizedBox(height: 8),
+      AppDropdown<String>(
+        value: _unit,
+        items: _dynamicUnits
+            .map((u) => DropdownMenuItem(value: u, child: Text(u)))
+            .toList(),
+        onChanged: (v) {
+          if (v != null) {
+            setState(() {
+              _unit = v;
+              // Auto-enable tracking for bottle products, clear it otherwise.
+              _trackEmpties = v.toLowerCase() == 'bottle';
+            });
+          }
+        },
+      ),
+      const SizedBox(height: 8),
+
+      // ── ALLOW FRACTIONAL SALES ──────────────────────────────────────────
+      CheckboxListTile(
+        value: _allowFractionalSales,
+        onChanged: (v) => setState(() => _allowFractionalSales = v ?? false),
+        title: const Text('Allow fractional sales'),
+        subtitle: const Text(
+          'Enables ±0.5 quantity steps when selling this product',
+        ),
+        controlAffinity: ListTileControlAffinity.leading,
+        contentPadding: EdgeInsets.zero,
+        dense: true,
+      ),
+      const SizedBox(height: 16),
+
+      // ── TRACK EMPTIES + CRATE VALUE (crate business + bottle only) ──────
+      if (_unit.toLowerCase() == 'bottle' && _isCrateBusiness) ...[
+        CheckboxListTile(
+          value: _trackEmpties,
+          onChanged: (v) => setState(() => _trackEmpties = v ?? false),
+          title: const Text('Track empty crate returns'),
+          subtitle: const Text(
+            'Enables deposit collection and crate return flow for this product',
+          ),
+          controlAffinity: ListTileControlAffinity.leading,
+          contentPadding: EdgeInsets.zero,
+          dense: true,
+        ),
+        if (_trackEmpties) ...[
+          const SizedBox(height: 6),
+          AppInput(
+            controller: _emptyCrateValueCtrl,
+            labelText: 'Empty Crate Value ($activeCurrencySymbol)',
+            hintText: '0.00',
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [CurrencyInputFormatter()],
+          ),
+        ],
+        const SizedBox(height: 16),
+      ],
+
+      // ── LOW STOCK ALERT (default 5) ─────────────────────────────────────
+      AppInput(
+        controller: _lowStockCtrl,
+        labelText: 'Low Stock Alert',
+        hintText: '5',
+        keyboardType: TextInputType.number,
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+      ),
+      const SizedBox(height: 16),
+
+      // ── SUPPLIER (optional) ─────────────────────────────────────────────
+      AppInput(
+        controller: _supplierCtrl,
+        labelText: 'Supplier',
+        hintText: 'Search supplier name…',
+        prefixIcon: Icon(Icons.search, size: 18, color: subtext),
+        onChanged: _onSupplierChanged,
+        suffixIcon: _selectedSupplier != null
+            ? GestureDetector(
+                onTap: _clearSupplier,
+                child: Icon(Icons.close, size: 16, color: subtext),
+              )
+            : null,
+      ),
+      if (_supplierSuggestions.isNotEmpty ||
+          (_supplierCtrl.text.trim().isNotEmpty && _selectedSupplier == null))
+        _supplierSuggestionsList(card, textColor, border),
+      if (Gates.manageSuppliers.allows(ref)) ...[
+        const SizedBox(height: 8),
+        AppButton(
+          text: 'Add new supplier',
+          variant: AppButtonVariant.outline,
+          onPressed: _addSupplierViaForm,
+        ),
+      ],
+      const SizedBox(height: 16),
+
+      // ── EXPIRY DATE (optional) ──────────────────────────────────────────
+      _sectionLabel('EXPIRY DATE', subtext),
+      const SizedBox(height: 4),
+      Text(
+        'Optional — used to flag stock nearing expiry',
+        style: TextStyle(fontSize: 11, color: subtext),
+      ),
+      const SizedBox(height: 8),
+      _expiryField(
+        card: card,
+        border: border,
+        subtext: subtext,
+        textColor: textColor,
+      ),
+
+      // ── STORE (multi-store only; single-store is used silently) ─────────
+      if (_stores.length > 1) ...[
+        const SizedBox(height: 16),
+        _sectionLabel('STORE *', subtext),
+        const SizedBox(height: 8),
+        AppDropdown<StoreData?>(
+          value: _selectedStore,
+          items: _stores
+              .map(
+                (w) => DropdownMenuItem<StoreData?>(
+                  value: w,
+                  child: Text(w.name, overflow: TextOverflow.ellipsis),
+                ),
+              )
+              .toList(),
+          onChanged: (v) => setState(() => _selectedStore = v),
+        ),
+      ],
+    ];
+  }
+
+  Widget _fieldHelper(String text, Color subtext) => Padding(
+    padding: const EdgeInsets.only(top: 6, left: 4),
+    child: Text(text, style: TextStyle(fontSize: 11, color: subtext)),
+  );
+
+  Widget _moreDetailsHeader(Color subtext, Color textColor) => InkWell(
+    onTap: () => setState(() => _showMoreDetails = !_showMoreDetails),
+    borderRadius: BorderRadius.circular(12),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Text(
+            'More details',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: textColor,
+            ),
+          ),
+          const Spacer(),
+          Icon(
+            _showMoreDetails ? Icons.expand_less : Icons.expand_more,
+            size: 22,
+            color: subtext,
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _categorySuggestionsList(Color card, Color textColor, Color border) =>
+      _suggestionList(
+        children: [
+          ..._categorySuggestions.map(
+            (c) => _suggestionTile(
+              label: c.name,
+              textColor: textColor,
+              card: card,
+              border: border,
+              onTap: () => _selectCategory(c),
+            ),
+          ),
+          if (_categoryCtrl.text.trim().isNotEmpty &&
+              !_categorySuggestions.any(
+                (c) =>
+                    c.name.toLowerCase() ==
+                    _categoryCtrl.text.trim().toLowerCase(),
+              ))
+            _suggestionTile(
+              label: 'Create "${_categoryCtrl.text.trim()}"',
+              icon: Icons.add_circle_outline,
+              textColor: Theme.of(context).colorScheme.primary,
+              card: card,
+              border: border,
+              onTap: () => _createNewCategory(_categoryCtrl.text.trim()),
+            ),
+        ],
+        card: card,
+        border: border,
+      );
+
+  Widget _manufacturerSuggestionsList(
+    Color card,
+    Color textColor,
+    Color border,
+  ) => _suggestionList(
+    children: [
+      ..._manufacturerSuggestions.map(
+        (m) => _suggestionTile(
+          label: m.name,
+          textColor: textColor,
+          card: card,
+          border: border,
+          onTap: () => _selectManufacturer(m),
+        ),
+      ),
+      if (_manufacturerCtrl.text.trim().isNotEmpty &&
+          !_manufacturerSuggestions.any(
+            (m) =>
+                m.name.toLowerCase() ==
+                _manufacturerCtrl.text.trim().toLowerCase(),
+          ))
+        _suggestionTile(
+          label: 'Create "${_manufacturerCtrl.text.trim()}"',
+          icon: Icons.add_circle_outline,
+          textColor: Theme.of(context).colorScheme.primary,
+          card: card,
+          border: border,
+          onTap: () => _createNewManufacturer(_manufacturerCtrl.text.trim()),
+        ),
+    ],
+    card: card,
+    border: border,
+  );
+
+  Widget _supplierSuggestionsList(Color card, Color textColor, Color border) =>
+      _suggestionList(
+        children: [
+          ..._supplierSuggestions.map(
+            (s) => _suggestionTile(
+              label: s.name,
+              textColor: textColor,
+              card: card,
+              border: border,
+              onTap: () => _selectSupplier(s),
+            ),
+          ),
+          if (_supplierCtrl.text.trim().isNotEmpty &&
+              !_supplierSuggestions.any(
+                (s) =>
+                    s.name.toLowerCase() ==
+                    _supplierCtrl.text.trim().toLowerCase(),
+              ))
+            _suggestionTile(
+              label: 'Create "${_supplierCtrl.text.trim()}"',
+              icon: Icons.add_circle_outline,
+              textColor: Theme.of(context).colorScheme.primary,
+              card: card,
+              border: border,
+              onTap: () => _createNewSupplier(_supplierCtrl.text.trim()),
+            ),
+        ],
+        card: card,
+        border: border,
+      );
 
   // ── HELPERS ────────────────────────────────────────────────────────────────
 
