@@ -10,6 +10,16 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### SHIPPED: `daos.dart` split into 11 domain `part` files (2026-07-04, locality refactor)
+- **Pure refactor — no behaviour change, seams not moved.** The 9,820-line
+  `lib/core/database/daos.dart` (47 DAOs) is now 11 domain-grouped
+  `part of 'daos.dart'` files (`daos_catalog.dart` … `daos_org.dart`), matching the
+  existing `sync_registry.dart` → `app_database.dart` house pattern. Still **one
+  library**: private `_unset`/`_absent` stay visible, the generated `daos.g.dart` is
+  unchanged (no `build_runner` rerun), and the 5 importers are untouched. Each DAO's
+  interface over its table set is unchanged; only source locality improved. Verified:
+  every code line preserved exactly once + `flutter analyze` clean (full project).
+
 ### SHIPPED: Business-Scoped Stream primitive — factory + full migration (2026-07-03, PRD #23 = issues #24 + #25)
 - **Built both slices in one pass.** New `lib/core/providers/business_scoped_stream.dart`:
   the `currentBusinessIdProvider` seam (`authProvider.select(currentUser?.businessId)`)

@@ -22,6 +22,37 @@ tile and the nearest `Material`, so they don't trigger it.
 
 **Verified:** `flutter analyze lib/features/pos/screens/cart_screen.dart` — no issues.
 
+## 2026-07-04 — `daos.dart` split into 11 domain `part` files (pure locality refactor)
+
+**Scope:** pure refactor, **no behaviour change**, **no interface change**. The
+9,820-line `lib/core/database/daos.dart` (47 `@DriftAccessor` DAOs) was mechanically
+carved into 11 domain-grouped `part of 'daos.dart'` files — the same house pattern
+`sync_registry.dart` already uses (`part of 'app_database.dart'`). Everything stays
+**one library**, so:
+- library-private members (`_unset`, `_absent`) stay visible across every part;
+- the generated `daos.g.dart` (`part of 'daos.dart'`) is **unchanged** — no
+  `build_runner` rerun needed, generation is identical;
+- the 5 files that `import daos.dart` are untouched — public class names still
+  live in library `daos.dart`.
+
+**The seams were not moved.** Each DAO is its own interface over a fixed table set;
+the split only improves **locality** (domain files now 358–2,324 lines vs one
+9,820-line monster). Verbatim contiguous slices — no reordering within any class;
+`CustomerDataExtension` moved with the customers group, the `_absent` sentinel kept
+inside its `BusinessesDao` block.
+
+**New files:** `daos_catalog.dart`, `daos_inventory.dart`, `daos_orders.dart`,
+`daos_customers.dart`, `daos_suppliers.dart`, `daos_crates.dart`,
+`daos_expenses.dart`, `daos_sync_diagnostics.dart`, `daos_stores_sessions.dart`,
+`daos_permissions.dart`, `daos_org.dart`. `daos.dart` is now a ~35-line library
+header (imports + `part` directives + the two sentinels).
+
+**Verified:** slicing script asserted every non-blank code line preserved exactly
+once (9,067 lines, 0 missing / 0 extra). `flutter analyze` clean — db dir and full
+project (`No issues found!`).
+
+---
+
 ## 2026-07-03 — Business-Scoped Stream primitive: guarded factory + full migration (PRD #23 = #24 + #25)
 
 **Scope:** retire the build-time-poison provider bug *by construction*. A
