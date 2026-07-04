@@ -2,6 +2,22 @@
 
 ---
 
+## 2026-07-04 — Migration 0131 deployed: configurable trial length (console getter pending)
+
+Applied `0131_configurable_trial_length.sql` to the linked Supabase project via
+`supabase db push` — recorded in `schema_migrations`, and the live
+`set_business_trial_end()` body verified to now call `console_get_trial_days()`
+with the 30-day fallback intact.
+
+**Console dependency not yet deployed.** `console_get_trial_days()` /
+`public.console_settings` (owned by the console repo, §13) don't exist in the
+shared project yet, so the trigger currently takes its **defensive 30-day
+fallback** — behaviour identical to migration 0101. Once the console side ships
+its getter, new sign-ups pick up the configured trial length automatically; **no
+redeploy of 0131 needed** (the trigger late-binds the function call at runtime).
+
+---
+
 ## 2026-07-04 — Saved Carts modal: ListTile ink/background no longer hidden by the surface fill
 
 **Bug:** Flutter framework warning — *"ListTile background color or ink splashes may
