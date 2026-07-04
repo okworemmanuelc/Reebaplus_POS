@@ -10,6 +10,100 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### SHIPPED: Provisional→authoritative COGS correction + rolled-up audit (2026-07-04, issue #40, ADR 0005)
+- **Epic 2, F4 (FIFO batch costing).** The **client correction flow**: lands the
+  server's authoritative COGS back on the device and audits it. Lives entirely in
+  the sync engine — off the sale / app-open path.
+- **`SupabaseSyncService`** — a push drain collects the (product, store) pairs
+  whose sale lines it delivered to the cloud (v1 `order_items` upserts +
+  v2 `pos_record_sale_v2` envelopes; quick-sale null-product lines excluded), then
+  `reconcilePushedSaleCosts` calls the server's `pos_recost_pairs` (0133). The
+  server-corrected `order_items.buying_price_kobo` flows back down as an **ordinary
+  LWW row update** on the following pull — replacing the provisional snapshot with
+  no merge conflict. Best-effort: an RPC failure is swallowed and self-heals on the
+  next sync of the pair (incl. a peer's late earlier-timestamped sale replaying the
+  ledger, F3).
+- **One rolled-up Activity Log row per sync batch** — new
+  `CostBatchesDao.logRecostReconciliation` (`cost.recosted_on_sync`, "N sales of X
+  re-costed on sync — batch-boundary reconciliation"; multi-product batches → "N
+  sales across M products"). Written ONLY when `recosted_count > 0` (a single-till
+  provisional that already matched writes no row). No per-sale prompt.
+- **`flushSale` deliberately not re-cost-triggered** — keeps recost off the
+  foreground sale path; the online-flushed sale is already consistent and any drift
+  is fixed by the reconnecting offline peer's re-cost.
+- **Tests:** `test/costing/recost_correction_flow_test.dart` (8) — provisional
+  present → corrected value + exactly one Activity Log row; LWW replaces the
+  provisional; count-0 / empty-pairs / RPC-failure all write no row; multi-product
+  roll-up; the two pure collectors incl. the quick-sale skip. `flutter analyze`
+  clean; costing + sync suites green (210).
+
+### SHIPPED: Pure FIFO draw-down + provisional COGS at checkout (2026-07-04, issue #38, ADR 0005)
+- **Epic 2, F2 (FIFO batch costing).** The device-side draw-down: a pure,
+  DB-free costing function and its wiring into the sale path. Single-till/online
+  happy path; multi-till server reconciliation is #39/#40.
+- **Pure function — [fifo_drawdown.dart](lib/core/costing/fifo_drawdown.dart):**
+  `fifoDrawDown(List<FifoBatch> oldestFirst, List<int> lineQtys) →
+  FifoDrawResult{lineCogsKobo, lineShortfall, batchConsumption}`. Weighted COGS
+  across partial-batch splits spanning two+ batches; cost-0 (uncosted) batch →
+  0 COGS but still drawn down; queue exhaustion reported as `lineShortfall`;
+  consumes the queue sequentially across lines. Widget-free/DB-free. 12 unit
+  tests ([fifo_drawdown_test.dart](test/costing/fifo_drawdown_test.dart)).
+- **Checkout wiring — `CostBatchesDao.drawDownSale`
+  ([daos_costing.dart](lib/core/database/daos_costing.dart)):** new
+  `CostBatchesDao` (registered; build_runner regenerated). Inside
+  `OrdersDao.createOrder`'s sale transaction (after the inventory guard, on BOTH
+  v1/v2 sync paths) it reads each (product, store) queue oldest-first, snapshots
+  the **provisional per-unit COGS** onto `OrderItems.buyingPriceKobo`, decrements
+  the consumed `cost_batches` + enqueues their upserts. **Per-unit rounding is
+  `round(line_total/qty)` (Dart `double.round()` == the server's round-half-away-
+  from-zero, migration 0133)** so a provisional line and its authoritative
+  correction agree. Selling price (`unitPriceKobo`) is untouched.
+- **COGS is exactly the local batch-queue view — no scalar fallback.** Units the
+  queue can't cover (a product with no batch, or a partial line) are **uncosted
+  (0)**, matching the server's `fifo_assign` (a scalar the server would later
+  rewrite to 0 is the "vanishing trust" failure ADR 0005 avoids).
+- **Derived scalar cache:** after the draw-down, `Products.buyingPriceKobo` is
+  re-pointed at the oldest remaining **costed** batch (across stores), only when
+  the value changes. An uncosted (cost-0) oldest batch is **skipped** — the
+  scalar is never clobbered to 0 (the 0→real backfill is #41). Existing read
+  sites (recon / profit report multiply per-unit × qty) unaffected.
+- **⚠️ Coherence gap (flagged, out of #38 scope): batch-creation-on-inflow is
+  NOT wired.** Neither Add Product's opening stock nor Receive Stock creates a
+  `cost_batches` row yet — the queue only grows via the #37 migration seed. So
+  post-migration new / out-of-stock-at-migration / restocked products have **no
+  batch → sales are uncosted (0 COGS)** until a batch exists. This is the
+  deliberate Epic 2 semantic (uncosted until cost is recorded; #41 backfills),
+  but Epic 2 is not usefully costing new stock until inflow→batch is wired.
+  Recommend a follow-up issue before Epic 2 is considered done.
+- **Tests:** 16 (12 pure + 4 integration:
+  [checkout_cogs_drawdown_test.dart](test/costing/checkout_cogs_drawdown_test.dart)
+  — boundary-span weighted snapshot + FIFO decrement + scalar recompute + selling
+  price untouched + cost_batches push; partial-coverage shortfall; no-batch
+  uncosted; uncosted-batch 0-COGS + no-clobber). `flutter analyze` clean project-
+  wide; full suite **729 pass / 69 skip / 1 pre-existing unrelated fail**
+  (`who_is_working_screen_test`, confirmed failing on stashed HEAD).
+
+### SHIPPED: Server-authoritative batch consumption + replay (2026-07-04, issue #39, ADR 0005)
+- **Epic 2, F3 (FIFO batch costing).** The server owns the per-(product, store)
+  cost queue and assigns "which batch paid for each sale," ordered by the sale's
+  **own recorded timestamp** (`orders.created_at`), re-deriving the authoritative
+  per-line COGS. Built as a **separate derivation pass** over the already-
+  quantified movement ledger — `pos_record_sale_v2` / `pos_inventory_delta_v2`
+  are untouched, so stock-quantity conflict resolution is never reopened.
+- **`0133_fifo_batch_consumption.sql`** — three layers: `fifo_assign(batches,
+  sales)` (pure IMMUTABLE FIFO draw-down: partial-batch splits, cost-0 uncosted
+  units, queue exhaustion; per-unit `round(total/qty)`); `pos_recost_product_
+  store(business, product, store)` (loads queue + recognized-sale ledger, replays,
+  writes `order_items.buying_price_kobo` + `cost_batches.qty_remaining`; full
+  replay ⇒ idempotent, late earlier sale ⇒ re-assigns already-corrected lines);
+  `pos_recost_pairs(business, pairs)` (rolls up a sync's touched pairs → one count
+  for #40's Activity Log row).
+- **Tests:** Tier-2 `pos_recost_batches_test.dart` (RPCs called directly, no
+  client). Verified against dev Supabase read-only: `fifo_assign` battery 8/8,
+  load queries + jsonb writeback correct.
+- **NOT yet on remote via db push** — needs `supabase db push` to record 0133
+  (0132 already deployed). Inert until #40 calls it.
+
 ### SHIPPED: Cost Batch schema + migration + sync membership (2026-07-04, issue #37, ADR 0005)
 - **Epic 2, F1 (FIFO batch costing).** The **Cost Batch** foundation landed
   ahead of any consuming logic (land-the-migration-first). No draw-down /

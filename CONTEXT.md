@@ -128,6 +128,31 @@ stays a single current value per product, independent of batches.
 _Avoid_: per-batch selling prices; treating a product-form buying-price edit
 as a batch record (a new batch at a new cost is a Receive Stock act).
 
+**Provisional COGS** *(FIFO — ADR 0005)*:
+An offline till's line COGS, computed from its own local batch-queue view at
+checkout — honest, but not yet authoritative. On sync the server re-derives the
+authoritative consumption (ordered by each sale's own recorded timestamp across
+all tills) and corrects the line snapshot as an ordinary LWW row update. Profit
+is provisional until synced; the correction drift is bounded by offline
+duration × batch-cost spread. Client and server use the same per-unit rounding
+so a provisional line and its correction agree when no re-ordering happened.
+_Avoid_: presenting provisional profit as final on a long-offline till;
+blocking the sale on a server round-trip.
+
+**Batch-Boundary Reconciliation** *(FIFO — ADR 0005)*:
+The server-authoritative re-costing that runs when synced sales re-order a
+(product, store)'s FIFO queue — e.g. a late **earlier**-timestamped sale claims
+a cheaper batch, pushing a later sale onto a pricier one. The server replays
+consumption from the timestamp-ordered movement ledger and re-assigns
+already-corrected lines (`pos_recost_product_store`, migration 0133); batch
+consumption is derived, recomputable state, so the replay is deterministic and
+idempotent for a fixed ledger. The correction is audited with one rolled-up
+Activity Log row per sync batch ("N sales of X re-costed on sync"), never a
+silent rewrite and never a per-sale prompt.
+_Avoid_: server-arrival order as the FIFO key; prompting the user per corrected
+sale; treating an assignment as permanent (it is stable only until an earlier
+sale arrives).
+
 ### Scoping
 
 **Current Business Id**:

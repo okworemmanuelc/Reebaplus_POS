@@ -545,6 +545,39 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         }
       }
 
+      // Epic 2 / ADR 0005 — FIFO cost draw-down. Snapshot each line's
+      // provisional per-unit COGS from the local batch queue and decrement the
+      // consumed cost_batches (both within this sale transaction). Quick-sale
+      // lines (no product) are excluded — they stay uncosted. Runs on BOTH sync
+      // paths: pos_record_sale_v2 does not own the batch queue (#39 adds that
+      // server-side), so the client decrements + pushes cost_batches directly.
+      // COGS is the local batch-queue view only; units with no batch are
+      // uncosted (0), matching the server (see CostBatchesDao.drawDownSale).
+      final costLines = <SaleCostLine>[];
+      for (var i = 0; i < items.length; i++) {
+        final item = items[i];
+        final pid = item.productId.value;
+        if (pid == null) continue; // quick sale: no product, no batch
+        costLines.add(
+          SaleCostLine(
+            index: i,
+            productId: pid,
+            storeId: item.storeId.value,
+            quantity: item.quantity.value,
+          ),
+        );
+      }
+      final provisionalCogs = await db.costBatchesDao.drawDownSale(costLines);
+      // Re-snapshot the provisional COGS onto the order lines; every downstream
+      // write (local order_items and the v1/v2 push payloads) uses these.
+      final costedItems = [
+        for (var i = 0; i < items.length; i++)
+          provisionalCogs.containsKey(i)
+              ? items[i].copyWith(buyingPriceKobo: Value(provisionalCogs[i]!))
+              : items[i],
+      ];
+      items = costedItems;
+
       // §13.4 crate dispatch + per-brand deposit record. For a REGISTERED
       // customer, record the crates taken at the sale, per brand:
       //   • write an order_crate_lines row (crates taken + the deposit RATE

@@ -824,6 +824,15 @@ class SupabaseSyncService {
     // Only link-degraded failures abort; per-row FK-deferred / permanent errors
     // keep their own backoff and don't.
     var isLinkDegraded = false;
+
+    // Epic 2 / ADR 0005 (#40) — the (product, store) pairs this drain actually
+    // delivered sale lines to the cloud for. Collected ONLY from successfully
+    // pushed rows (v1 `order_items` upserts below, v2 `pos_record_sale_v2`
+    // envelopes in `_pushDomainItems`), so exactly the pairs a sync batch
+    // touched are re-costed against the server-authoritative FIFO queue after
+    // the drain. Quick-sale lines (no product) never contribute.
+    final recostPairs = <({String productId, String storeId})>{};
+
     for (final group in orderedGroups) {
       final items = groups[group]!;
       final ids = items.map((i) => i.id).toList();
@@ -949,6 +958,12 @@ class SupabaseSyncService {
             }
           }
           await _db.syncDao.markDoneBatch(chunkIds);
+          // #40 — a delivered v1 sale line makes its (product, store) pair a
+          // recost candidate (quick-sale lines carry a null product_id and are
+          // skipped by the collector).
+          if (group.table == 'order_items') {
+            collectOrderItemPairs(chunkPayloads, recostPairs);
+          }
           // A clean chunk below the connection's ceiling counts toward
           // growing the adaptive size back up; already-at-ceiling just
           // resets the streak.
@@ -1053,7 +1068,12 @@ class SupabaseSyncService {
     // pos_create_product → stock_adjustments.performed_by → users.id). Skip on a
     // degraded link — the parents may not have landed and the RPC would fail.
     if (domainItems.isNotEmpty && !isLinkDegraded) {
-      await _pushDomainItems(domainItems, sessionBusinessId, currentAuthUid);
+      await _pushDomainItems(
+        domainItems,
+        sessionBusinessId,
+        currentAuthUid,
+        recostPairs: recostPairs,
+      );
     }
 
     // A drain that completed without a degraded link means the connection is
@@ -1065,6 +1085,15 @@ class SupabaseSyncService {
     // still in `sync_queue` (uploaded/completed, or pending for retry) or moved
     // to `sync_queue_orphans`. Anything missing from both vanished silently.
     await _auditDrainIntegrity(intendedIds, sessionBusinessId);
+
+    // Epic 2 / ADR 0005 (#40) — client correction flow. Now that this batch's
+    // sale lines are in the cloud, ask the server to re-derive the authoritative
+    // FIFO COGS for exactly the (product, store) pairs the drain touched. Any
+    // corrected `order_items.buying_price_kobo` flows back down as an ordinary
+    // LWW row update on the following pull; genuine corrections are audited with
+    // one rolled-up Activity Log row. Best-effort and off the sale path — see
+    // [reconcilePushedSaleCosts].
+    await reconcilePushedSaleCosts(recostPairs, sessionBusinessId);
 
     // If the raw select hit the page limit, more is waiting — drain in the
     // next tick rather than recursing (avoids stack growth on huge backlogs).
@@ -1162,8 +1191,9 @@ class SupabaseSyncService {
   Future<void> _pushDomainItems(
     List<SyncQueueData> items,
     String sessionBusinessId,
-    String currentAuthUid,
-  ) async {
+    String currentAuthUid, {
+    Set<({String productId, String storeId})>? recostPairs,
+  }) async {
     for (final item in items) {
       await _db.syncDao.markInProgressBatch([item.id]);
 
@@ -1213,6 +1243,13 @@ class SupabaseSyncService {
         final response = await _transport.callRpc(rpcName, payload);
         await _applyDomainResponse(rpcName, response);
         await _db.syncDao.markDone(item.id);
+        // #40 — a delivered v2 sale (thin-intent) makes each of its (product,
+        // store) pairs a recost candidate. The envelope carries one store for
+        // the whole sale (`p_store_id`) plus a `p_items` list; quick-sale lines
+        // (null product_id) are skipped by the collector.
+        if (recostPairs != null && rpcName == 'pos_record_sale_v2') {
+          collectSaleEnvelopePairs(payload, recostPairs);
+        }
         final replayed = response is Map && response['replayed'] == true;
         debugPrint('[SyncService] domain $rpcName ok (replayed=$replayed)');
       } on PostgrestException catch (e) {
@@ -1245,6 +1282,107 @@ class SupabaseSyncService {
         debugPrint('[SyncService] Domain RPC $rpcName transient error: $e');
         await _db.syncDao.markFailed(item.id, e.toString());
       }
+    }
+  }
+
+  /// Collect the (product, store) pairs from a batch of freshly-pushed v1
+  /// `order_items` upsert payloads (#40). Quick-sale lines carry a null
+  /// `product_id` and are skipped — they stay uncosted by design (ADR 0005).
+  @visibleForTesting
+  static void collectOrderItemPairs(
+    Iterable<Map<String, dynamic>> orderItemPayloads,
+    Set<({String productId, String storeId})> into,
+  ) {
+    for (final p in orderItemPayloads) {
+      final pid = p['product_id'];
+      final sid = p['store_id'];
+      if (pid is String && sid is String) {
+        into.add((productId: pid, storeId: sid));
+      }
+    }
+  }
+
+  /// Collect the (product, store) pairs from a freshly-pushed
+  /// `pos_record_sale_v2` envelope (#40). The v2 thin-intent carries one store
+  /// for the whole sale (`p_store_id`) and a `p_items` list; quick-sale lines
+  /// (null `product_id`) are skipped.
+  @visibleForTesting
+  static void collectSaleEnvelopePairs(
+    Map<String, dynamic> payload,
+    Set<({String productId, String storeId})> into,
+  ) {
+    final storeId = payload['p_store_id'];
+    final items = payload['p_items'];
+    if (storeId is! String || items is! List) return;
+    for (final it in items) {
+      if (it is Map && it['product_id'] is String) {
+        into.add((productId: it['product_id'] as String, storeId: storeId));
+      }
+    }
+  }
+
+  /// Client correction flow (Epic 2 / ADR 0005, #40). After a sync batch
+  /// delivers sale lines to the cloud, ask the server to re-derive the
+  /// authoritative FIFO COGS for exactly the [pairs] the batch touched
+  /// (`pos_recost_pairs`, migration 0133). The server rewrites each affected
+  /// `order_items.buying_price_kobo` and bumps its `last_updated_at`, so the
+  /// correction flows back down as an ordinary LWW row update on the next pull —
+  /// replacing the provisional snapshot with no merge conflict. Profit was
+  /// provisional until this lands.
+  ///
+  /// Corrections are **audited, never prompted**: exactly one rolled-up Activity
+  /// Log row per sync batch, and ONLY when the server actually changed something
+  /// (`recosted_count > 0`) — a single-till sale whose provisional already
+  /// matched the authoritative value re-costs nothing and writes no row.
+  ///
+  /// Fully best-effort and off the sale / app-open path: any failure is swallowed
+  /// (the re-cost is idempotent and self-heals on the next sync that touches the
+  /// pair — including a peer's late earlier-timestamped sale replaying the
+  /// ledger). Returns the rolled-up re-cost count (0 when nothing changed), for
+  /// diagnostics and tests. See ADR 0005 "batch-boundary reconciliation".
+  @visibleForTesting
+  Future<int> reconcilePushedSaleCosts(
+    Set<({String productId, String storeId})> pairs,
+    String businessId,
+  ) async {
+    if (pairs.isEmpty) return 0;
+    try {
+      final response = await _transport.callRpc('pos_recost_pairs', {
+        'p_business_id': businessId,
+        'p_pairs': [
+          for (final p in pairs)
+            {'product_id': p.productId, 'store_id': p.storeId},
+        ],
+      });
+      if (response is! Map) return 0;
+      final total = (response['recosted_count'] as num?)?.toInt() ?? 0;
+      if (total <= 0) return 0;
+
+      // Roll up the per-product counts (only products that actually changed) so
+      // the single audit row can name the product(s) and count.
+      final perProduct = <String, int>{};
+      final resultPairs = response['pairs'];
+      if (resultPairs is List) {
+        for (final r in resultPairs) {
+          if (r is! Map) continue;
+          final count = (r['recosted_count'] as num?)?.toInt() ?? 0;
+          final pid = r['product_id'];
+          if (count > 0 && pid is String) {
+            perProduct.update(pid, (v) => v + count, ifAbsent: () => count);
+          }
+        }
+      }
+
+      await _db.costBatchesDao.logRecostReconciliation(
+        totalRecosted: total,
+        perProduct: perProduct,
+      );
+      return total;
+    } catch (e) {
+      debugPrint(
+        '[SyncService] pos_recost_pairs reconcile failed (non-fatal): $e',
+      );
+      return 0;
     }
   }
 

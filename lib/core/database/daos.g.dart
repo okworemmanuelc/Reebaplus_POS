@@ -312,6 +312,54 @@ class StockCountsDaoManager {
       $$StockCountsTableTableManager(_db.attachedDatabase, _db.stockCounts);
 }
 
+mixin _$CostBatchesDaoMixin on DatabaseAccessor<AppDatabase> {
+  $BusinessesTable get businesses => attachedDatabase.businesses;
+  $CategoriesTable get categories => attachedDatabase.categories;
+  $CrateSizeGroupsTable get crateSizeGroups => attachedDatabase.crateSizeGroups;
+  $SuppliersTable get suppliers => attachedDatabase.suppliers;
+  $ManufacturersTable get manufacturers => attachedDatabase.manufacturers;
+  $ProductsTable get products => attachedDatabase.products;
+  $StoresTable get stores => attachedDatabase.stores;
+  $CostBatchesTable get costBatches => attachedDatabase.costBatches;
+  $CustomersTable get customers => attachedDatabase.customers;
+  $UsersTable get users => attachedDatabase.users;
+  $OrdersTable get orders => attachedDatabase.orders;
+  $OrderItemsTable get orderItems => attachedDatabase.orderItems;
+  CostBatchesDaoManager get managers => CostBatchesDaoManager(this);
+}
+
+class CostBatchesDaoManager {
+  final _$CostBatchesDaoMixin _db;
+  CostBatchesDaoManager(this._db);
+  $$BusinessesTableTableManager get businesses =>
+      $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$CategoriesTableTableManager get categories =>
+      $$CategoriesTableTableManager(_db.attachedDatabase, _db.categories);
+  $$CrateSizeGroupsTableTableManager get crateSizeGroups =>
+      $$CrateSizeGroupsTableTableManager(
+        _db.attachedDatabase,
+        _db.crateSizeGroups,
+      );
+  $$SuppliersTableTableManager get suppliers =>
+      $$SuppliersTableTableManager(_db.attachedDatabase, _db.suppliers);
+  $$ManufacturersTableTableManager get manufacturers =>
+      $$ManufacturersTableTableManager(_db.attachedDatabase, _db.manufacturers);
+  $$ProductsTableTableManager get products =>
+      $$ProductsTableTableManager(_db.attachedDatabase, _db.products);
+  $$StoresTableTableManager get stores =>
+      $$StoresTableTableManager(_db.attachedDatabase, _db.stores);
+  $$CostBatchesTableTableManager get costBatches =>
+      $$CostBatchesTableTableManager(_db.attachedDatabase, _db.costBatches);
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
+  $$UsersTableTableManager get users =>
+      $$UsersTableTableManager(_db.attachedDatabase, _db.users);
+  $$OrdersTableTableManager get orders =>
+      $$OrdersTableTableManager(_db.attachedDatabase, _db.orders);
+  $$OrderItemsTableTableManager get orderItems =>
+      $$OrderItemsTableTableManager(_db.attachedDatabase, _db.orderItems);
+}
+
 mixin _$OrdersDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
   $StoresTable get stores => attachedDatabase.stores;

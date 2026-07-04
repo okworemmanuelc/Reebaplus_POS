@@ -429,6 +429,10 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
     }
 
     final canEditBuying = _canEditBuying;
+    // Epic 2 / ADR 0005 (#41): remember the pre-edit cost so we can detect the
+    // one-time 0 → real-value transition after the save and offer to backfill
+    // the sales made before any cost existed.
+    final oldBuyingKobo = widget.product.buyingPriceKobo;
     final name = _nameCtrl.text.trim();
 
     final retailPrice = parseCurrency(_retailPriceCtrl.text);
@@ -577,6 +581,17 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
             productId: widget.product.id,
           );
 
+      // 5. Cost just became real (0 → a positive value): cost the still-
+      //    uncosted batches for the future and, if there are past uncosted
+      //    sales, offer once to backfill them (ADR 0005 "Cost backfill", #41).
+      if (canEditBuying && oldBuyingKobo == 0 && buyingKobo > 0) {
+        final offer = await db.costBatchesDao
+            .onCostBecameReal(widget.product.id, buyingKobo);
+        if (mounted && !offer.isEmpty) {
+          await _promptCostBackfill(db, offer, name, auth.currentUser?.id);
+        }
+      }
+
       if (mounted) {
         AppNotification.showSuccess(context, '$name updated successfully');
         Navigator.pop(context);
@@ -589,6 +604,54 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
       setState(() => _errorMessage = 'Could not update product: $e');
     } finally {
       if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  /// One-time prompt (ADR 0005 "Cost backfill", #41) offered when a product's
+  /// cost first becomes real and it has past uncosted sales. On accept, restates
+  /// those lines' snapshots to the new cost — gaps only, each in its own period —
+  /// and audits it with a single Activity Log row (owned by [applyCostBackfill]).
+  Future<void> _promptCostBackfill(
+    AppDatabase db,
+    CostBackfillOffer offer,
+    String productName,
+    String? staffId,
+  ) async {
+    final costLabel = formatCurrency(offer.newCostKobo / 100);
+    final apply = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Apply cost to past sales?'),
+        content: Text(
+          'You sold ${offer.unitsUncosted} unit(s) of "$productName" before a '
+          'cost was recorded. Apply $costLabel per unit to those past sales so '
+          'their profit is restated in the period they happened?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Apply'),
+          ),
+        ],
+      ),
+    );
+    if (apply != true) return;
+    final restated = await db.costBatchesDao.applyCostBackfill(
+      offer,
+      description:
+          '$productName: applied $costLabel/unit to ${offer.unitsUncosted} '
+          'unit(s) across ${offer.lineIds.length} past uncosted sale(s)',
+      staffId: staffId,
+    );
+    if (mounted && restated > 0) {
+      AppNotification.showSuccess(
+        context,
+        'Restated $restated past sale(s) of $productName',
+      );
     }
   }
 

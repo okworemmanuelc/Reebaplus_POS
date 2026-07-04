@@ -1755,6 +1755,7 @@ class MigrationEvents extends Table {
   daos: [
     CatalogDao,
     InventoryDao,
+    CostBatchesDao,
     OrdersDao,
     CustomersDao,
     ShipmentsDao,

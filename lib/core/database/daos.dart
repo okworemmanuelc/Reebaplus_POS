@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:timezone/timezone.dart' as tz;
+import 'package:reebaplus_pos/core/costing/fifo_drawdown.dart';
 import 'package:reebaplus_pos/core/data/business_types.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/business_scoped_dao.dart';
@@ -15,6 +16,7 @@ part 'daos.g.dart';
 
 part 'daos_catalog.dart';
 part 'daos_inventory.dart';
+part 'daos_costing.dart';
 part 'daos_orders.dart';
 part 'daos_customers.dart';
 part 'daos_suppliers.dart';

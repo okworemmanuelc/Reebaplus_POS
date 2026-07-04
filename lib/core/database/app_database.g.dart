@@ -38950,6 +38950,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   );
   late final CatalogDao catalogDao = CatalogDao(this as AppDatabase);
   late final InventoryDao inventoryDao = InventoryDao(this as AppDatabase);
+  late final CostBatchesDao costBatchesDao = CostBatchesDao(
+    this as AppDatabase,
+  );
   late final OrdersDao ordersDao = OrdersDao(this as AppDatabase);
   late final CustomersDao customersDao = CustomersDao(this as AppDatabase);
   late final ShipmentsDao shipmentsDao = ShipmentsDao(this as AppDatabase);

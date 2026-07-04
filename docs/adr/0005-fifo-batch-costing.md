@@ -97,3 +97,73 @@ lines, which drew from no batch.
   cost, no write) — rejected: restates history with a moving number, no
   consent, no audit; the "uncosted" indicator would vanish without the user
   ever deciding anything.
+
+## Implementation status
+
+- **F1 — Cost Batch schema + sync (#37):** migration `0132_cost_batches.sql`.
+  The per-(product, store) FIFO queue table, its `current_user_business_ids()`
+  RLS + realtime membership, and its `pos_pull_snapshot` entry; opening batches
+  seeded client-side by the Drift migration. No consumer logic.
+- **F3 — Server-authoritative consumption + replay (#39):** migration
+  `0133_fifo_batch_consumption.sql`. Deliberately a **separate derivation pass**
+  over the already-quantified movement ledger — it does **not** touch
+  `pos_record_sale_v2` / `pos_inventory_delta_v2`, so stock-quantity conflict
+  resolution is never reopened (only "which batch paid" is added). Three layers:
+    - `public.fifo_assign(batches, sales)` — the pure (IMMUTABLE) draw-down: an
+      oldest-first queue + a timestamp-ordered sale sequence in, per-line COGS
+      (with partial-batch splits and cost-0 *uncosted* units) + batch remainders
+      out. Deterministic and idempotent by construction; the seam the tests hit
+      directly. Per-unit rounding is `round(line_total / qty)` (round-half-away-
+      from-zero); the client provisional draw-down (#38) must match it.
+    - `public.pos_recost_product_store(business, product, store)` — the thin
+      orchestrator: loads the queue + the recognized-sale ledger
+      (`orders.status IN ('pending','completed')`, ordered by `orders.created_at`),
+      replays via `fifo_assign`, writes the authoritative per-line COGS back onto
+      `order_items.buying_price_kobo` and the derived `cost_batches.qty_remaining`.
+      Full replay from `qty_original` every call ⇒ idempotent; a late
+      earlier-timestamped sale re-orders the ledger ⇒ already-corrected lines are
+      re-assigned. Only changed rows bump `last_updated_at`, so `recosted_count`
+      counts genuinely re-costed sales and the correction flows down as an
+      ordinary LWW update.
+    - `public.pos_recost_pairs(business, pairs)` — recosts the (product, store)
+      pairs a sync touched and returns one rolled-up count for the client
+      correction flow (#40) to audit with a single Activity Log row. It does not
+      write the Activity Log itself (client owns that copy + localization).
+- **F4 — Provisional→authoritative COGS correction + rolled-up audit (#40):**
+  the client correction flow, in the sync engine (`SupabaseSyncService`). A push
+  drain collects exactly the (product, store) pairs whose sale lines it delivered
+  to the cloud — from v1 `order_items` upserts and v2 `pos_record_sale_v2`
+  envelopes alike; quick-sale (no-product) lines never contribute. After the
+  drain, `reconcilePushedSaleCosts` calls `pos_recost_pairs` for those pairs; the
+  server-corrected `order_items.buying_price_kobo` then flows back down as an
+  ordinary LWW row update on the following pull, replacing each provisional
+  snapshot with no merge conflict. Corrections are **audited, never prompted**:
+  `CostBatchesDao.logRecostReconciliation` writes exactly ONE rolled-up Activity
+  Log row per sync batch (`cost.recosted_on_sync`, "N sales of X re-costed on
+  sync — batch-boundary reconciliation"), and only when the server actually
+  changed something (`recosted_count > 0`) — a single-till sale whose provisional
+  already matched the authoritative value re-costs nothing and writes no row. The
+  whole flow is best-effort and off the sale / app-open path: a failed re-cost is
+  swallowed and self-heals on the next sync that touches the pair (including a
+  peer's late earlier-timestamped sale replaying the ledger, F3). An online sale
+  flushed directly (`flushSale`) is deliberately not re-cost-triggered — it is
+  already consistent, and any later drift is corrected by the reconnecting
+  offline peer's re-cost, which re-derives the whole ledger.
+- **F5 — Prompted cost backfill (#41):** the explicit, one-time *Uncosted*
+  backfill, entirely client-side (`CostBatchesDao.onCostBecameReal` /
+  `applyCostBackfill`, prompted from the product-edit sheet). When a product's
+  cost first becomes real (`0 → a positive value`), the still-uncosted batches
+  (`cost_kobo == 0`) are costed to the new value so future draws are costed and
+  the scalar cache aligns — this also makes the offer fire **once per batch**
+  (after it, the batch is no longer uncosted, so a real→real edit can't
+  re-trigger). The past **recognized, still-uncosted** sale lines
+  (`buying_price_kobo == 0`, `orders.status IN ('pending','completed')`,
+  `product_id` set) are gathered into a `CostBackfillOffer`; on accept each is
+  restated to the new per-unit cost — **gap-only, re-checked at the row** (never
+  overwrites a non-zero snapshot, even against a concurrent recost) and left in
+  its own order (so restated profit lands in that sale's original period) — and
+  the whole backfill writes exactly ONE `cost.backfill` Activity Log row.
+  Quick-sale lines (no product) are excluded by the `product_id` match and stay
+  uncosted; the **migration-era fallback** (pre-FIFO lines that drew from no
+  batch) needs no special case — a no-batch product's uncosted lines are the
+  same `buying_price_kobo == 0` set and back-fill identically.
