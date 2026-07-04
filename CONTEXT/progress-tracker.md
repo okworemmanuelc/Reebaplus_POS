@@ -10,6 +10,31 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### SHIPPED: Cost Batch schema + migration + sync membership (2026-07-04, issue #37, ADR 0005)
+- **Epic 2, F1 (FIFO batch costing).** The **Cost Batch** foundation landed
+  ahead of any consuming logic (land-the-migration-first). No draw-down /
+  server-authoritative consumption yet — that is a later Epic 2 issue.
+- **Drift `cost_batches`** (schema **v57 → v58**): per-(product, store) FIFO cost
+  queue `{qtyRemaining, qtyOriginal, costKobo, receivedAt, …}`; `costKobo == 0`
+  = uncosted. Mutable synced tenant table (drawn down in place — not a ledger,
+  not hard-deleted). v58 migration seeds **one opening batch per (product, store)**
+  from current stock at the product's scalar `buyingPriceKobo` (zero-cost →
+  uncosted; empty stock → no batch), with a **deterministic opening-batch id**
+  (`UuidV7.deterministic`, new UUIDv5 helper) so devices converge instead of
+  duplicating on sync. One `SyncedTable` registry entry (`Restore.plain`
+  resilient); golden pull-order/tenant-set updated.
+- **Cloud `0132_cost_batches.sql` (DEPLOYED + verified):** `cost_kobo` **bigint**,
+  `current_user_business_ids()` RLS, realtime + `pos_pull_snapshot` membership.
+  Safe for live v57 devices (pull iterates the app's own registry → ignores the
+  new snapshot key).
+- **Incidental fix:** the `@DriftAccessor` on `BusinessesDao` (daos_org.dart) was
+  misplaced above a `const _absent` sentinel, so a clean `build_runner` dropped
+  `_$BusinessesDaoMixin` and broke compilation (committed generated code was
+  stale-but-correct, masking it). Moved the annotation onto the class.
+- Migration test drives the real onUpgrade(57→58) + asserts the seed. `flutter
+  analyze` clean; full suite 713 pass / 58 skipped / 1 pre-existing unrelated
+  failure (`who_is_working_screen_test`, confirmed failing on HEAD).
+
 ### SHIPPED: Land on POS after onboarding — auto-push deleted (2026-07-04, issue #35, ADR 0006)
 - **Epic 1.** Onboarding now lands the device on **POS** — where the
   persona-aware "Add your first product" CTA (#34) greets the user — instead of

@@ -16680,6 +16680,633 @@ class InventoryCompanion extends UpdateCompanion<InventoryData> {
   }
 }
 
+class $CostBatchesTable extends CostBatches
+    with TableInfo<$CostBatchesTable, CostBatchData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CostBatchesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: () => UuidV7.generate(),
+  );
+  static const VerificationMeta _businessIdMeta = const VerificationMeta(
+    'businessId',
+  );
+  @override
+  late final GeneratedColumn<String> businessId = GeneratedColumn<String>(
+    'business_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES businesses (id)',
+    ),
+  );
+  static const VerificationMeta _productIdMeta = const VerificationMeta(
+    'productId',
+  );
+  @override
+  late final GeneratedColumn<String> productId = GeneratedColumn<String>(
+    'product_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES products (id)',
+    ),
+  );
+  static const VerificationMeta _storeIdMeta = const VerificationMeta(
+    'storeId',
+  );
+  @override
+  late final GeneratedColumn<String> storeId = GeneratedColumn<String>(
+    'store_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES stores (id)',
+    ),
+  );
+  static const VerificationMeta _qtyRemainingMeta = const VerificationMeta(
+    'qtyRemaining',
+  );
+  @override
+  late final GeneratedColumn<int> qtyRemaining = GeneratedColumn<int>(
+    'qty_remaining',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _qtyOriginalMeta = const VerificationMeta(
+    'qtyOriginal',
+  );
+  @override
+  late final GeneratedColumn<int> qtyOriginal = GeneratedColumn<int>(
+    'qty_original',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _costKoboMeta = const VerificationMeta(
+    'costKobo',
+  );
+  @override
+  late final GeneratedColumn<int> costKobo = GeneratedColumn<int>(
+    'cost_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _receivedAtMeta = const VerificationMeta(
+    'receivedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> receivedAt = GeneratedColumn<DateTime>(
+    'received_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _lastUpdatedAtMeta = const VerificationMeta(
+    'lastUpdatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastUpdatedAt =
+      GeneratedColumn<DateTime>(
+        'last_updated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+        defaultValue: currentDateAndTime,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    businessId,
+    productId,
+    storeId,
+    qtyRemaining,
+    qtyOriginal,
+    costKobo,
+    receivedAt,
+    createdAt,
+    lastUpdatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'cost_batches';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CostBatchData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('business_id')) {
+      context.handle(
+        _businessIdMeta,
+        businessId.isAcceptableOrUnknown(data['business_id']!, _businessIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_businessIdMeta);
+    }
+    if (data.containsKey('product_id')) {
+      context.handle(
+        _productIdMeta,
+        productId.isAcceptableOrUnknown(data['product_id']!, _productIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_productIdMeta);
+    }
+    if (data.containsKey('store_id')) {
+      context.handle(
+        _storeIdMeta,
+        storeId.isAcceptableOrUnknown(data['store_id']!, _storeIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_storeIdMeta);
+    }
+    if (data.containsKey('qty_remaining')) {
+      context.handle(
+        _qtyRemainingMeta,
+        qtyRemaining.isAcceptableOrUnknown(
+          data['qty_remaining']!,
+          _qtyRemainingMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_qtyRemainingMeta);
+    }
+    if (data.containsKey('qty_original')) {
+      context.handle(
+        _qtyOriginalMeta,
+        qtyOriginal.isAcceptableOrUnknown(
+          data['qty_original']!,
+          _qtyOriginalMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_qtyOriginalMeta);
+    }
+    if (data.containsKey('cost_kobo')) {
+      context.handle(
+        _costKoboMeta,
+        costKobo.isAcceptableOrUnknown(data['cost_kobo']!, _costKoboMeta),
+      );
+    }
+    if (data.containsKey('received_at')) {
+      context.handle(
+        _receivedAtMeta,
+        receivedAt.isAcceptableOrUnknown(data['received_at']!, _receivedAtMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('last_updated_at')) {
+      context.handle(
+        _lastUpdatedAtMeta,
+        lastUpdatedAt.isAcceptableOrUnknown(
+          data['last_updated_at']!,
+          _lastUpdatedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CostBatchData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CostBatchData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      businessId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}business_id'],
+      )!,
+      productId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}product_id'],
+      )!,
+      storeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}store_id'],
+      )!,
+      qtyRemaining: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}qty_remaining'],
+      )!,
+      qtyOriginal: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}qty_original'],
+      )!,
+      costKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}cost_kobo'],
+      )!,
+      receivedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}received_at'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      lastUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $CostBatchesTable createAlias(String alias) {
+    return $CostBatchesTable(attachedDatabase, alias);
+  }
+}
+
+class CostBatchData extends DataClass implements Insertable<CostBatchData> {
+  final String id;
+  final String businessId;
+  final String productId;
+  final String storeId;
+  final int qtyRemaining;
+  final int qtyOriginal;
+  final int costKobo;
+  final DateTime receivedAt;
+  final DateTime createdAt;
+  final DateTime lastUpdatedAt;
+  const CostBatchData({
+    required this.id,
+    required this.businessId,
+    required this.productId,
+    required this.storeId,
+    required this.qtyRemaining,
+    required this.qtyOriginal,
+    required this.costKobo,
+    required this.receivedAt,
+    required this.createdAt,
+    required this.lastUpdatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['business_id'] = Variable<String>(businessId);
+    map['product_id'] = Variable<String>(productId);
+    map['store_id'] = Variable<String>(storeId);
+    map['qty_remaining'] = Variable<int>(qtyRemaining);
+    map['qty_original'] = Variable<int>(qtyOriginal);
+    map['cost_kobo'] = Variable<int>(costKobo);
+    map['received_at'] = Variable<DateTime>(receivedAt);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
+    return map;
+  }
+
+  CostBatchesCompanion toCompanion(bool nullToAbsent) {
+    return CostBatchesCompanion(
+      id: Value(id),
+      businessId: Value(businessId),
+      productId: Value(productId),
+      storeId: Value(storeId),
+      qtyRemaining: Value(qtyRemaining),
+      qtyOriginal: Value(qtyOriginal),
+      costKobo: Value(costKobo),
+      receivedAt: Value(receivedAt),
+      createdAt: Value(createdAt),
+      lastUpdatedAt: Value(lastUpdatedAt),
+    );
+  }
+
+  factory CostBatchData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CostBatchData(
+      id: serializer.fromJson<String>(json['id']),
+      businessId: serializer.fromJson<String>(json['businessId']),
+      productId: serializer.fromJson<String>(json['productId']),
+      storeId: serializer.fromJson<String>(json['storeId']),
+      qtyRemaining: serializer.fromJson<int>(json['qtyRemaining']),
+      qtyOriginal: serializer.fromJson<int>(json['qtyOriginal']),
+      costKobo: serializer.fromJson<int>(json['costKobo']),
+      receivedAt: serializer.fromJson<DateTime>(json['receivedAt']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'businessId': serializer.toJson<String>(businessId),
+      'productId': serializer.toJson<String>(productId),
+      'storeId': serializer.toJson<String>(storeId),
+      'qtyRemaining': serializer.toJson<int>(qtyRemaining),
+      'qtyOriginal': serializer.toJson<int>(qtyOriginal),
+      'costKobo': serializer.toJson<int>(costKobo),
+      'receivedAt': serializer.toJson<DateTime>(receivedAt),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
+    };
+  }
+
+  CostBatchData copyWith({
+    String? id,
+    String? businessId,
+    String? productId,
+    String? storeId,
+    int? qtyRemaining,
+    int? qtyOriginal,
+    int? costKobo,
+    DateTime? receivedAt,
+    DateTime? createdAt,
+    DateTime? lastUpdatedAt,
+  }) => CostBatchData(
+    id: id ?? this.id,
+    businessId: businessId ?? this.businessId,
+    productId: productId ?? this.productId,
+    storeId: storeId ?? this.storeId,
+    qtyRemaining: qtyRemaining ?? this.qtyRemaining,
+    qtyOriginal: qtyOriginal ?? this.qtyOriginal,
+    costKobo: costKobo ?? this.costKobo,
+    receivedAt: receivedAt ?? this.receivedAt,
+    createdAt: createdAt ?? this.createdAt,
+    lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+  );
+  CostBatchData copyWithCompanion(CostBatchesCompanion data) {
+    return CostBatchData(
+      id: data.id.present ? data.id.value : this.id,
+      businessId: data.businessId.present
+          ? data.businessId.value
+          : this.businessId,
+      productId: data.productId.present ? data.productId.value : this.productId,
+      storeId: data.storeId.present ? data.storeId.value : this.storeId,
+      qtyRemaining: data.qtyRemaining.present
+          ? data.qtyRemaining.value
+          : this.qtyRemaining,
+      qtyOriginal: data.qtyOriginal.present
+          ? data.qtyOriginal.value
+          : this.qtyOriginal,
+      costKobo: data.costKobo.present ? data.costKobo.value : this.costKobo,
+      receivedAt: data.receivedAt.present
+          ? data.receivedAt.value
+          : this.receivedAt,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      lastUpdatedAt: data.lastUpdatedAt.present
+          ? data.lastUpdatedAt.value
+          : this.lastUpdatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CostBatchData(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('productId: $productId, ')
+          ..write('storeId: $storeId, ')
+          ..write('qtyRemaining: $qtyRemaining, ')
+          ..write('qtyOriginal: $qtyOriginal, ')
+          ..write('costKobo: $costKobo, ')
+          ..write('receivedAt: $receivedAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    businessId,
+    productId,
+    storeId,
+    qtyRemaining,
+    qtyOriginal,
+    costKobo,
+    receivedAt,
+    createdAt,
+    lastUpdatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CostBatchData &&
+          other.id == this.id &&
+          other.businessId == this.businessId &&
+          other.productId == this.productId &&
+          other.storeId == this.storeId &&
+          other.qtyRemaining == this.qtyRemaining &&
+          other.qtyOriginal == this.qtyOriginal &&
+          other.costKobo == this.costKobo &&
+          other.receivedAt == this.receivedAt &&
+          other.createdAt == this.createdAt &&
+          other.lastUpdatedAt == this.lastUpdatedAt);
+}
+
+class CostBatchesCompanion extends UpdateCompanion<CostBatchData> {
+  final Value<String> id;
+  final Value<String> businessId;
+  final Value<String> productId;
+  final Value<String> storeId;
+  final Value<int> qtyRemaining;
+  final Value<int> qtyOriginal;
+  final Value<int> costKobo;
+  final Value<DateTime> receivedAt;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> lastUpdatedAt;
+  final Value<int> rowid;
+  const CostBatchesCompanion({
+    this.id = const Value.absent(),
+    this.businessId = const Value.absent(),
+    this.productId = const Value.absent(),
+    this.storeId = const Value.absent(),
+    this.qtyRemaining = const Value.absent(),
+    this.qtyOriginal = const Value.absent(),
+    this.costKobo = const Value.absent(),
+    this.receivedAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CostBatchesCompanion.insert({
+    this.id = const Value.absent(),
+    required String businessId,
+    required String productId,
+    required String storeId,
+    required int qtyRemaining,
+    required int qtyOriginal,
+    this.costKobo = const Value.absent(),
+    this.receivedAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : businessId = Value(businessId),
+       productId = Value(productId),
+       storeId = Value(storeId),
+       qtyRemaining = Value(qtyRemaining),
+       qtyOriginal = Value(qtyOriginal);
+  static Insertable<CostBatchData> custom({
+    Expression<String>? id,
+    Expression<String>? businessId,
+    Expression<String>? productId,
+    Expression<String>? storeId,
+    Expression<int>? qtyRemaining,
+    Expression<int>? qtyOriginal,
+    Expression<int>? costKobo,
+    Expression<DateTime>? receivedAt,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? lastUpdatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (businessId != null) 'business_id': businessId,
+      if (productId != null) 'product_id': productId,
+      if (storeId != null) 'store_id': storeId,
+      if (qtyRemaining != null) 'qty_remaining': qtyRemaining,
+      if (qtyOriginal != null) 'qty_original': qtyOriginal,
+      if (costKobo != null) 'cost_kobo': costKobo,
+      if (receivedAt != null) 'received_at': receivedAt,
+      if (createdAt != null) 'created_at': createdAt,
+      if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CostBatchesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? businessId,
+    Value<String>? productId,
+    Value<String>? storeId,
+    Value<int>? qtyRemaining,
+    Value<int>? qtyOriginal,
+    Value<int>? costKobo,
+    Value<DateTime>? receivedAt,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? lastUpdatedAt,
+    Value<int>? rowid,
+  }) {
+    return CostBatchesCompanion(
+      id: id ?? this.id,
+      businessId: businessId ?? this.businessId,
+      productId: productId ?? this.productId,
+      storeId: storeId ?? this.storeId,
+      qtyRemaining: qtyRemaining ?? this.qtyRemaining,
+      qtyOriginal: qtyOriginal ?? this.qtyOriginal,
+      costKobo: costKobo ?? this.costKobo,
+      receivedAt: receivedAt ?? this.receivedAt,
+      createdAt: createdAt ?? this.createdAt,
+      lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (businessId.present) {
+      map['business_id'] = Variable<String>(businessId.value);
+    }
+    if (productId.present) {
+      map['product_id'] = Variable<String>(productId.value);
+    }
+    if (storeId.present) {
+      map['store_id'] = Variable<String>(storeId.value);
+    }
+    if (qtyRemaining.present) {
+      map['qty_remaining'] = Variable<int>(qtyRemaining.value);
+    }
+    if (qtyOriginal.present) {
+      map['qty_original'] = Variable<int>(qtyOriginal.value);
+    }
+    if (costKobo.present) {
+      map['cost_kobo'] = Variable<int>(costKobo.value);
+    }
+    if (receivedAt.present) {
+      map['received_at'] = Variable<DateTime>(receivedAt.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (lastUpdatedAt.present) {
+      map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CostBatchesCompanion(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('productId: $productId, ')
+          ..write('storeId: $storeId, ')
+          ..write('qtyRemaining: $qtyRemaining, ')
+          ..write('qtyOriginal: $qtyOriginal, ')
+          ..write('costKobo: $costKobo, ')
+          ..write('receivedAt: $receivedAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $StockTransfersTable extends StockTransfers
     with TableInfo<$StockTransfersTable, StockTransferData> {
   @override
@@ -38266,6 +38893,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $PendingCrateReturnsTable(this);
   late final $CrateLedgerTable crateLedger = $CrateLedgerTable(this);
   late final $InventoryTable inventory = $InventoryTable(this);
+  late final $CostBatchesTable costBatches = $CostBatchesTable(this);
   late final $StockTransfersTable stockTransfers = $StockTransfersTable(this);
   late final $StockAdjustmentsTable stockAdjustments = $StockAdjustmentsTable(
     this,
@@ -38435,6 +39063,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     pendingCrateReturns,
     crateLedger,
     inventory,
+    costBatches,
     stockTransfers,
     stockAdjustments,
     shipments,
@@ -38986,6 +39615,27 @@ final class $$BusinessesTableReferences
     ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_inventoryRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$CostBatchesTable, List<CostBatchData>>
+  _costBatchesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.costBatches,
+    aliasName: $_aliasNameGenerator(
+      db.businesses.id,
+      db.costBatches.businessId,
+    ),
+  );
+
+  $$CostBatchesTableProcessedTableManager get costBatchesRefs {
+    final manager = $$CostBatchesTableTableManager(
+      $_db,
+      $_db.costBatches,
+    ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_costBatchesRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -40272,6 +40922,31 @@ class $$BusinessesTableFilterComposer
           }) => $$InventoryTableFilterComposer(
             $db: $db,
             $table: $db.inventory,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> costBatchesRefs(
+    Expression<bool> Function($$CostBatchesTableFilterComposer f) f,
+  ) {
+    final $$CostBatchesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.costBatches,
+      getReferencedColumn: (t) => t.businessId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CostBatchesTableFilterComposer(
+            $db: $db,
+            $table: $db.costBatches,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -41754,6 +42429,31 @@ class $$BusinessesTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> costBatchesRefs<T extends Object>(
+    Expression<T> Function($$CostBatchesTableAnnotationComposer a) f,
+  ) {
+    final $$CostBatchesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.costBatches,
+      getReferencedColumn: (t) => t.businessId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CostBatchesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.costBatches,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<T> stockTransfersRefs<T extends Object>(
     Expression<T> Function($$StockTransfersTableAnnotationComposer a) f,
   ) {
@@ -42574,6 +43274,7 @@ class $$BusinessesTableTableManager
             bool pendingCrateReturnsRefs,
             bool crateLedgerRefs,
             bool inventoryRefs,
+            bool costBatchesRefs,
             bool stockTransfersRefs,
             bool stockAdjustmentsRefs,
             bool shipmentsRefs,
@@ -42725,6 +43426,7 @@ class $$BusinessesTableTableManager
                 pendingCrateReturnsRefs = false,
                 crateLedgerRefs = false,
                 inventoryRefs = false,
+                costBatchesRefs = false,
                 stockTransfersRefs = false,
                 stockAdjustmentsRefs = false,
                 shipmentsRefs = false,
@@ -42782,6 +43484,7 @@ class $$BusinessesTableTableManager
                     if (pendingCrateReturnsRefs) db.pendingCrateReturns,
                     if (crateLedgerRefs) db.crateLedger,
                     if (inventoryRefs) db.inventory,
+                    if (costBatchesRefs) db.costBatches,
                     if (stockTransfersRefs) db.stockTransfers,
                     if (stockAdjustmentsRefs) db.stockAdjustments,
                     if (shipmentsRefs) db.shipments,
@@ -43252,6 +43955,27 @@ class $$BusinessesTableTableManager
                                 table,
                                 p0,
                               ).inventoryRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.businessId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (costBatchesRefs)
+                        await $_getPrefetchedData<
+                          BusinessData,
+                          $BusinessesTable,
+                          CostBatchData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$BusinessesTableReferences
+                              ._costBatchesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$BusinessesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).costBatchesRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.businessId == item.id,
@@ -43951,6 +44675,7 @@ typedef $$BusinessesTableProcessedTableManager =
         bool pendingCrateReturnsRefs,
         bool crateLedgerRefs,
         bool inventoryRefs,
+        bool costBatchesRefs,
         bool stockTransfersRefs,
         bool stockAdjustmentsRefs,
         bool shipmentsRefs,
@@ -46230,6 +46955,24 @@ final class $$StoresTableReferences
     );
   }
 
+  static MultiTypedResultKey<$CostBatchesTable, List<CostBatchData>>
+  _costBatchesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.costBatches,
+    aliasName: $_aliasNameGenerator(db.stores.id, db.costBatches.storeId),
+  );
+
+  $$CostBatchesTableProcessedTableManager get costBatchesRefs {
+    final manager = $$CostBatchesTableTableManager(
+      $_db,
+      $_db.costBatches,
+    ).filter((f) => f.storeId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_costBatchesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
   static MultiTypedResultKey<$StockAdjustmentsTable, List<StockAdjustmentData>>
   _stockAdjustmentsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.stockAdjustments,
@@ -46759,6 +47502,31 @@ class $$StoresTableFilterComposer
           }) => $$InventoryTableFilterComposer(
             $db: $db,
             $table: $db.inventory,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> costBatchesRefs(
+    Expression<bool> Function($$CostBatchesTableFilterComposer f) f,
+  ) {
+    final $$CostBatchesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.costBatches,
+      getReferencedColumn: (t) => t.storeId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CostBatchesTableFilterComposer(
+            $db: $db,
+            $table: $db.costBatches,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -47413,6 +48181,31 @@ class $$StoresTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> costBatchesRefs<T extends Object>(
+    Expression<T> Function($$CostBatchesTableAnnotationComposer a) f,
+  ) {
+    final $$CostBatchesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.costBatches,
+      getReferencedColumn: (t) => t.storeId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CostBatchesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.costBatches,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<T> stockAdjustmentsRefs<T extends Object>(
     Expression<T> Function($$StockAdjustmentsTableAnnotationComposer a) f,
   ) {
@@ -47767,6 +48560,7 @@ class $$StoresTableTableManager
             bool storeCrateBalancesRefs,
             bool crateLedgerRefs,
             bool inventoryRefs,
+            bool costBatchesRefs,
             bool stockAdjustmentsRefs,
             bool stockTransactionsRefs,
             bool stockAdjustmentRequestsRefs,
@@ -47850,6 +48644,7 @@ class $$StoresTableTableManager
                 storeCrateBalancesRefs = false,
                 crateLedgerRefs = false,
                 inventoryRefs = false,
+                costBatchesRefs = false,
                 stockAdjustmentsRefs = false,
                 stockTransactionsRefs = false,
                 stockAdjustmentRequestsRefs = false,
@@ -47875,6 +48670,7 @@ class $$StoresTableTableManager
                     if (storeCrateBalancesRefs) db.storeCrateBalances,
                     if (crateLedgerRefs) db.crateLedger,
                     if (inventoryRefs) db.inventory,
+                    if (costBatchesRefs) db.costBatches,
                     if (stockAdjustmentsRefs) db.stockAdjustments,
                     if (stockTransactionsRefs) db.stockTransactions,
                     if (stockAdjustmentRequestsRefs) db.stockAdjustmentRequests,
@@ -48077,6 +48873,27 @@ class $$StoresTableTableManager
                                 table,
                                 p0,
                               ).inventoryRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.storeId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (costBatchesRefs)
+                        await $_getPrefetchedData<
+                          StoreData,
+                          $StoresTable,
+                          CostBatchData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$StoresTableReferences
+                              ._costBatchesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$StoresTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).costBatchesRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.storeId == item.id,
@@ -48386,6 +49203,7 @@ typedef $$StoresTableProcessedTableManager =
         bool storeCrateBalancesRefs,
         bool crateLedgerRefs,
         bool inventoryRefs,
+        bool costBatchesRefs,
         bool stockAdjustmentsRefs,
         bool stockTransactionsRefs,
         bool stockAdjustmentRequestsRefs,
@@ -54256,6 +55074,24 @@ final class $$ProductsTableReferences
     );
   }
 
+  static MultiTypedResultKey<$CostBatchesTable, List<CostBatchData>>
+  _costBatchesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.costBatches,
+    aliasName: $_aliasNameGenerator(db.products.id, db.costBatches.productId),
+  );
+
+  $$CostBatchesTableProcessedTableManager get costBatchesRefs {
+    final manager = $$CostBatchesTableTableManager(
+      $_db,
+      $_db.costBatches,
+    ).filter((f) => f.productId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_costBatchesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
   static MultiTypedResultKey<$StockTransfersTable, List<StockTransferData>>
   _stockTransfersRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.stockTransfers,
@@ -54692,6 +55528,31 @@ class $$ProductsTableFilterComposer
           }) => $$InventoryTableFilterComposer(
             $db: $db,
             $table: $db.inventory,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> costBatchesRefs(
+    Expression<bool> Function($$CostBatchesTableFilterComposer f) f,
+  ) {
+    final $$CostBatchesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.costBatches,
+      getReferencedColumn: (t) => t.productId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CostBatchesTableFilterComposer(
+            $db: $db,
+            $table: $db.costBatches,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -55398,6 +56259,31 @@ class $$ProductsTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> costBatchesRefs<T extends Object>(
+    Expression<T> Function($$CostBatchesTableAnnotationComposer a) f,
+  ) {
+    final $$CostBatchesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.costBatches,
+      getReferencedColumn: (t) => t.productId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CostBatchesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.costBatches,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<T> stockTransfersRefs<T extends Object>(
     Expression<T> Function($$StockTransfersTableAnnotationComposer a) f,
   ) {
@@ -55573,6 +56459,7 @@ class $$ProductsTableTableManager
             bool manufacturerId,
             bool priceListsRefs,
             bool inventoryRefs,
+            bool costBatchesRefs,
             bool stockTransfersRefs,
             bool stockAdjustmentsRefs,
             bool stockTransactionsRefs,
@@ -55749,6 +56636,7 @@ class $$ProductsTableTableManager
                 manufacturerId = false,
                 priceListsRefs = false,
                 inventoryRefs = false,
+                costBatchesRefs = false,
                 stockTransfersRefs = false,
                 stockAdjustmentsRefs = false,
                 stockTransactionsRefs = false,
@@ -55761,6 +56649,7 @@ class $$ProductsTableTableManager
                   explicitlyWatchedTables: [
                     if (priceListsRefs) db.priceLists,
                     if (inventoryRefs) db.inventory,
+                    if (costBatchesRefs) db.costBatches,
                     if (stockTransfersRefs) db.stockTransfers,
                     if (stockAdjustmentsRefs) db.stockAdjustments,
                     if (stockTransactionsRefs) db.stockTransactions,
@@ -55890,6 +56779,27 @@ class $$ProductsTableTableManager
                                 table,
                                 p0,
                               ).inventoryRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.productId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (costBatchesRefs)
+                        await $_getPrefetchedData<
+                          ProductData,
+                          $ProductsTable,
+                          CostBatchData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ProductsTableReferences
+                              ._costBatchesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ProductsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).costBatchesRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.productId == item.id,
@@ -56050,6 +56960,7 @@ typedef $$ProductsTableProcessedTableManager =
         bool manufacturerId,
         bool priceListsRefs,
         bool inventoryRefs,
+        bool costBatchesRefs,
         bool stockTransfersRefs,
         bool stockAdjustmentsRefs,
         bool stockTransactionsRefs,
@@ -65778,6 +66689,614 @@ typedef $$InventoryTableProcessedTableManager =
       $$InventoryTableUpdateCompanionBuilder,
       (InventoryData, $$InventoryTableReferences),
       InventoryData,
+      PrefetchHooks Function({bool businessId, bool productId, bool storeId})
+    >;
+typedef $$CostBatchesTableCreateCompanionBuilder =
+    CostBatchesCompanion Function({
+      Value<String> id,
+      required String businessId,
+      required String productId,
+      required String storeId,
+      required int qtyRemaining,
+      required int qtyOriginal,
+      Value<int> costKobo,
+      Value<DateTime> receivedAt,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+typedef $$CostBatchesTableUpdateCompanionBuilder =
+    CostBatchesCompanion Function({
+      Value<String> id,
+      Value<String> businessId,
+      Value<String> productId,
+      Value<String> storeId,
+      Value<int> qtyRemaining,
+      Value<int> qtyOriginal,
+      Value<int> costKobo,
+      Value<DateTime> receivedAt,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+
+final class $$CostBatchesTableReferences
+    extends BaseReferences<_$AppDatabase, $CostBatchesTable, CostBatchData> {
+  $$CostBatchesTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $BusinessesTable _businessIdTable(_$AppDatabase db) =>
+      db.businesses.createAlias(
+        $_aliasNameGenerator(db.costBatches.businessId, db.businesses.id),
+      );
+
+  $$BusinessesTableProcessedTableManager get businessId {
+    final $_column = $_itemColumn<String>('business_id')!;
+
+    final manager = $$BusinessesTableTableManager(
+      $_db,
+      $_db.businesses,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_businessIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $ProductsTable _productIdTable(_$AppDatabase db) =>
+      db.products.createAlias(
+        $_aliasNameGenerator(db.costBatches.productId, db.products.id),
+      );
+
+  $$ProductsTableProcessedTableManager get productId {
+    final $_column = $_itemColumn<String>('product_id')!;
+
+    final manager = $$ProductsTableTableManager(
+      $_db,
+      $_db.products,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_productIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $StoresTable _storeIdTable(_$AppDatabase db) => db.stores.createAlias(
+    $_aliasNameGenerator(db.costBatches.storeId, db.stores.id),
+  );
+
+  $$StoresTableProcessedTableManager get storeId {
+    final $_column = $_itemColumn<String>('store_id')!;
+
+    final manager = $$StoresTableTableManager(
+      $_db,
+      $_db.stores,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_storeIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$CostBatchesTableFilterComposer
+    extends Composer<_$AppDatabase, $CostBatchesTable> {
+  $$CostBatchesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get qtyRemaining => $composableBuilder(
+    column: $table.qtyRemaining,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get qtyOriginal => $composableBuilder(
+    column: $table.qtyOriginal,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get costKobo => $composableBuilder(
+    column: $table.costKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get receivedAt => $composableBuilder(
+    column: $table.receivedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$BusinessesTableFilterComposer get businessId {
+    final $$BusinessesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableFilterComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductsTableFilterComposer get productId {
+    final $$ProductsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableFilterComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableFilterComposer get storeId {
+    final $$StoresTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableFilterComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$CostBatchesTableOrderingComposer
+    extends Composer<_$AppDatabase, $CostBatchesTable> {
+  $$CostBatchesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get qtyRemaining => $composableBuilder(
+    column: $table.qtyRemaining,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get qtyOriginal => $composableBuilder(
+    column: $table.qtyOriginal,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get costKobo => $composableBuilder(
+    column: $table.costKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get receivedAt => $composableBuilder(
+    column: $table.receivedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$BusinessesTableOrderingComposer get businessId {
+    final $$BusinessesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableOrderingComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductsTableOrderingComposer get productId {
+    final $$ProductsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableOrderingComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableOrderingComposer get storeId {
+    final $$StoresTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableOrderingComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$CostBatchesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CostBatchesTable> {
+  $$CostBatchesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get qtyRemaining => $composableBuilder(
+    column: $table.qtyRemaining,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get qtyOriginal => $composableBuilder(
+    column: $table.qtyOriginal,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get costKobo =>
+      $composableBuilder(column: $table.costKobo, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get receivedAt => $composableBuilder(
+    column: $table.receivedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => column,
+  );
+
+  $$BusinessesTableAnnotationComposer get businessId {
+    final $$BusinessesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductsTableAnnotationComposer get productId {
+    final $$ProductsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableAnnotationComposer get storeId {
+    final $$StoresTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableAnnotationComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$CostBatchesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $CostBatchesTable,
+          CostBatchData,
+          $$CostBatchesTableFilterComposer,
+          $$CostBatchesTableOrderingComposer,
+          $$CostBatchesTableAnnotationComposer,
+          $$CostBatchesTableCreateCompanionBuilder,
+          $$CostBatchesTableUpdateCompanionBuilder,
+          (CostBatchData, $$CostBatchesTableReferences),
+          CostBatchData,
+          PrefetchHooks Function({
+            bool businessId,
+            bool productId,
+            bool storeId,
+          })
+        > {
+  $$CostBatchesTableTableManager(_$AppDatabase db, $CostBatchesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CostBatchesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CostBatchesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CostBatchesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> businessId = const Value.absent(),
+                Value<String> productId = const Value.absent(),
+                Value<String> storeId = const Value.absent(),
+                Value<int> qtyRemaining = const Value.absent(),
+                Value<int> qtyOriginal = const Value.absent(),
+                Value<int> costKobo = const Value.absent(),
+                Value<DateTime> receivedAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CostBatchesCompanion(
+                id: id,
+                businessId: businessId,
+                productId: productId,
+                storeId: storeId,
+                qtyRemaining: qtyRemaining,
+                qtyOriginal: qtyOriginal,
+                costKobo: costKobo,
+                receivedAt: receivedAt,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                required String businessId,
+                required String productId,
+                required String storeId,
+                required int qtyRemaining,
+                required int qtyOriginal,
+                Value<int> costKobo = const Value.absent(),
+                Value<DateTime> receivedAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CostBatchesCompanion.insert(
+                id: id,
+                businessId: businessId,
+                productId: productId,
+                storeId: storeId,
+                qtyRemaining: qtyRemaining,
+                qtyOriginal: qtyOriginal,
+                costKobo: costKobo,
+                receivedAt: receivedAt,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$CostBatchesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({businessId = false, productId = false, storeId = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (businessId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.businessId,
+                                    referencedTable:
+                                        $$CostBatchesTableReferences
+                                            ._businessIdTable(db),
+                                    referencedColumn:
+                                        $$CostBatchesTableReferences
+                                            ._businessIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (productId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.productId,
+                                    referencedTable:
+                                        $$CostBatchesTableReferences
+                                            ._productIdTable(db),
+                                    referencedColumn:
+                                        $$CostBatchesTableReferences
+                                            ._productIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (storeId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.storeId,
+                                    referencedTable:
+                                        $$CostBatchesTableReferences
+                                            ._storeIdTable(db),
+                                    referencedColumn:
+                                        $$CostBatchesTableReferences
+                                            ._storeIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$CostBatchesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $CostBatchesTable,
+      CostBatchData,
+      $$CostBatchesTableFilterComposer,
+      $$CostBatchesTableOrderingComposer,
+      $$CostBatchesTableAnnotationComposer,
+      $$CostBatchesTableCreateCompanionBuilder,
+      $$CostBatchesTableUpdateCompanionBuilder,
+      (CostBatchData, $$CostBatchesTableReferences),
+      CostBatchData,
       PrefetchHooks Function({bool businessId, bool productId, bool storeId})
     >;
 typedef $$StockTransfersTableCreateCompanionBuilder =
@@ -87862,6 +89381,8 @@ class $AppDatabaseManager {
       $$CrateLedgerTableTableManager(_db, _db.crateLedger);
   $$InventoryTableTableManager get inventory =>
       $$InventoryTableTableManager(_db, _db.inventory);
+  $$CostBatchesTableTableManager get costBatches =>
+      $$CostBatchesTableTableManager(_db, _db.costBatches);
   $$StockTransfersTableTableManager get stockTransfers =>
       $$StockTransfersTableTableManager(_db, _db.stockTransfers);
   $$StockAdjustmentsTableTableManager get stockAdjustments =>

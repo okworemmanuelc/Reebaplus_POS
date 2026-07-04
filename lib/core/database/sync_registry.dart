@@ -668,6 +668,22 @@ final List<SyncedTable> kSyncRegistry = [
       ),
     ),
   ),
+  // Epic 2 / FIFO batch costing (ADR 0005, issue #37): per-(product, store)
+  // cost queue. Surrogate id (client UuidV7 per receive; the migration-seeded
+  // opening batch uses a deterministic id so devices converge). Mutable synced
+  // tenant table (qty_remaining drawn down in place) — not a ledger, not
+  // hard-deleted, no push-column divergence. FK → products + stores, so a plain
+  // RESILIENT restore (a batch can land in a pull before its product/store
+  // slice). No consumer draw-down logic yet — this entry is the sync membership.
+  SyncedTable(
+    name: 'cost_batches',
+    tenantScoped: true,
+    restore: Restore.plain(
+      (db) => db.costBatches,
+      CostBatchData.fromJson,
+      resilient: true,
+    ),
+  ),
   SyncedTable(
     name: 'customers',
     tenantScoped: true,

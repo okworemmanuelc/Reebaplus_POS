@@ -705,4 +705,150 @@ void main() {
           reason: 'v56 block must seed the two store-transfer permissions');
     });
   });
+
+  group('onUpgrade v57 → v58 (cost_batches FIFO seed — ADR 0005, issue #37)', () {
+    Future<bool> objectExists(AppDatabase db, String type, String name) async {
+      final r = await db
+          .customSelect(
+            "SELECT 1 FROM sqlite_master WHERE type='$type' AND name='$name'",
+          )
+          .get();
+      return r.isNotEmpty;
+    }
+
+    test(
+        'seeds one opening batch per (product, store) at the scalar cost; '
+        'zero-cost stock → uncosted batch; empty stock → no batch', () async {
+      final biz = UuidV7.generate();
+      final store1 = UuidV7.generate();
+      final store2 = UuidV7.generate();
+      final productA = UuidV7.generate(); // costed, stock in two stores
+      final productB = UuidV7.generate(); // zero cost → uncosted batch
+      final productC = UuidV7.generate(); // zero stock → no batch
+      const recA = 1700000000; // product created_at (unix seconds)
+      const recB = 1700000100;
+      const recC = 1700000200;
+
+      final db1 = await openAndInit();
+
+      // A fresh v58 DB already created cost_batches (empty) at onCreate. Populate
+      // the SOURCE rows (business / stores / products / inventory), then revert
+      // the v58 delta — drop cost_batches + step user_version back — so the
+      // re-open's v58 block does the real seed against this stock.
+      await db1.customStatement(
+        "INSERT INTO businesses (id, name) VALUES (?, 'Biz')",
+        [biz],
+      );
+      for (final (id, name) in [(store1, 'Main'), (store2, 'Branch')]) {
+        await db1.customStatement(
+          'INSERT INTO stores (id, business_id, name) VALUES (?, ?, ?)',
+          [id, biz, name],
+        );
+      }
+      for (final (id, name, cost, created) in [
+        (productA, 'Star 60cl', 50000, recA),
+        (productB, 'House Water', 0, recB),
+        (productC, 'Ghost Item', 20000, recC),
+      ]) {
+        await db1.customStatement(
+          'INSERT INTO products (id, business_id, name, buying_price_kobo, '
+          'created_at) VALUES (?, ?, ?, ?, ?)',
+          [id, biz, name, cost, created],
+        );
+      }
+      for (final (product, store, qty) in [
+        (productA, store1, 10),
+        (productA, store2, 3),
+        (productB, store1, 5),
+        (productC, store1, 0), // empty → no batch
+      ]) {
+        await db1.customStatement(
+          'INSERT INTO inventory (id, business_id, product_id, store_id, '
+          'quantity) VALUES (?, ?, ?, ?, ?)',
+          [UuidV7.generate(), biz, product, store, qty],
+        );
+      }
+
+      await db1.customStatement('PRAGMA foreign_keys = OFF');
+      await db1.customStatement('DROP TABLE IF EXISTS cost_batches');
+      await db1.customStatement('PRAGMA foreign_keys = ON');
+      expect(await objectExists(db1, 'table', 'cost_batches'), isFalse);
+      await db1.customStatement('PRAGMA user_version = 57');
+      await db1.close();
+
+      // Re-open → onUpgrade(57 → 58) recreates the table (+ indexes + trigger)
+      // and seeds the opening batches.
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+
+      expect(await objectExists(db2, 'table', 'cost_batches'), isTrue,
+          reason: 'v58 must create cost_batches');
+      // The sync cursor index, the FIFO scan index, and the bump trigger must
+      // exist so a fresh install (onCreate) and an upgrade end up identical.
+      expect(
+        await objectExists(db2, 'index', 'idx_cost_batches_business_lua'),
+        isTrue,
+        reason: 'v58 must create the (business_id, last_updated_at) sync index',
+      );
+      expect(
+        await objectExists(
+            db2, 'index', 'idx_cost_batches_product_store_received'),
+        isTrue,
+        reason: 'v58 must create the FIFO scan index',
+      );
+      expect(
+        await objectExists(
+            db2, 'trigger', 'bump_cost_batches_last_updated_at'),
+        isTrue,
+        reason: 'v58 must create the last_updated_at bump trigger',
+      );
+
+      final rows = await db2
+          .customSelect(
+            'SELECT id, product_id, store_id, qty_remaining, qty_original, '
+            'cost_kobo, received_at FROM cost_batches',
+          )
+          .get();
+
+      // Exactly one batch per (product, store) WITH STOCK — productC (empty)
+      // gets none.
+      expect(rows, hasLength(3),
+          reason: 'one opening batch per (product, store) with stock');
+      final byKey = {
+        for (final r in rows)
+          '${r.read<String>('product_id')}:${r.read<String>('store_id')}': r,
+      };
+
+      // productA @ store1: full scalar cost, qty carried through.
+      final a1 = byKey['$productA:$store1']!;
+      expect(a1.read<int>('qty_remaining'), 10);
+      expect(a1.read<int>('qty_original'), 10);
+      expect(a1.read<int>('cost_kobo'), 50000);
+      expect(a1.read<int>('received_at'), recA,
+          reason: 'opening batch inherits the product created_at as received_at');
+      expect(
+        a1.read<String>('id'),
+        UuidV7.deterministic('cost_batch_opening:$biz:$productA:$store1'),
+        reason: 'opening-batch id is deterministic so devices converge on sync',
+      );
+
+      // productA @ store2: second store → its own batch.
+      final a2 = byKey['$productA:$store2']!;
+      expect(a2.read<int>('qty_remaining'), 3);
+      expect(a2.read<int>('cost_kobo'), 50000);
+
+      // productB: zero cost → uncosted batch (cost_kobo == 0).
+      final b1 = byKey['$productB:$store1']!;
+      expect(b1.read<int>('qty_remaining'), 5);
+      expect(b1.read<int>('cost_kobo'), 0,
+          reason: 'zero-cost stock becomes an uncosted batch');
+
+      // productC (zero stock) has no batch at all.
+      expect(
+        byKey.keys.where((k) => k.startsWith('$productC:')),
+        isEmpty,
+        reason: 'an empty (product, store) has nothing to cost',
+      );
+    });
+  });
 }

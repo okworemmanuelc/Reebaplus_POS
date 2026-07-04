@@ -2,6 +2,67 @@
 
 ---
 
+## 2026-07-04 — Cost Batch schema + migration + sync membership (Epic 2 / FIFO, issue #37, ADR 0005)
+
+**What shipped (Epic 2, F1).** The FIFO **Cost Batch** foundation — the table,
+its migration, and its sync wiring — landed and verified *in isolation*, ahead
+of any consuming logic (the land-the-migration-first rule). No draw-down /
+server-authoritative consumption yet; that is a later Epic 2 issue.
+
+- **Drift table `cost_batches`
+  ([app_database.dart](lib/core/database/app_database.dart)):** the
+  per-(product, store) FIFO cost queue — `{id, businessId, productId, storeId,
+  qtyRemaining, qtyOriginal, costKobo, receivedAt, createdAt, lastUpdatedAt}`.
+  `costKobo == 0` marks an **uncosted** batch. A normal MUTABLE synced tenant
+  table (qty drawn down in place) — not a ledger, not hard-deleted. Registered
+  in the `@DriftDatabase` tables list; **schema v57 → v58**.
+- **v58 migration (onUpgrade):** creates the table + the `(business_id,
+  last_updated_at)` cursor index, the FIFO `(business_id, product_id, store_id,
+  received_at)` scan index, and the bump trigger — the same shapes
+  `_postCreateStatements` emits, so onCreate == onUpgrade. Then seeds **one
+  opening batch per (product, store)** from current stock (`inventory.quantity >
+  0`) at the product's existing scalar `buyingPriceKobo` (zero-cost → uncosted);
+  `received_at`/`created_at`/`last_updated_at` inherit the product's
+  `created_at` so the row is byte-identical on every device. The opening-batch
+  **id is deterministic** (`UuidV7.deterministic`, a new UUIDv5 helper in
+  [uuid_v7.dart](lib/core/database/uuid_v7.dart)) so two devices that both run
+  the migration mint the SAME id and converge via `insertOnConflictUpdate`
+  instead of duplicating once per device.
+- **Sync registry
+  ([sync_registry.dart](lib/core/database/sync_registry.dart)):** one
+  `SyncedTable` entry, `Restore.plain(resilient: true)` (FK → products + stores;
+  a batch can land before its parent slice). `tenantScoped: true`, no push-column
+  divergence, no hardDelete/REPLICA IDENTITY (never tombstoned). Golden pull
+  order + tenant set updated for the new table.
+- **Cloud
+  ([0132_cost_batches.sql](supabase/migrations/0132_cost_batches.sql), DEPLOYED):**
+  `public.cost_batches` with **`cost_kobo BIGINT`** (money rule), `current_user_
+  business_ids()` RLS (`cost_batches_tenant_rw`), bump trigger, realtime
+  publication membership (no REPLICA IDENTITY FULL — upsert/update-only, like the
+  balance caches), and `pos_pull_snapshot` extended with `cost_batches` after
+  `inventory`. Verified on remote: bigint cost_kobo, RLS on, in publication,
+  snapshot carries it. Safe for live v57 devices — the pull iterates the app's
+  own registry, so the extra snapshot key is ignored.
+
+**Incidental root-cause fix (blocking the required regeneration).** A clean
+`dart run build_runner build` dropped `_$BusinessesDaoMixin` and failed to
+compile: the `@DriftAccessor(tables: [Businesses])` annotation in
+[daos_org.dart](lib/core/database/daos_org.dart) was **misplaced** — a `const
+_absent` sentinel sat between the annotation and `class BusinessesDao`, so
+drift_dev never generated the mixin. The committed generated file was
+stale-but-correct (generated before the sentinel was inserted), masking it until
+a fresh regen. Moved the annotation onto the class + a guard comment.
+
+**Verification.** New migration test
+([migration_upgrade_test.dart](test/database/migration_upgrade_test.dart)) drives
+the real onUpgrade(57→58) and asserts one opening batch per (product, store),
+zero-cost → uncosted, empty stock → no batch, the deterministic id, and the
+index/trigger creation. `flutter analyze` clean project-wide. Full suite: 713
+pass / 58 skipped / 1 pre-existing unrelated failure
+(`who_is_working_screen_test` — confirmed failing on HEAD without these changes).
+
+---
+
 ## 2026-07-04 — Land on POS after onboarding; delete the auto-push (issue #35, ADR 0006)
 
 **What shipped (Epic 1).** Onboarding now lands the device on POS — where the

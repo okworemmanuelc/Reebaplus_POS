@@ -692,6 +692,49 @@ class Inventory extends Table {
   ];
 }
 
+/// Epic 2 (FIFO batch costing — ADR 0005): the per-(product, store) FIFO cost
+/// queue. Each Receive Stock (and Add Product's opening stock) pushes one batch
+/// `{qtyRemaining, qtyOriginal, costKobo, receivedAt}`; sales draw it down
+/// oldest-first by `receivedAt`. `costKobo == 0` marks an UNCOSTED batch (sales
+/// from it snapshot 0 and are excluded from COGS until a cost is backfilled).
+///
+/// This is a normal MUTABLE synced tenant table — `qty_remaining` is drawn down
+/// in place — NOT an append-only ledger and NOT hard-deleted (a spent batch
+/// stays at qty 0 for history). Issue #37 (Epic 2, F1) lands the table, its
+/// migration seed, and its sync membership only; the draw-down / server-
+/// authoritative consumption logic is a later Epic 2 issue.
+@DataClassName('CostBatchData')
+class CostBatches extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get productId => text().references(Products, #id)();
+  TextColumn get storeId => text().references(Stores, #id)();
+  // Units still on the shelf from this batch; drawn down oldest-first by FIFO.
+  IntColumn get qtyRemaining => integer()();
+  // Units this batch started with — kept so a partially-consumed batch still
+  // reports what it originally held.
+  IntColumn get qtyOriginal => integer()();
+  // Per-unit cost for this batch, in kobo. 0 == uncosted (see class doc). Cloud
+  // side MUST be bigint (money column rule).
+  IntColumn get costKobo => integer().withDefault(const Constant(0))();
+  // FIFO ordering key: when this stock was received. The migration-seeded
+  // opening batch inherits the product's created_at so it always sorts oldest.
+  DateTimeColumn get receivedAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => [
+    'CHECK (qty_remaining >= 0)',
+    'CHECK (qty_original >= 0)',
+    'CHECK (cost_kobo >= 0)',
+  ];
+}
+
 // `Crates` table dropped in schemaVersion 5 (phase D §4.5). It was never
 // written by the live code path — `_syncedTenantTables` listed it but
 // no DAO touched it; the cloud counterpart will be dropped by the
@@ -1670,6 +1713,7 @@ class MigrationEvents extends Table {
     StoreCrateBalances,
     CrateLedger,
     Inventory,
+    CostBatches,
     StockTransfers,
     StockAdjustments,
     StockTransactions,
@@ -1785,7 +1829,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 57;
+  int get schemaVersion => 58;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3812,6 +3856,83 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(businesses, businesses.tracksEmptyCrates);
         }
       }
+      if (from < 58) {
+        // v58 (Epic 2 / FIFO batch costing — ADR 0005, issue #37): the
+        // `cost_batches` per-(product, store) FIFO cost queue. One new synced
+        // tenant table, seeded with one opening batch per (product, store) from
+        // current stock at the product's existing scalar cost. Mirrors
+        // supabase/migrations/0132_cost_batches.sql.
+        //
+        // 1. Create the table + its (business_id, last_updated_at) sync cursor
+        //    index, the FIFO scan index, and the bump trigger — the SAME shapes
+        //    the generic `_postCreateStatements` loops emit for a tenant table,
+        //    so a fresh install (onCreate) and an upgrade end up identical.
+        //    Idempotency guard (like v46/v53) for a DB stepped back to < 58 by
+        //    the revert-then-re-upgrade tests.
+        final cbExists = await customSelect(
+          "SELECT 1 FROM sqlite_master WHERE type='table' "
+          "AND name='cost_batches'",
+        ).get();
+        if (cbExists.isEmpty) {
+          await m.createTable(costBatches);
+          await customStatement(
+            'CREATE INDEX idx_cost_batches_business_lua '
+            'ON cost_batches (business_id, last_updated_at)',
+          );
+          await customStatement(
+            'CREATE INDEX idx_cost_batches_product_store_received '
+            'ON cost_batches (business_id, product_id, store_id, received_at)',
+          );
+          await customStatement(
+            'CREATE TRIGGER bump_cost_batches_last_updated_at '
+            'AFTER UPDATE ON cost_batches '
+            'FOR EACH ROW '
+            'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+            'BEGIN '
+            "UPDATE cost_batches SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+            'END',
+          );
+
+          // 2. Seed ONE opening batch per (product, store) from current stock at
+          //    the product's existing scalar cost (buying_price_kobo). Zero-cost
+          //    stock becomes an UNCOSTED batch (cost_kobo = 0). Only rows with
+          //    stock on hand (quantity > 0) get a batch — an empty (product,
+          //    store) has nothing to cost. received_at / created_at /
+          //    last_updated_at all inherit the product's created_at so the row
+          //    is byte-identical on every device and always sorts oldest.
+          //
+          //    The id is DETERMINISTIC (UuidV7.deterministic) so two devices
+          //    that both run this migration mint the SAME opening-batch id — the
+          //    rows converge via insertOnConflictUpdate on sync instead of
+          //    duplicating once per device. Future receive batches use a fresh
+          //    UuidV7 (one per receive).
+          final stockRows = await customSelect(
+            'SELECT i.business_id AS bid, i.product_id AS pid, '
+            'i.store_id AS sid, i.quantity AS qty, '
+            'p.buying_price_kobo AS cost, p.created_at AS rec '
+            'FROM inventory i JOIN products p ON p.id = i.product_id '
+            'WHERE i.quantity > 0',
+          ).get();
+          for (final r in stockRows) {
+            final bid = r.read<String>('bid');
+            final pid = r.read<String>('pid');
+            final sid = r.read<String>('sid');
+            final qty = r.read<int>('qty');
+            final rec = r.read<int>('rec');
+            final id = UuidV7.deterministic(
+              'cost_batch_opening:$bid:$pid:$sid',
+            );
+            await customStatement(
+              'INSERT INTO cost_batches '
+              '(id, business_id, product_id, store_id, qty_remaining, '
+              'qty_original, cost_kobo, received_at, created_at, '
+              'last_updated_at) '
+              'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+              [id, bid, pid, sid, qty, qty, r.read<int>('cost'), rec, rec, rec],
+            );
+          }
+        }
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -4313,6 +4434,8 @@ List<String> get _postCreateStatements {
     'CREATE INDEX idx_supplier_crate_ledger_owner ON supplier_crate_ledger (business_id, supplier_id, manufacturer_id, created_at)',
     'CREATE INDEX idx_crate_ledger_owner_group ON crate_ledger (business_id, customer_id, manufacturer_id, created_at)',
     'CREATE INDEX idx_inventory_business_ps ON inventory (business_id, product_id, store_id)',
+    // v58 (Epic 2 / FIFO) — oldest-first batch scan per (product, store).
+    'CREATE INDEX idx_cost_batches_product_store_received ON cost_batches (business_id, product_id, store_id, received_at)',
     'CREATE INDEX idx_stock_txn_prod_loc_time ON stock_transactions (product_id, location_id, created_at)',
     'CREATE INDEX idx_orders_business_time ON orders (business_id, created_at)',
     'CREATE INDEX idx_orders_business_status ON orders (business_id, status)',

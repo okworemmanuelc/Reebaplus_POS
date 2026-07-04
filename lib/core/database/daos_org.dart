@@ -57,13 +57,17 @@ class SettingsDao extends DatabaseAccessor<AppDatabase>
   }
 }
 
-@DriftAccessor(tables: [Businesses])
 /// Sentinel used by [BusinessesDao.updateInfo] to distinguish "caller did not
 /// pass logoUrl" (leave the column unchanged) from "caller passed null/empty"
 /// (clear the logo). Using a typed default of `Object?` lets the method
 /// accept `String`, `null`, `''`, or nothing, without overloading.
 const _absent = Object();
 
+// NB: `@DriftAccessor` must sit directly on the class — a declaration between
+// the annotation and `class BusinessesDao` (the `_absent` sentinel above) steals
+// the annotation, so drift_dev never emits `_$BusinessesDaoMixin` and a clean
+// regeneration fails to compile.
+@DriftAccessor(tables: [Businesses])
 class BusinessesDao extends DatabaseAccessor<AppDatabase>
     with _$BusinessesDaoMixin, BusinessScopedDao<AppDatabase> {
   BusinessesDao(super.db);
