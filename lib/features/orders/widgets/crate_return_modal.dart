@@ -5,9 +5,9 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
-import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/shared/services/orders/crate_return_input.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 
@@ -44,8 +44,12 @@ class CrateReturnModal extends ConsumerStatefulWidget {
   /// bottles (Guard 2, which skipped when the deposit was "covered", is gone:
   /// crates must be counted back regardless of how the deposit was paid). The
   /// only skip is Guard 1 — nothing crate-tracked in the order.
-  /// Returns `true` if the user confirmed crate returns, `false` if skipped.
-  static Future<bool> show(
+  ///
+  /// The modal only *collects* the counted-back empties (ADR 0004); the actual
+  /// settlement runs in `OrderCommands.confirm` (via `markAsCompleted`). Returns
+  /// the collected [CrateReturnResult] to hand to Confirm, [CrateReturnResult.empty]
+  /// when there was nothing to count, or `null` when the cashier dismissed it.
+  static Future<CrateReturnResult?> show(
     BuildContext context,
     OrderWithItems orderWithItems, {
     required WidgetRef ref,
@@ -55,10 +59,10 @@ class CrateReturnModal extends ConsumerStatefulWidget {
       final p = i.product; // null for a Quick Sale line — never a crate product
       return p != null && p.unit.toLowerCase() == 'bottle' && p.trackEmpties;
     });
-    if (!hasBottles) return true; // no crates to track — proceed
+    if (!hasBottles) return CrateReturnResult.empty; // no crates to track
 
-    if (!context.mounted) return false;
-    final result = await showModalBottomSheet<bool>(
+    if (!context.mounted) return null;
+    return showModalBottomSheet<CrateReturnResult>(
       context: context,
       isDismissible: false,
       enableDrag: false,
@@ -66,7 +70,6 @@ class CrateReturnModal extends ConsumerStatefulWidget {
       backgroundColor: Colors.transparent,
       builder: (_) => CrateReturnModal(orderWithItems: orderWithItems),
     );
-    return result == true;
   }
 
   @override
@@ -214,91 +217,32 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
     super.dispose();
   }
 
-  Future<void> _confirm() async {
+  /// Collect the counted-back empties and hand them to Confirm (ADR 0004). The
+  /// modal no longer writes to the DB — `OrderCommands.confirm` performs the
+  /// settlement (walk-in stock-only vs registered deposit settle) from these
+  /// counts, keeping the same per-row logic in one place. Skips empty-brand rows,
+  /// matching the old write loop.
+  void _confirm() {
     if (_saving) return;
     setState(() => _saving = true);
 
-    final customer = widget.orderWithItems.customer;
-    final order = widget.orderWithItems.order;
-    final db = ref.read(databaseProvider);
-    final auth = ref.read(authProvider);
+    final lines = _rows
+        .where((r) => r.manufacturerId.isNotEmpty)
+        .map(
+          (r) => CrateReturnLine(
+            manufacturerId: r.manufacturerId,
+            takenCrates: r.expectedQty,
+            returnedCrates: int.tryParse(r.controller.text) ?? r.expectedQty,
+            rateKobo: r.rateKobo,
+            paidKobo: r.paidKobo,
+          ),
+        )
+        .toList();
 
-    try {
-      // Walk-in customer: just record physical stock returns; lone owner has full
-      // authority so no PIN override is needed.
-      if (customer == null) {
-        for (final row in _rows) {
-          final returned = int.tryParse(row.controller.text) ?? row.expectedQty;
-          if (row.manufacturerId.isNotEmpty) {
-            await db.inventoryDao.addEmptyCrates(
-              row.manufacturerId,
-              returned,
-              storeId: order.storeId,
-            );
-          }
-        }
-        if (mounted) Navigator.pop(context, true);
-        return;
-      }
-
-      // Save directly to ledger — lone owner is always authorised.
-      final performedBy = auth.currentUser?.id ?? '';
-      await db.transaction(() async {
-        for (final row in _rows) {
-          final returned = int.tryParse(row.controller.text) ?? row.expectedQty;
-          if (row.manufacturerId.isEmpty) continue;
-
-          // 1. Physical crate stock comes back regardless of how it's settled.
-          if (returned > 0) {
-            await db.inventoryDao.addEmptyCrates(
-              row.manufacturerId,
-              returned,
-              storeId: order.storeId,
-            );
-          }
-
-          if (row.isMoneyTrack) {
-            // §13.4 Ring 5 money-track: the obligation lived in the credit balance as a
-            // held deposit — settle it in money (refund / forfeit / shortfall).
-            // No crate balance was issued for this brand, so DON'T touch the
-            // crate ledger (that would create a phantom credit).
-            await db.ordersDao.settleCrateDepositReturn(
-              customerId: customer.id,
-              manufacturerId: row.manufacturerId,
-              orderId: order.id,
-              takenCrates: row.expectedQty,
-              returnedCrates: returned,
-              rateKobo: row.rateKobo,
-              paidKobo: row.paidKobo,
-              refundAsCash: _refundAsCash,
-              performedBy: performedBy,
-            );
-          } else if (returned > 0) {
-            // crate-track (no deposit): net the issued balance. Leftover (taken −
-            // returned) stays as crate debt on the crates tab. This is the bug-fix
-            // path (an 'issued' row was written at the sale).
-            await db.crateLedgerDao.recordCrateReturnByCustomer(
-              customerId: customer.id,
-              manufacturerId: row.manufacturerId,
-              quantity: returned,
-              performedBy: performedBy,
-              orderId: order.id,
-            );
-          }
-        }
-      });
-
-      if (mounted) Navigator.pop(context, true);
-    } catch (e) {
-      if (mounted) {
-        AppNotification.showError(
-          context,
-          'Could not record crate returns: $e',
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
+    Navigator.pop(
+      context,
+      CrateReturnResult(lines: lines, refundAsCash: _refundAsCash),
+    );
   }
 
   /// §13.4 Ring 5 — choose where a money-track deposit refund goes: back to the

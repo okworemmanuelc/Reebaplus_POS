@@ -204,7 +204,9 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     }
 
     // Load sales summary from completed orders
-    final summary = await db.ordersDao.getSalesSummaryForProduct(productId);
+    final summary = await ref
+        .read(orderServiceProvider)
+        .getSalesSummaryForProduct(productId);
     if (mounted) setState(() => _salesSummary = summary);
 
     // Load last shipment from shipments
@@ -320,7 +322,9 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   Future<void> _reloadDerived() async {
     final db = ref.read(databaseProvider);
     final id = widget.item.id;
-    final summary = await db.ordersDao.getSalesSummaryForProduct(id);
+    final summary = await ref
+        .read(orderServiceProvider)
+        .getSalesSummaryForProduct(id);
     if (mounted) setState(() => _salesSummary = summary);
     final delivery = await db.shipmentsDao.getLastShipmentForProduct(id);
     if (mounted) setState(() => _lastDelivery = delivery);

@@ -101,7 +101,10 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
       if (mounted) setState(() => _creditHistory = hist);
     });
 
-    _ordersSub = db.ordersDao.watchOrdersByCustomer(id).listen((orders) {
+    _ordersSub = ref
+        .read(orderServiceProvider)
+        .watchOrdersByCustomer(id)
+        .listen((orders) {
       if (mounted) setState(() => _orders = orders);
     });
 

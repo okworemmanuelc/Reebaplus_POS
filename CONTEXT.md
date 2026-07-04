@@ -49,6 +49,48 @@ identity drift), moved to `sync_queue_orphans`. Still un-uploaded local data the
 Outbox invariant protects: visible and exportable, never silently dropped.
 _Avoid_: failed row, dead-letter.
 
+### Orders
+
+**Order**:
+The persisted record of a sale — one row in `orders` plus its line items. The
+aggregate the Order Module owns. Distinct from a *Sale*: an Order can be in
+states that are not recognized sales (cancelled/refunded).
+_Avoid_: transaction, receipt; "sale" for the record itself.
+
+**Sale**:
+The economic event — revenue changing hands, recognized at **Checkout**, not at
+Confirm. "A recognized sale" = any Order in a non-reversed state (`pending` or
+`completed`), per `orderCountsAsSale`. A Sale is a property of an Order, not a
+separate record.
+_Avoid_: using "sale" and "order" interchangeably; "completed sale" (revenue is
+not tied to the `completed` status).
+
+**Checkout**:
+The lifecycle operation that settles a sale and recognizes revenue: books wallet
+legs, deducts inventory, issues crates, writes the Order at status `pending`.
+The economic act.
+_Avoid_: settle, record-sale (as user-facing verbs), "complete the sale".
+
+**Confirm**:
+The ceremonial lifecycle operation flipping an Order `pending`→`completed`,
+stamping `completedAt` and recording goods receipt + returned empties. Creates
+**no** revenue.
+_Avoid_: complete (as a synonym for Checkout), finalize.
+
+**Cancel**:
+The lifecycle operation that reverses a settled sale (a.k.a. refund) — undoes
+stock, payments, and credit-balance legs. A cancelled/refunded Order is never a
+recognized Sale.
+_Avoid_: void, delete.
+
+**Cart**:
+A pre-checkout draft of a would-be Order — mutable, no revenue, no status, no
+invariants. Becomes an Order at **Checkout** (Cart → Checkout → Order). *Not*
+part of the Order Module, even though `OrdersDao` currently stores saved carts;
+a separate concern.
+_Avoid_: treating a Cart as a draft/pending Order; folding cart logic into the
+Order Module.
+
 ### Scoping
 
 **Current Business Id**:

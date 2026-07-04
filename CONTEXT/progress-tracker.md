@@ -20,6 +20,31 @@ The human updates it when resolving open questions or making architectural decis
   interface over its table set is unchanged; only source locality improved. Verified:
   every code line preserved exactly once + `flutter analyze` clean (full project).
 
+### SHIPPED: Order module extraction — facade over command/query surfaces (2026-07-04, ADR 0004)
+- **Pure refactor, no behaviour change.** Consolidated everything *order-shaped*
+  behind one deep module in `lib/shared/services/orders/`: the `OrderService`
+  **facade** (unchanged public API — `orderServiceProvider` and all call sites
+  untouched) delegating to two internal surfaces — **`OrderCommands`** (the
+  lifecycle writes **Checkout** / **Confirm** / **Cancel** + reject-compensation,
+  post-checkout side-effects isolated) and **`OrderQueries`** (read projections).
+- **`SaleFlusher` seam** (`sale_flusher.dart`) decouples the checkout
+  flush→reject→compensate path from the concrete Sync Engine (`SyncSaleFlusher`
+  real / `NoopSaleFlusher` no-sync); `SaleSyncException` stays in core (layering).
+- **Sits on top of `OrdersDao`** (unchanged persistence seam), did NOT absorb it.
+  Two stray screen reads (`watchOrdersByCustomer`, `getSalesSummaryForProduct`)
+  migrated onto the query surface. **Carts** + **delivery receipts** left OUT.
+- **Confirm consolidation** — crate-return settlement moved off the UI:
+  `CrateReturnModal` now only collects counts (`CrateReturnResult`);
+  `OrderCommands.confirm` settles empties **then** flips `pending`→`completed`,
+  preserving the old order + transaction shape. `markAsCompleted` gained optional
+  `customerId/storeId/crateReturns/refundAsCash` (only caller is the crate path).
+- **Verification:** design grilled via `/grill-with-docs` → `CONTEXT.md` glossary
+  (Order, Sale, Checkout, Confirm, Cancel, Cart) + ADR 0004. New
+  `test/orders/order_module_test.dart` pins payment-type/wallet-debit resolution
+  and Confirm settle-then-complete. `flutter analyze` clean; ~657-test suite green
+  (sole failure = pre-existing network flake in `who_is_working_screen_test`,
+  unrelated).
+
 ### SHIPPED: Business-Scoped Stream primitive — factory + full migration (2026-07-03, PRD #23 = issues #24 + #25)
 - **Built both slices in one pass.** New `lib/core/providers/business_scoped_stream.dart`:
   the `currentBusinessIdProvider` seam (`authProvider.select(currentUser?.businessId)`)

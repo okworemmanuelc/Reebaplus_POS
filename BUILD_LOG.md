@@ -53,6 +53,70 @@ project (`No issues found!`).
 
 ---
 
+## 2026-07-04 — Order module extraction: one facade over command/query surfaces (ADR 0004)
+
+**Scope:** pure refactor, **no behaviour change**. The order-lifecycle logic was
+scattered across `OrderService.addOrder`, `OrdersDao`, the Confirm ceremony
+*orchestrated by the UI* in `orders_screen`, and two screens reading orders
+straight from the DAO. Consolidated everything **order-shaped** behind one deep
+module. Design was grilled end-to-end (`/grill-with-docs`) and recorded in
+`CONTEXT.md` (glossary: Order, Sale, Checkout, Confirm, Cancel, Cart) + **ADR
+0004**.
+
+**New module — `lib/shared/services/orders/`:**
+- `order_service.dart` — the **facade** `OrderService` (unchanged public API, so
+  `orderServiceProvider` + call sites are untouched). Delegates to two internal
+  surfaces.
+- `order_commands.dart` — **`OrderCommands`**: the lifecycle writes **Checkout**
+  (was `addOrder`) / **Confirm** (was `markCompleted`) / **Cancel** (was
+  `markCancelled`) + `_compensateRejectedSale`. Post-checkout side-effects
+  (quick-sale audit + crate-debt notify) isolated into one
+  `_runPostCheckoutSideEffects` step.
+- `order_queries.dart` — **`OrderQueries`**: read projections (`watch*`, paging,
+  stats, cart-staleness) + the two migrated stray reads.
+- `sale_flusher.dart` — narrow **`SaleFlusher`** seam (`SyncSaleFlusher` real /
+  `NoopSaleFlusher` for no-sync). Decouples the flush→reject→compensate path
+  from the concrete Sync Engine; `SaleSyncException` stays in core (layering).
+- `crate_return_input.dart` — `CrateReturnLine` / `CrateReturnResult` DTOs.
+
+**Module sits on top of `OrdersDao`** (unchanged persistence seam) — did NOT
+absorb it. Reads (`watchOrdersByCustomer`, `getSalesSummaryForProduct`) migrated
+off direct DAO calls in `customer_detail_screen` / `product_detail_screen` onto
+the query surface. **Carts** and **delivery receipts** deliberately left OUT.
+
+**Confirm consolidation (the behaviour-visible move):** crate-return settlement
+moved off the UI. `CrateReturnModal` now only *collects* counts and returns a
+`CrateReturnResult`; `OrderCommands.confirm` performs the settle (walk-in
+stock-only vs registered deposit settle/net) **then** the `pending`→`completed`
+flip — same order as before (modal wrote, then `markCompleted` ran), same
+transaction shape. `markAsCompleted` gained optional `customerId/storeId/
+crateReturns/refundAsCash` (its only caller is the crate path).
+
+**Tests:** new `test/orders/order_module_test.dart` (7 tests) pins the
+highest-drift paths — checkout payment-type/wallet-debit resolution
+(cash/mixed/wallet/credit); Confirm settle-then-complete (money-track full
+return: refund to credit + empties restocked + status flip); and — added after
+the `/code-review` Spec axis flagged the gap — the two *ordering/failure*
+invariants: **Confirm aborts before the flip** (a crate-settle failure leaves the
+order `pending`) and **checkout reject→compensate** (a fake `SaleFlusher` throwing
+`SaleSyncException` → order `cancelled` + inventory refunded, exercising the seam's
+whole reason to exist). The existing ~657-test suite was the equivalence net,
+green at every step. `flutter analyze` clean.
+
+**Reviewed** via `/code-review` (Standards + Spec axes). Spec: no behaviour drift
+(payment/wallet logic byte-identical to the deleted file; Confirm settle→flip
+order preserved); only gap was the two missing invariant tests, now added.
+Standards: clean faithful move; the only standard-anchored asks (vocabulary-aligned
+public renames Checkout/Confirm/Cancel; the untyped `List<Map<String,dynamic>>
+cart` contract) are both pre-existing and deliberately kept for API stability —
+deferred as tracked follow-ups.
+
+**Pre-existing unrelated failure:** `test/auth/who_is_working_screen_test.dart`
+(one case) fails on a network `PostgrestException 400` via `SupabaseCloudTransport`
+— zero references to any changed file; not caused by this work.
+
+---
+
 ## 2026-07-03 — Business-Scoped Stream primitive: guarded factory + full migration (PRD #23 = #24 + #25)
 
 **Scope:** retire the build-time-poison provider bug *by construction*. A

@@ -4,34 +4,46 @@ import 'package:drift/drift.dart' show Value, Variable;
 import 'package:flutter/foundation.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
-import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
+import 'package:reebaplus_pos/core/services/supabase_sync_service.dart'
+    show SaleSyncException;
 import 'package:reebaplus_pos/core/utils/order_number.dart';
-import 'package:reebaplus_pos/shared/models/order.dart' as domain;
+import 'package:reebaplus_pos/shared/services/orders/crate_return_input.dart';
+import 'package:reebaplus_pos/shared/services/orders/sale_flusher.dart';
 import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
 
-class OrderService {
+/// The Order module's **command surface** (ADR 0004): the three lifecycle
+/// writes — **Checkout** (settle the sale, recognise revenue), **Confirm** (the
+/// ceremonial `pending`→`completed` flip), and **Cancel** (reverse a settled
+/// sale) — plus the reject → compensate reversal that pairs with Checkout.
+///
+/// This is where the order invariants live. It orchestrates and enforces; the
+/// atomic DB work is delegated to `OrdersDao`. Cloud push goes through the
+/// narrow [SaleFlusher] seam, so the flush → reject → compensate path is
+/// testable without a live Sync Engine.
+class OrderCommands {
   final AppDatabase _db;
-  final SupabaseSyncService? _syncService;
+  final SaleFlusher _flusher;
   final SecureStorageService? _secureStorage;
   late final OrdersDao _ordersDao = _db.ordersDao;
 
-  OrderService(this._db, [this._syncService, this._secureStorage]);
+  OrderCommands(this._db, this._flusher, [this._secureStorage]);
 
   /// Resolves this device's opaque id for the order-number tag (§30.8.1).
   /// `_secureStorage` is always injected in production (see
   /// `orderServiceProvider`); the constant fallback only ever applies to tests
-  /// that construct `OrderService(db)` without it.
+  /// that construct the module without it.
   Future<String> _orderDeviceTag() async {
     final deviceId =
         await _secureStorage?.getOrCreateDeviceId() ?? 'unconfigured-device';
     return deviceOrderTag(deviceId);
   }
 
-  /// Build an order from a UI cart and persist it atomically.
+  /// **Checkout** — build an order from a UI cart and persist it atomically,
+  /// recognising revenue (the Order is born `pending`).
   ///
   /// Returns the human-readable order number (e.g. `ORD-000042`) — the
   /// checkout/receipt code displays this to the user.
-  Future<String> addOrder({
+  Future<String> checkout({
     required String? customerId,
     required List<Map<String, dynamic>> cart,
     required int totalAmountKobo,
@@ -136,23 +148,157 @@ class OrderService {
     // locally — cancel the order, refund the inventory cache — so the
     // device's view stays consistent with the cloud's "this sale never
     // happened".
-    if (_syncService != null && _syncService.isOnline.value) {
+    if (_flusher.canFlush) {
       try {
-        await _syncService.flushSale(orderId);
+        await _flusher.flushSale(orderId);
       } on SaleSyncException catch (e) {
-        debugPrint('[OrderService] Sale rejected by server: $e');
+        debugPrint('[OrderCommands] Sale rejected by server: $e');
         await _compensateRejectedSale(orderId, items);
         rethrow;
       } catch (e) {
         // Transient error — the queue row stays pending and the
         // background drain will retry. Don't block the receipt.
-        debugPrint('[OrderService] flushSale transient: $e');
+        debugPrint('[OrderCommands] flushSale transient: $e');
       }
     }
 
+    await _runPostCheckoutSideEffects(
+      orderId: orderId,
+      orderNumber: orderNumber,
+      cart: cart,
+      customerId: customerId,
+      staffId: staffId,
+      storeId: storeId,
+    );
+
+    return orderNumber;
+  }
+
+  /// **Confirm** — settle the counted-back empties, then flip `pending`→
+  /// `completed` (stamps `completedAt`). Creates no revenue.
+  ///
+  /// Crate settlement runs *before* the status flip — the same order the UI
+  /// used to run them in (the modal wrote crate returns, then `markCompleted`
+  /// ran separately). A crate-settle failure aborts before the flip, exactly as
+  /// before. [crateReturns] is empty for a non-crate order (straight flip).
+  Future<void> confirm(
+    String orderId,
+    String staffId, {
+    String? customerId,
+    String? storeId,
+    List<CrateReturnLine> crateReturns = const [],
+    bool refundAsCash = false,
+  }) async {
+    await _settleCrateReturns(
+      orderId: orderId,
+      staffId: staffId,
+      customerId: customerId,
+      storeId: storeId,
+      crateReturns: crateReturns,
+      refundAsCash: refundAsCash,
+    );
+    await _ordersDao.markCompleted(orderId, staffId);
+  }
+
+  /// The crate-return settlement half of **Confirm**, moved off the UI
+  /// (`CrateReturnModal` used to perform these writes; it now only collects the
+  /// counts). Physical empties come back regardless; money-track brands settle
+  /// the held deposit (refund / forfeit / shortfall), crate-track brands net the
+  /// issued balance. Walk-ins record only physical stock. Preserves the modal's
+  /// exact per-row logic and transaction shape.
+  Future<void> _settleCrateReturns({
+    required String orderId,
+    required String staffId,
+    required String? customerId,
+    required String? storeId,
+    required List<CrateReturnLine> crateReturns,
+    required bool refundAsCash,
+  }) async {
+    if (crateReturns.isEmpty) return;
+
+    // Walk-in customer: just record physical stock returns (no wallet/ledger).
+    if (customerId == null || customerId.isEmpty) {
+      for (final line in crateReturns) {
+        if (line.manufacturerId.isEmpty) continue;
+        await _db.inventoryDao.addEmptyCrates(
+          line.manufacturerId,
+          line.returnedCrates,
+          storeId: storeId,
+        );
+      }
+      return;
+    }
+
+    await _db.transaction(() async {
+      for (final line in crateReturns) {
+        if (line.manufacturerId.isEmpty) continue;
+
+        // 1. Physical crate stock comes back regardless of how it's settled.
+        if (line.returnedCrates > 0) {
+          await _db.inventoryDao.addEmptyCrates(
+            line.manufacturerId,
+            line.returnedCrates,
+            storeId: storeId,
+          );
+        }
+
+        if (line.isMoneyTrack) {
+          // §13.4 money-track: the obligation lived in the credit balance as a
+          // held deposit — settle it in money (refund / forfeit / shortfall).
+          // No crate balance was issued for this brand, so DON'T touch the
+          // crate ledger (that would create a phantom credit).
+          await _ordersDao.settleCrateDepositReturn(
+            customerId: customerId,
+            manufacturerId: line.manufacturerId,
+            orderId: orderId,
+            takenCrates: line.takenCrates,
+            returnedCrates: line.returnedCrates,
+            rateKobo: line.rateKobo,
+            paidKobo: line.paidKobo,
+            refundAsCash: refundAsCash,
+            performedBy: staffId,
+          );
+        } else if (line.returnedCrates > 0) {
+          // crate-track (no deposit): net the issued balance. Leftover (taken −
+          // returned) stays as crate debt on the crates tab.
+          await _db.crateLedgerDao.recordCrateReturnByCustomer(
+            customerId: customerId,
+            manufacturerId: line.manufacturerId,
+            quantity: line.returnedCrates,
+            performedBy: staffId,
+            orderId: orderId,
+          );
+        }
+      }
+    });
+  }
+
+  /// **Cancel** / refund an order (§19.7): reverses stock, payments, and the
+  /// credit-balance legs so the customer's credit balance returns to its
+  /// pre-sale balance.
+  Future<void> cancel(String orderId, String reason, String staffId) {
+    return _ordersDao.markCancelled(orderId, reason, staffId);
+  }
+
+  Future<void> assignRider(String orderId, String riderName) {
+    return _ordersDao.assignRider(orderId, riderName);
+  }
+
+  /// The best-effort, non-transactional reactions to a checked-out sale — quick
+  /// sale audit and customer crate-debt notification (Q8/C, ADR 0004). Isolated
+  /// from the settlement core: a reader knows the money/inventory/crate work is
+  /// already done and these can never fail checkout (each is guarded).
+  Future<void> _runPostCheckoutSideEffects({
+    required String orderId,
+    required String orderNumber,
+    required List<Map<String, dynamic>> cart,
+    required String? customerId,
+    required String staffId,
+    required String storeId,
+  }) async {
     // §12.3 / §26.4: a Quick Sale is an off-inventory line. Once the sale is
-    // accepted (a server-rejected sale rethrows above and never reaches here),
-    // record it in the activity log and alert CEO + Manager for audit.
+    // accepted (a server-rejected sale rethrows before this and never reaches
+    // here), record it in the activity log and alert CEO + Manager for audit.
     final quickLines = cart
         .where((c) {
           final id = c['id'] as String?;
@@ -178,8 +324,6 @@ class OrderService {
       customerId: customerId,
       staffId: staffId,
     );
-
-    return orderNumber;
   }
 
   /// §12.1 / §26.4: notify CEO + Manager when a sale leaves the customer owing
@@ -234,7 +378,7 @@ class OrderService {
         );
       }
     } catch (e) {
-      debugPrint('[OrderService] crate-debt notify failed (non-fatal): $e');
+      debugPrint('[OrderCommands] crate-debt notify failed (non-fatal): $e');
     }
   }
 
@@ -280,7 +424,7 @@ class OrderService {
         );
       }
     } catch (e) {
-      debugPrint('[OrderService] quick-sale audit failed (non-fatal): $e');
+      debugPrint('[OrderCommands] quick-sale audit failed (non-fatal): $e');
     }
   }
 
@@ -422,118 +566,5 @@ class OrderService {
           );
         })
         .toList(growable: false);
-  }
-
-  Stream<List<domain.Order>> watchPendingOrders() {
-    return _ordersDao.watchPendingOrders().map<List<domain.Order>>(
-      (list) => list.map<domain.Order>((d) => OrderService.fromDb(d)).toList(),
-    );
-  }
-
-  Stream<List<domain.Order>> watchAllOrders() {
-    return _ordersDao.watchAllOrders().map<List<domain.Order>>(
-      (list) => list.map<domain.Order>((d) => OrderService.fromDb(d)).toList(),
-    );
-  }
-
-  Stream<List<domain.Order>> watchCompletedOrders() {
-    return _ordersDao.watchCompletedOrders().map<List<domain.Order>>(
-      (list) => list.map<domain.Order>((d) => OrderService.fromDb(d)).toList(),
-    );
-  }
-
-  Stream<List<OrderWithItems>> watchAllOrdersWithItems() {
-    return _ordersDao.watchAllOrdersWithItems();
-  }
-
-  Stream<List<OrderWithItems>> watchPendingOrdersWithItems({String? storeId}) {
-    return _ordersDao.watchPendingOrdersWithItems(storeId: storeId);
-  }
-
-  Future<List<OrderWithItems>> getOrdersPage({
-    required String status,
-    String? storeId,
-    DateTime? from,
-    DateTime? to,
-    String? search,
-    ({DateTime createdAt, String id})? cursor,
-    int limit = 30,
-  }) {
-    return _ordersDao.getOrdersPage(
-      status: status,
-      storeId: storeId,
-      from: from,
-      to: to,
-      search: search,
-      cursor: cursor,
-      limit: limit,
-    );
-  }
-
-  Stream<List<OrderWithItems>> watchOrdersPage({
-    required String status,
-    String? storeId,
-    DateTime? from,
-    DateTime? to,
-    String? search,
-    int limit = 30,
-  }) {
-    return _ordersDao.watchOrdersPage(
-      status: status,
-      storeId: storeId,
-      from: from,
-      to: to,
-      search: search,
-      limit: limit,
-    );
-  }
-
-  Stream<OrdersStats> watchOrdersStats({
-    required String status,
-    String? storeId,
-    DateTime? from,
-    DateTime? to,
-    String? search,
-  }) {
-    return _ordersDao.watchOrdersStats(
-      status: status,
-      storeId: storeId,
-      from: from,
-      to: to,
-      search: search,
-    );
-  }
-
-  Future<List<CartStaleItem>> checkCartStaleness(List<CartLineSnapshot> lines) {
-    return _ordersDao.checkCartStaleness(lines);
-  }
-
-  static domain.Order fromDb(OrderData data) {
-    return domain.Order(
-      id: data.id.toString(),
-      customerId: data.customerId?.toString(),
-      customerName: 'Customer ${data.customerId}',
-      items: [],
-      totalAmount: data.totalAmountKobo / 100.0,
-      amountPaid: data.amountPaidKobo / 100.0,
-      customerWallet: 0.0,
-      paymentMethod: data.paymentType,
-      createdAt: data.createdAt,
-      status: data.status,
-    );
-  }
-
-  Future<void> markAsCompleted(String orderId, String staffId) {
-    return _ordersDao.markCompleted(orderId, staffId);
-  }
-
-  /// Refund/cancel an order (§19.7): reverses stock, payments, and the credit balance
-  /// legs so the customer's credit balance returns to its pre-sale balance.
-  Future<void> markAsCancelled(String orderId, String reason, String staffId) {
-    return _ordersDao.markCancelled(orderId, reason, staffId);
-  }
-
-  Future<void> assignRider(String orderId, String riderName) {
-    return _ordersDao.assignRider(orderId, riderName);
   }
 }

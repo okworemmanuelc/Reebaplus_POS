@@ -792,14 +792,15 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
   void _executeMarkDelivered(OrderWithItems orderWithItems) async {
     final order = orderWithItems.order;
 
-    if (mounted) {
-      final confirmed = await CrateReturnModal.show(
-        context,
-        orderWithItems,
-        ref: ref,
-      );
-      if (!confirmed) return;
-    }
+    if (!mounted) return;
+    // The modal only COLLECTS the counted-back empties now (ADR 0004); the
+    // settlement runs inside Confirm (markAsCompleted). null = cashier dismissed.
+    final crateResult = await CrateReturnModal.show(
+      context,
+      orderWithItems,
+      ref: ref,
+    );
+    if (crateResult == null) return;
 
     if (!mounted) return;
 
@@ -809,6 +810,10 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
           .markAsCompleted(
             order.id,
             ref.read(authProvider).currentUser?.id ?? '',
+            customerId: order.customerId,
+            storeId: order.storeId,
+            crateReturns: crateResult.lines,
+            refundAsCash: crateResult.refundAsCash,
           );
 
       final receipt = model.DeliveryReceipt(

@@ -3,7 +3,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
-import 'package:reebaplus_pos/shared/services/order_service.dart';
+import 'package:reebaplus_pos/shared/services/orders/order_service.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
 
 class _Seed {

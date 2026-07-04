@@ -28,7 +28,7 @@ import 'package:reebaplus_pos/shared/services/cart_service.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/services/notification_service.dart';
 import 'package:reebaplus_pos/shared/services/crate_return_approval_service.dart';
-import 'package:reebaplus_pos/shared/services/order_service.dart';
+import 'package:reebaplus_pos/shared/services/orders/order_service.dart';
 import 'package:reebaplus_pos/shared/services/supplier_account_service.dart';
 import 'package:reebaplus_pos/shared/services/receive_stock_service.dart';
 import 'package:reebaplus_pos/shared/services/supplier_crate_service.dart';
