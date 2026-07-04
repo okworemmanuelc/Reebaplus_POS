@@ -2,6 +2,26 @@
 
 ---
 
+## 2026-07-04 — Saved Carts modal: ListTile ink/background no longer hidden by the surface fill
+
+**Bug:** Flutter framework warning — *"ListTile background color or ink splashes may
+be invisible … wrapped in a DecoratedBox that has a background color."* The Saved
+Carts bottom sheet in [cart_screen.dart](lib/features/pos/screens/cart_screen.dart)
+draws its rounded surface via `Container(decoration: BoxDecoration(color: _surface))`.
+That opaque `DecoratedBox` sits between the modal's `Material` and the list's
+`ListTile`s, so each tile paints its background/ink splash on the Material *below* the
+fill — hidden.
+
+**Fix:** wrapped the tile in a transparent `Material`
+(`MaterialType.transparency`), matching the framework's own prescription and the
+existing convention in this repo (role_permissions / staff_permissions /
+update_product_sheet all put a `Material` between an `AppDecorations` card and their
+`*ListTile`). Swept the other `*ListTile` sites — `printer_picker`, `business_info`,
+`staff_detail`, `add_product_screen` — none have an opaque `Container` between the
+tile and the nearest `Material`, so they don't trigger it.
+
+**Verified:** `flutter analyze lib/features/pos/screens/cart_screen.dart` — no issues.
+
 ## 2026-07-03 — Business-Scoped Stream primitive: guarded factory + full migration (PRD #23 = #24 + #25)
 
 **Scope:** retire the build-time-poison provider bug *by construction*. A

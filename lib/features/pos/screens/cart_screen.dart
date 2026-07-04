@@ -269,7 +269,13 @@ class _CartScreenState extends ConsumerState<CartScreen>
                       itemCount: carts.length,
                       itemBuilder: (context, index) {
                         final cart = carts[index];
-                        return ListTile(
+                        // ListTile paints its ink/background on the nearest
+                        // Material; the modal's surface-colored Container sits
+                        // above it and would hide those. A transparent Material
+                        // gives the tile an ink target above that fill.
+                        return Material(
+                          type: MaterialType.transparency,
+                          child: ListTile(
                           title: Text(
                             cart.name,
                             style: TextStyle(color: _text),
@@ -332,6 +338,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                               );
                             }
                           },
+                          ),
                         );
                       },
                     );
