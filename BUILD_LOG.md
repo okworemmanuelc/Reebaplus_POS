@@ -2,6 +2,59 @@
 
 ---
 
+## 2026-07-04 — Web POS Slice 1: walking skeleton (issue #47, ADRs 0007–0012)
+
+**What shipped.** The first code of the **Web POS** — a new top-level
+`web-pos/` Next.js (App Router) + React + TypeScript + `@supabase/supabase-js`
+app. Online-first (ADR 0007): a single browser Supabase client is the whole data
+layer (no Drift, no outbox). Thin but end-to-end through **auth → live RLS read →
+render**, establishing the responsive shell, theming, and permission-read layer
+every later slice builds on.
+
+- **Auth = Operator (ADR 0011).** `LoginForm` does email+OTP
+  (`signInWithOtp` → `verifyOtp`) and Google (`signInWithOAuth` → `/auth/callback`,
+  PKCE + `detectSessionInUrl`). `SessionProvider` tracks the session and, on
+  sign-in, runs `loadOperator()` — business scope from `profiles.business_id`,
+  role from the active `user_businesses` membership, effective permissions, the
+  `business_design_system` + `default_currency` settings, and the store list —
+  all RLS-scoped, **no custom JWT claims**. `IdleLock` signs out after 15 min of
+  inactivity, dropping the tab back to the sign-in screen.
+- **Live catalogue.** `loadCatalogue()` reads `categories` + `products`
+  (`retailer_price_kobo` / `wholesaler_price_kobo`) + `inventory` (on-hand summed
+  across stores) over PostgREST. `PosScreen` renders the responsive grid with
+  per-tier prices, a live in/low/out stock indicator, category chips, and a manual
+  Refresh (Realtime is Slice 5 / #49). Tapping a tile is gated on `sales.make`.
+- **Theming parity.** All five palettes (blue/amber/purple/green/b&w, light+dark)
+  ported verbatim from mobile `colors.dart` into `src/lib/theme/palettes.ts`
+  (keys = the `DesignSystem` enum names). `ThemeProvider` writes the active
+  palette as CSS custom properties on the document root, read live from the synced
+  `business_design_system` setting; light/dark follows the browser preference.
+- **Permission-read layer.** `resolveEffectivePermissions()` mirrors the mobile
+  Gate Registry's decisions (ADR 0009): role grants ± user overrides, **CEO
+  all-on**. `Can` / `useCan` gate nav + actions (hide-don't-block). Money via
+  `formatKobo` / `useCurrency` from `default_currency` — no hard-coded ₦.
+- **Config / deploy.** Public Supabase URL + anon key baked into
+  `src/lib/supabase/config.ts` (mirrors the mobile-intentional public/RLS-gated
+  key), overridable via `NEXT_PUBLIC_*` — builds with zero env setup. Vercel root
+  = `web-pos/` (ADR 0012); the README documents adding the deployed origin +
+  `/auth/callback` to Supabase Auth redirect URLs for Google.
+
+**Schema verified against the live cloud** before coding (snake_case columns):
+`products.retailer_price_kobo`/`wholesaler_price_kobo`, `inventory.quantity`,
+`user_businesses.role_id`+`status`, `role_permissions`/`user_permission_overrides`,
+`current_user_business_ids()` = `profiles.business_id`.
+
+**Verification.** `npm run typecheck` clean; `next build` green (5 routes
+prerender); `next start` smoke-test returns 200 on `/` and `/auth/callback` with
+the brand rendered. On-device/live sign-in walkthrough (real OTP + Google + a
+seeded business) pending — needs a browser session with real credentials.
+
+**Left for later slices:** cart/checkout RPC (#43) + the golden-scenario suite,
+Realtime (#49), inventory add/receive (#48), stock-adjust approval (#50), reports
+(#51), and store-scoped permission overrides (§10.2.1 middle layer).
+
+---
+
 ## 2026-07-04 — Batch-creation-on-inflow: Add Product + Receive Stock push a Cost Batch (Epic 2 / FIFO, issue #42, ADR 0005)
 
 **What shipped (Epic 2, F6).** The **producer** for the FIFO queue. F1 (#37) only

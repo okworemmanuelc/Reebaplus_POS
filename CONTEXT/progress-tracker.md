@@ -10,6 +10,76 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### PLANNING: Web POS (online-first browser client) — grilled 2026-07-04, ADRs 0007–0012
+- **North star:** full parity — the *entire* app replicated for web — reached in
+  phases. **Phase 1 = selling loop + inventory management + reports.** Later phases
+  add staff/roles, suppliers & ledgers, expenses, crate management, activity logs,
+  settings, onboarding (create-business / join-invite, minus PIN).
+- **Architecture decisions (see ADRs):**
+  - **0007** Web is **online-first**, not offline-first: live PostgREST/Realtime
+    reads + RPC writes, no Drift, no outbox. Offline invariants #1/#4 are
+    mobile-scoped, not app-wide.
+  - **0008** Web write path = **server-authoritative Postgres RPCs** (checkout,
+    receive/adjust stock, ledger posting, order#). Shared contract = schema + RPCs.
+  - **0009** Same money rules implemented **twice** (Dart offline / SQL online);
+    kept identical by a **shared golden-scenario suite** in CI.
+  - **0010** Stack = **Next.js/React + supabase-js** (no Flutter Web, no shared
+    client code).
+  - **0011** Auth = **per-user Supabase session is the operator** (no PIN, no
+    "Who's working?" picker); RLS scope from `profiles.business_id`.
+  - **0012** **Monorepo** — new `web-pos/` dir beside `supabase/migrations/`;
+    deploy on Vercel.
+- **PRD + issues published** (`okworemmanuelc/Reebaplus_POS`, all `ready-for-agent`):
+  epic **#46** (`docs/prd/web-pos.md`); slices **#47** skeleton → **#43** cash
+  checkout keystone → **#44** credit/wallet → **#45** crate → **#49** realtime →
+  **#48** inventory add/receive → **#50** stock-adjust approval → **#51** reports.
+  Dependency order: #43←#47; #44/#45←#43; #49/#48/#51←#47; #50←#48.
+- **Next:** one fresh session per issue → `/implement` (pass PRD #46 + the single
+  issue). Phase-1 keystone is #43 (`checkout_order` RPC + golden-scenario suite).
+- CONTEXT.md updated: intro now describes two clients; new **Web** glossary section
+  (Web POS, RPC Write API, Golden-Scenario Suite, Operator).
+
+### SHIPPED: Web POS Slice 1 — walking skeleton (2026-07-04, issue #47, ADRs 0007–0012)
+- **First code of the Web POS.** A new top-level **`web-pos/`** Next.js (App
+  Router) + React + TypeScript + `@supabase/supabase-js` app (ADR 0010/0012),
+  thin but end-to-end through **auth → live RLS read → render**. Online-first
+  (ADR 0007): a single browser Supabase client is the whole data layer — no
+  Drift, no outbox. `next build` green; all 5 routes prerender; server smoke-test
+  200 on `/` and `/auth/callback`.
+- **Auth = Operator (ADR 0011).** Email+OTP (`signInWithOtp`/`verifyOtp`) and
+  Google (`signInWithOAuth` → `/auth/callback`, PKCE, `detectSessionInUrl`). The
+  session IS the Operator for the tab; `loadOperator()` resolves business scope
+  from `profiles.business_id`, role from the active `user_businesses` membership,
+  and perms — **no custom JWT claims**. `IdleLock` (15 min inactivity) signs out
+  → tab re-locks to the sign-in screen. Every read is RLS-scoped, so the Operator
+  only sees their own business.
+- **Live catalogue.** `loadCatalogue()` reads `categories` + `products`
+  (`retailer_price_kobo` / `wholesaler_price_kobo`) + `inventory` (on-hand summed
+  across stores) over PostgREST; the responsive `PosScreen` renders the grid with
+  per-tier prices, a live stock indicator (in/low/out), and category chips.
+  Out-of-stock tiles render unavailable. Realtime auto-refresh is Slice 5 (#49);
+  here a manual **Refresh** re-pulls. Tapping a tile is gated on `sales.make`
+  (cart/checkout is Slice 2 / #43).
+- **Theming parity.** All five palettes (blue/amber/purple/green/b&w, light+dark)
+  ported verbatim from the mobile `colors.dart` into `src/lib/theme/palettes.ts`
+  (keys = the `DesignSystem` enum names). `ThemeProvider` applies the active
+  palette as CSS custom properties at the document root, read live from the synced
+  `business_design_system` setting (mobile's source too) — a change re-paints with
+  no redeploy; light/dark follows the browser preference.
+- **Permission-read layer.** `resolveEffectivePermissions()` mirrors the mobile
+  Gate Registry's *decisions* (ADR 0009 — not its Dart): role grants ± user
+  overrides, **CEO all-on**. `Can` / `useCan` drive hide-don't-block (gated nav +
+  the sell affordance). Currency via `formatKobo`/`useCurrency` from
+  `default_currency` — never hard-coded ₦.
+- **Config:** public Supabase URL + anon key baked into
+  `src/lib/supabase/config.ts` (mirrors the mobile-intentional public/RLS-gated
+  key), overridable via `NEXT_PUBLIC_*`; builds with zero env setup. Vercel root =
+  `web-pos/` (ADR 0012); README documents the OAuth redirect-URL config step.
+- **Scope left for later slices (per the epic order):** cart/checkout RPC (#43),
+  Realtime (#49), inventory add/receive (#48), stock-adjust approval (#50),
+  reports (#51), and store-scoped permission overrides (§10.2.1 middle layer).
+  No golden-scenario suite yet (arrives with the first money-write RPC, #43).
+
 ### SHIPPED: Batch-creation-on-inflow — Add Product + Receive Stock push a Cost Batch (2026-07-04, issue #42, ADR 0005)
 - **Epic 2, F6 (FIFO batch costing).** The **producer** for the queue: F1 (#37)
   only seeded opening batches via the migration and F2 (#38) only consumed it, so

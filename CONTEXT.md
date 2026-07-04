@@ -1,8 +1,13 @@
 # drinkPosApp — Domain Context
 
-A local-first drink-POS app. The on-device Drift database is the source of truth; a
-sync engine reconciles it with a Supabase cloud backend so the app works fully
-offline and converges when connectivity returns.
+A drink-POS platform with two clients over one Supabase backend. The **mobile app**
+is local-first: the on-device Drift database is the source of truth, and a sync
+engine reconciles it with the Supabase cloud so it works fully offline and converges
+when connectivity returns. The **web app** is online-first: it reads and writes the
+cloud live, through PostgREST/Realtime and server-authoritative RPCs, with no local
+source of truth (ADRs 0007–0012). The two clients share **one database schema and
+one RPC write-contract** — nothing else. The offline invariants (#1 local-source-of-
+truth, #4 every-write-through-the-outbox) are mobile-scoped, not app-wide.
 
 ## Language
 
@@ -171,3 +176,35 @@ business is bound, hands the closure `(ref, db, businessId)` with the resolved
 non-null id, and rebuilds on bind or switch — so a tenant-scoped read cannot be
 baked to a missing or stale business at build time.
 _Avoid_: raw `StreamProvider` over a DAO `watch*`, inline businessId guards.
+
+### Web
+
+**Web POS**:
+The online-first browser client (Next.js/React + `supabase-js`) that operates the
+app live against Supabase — reads through PostgREST/Realtime, writes through
+server-authoritative RPCs — with no Drift, no outbox, and no offline mode. A
+separate runtime from the mobile app, sharing only the schema and the RPC
+write-contract. Lives in `web-pos/`.
+_Avoid_: "the Flutter web build" (that is `web/`, mobile output); implying it is
+offline-capable or shares client code with mobile.
+
+**RPC Write API**:
+The set of `SECURITY DEFINER` Postgres RPCs that perform the Web POS's money-writes
+transactionally server-side (checkout, receive/adjust stock, ledger posting). The
+web client's *only* write path; it never writes business rows through PostgREST
+directly. The server-side counterpart to the mobile app's Dart DAO writes.
+_Avoid_: "the API", direct PostgREST writes from web, Edge Functions (the write
+API is RPCs, not functions).
+
+**Golden-Scenario Suite**:
+The shared fixtures — input state → expected resulting rows — run in CI against
+*both* the Dart DAO path (mobile) and the SQL RPC path (web) to prove the two
+implementations of the same money rule stay identical. The mechanism that makes
+"full parity" safe despite two implementations (ADR 0009).
+_Avoid_: treating each client's own unit tests as sufficient; assuming shared code
+prevents drift (there is none — only shared fixtures).
+
+**Operator** *(web)*:
+The signed-in web user attributed to a sale. On web the Supabase session is the
+operator directly — there is no PIN and no "Who's working?" picker (ADR 0011).
+_Avoid_: equating it with the mobile "active user" chosen via PIN.
