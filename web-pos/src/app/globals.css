@@ -1766,3 +1766,45 @@ input {
   color: var(--subtext);
   font-weight: 500;
 }
+
+/* ── Realtime live indicator (Slice 5, #49) ───────────────────────────────── */
+.live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  color: var(--subtext);
+  background: color-mix(in srgb, var(--surface2) 70%, transparent);
+  white-space: nowrap;
+}
+.live-badge__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.live-badge--live {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 40%, transparent);
+}
+.live-badge--live .live-badge__dot {
+  animation: live-pulse 1.8s ease-in-out infinite;
+}
+.live-badge--connecting {
+  color: var(--warning, var(--info));
+}
+.live-badge--offline {
+  color: var(--danger, var(--error));
+  border-color: color-mix(in srgb, var(--danger, var(--error)) 40%, transparent);
+}
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-badge--live .live-badge__dot { animation: none; }
+}
