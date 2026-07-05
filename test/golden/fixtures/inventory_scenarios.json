@@ -1,0 +1,144 @@
+{
+  "_comment": "Batch-creation golden fixtures (issue #48). Run against the Dart producers (CostBatchesDao.recordInflowBatch + SupplierAccountService) AND the SQL RPCs add_product/receive_stock (0140). The rule: one inflow => one fresh Cost Batch {qty_remaining=qty_original=quantity, cost_kobo=max(cost,0), received_at}, never merged; cost 0 => uncosted. Add Product => opening batch, no supplier. Receive Stock => receipt-dated batch + supplier invoice(debit) + optional payment(credit). add_product batches key on the sentinel 'opening' (received_at=now); receive batches key on their controlled date.",
+  "scenarios": [
+    {
+      "name": "add product with costed opening stock",
+      "operation": "add_product",
+      "product": {
+        "name": "Cola 50cl",
+        "unit": "Bottle",
+        "retailer_price_kobo": 60000,
+        "wholesaler_price_kobo": 55000,
+        "buying_price_kobo": 50000
+      },
+      "opening_stock": 12,
+      "expected": {
+        "batches": [
+          { "received_at": "opening", "qty_remaining": 12, "qty_original": 12, "cost_kobo": 50000 }
+        ],
+        "inventory_after": 12,
+        "supplier_balance_after_kobo": null
+      }
+    },
+    {
+      "name": "add product with uncosted opening stock (cost 0)",
+      "operation": "add_product",
+      "product": {
+        "name": "Sachet Water",
+        "unit": "Sachet",
+        "retailer_price_kobo": 5000,
+        "wholesaler_price_kobo": 4000,
+        "buying_price_kobo": 0
+      },
+      "opening_stock": 8,
+      "expected": {
+        "batches": [
+          { "received_at": "opening", "qty_remaining": 8, "qty_original": 8, "cost_kobo": 0 }
+        ],
+        "inventory_after": 8,
+        "supplier_balance_after_kobo": null
+      }
+    },
+    {
+      "name": "add product with no opening stock creates no batch",
+      "operation": "add_product",
+      "product": {
+        "name": "Empty Catalogue Item",
+        "unit": "Piece",
+        "retailer_price_kobo": 10000,
+        "wholesaler_price_kobo": 9000,
+        "buying_price_kobo": 7000
+      },
+      "opening_stock": 0,
+      "expected": {
+        "batches": [],
+        "inventory_after": 0,
+        "supplier_balance_after_kobo": null
+      }
+    },
+    {
+      "name": "receive stock adds a new batch behind the existing one, invoice fully paid",
+      "operation": "receive",
+      "product": {
+        "name": "Water 75cl",
+        "unit": "Bottle",
+        "retailer_price_kobo": 40000,
+        "wholesaler_price_kobo": 36000,
+        "buying_price_kobo": 28000
+      },
+      "receive": {
+        "existing_stock": 5,
+        "existing_batches": [
+          { "qty": 5, "cost_kobo": 28000, "received_at": "2026-01-01" }
+        ],
+        "lines": [
+          { "quantity": 10, "buying_price_kobo": 30000, "received_at": "2026-02-01" }
+        ],
+        "amount_paid_kobo": 300000,
+        "payment_method": "cash"
+      },
+      "expected": {
+        "batches": [
+          { "received_at": "2026-01-01", "qty_remaining": 5, "qty_original": 5, "cost_kobo": 28000 },
+          { "received_at": "2026-02-01", "qty_remaining": 10, "qty_original": 10, "cost_kobo": 30000 }
+        ],
+        "inventory_after": 15,
+        "supplier_balance_after_kobo": 0
+      }
+    },
+    {
+      "name": "receive stock with partial payment leaves a supplier debt",
+      "operation": "receive",
+      "product": {
+        "name": "Juice 100cl",
+        "unit": "Bottle",
+        "retailer_price_kobo": 35000,
+        "wholesaler_price_kobo": 32000,
+        "buying_price_kobo": 25000
+      },
+      "receive": {
+        "existing_stock": 0,
+        "existing_batches": [],
+        "lines": [
+          { "quantity": 8, "buying_price_kobo": 25000, "received_at": "2026-03-01" }
+        ],
+        "amount_paid_kobo": 50000,
+        "payment_method": "transfer"
+      },
+      "expected": {
+        "batches": [
+          { "received_at": "2026-03-01", "qty_remaining": 8, "qty_original": 8, "cost_kobo": 25000 }
+        ],
+        "inventory_after": 8,
+        "supplier_balance_after_kobo": -150000
+      }
+    },
+    {
+      "name": "receive uncosted stock (cost 0) posts no invoice",
+      "operation": "receive",
+      "product": {
+        "name": "Promo Cup",
+        "unit": "Piece",
+        "retailer_price_kobo": 0,
+        "wholesaler_price_kobo": 0,
+        "buying_price_kobo": 0
+      },
+      "receive": {
+        "existing_stock": 0,
+        "existing_batches": [],
+        "lines": [
+          { "quantity": 5, "buying_price_kobo": 0, "received_at": "2026-04-01" }
+        ],
+        "amount_paid_kobo": 0,
+        "payment_method": "cash"
+      },
+      "expected": {
+        "batches": [
+          { "received_at": "2026-04-01", "qty_remaining": 5, "qty_original": 5, "cost_kobo": 0 }
+        ],
+        "inventory_after": 5,
+        "supplier_balance_after_kobo": 0
+      }
+    }
+  ]
+}
