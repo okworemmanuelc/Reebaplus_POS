@@ -7,7 +7,30 @@ Drift, no outbox, no offline mode. See the decisions in
 [`../docs/adr/0007`–`0012`](../docs/adr/) and the PRD
 [`../docs/prd/web-pos.md`](../docs/prd/web-pos.md).
 
-## This is Slice 1 — the walking skeleton (issue #47)
+## Slice 2 — cash-sale checkout keystone (issue #43)
+
+The selling loop, end to end, on the server-authoritative write path:
+
+- **Grid → cart → checkout → receipt.** Tapping a product adds it to a
+  session-persistent cart (`CartProvider`); the cart shows qty steppers, remove, a
+  **role-capped discount**, and live line/order totals. Checkout takes
+  cash/transfer + the amount paid; the receipt prints (print-only stylesheet) and
+  shares/downloads (Web Share with a text-file fallback); "Done — back to POS"
+  clears the cart. Grid-beside-cart on tablet+, a sticky bottom bar + sheet on
+  phone.
+- **`checkout_order` RPC (ADR 0008, migration `0135`).** The web's only
+  money-write: one `SECURITY DEFINER` atomic transaction — Order at `pending` +
+  items, FIFO cost-batch draw-down under a row lock with per-line COGS snapshot,
+  inventory guard that **rejects an oversell at commit**, a collision-proof server
+  order number (`WEB-…`, never the mobile `ORD-…`), revenue recognized at
+  Checkout, and server-side `sales.make` + discount-cap enforcement. The sale
+  reaches the mobile tills through their existing Realtime pull.
+- **Golden-Scenario Suite (ADR 0009).** Shared fixtures (`../test/golden/fixtures/`)
+  run against both the Dart DAO (mobile) and the SQL RPC (web) in CI
+  (`.github/workflows/golden-scenarios.yml`); any drift in the money math fails the
+  build.
+
+## Slice 1 — the walking skeleton (issue #47)
 
 Thin but end-to-end through **auth → live read → render**:
 

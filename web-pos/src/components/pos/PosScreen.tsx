@@ -4,35 +4,58 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useSession } from '@/components/providers/SessionProvider';
 import { useCan } from '@/components/permissions/Can';
+import { useCurrency } from '@/hooks/useCurrency';
+import { useCustomers } from '@/hooks/useCustomers';
 import { PermissionKeys } from '@/lib/permissions';
 import { loadCatalogue, type Catalogue } from '@/lib/catalogue';
-import type { ProductWithStock } from '@/lib/types';
+import type { CheckoutResult } from '@/lib/checkout';
+import type { CustomerWithBalance, ProductWithStock } from '@/lib/types';
 import { ProductCard } from './ProductCard';
+import { CartProvider, useCart } from './CartProvider';
+import { Cart } from './Cart';
+import { CheckoutDialog } from './CheckoutDialog';
+import { CustomerPicker } from './CustomerPicker';
+import { Receipt } from './Receipt';
 
 const ALL = 'all';
 
-// The POS product grid — Slice 1's one live, end-to-end screen. It reads the
-// RLS-scoped catalogue (categories + per-tier prices + on-hand stock) over
-// PostgREST and renders it in the responsive grid. Realtime auto-refresh is
-// Slice 5; here a manual Refresh re-pulls. Tapping a product is gated on
-// sales.make (the cart itself lands in Slice 2 / #43).
+// Slice 2 turns the walking-skeleton grid into the full selling loop: grid → cart
+// → checkout (cash/transfer) → receipt → "Done, back to POS". The cart lives in a
+// CartProvider above the screen so it survives in-screen navigation within the
+// session. Realtime auto-refresh is Slice 5; here a manual Refresh (and an
+// automatic one after each sale) re-pulls live stock.
 export function PosScreen() {
+  return (
+    <CartProvider>
+      <PosInner />
+    </CartProvider>
+  );
+}
+
+type Phase = 'shop' | 'checkout' | 'receipt';
+
+function PosInner() {
   const { supabase, operator } = useSession();
   const canSell = useCan(PermissionKeys.salesMake);
+  const { kobo } = useCurrency();
+  const cart = useCart();
+  const customers = useCustomers();
 
   const [catalogue, setCatalogue] = useState<Catalogue | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [category, setCategory] = useState<string>(ALL);
-  const [selected, setSelected] = useState<ProductWithStock | null>(null);
+  const [phase, setPhase] = useState<Phase>('shop');
+  const [cartOpen, setCartOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [result, setResult] = useState<CheckoutResult | null>(null);
 
   const businessId = operator?.businessId ?? null;
 
   const refresh = useCallback(async () => {
     setError(null);
     try {
-      const next = await loadCatalogue(supabase);
-      setCatalogue(next);
+      setCatalogue(await loadCatalogue(supabase));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load products.');
     } finally {
@@ -51,73 +74,153 @@ export function PosScreen() {
     return catalogue.products.filter((p) => p.category_id === category);
   }, [catalogue, category]);
 
-  const onSelect = useCallback((p: ProductWithStock) => {
-    // Cart wiring is Slice 2 (#43). For the skeleton, acknowledge the tap.
-    setSelected(p);
+  const onSelect = useCallback(
+    (p: ProductWithStock) => cart.add(p),
+    [cart],
+  );
+
+  const startCheckout = useCallback(() => {
+    setCartOpen(false);
+    setPhase('checkout');
   }, []);
 
+  const onCheckoutComplete = useCallback((r: CheckoutResult) => {
+    setResult(r);
+    setPhase('receipt');
+  }, []);
+
+  const onDone = useCallback(() => {
+    cart.clear();
+    setResult(null);
+    setPhase('shop');
+    setCartOpen(false);
+    // Stock + a customer's wallet balance changed — re-pull both so the grid
+    // and the next customer attach reflect the sale.
+    void refresh();
+    void customers.refresh();
+  }, [cart, refresh, customers]);
+
+  const onPickCustomer = useCallback(
+    (c: CustomerWithBalance) => {
+      cart.attachCustomer(c);
+      setPickerOpen(false);
+    },
+    [cart],
+  );
+
   return (
-    <div className="pos">
-      <div className="pos__header">
-        <h1 className="pos__title">Point of Sale</h1>
-        <button
-          className="btn btn--outline"
-          onClick={() => void refresh()}
-          disabled={loading}
-        >
-          {loading ? 'Loading…' : 'Refresh'}
-        </button>
+    <div className="pos-layout">
+      <div className="pos">
+        <div className="pos__header">
+          <h1 className="pos__title">Point of Sale</h1>
+          <button
+            className="btn btn--outline"
+            onClick={() => void refresh()}
+            disabled={loading}
+          >
+            {loading ? 'Loading…' : 'Refresh'}
+          </button>
+        </div>
+
+        {error && <div className="banner banner--error">{error}</div>}
+
+        {catalogue && catalogue.categories.length > 0 && (
+          <div className="category-bar" role="tablist" aria-label="Categories">
+            <CategoryChip
+              label="All"
+              active={category === ALL}
+              onClick={() => setCategory(ALL)}
+            />
+            {catalogue.categories.map((c) => (
+              <CategoryChip
+                key={c.id}
+                label={c.name}
+                active={category === c.id}
+                onClick={() => setCategory(c.id)}
+              />
+            ))}
+          </div>
+        )}
+
+        {loading && !catalogue ? (
+          <div className="empty-state">
+            <div className="spinner" style={{ margin: '0 auto 12px' }} />
+            Loading your catalogue…
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="empty-state">
+            {catalogue && catalogue.products.length === 0
+              ? 'No products yet. Add products on the mobile app or (soon) here on web.'
+              : 'No products in this category.'}
+          </div>
+        ) : (
+          <div className="product-grid">
+            {filtered.map((p) => (
+              <ProductCard
+                key={p.id}
+                product={p}
+                canSell={canSell}
+                onSelect={onSelect}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
-      {selected && (
-        <div className="banner banner--info" role="status">
-          Selected <strong>{selected.name}</strong> — the cart & checkout arrive
-          in the next slice.
-        </div>
-      )}
-
-      {error && <div className="banner banner--error">{error}</div>}
-
-      {catalogue && catalogue.categories.length > 0 && (
-        <div className="category-bar" role="tablist" aria-label="Categories">
-          <CategoryChip
-            label="All"
-            active={category === ALL}
-            onClick={() => setCategory(ALL)}
+      {/* Desktop/tablet: cart beside the grid. Hidden on phone (CSS). */}
+      {canSell && (
+        <div className="pos-layout__cart">
+          <Cart
+            onCheckout={startCheckout}
+            onOpenCustomerPicker={() => setPickerOpen(true)}
           />
-          {catalogue.categories.map((c) => (
-            <CategoryChip
-              key={c.id}
-              label={c.name}
-              active={category === c.id}
-              onClick={() => setCategory(c.id)}
-            />
-          ))}
         </div>
       )}
 
-      {loading && !catalogue ? (
-        <div className="empty-state">
-          <div className="spinner" style={{ margin: '0 auto 12px' }} />
-          Loading your catalogue…
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="empty-state">
-          {catalogue && catalogue.products.length === 0
-            ? 'No products yet. Add products on the mobile app or (soon) here on web.'
-            : 'No products in this category.'}
-        </div>
-      ) : (
-        <div className="product-grid">
-          {filtered.map((p) => (
-            <ProductCard
-              key={p.id}
-              product={p}
-              canSell={canSell}
-              onSelect={onSelect}
+      {/* Phone: a sticky bar summarising the cart; taps open the cart sheet. */}
+      {canSell && cart.itemCount > 0 && (
+        <button
+          type="button"
+          className="cart-bar"
+          onClick={() => setCartOpen(true)}
+        >
+          <span className="cart-bar__count">{cart.itemCount}</span>
+          <span>View cart</span>
+          <span className="cart-bar__total">{kobo(cart.totalKobo)}</span>
+        </button>
+      )}
+
+      {canSell && cartOpen && (
+        <div className="cart-sheet-overlay" onClick={() => setCartOpen(false)}>
+          <div className="cart-sheet" onClick={(e) => e.stopPropagation()}>
+            <Cart
+              onCheckout={startCheckout}
+              onClose={() => setCartOpen(false)}
+              onOpenCustomerPicker={() => setPickerOpen(true)}
             />
-          ))}
+          </div>
         </div>
+      )}
+
+      {canSell && pickerOpen && (
+        <CustomerPicker
+          customers={customers.customers}
+          loading={customers.loading}
+          error={customers.error}
+          onPick={onPickCustomer}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
+
+      {phase === 'checkout' && (
+        <CheckoutDialog
+          onCancel={() => setPhase('shop')}
+          onComplete={onCheckoutComplete}
+        />
+      )}
+
+      {phase === 'receipt' && result && (
+        <Receipt result={result} onDone={onDone} />
       )}
     </div>
   );

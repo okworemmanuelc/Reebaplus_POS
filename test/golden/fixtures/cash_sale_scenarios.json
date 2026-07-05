@@ -1,0 +1,399 @@
+{
+  "_doc": [
+    "Golden-Scenario Suite fixtures for the Web POS Slice 2 cash/transfer checkout",
+    "keystone (PRD web-pos, ADR 0009, issue #43). Each fixture is one scenario:",
+    "an input starting state (products, inventory, FIFO cost batches) + a checkout,",
+    "and the expected resulting rows (order + items + FIFO draw-down + COGS snapshot",
+    "+ inventory + scalar cost cache + payment). The SAME fixtures run against BOTH",
+    "implementations of the money rule:",
+    "  * the Dart DAO path (mobile)  — test/golden/dart_dao_golden_test.dart (offline)",
+    "  * the SQL checkout_order RPC  — test/integration/rpcs/checkout_order_golden_test.dart",
+    "Any drift between the two fails CI. Amounts are *_kobo (bigint). A single store",
+    "is implied; batches are keyed by received_at (unique per product within a",
+    "fixture). The order NUMBER intentionally differs by client (mobile ORD-…, web",
+    "WEB-…) so each runner asserts its own scheme, never equality — the numbering",
+    "strategy is deliberately divergent (collision-proof), the money math is not."
+  ],
+  "scenarios": [
+    {
+      "name": "single costed line, cash, fully paid",
+      "products": [
+        { "key": "P1", "name": "Star 60cl", "unit_price_kobo": 100000, "scalar_cost_kobo": 50000 }
+      ],
+      "inventory": [{ "product": "P1", "quantity": 100 }],
+      "batches": [{ "product": "P1", "qty": 20, "cost_kobo": 50000, "received_at": "2026-01-01" }],
+      "checkout": {
+        "payment_method": "cash",
+        "discount_kobo": 0,
+        "amount_paid_kobo": 300000,
+        "items": [{ "product": "P1", "quantity": 3 }]
+      },
+      "expected": {
+        "order": {
+          "status": "pending", "payment_type": "cash",
+          "total_amount_kobo": 300000, "discount_kobo": 0,
+          "net_amount_kobo": 300000, "amount_paid_kobo": 300000,
+          "completed_at_null": true
+        },
+        "items": [{ "product": "P1", "quantity": 3, "unit_price_kobo": 100000, "total_kobo": 300000, "buying_price_kobo": 50000 }],
+        "batches_remaining": [{ "product": "P1", "received_at": "2026-01-01", "qty_remaining": 17 }],
+        "inventory_after": [{ "product": "P1", "quantity": 97 }],
+        "product_scalar_cost": [{ "product": "P1", "buying_price_kobo": 50000 }],
+        "payment": { "method": "cash", "amount_kobo": 300000 }
+      }
+    },
+    {
+      "name": "line spanning a batch boundary snapshots weighted per-unit COGS",
+      "products": [
+        { "key": "P1", "name": "Star 60cl", "unit_price_kobo": 100000, "scalar_cost_kobo": 50000 }
+      ],
+      "inventory": [{ "product": "P1", "quantity": 100 }],
+      "batches": [
+        { "product": "P1", "qty": 6, "cost_kobo": 50000, "received_at": "2026-01-01" },
+        { "product": "P1", "qty": 10, "cost_kobo": 60000, "received_at": "2026-02-01" }
+      ],
+      "checkout": {
+        "payment_method": "cash",
+        "discount_kobo": 0,
+        "amount_paid_kobo": 1000000,
+        "items": [{ "product": "P1", "quantity": 10 }]
+      },
+      "expected": {
+        "order": {
+          "status": "pending", "payment_type": "cash",
+          "total_amount_kobo": 1000000, "discount_kobo": 0,
+          "net_amount_kobo": 1000000, "amount_paid_kobo": 1000000,
+          "completed_at_null": true
+        },
+        "items": [{ "product": "P1", "quantity": 10, "unit_price_kobo": 100000, "total_kobo": 1000000, "buying_price_kobo": 54000 }],
+        "batches_remaining": [
+          { "product": "P1", "received_at": "2026-01-01", "qty_remaining": 0 },
+          { "product": "P1", "received_at": "2026-02-01", "qty_remaining": 6 }
+        ],
+        "inventory_after": [{ "product": "P1", "quantity": 90 }],
+        "product_scalar_cost": [{ "product": "P1", "buying_price_kobo": 60000 }],
+        "payment": { "method": "cash", "amount_kobo": 1000000 }
+      }
+    },
+    {
+      "name": "two lines of one product continue one FIFO draw across the boundary",
+      "products": [
+        { "key": "P1", "name": "Star 60cl", "unit_price_kobo": 100000, "scalar_cost_kobo": 50000 }
+      ],
+      "inventory": [{ "product": "P1", "quantity": 100 }],
+      "batches": [
+        { "product": "P1", "qty": 3, "cost_kobo": 50000, "received_at": "2026-01-01" },
+        { "product": "P1", "qty": 3, "cost_kobo": 90000, "received_at": "2026-02-01" }
+      ],
+      "checkout": {
+        "payment_method": "cash",
+        "discount_kobo": 0,
+        "amount_paid_kobo": 600000,
+        "items": [
+          { "product": "P1", "quantity": 3 },
+          { "product": "P1", "quantity": 3 }
+        ]
+      },
+      "expected": {
+        "order": {
+          "status": "pending", "payment_type": "cash",
+          "total_amount_kobo": 600000, "discount_kobo": 0,
+          "net_amount_kobo": 600000, "amount_paid_kobo": 600000,
+          "completed_at_null": true
+        },
+        "items": [
+          { "product": "P1", "quantity": 3, "unit_price_kobo": 100000, "total_kobo": 300000, "buying_price_kobo": 50000 },
+          { "product": "P1", "quantity": 3, "unit_price_kobo": 100000, "total_kobo": 300000, "buying_price_kobo": 90000 }
+        ],
+        "batches_remaining": [
+          { "product": "P1", "received_at": "2026-01-01", "qty_remaining": 0 },
+          { "product": "P1", "received_at": "2026-02-01", "qty_remaining": 0 }
+        ],
+        "inventory_after": [{ "product": "P1", "quantity": 94 }],
+        "product_scalar_cost": [{ "product": "P1", "buying_price_kobo": 50000 }],
+        "payment": { "method": "cash", "amount_kobo": 600000 }
+      }
+    },
+    {
+      "name": "partially-covered line: the shortfall is uncosted, dragging per-unit COGS down",
+      "products": [
+        { "key": "P1", "name": "Star 60cl", "unit_price_kobo": 100000, "scalar_cost_kobo": 50000 }
+      ],
+      "inventory": [{ "product": "P1", "quantity": 100 }],
+      "batches": [{ "product": "P1", "qty": 3, "cost_kobo": 50000, "received_at": "2026-01-01" }],
+      "checkout": {
+        "payment_method": "cash",
+        "discount_kobo": 0,
+        "amount_paid_kobo": 500000,
+        "items": [{ "product": "P1", "quantity": 5 }]
+      },
+      "expected": {
+        "order": {
+          "status": "pending", "payment_type": "cash",
+          "total_amount_kobo": 500000, "discount_kobo": 0,
+          "net_amount_kobo": 500000, "amount_paid_kobo": 500000,
+          "completed_at_null": true
+        },
+        "items": [{ "product": "P1", "quantity": 5, "unit_price_kobo": 100000, "total_kobo": 500000, "buying_price_kobo": 30000 }],
+        "batches_remaining": [{ "product": "P1", "received_at": "2026-01-01", "qty_remaining": 0 }],
+        "inventory_after": [{ "product": "P1", "quantity": 95 }],
+        "product_scalar_cost": [{ "product": "P1", "buying_price_kobo": 50000 }],
+        "payment": { "method": "cash", "amount_kobo": 500000 }
+      }
+    },
+    {
+      "name": "product with no cost batch is uncosted (0); scalar cache untouched",
+      "products": [
+        { "key": "P1", "name": "Star 60cl", "unit_price_kobo": 100000, "scalar_cost_kobo": 25000 }
+      ],
+      "inventory": [{ "product": "P1", "quantity": 100 }],
+      "batches": [],
+      "checkout": {
+        "payment_method": "cash",
+        "discount_kobo": 0,
+        "amount_paid_kobo": 300000,
+        "items": [{ "product": "P1", "quantity": 3 }]
+      },
+      "expected": {
+        "order": {
+          "status": "pending", "payment_type": "cash",
+          "total_amount_kobo": 300000, "discount_kobo": 0,
+          "net_amount_kobo": 300000, "amount_paid_kobo": 300000,
+          "completed_at_null": true
+        },
+        "items": [{ "product": "P1", "quantity": 3, "unit_price_kobo": 100000, "total_kobo": 300000, "buying_price_kobo": 0 }],
+        "batches_remaining": [],
+        "inventory_after": [{ "product": "P1", "quantity": 97 }],
+        "product_scalar_cost": [{ "product": "P1", "buying_price_kobo": 25000 }],
+        "payment": { "method": "cash", "amount_kobo": 300000 }
+      }
+    },
+    {
+      "name": "uncosted (cost-0) batch snapshots 0 COGS and never clobbers the scalar to 0",
+      "products": [
+        { "key": "P1", "name": "Star 60cl", "unit_price_kobo": 100000, "scalar_cost_kobo": 25000 }
+      ],
+      "inventory": [{ "product": "P1", "quantity": 100 }],
+      "batches": [{ "product": "P1", "qty": 10, "cost_kobo": 0, "received_at": "2026-01-01" }],
+      "checkout": {
+        "payment_method": "cash",
+        "discount_kobo": 0,
+        "amount_paid_kobo": 400000,
+        "items": [{ "product": "P1", "quantity": 4 }]
+      },
+      "expected": {
+        "order": {
+          "status": "pending", "payment_type": "cash",
+          "total_amount_kobo": 400000, "discount_kobo": 0,
+          "net_amount_kobo": 400000, "amount_paid_kobo": 400000,
+          "completed_at_null": true
+        },
+        "items": [{ "product": "P1", "quantity": 4, "unit_price_kobo": 100000, "total_kobo": 400000, "buying_price_kobo": 0 }],
+        "batches_remaining": [{ "product": "P1", "received_at": "2026-01-01", "qty_remaining": 6 }],
+        "inventory_after": [{ "product": "P1", "quantity": 96 }],
+        "product_scalar_cost": [{ "product": "P1", "buying_price_kobo": 25000 }],
+        "payment": { "method": "cash", "amount_kobo": 400000 }
+      }
+    },
+    {
+      "name": "order-level discount reduces net; COGS is unaffected",
+      "products": [
+        { "key": "P1", "name": "Star 60cl", "unit_price_kobo": 100000, "scalar_cost_kobo": 50000 }
+      ],
+      "inventory": [{ "product": "P1", "quantity": 100 }],
+      "batches": [{ "product": "P1", "qty": 20, "cost_kobo": 50000, "received_at": "2026-01-01" }],
+      "checkout": {
+        "payment_method": "cash",
+        "discount_kobo": 50000,
+        "amount_paid_kobo": 950000,
+        "items": [{ "product": "P1", "quantity": 10 }]
+      },
+      "expected": {
+        "order": {
+          "status": "pending", "payment_type": "cash",
+          "total_amount_kobo": 1000000, "discount_kobo": 50000,
+          "net_amount_kobo": 950000, "amount_paid_kobo": 950000,
+          "completed_at_null": true
+        },
+        "items": [{ "product": "P1", "quantity": 10, "unit_price_kobo": 100000, "total_kobo": 1000000, "buying_price_kobo": 50000 }],
+        "batches_remaining": [{ "product": "P1", "received_at": "2026-01-01", "qty_remaining": 10 }],
+        "inventory_after": [{ "product": "P1", "quantity": 90 }],
+        "product_scalar_cost": [{ "product": "P1", "buying_price_kobo": 50000 }],
+        "payment": { "method": "cash", "amount_kobo": 950000 }
+      }
+    },
+    {
+      "name": "two distinct products each draw their own FIFO queue; transfer payment",
+      "products": [
+        { "key": "P1", "name": "Star 60cl", "unit_price_kobo": 100000, "scalar_cost_kobo": 50000 },
+        { "key": "P2", "name": "Malt 33cl", "unit_price_kobo": 80000, "scalar_cost_kobo": 40000 }
+      ],
+      "inventory": [
+        { "product": "P1", "quantity": 50 },
+        { "product": "P2", "quantity": 50 }
+      ],
+      "batches": [
+        { "product": "P1", "qty": 10, "cost_kobo": 50000, "received_at": "2026-01-01" },
+        { "product": "P2", "qty": 10, "cost_kobo": 40000, "received_at": "2026-01-01" }
+      ],
+      "checkout": {
+        "payment_method": "transfer",
+        "discount_kobo": 0,
+        "amount_paid_kobo": 360000,
+        "items": [
+          { "product": "P1", "quantity": 2 },
+          { "product": "P2", "quantity": 2 }
+        ]
+      },
+      "expected": {
+        "order": {
+          "status": "pending", "payment_type": "cash",
+          "total_amount_kobo": 360000, "discount_kobo": 0,
+          "net_amount_kobo": 360000, "amount_paid_kobo": 360000,
+          "completed_at_null": true
+        },
+        "items": [
+          { "product": "P1", "quantity": 2, "unit_price_kobo": 100000, "total_kobo": 200000, "buying_price_kobo": 50000 },
+          { "product": "P2", "quantity": 2, "unit_price_kobo": 80000, "total_kobo": 160000, "buying_price_kobo": 40000 }
+        ],
+        "batches_remaining": [
+          { "product": "P1", "received_at": "2026-01-01", "qty_remaining": 8 },
+          { "product": "P2", "received_at": "2026-01-01", "qty_remaining": 8 }
+        ],
+        "inventory_after": [
+          { "product": "P1", "quantity": 48 },
+          { "product": "P2", "quantity": 48 }
+        ],
+        "product_scalar_cost": [
+          { "product": "P1", "buying_price_kobo": 50000 },
+          { "product": "P2", "buying_price_kobo": 40000 }
+        ],
+        "payment": { "method": "transfer", "amount_kobo": 360000 }
+      }
+    },
+    {
+      "name": "credit (Slice 3): Pay-with-Credit draws the whole sale from an existing balance",
+      "customer": { "opening_balance_kobo": 500000, "debt_limit_kobo": 0 },
+      "products": [
+        { "key": "P1", "name": "Star 60cl", "unit_price_kobo": 100000, "scalar_cost_kobo": 50000 }
+      ],
+      "inventory": [{ "product": "P1", "quantity": 100 }],
+      "batches": [{ "product": "P1", "qty": 20, "cost_kobo": 50000, "received_at": "2026-01-01" }],
+      "checkout": {
+        "payment_method": "wallet",
+        "discount_kobo": 0,
+        "amount_paid_kobo": 0,
+        "items": [{ "product": "P1", "quantity": 3 }]
+      },
+      "expected": {
+        "order": {
+          "status": "pending", "payment_type": "cash",
+          "total_amount_kobo": 300000, "discount_kobo": 0,
+          "net_amount_kobo": 300000, "amount_paid_kobo": 0,
+          "completed_at_null": true
+        },
+        "items": [{ "product": "P1", "quantity": 3, "unit_price_kobo": 100000, "total_kobo": 300000, "buying_price_kobo": 50000 }],
+        "batches_remaining": [{ "product": "P1", "received_at": "2026-01-01", "qty_remaining": 17 }],
+        "inventory_after": [{ "product": "P1", "quantity": 97 }],
+        "product_scalar_cost": [{ "product": "P1", "buying_price_kobo": 50000 }],
+        "wallet_legs": [{ "reference_type": "order_payment", "signed_amount_kobo": -300000 }],
+        "customer_balance_after_kobo": 200000
+      }
+    },
+    {
+      "name": "credit (Slice 3): Register-as-Credit-Sale (no cash) books the whole balance as debt",
+      "customer": { "opening_balance_kobo": 0, "debt_limit_kobo": 500000 },
+      "products": [
+        { "key": "P1", "name": "Star 60cl", "unit_price_kobo": 100000, "scalar_cost_kobo": 50000 }
+      ],
+      "inventory": [{ "product": "P1", "quantity": 100 }],
+      "batches": [{ "product": "P1", "qty": 20, "cost_kobo": 50000, "received_at": "2026-01-01" }],
+      "checkout": {
+        "payment_method": "credit",
+        "discount_kobo": 0,
+        "amount_paid_kobo": 0,
+        "items": [{ "product": "P1", "quantity": 3 }]
+      },
+      "expected": {
+        "order": {
+          "status": "pending", "payment_type": "cash",
+          "total_amount_kobo": 300000, "discount_kobo": 0,
+          "net_amount_kobo": 300000, "amount_paid_kobo": 0,
+          "completed_at_null": true
+        },
+        "items": [{ "product": "P1", "quantity": 3, "unit_price_kobo": 100000, "total_kobo": 300000, "buying_price_kobo": 50000 }],
+        "batches_remaining": [{ "product": "P1", "received_at": "2026-01-01", "qty_remaining": 17 }],
+        "inventory_after": [{ "product": "P1", "quantity": 97 }],
+        "product_scalar_cost": [{ "product": "P1", "buying_price_kobo": 50000 }],
+        "wallet_legs": [{ "reference_type": "order_payment", "signed_amount_kobo": -300000 }],
+        "customer_balance_after_kobo": -300000
+      }
+    },
+    {
+      "name": "credit (Slice 3): Register-as-Credit-Sale with partial cash posts a debit + a cash credit leg",
+      "customer": { "opening_balance_kobo": 0, "debt_limit_kobo": 500000 },
+      "products": [
+        { "key": "P1", "name": "Star 60cl", "unit_price_kobo": 100000, "scalar_cost_kobo": 50000 }
+      ],
+      "inventory": [{ "product": "P1", "quantity": 100 }],
+      "batches": [{ "product": "P1", "qty": 20, "cost_kobo": 50000, "received_at": "2026-01-01" }],
+      "checkout": {
+        "payment_method": "credit",
+        "discount_kobo": 0,
+        "amount_paid_kobo": 100000,
+        "items": [{ "product": "P1", "quantity": 3 }]
+      },
+      "expected": {
+        "order": {
+          "status": "pending", "payment_type": "cash",
+          "total_amount_kobo": 300000, "discount_kobo": 0,
+          "net_amount_kobo": 300000, "amount_paid_kobo": 100000,
+          "completed_at_null": true
+        },
+        "items": [{ "product": "P1", "quantity": 3, "unit_price_kobo": 100000, "total_kobo": 300000, "buying_price_kobo": 50000 }],
+        "batches_remaining": [{ "product": "P1", "received_at": "2026-01-01", "qty_remaining": 17 }],
+        "inventory_after": [{ "product": "P1", "quantity": 97 }],
+        "product_scalar_cost": [{ "product": "P1", "buying_price_kobo": 50000 }],
+        "payment": { "method": "cash", "amount_kobo": 100000 },
+        "wallet_legs": [
+          { "reference_type": "order_payment", "signed_amount_kobo": -300000 },
+          { "reference_type": "topup_cash", "signed_amount_kobo": 100000 }
+        ],
+        "customer_balance_after_kobo": -200000
+      }
+    },
+    {
+      "name": "credit (Slice 3): a registered fully-paid cash sale posts both legs (net-zero) for a complete history",
+      "customer": { "opening_balance_kobo": 0, "debt_limit_kobo": 0 },
+      "products": [
+        { "key": "P1", "name": "Star 60cl", "unit_price_kobo": 100000, "scalar_cost_kobo": 50000 }
+      ],
+      "inventory": [{ "product": "P1", "quantity": 100 }],
+      "batches": [{ "product": "P1", "qty": 20, "cost_kobo": 50000, "received_at": "2026-01-01" }],
+      "checkout": {
+        "payment_method": "cash",
+        "discount_kobo": 0,
+        "amount_paid_kobo": 300000,
+        "items": [{ "product": "P1", "quantity": 3 }]
+      },
+      "expected": {
+        "order": {
+          "status": "pending", "payment_type": "cash",
+          "total_amount_kobo": 300000, "discount_kobo": 0,
+          "net_amount_kobo": 300000, "amount_paid_kobo": 300000,
+          "completed_at_null": true
+        },
+        "items": [{ "product": "P1", "quantity": 3, "unit_price_kobo": 100000, "total_kobo": 300000, "buying_price_kobo": 50000 }],
+        "batches_remaining": [{ "product": "P1", "received_at": "2026-01-01", "qty_remaining": 17 }],
+        "inventory_after": [{ "product": "P1", "quantity": 97 }],
+        "product_scalar_cost": [{ "product": "P1", "buying_price_kobo": 50000 }],
+        "payment": { "method": "cash", "amount_kobo": 300000 },
+        "wallet_legs": [
+          { "reference_type": "order_payment", "signed_amount_kobo": -300000 },
+          { "reference_type": "topup_cash", "signed_amount_kobo": 300000 }
+        ],
+        "customer_balance_after_kobo": 0
+      }
+    }
+  ]
+}

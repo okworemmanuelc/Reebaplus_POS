@@ -37,13 +37,30 @@ export interface Operator {
   business: {
     id: string;
     name: string;
+    // Business type + empties opt-in drive the crate surfaces (Slice 4, #45):
+    // crate context is shown only when isCrateBusiness(type) && tracksEmptyCrates.
+    type: string | null;
     tracksEmptyCrates: boolean;
   } | null;
   role: { id: string; slug: string | null; name: string | null } | null;
   permissions: EffectivePermissions;
+  // Max discount % this operator's role may apply on a sale (§12.6/§13.2). The
+  // web clamps the cart discount to this; the checkout_order RPC re-clamps
+  // server-side (defence in depth). CEO = 100.
+  maxDiscountPercent: number;
   currencyCode: string;
   paletteName: PaletteName;
   stores: { id: string; name: string }[];
+}
+
+const MAX_DISCOUNT_PERCENT_KEY = 'max_discount_percent';
+
+// Seed defaults matching the mobile currentUserMaxDiscountPercentProvider
+// (CEO 100, Manager 10, else 0) — used until a role_settings row is written.
+function seedDiscountPercent(slug: string | null | undefined): number {
+  if (slug === 'ceo') return 100;
+  if (slug === 'manager') return 10;
+  return 0;
 }
 
 const NO_PERMISSIONS: EffectivePermissions = {
@@ -79,6 +96,7 @@ export async function loadOperator(
   // Role via the active membership for the bound business.
   let role: Operator['role'] = null;
   let permissions: EffectivePermissions = NO_PERMISSIONS;
+  let maxDiscountPercent = 0;
 
   if (userId) {
     const { data: memberships } = await supabase
@@ -105,24 +123,39 @@ export async function loadOperator(
       if (roleRow) {
         role = { id: roleRow.id, slug: roleRow.slug, name: roleRow.name };
 
-        const [{ data: grants }, { data: overrides }] = await Promise.all([
-          supabase
-            .from('role_permissions')
-            .select('id, business_id, role_id, permission_key')
-            .eq('role_id', roleRow.id)
-            .returns<RolePermissionRow[]>(),
-          supabase
-            .from('user_permission_overrides')
-            .select('id, business_id, user_id, permission_key, is_granted')
-            .eq('user_id', userId)
-            .returns<UserPermissionOverrideRow[]>(),
-        ]);
+        const [{ data: grants }, { data: overrides }, { data: roleSettings }] =
+          await Promise.all([
+            supabase
+              .from('role_permissions')
+              .select('id, business_id, role_id, permission_key')
+              .eq('role_id', roleRow.id)
+              .returns<RolePermissionRow[]>(),
+            supabase
+              .from('user_permission_overrides')
+              .select('id, business_id, user_id, permission_key, is_granted')
+              .eq('user_id', userId)
+              .returns<UserPermissionOverrideRow[]>(),
+            supabase
+              .from('role_settings')
+              .select('setting_key, setting_value')
+              .eq('role_id', roleRow.id)
+              .returns<{ setting_key: string; setting_value: string | null }[]>(),
+          ]);
 
         permissions = resolveEffectivePermissions({
           roleSlug: roleRow.slug,
           roleGrants: grants ?? [],
           userOverrides: overrides ?? [],
         });
+
+        const storedDiscount = (roleSettings ?? []).find(
+          (s) => s.setting_key === MAX_DISCOUNT_PERCENT_KEY,
+        )?.setting_value;
+        const parsed =
+          storedDiscount != null ? Number.parseInt(storedDiscount, 10) : NaN;
+        maxDiscountPercent = Number.isFinite(parsed)
+          ? parsed
+          : seedDiscountPercent(roleRow.slug);
       }
     }
   }
@@ -168,11 +201,13 @@ export async function loadOperator(
       ? {
           id: businessRow.id,
           name: businessRow.name ?? 'Your business',
+          type: businessRow.type,
           tracksEmptyCrates: businessRow.tracks_empty_crates ?? false,
         }
       : null,
     role,
     permissions,
+    maxDiscountPercent,
     currencyCode: currencyValue
       ? normalizeCurrencyCode(currencyValue)
       : DEFAULT_CURRENCY,

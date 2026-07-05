@@ -1,0 +1,57 @@
+# Golden-Scenario Suite (ADR 0009, issue #43) — the anti-divergence gate.
+#
+# The same cash-sale fixtures (test/golden/fixtures/*.json) run against BOTH
+# implementations of the checkout money rule. Drift between them fails the build.
+#
+#   * dart-dao   — the mobile Dart path (OrdersDao.createOrder + FIFO draw-down)
+#                  on an in-memory Drift DB. Offline, network-free → runs on
+#                  every push/PR, always.
+#   * rpc        — the SQL `checkout_order` RPC (migration 0135) on real dev
+#                  Supabase. Tier-2: runs only when the TEST_SUPABASE_* secrets
+#                  are configured; auto-skips otherwise (same gate the test uses).
+#
+# Both runners share test/golden/golden_scenario.dart, so the two paths are
+# compared field-for-field.
+
+name: golden-scenarios
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  dart-dao:
+    name: Golden — Dart DAO (offline, always)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.2
+      - run: flutter pub get
+      - name: Run the Dart-DAO golden fixtures
+        run: flutter test test/golden
+
+  rpc:
+    name: Golden — checkout_order RPC (Tier-2, when secrets present)
+    runs-on: ubuntu-latest
+    # Secrets aren't available to PRs from forks; skip there rather than fail.
+    if: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.2
+      - run: flutter pub get
+      - name: Run the checkout_order RPC golden fixtures (auto-skips without env)
+        run: flutter test test/integration/rpcs/checkout_order_golden_test.dart --tags integration
+        env:
+          TEST_SUPABASE_URL: ${{ secrets.TEST_SUPABASE_URL }}
+          TEST_SUPABASE_ANON_KEY: ${{ secrets.TEST_SUPABASE_ANON_KEY }}
+          TEST_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.TEST_SUPABASE_SERVICE_ROLE_KEY }}
+          TEST_USER_REFRESH_TOKEN: ${{ secrets.TEST_USER_REFRESH_TOKEN }}
+          TEST_BUSINESS_ID: ${{ secrets.TEST_BUSINESS_ID }}
+          TEST_USER_ID: ${{ secrets.TEST_USER_ID }}
