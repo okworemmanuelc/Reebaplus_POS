@@ -99,6 +99,15 @@ export interface ProductRow {
   manufacturer_id: string | null;
 }
 
+// A supplier (Slice 6, #48) — the party a Receive Stock delivery is booked
+// against. The delivery's invoice/payment post to this supplier's ledger.
+export interface SupplierRow {
+  id: string;
+  business_id: string;
+  name: string | null;
+  is_deleted: boolean | null;
+}
+
 // A manufacturer with its per-crate deposit rate (deposit_amount_kobo). The
 // deposit value of empties is per-manufacturer, shared across its products.
 export interface ManufacturerRow {

@@ -2,6 +2,66 @@
 
 ---
 
+## 2026-07-05 — Web POS Slice 6 code-review fixes (issue #48)
+
+**What changed.** Three fixes from the `/code-review` of PR #62; no new surface.
+Verified: web `tsc --noEmit` + `next build` green; the cost-0 no-clobber and the
+positive-cost update both re-checked live in a rolled-back CEO transaction.
+
+- **`receive_stock` cost-0 scalar clobber (correctness).** A receive line with cost 0
+  (an uncosted delivery) was unconditionally writing `products.buying_price_kobo = 0`,
+  wiping the product's existing scalar cost. Now `buying_price_kobo` only moves on a
+  costed line (`CASE WHEN v_buy > 0 THEN v_buy ELSE buying_price_kobo END`), matching
+  the mobile "oldest COSTED batch, no-clobber" rule. Batch handling was already right
+  (the uncosted batch is still created).
+- **`add_product` idempotency tenant-scoping.** The replay existence check now filters
+  `AND business_id = p_business_id` (like `update_product`), so a UUID collision with
+  another tenant's product can't short-circuit the insert or return a foreign row.
+- **Store selector (AC "opening stock, store").** The Add-Product and Receive-Stock
+  dialogs hardcoded `stores[0]`; they now render a store `<select>` (shown when the
+  business has more than one store) so a multi-store manager picks the target store.
+
+Migration `0140` was edited in place (not yet merged) and both functions were
+re-deployed live via `CREATE OR REPLACE`.
+
+---
+
+## 2026-07-05 — Web POS Slice 6: Inventory add/edit + receive stock (issue #48)
+
+**What changed.** The Web POS gained inventory management — add/edit products and
+receive supplier deliveries — behind three new server-authoritative RPCs, with the
+Cost Batch producer rule pinned across Dart and SQL by a new golden dimension.
+Verified: Dart golden green (6/6), `add_product`/`receive_stock` smoke-tested live
+against a real CEO in a rolled-back transaction, web `tsc --noEmit` + `next build`
+green.
+
+- **Migration `0140_web_inventory_rpcs.sql` (deployed).** `add_product` (product +
+  opening stock straight to inventory + the opening Cost Batch, no supplier),
+  `update_product` (details/prices; stock + batches untouched), and `receive_stock`
+  (supplier invoice debit + optional payment credit + per line: inventory upsert,
+  price persistence, a stock movement, and a receipt-dated Cost Batch). SQL twins of
+  the mobile Dart path (`CostBatchesDao.recordInflowBatch`, `InventoryDao.adjustStock`,
+  `SupplierAccountService`); each reuses the 0135 `caller_has_permission` /
+  `_assert_caller_owns_business` helpers and re-checks the permission server-side.
+  A receive line mirrors `adjustStock`'s default path — one `stock_adjustments` row
+  + a `stock_transactions` row referencing it (the `adjustment_id` ref that satisfies
+  the exactly-one-of-4-refs CHECK). Idempotent on the client id (product / receipt).
+- **Batch-creation Golden Suite (`test/golden/inventory_scenario.dart` + fixtures,
+  two runners).** A second golden dimension beside checkout: the rule "one inflow ⇒
+  one fresh batch {qty_remaining=qty_original=quantity, cost=max(cost,0), received_at},
+  never merged; cost 0 ⇒ uncosted" is run against the Dart producers
+  (`inventory_dart_dao_golden_test.dart`) and the SQL RPCs
+  (`web_inventory_golden_test.dart`, Tier-2). Covers costed/uncosted/no-opening-stock
+  Add Product and receive with existing batch / partial payment / uncosted lines.
+- **Web UI (`web-pos/src/components/inventory/*`, `lib/inventory.ts`).** An Inventory
+  view (responsive table, low-stock highlight), an add/edit Product dialog, and a
+  Receive Stock dialog (supplier + dated lines + invoice total + payment). Sidebar
+  navigation is now a client-side view switch (`NavProvider`); actions are
+  hide-don't-block on `products.add` / `stock.received`\|`stock.add`. Money via the
+  business-currency helpers; prices entered in major units, stored as `*_kobo`.
+
+---
+
 ## 2026-07-05 — Web POS checkout-UI cleanup (issue #57)
 
 **What changed.** Quality-only de-duplication of the Slice 2–4 web checkout; no

@@ -5,6 +5,8 @@ import { LoginForm } from '@/components/auth/LoginForm';
 import { AppShell } from '@/components/shell/AppShell';
 import { PosScreen } from '@/components/pos/PosScreen';
 import { CartProvider } from '@/components/pos/CartProvider';
+import { NavProvider, useNav } from '@/components/providers/NavProvider';
+import { InventoryScreen } from '@/components/inventory/InventoryScreen';
 
 // App entry. The signed-in Supabase session is the Operator (ADR 0011): while it
 // resolves we show a spinner; signed-out shows the sign-in screen; signed-in
@@ -32,12 +34,22 @@ export default function Home() {
   }
 
   return (
-    <CartProvider>
-      <AppShell>
-        <PosScreen />
-      </AppShell>
-    </CartProvider>
+    <NavProvider>
+      <CartProvider>
+        <AppShell>
+          <MainContent />
+        </AppShell>
+      </CartProvider>
+    </NavProvider>
   );
+}
+
+// The content area renders the active view (sidebar-driven, NavProvider). The
+// cart lives above this so it survives switching to Inventory and back.
+function MainContent() {
+  const { view } = useNav();
+  if (view === 'inventory') return <InventoryScreen />;
+  return <PosScreen />;
 }
 
 function FullscreenSpinner({ label }: { label: string }) {
