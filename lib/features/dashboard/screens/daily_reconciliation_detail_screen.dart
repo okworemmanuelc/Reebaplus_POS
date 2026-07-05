@@ -99,6 +99,8 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
             SizedBox(height: context.spacingM),
             _plCard(context, theme, d),
             SizedBox(height: context.spacingM),
+            _cashFlowCard(context, theme, d),
+            SizedBox(height: context.spacingM),
             _businessWorthCard(context, theme, d),
           ],
           SizedBox(height: context.spacingM),
@@ -243,6 +245,51 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
             style: context.bodySmall.copyWith(color: theme.hintColor),
           ),
         ],
+      ],
+    );
+  }
+
+  /// Derived cash-flow summary (ADR 0014): the period's expected cash MOVEMENT
+  /// from recorded cash tenders — cash sales + debts collected in, refunds +
+  /// cash expenses + cash supplier payments out. **Business-wide** (the
+  /// payment_transactions ledger has no store) and **not a counted drawer**:
+  /// there is no opening float to add this to (Hard Rule #8). CEO-only.
+  Widget _cashFlowCard(BuildContext context, ThemeData theme, ReconData d) {
+    final successColor = theme.extension<AppSemanticColors>()!.success;
+    final dangerColor = theme.colorScheme.error;
+    final netColor = d.netCashMovementKobo >= 0 ? successColor : dangerColor;
+    return _card(
+      context,
+      theme,
+      'Cash flow (business-wide)',
+      FontAwesomeIcons.moneyBillWave.data,
+      netColor,
+      [
+        _line(context, theme, 'Cash sales',
+            '+ ${formatCurrency(d.cashSalesKobo / 100.0)}'),
+        _line(context, theme, 'Debts collected (cash)',
+            '+ ${formatCurrency(d.cashDebtsCollectedKobo / 100.0)}'),
+        _line(context, theme, 'Cash in',
+            formatCurrency(d.cashInKobo / 100.0), strong: true),
+        _divider(theme),
+        _line(context, theme, 'Refunds paid (cash)',
+            '− ${formatCurrency(d.cashRefundsKobo / 100.0)}'),
+        _line(context, theme, 'Expenses paid (cash)',
+            '− ${formatCurrency(d.cashExpensesKobo / 100.0)}'),
+        _line(context, theme, 'Paid to suppliers (cash)',
+            '− ${formatCurrency(d.cashSupplierPaidKobo / 100.0)}'),
+        _line(context, theme, 'Cash out',
+            formatCurrency(d.cashOutKobo / 100.0), strong: true),
+        _divider(theme),
+        _line(context, theme, 'Net cash movement',
+            formatCurrency(d.netCashMovementKobo / 100.0),
+            strong: true, color: netColor),
+        const SizedBox(height: 6),
+        Text(
+          'Expected cash movement from recorded cash tenders — business-wide, '
+          'not a counted drawer.',
+          style: context.bodySmall.copyWith(color: theme.hintColor),
+        ),
       ],
     );
   }
@@ -701,6 +748,13 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
         // Supplier account position: negative = we owe, positive = credit held.
         ['Supplier account balance (now)', money(d.supplierAccountBalanceKobo)],
         ['Business net position (now)', money(d.businessNetPositionKobo)],
+        // Cash flow (business-wide) — mirrors _cashFlowCard.
+        ['Cash sales', money(d.cashSalesKobo)],
+        ['Debts collected (cash)', money(d.cashDebtsCollectedKobo)],
+        ['Refunds paid (cash)', money(d.cashRefundsKobo)],
+        ['Expenses paid (cash)', money(d.cashExpensesKobo)],
+        ['Paid to suppliers (cash)', money(d.cashSupplierPaidKobo)],
+        ['Net cash movement', money(d.netCashMovementKobo)],
         ['Stock shortages (units)', '${d.shortageUnits}'],
       ] else ...[
         ['Stock shortages (units)', '${d.shortageUnits}'],

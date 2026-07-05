@@ -253,6 +253,11 @@ class ReconData {
     required this.skus,
     required this.uncostedItems,
     required this.refundsKobo,
+    required this.cashSalesKobo,
+    required this.cashDebtsCollectedKobo,
+    required this.cashRefundsKobo,
+    required this.cashExpensesKobo,
+    required this.cashSupplierPaidKobo,
     required this.bestStaff,
     required this.bestStaffKobo,
     required this.expensesKobo,
@@ -297,6 +302,16 @@ class ReconData {
   final int skus;
   final int uncostedItems;
   final int refundsKobo;
+  // ── Cash-flow summary (ADR 0014, business-wide) ──────────────────────────
+  // Derived cash MOVEMENT for the period from tender-tagged flows (`method ==
+  // 'cash'`), NOT a drawer count (Hard Rule #8: no cash balance, no float, no
+  // Close Day). `payment_transactions` is the unified physical-cash ledger and
+  // has no storeId, so these are business-wide (like outstanding customer debt).
+  final int cashSalesKobo; // IN — payment_transactions type 'sale'
+  final int cashDebtsCollectedKobo; // IN — type 'wallet_topup' (debt paid in cash)
+  final int cashRefundsKobo; // OUT — type 'refund'
+  final int cashExpensesKobo; // OUT — type 'expense'
+  final int cashSupplierPaidKobo; // OUT — supplier_ledger payment_* (not in pay-txns)
   final String? bestStaff;
   final int bestStaffKobo;
   final int expensesKobo;
@@ -338,6 +353,15 @@ class ReconData {
   int get grossProfitKobo => netRevenueKobo - cogsKobo;
   int get netProfitKobo =>
       grossProfitKobo - expensesKobo - damageCostKobo - crateDamageDepositKobo;
+
+  // ── Cash-flow summary getters (ADR 0014) ─────────────────────────────────
+  int get cashInKobo => cashSalesKobo + cashDebtsCollectedKobo;
+  int get cashOutKobo =>
+      cashRefundsKobo + cashExpensesKobo + cashSupplierPaidKobo;
+  /// Expected net cash movement for the period (in − out). Not a cash balance —
+  /// there is no opening float to add it to (Hard Rule #8).
+  int get netCashMovementKobo => cashInKobo - cashOutKobo;
+  bool get hasCashActivity => cashInKobo != 0 || cashOutKobo != 0;
 
   /// Net result for the period (flow). Folds the inventory-on-hand asset and the
   /// supplier flows (goods received / paid to suppliers / refunds) that used to
@@ -398,6 +422,8 @@ ReconData computeReconData(
       ref.watch(allStockAdjustmentsProvider).valueOrNull ?? const [];
   final ledger =
       ref.watch(allSupplierLedgerEntriesProvider).valueOrNull ?? const [];
+  final payments =
+      ref.watch(allPaymentTransactionsProvider).valueOrNull ?? const [];
   final counts = ref.watch(allStockCountsProvider).valueOrNull ?? const [];
   // Inventory-on-hand must honour the active-store scope like every other
   // figure here (§12.1): pass the locked store so a single-store view doesn't
@@ -636,6 +662,44 @@ ReconData computeReconData(
     }
   }
 
+  // ── Cash-flow summary (ADR 0014; business-wide, tender-tagged) ───────────
+  // Expected cash MOVEMENT for the period from recorded cash tenders — NOT a
+  // drawer count (Hard Rule #8: no float, no counted cash). payment_transactions
+  // is the unified physical-cash ledger (sale / wallet_topup / refund / expense,
+  // each with a `method`) and has no storeId, so this card is business-wide.
+  // Crate deposits (a refundable held liability) are deliberately excluded — the
+  // ask is operating cash (sales + debts collected). `method` casing drifts
+  // ('Cash'/'cash'), so match case-insensitively.
+  var cashSalesKobo = 0;
+  var cashDebtsCollectedKobo = 0;
+  var cashRefundsKobo = 0;
+  var cashExpensesKobo = 0;
+  for (final p in payments) {
+    if (p.voidedAt != null) continue;
+    if (p.method.toLowerCase() != 'cash') continue;
+    if (!inSpan(p.createdAt)) continue;
+    if (p.type == 'sale') {
+      cashSalesKobo += p.amountKobo;
+    } else if (p.type == 'wallet_topup') {
+      cashDebtsCollectedKobo += p.amountKobo;
+    } else if (p.type == 'refund') {
+      cashRefundsKobo += p.amountKobo;
+    } else if (p.type == 'expense') {
+      cashExpensesKobo += p.amountKobo;
+    }
+  }
+  // Supplier payments made in cash — the one cash-out NOT in payment_transactions
+  // (recorded only on the supplier ledger). Business-wide, in span, to match the
+  // rest of the cash card.
+  var cashSupplierPaidKobo = 0;
+  for (final l in ledger) {
+    if (l.voidedAt != null || l.referenceType == 'void') continue;
+    if (!l.referenceType.startsWith('payment_')) continue;
+    if (!inSpan(l.activityDate)) continue;
+    if ((l.paymentMethod ?? '').toLowerCase() != 'cash') continue;
+    cashSupplierPaidKobo += l.amountKobo;
+  }
+
   // ── Outstanding customer debt (business-wide — wallets aren't per store) ──
   final totalOwedKobo = balances.values
       .where((b) => b < 0)
@@ -676,6 +740,11 @@ ReconData computeReconData(
     skus: skuSet.length,
     uncostedItems: uncostedItems,
     refundsKobo: refundsKobo,
+    cashSalesKobo: cashSalesKobo,
+    cashDebtsCollectedKobo: cashDebtsCollectedKobo,
+    cashRefundsKobo: cashRefundsKobo,
+    cashExpensesKobo: cashExpensesKobo,
+    cashSupplierPaidKobo: cashSupplierPaidKobo,
     bestStaff: bestStaff,
     bestStaffKobo: bestStaffKobo,
     expensesKobo: expensesKobo,

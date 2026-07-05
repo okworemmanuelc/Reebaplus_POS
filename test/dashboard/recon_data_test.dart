@@ -12,6 +12,11 @@ ReconData recon({
   int expensesKobo = 0,
   int damageCostKobo = 0,
   int crateDamageDepositKobo = 0,
+  int cashSalesKobo = 0,
+  int cashDebtsCollectedKobo = 0,
+  int cashRefundsKobo = 0,
+  int cashExpensesKobo = 0,
+  int cashSupplierPaidKobo = 0,
 }) {
   return ReconData(
     totalRevenueKobo: costedRevenueKobo,
@@ -22,6 +27,11 @@ ReconData recon({
     skus: 0,
     uncostedItems: 0,
     refundsKobo: 0,
+    cashSalesKobo: cashSalesKobo,
+    cashDebtsCollectedKobo: cashDebtsCollectedKobo,
+    cashRefundsKobo: cashRefundsKobo,
+    cashExpensesKobo: cashExpensesKobo,
+    cashSupplierPaidKobo: cashSupplierPaidKobo,
     bestStaff: null,
     bestStaffKobo: 0,
     expensesKobo: expensesKobo,
@@ -107,6 +117,40 @@ void main() {
       // A fully-discounted period has no net revenue → no divide-by-zero.
       expect(recon(costedRevenueKobo: 5000, discountsKobo: 5000).grossMarginPct,
           '0.0');
+    });
+  });
+
+  group('ReconData cash-flow summary (issue #72, ADR 0014)', () {
+    test('cash in = cash sales + debts collected', () {
+      final d = recon(cashSalesKobo: 80000, cashDebtsCollectedKobo: 12000);
+      expect(d.cashInKobo, 92000);
+    });
+
+    test('cash out = refunds + cash expenses + cash supplier payments', () {
+      final d = recon(
+        cashRefundsKobo: 3000,
+        cashExpensesKobo: 7000,
+        cashSupplierPaidKobo: 20000,
+      );
+      expect(d.cashOutKobo, 30000);
+    });
+
+    test('net cash movement is in minus out (can be negative)', () {
+      final d = recon(
+        cashSalesKobo: 50000,
+        cashDebtsCollectedKobo: 10000,
+        cashRefundsKobo: 5000,
+        cashExpensesKobo: 15000,
+        cashSupplierPaidKobo: 60000,
+      );
+      // 60,000 in − 80,000 out = −20,000.
+      expect(d.netCashMovementKobo, -20000);
+    });
+
+    test('hasCashActivity is false only when nothing moved', () {
+      expect(recon().hasCashActivity, isFalse);
+      expect(recon(cashSalesKobo: 1).hasCashActivity, isTrue);
+      expect(recon(cashSupplierPaidKobo: 1).hasCashActivity, isTrue);
     });
   });
 }

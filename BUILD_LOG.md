@@ -2,6 +2,39 @@
 
 ---
 
+## 2026-07-05 — Closing report: cash-flow summary (issue #72, slice 1)
+
+**What changed.** First slice of the closing-report enhancement (ADR 0014 §②):
+a **derived cash-flow summary** on the CEO Daily Reconciliation — the period's
+expected cash *movement* from recorded cash tenders, **not** a counted drawer
+(Hard Rule #8: no float, no Close Day, no cash balance).
+
+- **Sourcing.** `payment_transactions` is the unified physical-cash ledger; every
+  cash move writes one (`sale` / `wallet_topup` / `refund` / `expense`, each with
+  a `method`). Verified at the insert sites (`daos_orders`, `credit_ledger_service`,
+  `daos_expenses`). Supplier payments are the one cash-out **not** in it (only on
+  `supplier_ledger_entries`), so they're summed from there. Expenses are taken
+  from the `expense` payment rows — **not** also from the expenses table — so
+  nothing double-counts. `method` matched case-insensitively ('Cash'/'cash' drift).
+- **Business-wide.** `payment_transactions` has no `storeId`, so the card is
+  business-wide (like the existing outstanding-debt line) and clearly labelled.
+  Crate deposits (a refundable held liability) are excluded — the ask is
+  operating cash (sales + debts collected).
+- **New plumbing.** `OrdersDao.watchAllPaymentTransactions()` (no regen — table
+  already in its accessor) + `allPaymentTransactionsProvider`
+  (`businessScopedStream`; passes the provider-ban test). `ReconData` gains
+  `cashSalesKobo` / `cashDebtsCollectedKobo` / `cashRefundsKobo` /
+  `cashExpensesKobo` / `cashSupplierPaidKobo` + `cashInKobo` / `cashOutKobo` /
+  `netCashMovementKobo` getters.
+- **UI/CSV.** New CEO-only `_cashFlowCard` (Cash in → Cash out → Net cash
+  movement) between P&L and Business worth; CSV export gains the same rows.
+- **Tests.** 4 cash-flow getter cases added to `recon_data_test.dart` (10 total
+  green); `flutter analyze` clean; provider-ban + business-scoped-stream tests green.
+
+Remaining for #72: stock flow-equation card and the integrity flag.
+
+---
+
 ## 2026-07-05 — Daily Reconciliation P&L: subtract discounts (issue #70)
 
 **What changed.** The Daily Reconciliation booked sales revenue **gross** and

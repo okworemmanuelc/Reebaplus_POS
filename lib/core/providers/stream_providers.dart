@@ -1822,3 +1822,14 @@ final allSupplierLedgerEntriesProvider =
   (ref, db, businessId) => db.supplierLedgerDao.watchAllHistory(),
   whenAbsent: const [],
 );
+
+/// Every `payment_transactions` row (the unified physical-cash tender ledger)
+/// for this business, newest first. Feeds the Daily Reconciliation cash-flow
+/// summary (ADR 0014): cash IN (`sale`, `wallet_topup`) and cash OUT (`refund`,
+/// `expense`), each filtered on `method == 'cash'`. The table carries no
+/// `storeId`, so the cash summary is business-wide (like customer debt).
+final allPaymentTransactionsProvider =
+    businessScopedStream<List<PaymentTransactionData>>(
+  (ref, db, businessId) => db.ordersDao.watchAllPaymentTransactions(),
+  whenAbsent: const [],
+);
