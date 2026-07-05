@@ -10,6 +10,28 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### IN PROGRESS: Closing-report reconciliation (ADR 0014, 2026-07-05)
+Enhancing the Daily Reconciliation (§25.9) into a full closing report. Grilled;
+design in **ADR 0014**. Two issues off `main`:
+- **#70 — P&L discount fix (SHIPPED → PR #71).** Report booked revenue gross and
+  ignored `orders.discountKobo`, overstating profit. Added `ReconData.discountsKobo`
+  + `netRevenueKobo`; P&L now Revenue → −Discounts → Net revenue → −COGS; margin on
+  net revenue. Branch `fix/recon-pl-discounts`.
+- **#72 — closing-report enhancement (branch `feat/closing-report-reconciliation`,
+  stacked on #70).**
+  - ✅ **Slice 1 — cash-flow summary (committed `676c310`).** Business-wide derived
+    cash *movement* from tender-tagged flows (no drawer count — Hard Rule #8).
+    `OrdersDao.watchAllPaymentTransactions` + `allPaymentTransactionsProvider`;
+    CEO-only card + CSV. `payment_transactions` = unified cash ledger; supplier cash
+    from supplier_ledger; no double-count.
+  - ⏳ **Slice 2 — stock flow-equation card.** Decided: value the flow at **current
+    cost throughout** (ties out to current inventory-at-cost); expired broken out
+    from damages. Source from `stock_transactions` (has `movementType` + `locationId`).
+  - ⏳ **Slice 3 — integrity flag.** Flow-reconciliation, no new tables; flags
+    P&L-profit vs measured-asset-change gap (stock-count variance as the signal).
+
+
+
 ### PLANNING: Web POS (online-first browser client) — grilled 2026-07-04, ADRs 0007–0012
 - **North star:** full parity — the *entire* app replicated for web — reached in
   phases. **Phase 1 = selling loop + inventory management + reports.** Later phases
