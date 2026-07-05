@@ -16,6 +16,24 @@ String fmt(CurrencyInputFormatter f, String input) {
   return out.text;
 }
 
+/// Simulates an in-place edit: the field currently shows [oldText]; the user's
+/// keystroke produced [newText] with the caret now at [newCaret]. Returns the
+/// value the field would end up with (reformatted text + resolved caret).
+TextEditingValue editAt(
+  CurrencyInputFormatter f, {
+  required String oldText,
+  required String newText,
+  required int newCaret,
+}) {
+  return f.formatEditUpdate(
+    TextEditingValue(text: oldText),
+    TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: newCaret),
+    ),
+  );
+}
+
 void main() {
   group('CurrencyInputFormatter (money, grouped + decimals)', () {
     final f = CurrencyInputFormatter();
@@ -59,6 +77,43 @@ void main() {
     test('round-trips through parseCurrency to a decimal value', () {
       expect(parseCurrency(fmt(f, '1500.50')), 1500.50);
       expect(parseCurrency(fmt(f, '1500.')), 1500.0);
+    });
+  });
+
+  group('CurrencyInputFormatter caret preservation (mid-string edits)', () {
+    final f = CurrencyInputFormatter();
+
+    test('typing in the middle keeps the caret next to the inserted digit', () {
+      // Field shows "1,500"; caret placed right after the "1"; user types "2".
+      final out = editAt(f, oldText: '1,500', newText: '12,500', newCaret: 2);
+      expect(out.text, '12,500');
+      // Caret stays just after the digit the user typed, not slammed to the end.
+      expect(out.selection.baseOffset, 2);
+    });
+
+    test('caret hops over a newly inserted grouping comma', () {
+      // "500" + "2" after the first digit => "5,200"; caret follows the "2".
+      final out = editAt(f, oldText: '500', newText: '5200', newCaret: 2);
+      expect(out.text, '5,200');
+      expect(out.selection.baseOffset, 3); // after "5,2"
+    });
+
+    test('deleting a middle digit keeps the caret in place', () {
+      // "12,500" with the "2" removed => "1,500"; caret rests after the "1".
+      final out = editAt(f, oldText: '12,500', newText: '1,500', newCaret: 1);
+      expect(out.text, '1,500');
+      expect(out.selection.baseOffset, 1);
+    });
+
+    test('caret at the start stays at the start', () {
+      final out = editAt(f, oldText: '500', newText: '500', newCaret: 0);
+      expect(out.selection.baseOffset, 0);
+    });
+
+    test('caret at the end still lands at the end', () {
+      final out = editAt(f, oldText: '1,50', newText: '1,500', newCaret: 5);
+      expect(out.text, '1,500');
+      expect(out.selection.baseOffset, 5);
     });
   });
 

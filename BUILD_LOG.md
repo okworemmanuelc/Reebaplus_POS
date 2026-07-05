@@ -2,6 +2,29 @@
 
 ---
 
+## 2026-07-05 — Currency input: preserve the caret on mid-string edits
+
+**What changed.** `CurrencyInputFormatter` no longer slams the caret to the end of
+the field after every keystroke. Previously it returned
+`TextSelection.collapsed(offset: newText.length)`, so moving the cursor into the
+middle of a price to make a correction and typing teleported the caret back to the
+end, distorting the value. Now the formatter counts the "meaningful" characters
+(digits + the decimal dot, ignoring grouping commas it inserts) sitting before the
+raw caret, then re-places the caret after that same count in the reformatted text —
+so the cursor stays next to the character the user just typed/deleted, hopping over
+any comma the formatter adds or removes.
+
+- **`lib/core/utils/currency_input_formatter.dart`.** Added a `_meaningful`
+  (`[\d.]`) regexp and caret-mapping loops; the return now uses the resolved
+  `newOffset` instead of `newText.length`. Truncation (e.g. a 3rd decimal digit
+  dropped) safely clamps the caret to the end.
+- **`test/utils/currency_input_formatter_test.dart`.** New "caret preservation
+  (mid-string edits)" group: typing in the middle, hopping a newly inserted comma,
+  deleting a middle digit, caret-at-start, and caret-at-end. All 18 tests green;
+  `flutter analyze` clean.
+
+---
+
 ## 2026-07-05 — Web POS: de-duplicate RPC helpers (issue #68)
 
 **What changed.** Quality-only cleanup from the epic-#46 code review; no behaviour

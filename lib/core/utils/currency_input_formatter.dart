@@ -12,6 +12,12 @@ class CurrencyInputFormatter extends TextInputFormatter {
   final bool grouping;
   final int decimalDigits;
 
+  // A "meaningful" character is one the user actually typed (a digit or the
+  // decimal point) — as opposed to a grouping comma the formatter inserts.
+  // Caret preservation counts these, so inserted/removed commas never drag the
+  // cursor around.
+  static final RegExp _meaningful = RegExp(r'[\d.]');
+
   @override
   TextEditingValue formatEditUpdate(
     TextEditingValue oldValue,
@@ -52,9 +58,32 @@ class CurrencyInputFormatter extends TextInputFormatter {
         ? formattedWhole
         : '$formattedWhole.$fraction';
 
+    // Preserve the caret instead of forcing it to the end. Count the meaningful
+    // characters (digits + dot) sitting before the caret in the raw input, then
+    // place the caret after that same number of meaningful characters in the
+    // reformatted text — grouping commas the formatter inserted are skipped, so
+    // editing in the middle no longer teleports the cursor to the end.
+    final int rawCaret = newValue.selection.end < 0
+        ? newValue.text.length
+        : newValue.selection.end.clamp(0, newValue.text.length);
+    int meaningfulBeforeCaret = 0;
+    for (int i = 0; i < rawCaret; i++) {
+      if (_meaningful.hasMatch(newValue.text[i])) meaningfulBeforeCaret++;
+    }
+
+    int newOffset = newText.length;
+    int seen = 0;
+    for (int i = 0; i < newText.length; i++) {
+      if (seen >= meaningfulBeforeCaret) {
+        newOffset = i;
+        break;
+      }
+      if (_meaningful.hasMatch(newText[i])) seen++;
+    }
+
     return newValue.copyWith(
       text: newText,
-      selection: TextSelection.collapsed(offset: newText.length),
+      selection: TextSelection.collapsed(offset: newOffset),
     );
   }
 }
