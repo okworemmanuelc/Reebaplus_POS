@@ -111,6 +111,10 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
           ],
           SizedBox(height: context.spacingM),
           _stockCard(context, theme, d),
+          if (isCeo && d.hasStockFlow) ...[
+            SizedBox(height: context.spacingM),
+            _integrityCard(context, theme, d),
+          ],
           if (!isCeo) ...[
             SizedBox(height: context.spacingM),
             _debtsExpensesCard(context, theme, d),
@@ -359,6 +363,77 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
           style: context.bodySmall.copyWith(color: theme.hintColor),
         ),
       ],
+    );
+  }
+
+  /// Integrity flag (ADR 0014 slice 3): reconciles reported P&L profit against
+  /// the independent physical stock count. Any gap is the stock-count variance
+  /// the recorded flows never booked — a recording error (shrinkage / theft /
+  /// miscount), not a separate loss, and NOT reflected in the reported profit.
+  /// No persistence — derived from flows + the count. CEO-only.
+  Widget _integrityCard(BuildContext context, ThemeData theme, ReconData d) {
+    final successColor = theme.extension<AppSemanticColors>()!.success;
+    final dangerColor = theme.colorScheme.error;
+    if (!d.hasStockCount) {
+      return _card(
+        context,
+        theme,
+        'Integrity check',
+        FontAwesomeIcons.shieldHalved.data,
+        theme.hintColor,
+        [
+          Text(
+            'No physical stock count in this period, so the recorded flows can\'t '
+            'be reconciled against a real count. Take a stock count to verify '
+            'nothing left unrecorded.',
+            style: context.bodySmall.copyWith(color: theme.hintColor),
+          ),
+        ],
+      );
+    }
+    final gap = d.stockVarianceKobo;
+    final reconciled = gap == 0;
+    final color = reconciled ? successColor : dangerColor;
+    return _card(
+      context,
+      theme,
+      'Integrity check',
+      FontAwesomeIcons.shieldHalved.data,
+      color,
+      [
+        _line(context, theme, 'Reported net profit',
+            formatCurrency(d.netProfitKobo / 100.0)),
+        _line(
+          context,
+          theme,
+          'Unexplained stock variance',
+          reconciled
+              ? formatCurrency(0)
+              : '${gap >= 0 ? '+ ' : '− '}${formatCurrency(gap.abs() / 100.0)}',
+          danger: !reconciled,
+        ),
+        _divider(theme),
+        _line(
+          context,
+          theme,
+          'Count-reconciled profit',
+          formatCurrency(d.integrityAdjustedProfitKobo / 100.0),
+          strong: true,
+          color: color,
+        ),
+        const SizedBox(height: 6),
+        Text(
+          reconciled
+              ? 'The physical count matches recorded sales, receipts, damages and '
+                    'expiries — the reported profit reconciles.'
+              : 'The physical count is off the recorded flows by '
+                    '${formatCurrency(gap.abs() / 100.0)}. This is a recording gap '
+                    '(unbooked shrinkage / theft or a miscount), not reflected in '
+                    'the reported profit above.',
+          style: context.bodySmall.copyWith(color: theme.hintColor),
+        ),
+      ],
+      danger: !reconciled,
     );
   }
 
@@ -832,6 +907,8 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
         ['Other stock movements (at cost)', money(d.stockOtherMovementsKobo)],
         ['Expected closing (at cost)', money(d.stockExpectedClosingKobo)],
         ['Stock variance (counted − expected)', money(d.stockVarianceKobo)],
+        // Integrity check — mirrors _integrityCard.
+        ['Count-reconciled profit', money(d.integrityAdjustedProfitKobo)],
         ['Stock shortages (units)', '${d.shortageUnits}'],
       ] else ...[
         ['Stock shortages (units)', '${d.shortageUnits}'],

@@ -17,6 +17,7 @@ ReconData recon({
   int cashRefundsKobo = 0,
   int cashExpensesKobo = 0,
   int cashSupplierPaidKobo = 0,
+  bool hasStockCount = false,
   int shortageCostKobo = 0,
   int surplusCostKobo = 0,
   int stockOpeningKobo = 0,
@@ -49,7 +50,7 @@ ReconData recon({
     damageCostKobo: damageCostKobo,
     damageRetailKobo: 0,
     crateDamageDepositKobo: crateDamageDepositKobo,
-    hasStockCount: false,
+    hasStockCount: hasStockCount,
     productsCounted: 0,
     shortageCount: 0,
     shortageUnits: 0,
@@ -213,6 +214,48 @@ void main() {
       expect(recon(stockExpectedClosingKobo: 1).hasStockFlow, isTrue);
       expect(recon(stockReceivedKobo: 1).hasStockFlow, isTrue);
       expect(recon(stockExpiredKobo: 1).hasStockFlow, isTrue);
+    });
+  });
+
+  group('ReconData integrity flag (issue #72 slice 3, ADR 0014)', () {
+    test('count-reconciled profit is net profit plus the stock variance', () {
+      // Net profit 30,000; counted 4,000 short (shortage cost) → 26,000.
+      final d = recon(
+        costedRevenueKobo: 100000,
+        cogsKobo: 70000,
+        hasStockCount: true,
+        shortageCostKobo: 4000,
+      );
+      expect(d.netProfitKobo, 30000);
+      expect(d.stockVarianceKobo, -4000);
+      expect(d.integrityAdjustedProfitKobo, 26000);
+    });
+
+    test('a surplus lifts the reconciled profit above the reported profit', () {
+      final d = recon(
+        costedRevenueKobo: 50000,
+        cogsKobo: 30000,
+        hasStockCount: true,
+        surplusCostKobo: 1500,
+      );
+      // net profit 20,000 + surplus 1,500 = 21,500.
+      expect(d.integrityAdjustedProfitKobo, 21500);
+    });
+
+    test('hasIntegrityGap requires both a count and a non-zero variance', () {
+      // Variance present but no count taken → nothing to reconcile against.
+      expect(recon(shortageCostKobo: 5000).hasIntegrityGap, isFalse);
+      // Count taken and it ties out → reconciled, no gap.
+      expect(recon(hasStockCount: true).hasIntegrityGap, isFalse);
+      // Count taken and it diverges → flagged.
+      expect(
+        recon(hasStockCount: true, shortageCostKobo: 5000).hasIntegrityGap,
+        isTrue,
+      );
+      expect(
+        recon(hasStockCount: true, surplusCostKobo: 5000).hasIntegrityGap,
+        isTrue,
+      );
     });
   });
 }

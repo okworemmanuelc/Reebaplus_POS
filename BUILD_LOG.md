@@ -2,6 +2,36 @@
 
 ---
 
+## 2026-07-05 — Closing report: integrity flag (issue #72, slice 3 — epic complete)
+
+**What changed.** Final slice of the closing-report enhancement (ADR 0014 §④):
+a CEO-only **integrity check** card that reconciles reported P&L profit against
+the independent physical stock count — **no new persistence**, derived entirely
+from recorded flows + the count.
+
+- **What it does.** A true "Δ net position over the period = reported profit"
+  identity can't close: there's no cash leg (Hard Rule #8) and no stored
+  period-start snapshot. So instead of persisting snapshots, the flag surfaces
+  the one thing the recorded flows did **not** book — the **stock-count variance**
+  (physical − expected, at cost, straight from slice 2's `stockVarianceKobo`).
+  Reported profit is built only from sales / COGS / discounts / expenses /
+  damages, so a count shortfall is a **recording error** (unbooked shrinkage /
+  theft / miscount), not a separate real loss, and it isn't reflected in the
+  reported profit. The card shows Reported net profit → Unexplained variance →
+  **Count-reconciled profit** (`netProfit + variance`), with a
+  reconciled/flagged verdict and a "take a count" nudge when no count exists.
+- **Plumbing.** `ReconData` gains `integrityAdjustedProfitKobo` +
+  `hasIntegrityGap` getters (no new fields — reuses the slice-2 variance). New
+  CEO-only `_integrityCard` (shield icon) after the stock audit, shown when
+  `hasStockFlow`; CSV export gains a "Count-reconciled profit" row.
+- **Tests.** 3 integrity getter cases added to `recon_data_test.dart` (17 total
+  green); `flutter analyze` clean.
+
+**Epic status:** all three closing-report checks now ship — cash-flow summary
+(slice 1), stock flow-equation (slice 2), integrity flag (slice 3). Closes #72.
+
+---
+
 ## 2026-07-05 — Closing report: stock flow-equation card (issue #72, slice 2)
 
 **What changed.** Second slice of the closing-report enhancement (ADR 0014 §①):

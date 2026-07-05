@@ -10,10 +10,10 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
-### IN PROGRESS: Closing-report reconciliation (ADR 0014, 2026-07-05)
-Enhancing the Daily Reconciliation (§25.9) into a full closing report. Grilled;
+### SHIPPED: Closing-report reconciliation (ADR 0014, 2026-07-05)
+Enhanced the Daily Reconciliation (§25.9) into a full closing report. Grilled;
 design in **ADR 0014**. Two issues off `main`:
-- **#70 — P&L discount fix (SHIPPED → PR #71).** Report booked revenue gross and
+- **#70 — P&L discount fix (SHIPPED — PR #71 MERGED to `main`).** Report booked revenue gross and
   ignored `orders.discountKobo`, overstating profit. Added `ReconData.discountsKobo`
   + `netRevenueKobo`; P&L now Revenue → −Discounts → Net revenue → −COGS; margin on
   net revenue. Branch `fix/recon-pl-discounts`.
@@ -33,8 +33,12 @@ design in **ADR 0014**. Two issues off `main`:
     `adjustmentId → reason` (`isExpiredReason`). `StockLedgerDao.watchAllTransactions`
     + `allStockTransactionsProvider`; 7 `stock*Kobo` fields + `stockVarianceKobo`
     / `hasStockFlow` getters; `_stockFlowCard` + CSV. 14 recon tests green.
-  - ⏳ **Slice 3 — integrity flag.** Flow-reconciliation, no new tables; flags
-    P&L-profit vs measured-asset-change gap (stock-count variance as the signal).
+  - ✅ **Slice 3 — integrity flag (this branch).** CEO-only integrity check:
+    reconciles reported P&L profit against the physical count with **no new
+    persistence** — surfaces the stock-count variance the flows never booked
+    (`integrityAdjustedProfitKobo = netProfit + variance`; `hasIntegrityGap`),
+    framed as a recording error, not a real loss. `_integrityCard` + CSV row. 17
+    recon tests green. **Epic complete → closes #72.**
 
 
 

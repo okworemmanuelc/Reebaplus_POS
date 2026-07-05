@@ -435,6 +435,27 @@ class ReconData {
   /// count exists in the period ([hasStockCount]).
   int get stockVarianceKobo => surplusCostKobo - shortageCostKobo;
 
+  // ── Integrity flag (ADR 0014 slice 3) ────────────────────────────────────
+  // Reconciles reported P&L profit against the independent physical stock
+  // count, deriving the gap entirely from recorded flows + the count — no new
+  // persistence. A true "Δ net position = profit" identity can't close (no cash
+  // leg under Hard Rule #8, no stored period-start snapshot), so the flag
+  // instead surfaces the one thing the flows did NOT record: the stock-count
+  // variance. Reported profit is built only from sales / COGS / discounts /
+  // expenses / damages, so a count shortfall is a RECORDING error (unbooked
+  // shrinkage / theft / miscount) the profit figure never reflected — not a
+  // separate real loss.
+
+  /// Reported net profit reconciled against the physical count: P&L profit plus
+  /// the stock-count variance the flows never booked. Equals [netProfitKobo]
+  /// when the count matches the flows (a surplus lifts it, a shortage cuts it).
+  int get integrityAdjustedProfitKobo => netProfitKobo + stockVarianceKobo;
+
+  /// True when a physical count was taken and it does not match the recorded
+  /// flows — an unexplained gap worth flagging. Without a count there is nothing
+  /// independent to reconcile against, so this is false.
+  bool get hasIntegrityGap => hasStockCount && stockVarianceKobo != 0;
+
   /// Whether any stock movement or on-hand value exists to render the card.
   bool get hasStockFlow =>
       stockOpeningKobo != 0 ||
