@@ -179,7 +179,10 @@ void main() {
           totalKobo: total,
         ));
       }
-      final discount = scenario.checkout.discountKobo;
+      // The role discount cap (§12.6/§13.2): clamp the requested discount to the
+      // caller's percentage of gross, identical to the RPC's server-side clamp.
+      final discount = clampDiscountKobo(
+          scenario.checkout.discountKobo, scenario.maxDiscountPercent, gross);
       final net = gross - discount;
 
       // The cash actually settled: for a walk-in cash/transfer it's the net; for
@@ -194,6 +197,29 @@ void main() {
       // topup_cash, so mirror that: 'transfer' stays, everything else → 'cash'.
       final tenderMethod =
           scenario.checkout.paymentMethod == 'transfer' ? 'transfer' : 'cash';
+
+      // A rejection scenario (Slice 3, #55): mirror mobile's hide-don't-write
+      // debt-limit guard — a sale that would push the customer past their limit is
+      // refused before any write (mobile never reaches createOrder past the
+      // block). Assert the guard fires and that nothing persisted. Same rule as
+      // the RPC (0136) + CheckoutDialog: only a sale that books NEW debt is gated;
+      // limit ≤ 0 forbids any credit; otherwise the projected balance must stay
+      // ≥ −limit.
+      if (scenario.expectRejection != null) {
+        final balance = scenario.customer!.openingBalanceKobo;
+        final projected = balance + cashPaid - net;
+        final booksNewDebt = cashPaid < net && projected < 0;
+        final limit = scenario.customer!.debtLimitKobo;
+        final overLimit = booksNewDebt && (limit <= 0 || projected < -limit);
+        expect(overLimit, isTrue,
+            reason: '${scenario.name}: expected the debt-limit guard to reject');
+        final rows = await (db.select(db.orders)
+              ..where((o) => o.id.equals(orderId)))
+            .get();
+        expect(rows, isEmpty,
+            reason: '${scenario.name}: a rejected sale writes no order');
+        return;
+      }
 
       await db.ordersDao.createOrder(
         order: OrdersCompanion.insert(

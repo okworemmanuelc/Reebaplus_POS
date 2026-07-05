@@ -256,7 +256,7 @@ void main() {
       final amountPaid =
           customerId != null ? scenario.checkout.amountPaidKobo : net;
 
-      await clients.userClient.rpc('checkout_order', params: {
+      final params = <String, dynamic>{
         'p_business_id': businessId,
         'p_order_id': orderId,
         'p_store_id': store,
@@ -272,7 +272,29 @@ void main() {
         'p_amount_paid_kobo': amountPaid,
         'p_discount_kobo': scenario.checkout.discountKobo,
         'p_customer_id': customerId,
-      });
+      };
+
+      // A rejection scenario (Slice 3, #55): the RPC must refuse — its debt-limit
+      // guard raises (P0001) BEFORE any write — and persist nothing. Assert the
+      // raise carries the expected token and that no order row exists, then stop:
+      // there are no result rows to compare against a golden outcome.
+      if (scenario.expectRejection != null) {
+        await expectLater(
+          clients.userClient.rpc('checkout_order', params: params),
+          throwsA(predicate(
+              (Object e) => e.toString().contains(scenario.expectRejection!))),
+        );
+        final leftover = await admin
+            .from('orders')
+            .select('id')
+            .eq('id', orderId)
+            .maybeSingle();
+        expect(leftover, isNull,
+            reason: '${scenario.name}: a rejected sale writes no order');
+        return;
+      }
+
+      await clients.userClient.rpc('checkout_order', params: params);
 
       // ── Collect the resulting rows in fixture terms ────────────────────────
       final keyByProductId = {
@@ -437,6 +459,14 @@ void main() {
       );
 
       expectGolden(scenario, outcome, orderNumberScheme: webOrderNumberScheme);
-    }, skip: _skipReason);
+    },
+        // The clamp keys off the CALLER's role cap, and 0135 short-circuits the
+        // CEO slug to 100 — so it can't bite for this Tier-2 identity (the
+        // business CEO). The clamp rule is pinned on the Dart arm; skip it here
+        // rather than assert an un-clampable caller.
+        skip: _skipReason ??
+            (scenario.maxDiscountPercent != null
+                ? 'discount clamp needs a non-CEO caller; pinned on the Dart arm'
+                : null));
   }
 }

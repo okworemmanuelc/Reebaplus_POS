@@ -394,6 +394,52 @@
         ],
         "customer_balance_after_kobo": 0
       }
+    },
+    {
+      "name": "discount clamp (Slice 2, #55): a non-CEO request over the 10% role cap is clamped, not honoured",
+      "_note": "Dart-arm only — the RPC clamp keys off the caller's role and the Tier-2 identity is CEO (cap 100), so the SQL runner skips max_discount_percent scenarios.",
+      "max_discount_percent": 10,
+      "products": [
+        { "key": "P1", "name": "Star 60cl", "unit_price_kobo": 100000, "scalar_cost_kobo": 50000 }
+      ],
+      "inventory": [{ "product": "P1", "quantity": 100 }],
+      "batches": [{ "product": "P1", "qty": 20, "cost_kobo": 50000, "received_at": "2026-01-01" }],
+      "checkout": {
+        "payment_method": "cash",
+        "discount_kobo": 300000,
+        "amount_paid_kobo": 900000,
+        "items": [{ "product": "P1", "quantity": 10 }]
+      },
+      "expected": {
+        "order": {
+          "status": "pending", "payment_type": "cash",
+          "total_amount_kobo": 1000000, "discount_kobo": 100000,
+          "net_amount_kobo": 900000, "amount_paid_kobo": 900000,
+          "completed_at_null": true
+        },
+        "items": [{ "product": "P1", "quantity": 10, "unit_price_kobo": 100000, "total_kobo": 1000000, "buying_price_kobo": 50000 }],
+        "batches_remaining": [{ "product": "P1", "received_at": "2026-01-01", "qty_remaining": 10 }],
+        "inventory_after": [{ "product": "P1", "quantity": 90 }],
+        "product_scalar_cost": [{ "product": "P1", "buying_price_kobo": 50000 }],
+        "payment": { "method": "cash", "amount_kobo": 900000 }
+      }
+    },
+    {
+      "name": "debt limit (Slice 3, #55): a credit sale past the limit is rejected and writes nothing",
+      "_note": "A rejection scenario: no `expected` block. Both arms attempt the checkout and assert it is refused with `debt_limit_exceeded` and that no order is written. gross 300000 net 300000, no cash → projected -300000 < -100000 limit.",
+      "customer": { "opening_balance_kobo": 0, "debt_limit_kobo": 100000 },
+      "products": [
+        { "key": "P1", "name": "Star 60cl", "unit_price_kobo": 100000, "scalar_cost_kobo": 50000 }
+      ],
+      "inventory": [{ "product": "P1", "quantity": 100 }],
+      "batches": [{ "product": "P1", "qty": 20, "cost_kobo": 50000, "received_at": "2026-01-01" }],
+      "checkout": {
+        "payment_method": "credit",
+        "discount_kobo": 0,
+        "amount_paid_kobo": 0,
+        "items": [{ "product": "P1", "quantity": 3 }]
+      },
+      "expect": { "rejected_with": "debt_limit_exceeded" }
     }
   ]
 }

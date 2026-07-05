@@ -188,7 +188,25 @@ class GoldenScenario {
   final List<FxInventory> inventory;
   final List<FxBatch> batches;
   final FxCheckout checkout;
-  final ExpectedOrder expectedOrder;
+
+  /// The caller's role discount cap (§12.6/§13.2 max_discount_percent). When set,
+  /// the runners clamp the requested checkout discount to `gross * pct ~/ 100`
+  /// (integer division, mirroring the RPC's `(v_gross * v_max_pct) / 100`); null ⇒
+  /// no cap modelled (CEO / within-cap) and the requested discount applies as-is.
+  /// NOTE: the RPC clamp keys off the CALLER's role, and 0135 short-circuits the
+  /// CEO slug to 100 — so a clamp can only bite for a non-CEO caller. The Tier-2
+  /// RPC runner is signed in as the business CEO, so it SKIPS clamp scenarios; the
+  /// clamp rule is pinned on the Dart (mobile) arm.
+  final int? maxDiscountPercent;
+
+  /// When set, the scenario is a REJECTION: the checkout must be refused with this
+  /// error token and NOTHING persisted. The success expectations below are absent.
+  /// Mirrors the RPC guard raise (e.g. 'debt_limit_exceeded', P0001) and mobile's
+  /// hide-don't-write. Only the debt-limit guard is modelled today.
+  final String? expectRejection;
+
+  /// The expected order header, or null for a rejection scenario (no rows).
+  final ExpectedOrder? expectedOrder;
   final List<ExpectedItem> expectedItems;
 
   /// key "productKey|receivedAt" → expected qty_remaining.
@@ -232,6 +250,8 @@ class GoldenScenario {
     required this.inventory,
     required this.batches,
     required this.checkout,
+    required this.maxDiscountPercent,
+    required this.expectRejection,
     required this.expectedOrder,
     required this.expectedItems,
     required this.expectedBatchRemaining,
@@ -248,21 +268,24 @@ class GoldenScenario {
   FxProduct product(String key) => products.firstWhere((p) => p.key == key);
 
   factory GoldenScenario._fromJson(Map<String, dynamic> j) {
-    final exp = j['expected'] as Map<String, dynamic>;
+    final rejectedWith =
+        (j['expect'] as Map<String, dynamic>?)?['rejected_with'] as String?;
+    // A rejection scenario carries no `expected` block; tolerate its absence.
+    final exp = (j['expected'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
 
     final batchRemaining = <String, int>{};
-    for (final b in (exp['batches_remaining'] as List)) {
+    for (final b in ((exp['batches_remaining'] as List?) ?? const [])) {
       final m = b as Map<String, dynamic>;
       batchRemaining['${m['product']}|${m['received_at']}'] =
           m['qty_remaining'] as int;
     }
     final inv = <String, int>{};
-    for (final r in (exp['inventory_after'] as List)) {
+    for (final r in ((exp['inventory_after'] as List?) ?? const [])) {
       final m = r as Map<String, dynamic>;
       inv[m['product'] as String] = m['quantity'] as int;
     }
     final scalar = <String, int>{};
-    for (final r in (exp['product_scalar_cost'] as List)) {
+    for (final r in ((exp['product_scalar_cost'] as List?) ?? const [])) {
       final m = r as Map<String, dynamic>;
       scalar[m['product'] as String] = m['buying_price_kobo'] as int;
     }
@@ -320,8 +343,12 @@ class GoldenScenario {
                 FxCheckoutLine(i['product'] as String, i['quantity'] as int))
             .toList(),
       ),
-      expectedOrder: ExpectedOrder(exp['order'] as Map<String, dynamic>),
-      expectedItems: (exp['items'] as List)
+      maxDiscountPercent: j['max_discount_percent'] as int?,
+      expectRejection: rejectedWith,
+      expectedOrder: exp['order'] == null
+          ? null
+          : ExpectedOrder(exp['order'] as Map<String, dynamic>),
+      expectedItems: ((exp['items'] as List?) ?? const [])
           .map((i) => ExpectedItem(i as Map<String, dynamic>))
           .toList(),
       expectedBatchRemaining: batchRemaining,
@@ -482,12 +509,24 @@ class CheckoutOutcome {
 /// The shared assertion. Compares a runner's [CheckoutOutcome] to the fixture's
 /// expectations. [orderNumberScheme] is the runner's own numbering regex
 /// (mobile / web) — the one axis that is meant to differ.
+/// The applied order discount after the role cap (§12.6/§13.2): the requested
+/// amount, never negative, floored to `gross * maxPct ~/ 100` — mirroring the
+/// RPC's `LEAST(GREATEST(p_discount, 0), (v_gross * v_max_pct) / 100)`. [maxPct]
+/// null ⇒ no cap modelled (the request applies as-is). Shared so both golden arms
+/// clamp identically.
+int clampDiscountKobo(int requestedKobo, int? maxPct, int grossKobo) {
+  final nonNeg = requestedKobo < 0 ? 0 : requestedKobo;
+  if (maxPct == null) return nonNeg;
+  final cap = (grossKobo * maxPct) ~/ 100;
+  return nonNeg > cap ? cap : nonNeg;
+}
+
 void expectGolden(
   GoldenScenario s,
   CheckoutOutcome actual, {
   required RegExp orderNumberScheme,
 }) {
-  final e = s.expectedOrder;
+  final e = s.expectedOrder!;
   expect(actual.orderNumber, matches(orderNumberScheme),
       reason: '${s.name}: order number must match this client\'s scheme');
   expect(actual.order.status, e.status, reason: '${s.name}: order status');
