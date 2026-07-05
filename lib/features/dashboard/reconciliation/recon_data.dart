@@ -248,6 +248,7 @@ class ReconData {
     required this.totalRevenueKobo,
     required this.costedRevenueKobo,
     required this.cogsKobo,
+    required this.discountsKobo,
     required this.itemsSold,
     required this.skus,
     required this.uncostedItems,
@@ -286,6 +287,12 @@ class ReconData {
   final int totalRevenueKobo;
   final int costedRevenueKobo;
   final int cogsKobo;
+  /// Period discounts given on counted sales (`orders.discountKobo`, summed in
+  /// scope + span). `order_items.unitPriceKobo` is the GROSS list price, so the
+  /// revenue sums above are gross of discount; this is subtracted in the P&L so
+  /// profit isn't overstated by the discount given (the order's real payable is
+  /// `netAmountKobo = gross − discount`). Contra-revenue, not an expense.
+  final int discountsKobo;
   final int itemsSold;
   final int skus;
   final int uncostedItems;
@@ -324,7 +331,11 @@ class ReconData {
   final List<({String name, int qty})> topItems;
   final List<({String manufacturerName, int count, int valueKobo})> manufacturerEmpties;
 
-  int get grossProfitKobo => costedRevenueKobo - cogsKobo;
+  /// Costed revenue net of discounts given — the real money earned on costed
+  /// lines. `costedRevenueKobo` is gross (Σ qty × gross unitPrice), so we
+  /// subtract the period's discounts to get what was actually charged.
+  int get netRevenueKobo => costedRevenueKobo - discountsKobo;
+  int get grossProfitKobo => netRevenueKobo - cogsKobo;
   int get netProfitKobo =>
       grossProfitKobo - expensesKobo - damageCostKobo - crateDamageDepositKobo;
 
@@ -352,10 +363,11 @@ class ReconData {
   /// Display this signed value — never relabel a credit as "owed".
   int get supplierAccountBalanceKobo => -supplierPayableKobo;
 
-  /// Gross margin as a 1-dp percentage string ("0.0" when there's no costed
-  /// revenue). Shared by the Statement card and the CSV export.
-  String get grossMarginPct => costedRevenueKobo > 0
-      ? (grossProfitKobo / costedRevenueKobo * 100).toStringAsFixed(1)
+  /// Gross margin as a 1-dp percentage string ("0.0" when there's no net
+  /// revenue). Measured against net revenue (after discounts), so the margin
+  /// reflects money actually earned. Shared by the P&L card and the CSV export.
+  String get grossMarginPct => netRevenueKobo > 0
+      ? (grossProfitKobo / netRevenueKobo * 100).toStringAsFixed(1)
       : '0.0';
 
   bool get isEmpty =>
@@ -419,6 +431,7 @@ ReconData computeReconData(
   var totalRevenueKobo = 0;
   var costedRevenueKobo = 0;
   var cogsKobo = 0;
+  var discountsKobo = 0;
   var itemsSold = 0;
   var uncostedItems = 0;
   var refundsKobo = 0;
@@ -436,6 +449,9 @@ ReconData computeReconData(
     if (!orderCountsAsSale(o.order.status) || !inSpan(o.order.createdAt)) {
       continue;
     }
+    // Order-level discount (contra-revenue). Scoped by the order's store to
+    // match refunds above; lines carry the same storeId in practice.
+    if (inScope(o.order.storeId)) discountsKobo += o.order.discountKobo;
     var orderRevenue = 0;
     for (final i in o.items) {
       if (!inScope(i.item.storeId)) continue;
@@ -655,6 +671,7 @@ ReconData computeReconData(
     totalRevenueKobo: totalRevenueKobo,
     costedRevenueKobo: costedRevenueKobo,
     cogsKobo: cogsKobo,
+    discountsKobo: discountsKobo,
     itemsSold: itemsSold,
     skus: skuSet.length,
     uncostedItems: uncostedItems,

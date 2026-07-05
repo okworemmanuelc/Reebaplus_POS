@@ -2,6 +2,32 @@
 
 ---
 
+## 2026-07-05 — Daily Reconciliation P&L: subtract discounts (issue #70)
+
+**What changed.** The Daily Reconciliation booked sales revenue **gross** and
+never read `orders.discountKobo`, so **gross/net profit were overstated by the
+discounts given**. (`order_items.unitPriceKobo` is the gross list price; the
+order's real payable is `netAmountKobo = gross − discount`, per
+`order_commands.dart`.) Fixed per ADR 0014 §③.
+
+- **`recon_data.dart`.** New `ReconData.discountsKobo` (summed from
+  `orders.discountKobo` over counted sales, store- and span-scoped like refunds).
+  New `netRevenueKobo = costedRevenueKobo − discountsKobo`; `grossProfitKobo`
+  now `netRevenue − COGS`; `grossMarginPct` measured against **net** revenue
+  (with a divide-by-zero guard for a fully-discounted period).
+- **`daily_reconciliation_detail_screen.dart`.** P&L card shows Revenue →
+  − Discounts → Net revenue → − COGS → Gross profit (discount rows render only
+  when discounts > 0). CSV export gains the Discounts + Net-revenue rows.
+- **`test/dashboard/recon_data_test.dart`.** New — 6 cases over the P&L getters
+  (net revenue, gross profit, net profit, margin-on-net, zero-discount parity,
+  zero-net-revenue guard). All green; `flutter analyze` clean on the feature.
+
+CEO-only (cost wall §25.3) is unchanged. Scope is P&L discounts only — the stock
+flow-equation card, cash-flow summary, and integrity flag are the follow-up
+issue (ADR 0014).
+
+---
+
 ## 2026-07-05 — Currency input: preserve the caret on mid-string edits
 
 **What changed.** `CurrencyInputFormatter` no longer slams the caret to the end of

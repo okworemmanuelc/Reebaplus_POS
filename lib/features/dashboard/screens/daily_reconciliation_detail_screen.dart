@@ -179,6 +179,20 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
           'Revenue',
           formatCurrency(d.costedRevenueKobo / 100.0),
         ),
+        if (d.discountsKobo > 0) ...[
+          _line(
+            context,
+            theme,
+            'Discounts',
+            '− ${formatCurrency(d.discountsKobo / 100.0)}',
+          ),
+          _line(
+            context,
+            theme,
+            'Net revenue',
+            formatCurrency(d.netRevenueKobo / 100.0),
+          ),
+        ],
         _line(
           context,
           theme,
@@ -676,7 +690,9 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
         ['Stock shortages (at cost)', money(d.shortageCostKobo)],
         ['Net result for period', money(d.periodNetResultKobo)],
         // Profit & Loss — mirrors _plCard.
-        ['Revenue (costed)', money(d.costedRevenueKobo)],
+        ['Revenue (costed, gross)', money(d.costedRevenueKobo)],
+        ['Discounts', money(d.discountsKobo)],
+        ['Net revenue (costed)', money(d.netRevenueKobo)],
         ['Cost of goods sold', money(d.cogsKobo)],
         ['Gross profit', money(d.grossProfitKobo)],
         ['Gross margin %', d.grossMarginPct],
