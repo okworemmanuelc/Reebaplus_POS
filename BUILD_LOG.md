@@ -2,6 +2,45 @@
 
 ---
 
+## 2026-07-05 — Web POS Slice 7 code-review fix (issue #50)
+
+**What changed.** One fix from the `/code-review` of PR #63; web `tsc --noEmit` +
+`next build` green. The Adjust-Stock dialog hardcoded `stores[0]`, so a multi-store
+manager couldn't target a store; it now renders a store `<select>` (shown when the
+business has more than one store), matching the Add-Product / Receive-Stock dialogs.
+
+---
+
+## 2026-07-05 — Web POS Slice 7: Stock adjustment + approval gate (issue #50)
+
+**What changed.** The Web POS gained stock adjustment with the approval gate,
+mirroring mobile §16.6.1: a stock keeper's change is a pending request; a
+manager/CEO applies immediately and approves/rejects the queue. Stacked on #48.
+Verified: Dart golden green (4/4), all three paths (CEO apply / approve / reject)
+smoke-tested live in a rolled-back transaction, web `tsc` + `next build` green.
+
+- **Migration `0141_web_stock_adjustment_rpcs.sql` (deployed).** `request_stock_
+  adjustment` branches on the CALLER's role (`caller_role_slug` helper, new):
+  CEO/Manager applies immediately (+ an approved audit row); anyone else with
+  `stock.adjust` files a pending request, no inventory change. `approve_stock_
+  adjustment` (approver-only) applies the delta or rejects with no change. Shared
+  `_apply_stock_adjustment` helper mirrors `InventoryDao.adjustStock` (guarded
+  inventory delta + `stock_adjustments` + `stock_transactions('adjustment')`) — no
+  Cost Batch, an adjustment is a correction not an inflow. Both RPCs idempotent /
+  status-guarded.
+- **Golden Suite (`test/golden/stock_adjustment_scenario.dart` + fixtures).**
+  request-vs-apply pinned across the Dart DAO (`stock_adjustment_dart_dao_golden_
+  test.dart`) and the SQL RPC (`web_stock_adjustment_golden_test.dart`, Tier-2).
+  The stock-keeper → pending path is pinned on the Dart arm; the RPC arm (CEO
+  identity, routed to immediate-apply) skips 'request' scenarios — same precedent
+  as the checkout discount clamp.
+- **Web UI.** Per-product "Adjust" action (`AdjustStockDialog`, on `stock.adjust`)
+  that surfaces whether the change applied or was sent for approval, and a
+  manager/CEO `ApprovalsPanel` queue (approve/reject) shown for CEO/Manager roles —
+  mirroring the server's approver rule.
+
+---
+
 ## 2026-07-05 — Web POS Slice 6 code-review fixes (issue #48)
 
 **What changed.** Three fixes from the `/code-review` of PR #62; no new surface.
