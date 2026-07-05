@@ -1,0 +1,37 @@
+{
+  "_comment": "Stock-adjustment approval-gate golden fixtures (issue #50). Run against the Dart DAO (requestStockAdjustment/approveRequest/rejectRequest) AND the SQL RPCs request_stock_adjustment/approve_stock_adjustment (0141). Rule: pending => no inventory change; approve => apply delta (no Cost Batch); reject => no change. 'request' scenarios pin the stock-keeper->pending path on the Dart arm; the RPC arm skips them (its Tier-2 identity is the CEO, whom the server routes to immediate-apply).",
+  "scenarios": [
+    {
+      "name": "stock keeper request creates a pending row, no inventory change",
+      "operation": "request",
+      "start_qty": 20,
+      "quantity_diff": 10,
+      "reason": "recount found more",
+      "expected": { "status": "pending", "inventory_after": 20 }
+    },
+    {
+      "name": "approving an add applies the delta",
+      "operation": "approve",
+      "start_qty": 20,
+      "quantity_diff": 10,
+      "reason": "recount found more",
+      "expected": { "status": "approved", "inventory_after": 30 }
+    },
+    {
+      "name": "approving a remove applies the negative delta",
+      "operation": "approve",
+      "start_qty": 20,
+      "quantity_diff": -8,
+      "reason": "breakage",
+      "expected": { "status": "approved", "inventory_after": 12 }
+    },
+    {
+      "name": "rejecting a request makes no inventory change",
+      "operation": "reject",
+      "start_qty": 20,
+      "quantity_diff": -5,
+      "reason": "not verified",
+      "expected": { "status": "rejected", "inventory_after": 20 }
+    }
+  ]
+}

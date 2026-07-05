@@ -1944,3 +1944,90 @@ select.input {
   background: var(--surface2);
   font-size: 15px;
 }
+
+/* ── Stock adjustment + approvals (Slice 7, #50) ──────────────────────────── */
+.inventory__row-actions {
+  display: inline-flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.adjust__product {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 6px;
+}
+.adjust__preview {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  border-radius: var(--radius);
+  background: var(--surface2);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.approvals {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--warning, var(--info)) 8%, var(--surface));
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.approvals__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.approvals__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 11px;
+  background: var(--primary);
+  color: var(--on-primary);
+  font-size: 12px;
+}
+.approvals__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.approvals__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.approvals__info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.approvals__delta {
+  font-weight: 700;
+  color: var(--success);
+}
+.approvals__delta--remove {
+  color: var(--danger, var(--error));
+}
+.approvals__actions {
+  display: inline-flex;
+  gap: 8px;
+}

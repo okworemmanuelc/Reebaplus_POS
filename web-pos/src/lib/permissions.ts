@@ -22,6 +22,7 @@ export const PermissionKeys = {
   productsAdd: 'products.add',
   stockView: 'stock.view',
   stockAdd: 'stock.add',
+  stockAdjust: 'stock.adjust',
   stockReceived: 'stock.received',
   reportsView: 'reports.view',
 } as const;
