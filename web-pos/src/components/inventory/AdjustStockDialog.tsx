@@ -27,7 +27,8 @@ export function AdjustStockDialog({
   const [notice, setNotice] = useState<string | null>(null);
 
   const businessId = operator?.businessId ?? null;
-  const storeId = operator?.stores?.[0]?.id ?? null;
+  const stores = operator?.stores ?? [];
+  const [storeId, setStoreId] = useState<string | null>(stores[0]?.id ?? null);
   const amount = parseInt(qty, 10) || 0;
   const delta = mode === 'add' ? amount : -amount;
 
@@ -131,6 +132,26 @@ export function AdjustStockDialog({
                 <div className="adjust__preview">{product.onHand + delta}</div>
               </div>
             </div>
+
+            {stores.length > 1 && (
+              <div className="field">
+                <label className="field__label" htmlFor="adj-store">
+                  Store
+                </label>
+                <select
+                  id="adj-store"
+                  className="input"
+                  value={storeId ?? ''}
+                  onChange={(e) => setStoreId(e.target.value || null)}
+                >
+                  {stores.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div className="field">
               <label className="field__label" htmlFor="adj-reason">

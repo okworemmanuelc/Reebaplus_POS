@@ -2,6 +2,15 @@
 
 ---
 
+## 2026-07-05 — Web POS Slice 7 code-review fix (issue #50)
+
+**What changed.** One fix from the `/code-review` of PR #63; web `tsc --noEmit` +
+`next build` green. The Adjust-Stock dialog hardcoded `stores[0]`, so a multi-store
+manager couldn't target a store; it now renders a store `<select>` (shown when the
+business has more than one store), matching the Add-Product / Receive-Stock dialogs.
+
+---
+
 ## 2026-07-05 — Web POS Slice 7: Stock adjustment + approval gate (issue #50)
 
 **What changed.** The Web POS gained stock adjustment with the approval gate,
