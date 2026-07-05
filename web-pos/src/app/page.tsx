@@ -7,6 +7,7 @@ import { PosScreen } from '@/components/pos/PosScreen';
 import { CartProvider } from '@/components/pos/CartProvider';
 import { NavProvider, useNav } from '@/components/providers/NavProvider';
 import { InventoryScreen } from '@/components/inventory/InventoryScreen';
+import { ReportsScreen } from '@/components/reports/ReportsScreen';
 
 // App entry. The signed-in Supabase session is the Operator (ADR 0011): while it
 // resolves we show a spinner; signed-out shows the sign-in screen; signed-in
@@ -49,6 +50,7 @@ export default function Home() {
 function MainContent() {
   const { view } = useNav();
   if (view === 'inventory') return <InventoryScreen />;
+  if (view === 'reports') return <ReportsScreen />;
   return <PosScreen />;
 }
 

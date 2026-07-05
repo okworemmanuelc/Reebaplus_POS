@@ -2,6 +2,30 @@
 
 ---
 
+## 2026-07-05 — Web POS Slice 8: Reports & dashboards (issue #51)
+
+**What changed.** Read-only reports on web — sales/revenue dashboard, a profit
+report that excludes Uncosted units transparently, activity logs, and store
+scoping. No write RPCs; aggregation reads only. Stacked on #48 (reuses the
+`NavProvider` view switch). Money rules mirror mobile exactly (verified against
+live data). Web `tsc` + `next build` green.
+
+- **`reports.ts`.** `loadSalesReport` reads counted orders (`status in
+  {pending,completed}` — `orderCountsAsSale`, revenue recognized at checkout) and
+  their order_items (one PostgREST `orders!inner` join, optionally store-scoped)
+  and computes: all-sales revenue + order count; and a profit view over COSTED
+  lines only — a line with no product or `buying_price_kobo <= 0` is excluded from
+  both revenue and COGS and counted as an Uncosted unit, so Revenue − COGS =
+  Gross Profit (mirrors `profit_report_screen.dart`). Plus revenue-by-day and top
+  products. `loadActivityLogs` reads the recent activity feed.
+- **`ReportsScreen`.** Period (Today / 7d / 30d) + store scope (All / each store),
+  KPI tiles, a revenue-by-day mini-chart, a top-products table, and the activity
+  feed. Profit/COGS tiles + the "Excludes N item(s) with no recorded buying
+  price" note are gated on `reports.see_profit`; the screen (and sidebar entry) on
+  `reports.see_sales`. Wired into the sidebar via `NavProvider`.
+
+---
+
 ## 2026-07-05 — Web POS Slice 5: Live consistency / Realtime (issue #49)
 
 **What changed.** The Web POS grid now stays live with the mobile tills via
