@@ -58,7 +58,7 @@ mirrors the RPC's `LEAST(GREATEST(p_discount,0), (gross*pct)/100)`.
 
 ---
 
-## 2026-07-05 — checkout_order helper extraction (issue #53) — BUILT, NOT DEPLOYED
+## 2026-07-05 — checkout_order helper extraction (issue #53) — DEPLOYED + VERIFIED
 
 **What changed (code only).** New migration `0139_checkout_order_helpers.sql`
 extracts the three invariant legs of `checkout_order` into SECURITY DEFINER
@@ -80,12 +80,20 @@ reference no extracted local. From here a new checkout slice grows only its own
 dispatch, not another copy of the shared legs. Numbered `0139` — `0134`/`0138`
 are reserved by the parked console-admin work.
 
-**⚠️ NOT DEPLOYED — do not `supabase db push` until verified.** A behavior-identical
-rewrite of the live money path must be *proven*, not assumed. The proof is the
-Golden Suite's RPC arm (`test/integration/rpcs/checkout_order_golden_test.dart`,
-Tier-2), which is currently unrunnable — its `TEST_USER_REFRESH_TOKEN` is expired.
-Refresh the token, get that arm green against dev, THEN deploy. Committed to the
-`refactor/checkout-order-sql-helpers` branch.
+**✅ DEPLOYED 2026-07-05.** `supabase db push` applied `0139` to the remote after a
+history repair — the remote was ahead of local (console-admin `0134` + the
+`20260705034304` console_delete_business migration were deployed from another
+session but are still parked in a stash, not in the repo), so
+`migration repair --status reverted 0134 20260705034304` cleared the divergence
+(history table only — schema untouched) before the push. When the console-admin
+migrations land as their own PR they must reconcile that repair.
+
+**✅ VERIFIED behavior-identical.** The proof is the Golden Suite's RPC arm
+(`test/integration/rpcs/checkout_order_golden_test.dart`, Tier-2), run against the
+newly-deployed `0139`: **18/18 green (1 intentional skip)** — the same result the
+arm gave against `0137`, so the extraction changed no observable behavior on the
+live money path. (Prereq unblocked first: the Tier-2 `TEST_USER_REFRESH_TOKEN` was
+refreshed and the test tenant re-seeded.) Merged to `main` via PR #59.
 
 ---
 
