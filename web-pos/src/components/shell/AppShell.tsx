@@ -106,7 +106,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { view, setView } = useNav();
   const canInventory =
     useCan(PermissionKeys.stockView) || useCan(PermissionKeys.productsAdd);
-  const canReports = useCan(PermissionKeys.reportsView);
+  const canReports = useCan(PermissionKeys.reportsSeeSales);
 
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [themeDropdownOpen, setThemeDropdownOpen] = useState(false);
@@ -190,7 +190,15 @@ export function AppShell({ children }: { children: ReactNode }) {
             />
           )}
           <NavItem icon={<SalesIcon />} label="Sales" collapsed={isCollapsed} />
-          {canReports && <NavItem icon={<ReportsIcon />} label="Reports" collapsed={isCollapsed} />}
+          {canReports && (
+            <NavItem
+              icon={<ReportsIcon />}
+              label="Reports"
+              active={view === 'reports'}
+              collapsed={isCollapsed}
+              onClick={() => setView('reports')}
+            />
+          )}
           <NavItem icon={<SettingsIcon />} label="Settings" collapsed={isCollapsed} />
         </div>
 
