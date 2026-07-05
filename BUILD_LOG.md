@@ -24,8 +24,14 @@ mirrors the RPC's `LEAST(GREATEST(p_discount,0), (gross*pct)/100)`.
   fires + no order row); the RPC runner asserts the RPC raises `debt_limit_exceeded`
   and no order persists (via `expectLater(..., throwsA(...))`).
 - **Verified.** `flutter test test/golden/dart_dao_golden_test.dart` — 19/19 green
-  (incl. both new scenarios). The RPC arm compiles and skips cleanly offline; it
-  runs in CI once the Tier-2 token is refreshed (the current token is expired).
+  (incl. both new scenarios). The RPC arm now runs **18/18 green (1 intentional
+  skip)** against dev after the Tier-2 token was refreshed and the test tenant
+  re-seeded. Fixing that run surfaced a latent teardown bug: the golden
+  `tearDown` deleted the append-only ledgers (`wallet_transactions`,
+  `payment_transactions`, `crate_ledger`) directly, which the `forbid_delete`
+  trigger blocks (P0001) — and their parents then fail with 23503 FK. Cleanup is
+  now best-effort via a local `del()` helper that swallows both codes and leaks
+  the append-only rows by design, matching `TestBusinessFixture.deleteTopupRows`.
 
 ---
 

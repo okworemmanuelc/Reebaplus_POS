@@ -3,6 +3,7 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../golden/golden_scenario.dart';
 import '../../helpers/supabase_test_clients.dart';
@@ -66,43 +67,58 @@ void main() {
 
   tearDown(() async {
     if (_skipReason != null) return;
+    // Best-effort cleanup. `wallet_transactions`, `payment_transactions` and
+    // `crate_ledger` are append-only — the `forbid_delete` trigger blocks
+    // DELETE (P0001) and those rows leak by design (see
+    // TestBusinessFixture.deleteTopupRows); their parents (customer_wallets,
+    // customers, orders) then can't be deleted either (23503 FK). Both codes
+    // are expected in the shared test business, so swallow them and leak the
+    // rows — reset the test business periodically.
+    Future<void> del(String table, String column, String id) async {
+      try {
+        await clients.adminClient.from(table).delete().eq(column, id);
+      } on PostgrestException catch (e) {
+        if (e.code != 'P0001' && e.code != '23503') rethrow;
+      }
+    }
+
     // Children before parents. wallet/payment/stock FK into orders is NO ACTION,
     // so they must go before the order; order_items CASCADE with the order. The
     // wallet legs (incl. the seeded opening credit) go by customer. Crate rows
     // (order_crate_lines + the 'issued' crate_ledger) reference the order too, so
     // they go before it; customer_crate_balances goes with the customer.
     for (final id in customerIds) {
-      await clients.adminClient.from('wallet_transactions').delete().eq('customer_id', id);
-      await clients.adminClient.from('customer_crate_balances').delete().eq('customer_id', id);
+      await del('wallet_transactions', 'customer_id', id);
+      await del('customer_crate_balances', 'customer_id', id);
     }
     for (final id in orderIds) {
-      await clients.adminClient.from('crate_ledger').delete().eq('reference_order_id', id);
-      await clients.adminClient.from('order_crate_lines').delete().eq('order_id', id);
-      await clients.adminClient.from('stock_transactions').delete().eq('order_id', id);
-      await clients.adminClient.from('payment_transactions').delete().eq('order_id', id);
-      await clients.adminClient.from('orders').delete().eq('id', id);
+      await del('crate_ledger', 'reference_order_id', id);
+      await del('order_crate_lines', 'order_id', id);
+      await del('stock_transactions', 'order_id', id);
+      await del('payment_transactions', 'order_id', id);
+      await del('orders', 'id', id);
     }
     for (final id in walletIds) {
-      await clients.adminClient.from('customer_wallets').delete().eq('id', id);
+      await del('customer_wallets', 'id', id);
     }
     for (final id in customerIds) {
-      await clients.adminClient.from('customers').delete().eq('id', id);
+      await del('customers', 'id', id);
     }
     for (final id in batchIds) {
-      await clients.adminClient.from('cost_batches').delete().eq('id', id);
+      await del('cost_batches', 'id', id);
     }
     for (final id in inventoryIds) {
-      await clients.adminClient.from('inventory').delete().eq('id', id);
+      await del('inventory', 'id', id);
     }
     for (final id in productIds) {
-      await clients.adminClient.from('products').delete().eq('id', id);
+      await del('products', 'id', id);
     }
     // products FK manufacturer_id → manufacturers, so drop manufacturers after.
     for (final id in manufacturerIds) {
-      await clients.adminClient.from('manufacturers').delete().eq('id', id);
+      await del('manufacturers', 'id', id);
     }
     if (storeId != null) {
-      await clients.adminClient.from('stores').delete().eq('id', storeId!);
+      await del('stores', 'id', storeId!);
     }
     // Restore the business's crate settings a crate scenario may have flipped.
     await clients.adminClient.from('businesses').update({
