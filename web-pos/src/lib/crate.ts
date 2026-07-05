@@ -8,6 +8,7 @@
 // the read/display side — the hide-don't-block surface and the empties summary
 // the cart + receipt show.
 
+import type { Operator } from './operator';
 import type { ProductWithStock } from './types';
 
 // Whether [type] is a business that uses empty-crate features — Bar or Beer/
@@ -27,6 +28,16 @@ export function businessTracksCrates(
   tracksEmptyCrates: boolean,
 ): boolean {
   return isCrateBusiness(type) && tracksEmptyCrates;
+}
+
+// Whether THIS operator's business shows crate surfaces — the crate gate read off
+// the session operator, bundled so the checkout components (Cart, CheckoutDialog)
+// don't each repeat the same `business?.type` / `?? false` unpacking.
+export function operatorTracksCrates(operator: Operator | null): boolean {
+  return businessTracksCrates(
+    operator?.business?.type,
+    operator?.business?.tracksEmptyCrates ?? false,
+  );
 }
 
 // Whether a product carries a returnable crate deposit — a bottle with empties

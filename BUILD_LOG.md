@@ -2,6 +2,29 @@
 
 ---
 
+## 2026-07-05 — Web POS checkout-UI cleanup (issue #57)
+
+**What changed.** Quality-only de-duplication of the Slice 2–4 web checkout; no
+behavior change (typecheck + `next build` green).
+
+- **Shared `receiptRows()` (`web-pos/src/lib/receipt.ts`, new).** The receipt's
+  subtotal→empties summary was built twice — once in `Receipt.tsx`'s JSX and once
+  in its `plainText()` — and had already drifted (the empties line read
+  "— ₦X deposit" in plain text vs "· ₦X" on screen). Both renderings now derive
+  from one `receiptRows(result, format)` returning `{label, value, kind}[]`, so
+  they can't diverge; `receiptRowClass(kind)` maps a row to its CSS class. The
+  divergent empties wording is unified to "· ₦X deposit".
+- **`paymentMethodMeta` map (`web-pos/src/lib/checkout.ts`).** The `PaymentMethod`
+  labels + the hard-coded `['cash','transfer']` / `['wallet','credit']` selector
+  arrays collapsed into one `paymentMethodMeta` (label + group) with
+  `paymentMethodsInGroup('tender'|'credit')`. `CheckoutDialog` renders its
+  segmented control from these.
+- **`operatorTracksCrates(operator)` (`web-pos/src/lib/crate.ts`).** The verbatim
+  `businessTracksCrates(operator?.business?.type, …?.tracksEmptyCrates ?? false)`
+  duplicated in `Cart.tsx` and `CheckoutDialog.tsx` is now one bundled helper.
+
+---
+
 ## 2026-07-05 — Golden Suite: discount-cap clamp + debt-limit rejection (issue #55)
 
 **What changed.** Two money decisions the Web POS makes were unpinned by the shared

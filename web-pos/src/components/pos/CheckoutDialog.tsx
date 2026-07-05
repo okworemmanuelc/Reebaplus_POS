@@ -7,10 +7,12 @@ import { useCurrency } from '@/hooks/useCurrency';
 import {
   checkoutOrder,
   lineUnitPriceKobo,
+  paymentMethodMeta,
+  paymentMethodsInGroup,
   type CheckoutResult,
   type PaymentMethod,
 } from '@/lib/checkout';
-import { businessTracksCrates, crateSummary } from '@/lib/crate';
+import { crateSummary, operatorTracksCrates } from '@/lib/crate';
 import { useCart } from './CartProvider';
 
 // Checkout for all Slice 3 paths. Walk-in ⇒ Cash/Transfer only (Slice 2). With a
@@ -110,10 +112,7 @@ export function CheckoutDialog({
       // Empty-crate summary for the receipt (Slice 4): the returnable crates the
       // customer takes and their deposit value, shown only when the business
       // tracks crates. The crate LEDGER itself was posted server-side by the RPC.
-      const crateOn = businessTracksCrates(
-        operator?.business?.type,
-        operator?.business?.tracksEmptyCrates ?? false,
-      );
+      const crateOn = operatorTracksCrates(operator);
       const empties = crateSummary(lines, crateOn);
       const crate = {
         crateCount: empties.crates,
@@ -130,13 +129,6 @@ export function CheckoutDialog({
       setSubmitting(false);
     }
   }
-
-  const methodLabel: Record<PaymentMethod, string> = {
-    cash: 'Cash',
-    transfer: 'Transfer',
-    wallet: 'Pay with Credit',
-    credit: 'Credit Sale',
-  };
 
   const completeLabel =
     method === 'wallet'
@@ -181,25 +173,25 @@ export function CheckoutDialog({
           <div className="field">
             <span className="field__label">Payment method</span>
             <div className="segmented segmented--wrap" role="group" aria-label="Payment method">
-              {(['cash', 'transfer'] as PaymentMethod[]).map((m) => (
+              {paymentMethodsInGroup('tender').map((m) => (
                 <button
                   key={m}
                   type="button"
                   className={`segmented__opt${method === m ? ' segmented__opt--active' : ''}`}
                   onClick={() => setMethod(m)}
                 >
-                  {methodLabel[m]}
+                  {paymentMethodMeta[m].label}
                 </button>
               ))}
               {customer &&
-                (['wallet', 'credit'] as PaymentMethod[]).map((m) => (
+                paymentMethodsInGroup('credit').map((m) => (
                   <button
                     key={m}
                     type="button"
                     className={`segmented__opt${method === m ? ' segmented__opt--active' : ''}`}
                     onClick={() => setMethod(m)}
                   >
-                    {methodLabel[m]}
+                    {paymentMethodMeta[m].label}
                   </button>
                 ))}
             </div>

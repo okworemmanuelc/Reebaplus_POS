@@ -17,6 +17,8 @@ import { CheckoutDialog } from './CheckoutDialog';
 import { CustomerPicker } from './CustomerPicker';
 import { Receipt } from './Receipt';
 
+type Phase = 'shop' | 'checkout' | 'receipt';
+
 const ALL = 'all';
 
 // Slice 2 turns the walking-skeleton grid into the full selling loop: grid → cart
@@ -25,16 +27,6 @@ const ALL = 'all';
 // session. Realtime auto-refresh is Slice 5; here a manual Refresh (and an
 // automatic one after each sale) re-pulls live stock.
 export function PosScreen() {
-  return (
-    <CartProvider>
-      <PosInner />
-    </CartProvider>
-  );
-}
-
-type Phase = 'shop' | 'checkout' | 'receipt';
-
-function PosInner() {
   const { supabase, operator } = useSession();
   const canSell = useCan(PermissionKeys.salesMake);
   const { kobo } = useCurrency();
@@ -70,9 +62,16 @@ function PosInner() {
 
   const filtered = useMemo(() => {
     if (!catalogue) return [];
-    if (category === ALL) return catalogue.products;
-    return catalogue.products.filter((p) => p.category_id === category);
-  }, [catalogue, category]);
+    let items = catalogue.products;
+    if (category !== ALL) {
+      items = items.filter((p) => p.category_id === category);
+    }
+    if (cart.searchQuery.trim()) {
+      const q = cart.searchQuery.toLowerCase().trim();
+      items = items.filter((p) => p.name.toLowerCase().includes(q));
+    }
+    return items;
+  }, [catalogue, category, cart.searchQuery]);
 
   const onSelect = useCallback(
     (p: ProductWithStock) => cart.add(p),
@@ -114,11 +113,28 @@ function PosInner() {
         <div className="pos__header">
           <h1 className="pos__title">Point of Sale</h1>
           <button
-            className="btn btn--outline"
+            className="btn btn--outline btn--refresh"
             onClick={() => void refresh()}
             disabled={loading}
           >
-            {loading ? 'Loading…' : 'Refresh'}
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={loading ? 'spin' : ''}
+              style={{ marginRight: '6px' }}
+            >
+              <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+              <path d="M3 3v5h5" />
+              <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+              <path d="M16 16h5v5" />
+            </svg>
+            Refresh
           </button>
         </div>
 

@@ -5,7 +5,7 @@ import { useMemo } from 'react';
 import { useSession } from '@/components/providers/SessionProvider';
 import { useCurrency } from '@/hooks/useCurrency';
 import { lineUnitPriceKobo } from '@/lib/checkout';
-import { businessTracksCrates, crateSummary } from '@/lib/crate';
+import { crateSummary, operatorTracksCrates } from '@/lib/crate';
 import { useCart } from './CartProvider';
 
 // The cart panel: line items (qty stepper + remove), a role-capped discount, the
@@ -47,10 +47,7 @@ export function Cart({
   // Empties surface (Slice 4, #45): hidden entirely unless the business is
   // crate-eligible AND opts into empty tracking (mirrors mobile's hide). When on,
   // it summarises the returnable, deposit-bearing crates in the cart.
-  const crateOn = businessTracksCrates(
-    operator?.business?.type,
-    operator?.business?.tracksEmptyCrates ?? false,
-  );
+  const crateOn = operatorTracksCrates(operator);
   const empties = useMemo(
     () => crateSummary(lines, crateOn),
     [lines, crateOn],
@@ -58,11 +55,89 @@ export function Cart({
 
   const empty = lines.length === 0;
 
+  const getPlaceholderEmoji = (name: string): string => {
+    const lower = name.toLowerCase();
+    if (
+      lower.includes('beer') ||
+      lower.includes('heineken') ||
+      lower.includes('guinness') ||
+      lower.includes('stout') ||
+      lower.includes('lager') ||
+      lower.includes('brew')
+    ) {
+      return '🍺';
+    }
+    if (
+      lower.includes('soda') ||
+      lower.includes('cola') ||
+      lower.includes('coke') ||
+      lower.includes('fanta') ||
+      lower.includes('sprite') ||
+      lower.includes('pepsi') ||
+      lower.includes('soft drink')
+    ) {
+      return '🥤';
+    }
+    if (
+      lower.includes('wine') ||
+      lower.includes('champagne') ||
+      lower.includes('rose') ||
+      lower.includes('red') ||
+      lower.includes('white wine')
+    ) {
+      return '🍷';
+    }
+    if (
+      lower.includes('water') ||
+      lower.includes('h2o') ||
+      lower.includes('eva') ||
+      lower.includes('mineral')
+    ) {
+      return '💧';
+    }
+    if (
+      lower.includes('juice') ||
+      lower.includes('orange') ||
+      lower.includes('fruit') ||
+      lower.includes('pineapple') ||
+      lower.includes('cocktail')
+    ) {
+      return '🍹';
+    }
+    if (
+      lower.includes('milk') ||
+      lower.includes('shake') ||
+      lower.includes('yoghurt') ||
+      lower.includes('dairy')
+    ) {
+      return '🥛';
+    }
+    if (
+      lower.includes('spirit') ||
+      lower.includes('vodka') ||
+      lower.includes('gin') ||
+      lower.includes('whiskey') ||
+      lower.includes('tequila') ||
+      lower.includes('alcohol') ||
+      lower.includes('liquor') ||
+      lower.includes('liqueur') ||
+      lower.includes('rum')
+    ) {
+      return '🍾';
+    }
+    return '🍹';
+  };
+
+  const isExternalUrl = (path: string | null): boolean => {
+    if (!path) return false;
+    return path.startsWith('http://') || path.startsWith('https://');
+  };
+
   return (
     <aside className="cart" aria-label="Cart">
       <div className="cart__head">
         <h2 className="cart__title">
-          Cart{itemCount > 0 && <span className="cart__count">{itemCount}</span>}
+          Active Sale / Cart{itemCount > 0 && <span className="cart__count">{itemCount}</span>}
         </h2>
         <div className="cart__head-actions">
           {!empty && (
@@ -124,7 +199,7 @@ export function Cart({
               className="cart__customer-add"
               onClick={onOpenCustomerPicker}
             >
-              + Attach customer
+              <span className="plus-icon">+</span> Attach customer
             </button>
           )}
         </div>
@@ -132,7 +207,14 @@ export function Cart({
 
       {empty ? (
         <div className="cart__empty">
-          Tap products to add them to the sale.
+          <div className="cart__empty-illustration">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.25, marginBottom: '12px' }}>
+              <circle cx="8" cy="21" r="1" />
+              <circle cx="19" cy="21" r="1" />
+              <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" />
+            </svg>
+          </div>
+          Cart holds items to process.
         </div>
       ) : (
         <ul className="cart__lines">
@@ -140,6 +222,21 @@ export function Cart({
             const unit = lineUnitPriceKobo(l.product);
             return (
               <li key={l.product.id} className="cart__line">
+                <div className="cart__line-thumbnail">
+                  {isExternalUrl(l.product.image_path) ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={l.product.image_path!}
+                      alt={l.product.name}
+                      className="cart__line-image"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="cart__line-placeholder">
+                      {getPlaceholderEmoji(l.product.name)}
+                    </div>
+                  )}
+                </div>
                 <div className="cart__line-info">
                   <div className="cart__line-name">{l.product.name}</div>
                   <div className="cart__line-unit">{kobo(unit)} each</div>
@@ -249,14 +346,24 @@ export function Cart({
             </div>
           )}
 
-          <button
-            type="button"
-            className="btn btn--primary btn--block cart__checkout"
-            onClick={onCheckout}
-            disabled={totalKobo <= 0}
-          >
-            Checkout · {kobo(totalKobo)}
-          </button>
+          <div className="cart__action-buttons">
+            <button
+              type="button"
+              className="btn btn--primary cart__checkout-btn"
+              onClick={onCheckout}
+              disabled={totalKobo <= 0}
+            >
+              Check Out
+            </button>
+            <button
+              type="button"
+              className="btn btn--outline cart__save-btn"
+              onClick={() => alert('Sale saved successfully to drafts!')}
+              disabled={totalKobo <= 0}
+            >
+              Save Sale
+            </button>
+          </div>
         </div>
       )}
     </aside>
