@@ -4,6 +4,7 @@ import { useSession } from '@/components/providers/SessionProvider';
 import { LoginForm } from '@/components/auth/LoginForm';
 import { AppShell } from '@/components/shell/AppShell';
 import { PosScreen } from '@/components/pos/PosScreen';
+import { CartProvider } from '@/components/pos/CartProvider';
 
 // App entry. The signed-in Supabase session is the Operator (ADR 0011): while it
 // resolves we show a spinner; signed-out shows the sign-in screen; signed-in
@@ -31,9 +32,11 @@ export default function Home() {
   }
 
   return (
-    <AppShell>
-      <PosScreen />
-    </AppShell>
+    <CartProvider>
+      <AppShell>
+        <PosScreen />
+      </AppShell>
+    </CartProvider>
   );
 }
 

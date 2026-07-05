@@ -32,6 +32,7 @@ interface CartContextValue {
   // The registered customer attached to the sale (Slice 3), or null for a
   // walk-in. Drives the credit/wallet checkout paths and the debt-limit guard.
   customer: CustomerWithBalance | null;
+  searchQuery: string;
   add: (product: ProductWithStock) => void;
   setQuantity: (productId: string, quantity: number) => void;
   remove: (productId: string) => void;
@@ -39,6 +40,7 @@ interface CartContextValue {
   attachCustomer: (customer: CustomerWithBalance) => void;
   detachCustomer: () => void;
   clear: () => void;
+  setSearchQuery: (query: string) => void;
 }
 
 const CartContext = createContext<CartContextValue | null>(null);
@@ -47,6 +49,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [lines, setLines] = useState<CartLine[]>([]);
   const [discountKobo, setDiscountRaw] = useState(0);
   const [customer, setCustomer] = useState<CustomerWithBalance | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const add = useCallback((product: ProductWithStock) => {
     setLines((prev) => {
@@ -118,6 +121,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       subtotalKobo,
       totalKobo: Math.max(0, subtotalKobo - cappedDiscount),
       customer,
+      searchQuery,
       add,
       setQuantity,
       remove,
@@ -125,6 +129,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       attachCustomer,
       detachCustomer,
       clear,
+      setSearchQuery,
     }),
     [
       lines,
@@ -133,6 +138,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       subtotalKobo,
       cappedDiscount,
       customer,
+      searchQuery,
       add,
       setQuantity,
       remove,
