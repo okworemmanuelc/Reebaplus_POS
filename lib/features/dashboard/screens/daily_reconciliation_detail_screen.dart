@@ -105,6 +105,10 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
           ],
           SizedBox(height: context.spacingM),
           _shrinkageCard(context, theme, d, retail: !isCeo),
+          if (isCeo && d.hasStockFlow) ...[
+            SizedBox(height: context.spacingM),
+            _stockFlowCard(context, theme, d),
+          ],
           SizedBox(height: context.spacingM),
           _stockCard(context, theme, d),
           if (!isCeo) ...[
@@ -288,6 +292,70 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
         Text(
           'Expected cash movement from recorded cash tenders — business-wide, '
           'not a counted drawer.',
+          style: context.bodySmall.copyWith(color: theme.hintColor),
+        ),
+      ],
+    );
+  }
+
+  /// Stock reconciliation as a cost-valued flow equation (ADR 0014): Opening +
+  /// Goods received − COGS − Damages − Expired (± Other) = Expected closing (the
+  /// perpetual system figure), then Variance = Physical count − Expected. Every
+  /// figure is at CURRENT per-product cost (the stated basis — cost is
+  /// time-varying under FIFO). CEO-only (cost wall §25.3).
+  Widget _stockFlowCard(BuildContext context, ThemeData theme, ReconData d) {
+    final successColor = theme.extension<AppSemanticColors>()!.success;
+    final dangerColor = theme.colorScheme.error;
+    final variance = d.stockVarianceKobo;
+    final hasVariance = d.hasStockCount && variance != 0;
+    final varianceColor = variance >= 0 ? successColor : dangerColor;
+    return _card(
+      context,
+      theme,
+      'Stock reconciliation (at cost)',
+      FontAwesomeIcons.scaleBalanced.data,
+      Colors.blueAccent,
+      [
+        _line(context, theme, 'Opening stock',
+            formatCurrency(d.stockOpeningKobo / 100.0)),
+        _line(context, theme, 'Goods received',
+            '+ ${formatCurrency(d.stockReceivedKobo / 100.0)}'),
+        _line(context, theme, 'Cost of goods sold',
+            '− ${formatCurrency(d.stockCogsKobo / 100.0)}'),
+        _line(context, theme, 'Damages',
+            '− ${formatCurrency(d.stockDamagesKobo / 100.0)}'),
+        _line(context, theme, 'Expired',
+            '− ${formatCurrency(d.stockExpiredKobo / 100.0)}'),
+        if (d.stockOtherMovementsKobo != 0)
+          _line(
+            context,
+            theme,
+            'Other movements',
+            '${d.stockOtherMovementsKobo >= 0 ? '+ ' : '− '}'
+                '${formatCurrency(d.stockOtherMovementsKobo.abs() / 100.0)}',
+          ),
+        _divider(theme),
+        _line(context, theme, 'Expected closing',
+            formatCurrency(d.stockExpectedClosingKobo / 100.0),
+            strong: true),
+        if (d.hasStockCount) ...[
+          _line(
+            context,
+            theme,
+            'Variance (counted − expected)',
+            '${variance >= 0 ? '+ ' : '− '}'
+                '${formatCurrency(variance.abs() / 100.0)}',
+            strong: true,
+            color: hasVariance ? varianceColor : null,
+          ),
+        ],
+        const SizedBox(height: 6),
+        Text(
+          d.hasStockCount
+              ? 'Valued at current cost. Variance is the counted-vs-expected gap '
+                    'the recorded flows didn\'t explain.'
+              : 'Valued at current cost. No stock count in this period, so there '
+                    'is no variance to reconcile against.',
           style: context.bodySmall.copyWith(color: theme.hintColor),
         ),
       ],
@@ -755,6 +823,15 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
         ['Expenses paid (cash)', money(d.cashExpensesKobo)],
         ['Paid to suppliers (cash)', money(d.cashSupplierPaidKobo)],
         ['Net cash movement', money(d.netCashMovementKobo)],
+        // Stock reconciliation (at cost) — mirrors _stockFlowCard.
+        ['Opening stock (at cost)', money(d.stockOpeningKobo)],
+        ['Goods received (at cost)', money(d.stockReceivedKobo)],
+        ['COGS (at current cost)', money(d.stockCogsKobo)],
+        ['Damages (stock, at cost)', money(d.stockDamagesKobo)],
+        ['Expired (at cost)', money(d.stockExpiredKobo)],
+        ['Other stock movements (at cost)', money(d.stockOtherMovementsKobo)],
+        ['Expected closing (at cost)', money(d.stockExpectedClosingKobo)],
+        ['Stock variance (counted − expected)', money(d.stockVarianceKobo)],
         ['Stock shortages (units)', '${d.shortageUnits}'],
       ] else ...[
         ['Stock shortages (units)', '${d.shortageUnits}'],

@@ -24,9 +24,15 @@ design in **ADR 0014**. Two issues off `main`:
     `OrdersDao.watchAllPaymentTransactions` + `allPaymentTransactionsProvider`;
     CEO-only card + CSV. `payment_transactions` = unified cash ledger; supplier cash
     from supplier_ledger; no double-count.
-  - ⏳ **Slice 2 — stock flow-equation card.** Decided: value the flow at **current
-    cost throughout** (ties out to current inventory-at-cost); expired broken out
-    from damages. Source from `stock_transactions` (has `movementType` + `locationId`).
+  - ✅ **Slice 2 — stock flow-equation card (this branch).** CEO-only stock
+    reconciliation: Opening + Goods received − COGS − Damages − Expired (± Other)
+    = Expected closing → Variance = Physical − Expected. Valued at **current cost
+    throughout**; opening/expected-closing reconstructed by **rewinding the
+    `stock_transactions` ledger from current on-hand** (ties out by construction,
+    handles historical period-end). Expired split from damages via
+    `adjustmentId → reason` (`isExpiredReason`). `StockLedgerDao.watchAllTransactions`
+    + `allStockTransactionsProvider`; 7 `stock*Kobo` fields + `stockVarianceKobo`
+    / `hasStockFlow` getters; `_stockFlowCard` + CSV. 14 recon tests green.
   - ⏳ **Slice 3 — integrity flag.** Flow-reconciliation, no new tables; flags
     P&L-profit vs measured-asset-change gap (stock-count variance as the signal).
 

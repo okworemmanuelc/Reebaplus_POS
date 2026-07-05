@@ -112,6 +112,29 @@ bool isDamageReason(String reason) {
       r.startsWith('broken');
 }
 
+/// A damage/loss reason that specifically names expiry (spoilage past date).
+/// The ADR 0014 stock flow-equation card breaks **Expired** out of Damages as
+/// its own line. Record Damages stamps `damage:expired` (`stock_count_screen`);
+/// a Manager/CEO free-text removal stores "Expired". Both contain "expired", so
+/// match on that, case-insensitively. Callers pair this with [isDamageReason]:
+/// a non-expired damage is `isDamageReason(r) && !isExpiredReason(r)`.
+bool isExpiredReason(String reason) => reason.toLowerCase().contains('expired');
+
+/// A stock-increment reason that names a goods RECEIPT (stock coming in), for
+/// the ADR 0014 flow-equation "Goods received" line. Both Receive Stock and Add
+/// Product opening stock route through `adjustStock` with the reason "Stock
+/// received"; a few synonyms are accepted for robustness. Count reconciliations
+/// ("Daily stock count adjustment") and manual removals are deliberately NOT
+/// receipts — they fall to the "other movements" residual.
+bool isReceiptReason(String reason) {
+  final r = reason.toLowerCase();
+  return r.contains('received') ||
+      r.contains('receipt') ||
+      r.contains('restock') ||
+      r.contains('opening') ||
+      r.contains('initial');
+}
+
 /// §17.2 crate-aware damages — FULL crate lost. When a damaged tracked-bottle
 /// product also forfeits its refundable crate deposit because the full crate
 /// (item + its container) was lost, Record Damages appends this suffix to the
@@ -285,6 +308,13 @@ class ReconData {
     required this.inventoryOnHandKobo,
     required this.uncostedInventoryItems,
     required this.surplusCostKobo,
+    required this.stockOpeningKobo,
+    required this.stockReceivedKobo,
+    required this.stockCogsKobo,
+    required this.stockDamagesKobo,
+    required this.stockExpiredKobo,
+    required this.stockOtherMovementsKobo,
+    required this.stockExpectedClosingKobo,
     required this.topItems,
     required this.manufacturerEmpties,
   });
@@ -343,6 +373,27 @@ class ReconData {
   final int inventoryOnHandKobo;
   final int uncostedInventoryItems;
   final int surplusCostKobo;
+
+  // ── Stock flow-equation card (ADR 0014, at current cost) ─────────────────
+  // Opening@cost + Goods received − COGS − Damages − Expired (± Other) =
+  // Expected closing (the perpetual SYSTEM figure), then Variance = Physical
+  // count − Expected. Reconstructed from the `stock_transactions` ledger by
+  // rewinding recorded deltas from the current on-hand figure, so the equation
+  // ties out by construction (see [computeReconData]). Every term is valued at
+  // the product's CURRENT buying price — cost is time-varying under FIFO (ADR
+  // 0005) and only current stock is valued today, so this states a current-cost
+  // basis rather than pretending to historical-cost precision. CEO-only (§25.3).
+  final int stockOpeningKobo; // system stock at period start × current cost
+  final int stockReceivedKobo; // goods received in period × current cost
+  final int stockCogsKobo; // units sold in period × current cost
+  final int stockDamagesKobo; // non-expired damages in period × current cost
+  final int stockExpiredKobo; // expired removals in period × current cost
+  /// Signed residual: transfers, count reconciliations, and any adjustment not
+  /// classified as a sale / receipt / damage / expiry. Keeps the flow equation
+  /// tying to the system figure without silently folding these into opening.
+  final int stockOtherMovementsKobo;
+  final int stockExpectedClosingKobo; // system stock at period end × current cost
+
   final List<({String name, int qty})> topItems;
   final List<({String manufacturerName, int count, int valueKobo})> manufacturerEmpties;
 
@@ -362,6 +413,37 @@ class ReconData {
   /// there is no opening float to add it to (Hard Rule #8).
   int get netCashMovementKobo => cashInKobo - cashOutKobo;
   bool get hasCashActivity => cashInKobo != 0 || cashOutKobo != 0;
+
+  // ── Stock flow-equation getters (ADR 0014) ───────────────────────────────
+  /// Expected closing rebuilt from the flow lines the card renders. Equal to
+  /// [stockExpectedClosingKobo] by construction (opening is the rewind of the
+  /// period's deltas from the system closing), so displaying both proves the
+  /// equation ties out.
+  int get stockDerivedClosingKobo =>
+      stockOpeningKobo +
+      stockReceivedKobo -
+      stockCogsKobo -
+      stockDamagesKobo -
+      stockExpiredKobo +
+      stockOtherMovementsKobo;
+
+  /// Variance = Physical count − Expected closing, valued at current cost:
+  /// a surplus (physical over system) is positive, a shortage negative. This is
+  /// the count discrepancy the recorded flows did NOT explain — the independent
+  /// signal the closing report surfaces. Uses the same count figures as the
+  /// stock audit (`surplus`/`shortage` at cost). Meaningful only when a physical
+  /// count exists in the period ([hasStockCount]).
+  int get stockVarianceKobo => surplusCostKobo - shortageCostKobo;
+
+  /// Whether any stock movement or on-hand value exists to render the card.
+  bool get hasStockFlow =>
+      stockOpeningKobo != 0 ||
+      stockExpectedClosingKobo != 0 ||
+      stockReceivedKobo != 0 ||
+      stockCogsKobo != 0 ||
+      stockDamagesKobo != 0 ||
+      stockExpiredKobo != 0 ||
+      stockOtherMovementsKobo != 0;
 
   /// Net result for the period (flow). Folds the inventory-on-hand asset and the
   /// supplier flows (goods received / paid to suppliers / refunds) that used to
@@ -424,6 +506,8 @@ ReconData computeReconData(
       ref.watch(allSupplierLedgerEntriesProvider).valueOrNull ?? const [];
   final payments =
       ref.watch(allPaymentTransactionsProvider).valueOrNull ?? const [];
+  final stockTxns =
+      ref.watch(allStockTransactionsProvider).valueOrNull ?? const [];
   final counts = ref.watch(allStockCountsProvider).valueOrNull ?? const [];
   // Inventory-on-hand must honour the active-store scope like every other
   // figure here (§12.1): pass the locked store so a single-store view doesn't
@@ -537,6 +621,91 @@ ReconData computeReconData(
     } else {
       inventoryOnHandKobo += p.totalStock * p.product.buyingPriceKobo;
     }
+  }
+
+  // ── Stock flow-equation at current cost (ADR 0014) ───────────────────────
+  // Opening@cost + Goods received − COGS − Damages − Expired (± Other) =
+  // Expected closing (the perpetual SYSTEM figure), then Variance = Physical −
+  // Expected (the stock-count discrepancy). Opening and expected-closing are
+  // reconstructed by rewinding the recorded `stock_transactions` deltas from
+  // the current on-hand figure, so the equation ties to the system by
+  // construction. Every term is valued at the product's CURRENT buying price —
+  // cost is time-varying under FIFO (ADR 0005) and only current stock is valued
+  // today, so this states a current-cost basis rather than faking historical
+  // precision. Store scope is applied per row's `locationId` like every figure
+  // here. Receipts (Receive Stock / opening stock) and manual adjustments share
+  // movementType 'adjustment', so they're split by the linked reason; anything
+  // unclassified (transfers, count reconciliations) is kept in an "other
+  // movements" residual so nothing is silently folded into opening.
+  final reasonByAdjustmentId = {for (final a in adjustments) a.id: a.reason};
+  final currentUnits = {
+    for (final p in productsWS) p.product.id: p.totalStock,
+  };
+  final afterEndUnits = <String, int>{}; // deltas at/after period end (rewind)
+  final periodDelta = <String, int>{}; // net delta within the period
+  final receivedUnits = <String, int>{};
+  final soldUnits = <String, int>{};
+  final damagedUnits = <String, int>{};
+  final expiredUnits = <String, int>{};
+  final otherDelta = <String, int>{}; // signed residual within the period
+  void add(Map<String, int> m, String k, int v) => m[k] = (m[k] ?? 0) + v;
+  for (final t in stockTxns) {
+    if (t.voidedAt != null || !inScope(t.locationId)) continue;
+    final pid = t.productId;
+    final delta = t.quantityDelta;
+    if (endExclusive != null && !t.createdAt.isBefore(endExclusive)) {
+      add(afterEndUnits, pid, delta);
+    }
+    if (!inSpan(t.createdAt)) continue;
+    add(periodDelta, pid, delta);
+    final mt = t.movementType;
+    if (mt == 'sale' || mt == 'return') {
+      // A return (stock restored) nets against units sold.
+      add(soldUnits, pid, -delta);
+    } else if (mt == 'received' || mt == 'restock') {
+      add(receivedUnits, pid, delta);
+    } else if (mt == 'adjustment' || mt == 'adjusted') {
+      final reason = t.adjustmentId == null
+          ? ''
+          : (reasonByAdjustmentId[t.adjustmentId] ?? '');
+      if (isExpiredReason(reason)) {
+        add(expiredUnits, pid, -delta);
+      } else if (isDamageReason(reason)) {
+        add(damagedUnits, pid, -delta);
+      } else if (isReceiptReason(reason)) {
+        add(receivedUnits, pid, delta);
+      } else {
+        add(otherDelta, pid, delta);
+      }
+    } else {
+      // transfer_in / transfer_out / anything unclassified
+      add(otherDelta, pid, delta);
+    }
+  }
+  var stockOpeningKobo = 0;
+  var stockReceivedKobo = 0;
+  var stockCogsKobo = 0;
+  var stockDamagesKobo = 0;
+  var stockExpiredKobo = 0;
+  var stockOtherMovementsKobo = 0;
+  var stockExpectedClosingKobo = 0;
+  final flowPids = <String>{
+    ...currentUnits.keys,
+    ...periodDelta.keys,
+    ...afterEndUnits.keys,
+  };
+  for (final pid in flowPids) {
+    final cost = productById[pid]?.buyingPriceKobo ?? 0;
+    if (cost <= 0) continue; // uncosted units carry no value (P&L footnote)
+    final closing = (currentUnits[pid] ?? 0) - (afterEndUnits[pid] ?? 0);
+    final opening = closing - (periodDelta[pid] ?? 0);
+    stockOpeningKobo += opening * cost;
+    stockExpectedClosingKobo += closing * cost;
+    stockReceivedKobo += (receivedUnits[pid] ?? 0) * cost;
+    stockCogsKobo += (soldUnits[pid] ?? 0) * cost;
+    stockDamagesKobo += (damagedUnits[pid] ?? 0) * cost;
+    stockExpiredKobo += (expiredUnits[pid] ?? 0) * cost;
+    stockOtherMovementsKobo += (otherDelta[pid] ?? 0) * cost;
   }
 
   // ── Expenses (approved, in span, in scope) ───────────────────────────────
@@ -772,6 +941,13 @@ ReconData computeReconData(
     inventoryOnHandKobo: inventoryOnHandKobo,
     uncostedInventoryItems: uncostedInventoryItems,
     surplusCostKobo: surplusCostKobo,
+    stockOpeningKobo: stockOpeningKobo,
+    stockReceivedKobo: stockReceivedKobo,
+    stockCogsKobo: stockCogsKobo,
+    stockDamagesKobo: stockDamagesKobo,
+    stockExpiredKobo: stockExpiredKobo,
+    stockOtherMovementsKobo: stockOtherMovementsKobo,
+    stockExpectedClosingKobo: stockExpectedClosingKobo,
     topItems: topItems,
     manufacturerEmpties: manufacturerEmpties,
   );

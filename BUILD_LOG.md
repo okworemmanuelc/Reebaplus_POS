@@ -2,6 +2,54 @@
 
 ---
 
+## 2026-07-05 — Closing report: stock flow-equation card (issue #72, slice 2)
+
+**What changed.** Second slice of the closing-report enhancement (ADR 0014 §①):
+a CEO-only **stock reconciliation flow-equation** card on the Daily
+Reconciliation — Opening + Goods received − COGS − Damages − Expired (± Other) =
+**Expected closing** (the perpetual system figure), then **Variance = Physical
+count − Expected**. Values the whole equation at **current per-product cost**.
+
+- **Cost basis (the hard input, resolved).** Opening stock *as of a past date*
+  is genuinely hard: cost is time-varying under FIFO (ADR 0005) and only current
+  stock is valued today. Rather than fake historical precision, every term is
+  valued at the product's **current** buying price, and opening / expected-closing
+  are reconstructed by **rewinding the recorded `stock_transactions` deltas from
+  the current on-hand figure** (`current − Σ deltas after period end` = closing;
+  `closing − Σ period deltas` = opening). Because opening is that rewind, the
+  equation **ties out to the system figure by construction** — stated basis, not
+  faked precision.
+- **Expired split from damages.** Record Damages and free-text removals both put
+  expiry in `stock_adjustments.reason` (`damage:expired` / "Expired"), reached
+  from the ledger row via `adjustmentId`. New `isExpiredReason` (contains
+  "expired") breaks Expired onto its own line; non-expired damage stays Damages.
+  The P&L "Damages (at cost)" line is deliberately **left unchanged** (still
+  folds expiry) — this split is scoped to the stock card.
+- **Classification.** From `stock_transactions` (store-scoped by `locationId`,
+  non-voided): `sale`/`return` → COGS (returns net against it); receipts (reason
+  "Stock received", both Receive Stock and Add Product opening) → Goods received;
+  `adjustment` reasons → Expired / Damages / receipt; everything else (transfers,
+  "Daily stock count adjustment", unclassified) → an **Other movements** residual
+  so nothing is silently folded into opening. Variance reuses the stock-count
+  surplus/shortage-at-cost figures (`surplus − shortage`), shown only when a
+  count exists.
+- **New plumbing.** `StockLedgerDao.watchAllTransactions()` (raw ledger rows, no
+  regen) + `allStockTransactionsProvider` (`businessScopedStream`; passes the
+  provider-ban test). `ReconData` gains `stockOpeningKobo` / `stockReceivedKobo` /
+  `stockCogsKobo` / `stockDamagesKobo` / `stockExpiredKobo` /
+  `stockOtherMovementsKobo` / `stockExpectedClosingKobo` fields +
+  `stockDerivedClosingKobo` / `stockVarianceKobo` / `hasStockFlow` getters.
+- **UI/CSV.** New CEO-only `_stockFlowCard` (scale-balanced icon) between the
+  shrinkage card and the stock audit, shown only when `hasStockFlow`; CSV export
+  gains the mirroring rows.
+- **Tests.** 4 flow-equation getter cases added to `recon_data_test.dart` (14
+  total green); `flutter analyze` clean; provider-ban + business-scoped-stream
+  tests green.
+
+Remaining for #72: the integrity flag (slice 3).
+
+---
+
 ## 2026-07-05 — Closing report: cash-flow summary (issue #72, slice 1)
 
 **What changed.** First slice of the closing-report enhancement (ADR 0014 §②):

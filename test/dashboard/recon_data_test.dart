@@ -17,6 +17,15 @@ ReconData recon({
   int cashRefundsKobo = 0,
   int cashExpensesKobo = 0,
   int cashSupplierPaidKobo = 0,
+  int shortageCostKobo = 0,
+  int surplusCostKobo = 0,
+  int stockOpeningKobo = 0,
+  int stockReceivedKobo = 0,
+  int stockCogsKobo = 0,
+  int stockDamagesKobo = 0,
+  int stockExpiredKobo = 0,
+  int stockOtherMovementsKobo = 0,
+  int stockExpectedClosingKobo = 0,
 }) {
   return ReconData(
     totalRevenueKobo: costedRevenueKobo,
@@ -46,7 +55,7 @@ ReconData recon({
     shortageUnits: 0,
     surplusCount: 0,
     surplusUnits: 0,
-    shortageCostKobo: 0,
+    shortageCostKobo: shortageCostKobo,
     shortageRetailKobo: 0,
     shortages: const [],
     goodsReceivedKobo: 0,
@@ -58,7 +67,14 @@ ReconData recon({
     supplierPayableKobo: 0,
     inventoryOnHandKobo: 0,
     uncostedInventoryItems: 0,
-    surplusCostKobo: 0,
+    surplusCostKobo: surplusCostKobo,
+    stockOpeningKobo: stockOpeningKobo,
+    stockReceivedKobo: stockReceivedKobo,
+    stockCogsKobo: stockCogsKobo,
+    stockDamagesKobo: stockDamagesKobo,
+    stockExpiredKobo: stockExpiredKobo,
+    stockOtherMovementsKobo: stockOtherMovementsKobo,
+    stockExpectedClosingKobo: stockExpectedClosingKobo,
     topItems: const [],
     manufacturerEmpties: const [],
   );
@@ -151,6 +167,52 @@ void main() {
       expect(recon().hasCashActivity, isFalse);
       expect(recon(cashSalesKobo: 1).hasCashActivity, isTrue);
       expect(recon(cashSupplierPaidKobo: 1).hasCashActivity, isTrue);
+    });
+  });
+
+  group('ReconData stock flow-equation (issue #72 slice 2, ADR 0014)', () {
+    test('derived closing = opening + received − cogs − damages − expired', () {
+      // Opening 100,000 + received 40,000 − COGS 55,000 − damages 3,000 −
+      // expired 2,000 = 80,000, and no other movements.
+      final d = recon(
+        stockOpeningKobo: 100000,
+        stockReceivedKobo: 40000,
+        stockCogsKobo: 55000,
+        stockDamagesKobo: 3000,
+        stockExpiredKobo: 2000,
+        stockExpectedClosingKobo: 80000,
+      );
+      expect(d.stockDerivedClosingKobo, 80000);
+      // Ties out to the perpetual system figure fed in independently.
+      expect(d.stockDerivedClosingKobo, d.stockExpectedClosingKobo);
+    });
+
+    test('other movements (transfers / count fixes) fold into the equation', () {
+      // A +5,000 transfer-in shifts derived closing up by 5,000.
+      final d = recon(
+        stockOpeningKobo: 100000,
+        stockReceivedKobo: 0,
+        stockCogsKobo: 20000,
+        stockOtherMovementsKobo: 5000,
+        stockExpectedClosingKobo: 85000,
+      );
+      expect(d.stockDerivedClosingKobo, 85000);
+      expect(d.stockDerivedClosingKobo, d.stockExpectedClosingKobo);
+    });
+
+    test('variance is surplus minus shortage (physical − expected, at cost)', () {
+      // Counted 2,000 over in one product, 5,000 short in another → net −3,000.
+      final d = recon(surplusCostKobo: 2000, shortageCostKobo: 5000);
+      expect(d.stockVarianceKobo, -3000);
+      // A pure surplus is positive.
+      expect(recon(surplusCostKobo: 1500).stockVarianceKobo, 1500);
+    });
+
+    test('hasStockFlow is false only when every flow line is zero', () {
+      expect(recon().hasStockFlow, isFalse);
+      expect(recon(stockExpectedClosingKobo: 1).hasStockFlow, isTrue);
+      expect(recon(stockReceivedKobo: 1).hasStockFlow, isTrue);
+      expect(recon(stockExpiredKobo: 1).hasStockFlow, isTrue);
     });
   });
 }

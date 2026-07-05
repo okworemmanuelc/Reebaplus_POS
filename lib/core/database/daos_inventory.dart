@@ -730,6 +730,18 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
         .watch();
   }
 
+  /// Every non-voided stock movement for the business (raw ledger rows, no
+  /// joins). Feeds the Daily Reconciliation stock flow-equation card (ADR
+  /// 0014): opening and expected-closing stock are reconstructed by rewinding
+  /// these deltas from the current on-hand figure, valued at current cost.
+  /// Store scope is applied in the report from each row's `locationId`.
+  Stream<List<StockTransactionData>> watchAllTransactions() {
+    return (select(stockTransactions)
+          ..where((s) => whereBusiness(s) & s.voidedAt.isNull())
+          ..orderBy([(s) => OrderingTerm.desc(s.createdAt)]))
+        .watch();
+  }
+
   // ── Filtered queries with joined product/user/store names ──────────
 
   JoinedSelectStatement<HasResultSet, dynamic> _buildFilteredQuery({
