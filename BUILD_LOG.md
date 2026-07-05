@@ -2,6 +2,30 @@
 
 ---
 
+## 2026-07-05 — Web POS Slice 6 code-review fixes (issue #48)
+
+**What changed.** Three fixes from the `/code-review` of PR #62; no new surface.
+Verified: web `tsc --noEmit` + `next build` green; the cost-0 no-clobber and the
+positive-cost update both re-checked live in a rolled-back CEO transaction.
+
+- **`receive_stock` cost-0 scalar clobber (correctness).** A receive line with cost 0
+  (an uncosted delivery) was unconditionally writing `products.buying_price_kobo = 0`,
+  wiping the product's existing scalar cost. Now `buying_price_kobo` only moves on a
+  costed line (`CASE WHEN v_buy > 0 THEN v_buy ELSE buying_price_kobo END`), matching
+  the mobile "oldest COSTED batch, no-clobber" rule. Batch handling was already right
+  (the uncosted batch is still created).
+- **`add_product` idempotency tenant-scoping.** The replay existence check now filters
+  `AND business_id = p_business_id` (like `update_product`), so a UUID collision with
+  another tenant's product can't short-circuit the insert or return a foreign row.
+- **Store selector (AC "opening stock, store").** The Add-Product and Receive-Stock
+  dialogs hardcoded `stores[0]`; they now render a store `<select>` (shown when the
+  business has more than one store) so a multi-store manager picks the target store.
+
+Migration `0140` was edited in place (not yet merged) and both functions were
+re-deployed live via `CREATE OR REPLACE`.
+
+---
+
 ## 2026-07-05 — Web POS Slice 6: Inventory add/edit + receive stock (issue #48)
 
 **What changed.** The Web POS gained inventory management — add/edit products and
