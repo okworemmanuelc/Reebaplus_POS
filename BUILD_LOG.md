@@ -2,6 +2,23 @@
 
 ---
 
+## 2026-07-05 — Web POS: de-duplicate RPC helpers (issue #68)
+
+**What changed.** Quality-only cleanup from the epic-#46 code review; no behaviour
+change (`tsc` + `next build` green, every friendly-error string preserved).
+
+- **New `web-pos/src/lib/rpc.ts`.** `newId()` (was copy-pasted in `inventory.ts` +
+  `stockAdjustments.ts` and inlined in `checkout.ts`) and `friendlyRpcError(message,
+  cases)` — the shared match loop + the identical `tenant_mismatch` /
+  `no_business_for_caller` fallback every RPC can raise. Each caller keeps its own
+  domain case table (the domain messages legitimately differ).
+- **`toKobo` / `fromKobo` moved into `lib/currency.ts`** beside `formatKobo`; the
+  Add-Product and Receive-Stock dialogs import them instead of each defining a copy.
+- `checkout.ts` / `inventory.ts` / `stockAdjustments.ts` now import the shared
+  helpers; their `friendlyError` is a thin wrapper over `friendlyRpcError`.
+
+---
+
 ## 2026-07-05 — Web POS Slice 8: Reports & dashboards (issue #51)
 
 **What changed.** Read-only reports on web — sales/revenue dashboard, a profit

@@ -7,6 +7,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { friendlyRpcError, newId } from './rpc';
 import type { ProductWithStock } from './types';
 
 // The retail tier is the primary line price (per-tier switching is a later
@@ -109,38 +110,33 @@ interface OrderRow {
 
 // Turn a raw RPC error into an operator-facing message.
 function friendlyError(message: string): string {
-  if (message.includes('insufficient_stock')) {
-    return 'Not enough stock to complete this sale — another till may have just sold the same item. Refresh and try again.';
-  }
-  if (message.includes('permission_denied')) {
-    return 'You do not have permission to ring up a sale.';
-  }
-  if (message.includes('debt_limit_exceeded')) {
-    return 'This sale would push the customer past their debt limit. Take a payment, lower the amount owed, or raise their limit.';
-  }
-  if (message.includes('customer_wallet_missing')) {
-    return 'This customer has no wallet set up yet. Add them again on the mobile app, then retry.';
-  }
-  if (message.includes('credit_requires_customer')) {
-    return 'Attach a registered customer before selling on credit.';
-  }
-  if (message.includes('amount_paid_below_net')) {
-    return 'The amount paid is less than the total. Enter the full amount, or use Pay with Credit / Register as Credit Sale.';
-  }
-  if (message.includes('tenant_mismatch') || message.includes('no_business_for_caller')) {
-    return 'Your session is not linked to this business. Sign out and back in.';
-  }
-  return message;
+  return friendlyRpcError(message, [
+    [
+      'insufficient_stock',
+      'Not enough stock to complete this sale — another till may have just sold the same item. Refresh and try again.',
+    ],
+    ['permission_denied', 'You do not have permission to ring up a sale.'],
+    [
+      'debt_limit_exceeded',
+      'This sale would push the customer past their debt limit. Take a payment, lower the amount owed, or raise their limit.',
+    ],
+    [
+      'customer_wallet_missing',
+      'This customer has no wallet set up yet. Add them again on the mobile app, then retry.',
+    ],
+    ['credit_requires_customer', 'Attach a registered customer before selling on credit.'],
+    [
+      'amount_paid_below_net',
+      'The amount paid is less than the total. Enter the full amount, or use Pay with Credit / Register as Credit Sale.',
+    ],
+  ]);
 }
 
 export async function checkoutOrder(
   supabase: SupabaseClient,
   args: CheckoutArgs,
 ): Promise<CheckoutResult> {
-  const orderId =
-    typeof crypto !== 'undefined' && 'randomUUID' in crypto
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const orderId = newId();
 
   const { data, error } = await supabase.rpc('checkout_order', {
     p_business_id: args.businessId,

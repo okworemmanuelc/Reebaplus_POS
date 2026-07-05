@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 import { useSession } from '@/components/providers/SessionProvider';
 import { useCurrency } from '@/hooks/useCurrency';
+import { fromKobo, toKobo } from '@/lib/currency';
 import {
   addProduct,
   updateProduct,
@@ -11,15 +12,6 @@ import {
   type ProductUnit,
 } from '@/lib/inventory';
 import type { CategoryRow, ProductWithStock } from '@/lib/types';
-
-// Naira (major-unit) input → kobo (bigint). Empty / invalid ⇒ 0.
-function toKobo(naira: string): number {
-  const n = parseFloat(naira);
-  return Number.isFinite(n) && n > 0 ? Math.round(n * 100) : 0;
-}
-function fromKobo(kobo: number | null | undefined): string {
-  return kobo && kobo > 0 ? (kobo / 100).toString() : '';
-}
 
 const SIZES = ['', 'big', 'medium', 'small'] as const;
 

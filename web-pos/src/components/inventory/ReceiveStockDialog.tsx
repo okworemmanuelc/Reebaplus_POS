@@ -4,20 +4,13 @@ import { useMemo, useState } from 'react';
 
 import { useSession } from '@/components/providers/SessionProvider';
 import { useCurrency } from '@/hooks/useCurrency';
+import { fromKobo, toKobo } from '@/lib/currency';
 import {
   receiveStock,
   RECEIVE_PAYMENT_METHODS,
   type ReceivePaymentMethod,
 } from '@/lib/inventory';
 import type { ProductWithStock, SupplierRow } from '@/lib/types';
-
-function toKobo(naira: string): number {
-  const n = parseFloat(naira);
-  return Number.isFinite(n) && n > 0 ? Math.round(n * 100) : 0;
-}
-function fromKobo(kobo: number | null | undefined): string {
-  return kobo && kobo > 0 ? (kobo / 100).toString() : '';
-}
 
 interface DraftLine {
   productId: string;

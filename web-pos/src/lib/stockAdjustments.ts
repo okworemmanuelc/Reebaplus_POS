@@ -6,29 +6,15 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-function newId(): string {
-  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
+import { friendlyRpcError, newId } from './rpc';
 
 function friendlyError(message: string): string {
-  if (message.includes('insufficient_stock')) {
-    return 'That would take stock below zero. Lower the amount removed.';
-  }
-  if (message.includes('permission_denied')) {
-    return 'You do not have permission to do this.';
-  }
-  if (message.includes('quantity_diff_must_be_nonzero')) {
-    return 'Enter a non-zero quantity.';
-  }
-  if (message.includes('request_not_found')) {
-    return 'That request no longer exists. Refresh the queue.';
-  }
-  if (message.includes('tenant_mismatch') || message.includes('no_business_for_caller')) {
-    return 'Your session is not linked to this business. Sign out and back in.';
-  }
-  return message;
+  return friendlyRpcError(message, [
+    ['insufficient_stock', 'That would take stock below zero. Lower the amount removed.'],
+    ['permission_denied', 'You do not have permission to do this.'],
+    ['quantity_diff_must_be_nonzero', 'Enter a non-zero quantity.'],
+    ['request_not_found', 'That request no longer exists. Refresh the queue.'],
+  ]);
 }
 
 export interface RequestAdjustmentResult {
