@@ -2,6 +2,28 @@
 
 ---
 
+## 2026-07-05 — Web POS Slice 5: Live consistency / Realtime (issue #49)
+
+**What changed.** The Web POS grid now stays live with the mobile tills via
+Supabase Realtime — no manual refresh. Pure web-client feature (all operational
+tables were already in the `supabase_realtime` publication; no migration). Web
+`tsc` + `next build` green.
+
+- **`useRealtimeRefresh` hook (`web-pos/src/hooks/useRealtimeRefresh.ts`).** One
+  business-scoped channel subscribes to `postgres_changes` on `products`,
+  `inventory`, `cost_batches`, `orders` (filtered `business_id=eq.<id>`, matching
+  the RLS the channel authorizes with). Rather than diff individual events, any
+  change triggers a debounced re-pull of the same RLS-scoped read Slice 1 wired —
+  reconciliation stays trivially correct (the screen re-derives from the
+  authoritative cloud rows). Reconnect/backfill: a re-SUBSCRIBED channel and a
+  tab regaining focus/connectivity both re-pull, so a dropped socket never leaves
+  the view stale. Returns a `connecting | live | offline` status.
+- **`PosScreen`** wires the hook to its catalogue `refresh` and shows a small
+  Live/Offline badge; a price edit, stock change, or new order on any device now
+  appears in the grid automatically.
+
+---
+
 ## 2026-07-05 — Web POS Slice 7 code-review fix (issue #50)
 
 **What changed.** One fix from the `/code-review` of PR #63; web `tsc --noEmit` +
