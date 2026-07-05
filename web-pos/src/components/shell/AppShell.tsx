@@ -7,6 +7,7 @@ import { useCan } from '@/components/permissions/Can';
 import { PermissionKeys } from '@/lib/permissions';
 import { useTheme, type UserThemeMode } from '@/components/providers/ThemeProvider';
 import { useCart } from '@/components/pos/CartProvider';
+import { useNav } from '@/components/providers/NavProvider';
 
 // Outline SVG Icons for Sidebar & Header
 const HomeIcon = () => (
@@ -102,6 +103,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { operator, signOut } = useSession();
   const { themeMode, setThemeMode } = useTheme();
   const cart = useCart();
+  const { view, setView } = useNav();
   const canInventory =
     useCan(PermissionKeys.stockView) || useCan(PermissionKeys.productsAdd);
   const canReports = useCan(PermissionKeys.reportsView);
@@ -171,8 +173,22 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         {/* Navigation List */}
         <div className="shell__nav-items">
-          <NavItem icon={<HomeIcon />} label="Home" collapsed={isCollapsed} />
-          <NavItem icon={<ProductsIcon />} label="Products" active collapsed={isCollapsed} />
+          <NavItem
+            icon={<HomeIcon />}
+            label="Sell"
+            active={view === 'pos'}
+            collapsed={isCollapsed}
+            onClick={() => setView('pos')}
+          />
+          {canInventory && (
+            <NavItem
+              icon={<ProductsIcon />}
+              label="Products"
+              active={view === 'inventory'}
+              collapsed={isCollapsed}
+              onClick={() => setView('inventory')}
+            />
+          )}
           <NavItem icon={<SalesIcon />} label="Sales" collapsed={isCollapsed} />
           {canReports && <NavItem icon={<ReportsIcon />} label="Reports" collapsed={isCollapsed} />}
           <NavItem icon={<SettingsIcon />} label="Settings" collapsed={isCollapsed} />
@@ -302,24 +318,47 @@ function NavItem({
   label,
   active = false,
   collapsed = false,
+  onClick,
 }: {
   icon: ReactNode;
   label: string;
   active?: boolean;
   collapsed?: boolean;
+  onClick?: () => void;
 }) {
-  return (
-    <div
-      className={`shell__nav-item${active ? ' shell__nav-item--active' : ''}${
-        collapsed ? ' shell__nav-item--collapsed' : ''
-      }`}
-      aria-current={active ? 'page' : undefined}
-      title={collapsed ? label : undefined}
-    >
+  const className = `shell__nav-item${active ? ' shell__nav-item--active' : ''}${
+    collapsed ? ' shell__nav-item--collapsed' : ''
+  }`;
+  const inner = (
+    <>
       <span className="shell__nav-icon" aria-hidden>
         {icon}
       </span>
       <span className="shell__nav-label">{label}</span>
+    </>
+  );
+
+  // Interactive items are real buttons (keyboard + a11y); inert ones stay a div.
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        className={className}
+        aria-current={active ? 'page' : undefined}
+        title={collapsed ? label : undefined}
+        onClick={onClick}
+      >
+        {inner}
+      </button>
+    );
+  }
+  return (
+    <div
+      className={className}
+      aria-current={active ? 'page' : undefined}
+      title={collapsed ? label : undefined}
+    >
+      {inner}
     </div>
   );
 }

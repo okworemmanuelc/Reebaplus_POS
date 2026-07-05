@@ -2,6 +2,42 @@
 
 ---
 
+## 2026-07-05 — Web POS Slice 6: Inventory add/edit + receive stock (issue #48)
+
+**What changed.** The Web POS gained inventory management — add/edit products and
+receive supplier deliveries — behind three new server-authoritative RPCs, with the
+Cost Batch producer rule pinned across Dart and SQL by a new golden dimension.
+Verified: Dart golden green (6/6), `add_product`/`receive_stock` smoke-tested live
+against a real CEO in a rolled-back transaction, web `tsc --noEmit` + `next build`
+green.
+
+- **Migration `0140_web_inventory_rpcs.sql` (deployed).** `add_product` (product +
+  opening stock straight to inventory + the opening Cost Batch, no supplier),
+  `update_product` (details/prices; stock + batches untouched), and `receive_stock`
+  (supplier invoice debit + optional payment credit + per line: inventory upsert,
+  price persistence, a stock movement, and a receipt-dated Cost Batch). SQL twins of
+  the mobile Dart path (`CostBatchesDao.recordInflowBatch`, `InventoryDao.adjustStock`,
+  `SupplierAccountService`); each reuses the 0135 `caller_has_permission` /
+  `_assert_caller_owns_business` helpers and re-checks the permission server-side.
+  A receive line mirrors `adjustStock`'s default path — one `stock_adjustments` row
+  + a `stock_transactions` row referencing it (the `adjustment_id` ref that satisfies
+  the exactly-one-of-4-refs CHECK). Idempotent on the client id (product / receipt).
+- **Batch-creation Golden Suite (`test/golden/inventory_scenario.dart` + fixtures,
+  two runners).** A second golden dimension beside checkout: the rule "one inflow ⇒
+  one fresh batch {qty_remaining=qty_original=quantity, cost=max(cost,0), received_at},
+  never merged; cost 0 ⇒ uncosted" is run against the Dart producers
+  (`inventory_dart_dao_golden_test.dart`) and the SQL RPCs
+  (`web_inventory_golden_test.dart`, Tier-2). Covers costed/uncosted/no-opening-stock
+  Add Product and receive with existing batch / partial payment / uncosted lines.
+- **Web UI (`web-pos/src/components/inventory/*`, `lib/inventory.ts`).** An Inventory
+  view (responsive table, low-stock highlight), an add/edit Product dialog, and a
+  Receive Stock dialog (supplier + dated lines + invoice total + payment). Sidebar
+  navigation is now a client-side view switch (`NavProvider`); actions are
+  hide-don't-block on `products.add` / `stock.received`\|`stock.add`. Money via the
+  business-currency helpers; prices entered in major units, stored as `*_kobo`.
+
+---
+
 ## 2026-07-05 — Web POS checkout-UI cleanup (issue #57)
 
 **What changed.** Quality-only de-duplication of the Slice 2–4 web checkout; no
