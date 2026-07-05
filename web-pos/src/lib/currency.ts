@@ -84,3 +84,15 @@ export function formatKobo(
   if (kobo === null || kobo === undefined) return '—';
   return formatCurrency(kobo / 100, code);
 }
+
+// Parse a major-unit (e.g. naira) text input to kobo. Empty / non-positive ⇒ 0.
+export function toKobo(naira: string): number {
+  const n = parseFloat(naira);
+  return Number.isFinite(n) && n > 0 ? Math.round(n * 100) : 0;
+}
+
+// Render a kobo amount as an editable major-unit string (empty when 0/absent).
+// Inverse of toKobo for form inputs.
+export function fromKobo(kobo: number | null | undefined): string {
+  return kobo && kobo > 0 ? (kobo / 100).toString() : '';
+}

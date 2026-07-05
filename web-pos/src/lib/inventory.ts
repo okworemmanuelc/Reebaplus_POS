@@ -6,6 +6,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { friendlyRpcError, newId } from './rpc';
 import type { CategoryRow, ProductRow, SupplierRow } from './types';
 
 // A product unit the catalogue understands (mirrors the cloud products.unit
@@ -31,39 +32,20 @@ export type ProductUnit = (typeof PRODUCT_UNITS)[number];
 export const RECEIVE_PAYMENT_METHODS = ['cash', 'transfer', 'pos', 'other'] as const;
 export type ReceivePaymentMethod = (typeof RECEIVE_PAYMENT_METHODS)[number];
 
-function newId(): string {
-  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
-// Map an RPC error token to an operator-facing message (mirrors checkout.ts).
+// Map an RPC error token to an operator-facing message.
 function friendlyError(message: string): string {
-  if (message.includes('permission_denied')) {
-    return 'You do not have permission to do this. Ask a manager.';
-  }
-  if (message.includes('name_required')) {
-    return 'Enter a product name.';
-  }
-  if (message.includes('lines_required') || message.includes('line_quantity_must_be_positive')) {
-    return 'Add at least one line with a quantity of one or more.';
-  }
-  if (message.includes('opening_stock_must_be_non_negative')) {
-    return 'Opening stock cannot be negative.';
-  }
-  if (message.includes('product_not_found')) {
-    return 'That product no longer exists. Refresh and try again.';
-  }
-  if (message.includes('supplier_id_required')) {
-    return 'Choose a supplier for this delivery.';
-  }
-  if (message.includes('store_id_required')) {
-    return 'This account has no store set up yet.';
-  }
-  if (message.includes('tenant_mismatch') || message.includes('no_business_for_caller')) {
-    return 'Your session is not linked to this business. Sign out and back in.';
-  }
-  return message;
+  return friendlyRpcError(message, [
+    ['permission_denied', 'You do not have permission to do this. Ask a manager.'],
+    ['name_required', 'Enter a product name.'],
+    [
+      ['lines_required', 'line_quantity_must_be_positive'],
+      'Add at least one line with a quantity of one or more.',
+    ],
+    ['opening_stock_must_be_non_negative', 'Opening stock cannot be negative.'],
+    ['product_not_found', 'That product no longer exists. Refresh and try again.'],
+    ['supplier_id_required', 'Choose a supplier for this delivery.'],
+    ['store_id_required', 'This account has no store set up yet.'],
+  ]);
 }
 
 export interface AddProductArgs {
