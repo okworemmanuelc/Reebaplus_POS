@@ -2,6 +2,233 @@
 
 ---
 
+## 2026-07-05 — Web POS Slice 4: empty-crate ledger at checkout (issue #45, ADRs 0008/0009)
+
+**What shipped.** A web sale of deposit-bearing product now posts the **empty-crate
+ledger movements** for crate-eligible businesses, pinned identical to mobile by the
+golden suite, and the web cart + receipt surface the returnable-empties context —
+shown only when the business is crate-eligible and opts into empty tracking.
+
+- **`checkout_order` extended (migration `0137_checkout_order_crate.sql`).** A plain
+  CREATE-OR-REPLACE of the 8-arg 0136 function (same signature → no overload) that
+  adds the §13.4 crate dispatch. For a **registered** customer at a business where
+  `_is_crate_business(type) AND tracks_empty_crates` (new helper mirrors the mobile
+  `isCrateBusiness` — case-insensitive Bar / Beer|Beverage distributor), it groups
+  the crate-eligible lines (unit `bottle` + `track_empties` + a manufacturer) by
+  manufacturer and, per manufacturer: writes one `order_crate_lines` row (crates
+  taken + the deposit **rate** snapshot from `manufacturers.deposit_amount_kobo`,
+  frozen at sale time + deposit paid 0), one `'issued'` `crate_ledger` row (+crates),
+  and increments `customer_crate_balances` (upsert on the unique key) — so the
+  existing return path can net the balance to zero. Byte-for-byte the mobile
+  `OrdersDao.createOrder` + `CrateLedgerDao.recordCrateIssueByCustomer` crate-track
+  branch. **No double-count**: the crate legs never touch inventory, `cost_batches`,
+  COGS, payment, or the wallet. Walk-ins / non-crate businesses / empties-off all
+  post nothing.
+- **Scope = crate-track (empties owed).** The web collects no deposit money at
+  checkout, so every web crate sale is crate-track (`deposit_paid = 0`), and the
+  wallet legs stay exactly 0136's (deposit carve-out / money-track is a later
+  slice). The deposit **value** is still surfaced (rate × crates) as the value of
+  the empties owed.
+- **Verified end-to-end.** Deployed to dev and ran the **full** RPC via an
+  impersonated (JWT-claim `set_config`) transaction that **rolled back**: a
+  registered crate sale minted `WEB-000001-…`, drew FIFO COGS (item cogs 50000,
+  inventory 100→97), posted `order_crate_lines` (3 crates, rate 50000, paid 0), a
+  `crate_ledger` `issued` +3 to the customer, `customer_crate_balances` = 3, and the
+  net-zero wallet legs — matching the Dart golden field-for-field. Nothing persisted.
+- **Golden suite extended (ADR 0009).** The shared model gained optional crate
+  inputs (`business_type`, `tracks_empty_crates`, `manufacturers`, per-product
+  `manufacturer`) and expected crate rows (`crate_lines` / `crate_ledger` /
+  `crate_balances`), all defaulting empty so the cash/credit fixtures are unchanged.
+  New `crate_sale_scenarios.json` (5 scenarios: single line, two manufacturers,
+  mixed crate+non-crate cart, two lines summing to one crate line, and the gate-OFF
+  no-op). Both runners seed the business type + manufacturers + crate-eligible
+  bottles and collect the crate rows; the **Dart DAO tier is 17/17 green** offline,
+  the RPC tier is wired + env-gated (skips clean without secrets; the live E2E above
+  proves parity). `_is_crate_business` verified true/false against the canonical vs
+  non-crate types.
+- **Web UI (hide-don't-block).** `crate.ts` adds `isCrateBusiness` /
+  `businessTracksCrates` / `crateEligible` / `crateSummary`; the catalogue loads
+  `track_empties` + `manufacturer_id` and joins each product's per-manufacturer
+  deposit rate; the operator exposes `business.type`. The **Cart** and **Receipt**
+  render an "Empties (returnable)" line (N crates · deposit value) only when the
+  business tracks crates and the cart holds deposit-bearing product — hidden
+  entirely otherwise. `npm run typecheck` + `npm run build` green.
+- **Files.** `supabase/migrations/0137_checkout_order_crate.sql`;
+  `test/golden/golden_scenario.dart`, `test/golden/dart_dao_golden_test.dart`,
+  `test/golden/fixtures/crate_sale_scenarios.json`,
+  `test/integration/rpcs/checkout_order_golden_test.dart`;
+  `web-pos/src/lib/{crate.ts,catalogue.ts,operator.ts,types.ts,checkout.ts}`,
+  `web-pos/src/components/pos/{Cart,CheckoutDialog,Receipt}.tsx`.
+- **Left for later.** The money-track deposit path (cash deposit collected →
+  held `crate_deposit` wallet leg + goods carve-out, mobile Ring 6) needs a
+  deposit-collection surface; not required by #45 (empties tracking). Realtime
+  propagation of crate rows is Slice 5 (#49).
+
+---
+
+## 2026-07-05 — Web POS Slice 3: registered-customer credit & the wallet ledger (issue #44, ADRs 0008/0009)
+
+**What shipped.** The Web POS can now ring a sale up against a **registered
+customer's credit**: attach a customer, see their live balance, and check out as
+**Pay-with-Credit** (draw from their wallet) or **Register-as-Credit-Sale** (they
+owe the balance) — with the wallet ledger posted append-only server-side and the
+debt limit enforced at checkout, all pinned identical to mobile by the golden
+suite.
+
+- **`checkout_order` widened (migration `0136_checkout_order_credit.sql`).** Added
+  `p_customer_id` and the `credit` / `wallet` payment methods on top of the Slice 2
+  cash keystone. Dropped the 7-arg overload first (the CREATE-OR-REPLACE overload
+  trap → PGRST203). A registered sale posts **append-only wallet legs** (invariant
+  #3), byte-identical to mobile `OrdersDao.createOrder`: Leg 1 = a `debit` of the
+  order **net** (`order_payment`), Leg 2 = a `credit` of the cash paid
+  (`topup_cash` / `topup_transfer`, skipped when no cash lands). The customer
+  balance stays **derived** — new helper `_customer_wallet_balance()` sums the
+  signed legs excluding the crate-deposit family (mirrors
+  `CustomersDao.getBalanceKobo`).
+- **Debt limit, server-side.** A sale that books NEW debt (cash_paid < net) is
+  rejected (`debt_limit_exceeded`) when the projected balance would fall below
+  `−wallet_limit_kobo`; a fully-settled sale is never gated; `wallet_limit_kobo=0`
+  means no credit at all — the exact mobile `_overDebtLimit` rule. Also
+  `credit_requires_customer` and `customer_wallet_missing` guards.
+- **Verified end-to-end.** Deployed to dev and smoke-tested all four paths via an
+  impersonated (JWT-claim `set_config`) transaction that **rolled back** — a
+  no-cash credit sale posts one −net debit (balance −net); Pay-with-Credit drops an
+  existing balance by net; partial-cash credit posts debit + `topup_cash`;
+  over-limit raises `debt_limit_exceeded`. Nothing persisted.
+- **Golden suite extended.** The shared model gained an optional `customer`
+  (opening balance + debt limit), expected `wallet_legs` (multiset) +
+  `customer_balance_after_kobo`, and a nullable payment. Four credit fixtures added;
+  both runners seed a customer + wallet + opening leg and collect the per-order legs
+  + derived balance. **Dart DAO tier 12/12 green** offline. Guard tests add
+  debt-limit rejection, no-limit rejection, Pay-with-Credit, partial-cash legs, and
+  the credit-requires-customer guard. Fixed a latent Slice 2 bug: the Tier-2 seeds
+  used `selling_price_kobo` (no such column) → now `retailer_price_kobo`.
+- **Web UI.** `CustomerPicker` (searchable, shows each customer's derived balance)
+  + a cart customer bar (attach/change/remove + balance chip); `CheckoutDialog`
+  offers **Pay with Credit** and **Register as Credit Sale** when a customer is
+  attached, shows a live projected balance, and **blocks over the debt limit**
+  (disabled submit + banner) mirroring the server. `Receipt` shows the customer,
+  "on credit", and the new balance. `useCustomers` refreshes balances after each
+  sale. `npm run typecheck` + `npm run build` green; `flutter analyze` clean.
+- **Left for later:** crate ledger at checkout (#45), Realtime (#49), inventory
+  writes (#48), reports (#51).
+
+---
+
+## 2026-07-05 — Web POS Slice 2: cash-sale checkout keystone + Golden-Scenario Suite (issue #43, ADRs 0008/0009)
+
+**What shipped.** The keystone slice: a cash/transfer sale rung up on web end to
+end (grid → cart → checkout → receipt), settled by a new server-authoritative
+RPC, with the anti-divergence **Golden-Scenario Suite** proving the web money math
+matches mobile.
+
+- **`checkout_order` RPC (migration `0135_checkout_order.sql`, ADR 0008).** One
+  `SECURITY DEFINER` atomic transaction for the cash/transfer path (no customer
+  credit / no crate — Slices 3 & 4): inserts the Order at `pending` + line items;
+  draws down the FIFO `cost_batches` oldest-first **under a `FOR UPDATE` row lock**
+  (reusing the pure `fifo_assign` from 0133, so per-unit COGS rounding is
+  byte-identical to the recost pass and the mobile draw-down) and snapshots per-line
+  `buying_price_kobo`; decrements inventory with the `quantity >= qty` guard and
+  **rejects at commit if stock is insufficient** (two concurrent tills can't
+  oversell); re-points the product's scalar `buying_price_kobo` cache; writes one
+  `payment_transactions` row; recognizes revenue **at Checkout** (`status='pending'`,
+  `completed_at` NULL — matches `orderCountsAsSale`). Idempotent on `p_order_id`.
+- **Server order number, collision-proof.** `WEB-NNNNNN-XXXXXX` (running count +
+  6 hex from the order id). The `WEB-` prefix makes collision with the mobile
+  device-tag scheme (`ORD-NNNNNN-XXXXXX`) impossible regardless of the tail.
+- **Defence in depth.** Two reusable helpers — `caller_has_permission()` (role
+  grants ± user overrides, CEO all-on) and `caller_max_discount_percent()`
+  (role_settings, seed defaults CEO 100 / Manager 10 / else 0) — enforce
+  `sales.make` and clamp the order discount server-side, mirroring the mobile Gate
+  Registry's *decisions* (not its Dart code).
+- **Golden-Scenario Suite (ADR 0009).** `test/golden/fixtures/cash_sale_scenarios.json`
+  (8 scenarios: single line, boundary-span weighted COGS, two lines one draw,
+  partial-cover shortfall, no-batch uncosted, cost-0 batch, order discount, two
+  products + transfer) run against **both** implementations via one shared model
+  (`test/golden/golden_scenario.dart`): the Dart DAO path
+  (`test/golden/dart_dao_golden_test.dart`, in-memory Drift, offline → every CI
+  build) and the SQL RPC (`test/integration/rpcs/checkout_order_golden_test.dart`,
+  Tier-2, env-gated). Field-for-field drift fails the build. The order-number
+  *scheme* differs by client by design, so each runner asserts its own regex.
+  `.github/workflows/golden-scenarios.yml` runs the Dart tier always and the RPC
+  tier when the `TEST_SUPABASE_*` secrets are present.
+- **RPC guard tests** (`test/integration/rpcs/checkout_order_test.dart`): oversell
+  rejection, the two-till concurrency guard, idempotent replay, the `WEB-`/`ORD-`
+  non-collision, and discount-within-cap — the ACs the happy-path fixtures don't
+  cover.
+- **Web UI.** `CartProvider` (session-persistent cart) + `Cart` (qty stepper,
+  remove, role-capped discount, live totals) + `CheckoutDialog` (cash/transfer,
+  amount paid, change) + `Receipt` (print via a print-only stylesheet, Share via
+  Web Share with a text-file fallback download, "Done — back to POS" clears the
+  cart). `PosScreen` becomes grid-beside-cart on tablet+ and a sticky bottom bar
+  + bottom-sheet on phone. `loadOperator` now also resolves `maxDiscountPercent`.
+  The completed sale reaches the mobile devices through the existing
+  Realtime-signalled pull (no new sync wiring).
+
+**Verified.** `checkout_order` + both helpers deployed via `apply_migration` and
+registered; `fifo_assign` boundary-span, the `WEB-` order-number scheme (matches
+`^WEB-\d{6}-[0-9A-F]{6}$`, never `^ORD-`), and the Manager discount clamp confirmed
+by SQL; every RPC insert satisfies the live CHECK constraints (movement_type,
+exactly-one-reference, payment type/method, order status/payment_type); live column
+names (orders/order_items/inventory/stock_transactions/payment_transactions) match
+the RPC. Dart golden suite **8/8 green**; RPC golden + guard tests analyze clean and
+auto-skip without env. `web-pos` `npm run typecheck` + `npm run build` green.
+
+---
+
+## 2026-07-04 — Web POS Slice 1: walking skeleton (issue #47, ADRs 0007–0012)
+
+**What shipped.** The first code of the **Web POS** — a new top-level
+`web-pos/` Next.js (App Router) + React + TypeScript + `@supabase/supabase-js`
+app. Online-first (ADR 0007): a single browser Supabase client is the whole data
+layer (no Drift, no outbox). Thin but end-to-end through **auth → live RLS read →
+render**, establishing the responsive shell, theming, and permission-read layer
+every later slice builds on.
+
+- **Auth = Operator (ADR 0011).** `LoginForm` does email+OTP
+  (`signInWithOtp` → `verifyOtp`) and Google (`signInWithOAuth` → `/auth/callback`,
+  PKCE + `detectSessionInUrl`). `SessionProvider` tracks the session and, on
+  sign-in, runs `loadOperator()` — business scope from `profiles.business_id`,
+  role from the active `user_businesses` membership, effective permissions, the
+  `business_design_system` + `default_currency` settings, and the store list —
+  all RLS-scoped, **no custom JWT claims**. `IdleLock` signs out after 15 min of
+  inactivity, dropping the tab back to the sign-in screen.
+- **Live catalogue.** `loadCatalogue()` reads `categories` + `products`
+  (`retailer_price_kobo` / `wholesaler_price_kobo`) + `inventory` (on-hand summed
+  across stores) over PostgREST. `PosScreen` renders the responsive grid with
+  per-tier prices, a live in/low/out stock indicator, category chips, and a manual
+  Refresh (Realtime is Slice 5 / #49). Tapping a tile is gated on `sales.make`.
+- **Theming parity.** All five palettes (blue/amber/purple/green/b&w, light+dark)
+  ported verbatim from mobile `colors.dart` into `src/lib/theme/palettes.ts`
+  (keys = the `DesignSystem` enum names). `ThemeProvider` writes the active
+  palette as CSS custom properties on the document root, read live from the synced
+  `business_design_system` setting; light/dark follows the browser preference.
+- **Permission-read layer.** `resolveEffectivePermissions()` mirrors the mobile
+  Gate Registry's decisions (ADR 0009): role grants ± user overrides, **CEO
+  all-on**. `Can` / `useCan` gate nav + actions (hide-don't-block). Money via
+  `formatKobo` / `useCurrency` from `default_currency` — no hard-coded ₦.
+- **Config / deploy.** Public Supabase URL + anon key baked into
+  `src/lib/supabase/config.ts` (mirrors the mobile-intentional public/RLS-gated
+  key), overridable via `NEXT_PUBLIC_*` — builds with zero env setup. Vercel root
+  = `web-pos/` (ADR 0012); the README documents adding the deployed origin +
+  `/auth/callback` to Supabase Auth redirect URLs for Google.
+
+**Schema verified against the live cloud** before coding (snake_case columns):
+`products.retailer_price_kobo`/`wholesaler_price_kobo`, `inventory.quantity`,
+`user_businesses.role_id`+`status`, `role_permissions`/`user_permission_overrides`,
+`current_user_business_ids()` = `profiles.business_id`.
+
+**Verification.** `npm run typecheck` clean; `next build` green (5 routes
+prerender); `next start` smoke-test returns 200 on `/` and `/auth/callback` with
+the brand rendered. On-device/live sign-in walkthrough (real OTP + Google + a
+seeded business) pending — needs a browser session with real credentials.
+
+**Left for later slices:** cart/checkout RPC (#43) + the golden-scenario suite,
+Realtime (#49), inventory add/receive (#48), stock-adjust approval (#50), reports
+(#51), and store-scoped permission overrides (§10.2.1 middle layer).
+
+---
+
 ## 2026-07-04 — Batch-creation-on-inflow: Add Product + Receive Stock push a Cost Batch (Epic 2 / FIFO, issue #42, ADR 0005)
 
 **What shipped (Epic 2, F6).** The **producer** for the FIFO queue. F1 (#37) only
