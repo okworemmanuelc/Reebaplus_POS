@@ -6,6 +6,7 @@ import { useSession } from '@/components/providers/SessionProvider';
 import { useCan } from '@/components/permissions/Can';
 import { useCurrency } from '@/hooks/useCurrency';
 import { useCustomers } from '@/hooks/useCustomers';
+import { useRealtimeRefresh, type RealtimeStatus } from '@/hooks/useRealtimeRefresh';
 import { PermissionKeys } from '@/lib/permissions';
 import { loadCatalogue, type Catalogue } from '@/lib/catalogue';
 import type { CheckoutResult } from '@/lib/checkout';
@@ -60,6 +61,16 @@ export function PosScreen() {
     void refresh();
   }, [refresh, businessId]);
 
+  // Slice 5 (#49): live consistency. A price/stock/order change on any device
+  // re-pulls the catalogue so the grid never goes stale; a dropped-then-restored
+  // socket backfills automatically.
+  const liveStatus = useRealtimeRefresh({
+    supabase,
+    businessId,
+    tables: ['products', 'inventory', 'cost_batches', 'orders'],
+    onChange: refresh,
+  });
+
   const filtered = useMemo(() => {
     if (!catalogue) return [];
     let items = catalogue.products;
@@ -112,6 +123,7 @@ export function PosScreen() {
       <div className="pos">
         <div className="pos__header">
           <h1 className="pos__title">Point of Sale</h1>
+          <LiveBadge status={liveStatus} />
           <button
             className="btn btn--outline btn--refresh"
             onClick={() => void refresh()}
@@ -239,6 +251,27 @@ export function PosScreen() {
         <Receipt result={result} onDone={onDone} />
       )}
     </div>
+  );
+}
+
+// A small live/offline indicator for the Realtime connection (Slice 5).
+function LiveBadge({ status }: { status: RealtimeStatus }) {
+  const label =
+    status === 'live' ? 'Live' : status === 'connecting' ? 'Connecting…' : 'Offline';
+  return (
+    <span
+      className={`live-badge live-badge--${status}`}
+      title={
+        status === 'live'
+          ? 'Connected — the grid updates automatically'
+          : status === 'offline'
+            ? 'Reconnecting — pull to refresh if needed'
+            : 'Connecting…'
+      }
+    >
+      <span className="live-badge__dot" aria-hidden />
+      {label}
+    </span>
   );
 }
 

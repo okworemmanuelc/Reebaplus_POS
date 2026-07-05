@@ -65,7 +65,8 @@ export function ProductFormDialog({
   const [error, setError] = useState<string | null>(null);
 
   const businessId = operator?.businessId ?? null;
-  const storeId = operator?.stores?.[0]?.id ?? null;
+  const stores = operator?.stores ?? [];
+  const [storeId, setStoreId] = useState<string | null>(stores[0]?.id ?? null);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -284,6 +285,29 @@ export function ProductFormDialog({
                 </div>
               )}
             </div>
+
+            {!isEdit && stores.length > 1 && (
+              <div className="field">
+                <label className="field__label" htmlFor="p-store">
+                  Store
+                </label>
+                <select
+                  id="p-store"
+                  className="input"
+                  value={storeId ?? ''}
+                  onChange={(e) => setStoreId(e.target.value || null)}
+                >
+                  {stores.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+                <span className="field__hint">
+                  Opening stock lands in this store.
+                </span>
+              </div>
+            )}
 
             <div className="form-row">
               <div className="field">

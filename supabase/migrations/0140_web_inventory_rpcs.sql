@@ -95,10 +95,12 @@ BEGIN
       USING ERRCODE = 'invalid_parameter_value';
   END IF;
 
-  -- Idempotent replay.
-  SELECT true INTO v_existing FROM public.products WHERE id = p_product_id;
+  -- Idempotent replay (tenant-scoped: never short-circuit on a foreign row).
+  SELECT true INTO v_existing
+    FROM public.products WHERE id = p_product_id AND business_id = p_business_id;
   IF v_existing THEN
-    SELECT to_jsonb(p.*) INTO v_product FROM public.products p WHERE p.id = p_product_id;
+    SELECT to_jsonb(p.*) INTO v_product
+      FROM public.products p WHERE p.id = p_product_id AND p.business_id = p_business_id;
     RETURN jsonb_build_object('product', v_product, 'replayed', true);
   END IF;
 
@@ -397,9 +399,11 @@ BEGIN
     RETURNING quantity INTO v_new_qty;
 
     -- Persist the delivery's prices onto the product (mirrors updateProductPrices):
-    -- the buying price is always the receipt cost; retail/wholesale only when sent.
+    -- a costed line updates the scalar buying price; a 0-cost (uncosted) line must
+    -- NOT clobber the existing scalar cost (mirrors the mobile "oldest COSTED batch,
+    -- no-clobber" rule). Retail/wholesale only when sent.
     UPDATE public.products
-       SET buying_price_kobo     = v_buy,
+       SET buying_price_kobo     = CASE WHEN v_buy > 0 THEN v_buy ELSE buying_price_kobo END,
            retailer_price_kobo   = COALESCE(v_retail, retailer_price_kobo),
            wholesaler_price_kobo = COALESCE(v_wholesale, wholesaler_price_kobo),
            last_updated_at       = v_now

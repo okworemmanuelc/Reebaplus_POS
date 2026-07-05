@@ -14,6 +14,8 @@ import {
 import type { ProductWithStock } from '@/lib/types';
 import { ProductFormDialog } from './ProductFormDialog';
 import { ReceiveStockDialog } from './ReceiveStockDialog';
+import { AdjustStockDialog } from './AdjustStockDialog';
+import { ApprovalsPanel } from './ApprovalsPanel';
 
 // Web POS Slice 6 (#48) — Inventory management. A live product list with the two
 // catalogue money-writes: Add/Edit product (products.add) and Receive Stock
@@ -24,10 +26,15 @@ export function InventoryScreen() {
   const { supabase, operator } = useSession();
   const { kobo } = useCurrency();
   const canAdd = useCan(PermissionKeys.productsAdd);
+  const canAdjust = useCan(PermissionKeys.stockAdjust);
   const canReceive =
     useCan(PermissionKeys.stockReceived) ||
     useCan(PermissionKeys.stockAdd) ||
     canAdd;
+  // Approvers (CEO / Manager) see the pending-request queue — mirrors the
+  // server rule in approve_stock_adjustment (0141).
+  const canApprove =
+    operator?.role?.slug === 'ceo' || operator?.role?.slug === 'manager';
 
   const [catalogue, setCatalogue] = useState<Catalogue | null>(null);
   const [refs, setRefs] = useState<InventoryRefs | null>(null);
@@ -35,10 +42,12 @@ export function InventoryScreen() {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
 
-  // Dialog state: add a product, edit a specific product, or receive a delivery.
+  // Dialog state: add a product, edit a specific product, receive a delivery,
+  // or adjust one product's stock.
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<ProductWithStock | null>(null);
   const [receiveOpen, setReceiveOpen] = useState(false);
+  const [adjusting, setAdjusting] = useState<ProductWithStock | null>(null);
 
   const businessId = operator?.businessId ?? null;
 
@@ -84,8 +93,14 @@ export function InventoryScreen() {
     setFormOpen(false);
     setReceiveOpen(false);
     setEditing(null);
+    setAdjusting(null);
     void refresh();
   }, [refresh]);
+
+  const nameById = useMemo(
+    () => new Map((catalogue?.products ?? []).map((p) => [p.id, p.name])),
+    [catalogue],
+  );
 
   const categoryName = useCallback(
     (id: string | null) =>
@@ -129,6 +144,10 @@ export function InventoryScreen() {
 
       {error && <div className="banner banner--error">{error}</div>}
 
+      {canApprove && (
+        <ApprovalsPanel nameById={nameById} onChanged={() => void refresh()} />
+      )}
+
       <div className="inventory__toolbar">
         <input
           className="input"
@@ -163,7 +182,7 @@ export function InventoryScreen() {
                 <th className="num">Retail</th>
                 <th className="num">Wholesale</th>
                 <th className="num">Cost</th>
-                {canAdd && <th aria-label="Actions" />}
+                {(canAdd || canAdjust) && <th aria-label="Actions" />}
               </tr>
             </thead>
             <tbody>
@@ -191,14 +210,26 @@ export function InventoryScreen() {
                     <td className="num">{kobo(p.retailer_price_kobo)}</td>
                     <td className="num">{kobo(p.wholesaler_price_kobo)}</td>
                     <td className="num">{kobo(p.buying_price_kobo)}</td>
-                    {canAdd && (
+                    {(canAdd || canAdjust) && (
                       <td className="num">
-                        <button
-                          className="btn btn--outline btn--sm"
-                          onClick={() => openEdit(p)}
-                        >
-                          Edit
-                        </button>
+                        <div className="inventory__row-actions">
+                          {canAdjust && (
+                            <button
+                              className="btn btn--outline btn--sm"
+                              onClick={() => setAdjusting(p)}
+                            >
+                              Adjust
+                            </button>
+                          )}
+                          {canAdd && (
+                            <button
+                              className="btn btn--outline btn--sm"
+                              onClick={() => openEdit(p)}
+                            >
+                              Edit
+                            </button>
+                          )}
+                        </div>
                       </td>
                     )}
                   </tr>
@@ -227,6 +258,14 @@ export function InventoryScreen() {
           suppliers={refs.suppliers}
           onSaved={onSaved}
           onCancel={() => setReceiveOpen(false)}
+        />
+      )}
+
+      {adjusting && (
+        <AdjustStockDialog
+          product={adjusting}
+          onSaved={onSaved}
+          onCancel={() => setAdjusting(null)}
         />
       )}
     </div>

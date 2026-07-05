@@ -26,6 +26,91 @@ live data). Web `tsc` + `next build` green.
 
 ---
 
+## 2026-07-05 — Web POS Slice 5: Live consistency / Realtime (issue #49)
+
+**What changed.** The Web POS grid now stays live with the mobile tills via
+Supabase Realtime — no manual refresh. Pure web-client feature (all operational
+tables were already in the `supabase_realtime` publication; no migration). Web
+`tsc` + `next build` green.
+
+- **`useRealtimeRefresh` hook (`web-pos/src/hooks/useRealtimeRefresh.ts`).** One
+  business-scoped channel subscribes to `postgres_changes` on `products`,
+  `inventory`, `cost_batches`, `orders` (filtered `business_id=eq.<id>`, matching
+  the RLS the channel authorizes with). Rather than diff individual events, any
+  change triggers a debounced re-pull of the same RLS-scoped read Slice 1 wired —
+  reconciliation stays trivially correct (the screen re-derives from the
+  authoritative cloud rows). Reconnect/backfill: a re-SUBSCRIBED channel and a
+  tab regaining focus/connectivity both re-pull, so a dropped socket never leaves
+  the view stale. Returns a `connecting | live | offline` status.
+- **`PosScreen`** wires the hook to its catalogue `refresh` and shows a small
+  Live/Offline badge; a price edit, stock change, or new order on any device now
+  appears in the grid automatically.
+
+---
+
+## 2026-07-05 — Web POS Slice 7 code-review fix (issue #50)
+
+**What changed.** One fix from the `/code-review` of PR #63; web `tsc --noEmit` +
+`next build` green. The Adjust-Stock dialog hardcoded `stores[0]`, so a multi-store
+manager couldn't target a store; it now renders a store `<select>` (shown when the
+business has more than one store), matching the Add-Product / Receive-Stock dialogs.
+
+---
+
+## 2026-07-05 — Web POS Slice 7: Stock adjustment + approval gate (issue #50)
+
+**What changed.** The Web POS gained stock adjustment with the approval gate,
+mirroring mobile §16.6.1: a stock keeper's change is a pending request; a
+manager/CEO applies immediately and approves/rejects the queue. Stacked on #48.
+Verified: Dart golden green (4/4), all three paths (CEO apply / approve / reject)
+smoke-tested live in a rolled-back transaction, web `tsc` + `next build` green.
+
+- **Migration `0141_web_stock_adjustment_rpcs.sql` (deployed).** `request_stock_
+  adjustment` branches on the CALLER's role (`caller_role_slug` helper, new):
+  CEO/Manager applies immediately (+ an approved audit row); anyone else with
+  `stock.adjust` files a pending request, no inventory change. `approve_stock_
+  adjustment` (approver-only) applies the delta or rejects with no change. Shared
+  `_apply_stock_adjustment` helper mirrors `InventoryDao.adjustStock` (guarded
+  inventory delta + `stock_adjustments` + `stock_transactions('adjustment')`) — no
+  Cost Batch, an adjustment is a correction not an inflow. Both RPCs idempotent /
+  status-guarded.
+- **Golden Suite (`test/golden/stock_adjustment_scenario.dart` + fixtures).**
+  request-vs-apply pinned across the Dart DAO (`stock_adjustment_dart_dao_golden_
+  test.dart`) and the SQL RPC (`web_stock_adjustment_golden_test.dart`, Tier-2).
+  The stock-keeper → pending path is pinned on the Dart arm; the RPC arm (CEO
+  identity, routed to immediate-apply) skips 'request' scenarios — same precedent
+  as the checkout discount clamp.
+- **Web UI.** Per-product "Adjust" action (`AdjustStockDialog`, on `stock.adjust`)
+  that surfaces whether the change applied or was sent for approval, and a
+  manager/CEO `ApprovalsPanel` queue (approve/reject) shown for CEO/Manager roles —
+  mirroring the server's approver rule.
+
+---
+
+## 2026-07-05 — Web POS Slice 6 code-review fixes (issue #48)
+
+**What changed.** Three fixes from the `/code-review` of PR #62; no new surface.
+Verified: web `tsc --noEmit` + `next build` green; the cost-0 no-clobber and the
+positive-cost update both re-checked live in a rolled-back CEO transaction.
+
+- **`receive_stock` cost-0 scalar clobber (correctness).** A receive line with cost 0
+  (an uncosted delivery) was unconditionally writing `products.buying_price_kobo = 0`,
+  wiping the product's existing scalar cost. Now `buying_price_kobo` only moves on a
+  costed line (`CASE WHEN v_buy > 0 THEN v_buy ELSE buying_price_kobo END`), matching
+  the mobile "oldest COSTED batch, no-clobber" rule. Batch handling was already right
+  (the uncosted batch is still created).
+- **`add_product` idempotency tenant-scoping.** The replay existence check now filters
+  `AND business_id = p_business_id` (like `update_product`), so a UUID collision with
+  another tenant's product can't short-circuit the insert or return a foreign row.
+- **Store selector (AC "opening stock, store").** The Add-Product and Receive-Stock
+  dialogs hardcoded `stores[0]`; they now render a store `<select>` (shown when the
+  business has more than one store) so a multi-store manager picks the target store.
+
+Migration `0140` was edited in place (not yet merged) and both functions were
+re-deployed live via `CREATE OR REPLACE`.
+
+---
+
 ## 2026-07-05 — Web POS Slice 6: Inventory add/edit + receive stock (issue #48)
 
 **What changed.** The Web POS gained inventory management — add/edit products and

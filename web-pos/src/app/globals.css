@@ -1767,6 +1767,47 @@ input {
   font-weight: 500;
 }
 
+/* ── Realtime live indicator (Slice 5, #49) ───────────────────────────────── */
+.live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  color: var(--subtext);
+  background: color-mix(in srgb, var(--surface2) 70%, transparent);
+  white-space: nowrap;
+}
+.live-badge__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.live-badge--live {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 40%, transparent);
+}
+.live-badge--live .live-badge__dot {
+  animation: live-pulse 1.8s ease-in-out infinite;
+}
+.live-badge--connecting {
+  color: var(--warning, var(--info));
+}
+.live-badge--offline {
+  color: var(--danger, var(--error));
+  border-color: color-mix(in srgb, var(--danger, var(--error)) 40%, transparent);
+}
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-badge--live .live-badge__dot { animation: none; }
+}
 /* ── Inventory (Slice 6, #48) ─────────────────────────────────────────────── */
 .inventory {
   display: flex;
@@ -1943,6 +1984,93 @@ select.input {
   border-radius: var(--radius);
   background: var(--surface2);
   font-size: 15px;
+}
+
+/* ── Stock adjustment + approvals (Slice 7, #50) ──────────────────────────── */
+.inventory__row-actions {
+  display: inline-flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.adjust__product {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 6px;
+}
+.adjust__preview {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  border-radius: var(--radius);
+  background: var(--surface2);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.approvals {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--warning, var(--info)) 8%, var(--surface));
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.approvals__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.approvals__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 11px;
+  background: var(--primary);
+  color: var(--on-primary);
+  font-size: 12px;
+}
+.approvals__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.approvals__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.approvals__info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.approvals__delta {
+  font-weight: 700;
+  color: var(--success);
+}
+.approvals__delta--remove {
+  color: var(--danger, var(--error));
+}
+.approvals__actions {
+  display: inline-flex;
+  gap: 8px;
 }
 
 /* ── Reports & dashboards (Slice 8, #51) ──────────────────────────────────── */
