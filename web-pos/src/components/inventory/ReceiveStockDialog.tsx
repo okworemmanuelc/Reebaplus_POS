@@ -56,7 +56,8 @@ export function ReceiveStockDialog({
   const [error, setError] = useState<string | null>(null);
 
   const businessId = operator?.businessId ?? null;
-  const storeId = operator?.stores?.[0]?.id ?? null;
+  const stores = operator?.stores ?? [];
+  const [storeId, setStoreId] = useState<string | null>(stores[0]?.id ?? null);
 
   const available = useMemo(
     () => products.filter((p) => !lines.some((l) => l.productId === p.id)),
@@ -199,6 +200,27 @@ export function ReceiveStockDialog({
                 />
               </div>
             </div>
+
+            {stores.length > 1 && (
+              <div className="field">
+                <label className="field__label" htmlFor="r-store">
+                  Store
+                </label>
+                <select
+                  id="r-store"
+                  className="input"
+                  value={storeId ?? ''}
+                  onChange={(e) => setStoreId(e.target.value || null)}
+                >
+                  {stores.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+                <span className="field__hint">Stock is received into this store.</span>
+              </div>
+            )}
 
             <div className="field">
               <span className="field__label">Products received</span>
