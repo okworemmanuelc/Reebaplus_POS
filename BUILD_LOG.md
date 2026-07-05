@@ -25,6 +25,70 @@ behavior change (typecheck + `next build` green).
 
 ---
 
+## 2026-07-05 — Golden Suite: discount-cap clamp + debt-limit rejection (issue #55)
+
+**What changed.** Two money decisions the Web POS makes were unpinned by the shared
+Golden Scenario Suite; both are now fixtures. The shared model
+(`test/golden/golden_scenario.dart`) gained `max_discount_percent` (the caller's
+role cap) and an `expect: { rejected_with }` shape (a rejection scenario carries no
+`expected` rows), plus a shared `clampDiscountKobo(requested, maxPct, gross)` that
+mirrors the RPC's `LEAST(GREATEST(p_discount,0), (gross*pct)/100)`.
+
+- **Discount-cap clamp (`cash_sale_scenarios.json`).** A non-CEO requesting ₦3,000
+  off a ₦10,000 sale under a 10% cap nets a ₦1,000 (clamped) discount, not ₦3,000.
+  Pinned on the **Dart arm** (`dart_dao_golden_test.dart` now clamps via
+  `clampDiscountKobo`). The **RPC arm SKIPS** it: `caller_max_discount_percent`
+  (0135) short-circuits the CEO slug to 100, and the Tier-2 identity is the
+  business CEO — so the server clamp can't bite for that caller. Skip reason is
+  spelled out in the test.
+- **Debt-limit rejection.** A Register-as-Credit-Sale that would push a customer
+  past their `wallet_limit_kobo` is refused and writes nothing. Pinned on **both
+  arms**: the Dart runner mirrors mobile's hide-don't-write guard (assert the rule
+  fires + no order row); the RPC runner asserts the RPC raises `debt_limit_exceeded`
+  and no order persists (via `expectLater(..., throwsA(...))`).
+- **Verified.** `flutter test test/golden/dart_dao_golden_test.dart` — 19/19 green
+  (incl. both new scenarios). The RPC arm now runs **18/18 green (1 intentional
+  skip)** against dev after the Tier-2 token was refreshed and the test tenant
+  re-seeded. Fixing that run surfaced a latent teardown bug: the golden
+  `tearDown` deleted the append-only ledgers (`wallet_transactions`,
+  `payment_transactions`, `crate_ledger`) directly, which the `forbid_delete`
+  trigger blocks (P0001) — and their parents then fail with 23503 FK. Cleanup is
+  now best-effort via a local `del()` helper that swallows both codes and leaks
+  the append-only rows by design, matching `TestBusinessFixture.deleteTopupRows`.
+
+---
+
+## 2026-07-05 — checkout_order helper extraction (issue #53) — BUILT, NOT DEPLOYED
+
+**What changed (code only).** New migration `0139_checkout_order_helpers.sql`
+extracts the three invariant legs of `checkout_order` into SECURITY DEFINER
+helpers and CREATE-OR-REPLACEs `checkout_order` (same 8-arg signature) to dispatch
+through them:
+
+- `_checkout_mint_order_number(business_id, order_id)` — the `WEB-NNNNNN-XXXXXX`
+  number (0137:285-288), one SQL query.
+- `_checkout_insert_lines(…)` — the item + inventory-guard + stock-ledger loop
+  (0137:306-377), returns `inventory_after`.
+- `_checkout_draw_fifo(…)` — the FIFO draw-down + scalar re-point (0137:379-453).
+
+Behavior-identical to 0137: the blocks are copied verbatim (only the dead
+`v_items_out` accumulation the loop built and 0137 overwrote from the DB is
+dropped); `v_now` is passed into the helpers so every `gen_random_uuid()`/timestamp
+is as inline; the `FOR UPDATE` batch locks + stock-guard row locks are unchanged
+(helpers run in the caller's transaction). `checkout_order`'s body was verified to
+reference no extracted local. From here a new checkout slice grows only its own
+dispatch, not another copy of the shared legs. Numbered `0139` — `0134`/`0138`
+are reserved by the parked console-admin work.
+
+**⚠️ NOT DEPLOYED — do not `supabase db push` until verified.** A behavior-identical
+rewrite of the live money path must be *proven*, not assumed. The proof is the
+Golden Suite's RPC arm (`test/integration/rpcs/checkout_order_golden_test.dart`,
+Tier-2), which is currently unrunnable — its `TEST_USER_REFRESH_TOKEN` is expired.
+Refresh the token, get that arm green against dev, THEN deploy. Committed to the
+`refactor/checkout-order-sql-helpers` branch.
+
+---
+
 ## 2026-07-05 — Web POS Slice 4: empty-crate ledger at checkout (issue #45, ADRs 0008/0009)
 
 **What shipped.** A web sale of deposit-bearing product now posts the **empty-crate
