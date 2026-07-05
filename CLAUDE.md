@@ -23,11 +23,14 @@ If implementation changes the architecture, scope, or
 standards documented in the context files, update the
 relevant file before continuing.
 
+Use the `git-issue-workflow` skill when starting or
+finishing work on an issue.
+
 ## Agent skills
 
 ### Issue tracker
 
-Issues and PRDs are tracked in this repo's GitHub Issues (`okworemmanuelc/drinkPosApp`) via the `gh` CLI; external PRs are not a triage surface. See `docs/agents/issue-tracker.md`.
+Issues and PRDs are tracked in this repo's GitHub Issues (`okworemmanuelc/Reebaplus_POS`) via the `gh` CLI; external PRs are not a triage surface. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
