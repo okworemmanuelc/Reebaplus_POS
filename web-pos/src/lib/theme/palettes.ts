@@ -34,6 +34,10 @@ export interface ThemeTokens {
   success: string;
   warning: string;
   info: string;
+  glassBg: string;
+  glassBorder: string;
+  bgPatternColor: string;
+  glowOpacity: string;
 }
 
 type PaletteSet = Record<ThemeMode, ThemeTokens>;
@@ -56,6 +60,10 @@ const blue: PaletteSet = {
     success: '#10B981',
     warning: '#FFB020',
     info: '#3B82F6',
+    glassBg: 'rgba(255, 255, 255, 0.45)',
+    glassBorder: 'rgba(255, 255, 255, 0.6)',
+    bgPatternColor: 'rgba(37, 99, 235, 0.03)',
+    glowOpacity: '0.05',
   },
   dark: {
     bg: '#090D14',
@@ -72,6 +80,10 @@ const blue: PaletteSet = {
     success: '#10B981',
     warning: '#FFB020',
     info: '#3B82F6',
+    glassBg: 'rgba(17, 24, 39, 0.45)',
+    glassBorder: 'rgba(255, 255, 255, 0.08)',
+    bgPatternColor: 'rgba(255, 255, 255, 0.025)',
+    glowOpacity: '0.18',
   },
 };
 
@@ -91,6 +103,10 @@ const amber: PaletteSet = {
     success: '#30D158',
     warning: '#FFB020',
     info: '#3B82F6',
+    glassBg: 'rgba(255, 255, 255, 0.45)',
+    glassBorder: 'rgba(255, 255, 255, 0.6)',
+    bgPatternColor: 'rgba(217, 119, 6, 0.03)',
+    glowOpacity: '0.05',
   },
   dark: {
     bg: '#080C12',
@@ -107,6 +123,10 @@ const amber: PaletteSet = {
     success: '#30D158',
     warning: '#FFB020',
     info: '#3B82F6',
+    glassBg: 'rgba(14, 20, 32, 0.45)',
+    glassBorder: 'rgba(255, 255, 255, 0.07)',
+    bgPatternColor: 'rgba(255, 255, 255, 0.02)',
+    glowOpacity: '0.15',
   },
 };
 
@@ -126,6 +146,10 @@ const purple: PaletteSet = {
     success: '#34D399',
     warning: '#FBBF24',
     info: '#8B5CF6',
+    glassBg: 'rgba(255, 255, 255, 0.45)',
+    glassBorder: 'rgba(255, 255, 255, 0.6)',
+    bgPatternColor: 'rgba(124, 58, 237, 0.03)',
+    glowOpacity: '0.05',
   },
   dark: {
     bg: '#0B0D10',
@@ -142,6 +166,10 @@ const purple: PaletteSet = {
     success: '#34D399',
     warning: '#FBBF24',
     info: '#8B5CF6',
+    glassBg: 'rgba(21, 23, 27, 0.45)',
+    glassBorder: 'rgba(255, 255, 255, 0.07)',
+    bgPatternColor: 'rgba(255, 255, 255, 0.02)',
+    glowOpacity: '0.16',
   },
 };
 
@@ -161,6 +189,10 @@ const green: PaletteSet = {
     success: '#22C55E',
     warning: '#FFB020',
     info: '#3B82F6',
+    glassBg: 'rgba(255, 255, 255, 0.45)',
+    glassBorder: 'rgba(255, 255, 255, 0.6)',
+    bgPatternColor: 'rgba(21, 128, 61, 0.03)',
+    glowOpacity: '0.05',
   },
   dark: {
     bg: '#0B0D10',
@@ -177,6 +209,10 @@ const green: PaletteSet = {
     success: '#22C55E',
     warning: '#FFB020',
     info: '#3B82F6',
+    glassBg: 'rgba(21, 23, 27, 0.45)',
+    glassBorder: 'rgba(255, 255, 255, 0.07)',
+    bgPatternColor: 'rgba(255, 255, 255, 0.02)',
+    glowOpacity: '0.15',
   },
 };
 
@@ -196,6 +232,10 @@ const bw: PaletteSet = {
     success: '#22C55E',
     warning: '#FFB020',
     info: '#3B82F6',
+    glassBg: 'rgba(255, 255, 255, 0.45)',
+    glassBorder: 'rgba(255, 255, 255, 0.6)',
+    bgPatternColor: 'rgba(17, 17, 17, 0.03)',
+    glowOpacity: '0.04',
   },
   dark: {
     bg: '#000000',
@@ -212,6 +252,10 @@ const bw: PaletteSet = {
     success: '#22C55E',
     warning: '#FFB020',
     info: '#3B82F6',
+    glassBg: 'rgba(18, 18, 18, 0.45)',
+    glassBorder: 'rgba(255, 255, 255, 0.08)',
+    bgPatternColor: 'rgba(255, 255, 255, 0.025)',
+    glowOpacity: '0.12',
   },
 };
 
