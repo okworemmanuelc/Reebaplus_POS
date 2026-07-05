@@ -6,6 +6,7 @@ import { useSession } from '@/components/providers/SessionProvider';
 import { useCurrency } from '@/hooks/useCurrency';
 import { formatKobo } from '@/lib/currency';
 import type { CheckoutResult } from '@/lib/checkout';
+import { receiptRowClass, receiptRows } from '@/lib/receipt';
 
 // The receipt shown after a successful checkout: order number, lines, totals,
 // and the actions — Print (browser print with the receipt-only print stylesheet),
@@ -25,9 +26,6 @@ export function Receipt({
   const businessName = operator?.business?.name ?? 'Receipt';
   const when = new Date(result.createdAt).toLocaleString();
 
-  // The amount still owed on this sale (0 unless it was a credit / partial sale).
-  const onCreditKobo = Math.max(0, result.netAmountKobo - result.amountPaidKobo);
-
   const plainText = useCallback(() => {
     const lines = result.lines
       .map(
@@ -35,6 +33,9 @@ export function Receipt({
           `${l.quantity} x ${l.name}  ${formatKobo(l.unitPriceKobo * l.quantity, code)}`,
       )
       .join('\n');
+    const summary = receiptRows(result, (k) => formatKobo(k, code)).map(
+      (r) => `${r.label}: ${r.value}`,
+    );
     return [
       businessName,
       `Order ${result.orderNumber}`,
@@ -43,36 +44,11 @@ export function Receipt({
       '',
       lines,
       '',
-      `Subtotal: ${formatKobo(result.totalAmountKobo, code)}`,
-      result.discountKobo > 0
-        ? `Discount: -${formatKobo(result.discountKobo, code)}`
-        : null,
-      `Total: ${formatKobo(result.netAmountKobo, code)}`,
-      result.paymentMethod === 'wallet'
-        ? `Paid with credit: ${formatKobo(result.netAmountKobo, code)}`
-        : `Paid (${result.paymentMethod}): ${formatKobo(result.tenderedKobo ?? result.amountPaidKobo, code)}`,
-      (result.changeKobo ?? 0) > 0
-        ? `Change: ${formatKobo(result.changeKobo ?? 0, code)}`
-        : null,
-      onCreditKobo > 0 ? `On credit: ${formatKobo(onCreditKobo, code)}` : null,
-      result.customerName && result.customerBalanceKobo != null
-        ? `Balance: ${
-            result.customerBalanceKobo < 0
-              ? `owes ${formatKobo(-result.customerBalanceKobo, code)}`
-              : `${formatKobo(result.customerBalanceKobo, code)} credit`
-          }`
-        : null,
-      (result.crateCount ?? 0) > 0
-        ? `Empties (returnable): ${result.crateCount} crate${result.crateCount === 1 ? '' : 's'}${
-            (result.crateDepositKobo ?? 0) > 0
-              ? ` — ${formatKobo(result.crateDepositKobo ?? 0, code)} deposit`
-              : ''
-          }`
-        : null,
+      ...summary,
     ]
       .filter(Boolean)
       .join('\n');
-  }, [result, businessName, when, code, onCreditKobo]);
+  }, [result, businessName, when, code]);
 
   const onShare = useCallback(async () => {
     setShareNote(null);
@@ -132,63 +108,12 @@ export function Receipt({
 
           <div className="receipt__divider" />
 
-          <div className="receipt__row">
-            <span>Subtotal</span>
-            <span>{kobo(result.totalAmountKobo)}</span>
-          </div>
-          {result.discountKobo > 0 && (
-            <div className="receipt__row receipt__row--muted">
-              <span>Discount</span>
-              <span>−{kobo(result.discountKobo)}</span>
+          {receiptRows(result, kobo).map((row, i) => (
+            <div key={i} className={receiptRowClass(row.kind)}>
+              <span>{row.label}</span>
+              <span>{row.value}</span>
             </div>
-          )}
-          <div className="receipt__row receipt__row--total">
-            <span>Total</span>
-            <span>{kobo(result.netAmountKobo)}</span>
-          </div>
-          {result.paymentMethod === 'wallet' ? (
-            <div className="receipt__row receipt__row--muted">
-              <span>Paid with credit</span>
-              <span>{kobo(result.netAmountKobo)}</span>
-            </div>
-          ) : (
-            <div className="receipt__row receipt__row--muted">
-              <span>Paid ({result.paymentMethod})</span>
-              <span>{kobo(result.tenderedKobo ?? result.amountPaidKobo)}</span>
-            </div>
-          )}
-          {(result.changeKobo ?? 0) > 0 && (
-            <div className="receipt__row receipt__row--muted">
-              <span>Change</span>
-              <span>{kobo(result.changeKobo ?? 0)}</span>
-            </div>
-          )}
-          {onCreditKobo > 0 && (
-            <div className="receipt__row receipt__row--muted">
-              <span>On credit</span>
-              <span>{kobo(onCreditKobo)}</span>
-            </div>
-          )}
-          {result.customerName && result.customerBalanceKobo != null && (
-            <div className="receipt__row receipt__row--muted">
-              <span>Balance</span>
-              <span>
-                {result.customerBalanceKobo < 0
-                  ? `owes ${kobo(-result.customerBalanceKobo)}`
-                  : `${kobo(result.customerBalanceKobo)} credit`}
-              </span>
-            </div>
-          )}
-          {(result.crateCount ?? 0) > 0 && (
-            <div className="receipt__row receipt__row--muted">
-              <span>Empties (returnable)</span>
-              <span>
-                {result.crateCount} crate{result.crateCount === 1 ? '' : 's'}
-                {(result.crateDepositKobo ?? 0) > 0 &&
-                  ` · ${kobo(result.crateDepositKobo ?? 0)}`}
-              </span>
-            </div>
-          )}
+          ))}
 
           <div className="receipt__thanks">Thank you!</div>
         </div>

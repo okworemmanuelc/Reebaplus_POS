@@ -33,6 +33,31 @@ export interface CheckoutLineInput {
 //                         amountPaidKobo is any cash part-paid now (0..net).
 export type PaymentMethod = 'cash' | 'transfer' | 'wallet' | 'credit';
 
+// A checkout method's selector group: walk-in tenders (always offered) vs the
+// registered-customer credit paths (offered only when a customer is attached).
+export type PaymentGroup = 'tender' | 'credit';
+
+// Display label + selector group for each checkout path — the single source of
+// truth the CheckoutDialog renders its segmented control from, instead of a
+// separate label map and hard-coded ['cash','transfer'] / ['wallet','credit']
+// arrays. Insertion order is the display order.
+export const paymentMethodMeta: Record<
+  PaymentMethod,
+  { label: string; group: PaymentGroup }
+> = {
+  cash: { label: 'Cash', group: 'tender' },
+  transfer: { label: 'Transfer', group: 'tender' },
+  wallet: { label: 'Pay with Credit', group: 'credit' },
+  credit: { label: 'Credit Sale', group: 'credit' },
+};
+
+// The methods in a selector group, in display order.
+export function paymentMethodsInGroup(group: PaymentGroup): PaymentMethod[] {
+  return (Object.keys(paymentMethodMeta) as PaymentMethod[]).filter(
+    (m) => paymentMethodMeta[m].group === group,
+  );
+}
+
 export interface CheckoutArgs {
   businessId: string;
   storeId: string;

@@ -5,7 +5,7 @@ import { useMemo } from 'react';
 import { useSession } from '@/components/providers/SessionProvider';
 import { useCurrency } from '@/hooks/useCurrency';
 import { lineUnitPriceKobo } from '@/lib/checkout';
-import { businessTracksCrates, crateSummary } from '@/lib/crate';
+import { crateSummary, operatorTracksCrates } from '@/lib/crate';
 import { useCart } from './CartProvider';
 
 // The cart panel: line items (qty stepper + remove), a role-capped discount, the
@@ -47,10 +47,7 @@ export function Cart({
   // Empties surface (Slice 4, #45): hidden entirely unless the business is
   // crate-eligible AND opts into empty tracking (mirrors mobile's hide). When on,
   // it summarises the returnable, deposit-bearing crates in the cart.
-  const crateOn = businessTracksCrates(
-    operator?.business?.type,
-    operator?.business?.tracksEmptyCrates ?? false,
-  );
+  const crateOn = operatorTracksCrates(operator);
   const empties = useMemo(
     () => crateSummary(lines, crateOn),
     [lines, crateOn],
