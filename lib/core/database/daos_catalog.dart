@@ -424,6 +424,24 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
     await db.syncDao.enqueueUpsert('products', comp);
   }
 
+  /// Writes the cloud [imageUrl] (or null to clear) onto [productId] and
+  /// enqueues the products upsert so the photo converges cross-device (#78).
+  /// Called after a successful image upload — on Add/Update Product, and by the
+  /// offline retry flush once connectivity returns. A minimal partial upsert:
+  /// it touches only `image_url` + the sync cursor, leaving every other column
+  /// untouched (the local `image_path` offline render is unaffected).
+  Future<void> setProductImageUrl(String productId, String? imageUrl) async {
+    final comp = ProductsCompanion(
+      id: Value(productId),
+      imageUrl: Value(imageUrl),
+      lastUpdatedAt: Value(DateTime.now()),
+    );
+    await (update(
+      products,
+    )..where((t) => t.id.equals(productId) & whereBusiness(t))).write(comp);
+    await db.syncDao.enqueueUpsert('products', comp);
+  }
+
   Future<void> updateProductPrices(
     String productId, {
     required int buyingPriceKobo,
