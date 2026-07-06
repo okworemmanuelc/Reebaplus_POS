@@ -7,7 +7,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 /// App version recorded with each crash. Mirrors `version:` in pubspec.yaml —
 /// bump both together. (There is no package_info dependency; keeping this a
 /// constant avoids adding one just for diagnostics.)
-const String kAppVersion = '1.0.0+1';
+const String kAppVersion = '1.0.6+6';
 
 /// App-wide crash safety net (master plan §33 — Reliability and Crash
 /// Handling). Installs the global error handlers and records caught/uncaught
