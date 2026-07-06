@@ -392,9 +392,11 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen> {
   Widget _buildBalanceCard(BuildContext context, ThemeData theme, int balanceKobo, String scopeLabel) {
     final owed = balanceKobo < 0;
     final color = owed ? danger : (balanceKobo > 0 ? success : _text);
+    // Positive = we paid the supplier in advance (a prepayment), not credit we
+    // hold on their behalf; negative = a debt we owe for unpaid goods.
     final label = owed
         ? 'Amount owed to supplier'
-        : (balanceKobo > 0 ? 'Credit balance' : 'Settled');
+        : (balanceKobo > 0 ? 'Paid in advance' : 'Settled');
 
     return _GlassyCard(
       margin: EdgeInsets.symmetric(horizontal: context.getRSize(20)).copyWith(

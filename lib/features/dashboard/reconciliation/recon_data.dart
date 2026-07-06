@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/core/settings/vat_settings.dart';
 import 'package:reebaplus_pos/shared/models/order_status.dart';
 
 /// Shared aggregation engine for the Daily Reconciliation (§25.9).
@@ -272,6 +273,9 @@ class ReconData {
     required this.costedRevenueKobo,
     required this.cogsKobo,
     required this.discountsKobo,
+    required this.vatEnabled,
+    required this.vatRateBps,
+    required this.vatKobo,
     required this.itemsSold,
     required this.skus,
     required this.uncostedItems,
@@ -328,6 +332,18 @@ class ReconData {
   /// profit isn't overstated by the discount given (the order's real payable is
   /// `netAmountKobo = gross − discount`). Contra-revenue, not an expense.
   final int discountsKobo;
+
+  // ── VAT (opt-in, per-business — OFF by default) ──────────────────────────
+  // Surfaced only when the business has enabled VAT in Settings (§10.1). Phase 1
+  // reports the VAT **due on the period's net sales** (gross − discounts) at the
+  // configured rate — it is a pass-through liability, NOT revenue or an expense,
+  // so it does not enter the P&L profit math. Adding VAT to the cart/receipt at
+  // checkout is a later slice; until then this is the obligation on recorded
+  // sales, computed by [computeVatKobo].
+  final bool vatEnabled;
+  final int vatRateBps; // basis points (750 = 7.5%)
+  final int vatKobo; // VAT due on net sales this period (0 when disabled)
+
   final int itemsSold;
   final int skus;
   final int uncostedItems;
@@ -396,6 +412,10 @@ class ReconData {
 
   final List<({String name, int qty})> topItems;
   final List<({String manufacturerName, int count, int valueKobo})> manufacturerEmpties;
+
+  /// The configured VAT rate as a display percentage ("7.5"), for card labels.
+  String get vatRateLabel =>
+      VatConfig(enabled: vatEnabled, rateBps: vatRateBps).ratePercentLabel;
 
   /// Costed revenue net of discounts given — the real money earned on costed
   /// lines. `costedRevenueKobo` is gross (Σ qty × gross unitPrice), so we
@@ -482,12 +502,13 @@ class ReconData {
       shortageCostKobo;
   int get businessNetPositionKobo => inventoryOnHandKobo + totalOwedKobo + crateDepositKobo - supplierPayableKobo;
 
-  /// Supplier account position (§21): all payments minus all goods
-  /// received, point-in-time. The inverse of [supplierPayableKobo] and identical
-  /// to `SupplierLedgerDao.getBalanceKobo` (SUM of signed entries).
-  ///   • positive (green) → credit we hold WITH the supplier (we've paid ahead);
-  ///   • negative (red)   → amount WE owe the supplier.
-  /// Display this signed value — never relabel a credit as "owed".
+  /// Supplier account position (§21): all payments made to suppliers minus all
+  /// goods received, point-in-time. The inverse of [supplierPayableKobo] and
+  /// identical to `SupplierLedgerDao.getBalanceKobo` (SUM of signed entries).
+  ///   • positive (green) → money we paid the supplier IN ADVANCE (a
+  ///     prepayment) — NOT money we hold on their behalf;
+  ///   • negative (red)   → a debt WE owe the supplier for unpaid goods.
+  /// Display this signed value — never relabel an advance payment as "owed".
   int get supplierAccountBalanceKobo => -supplierPayableKobo;
 
   /// Gross margin as a 1-dp percentage string ("0.0" when there's no net
@@ -551,6 +572,7 @@ ReconData computeReconData(
   final crateDamages =
       ref.watch(allCrateDamagesProvider).valueOrNull ?? const [];
   final users = ref.watch(usersByBusinessProvider).valueOrNull ?? const {};
+  final vat = ref.watch(vatConfigProvider).valueOrNull ?? VatConfig.off;
 
   final productById = {for (final p in productsWS) p.product.id: p.product};
   final inScope = reconStoreFilter(ref);
@@ -632,6 +654,14 @@ ReconData computeReconData(
       .toList()
     ..sort((a, b) => b.qty.compareTo(a.qty));
   final topItems = topItemsList.take(3).toList();
+
+  // ── VAT due on net sales (only when the business has enabled VAT) ─────────
+  // Base = gross sales − discounts (scope-consistent with the sums above). A
+  // pass-through liability computed on recorded sales; it does not affect the
+  // P&L profit lines.
+  final vatKobo = vat.enabled
+      ? computeVatKobo(totalRevenueKobo - discountsKobo, vat.rateBps)
+      : 0;
 
   // ── Inventory on hand at cost (point-in-time) ────────────────────────────
   var inventoryOnHandKobo = 0;
@@ -926,6 +956,9 @@ ReconData computeReconData(
     costedRevenueKobo: costedRevenueKobo,
     cogsKobo: cogsKobo,
     discountsKobo: discountsKobo,
+    vatEnabled: vat.enabled,
+    vatRateBps: vat.rateBps,
+    vatKobo: vatKobo,
     itemsSold: itemsSold,
     skus: skuSet.length,
     uncostedItems: uncostedItems,

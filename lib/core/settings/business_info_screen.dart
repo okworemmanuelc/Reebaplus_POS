@@ -11,6 +11,7 @@ import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/result.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
+import 'package:reebaplus_pos/core/settings/vat_settings.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -34,6 +35,10 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
   String? _type;
   bool _tracksEmptyCrates = true;
   String _currency = kDefaultCurrency;
+  // VAT is opt-in and OFF by default (not every business is authorised to
+  // charge it). Rate is entered as a percentage and stored as basis points.
+  bool _vatEnabled = false;
+  final _vatRateController = TextEditingController();
   bool _loading = true;
   bool _saving = false;
 
@@ -61,6 +66,7 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
   void dispose() {
     _nameController.dispose();
     _phoneController.dispose();
+    _vatRateController.dispose();
     super.dispose();
   }
 
@@ -73,6 +79,8 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
           )..where((t) => t.id.equals(bizId))).getSingleOrNull()
         : (await db.select(db.businesses).get()).firstOrNull;
     final currency = await db.settingsDao.get('default_currency');
+    final vatEnabledRaw = await db.settingsDao.get(kVatEnabledKey);
+    final vatBps = parseVatRateBps(await db.settingsDao.get(kVatRateBpsKey));
 
     // Attempt to resolve a cached local logo path.
     String? logoPath;
@@ -103,6 +111,10 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
         ...kCountryCurrency.values,
         _currency,
       }.toList()..sort();
+      _vatEnabled = vatEnabledRaw?.trim().toLowerCase() == 'true';
+      _vatRateController.text = vatBps > 0
+          ? VatConfig(enabled: true, rateBps: vatBps).ratePercentLabel
+          : '';
       _logoLocalPath = logoPath;
       _loading = false;
     });
@@ -202,9 +214,18 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
             : newLogoUrl ?? const Object(), // sentinel = leave unchanged
       );
       await db.settingsDao.set('default_currency', _currency);
+      // VAT (opt-in). Persist the flag always; write the rate (as basis points)
+      // only when enabled, defaulting a blank/zero entry so the closing shows no
+      // phantom VAT.
+      await db.settingsDao.set(kVatEnabledKey, _vatEnabled ? 'true' : 'false');
+      if (_vatEnabled) {
+        final pct = double.tryParse(_vatRateController.text.trim()) ?? 0;
+        final bps = pct <= 0 ? 0 : (pct * 100).round();
+        await db.settingsDao.set(kVatRateBpsKey, bps.toString());
+      }
       await db.activityLogDao.log(
         action: 'settings.business_info.update',
-        description: 'Updated business info (name, type, currency)',
+        description: 'Updated business info (name, type, currency, VAT)',
         staffId: db.currentUserId,
       );
       if (!mounted) return;
@@ -345,6 +366,65 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
                           onChanged: (v) =>
                               setState(() => _currency = v ?? _currency),
                         ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  const SettingsSectionTitle('Tax'),
+                  const SizedBox(height: 16),
+                  GlassyCard(
+                    padding: const EdgeInsets.all(16),
+                    radius: 16,
+                    child: Column(
+                      children: [
+                        SwitchListTile(
+                          value: _vatEnabled,
+                          onChanged: (v) => setState(() {
+                            _vatEnabled = v;
+                            // Prefill the standard rate the first time it's
+                            // enabled with a blank field.
+                            if (v && _vatRateController.text.trim().isEmpty) {
+                              _vatRateController.text = const VatConfig(
+                                enabled: true,
+                                rateBps: kDefaultVatRateBps,
+                              ).ratePercentLabel;
+                            }
+                          }),
+                          activeThumbColor:
+                              Theme.of(context).colorScheme.primary,
+                          activeTrackColor: Theme.of(
+                            context,
+                          ).colorScheme.primary.withValues(alpha: 0.35),
+                          title: Text(
+                            'Charge VAT',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          subtitle: Text(
+                            'Only enable if your business is registered to '
+                            'charge VAT. It appears on the daily closing.',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                        if (_vatEnabled) ...[
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: _vatRateController,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'^\d*\.?\d*'),
+                              ),
+                            ],
+                            decoration: AppDecorations.authInputDecoration(
+                              context,
+                              label: 'VAT rate (%)',
+                              prefixIcon: Icons.percent_rounded,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
