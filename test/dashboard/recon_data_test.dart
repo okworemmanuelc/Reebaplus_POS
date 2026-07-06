@@ -7,8 +7,12 @@ import 'package:reebaplus_pos/features/dashboard/reconciliation/recon_data.dart'
 /// expenses / damages, so the rest can be neutral.
 ReconData recon({
   int costedRevenueKobo = 0,
+  int totalRevenueKobo = -1, // -1 ⇒ mirror costedRevenueKobo (back-compat)
   int cogsKobo = 0,
   int discountsKobo = 0,
+  bool vatEnabled = false,
+  int vatRateBps = 0,
+  int vatKobo = 0,
   int expensesKobo = 0,
   int damageCostKobo = 0,
   int crateDamageDepositKobo = 0,
@@ -29,10 +33,13 @@ ReconData recon({
   int stockExpectedClosingKobo = 0,
 }) {
   return ReconData(
-    totalRevenueKobo: costedRevenueKobo,
+    totalRevenueKobo: totalRevenueKobo < 0 ? costedRevenueKobo : totalRevenueKobo,
     costedRevenueKobo: costedRevenueKobo,
     cogsKobo: cogsKobo,
     discountsKobo: discountsKobo,
+    vatEnabled: vatEnabled,
+    vatRateBps: vatRateBps,
+    vatKobo: vatKobo,
     itemsSold: 0,
     skus: 0,
     uncostedItems: 0,
@@ -134,6 +141,27 @@ void main() {
       // A fully-discounted period has no net revenue → no divide-by-zero.
       expect(recon(costedRevenueKobo: 5000, discountsKobo: 5000).grossMarginPct,
           '0.0');
+    });
+  });
+
+  group('ReconData VAT (opt-in, per-business)', () {
+    test('vatRateLabel renders the configured rate as a percent', () {
+      final d = recon(vatEnabled: true, vatRateBps: 750, vatKobo: 1000);
+      expect(d.vatRateLabel, '7.5');
+    });
+
+    test('VAT is a pass-through — it does not enter the profit lines', () {
+      // Same P&L inputs, VAT on vs off → identical gross/net profit.
+      final off = recon(costedRevenueKobo: 100000, cogsKobo: 60000);
+      final on = recon(
+        costedRevenueKobo: 100000,
+        cogsKobo: 60000,
+        vatEnabled: true,
+        vatRateBps: 750,
+        vatKobo: 7500,
+      );
+      expect(on.grossProfitKobo, off.grossProfitKobo);
+      expect(on.netProfitKobo, off.netProfitKobo);
     });
   });
 

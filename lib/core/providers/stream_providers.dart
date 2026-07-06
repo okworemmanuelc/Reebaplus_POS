@@ -14,6 +14,7 @@ import 'package:reebaplus_pos/core/data/currencies.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/business_scoped_stream.dart';
+import 'package:reebaplus_pos/core/settings/vat_settings.dart';
 import 'package:reebaplus_pos/core/theme/theme_notifier.dart';
 import 'package:reebaplus_pos/core/utils/business_time.dart';
 import 'package:reebaplus_pos/core/utils/date_period.dart';
@@ -1211,6 +1212,25 @@ final currencySymbolProvider = Provider<String>((ref) {
   final code = ref.watch(currencyCodeProvider).valueOrNull ?? kDefaultCurrency;
   return currencySymbolForCode(code);
 });
+
+/// The business's VAT configuration (opt-in, OFF by default), streamed from the
+/// synced `vat_enabled` / `vat_rate_bps` settings keys — same mechanism as
+/// [currencyCodeProvider], so a CEO toggling VAT in Settings propagates across
+/// devices with no migration. A row is only "enabled" when the flag is `'true'`
+/// AND the rate is positive, so an enabled-but-unconfigured business shows no
+/// VAT. Consumed by the standardized daily closing (Phase 1 surfaces VAT due on
+/// net sales; the checkout/receipt VAT leg is a later slice).
+final vatConfigProvider = businessScopedStream<VatConfig>(
+  (ref, db, businessId) => db.settingsDao.watch(kVatEnabledKey).asyncMap((
+    enabledRaw,
+  ) async {
+    final enabled = enabledRaw?.trim().toLowerCase() == 'true';
+    if (!enabled) return VatConfig.off;
+    final rateBps = parseVatRateBps(await db.settingsDao.get(kVatRateBpsKey));
+    return VatConfig(enabled: rateBps > 0, rateBps: rateBps);
+  }),
+  whenAbsent: VatConfig.off,
+);
 
 /// Global permissions catalog. Identical on every device and every
 /// business — seeded by migration, never written at runtime.
