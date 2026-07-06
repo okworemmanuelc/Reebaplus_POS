@@ -13,7 +13,7 @@ import 'package:reebaplus_pos/core/data/currencies.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
-import 'package:reebaplus_pos/core/data/business_types.dart';
+import 'package:reebaplus_pos/core/industry/industry.dart';
 import 'package:reebaplus_pos/features/auth/onboarding/onboarding_draft.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_form_kit.dart';
 import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
@@ -50,30 +50,9 @@ class CeoSignUpScreen extends ConsumerStatefulWidget {
 class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
   static const int _totalSteps = 9;
 
-  /// All seven master-plan business types (§1.2). Only 'Beverage distributor'
-  /// is selectable; the other six are visible but greyed-out as coming soon.
-  static const List<({String label, IconData icon, bool comingSoon})>
-  _businessTypes = [
-    (label: 'Restaurant', icon: Icons.restaurant_rounded, comingSoon: true),
-    (
-      label: 'Supermarket',
-      icon: Icons.local_grocery_store_rounded,
-      comingSoon: true,
-    ),
-    (label: 'Bar', icon: Icons.local_bar_rounded, comingSoon: true),
-    (
-      label: 'Beverage distributor',
-      icon: Icons.sports_bar_rounded,
-      comingSoon: false,
-    ),
-    (label: 'Pharmacy', icon: Icons.local_pharmacy_rounded, comingSoon: true),
-    (
-      label: 'Building Materials',
-      icon: Icons.foundation_rounded,
-      comingSoon: true,
-    ),
-    (label: 'Boutique', icon: Icons.checkroom_rounded, comingSoon: true),
-  ];
+  // The business-type picker is rendered from [Industry.catalogue] — the one
+  // Industry registry (ADR 0015). Each entry carries its own label, icon and
+  // coming-soon flag, so this screen no longer keeps a private duplicate list.
 
   // Obvious PINs to block (master plan §5.1). Mirrors create_pin_screen.dart.
   static const Set<String> _blockedPins = {
@@ -871,7 +850,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
       title: 'What type of business?',
       subtitle: 'Pick the one that fits best.',
       children: [
-        ..._businessTypes.map((t) {
+        ...Industry.catalogue.map((t) {
           final selected = _businessType == t.label;
           return Padding(
             padding: const EdgeInsets.only(bottom: 12),
