@@ -11,5 +11,5 @@ export 'package:reebaplus_pos/core/industry/industry.dart' show isCrateBusiness;
 /// cannot drift from the registry. DB stores the canonical 'Beer distributor'
 /// string for Beverage distributor tenants; the Business Info screen maps the
 /// display ↔ DB label at load/save time.
-List<String> get kBusinessTypes =>
+final List<String> kBusinessTypes =
     Industry.catalogue.map((i) => i.label).toList(growable: false);

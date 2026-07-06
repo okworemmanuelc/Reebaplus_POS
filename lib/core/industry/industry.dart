@@ -78,8 +78,8 @@ enum Industry {
 
   /// The industries offered in pickers, in plan order — every entry except
   /// [generic]. Onboarding and Settings render from this so the two lists can
-  /// never diverge from the registry.
-  static List<Industry> get catalogue =>
+  /// never diverge from the registry. Computed once (used inside `build`).
+  static final List<Industry> catalogue =
       values.where((i) => i != generic).toList(growable: false);
 }
 
@@ -90,8 +90,7 @@ enum Industry {
 Industry industryOf(String? type) {
   final t = type?.trim().toLowerCase();
   if (t == null || t.isEmpty) return Industry.generic;
-  for (final ind in Industry.values) {
-    if (ind == Industry.generic) continue;
+  for (final ind in Industry.catalogue) {
     if (ind.label.toLowerCase() == t || ind.aliases.contains(t)) return ind;
   }
   return Industry.generic;
