@@ -1822,3 +1822,25 @@ final allSupplierLedgerEntriesProvider =
   (ref, db, businessId) => db.supplierLedgerDao.watchAllHistory(),
   whenAbsent: const [],
 );
+
+/// Every `payment_transactions` row (the unified physical-cash tender ledger)
+/// for this business, newest first. Feeds the Daily Reconciliation cash-flow
+/// summary (ADR 0014): cash IN (`sale`, `wallet_topup`) and cash OUT (`refund`,
+/// `expense`), each filtered on `method == 'cash'`. The table carries no
+/// `storeId`, so the cash summary is business-wide (like customer debt).
+final allPaymentTransactionsProvider =
+    businessScopedStream<List<PaymentTransactionData>>(
+  (ref, db, businessId) => db.ordersDao.watchAllPaymentTransactions(),
+  whenAbsent: const [],
+);
+
+/// Every non-voided `stock_transactions` row (the append-only stock ledger) for
+/// this business. Feeds the Daily Reconciliation stock flow-equation card (ADR
+/// 0014): opening and expected-closing stock are reconstructed by rewinding
+/// these deltas from the current on-hand figure, valued at current cost. Store
+/// scope is applied in the report from each row's `locationId`.
+final allStockTransactionsProvider =
+    businessScopedStream<List<StockTransactionData>>(
+  (ref, db, businessId) => db.stockLedgerDao.watchAllTransactions(),
+  whenAbsent: const [],
+);

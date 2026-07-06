@@ -2,6 +2,117 @@
 
 ---
 
+## 2026-07-05 — Closing report: integrity flag (issue #72, slice 3 — epic complete)
+
+**What changed.** Final slice of the closing-report enhancement (ADR 0014 §④):
+a CEO-only **integrity check** card that reconciles reported P&L profit against
+the independent physical stock count — **no new persistence**, derived entirely
+from recorded flows + the count.
+
+- **What it does.** A true "Δ net position over the period = reported profit"
+  identity can't close: there's no cash leg (Hard Rule #8) and no stored
+  period-start snapshot. So instead of persisting snapshots, the flag surfaces
+  the one thing the recorded flows did **not** book — the **stock-count variance**
+  (physical − expected, at cost, straight from slice 2's `stockVarianceKobo`).
+  Reported profit is built only from sales / COGS / discounts / expenses /
+  damages, so a count shortfall is a **recording error** (unbooked shrinkage /
+  theft / miscount), not a separate real loss, and it isn't reflected in the
+  reported profit. The card shows Reported net profit → Unexplained variance →
+  **Count-reconciled profit** (`netProfit + variance`), with a
+  reconciled/flagged verdict and a "take a count" nudge when no count exists.
+- **Plumbing.** `ReconData` gains `integrityAdjustedProfitKobo` +
+  `hasIntegrityGap` getters (no new fields — reuses the slice-2 variance). New
+  CEO-only `_integrityCard` (shield icon) after the stock audit, shown when
+  `hasStockFlow`; CSV export gains a "Count-reconciled profit" row.
+- **Tests.** 3 integrity getter cases added to `recon_data_test.dart` (17 total
+  green); `flutter analyze` clean.
+
+**Epic status:** all three closing-report checks now ship — cash-flow summary
+(slice 1), stock flow-equation (slice 2), integrity flag (slice 3). Closes #72.
+
+---
+
+## 2026-07-05 — Closing report: stock flow-equation card (issue #72, slice 2)
+
+**What changed.** Second slice of the closing-report enhancement (ADR 0014 §①):
+a CEO-only **stock reconciliation flow-equation** card on the Daily
+Reconciliation — Opening + Goods received − COGS − Damages − Expired (± Other) =
+**Expected closing** (the perpetual system figure), then **Variance = Physical
+count − Expected**. Values the whole equation at **current per-product cost**.
+
+- **Cost basis (the hard input, resolved).** Opening stock *as of a past date*
+  is genuinely hard: cost is time-varying under FIFO (ADR 0005) and only current
+  stock is valued today. Rather than fake historical precision, every term is
+  valued at the product's **current** buying price, and opening / expected-closing
+  are reconstructed by **rewinding the recorded `stock_transactions` deltas from
+  the current on-hand figure** (`current − Σ deltas after period end` = closing;
+  `closing − Σ period deltas` = opening). Because opening is that rewind, the
+  equation **ties out to the system figure by construction** — stated basis, not
+  faked precision.
+- **Expired split from damages.** Record Damages and free-text removals both put
+  expiry in `stock_adjustments.reason` (`damage:expired` / "Expired"), reached
+  from the ledger row via `adjustmentId`. New `isExpiredReason` (contains
+  "expired") breaks Expired onto its own line; non-expired damage stays Damages.
+  The P&L "Damages (at cost)" line is deliberately **left unchanged** (still
+  folds expiry) — this split is scoped to the stock card.
+- **Classification.** From `stock_transactions` (store-scoped by `locationId`,
+  non-voided): `sale`/`return` → COGS (returns net against it); receipts (reason
+  "Stock received", both Receive Stock and Add Product opening) → Goods received;
+  `adjustment` reasons → Expired / Damages / receipt; everything else (transfers,
+  "Daily stock count adjustment", unclassified) → an **Other movements** residual
+  so nothing is silently folded into opening. Variance reuses the stock-count
+  surplus/shortage-at-cost figures (`surplus − shortage`), shown only when a
+  count exists.
+- **New plumbing.** `StockLedgerDao.watchAllTransactions()` (raw ledger rows, no
+  regen) + `allStockTransactionsProvider` (`businessScopedStream`; passes the
+  provider-ban test). `ReconData` gains `stockOpeningKobo` / `stockReceivedKobo` /
+  `stockCogsKobo` / `stockDamagesKobo` / `stockExpiredKobo` /
+  `stockOtherMovementsKobo` / `stockExpectedClosingKobo` fields +
+  `stockDerivedClosingKobo` / `stockVarianceKobo` / `hasStockFlow` getters.
+- **UI/CSV.** New CEO-only `_stockFlowCard` (scale-balanced icon) between the
+  shrinkage card and the stock audit, shown only when `hasStockFlow`; CSV export
+  gains the mirroring rows.
+- **Tests.** 4 flow-equation getter cases added to `recon_data_test.dart` (14
+  total green); `flutter analyze` clean; provider-ban + business-scoped-stream
+  tests green.
+
+Remaining for #72: the integrity flag (slice 3).
+
+---
+
+## 2026-07-05 — Closing report: cash-flow summary (issue #72, slice 1)
+
+**What changed.** First slice of the closing-report enhancement (ADR 0014 §②):
+a **derived cash-flow summary** on the CEO Daily Reconciliation — the period's
+expected cash *movement* from recorded cash tenders, **not** a counted drawer
+(Hard Rule #8: no float, no Close Day, no cash balance).
+
+- **Sourcing.** `payment_transactions` is the unified physical-cash ledger; every
+  cash move writes one (`sale` / `wallet_topup` / `refund` / `expense`, each with
+  a `method`). Verified at the insert sites (`daos_orders`, `credit_ledger_service`,
+  `daos_expenses`). Supplier payments are the one cash-out **not** in it (only on
+  `supplier_ledger_entries`), so they're summed from there. Expenses are taken
+  from the `expense` payment rows — **not** also from the expenses table — so
+  nothing double-counts. `method` matched case-insensitively ('Cash'/'cash' drift).
+- **Business-wide.** `payment_transactions` has no `storeId`, so the card is
+  business-wide (like the existing outstanding-debt line) and clearly labelled.
+  Crate deposits (a refundable held liability) are excluded — the ask is
+  operating cash (sales + debts collected).
+- **New plumbing.** `OrdersDao.watchAllPaymentTransactions()` (no regen — table
+  already in its accessor) + `allPaymentTransactionsProvider`
+  (`businessScopedStream`; passes the provider-ban test). `ReconData` gains
+  `cashSalesKobo` / `cashDebtsCollectedKobo` / `cashRefundsKobo` /
+  `cashExpensesKobo` / `cashSupplierPaidKobo` + `cashInKobo` / `cashOutKobo` /
+  `netCashMovementKobo` getters.
+- **UI/CSV.** New CEO-only `_cashFlowCard` (Cash in → Cash out → Net cash
+  movement) between P&L and Business worth; CSV export gains the same rows.
+- **Tests.** 4 cash-flow getter cases added to `recon_data_test.dart` (10 total
+  green); `flutter analyze` clean; provider-ban + business-scoped-stream tests green.
+
+Remaining for #72: stock flow-equation card and the integrity flag.
+
+---
+
 ## 2026-07-05 — Daily Reconciliation P&L: subtract discounts (issue #70)
 
 **What changed.** The Daily Reconciliation booked sales revenue **gross** and

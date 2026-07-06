@@ -28,8 +28,10 @@ Decisions locked:
   `expenses.paymentMethod`, `supplier_ledger_entries.paymentMethod`
   (all `== 'cash'`, matched **case-insensitively** — the data has `'Cash'`/`'cash'`
   drift). The authoritative cash-in source is `payment_transactions`
-  (`type` in {sale, topup_cash, …}), not `orders.paymentType`, so partial cash
-  on a credit order is captured. No cash *balance* is ever asserted.
+  (`type` in {sale, wallet_topup, refund, expense}), not `orders.paymentType`, so
+  partial cash on a credit order is captured; cash supplier payments (the one
+  cash-out not in `payment_transactions`) are summed from `supplier_ledger_entries`
+  `payment_*`. No cash *balance* is ever asserted.
 
 - **Stock reconciliation is a cost-valued flow-equation card (a derivation),
   compared to the physical count.** Opening (at cost) + Goods received − COGS −
@@ -39,9 +41,20 @@ Decisions locked:
   reason). The literal spec equation (which also subtracts *shortages* from
   expected) is rejected: a shortage **is** the variance, so subtracting it would
   double-count. The one genuinely hard input is *opening stock at cost as of a
-  past date* — cost is time-varying under FIFO (ADR 0005) and today only current
-  stock at current cost is valued; the implementation approximates and states
-  its basis rather than pretending to historical-cost precision.
+  past date* — cost is time-varying under FIFO (ADR 0005). **Basis decided
+  as-built (current cost, ledger-rewound):** every term (opening, received,
+  COGS, damages, expired) is valued at the product's *current* per-product
+  buying price (`products.buyingPriceKobo`; uncosted units, cost ≤ 0, carry
+  zero value). Opening and Expected closing are reconstructed by **rewinding the
+  recorded `stock_transactions` deltas from the current on-hand figure** — so the
+  equation ties to the perpetual SYSTEM figure *by construction* rather than
+  pretending to historical-cost precision. Deltas are classified by
+  `movementType`/reason (sale → COGS, receipt reasons → Goods received,
+  `damage:`/`expired` reasons → Damages/Expired); transfers, count fixes, and
+  anything unclassified land in a signed **Other movements** residual so nothing
+  is silently folded into opening. Consequence: this card's COGS (current cost)
+  can diverge from the P&L COGS (per-line snapshotted FIFO cost) under a price
+  change — accepted as the stated current-cost basis.
 
 - **P&L books gross revenue and subtracts an explicit Discounts line.**
   `order_items.unitPriceKobo` is the **gross** list price; the order's real

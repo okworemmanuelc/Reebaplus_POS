@@ -10,6 +10,38 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### SHIPPED: Closing-report reconciliation (ADR 0014, 2026-07-05)
+Enhanced the Daily Reconciliation (§25.9) into a full closing report. Grilled;
+design in **ADR 0014**. Two issues off `main`:
+- **#70 — P&L discount fix (SHIPPED — PR #71 MERGED to `main`).** Report booked revenue gross and
+  ignored `orders.discountKobo`, overstating profit. Added `ReconData.discountsKobo`
+  + `netRevenueKobo`; P&L now Revenue → −Discounts → Net revenue → −COGS; margin on
+  net revenue. Branch `fix/recon-pl-discounts`.
+- **#72 — closing-report enhancement (branch `feat/closing-report-reconciliation`,
+  stacked on #70).**
+  - ✅ **Slice 1 — cash-flow summary (committed `676c310`).** Business-wide derived
+    cash *movement* from tender-tagged flows (no drawer count — Hard Rule #8).
+    `OrdersDao.watchAllPaymentTransactions` + `allPaymentTransactionsProvider`;
+    CEO-only card + CSV. `payment_transactions` = unified cash ledger; supplier cash
+    from supplier_ledger; no double-count.
+  - ✅ **Slice 2 — stock flow-equation card (this branch).** CEO-only stock
+    reconciliation: Opening + Goods received − COGS − Damages − Expired (± Other)
+    = Expected closing → Variance = Physical − Expected. Valued at **current cost
+    throughout**; opening/expected-closing reconstructed by **rewinding the
+    `stock_transactions` ledger from current on-hand** (ties out by construction,
+    handles historical period-end). Expired split from damages via
+    `adjustmentId → reason` (`isExpiredReason`). `StockLedgerDao.watchAllTransactions`
+    + `allStockTransactionsProvider`; 7 `stock*Kobo` fields + `stockVarianceKobo`
+    / `hasStockFlow` getters; `_stockFlowCard` + CSV. 14 recon tests green.
+  - ✅ **Slice 3 — integrity flag (this branch).** CEO-only integrity check:
+    reconciles reported P&L profit against the physical count with **no new
+    persistence** — surfaces the stock-count variance the flows never booked
+    (`integrityAdjustedProfitKobo = netProfit + variance`; `hasIntegrityGap`),
+    framed as a recording error, not a real loss. `_integrityCard` + CSV row. 17
+    recon tests green. **Epic complete → closes #72.**
+
+
+
 ### PLANNING: Web POS (online-first browser client) — grilled 2026-07-04, ADRs 0007–0012
 - **North star:** full parity — the *entire* app replicated for web — reached in
   phases. **Phase 1 = selling loop + inventory management + reports.** Later phases

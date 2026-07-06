@@ -25,6 +25,18 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
 
   // ── Reads ──────────────────────────────────────────────────────────────────
 
+  /// Every `payment_transactions` row for this business — the unified physical-
+  /// cash tender ledger (`type` in {sale, wallet_topup, refund, expense}, each
+  /// carrying its `method`). Newest first. Voided rows are kept; callers filter
+  /// on `voidedAt`. This table has no `storeId`, so the Daily Reconciliation
+  /// cash-flow summary that reads it (ADR 0014) is business-wide.
+  Stream<List<PaymentTransactionData>> watchAllPaymentTransactions() {
+    return (select(paymentTransactions)
+          ..where((p) => whereBusiness(p))
+          ..orderBy([(p) => OrderingTerm.desc(p.createdAt)]))
+        .watch();
+  }
+
   Future<OrderData?> findById(String id) {
     return (select(orders)
           ..where((o) => o.id.equals(id) & whereBusiness(o))

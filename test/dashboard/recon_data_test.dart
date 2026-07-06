@@ -12,6 +12,21 @@ ReconData recon({
   int expensesKobo = 0,
   int damageCostKobo = 0,
   int crateDamageDepositKobo = 0,
+  int cashSalesKobo = 0,
+  int cashDebtsCollectedKobo = 0,
+  int cashRefundsKobo = 0,
+  int cashExpensesKobo = 0,
+  int cashSupplierPaidKobo = 0,
+  bool hasStockCount = false,
+  int shortageCostKobo = 0,
+  int surplusCostKobo = 0,
+  int stockOpeningKobo = 0,
+  int stockReceivedKobo = 0,
+  int stockCogsKobo = 0,
+  int stockDamagesKobo = 0,
+  int stockExpiredKobo = 0,
+  int stockOtherMovementsKobo = 0,
+  int stockExpectedClosingKobo = 0,
 }) {
   return ReconData(
     totalRevenueKobo: costedRevenueKobo,
@@ -22,6 +37,11 @@ ReconData recon({
     skus: 0,
     uncostedItems: 0,
     refundsKobo: 0,
+    cashSalesKobo: cashSalesKobo,
+    cashDebtsCollectedKobo: cashDebtsCollectedKobo,
+    cashRefundsKobo: cashRefundsKobo,
+    cashExpensesKobo: cashExpensesKobo,
+    cashSupplierPaidKobo: cashSupplierPaidKobo,
     bestStaff: null,
     bestStaffKobo: 0,
     expensesKobo: expensesKobo,
@@ -30,13 +50,13 @@ ReconData recon({
     damageCostKobo: damageCostKobo,
     damageRetailKobo: 0,
     crateDamageDepositKobo: crateDamageDepositKobo,
-    hasStockCount: false,
+    hasStockCount: hasStockCount,
     productsCounted: 0,
     shortageCount: 0,
     shortageUnits: 0,
     surplusCount: 0,
     surplusUnits: 0,
-    shortageCostKobo: 0,
+    shortageCostKobo: shortageCostKobo,
     shortageRetailKobo: 0,
     shortages: const [],
     goodsReceivedKobo: 0,
@@ -48,7 +68,14 @@ ReconData recon({
     supplierPayableKobo: 0,
     inventoryOnHandKobo: 0,
     uncostedInventoryItems: 0,
-    surplusCostKobo: 0,
+    surplusCostKobo: surplusCostKobo,
+    stockOpeningKobo: stockOpeningKobo,
+    stockReceivedKobo: stockReceivedKobo,
+    stockCogsKobo: stockCogsKobo,
+    stockDamagesKobo: stockDamagesKobo,
+    stockExpiredKobo: stockExpiredKobo,
+    stockOtherMovementsKobo: stockOtherMovementsKobo,
+    stockExpectedClosingKobo: stockExpectedClosingKobo,
     topItems: const [],
     manufacturerEmpties: const [],
   );
@@ -107,6 +134,128 @@ void main() {
       // A fully-discounted period has no net revenue → no divide-by-zero.
       expect(recon(costedRevenueKobo: 5000, discountsKobo: 5000).grossMarginPct,
           '0.0');
+    });
+  });
+
+  group('ReconData cash-flow summary (issue #72, ADR 0014)', () {
+    test('cash in = cash sales + debts collected', () {
+      final d = recon(cashSalesKobo: 80000, cashDebtsCollectedKobo: 12000);
+      expect(d.cashInKobo, 92000);
+    });
+
+    test('cash out = refunds + cash expenses + cash supplier payments', () {
+      final d = recon(
+        cashRefundsKobo: 3000,
+        cashExpensesKobo: 7000,
+        cashSupplierPaidKobo: 20000,
+      );
+      expect(d.cashOutKobo, 30000);
+    });
+
+    test('net cash movement is in minus out (can be negative)', () {
+      final d = recon(
+        cashSalesKobo: 50000,
+        cashDebtsCollectedKobo: 10000,
+        cashRefundsKobo: 5000,
+        cashExpensesKobo: 15000,
+        cashSupplierPaidKobo: 60000,
+      );
+      // 60,000 in − 80,000 out = −20,000.
+      expect(d.netCashMovementKobo, -20000);
+    });
+
+    test('hasCashActivity is false only when nothing moved', () {
+      expect(recon().hasCashActivity, isFalse);
+      expect(recon(cashSalesKobo: 1).hasCashActivity, isTrue);
+      expect(recon(cashSupplierPaidKobo: 1).hasCashActivity, isTrue);
+    });
+  });
+
+  group('ReconData stock flow-equation (issue #72 slice 2, ADR 0014)', () {
+    test('derived closing = opening + received − cogs − damages − expired', () {
+      // Opening 100,000 + received 40,000 − COGS 55,000 − damages 3,000 −
+      // expired 2,000 = 80,000, and no other movements.
+      final d = recon(
+        stockOpeningKobo: 100000,
+        stockReceivedKobo: 40000,
+        stockCogsKobo: 55000,
+        stockDamagesKobo: 3000,
+        stockExpiredKobo: 2000,
+        stockExpectedClosingKobo: 80000,
+      );
+      expect(d.stockDerivedClosingKobo, 80000);
+      // Ties out to the perpetual system figure fed in independently.
+      expect(d.stockDerivedClosingKobo, d.stockExpectedClosingKobo);
+    });
+
+    test('other movements (transfers / count fixes) fold into the equation', () {
+      // A +5,000 transfer-in shifts derived closing up by 5,000.
+      final d = recon(
+        stockOpeningKobo: 100000,
+        stockReceivedKobo: 0,
+        stockCogsKobo: 20000,
+        stockOtherMovementsKobo: 5000,
+        stockExpectedClosingKobo: 85000,
+      );
+      expect(d.stockDerivedClosingKobo, 85000);
+      expect(d.stockDerivedClosingKobo, d.stockExpectedClosingKobo);
+    });
+
+    test('variance is surplus minus shortage (physical − expected, at cost)', () {
+      // Counted 2,000 over in one product, 5,000 short in another → net −3,000.
+      final d = recon(surplusCostKobo: 2000, shortageCostKobo: 5000);
+      expect(d.stockVarianceKobo, -3000);
+      // A pure surplus is positive.
+      expect(recon(surplusCostKobo: 1500).stockVarianceKobo, 1500);
+    });
+
+    test('hasStockFlow is false only when every flow line is zero', () {
+      expect(recon().hasStockFlow, isFalse);
+      expect(recon(stockExpectedClosingKobo: 1).hasStockFlow, isTrue);
+      expect(recon(stockReceivedKobo: 1).hasStockFlow, isTrue);
+      expect(recon(stockExpiredKobo: 1).hasStockFlow, isTrue);
+    });
+  });
+
+  group('ReconData integrity flag (issue #72 slice 3, ADR 0014)', () {
+    test('count-reconciled profit is net profit plus the stock variance', () {
+      // Net profit 30,000; counted 4,000 short (shortage cost) → 26,000.
+      final d = recon(
+        costedRevenueKobo: 100000,
+        cogsKobo: 70000,
+        hasStockCount: true,
+        shortageCostKobo: 4000,
+      );
+      expect(d.netProfitKobo, 30000);
+      expect(d.stockVarianceKobo, -4000);
+      expect(d.integrityAdjustedProfitKobo, 26000);
+    });
+
+    test('a surplus lifts the reconciled profit above the reported profit', () {
+      final d = recon(
+        costedRevenueKobo: 50000,
+        cogsKobo: 30000,
+        hasStockCount: true,
+        surplusCostKobo: 1500,
+      );
+      // net profit 20,000 + surplus 1,500 = 21,500.
+      expect(d.integrityAdjustedProfitKobo, 21500);
+    });
+
+    test('hasIntegrityGap requires both a count and a non-zero variance', () {
+      // Variance present but no count taken → nothing to reconcile against.
+      expect(recon(shortageCostKobo: 5000).hasIntegrityGap, isFalse);
+      // Count taken and it ties out → reconciled, no gap.
+      expect(recon(hasStockCount: true).hasIntegrityGap, isFalse);
+      // Count taken and it diverges → flagged.
+      expect(
+        recon(hasStockCount: true, shortageCostKobo: 5000).hasIntegrityGap,
+        isTrue,
+      );
+      expect(
+        recon(hasStockCount: true, surplusCostKobo: 5000).hasIntegrityGap,
+        isTrue,
+      );
     });
   });
 }

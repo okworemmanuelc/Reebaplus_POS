@@ -99,12 +99,22 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
             SizedBox(height: context.spacingM),
             _plCard(context, theme, d),
             SizedBox(height: context.spacingM),
+            _cashFlowCard(context, theme, d),
+            SizedBox(height: context.spacingM),
             _businessWorthCard(context, theme, d),
           ],
           SizedBox(height: context.spacingM),
           _shrinkageCard(context, theme, d, retail: !isCeo),
+          if (isCeo && d.hasStockFlow) ...[
+            SizedBox(height: context.spacingM),
+            _stockFlowCard(context, theme, d),
+          ],
           SizedBox(height: context.spacingM),
           _stockCard(context, theme, d),
+          if (isCeo && d.hasStockFlow) ...[
+            SizedBox(height: context.spacingM),
+            _integrityCard(context, theme, d),
+          ],
           if (!isCeo) ...[
             SizedBox(height: context.spacingM),
             _debtsExpensesCard(context, theme, d),
@@ -244,6 +254,186 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
           ),
         ],
       ],
+    );
+  }
+
+  /// Derived cash-flow summary (ADR 0014): the period's expected cash MOVEMENT
+  /// from recorded cash tenders — cash sales + debts collected in, refunds +
+  /// cash expenses + cash supplier payments out. **Business-wide** (the
+  /// payment_transactions ledger has no store) and **not a counted drawer**:
+  /// there is no opening float to add this to (Hard Rule #8). CEO-only.
+  Widget _cashFlowCard(BuildContext context, ThemeData theme, ReconData d) {
+    final successColor = theme.extension<AppSemanticColors>()!.success;
+    final dangerColor = theme.colorScheme.error;
+    final netColor = d.netCashMovementKobo >= 0 ? successColor : dangerColor;
+    return _card(
+      context,
+      theme,
+      'Cash flow (business-wide)',
+      FontAwesomeIcons.moneyBillWave.data,
+      netColor,
+      [
+        _line(context, theme, 'Cash sales',
+            '+ ${formatCurrency(d.cashSalesKobo / 100.0)}'),
+        _line(context, theme, 'Debts collected (cash)',
+            '+ ${formatCurrency(d.cashDebtsCollectedKobo / 100.0)}'),
+        _line(context, theme, 'Cash in',
+            formatCurrency(d.cashInKobo / 100.0), strong: true),
+        _divider(theme),
+        _line(context, theme, 'Refunds paid (cash)',
+            '− ${formatCurrency(d.cashRefundsKobo / 100.0)}'),
+        _line(context, theme, 'Expenses paid (cash)',
+            '− ${formatCurrency(d.cashExpensesKobo / 100.0)}'),
+        _line(context, theme, 'Paid to suppliers (cash)',
+            '− ${formatCurrency(d.cashSupplierPaidKobo / 100.0)}'),
+        _line(context, theme, 'Cash out',
+            formatCurrency(d.cashOutKobo / 100.0), strong: true),
+        _divider(theme),
+        _line(context, theme, 'Net cash movement',
+            formatCurrency(d.netCashMovementKobo / 100.0),
+            strong: true, color: netColor),
+        const SizedBox(height: 6),
+        Text(
+          'Expected cash movement from recorded cash tenders — business-wide, '
+          'not a counted drawer.',
+          style: context.bodySmall.copyWith(color: theme.hintColor),
+        ),
+      ],
+    );
+  }
+
+  /// Stock reconciliation as a cost-valued flow equation (ADR 0014): Opening +
+  /// Goods received − COGS − Damages − Expired (± Other) = Expected closing (the
+  /// perpetual system figure), then Variance = Physical count − Expected. Every
+  /// figure is at CURRENT per-product cost (the stated basis — cost is
+  /// time-varying under FIFO). CEO-only (cost wall §25.3).
+  Widget _stockFlowCard(BuildContext context, ThemeData theme, ReconData d) {
+    final successColor = theme.extension<AppSemanticColors>()!.success;
+    final dangerColor = theme.colorScheme.error;
+    final variance = d.stockVarianceKobo;
+    final hasVariance = d.hasStockCount && variance != 0;
+    final varianceColor = variance >= 0 ? successColor : dangerColor;
+    return _card(
+      context,
+      theme,
+      'Stock reconciliation (at cost)',
+      FontAwesomeIcons.scaleBalanced.data,
+      Colors.blueAccent,
+      [
+        _line(context, theme, 'Opening stock',
+            formatCurrency(d.stockOpeningKobo / 100.0)),
+        _line(context, theme, 'Goods received',
+            '+ ${formatCurrency(d.stockReceivedKobo / 100.0)}'),
+        _line(context, theme, 'Cost of goods sold',
+            '− ${formatCurrency(d.stockCogsKobo / 100.0)}'),
+        _line(context, theme, 'Damages',
+            '− ${formatCurrency(d.stockDamagesKobo / 100.0)}'),
+        _line(context, theme, 'Expired',
+            '− ${formatCurrency(d.stockExpiredKobo / 100.0)}'),
+        if (d.stockOtherMovementsKobo != 0)
+          _line(
+            context,
+            theme,
+            'Other movements',
+            '${d.stockOtherMovementsKobo >= 0 ? '+ ' : '− '}'
+                '${formatCurrency(d.stockOtherMovementsKobo.abs() / 100.0)}',
+          ),
+        _divider(theme),
+        _line(context, theme, 'Expected closing',
+            formatCurrency(d.stockExpectedClosingKobo / 100.0),
+            strong: true),
+        if (d.hasStockCount) ...[
+          _line(
+            context,
+            theme,
+            'Variance (counted − expected)',
+            '${variance >= 0 ? '+ ' : '− '}'
+                '${formatCurrency(variance.abs() / 100.0)}',
+            strong: true,
+            color: hasVariance ? varianceColor : null,
+          ),
+        ],
+        const SizedBox(height: 6),
+        Text(
+          d.hasStockCount
+              ? 'Valued at current cost. Variance is the counted-vs-expected gap '
+                    'the recorded flows didn\'t explain.'
+              : 'Valued at current cost. No stock count in this period, so there '
+                    'is no variance to reconcile against.',
+          style: context.bodySmall.copyWith(color: theme.hintColor),
+        ),
+      ],
+    );
+  }
+
+  /// Integrity flag (ADR 0014 slice 3): reconciles reported P&L profit against
+  /// the independent physical stock count. Any gap is the stock-count variance
+  /// the recorded flows never booked — a recording error (shrinkage / theft /
+  /// miscount), not a separate loss, and NOT reflected in the reported profit.
+  /// No persistence — derived from flows + the count. CEO-only.
+  Widget _integrityCard(BuildContext context, ThemeData theme, ReconData d) {
+    final successColor = theme.extension<AppSemanticColors>()!.success;
+    final dangerColor = theme.colorScheme.error;
+    if (!d.hasStockCount) {
+      return _card(
+        context,
+        theme,
+        'Integrity check',
+        FontAwesomeIcons.shieldHalved.data,
+        theme.hintColor,
+        [
+          Text(
+            'No physical stock count in this period, so the recorded flows can\'t '
+            'be reconciled against a real count. Take a stock count to verify '
+            'nothing left unrecorded.',
+            style: context.bodySmall.copyWith(color: theme.hintColor),
+          ),
+        ],
+      );
+    }
+    final gap = d.stockVarianceKobo;
+    final reconciled = gap == 0;
+    final color = reconciled ? successColor : dangerColor;
+    return _card(
+      context,
+      theme,
+      'Integrity check',
+      FontAwesomeIcons.shieldHalved.data,
+      color,
+      [
+        _line(context, theme, 'Reported net profit',
+            formatCurrency(d.netProfitKobo / 100.0)),
+        _line(
+          context,
+          theme,
+          'Unexplained stock variance',
+          reconciled
+              ? formatCurrency(0)
+              : '${gap >= 0 ? '+ ' : '− '}${formatCurrency(gap.abs() / 100.0)}',
+          danger: !reconciled,
+        ),
+        _divider(theme),
+        _line(
+          context,
+          theme,
+          'Count-reconciled profit',
+          formatCurrency(d.integrityAdjustedProfitKobo / 100.0),
+          strong: true,
+          color: color,
+        ),
+        const SizedBox(height: 6),
+        Text(
+          reconciled
+              ? 'The physical count matches recorded sales, receipts, damages and '
+                    'expiries — the reported profit reconciles.'
+              : 'The physical count is off the recorded flows by '
+                    '${formatCurrency(gap.abs() / 100.0)}. This is a recording gap '
+                    '(unbooked shrinkage / theft or a miscount), not reflected in '
+                    'the reported profit above.',
+          style: context.bodySmall.copyWith(color: theme.hintColor),
+        ),
+      ],
+      danger: !reconciled,
     );
   }
 
@@ -701,6 +891,24 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
         // Supplier account position: negative = we owe, positive = credit held.
         ['Supplier account balance (now)', money(d.supplierAccountBalanceKobo)],
         ['Business net position (now)', money(d.businessNetPositionKobo)],
+        // Cash flow (business-wide) — mirrors _cashFlowCard.
+        ['Cash sales', money(d.cashSalesKobo)],
+        ['Debts collected (cash)', money(d.cashDebtsCollectedKobo)],
+        ['Refunds paid (cash)', money(d.cashRefundsKobo)],
+        ['Expenses paid (cash)', money(d.cashExpensesKobo)],
+        ['Paid to suppliers (cash)', money(d.cashSupplierPaidKobo)],
+        ['Net cash movement', money(d.netCashMovementKobo)],
+        // Stock reconciliation (at cost) — mirrors _stockFlowCard.
+        ['Opening stock (at cost)', money(d.stockOpeningKobo)],
+        ['Goods received (at cost)', money(d.stockReceivedKobo)],
+        ['COGS (at current cost)', money(d.stockCogsKobo)],
+        ['Damages (stock, at cost)', money(d.stockDamagesKobo)],
+        ['Expired (at cost)', money(d.stockExpiredKobo)],
+        ['Other stock movements (at cost)', money(d.stockOtherMovementsKobo)],
+        ['Expected closing (at cost)', money(d.stockExpectedClosingKobo)],
+        ['Stock variance (counted − expected)', money(d.stockVarianceKobo)],
+        // Integrity check — mirrors _integrityCard.
+        ['Count-reconciled profit', money(d.integrityAdjustedProfitKobo)],
         ['Stock shortages (units)', '${d.shortageUnits}'],
       ] else ...[
         ['Stock shortages (units)', '${d.shortageUnits}'],
