@@ -400,7 +400,6 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
     // CEO: cost-valued flow equation reconciled to the count.
     final variance = d.stockVarianceKobo;
     final hasVariance = d.hasStockCount && variance != 0;
-    final varianceColor = variance >= 0 ? successColor : dangerColor;
     return _card(
       context,
       theme,
@@ -439,7 +438,7 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
               '${variance >= 0 ? '+ ' : '− '}'
                   '${formatCurrency(variance.abs() / 100.0)}',
               strong: true,
-              color: hasVariance ? varianceColor : null,
+              color: hasVariance ? dangerColor : null,
             ),
         ],
         if (d.hasStockCount) ...[
