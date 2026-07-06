@@ -148,6 +148,44 @@ this is a starting cut, not the final issue list.
    new industries?
 9. **Rollout:** ship all nine at once, or feature-flag the newly enabled ones?
 
+## 7a. Decisions locked during grilling (running log)
+
+1. **Architecture = configuration over one shared model (option A).** Industry is a
+   *profile* layered on the existing single products/POS/inventory model — not a
+   per-industry data model or plugin app. Generalises the existing crate pattern.
+2. **Industry identity = a total normalizer over `businesses.type` (option i).** No
+   new column, no migration (`businesses.type` is unconstrained `text` on both
+   client and cloud; cloud crate gate `0137` already normalizes the string). One
+   `Industry` enum keyed by `industryOf(type)`, unknown/null → a safe `generic`
+   profile. Collapses the two duplicated lists (`business_types.dart` +
+   `_businessTypes` in `ceo_sign_up_screen.dart`) into one registry.
+3. **Terminology = swap key nouns only, app-shipped, generic fallback.** Change
+   only the domain nouns that read wrong cross-industry (item name, unit, category;
+   drink-only words like crate/empties stay scoped to beverage). Neutral words
+   (Save/Price/Stock/Search) unchanged. Words ship as compile-time constants in the
+   registry — **not** CEO-editable, not synced. Owner customization is a possible
+   later add, explicitly out of scope now.
+4. **Rollout = unlock all 9 now, tailor extras later.** All industries selectable
+   immediately on the shared feature set + correct words + starter categories/units.
+   Industry-specific extras (IMEI, expiry alerts, etc.) added afterwards, one
+   industry per PR — availability is never blocked on them.
+5. **Feature morph = industry decides + a few owner switches.** Each profile lists
+   its extras; most auto-on, a few stay owner opt-ins where behaviour varies
+   (mirrors `tracks_empty_crates`). Not a wall of manual toggles.
+6. **Product photo = one per product, cloud-synced, detail/edit screen only.**
+   Optional on Add + Update Product; uploads to Supabase Storage, shows on every
+   device, reuses the `BusinessLogoService` pattern (local-cache render + offline
+   upload). NOT on the POS grid, NOT on receipts (both easy later). No gallery.
+7. **Industry editable after onboarding, data preserved.** Switching changes words
+   + optional-feature visibility only; product/history data untouched (hidden
+   fields keep their data). Consistent with the editable crate switch.
+8. **Scope boundary locked.** OUT now (deferred to per-industry PRs): barcode/IMEI
+   scanning, deep per-industry flows, price-tier redesign (tiers keep
+   Retailer/Wholesaler; only labels change via the lexicon). IN now: the registry
+   + 9 industries, the noun-swap, basic starter categories/units, the synced photo.
+
+Full rationale for each: **ADR 0015**. Glossary: `CONTEXT.md` → Industry section.
+
 ## 8. Delivery approach
 Epic 0–1 (foundation + onboarding) first; Epic 2 (terminology) and Epic 3
 (image) can run in parallel once the profile registry exists; Epic 4+ ships
