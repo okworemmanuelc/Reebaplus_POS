@@ -78,10 +78,23 @@ class FxCheckoutLine {
 class FxCheckout {
   final String paymentMethod; // 'cash' | 'transfer' | 'credit' | 'wallet'
   final int discountKobo;
+  /// The cash paid toward GOODS (net) — the deposit is separate ([crateDeposits]).
+  /// Each runner adds the deposit total to derive the GRAND cash actually
+  /// collected (goods + deposit), which is what the RPC / createOrder receive.
   final int amountPaidKobo;
   final List<FxCheckoutLine> items;
+
+  /// §13.4 money-track deposit COLLECTED at checkout, keyed by manufacturer KEY
+  /// → deposit paid (kobo). Empty ⇒ crate-track (no deposit money). Only applies
+  /// to a registered Cash/Transfer sale (mobile `_depositApplies`).
+  final Map<String, int> crateDeposits;
+
   FxCheckout(this.paymentMethod, this.discountKobo, this.amountPaidKobo,
-      this.items);
+      this.items,
+      {this.crateDeposits = const {}});
+
+  int get depositTotalKobo =>
+      crateDeposits.values.fold<int>(0, (s, v) => s + v);
 }
 
 /// A registered customer attached to a credit/wallet scenario (Slice 3, #44).
@@ -342,6 +355,10 @@ class GoldenScenario {
             .map((i) =>
                 FxCheckoutLine(i['product'] as String, i['quantity'] as int))
             .toList(),
+        crateDeposits: ((j['checkout']['crate_deposits']
+                    as Map<String, dynamic>?) ??
+                const {})
+            .map((k, v) => MapEntry(k, v as int)),
       ),
       maxDiscountPercent: j['max_discount_percent'] as int?,
       expectRejection: rejectedWith,
