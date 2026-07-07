@@ -10,6 +10,47 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### Live cross-device sync ("deleted product still sellable") — in progress (2026-07-07)
+On-device debugging of "console changes don't reach the app live." Findings + fixes:
+- **Pull works; realtime never delivered.** DB soft-delete + guard already correct
+  (#87/#88/#89 merged; migrations 0145/0146 deployed). A manual pull-to-refresh
+  clears a console-deleted product; only the *live* path was dead.
+- **#93 resubscribe race (PR #94, MERGED).** `restartRealtimeSync` tore channels
+  down fire-and-forget then synchronously re-created them; the transport's
+  `startRealtime` guard bailed on the not-yet-cleared list → **zero** channels every
+  session. Fixed: await teardown before re-subscribe + synchronous `_realtimeActive`
+  flip; transport `stopRealtime` clears holders synchronously. Regression test.
+- **#95 channel fan-out + #97 socket auth (PR #96, OPEN).** After #93, all ~55
+  per-table `postgres_changes` channels errored. Collapsed to **one channel, N
+  bindings** (#95) and forced `realtime.setAuth` before subscribe (#97). On-device
+  diagnostic proved `socketAlreadyHadSessionToken=true` — **the socket IS authed**,
+  yet every `postgres_changes` binding still `channelError → timedOut` and **no
+  `supabase_realtime` CDC slot streams to the client**. Server checks ruled out:
+  slots not exhausted (2/5), all tables in the publication, `authenticated` has
+  SELECT + `business_id`, filter-check passes. **postgres_changes root cause still
+  OPEN** (server-side realtime authorization/delivery).
+- **Key architecture reconciliation.** `architecture.md` defines Realtime as a
+  **signal that triggers a pull, "not the transport for the data itself"** (best-
+  effort; Goal #2 / SC#6 say "when realtime sync is healthy"). The implementation
+  diverged to direct-apply of 55 `postgres_changes` — the failing path. The
+  documented **"periodic fallback poll"** (architecture.md §Pull path) is **NOT
+  implemented**: the only `Timer.periodic` (30 s) drains the outbox (push) — there
+  is no periodic *pull*, so a foregrounded idle till never converges without a
+  working realtime or a manual refresh.
+- **DECISION (resolved 2026-07-07):** implement the documented periodic fallback
+  **pull** → `catchUpPull` for robust near-live convergence (spec-aligned,
+  independent of the broken postgres_changes). Chasing server-side
+  `postgres_changes` deferred. #96 (one channel + setAuth) stays as a best-effort
+  realtime *signal*.
+- **#98 periodic fallback pull — SHIPPED (PR pending).** Added the documented
+  "periodic fallback poll" to the existing 30 s sync tick: foregrounded + online +
+  business-bound → silent, debounced `catchUpPull(reason: 'periodic')` (runs before
+  and independent of the push drain). A console edit/soft-delete now converges
+  within ~one tick with no manual refresh, regardless of realtime health. Timer
+  lifecycle reused (starts at sign-in, cancels at logout, suspends when
+  backgrounded). test/sync 186 green; analyze clean. On-device: a deleted product
+  stops being sellable within ~30 s.
+
 ### Multi-industry onboarding & app morphing (PRD #76, ADR 0015) — in progress
 Slices: **#77** registry foundation → **#79** enable all nine → **#80** Lexicon on
 product forms → **#81** Lexicon on POS/inventory/guides; **#78** synced product

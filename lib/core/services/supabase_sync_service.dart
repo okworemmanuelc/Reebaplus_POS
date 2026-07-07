@@ -3317,6 +3317,20 @@ class SupabaseSyncService {
       _autoPushPeriodic ??= Timer.periodic(_autoPushPeriodicInterval, (
         _,
       ) async {
+        // Architecture §Pull path — the documented "periodic fallback poll".
+        // Realtime is a best-effort *signal* that triggers a pull, not the data
+        // transport; when it is unhealthy nothing else pulls while the till sits
+        // foregrounded and idle, so a console edit / soft-delete never converges
+        // without a manual refresh. This silent catch-up pull guarantees
+        // convergence within one tick. It runs before — and independently of —
+        // the push drain below (it must fire even while a push is in flight),
+        // and self-guards on business-bound + online + not-mid-full-pull, with a
+        // debounce inside catchUpPull so it never overlaps the reconnect/resume
+        // catch-ups.
+        final pullBizId = _db.businessIdResolver.call();
+        if (pullBizId != null) {
+          unawaited(catchUpPull(pullBizId, reason: 'periodic'));
+        }
         try {
           if (_pushing) return;
           await _db.syncDao.resetStuckInProgress();
