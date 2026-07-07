@@ -59,6 +59,16 @@ on the cloud — so a blind `db push` was avoided).
 - Cloud verified: `products.image_url` column present, `product-images` bucket
   public with 4 storage policies.
 
+**Code-review fixes (two-axis review).** (1) **Coalesce-safety:** the outbox keeps
+one pending row per `(action_type, id)`, so a partial `{id, image_url}` upsert
+queued right after an `updateProductDetails` upsert replaced it and dropped the
+concurrent name/price edits — `setProductImageUrl` now enqueues the FULL row
+(`_enqueueFullProduct`); regression test added. (2) **POS-grid exclusion:** the
+flows had written the cache path to `products.image_path`, which the POS grid
+renders — #78 photos now live in `image_url` + the local cache only
+(`updateProductDetails.imagePath` is a sentinel-defaulted param). (3)
+`ProductPhotoField` uses `textTheme` styles; removed dead `localPathIfExists`.
+
 ## 2026-07-06 — Standardized daily closing: declutter + opt-in VAT
 
 **Context.** The Daily Reconciliation detail screen had grown to **9 cards that
