@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:reebaplus_pos/core/industry/lexicon.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/result.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -80,8 +81,9 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
   String? _imagePath;
   Uint8List? _pendingImageBytes;
 
-  static const _units = ['Crate', 'Bottle', 'Pack', 'Carton', 'Keg', 'Can'];
-  List<String> _dynamicUnits = _units;
+  // Unit suggestions come from the industry's Lexicon (#80); set in initState +
+  // merged with the product's own unit and any already in use in _loadData.
+  List<String> _dynamicUnits = const [];
 
   /// Whether the current role may see / edit the buying price (§16.5 / §16.7).
   /// Reads (not watches) so it is safe to call from `_save`.
@@ -106,6 +108,10 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
 
   /// trackEmpties as actually saved — forced off for non-crate businesses.
   bool get _effectiveTrackEmpties => _isCrateBusiness && _trackEmpties;
+
+  /// The active industry's words + presets (#80). Read (not watched); the sheet
+  /// edits one product for one business, so the Lexicon is stable here.
+  Lexicon get _lexicon => ref.read(industryLexiconProvider);
 
   /// Empty-crate value in kobo, or null when not tracking empties / left blank.
   int? get _emptyCrateValueKobo {
@@ -161,6 +167,9 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
     _imagePath = p.imagePath;
 
     _unit = p.unit;
+    // The industry's starter units, plus this product's own unit so the
+    // dropdown always includes the selected value (#80).
+    _dynamicUnits = <String>{..._lexicon.starterUnits, p.unit}.toList()..sort();
     _trackEmpties = p.trackEmpties;
     _allowFractionalSales = p.allowFractionalSales;
     _size = p.size;
@@ -193,7 +202,8 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
       _allSuppliers = suppliers;
       _allManufacturers = manufacturers;
       _allCategories = cats;
-      _dynamicUnits = <String>{..._units, _unit, ...uniqueUnits}.toList()
+      _dynamicUnits = <String>{..._lexicon.starterUnits, _unit, ...uniqueUnits}
+          .toList()
         ..sort();
       if (cachedPhoto != null) _imagePath = cachedPhoto;
 
@@ -476,9 +486,9 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
 
       String? missingField;
       if (name.isEmpty) {
-        missingField = 'Product Name';
+        missingField = '${_lexicon.item} Name';
       } else if (_selectedCategory == null) {
-        missingField = 'Category';
+        missingField = _lexicon.category;
       } else if (_retailPriceCtrl.text.trim().isEmpty) {
         missingField = 'Retailer Price';
       } else if (_wholesalePriceCtrl.text.trim().isEmpty) {
@@ -880,15 +890,15 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                     // ── PRODUCT NAME ─────────────────────────────────────────
                     AppInput(
                       controller: _nameCtrl,
-                      labelText: 'Product Name *',
-                      hintText: _isCrateBusiness ? 'Eva water 75cl' : 'e.g. Heineken 60cl',
+                      labelText: '${_lexicon.item} Name *',
+                      hintText: _lexicon.itemNameHint,
                     ),
                     const SizedBox(height: 14),
 
                     // ── CATEGORY ─────────────────────────────────────────────
                     AppInput(
                       controller: _categoryCtrl,
-                      labelText: 'CATEGORY *',
+                      labelText: '${_lexicon.category.toUpperCase()} *',
                       hintText: 'Search or type category name…',
                       prefixIcon: Icon(Icons.search, size: 18, color: subtext),
                       onChanged: _onCategoryChanged,
@@ -958,7 +968,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                     AppInput(
                       controller: _subtitleCtrl,
                       labelText: 'Description / Subtitle',
-                      hintText: _isCrateBusiness ? 'sparkling water' : 'e.g. Premium Lager',
+                      hintText: _lexicon.itemDescriptionHint,
                     ),
                     const SizedBox(height: 14),
 
