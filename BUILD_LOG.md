@@ -14,8 +14,8 @@ skipping it never blocks a save.
   additive `ALTER TABLE products ADD COLUMN image_url`; `products` is a
   pass-through push table, so the column rides the normal outbox → upsert → pull
   path with no RPC/whitelist change (dodges the overload trap). `CatalogDao.
-  setProductImageUrl` is a minimal partial upsert used after upload + by the
-  offline flush.
+  setProductImageUrl` persists the URL on the local row and enqueues the FULL
+  product row (coalesce-safe) after upload + by the offline flush.
 - **Service + storage.** `ProductImageService` mirrors `BusinessLogoService`:
   pick+resize, upload to the **product-images** bucket at
   `<businessId>/<productId>.png`, local file cache, and a SharedPreferences
