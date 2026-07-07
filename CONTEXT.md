@@ -158,6 +158,38 @@ _Avoid_: server-arrival order as the FIFO key; prompting the user per corrected
 sale; treating an assignment as permanent (it is stable only until an earlier
 sale arrives).
 
+### Industry
+
+**Industry**:
+The trade a business operates in (Beverage distributor, Pharmacy, Phone &
+Gadgets, Frozen Foods & Grocery, …) — the single input that morphs the app's
+words, presets, and optional feature surfaces. Resolved from `businesses.type`
+by the total normalizer `industryOf(type)`; unknown/null → the `generic`
+Industry, never a crash. Across the epic all nine become selectable at
+onboarding and editable later; this foundation slice adds the registry without
+changing today's selectable set (ADR 0015).
+_Avoid_: reading `businesses.type` string directly to branch behaviour (use the
+resolved Industry); a new `industry_id` column (identity is the normalized type).
+
+**Industry Profile**:
+The per-Industry configuration record in the one industry registry: display
+label, icon, its **Lexicon**, starter categories/units, and its feature flags.
+Layered over the *one* shared products/POS/inventory model — an Industry is
+configuration, not a separate data model or app (ADR 0015). The registry
+supersedes the old duplicated lists (`business_types.dart` +
+`_businessTypes` in `ceo_sign_up_screen.dart`).
+_Avoid_: per-industry screens/tables/flows forked from the shared model; a
+plugin architecture.
+
+**Lexicon**:
+The app-shipped, compile-time set of an Industry's domain nouns (item name, unit,
+category, …) — only the nouns that read wrong cross-industry; neutral words
+(Save/Price/Stock) are left literal. Beverage-only nouns (crate, empties) live
+only in the beverage profile so they cannot leak. Missing slots fall back to the
+`generic` Lexicon. Not CEO-editable, not synced (ADR 0015).
+_Avoid_: translating every string; a synced or owner-editable vocabulary;
+hardcoding "crate"/"bottle" in feature code.
+
 ### Scoping
 
 **Current Business Id**:
