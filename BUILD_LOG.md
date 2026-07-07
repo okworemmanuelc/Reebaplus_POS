@@ -2,6 +2,35 @@
 
 ---
 
+## 2026-07-07 — Reconnect + app-resume catch-up pull; re-stamp cleanup (issue #88)
+
+**What changed.** Devices missed cloud soft-deletes because Supabase realtime
+never replays events dropped while the socket was down, and the reconnect
+catch-up only fired after a *failed* pull. Live data confirmed the lingering
+"deleted" products were soft-deleted + recent (not hard-deleted).
+
+- **`catchUpPull(businessId)`** — new silent, 20s-debounced delta pull; guarded
+  by the in-flight full-pull flag + online check; pushes the outbox first (§3.4).
+- **Reconnect** (`_onOnlineChanged`) now calls it **unconditionally** on every
+  offline→online (dropped the "only if last pull failed" gate).
+- **App-resume** (`auto_lock_wrapper`) now also fires it (previously only
+  refreshed the businesses row + restarted realtime).
+- **Migration `0146_restamp_soft_deleted_rows.sql`** — one-time
+  `last_updated_at=now() WHERE is_deleted` on the catalog/entity tables so every
+  device re-pulls and drops them. Positive sync only (zero wipe-race). The local
+  "delete rows absent from snapshot" reconcile was explicitly rejected.
+
+**Tests** `test/sync/catch_up_pull_test.dart` (guards + debounce); full
+`test/sync/` suite green (183). **0146 deployed + verified** via `apply_migration`
+(2026-07-07): all 6 soft-deleted products re-stamped.
+
+**Files changed:** `lib/core/services/supabase_sync_service.dart`,
+`lib/shared/widgets/auto_lock_wrapper.dart`,
+`supabase/migrations/0146_restamp_soft_deleted_rows.sql`,
+`test/sync/catch_up_pull_test.dart`.
+
+---
+
 ## 2026-07-07 — Terminology morph (Lexicon) on POS, inventory & guides (issue #81, PRD #76)
 
 **What changed.** Extends the industry Lexicon (from #80) to the remaining
