@@ -316,7 +316,10 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     _trackEmpties = product.trackEmpties;
     _size = product.size;
     _expiryDate = product.expiryDate;
-    _imagePath = product.imagePath;
+    // Only adopt a non-null legacy imagePath — a cross-device photo has its
+    // renderable path resolved via ensureCached (#78), so don't blank it here
+    // when a synced row carries a null/foreign imagePath.
+    if (product.imagePath != null) _imagePath = product.imagePath;
     // Keep the unit dropdown inclusive of a (possibly new) synced unit value.
     if (!_allUnits.contains(product.unit)) {
       _allUnits = ({..._allUnits, product.unit}.toList())..sort();

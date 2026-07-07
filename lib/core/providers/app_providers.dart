@@ -536,17 +536,6 @@ final productImageServiceProvider = Provider<ProductImageService>((ref) {
   return ProductImageService(ref.read(supabaseClientProvider));
 });
 
-/// The local file path to a product's photo, or null when none is set or the
-/// cache is still being populated. Family keyed by the product's id + cloud
-/// URL: [ProductImageService.ensureCached] serves the local file when present,
-/// otherwise downloads from Storage once (so photos survive a reinstall and
-/// appear on every device), and returns null offline with no cache.
-final productImagePathProvider = FutureProvider.autoDispose
-    .family<String?, ({String productId, String? imageUrl})>((ref, arg) async {
-      final svc = ref.read(productImageServiceProvider);
-      return svc.ensureCached(productId: arg.productId, imageUrl: arg.imageUrl);
-    });
-
 /// Lifts the `SupabaseSyncService.pullStatus` ValueNotifier into Riverpod
 /// so the MainLayout catch-up banner (and SyncIssues) can `ref.watch` it.
 /// Mirrors the pattern used for the `isOnline` ValueNotifier (read directly
