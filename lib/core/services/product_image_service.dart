@@ -189,12 +189,6 @@ class ProductImageService {
   /// whether the file exists.
   Future<String> localPathFor(String productId) => _localPath(productId);
 
-  /// Returns the local file path if the cached file exists, otherwise null.
-  Future<String?> localPathIfExists(String productId) async {
-    final path = await _localPath(productId);
-    return File(path).existsSync() ? path : null;
-  }
-
   /// Returns the local file path, downloading from [imageUrl] once if the local
   /// cache is absent. Returns null if neither the local cache nor the URL
   /// yields an image (e.g. offline with no cache).

@@ -1617,8 +1617,9 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
 
     try {
       // Upload (keyed by product id) + local cache; offline it caches locally
-      // and queues for the reconnect flush. The cache path becomes imagePath
-      // (offline render) and the cloud URL is patched to sync cross-device. #78.
+      // and queues for the reconnect flush. The photo lives in image_url + the
+      // ProductImageService cache (never products.image_path, so it stays off
+      // the POS grid); the cache path drives the local preview. #78.
       final res = await imgSvc.save(
         businessId: businessId,
         productId: productId,
@@ -1629,24 +1630,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       setState(() => _imagePath = localPath);
 
       final db = ref.read(databaseProvider);
-      await db.catalogDao.updateProductDetails(
-        productId,
-        name: _nameController.text.trim(),
-        manufacturerId: _selectedManufacturerId,
-        buyingPriceKobo:
-            ((parseCurrency(_buyingPriceController.text)) * 100).round(),
-        retailerPriceKobo:
-            ((parseCurrency(_retailPriceController.text)) * 100).round(),
-        wholesalerPriceKobo:
-            ((parseCurrency(_wholesalerPriceController.text)) * 100).round(),
-        emptyCrateValueKobo:
-            (parseCurrency(_emptyCrateValueController.text) * 100).toInt(),
-        categoryId: _selectedCategoryId,
-        unit: _selectedUnit,
-        lowStockThreshold: widget.item.lowStockThreshold.toInt(),
-        imagePath: localPath,
-      );
       if (res case Ok(:final value)) {
+        // Persists the URL and enqueues the FULL product row (coalesce-safe).
         await db.catalogDao.setProductImageUrl(productId, value);
       }
 

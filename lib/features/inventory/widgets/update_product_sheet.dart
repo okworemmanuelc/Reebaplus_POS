@@ -504,11 +504,11 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
       final buyingKobo = (buyingPrice * 100).round();
       final lowStock = int.tryParse(_lowStockCtrl.text) ?? 5;
 
-      // Optional product photo (#78): upload a freshly picked image (keyed by
-      // the product id) BEFORE the details write, so the local cache path
-      // becomes the product's imagePath and renders offline; the cloud URL is
-      // patched after (it also syncs cross-device). Offline, save() caches
-      // locally + marks the product pending so the reconnect flush uploads later.
+      // Optional product photo (#78): upload a freshly picked image, keyed by
+      // the product id. The photo lives in image_url + the ProductImageService
+      // cache (never products.image_path, so it stays off the POS grid); the
+      // cache path drives the local preview here. Offline, save() caches locally
+      // + marks the product pending so the reconnect flush uploads it later.
       String? newImageUrl;
       if (_pendingImageBytes != null) {
         final businessId = auth.currentUser?.businessId;
@@ -537,7 +537,6 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
         unit: _unit,
         trackEmpties: _effectiveTrackEmpties,
         allowFractionalSales: _allowFractionalSales,
-        imagePath: _imagePath,
         lowStockThreshold: lowStock,
         subtitle: _subtitleCtrl.text.trim().isEmpty
             ? null

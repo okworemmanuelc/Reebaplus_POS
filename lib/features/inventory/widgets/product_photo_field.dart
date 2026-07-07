@@ -98,11 +98,8 @@ class ProductPhotoField extends StatelessWidget {
                   ),
                   child: Text(
                     _hasImage ? 'Change photo' : 'Add photo',
-                    style: TextStyle(
-                      color: theme.colorScheme.primary,
-                      fontWeight: FontWeight.w600,
-                      fontSize: context.getRFontSize(14),
-                    ),
+                    style: theme.textTheme.labelLarge
+                        ?.copyWith(color: theme.colorScheme.primary),
                   ),
                 ),
               ),
@@ -112,19 +109,16 @@ class ProductPhotoField extends StatelessWidget {
                   onTap: onRemove,
                   child: Text(
                     'Remove photo',
-                    style: TextStyle(
-                      color: theme.colorScheme.error,
-                      fontSize: context.getRFontSize(13),
-                    ),
+                    style: theme.textTheme.titleSmall
+                        ?.copyWith(color: theme.colorScheme.error),
                   ),
                 ),
               ],
               SizedBox(height: context.getRSize(6)),
               Text(
                 'Optional — shown on the product’s details.',
-                style: TextStyle(
+                style: theme.textTheme.labelSmall?.copyWith(
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                  fontSize: context.getRFontSize(11),
                 ),
               ),
             ],

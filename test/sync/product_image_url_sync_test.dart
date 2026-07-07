@@ -55,4 +55,46 @@ void main() {
       await boot.db.close();
     }
   });
+
+  test('patching the photo after a details edit keeps the edit (coalesce-safe)',
+      () async {
+    // The outbox keeps ONE pending row per (action_type, id): a details edit
+    // then a photo patch both enqueue a products upsert for the same id and
+    // coalesce. setProductImageUrl must enqueue the FULL row so the coalesced
+    // payload carries BOTH the edited name AND image_url — a partial
+    // {id, image_url} upsert would replace the edit and silently drop it.
+    final boot = await bootstrapTestDb();
+    try {
+      final id = UuidV7.generate();
+      await boot.db.into(boot.db.products).insert(
+            ProductsCompanion.insert(
+              id: Value(id),
+              businessId: boot.businessId,
+              name: 'Old name',
+            ),
+          );
+
+      await boot.db.catalogDao.updateProductDetails(
+        id,
+        name: 'New name',
+        buyingPriceKobo: 100,
+        retailerPriceKobo: 200,
+        wholesalerPriceKobo: 150,
+      );
+      await boot.db.catalogDao.setProductImageUrl(id, 'https://x/p.png');
+
+      final products = (await getPendingQueue(boot.db))
+          .where((q) =>
+              q.actionType.startsWith('products') &&
+              (jsonDecode(q.payload) as Map)['id'] == id)
+          .toList();
+      expect(products, hasLength(1), reason: 'coalesced to one products upsert');
+      final payload = jsonDecode(products.single.payload) as Map<String, dynamic>;
+      expect(payload['name'], 'New name',
+          reason: 'the details edit must survive the photo patch');
+      expect(payload['image_url'], 'https://x/p.png');
+    } finally {
+      await boot.db.close();
+    }
+  });
 }

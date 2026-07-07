@@ -367,7 +367,7 @@ final supabaseSyncServiceProvider = Provider<SupabaseSyncService>((ref) {
   // their public URLs onto the product rows (which then sync cross-device). #78.
   service.onReconnected = () {
     final db = ref.read(databaseProvider);
-    final businessId = db.businessIdResolver.call();
+    final businessId = db.currentBusinessId;
     if (businessId == null) return;
     unawaited(
       ref.read(productImageServiceProvider).flushPending(
