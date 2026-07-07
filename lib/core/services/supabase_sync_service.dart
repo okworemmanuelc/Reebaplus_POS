@@ -263,6 +263,12 @@ class SupabaseSyncService {
     PullStatus.idle,
   );
 
+  /// Debounce window shared by the reconnect + app-resume [catchUpPull] calls,
+  /// so a device that regains network and foregrounds at nearly the same moment
+  /// doesn't fire two overlapping delta pulls.
+  static const Duration _catchUpDebounce = Duration(seconds: 20);
+  DateTime? _lastCatchUpAt;
+
   /// Re-entrancy guard for `pullChanges`. setCurrentUser fires it on every
   /// login boundary; the connectivity-recovery listener may also fire it;
   /// users can tap the catch-up banner retry. Without a guard these can race
@@ -345,27 +351,17 @@ class SupabaseSyncService {
       } catch (e) {
         debugPrint('[SyncService] onReconnected hook threw: $e');
       }
-    }
-    if (!_wasOnline &&
-        nowOnline &&
-        pullStatus.value.stage == PullStage.failed &&
-        _currentBusinessId != null &&
-        !_fullPullRunning) {
-      debugPrint(
-        '[SyncService] Connectivity recovered while pull was failed — '
-        'auto-retrying pullChanges($_currentBusinessId)',
-      );
-      // Fire-and-forget retry. If we're still offline / the link is flaky this
-      // throws again; swallow it so it can't escape to the top-level zone as an
-      // unhandled error. pullStatus stays `failed` and the next connectivity
-      // flip retries (offline-first — a failed background pull is not a crash).
-      // §3.4: push the outbox first so a device that was offline uploads its
-      // work before re-downloading.
-      unawaited(
-        pushThenPull(_currentBusinessId!).catchError((Object e) {
-          debugPrint('[SyncService] connectivity-retry pull failed: $e');
-        }),
-      );
+      // Unconditional catch-up: realtime never replays `postgres_changes`
+      // missed while the socket was down, so on EVERY reconnect — not only
+      // after a *failed* pull — pull the delta since the last watermark.
+      // Otherwise a product soft-deleted on the console while this device was
+      // offline lingers (still sellable) until the next login or manual
+      // refresh. Debounced + in-flight-guarded inside catchUpPull, which also
+      // pushes the outbox first (§3.4: upload before re-downloading).
+      final bizId = _currentBusinessId;
+      if (bizId != null) {
+        unawaited(catchUpPull(bizId, reason: 'reconnect'));
+      }
     }
     _wasOnline = nowOnline;
   }
@@ -1981,6 +1977,44 @@ class SupabaseSyncService {
     await _runPushOnce();
     await pullChanges(businessId);
   }
+
+  /// Silent, debounced delta catch-up pull for the reconnect + app-resume
+  /// paths. Supabase realtime does NOT replay `postgres_changes` missed while
+  /// the socket was down (offline, or OS-suspended while the app is
+  /// backgrounded), so a console edit — most importantly a product soft-delete
+  /// — can otherwise linger on a logged-in device until the next login or
+  /// manual pull-to-refresh. This pulls the delta since the last watermark with
+  /// no refresh banner (background only). Guarded by the in-flight full-pull
+  /// flag and a shared debounce so a near-simultaneous reconnect + foreground
+  /// can't fire two overlapping pulls; best-effort (never throws to the caller).
+  Future<void> catchUpPull(String businessId, {String reason = ''}) async {
+    if (_currentBusinessId == null || _fullPullRunning || !isOnline.value) {
+      return;
+    }
+    final now = DateTime.now();
+    if (_lastCatchUpAt != null &&
+        now.difference(_lastCatchUpAt!) < _catchUpDebounce) {
+      debugPrint('[SyncService] Catch-up pull ($reason) debounced');
+      return;
+    }
+    _lastCatchUpAt = now;
+    debugPrint('[SyncService] Catch-up pull ($reason) for $businessId');
+    try {
+      await pushThenPull(businessId);
+    } catch (e) {
+      debugPrint('[SyncService] catch-up pull ($reason) failed: $e');
+    }
+  }
+
+  /// Test seam: the timestamp of the last non-debounced [catchUpPull], so a test
+  /// can assert the guard/debounce decisions without driving the full pull.
+  @visibleForTesting
+  DateTime? get lastCatchUpAtForTesting => _lastCatchUpAt;
+
+  /// Test seam: bind the active business without running a login/pull, so
+  /// [catchUpPull]'s guards can be exercised in isolation.
+  @visibleForTesting
+  set currentBusinessIdForTesting(String? id) => _currentBusinessId = id;
 
   /// Minimum-login pull: fetches only the tables required for `MainLayout`
   /// to render. Designed to complete in ~1-6 seconds depending on link

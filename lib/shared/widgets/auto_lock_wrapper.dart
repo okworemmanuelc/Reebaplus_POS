@@ -99,6 +99,13 @@ class _AutoLockWrapperState extends ConsumerState<AutoLockWrapper>
         // this, "live" sync silently stays dead after the app comes back even
         // though refreshBusinessRow above does a one-shot catch-up.
         _sync.restartRealtimeSync(subBizId);
+        // Beyond the businesses row above: pull the full delta since the last
+        // watermark so any INSERT/UPDATE the realtime socket missed while the
+        // app was backgrounded lands now — most importantly a product
+        // soft-deleted on the console, which would otherwise linger (still
+        // sellable) until the next login or manual refresh. Silent + debounced
+        // inside catchUpPull; ref-free (uses captured _sync).
+        unawaited(_sync.catchUpPull(subBizId, reason: 'app-resume'));
       }
 
       final pausedMs = prefs.getInt(_pausedTimeKey);

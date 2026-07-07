@@ -23,6 +23,61 @@ soft-delete mandate at the DB layer.
 
 ---
 
+## 2026-07-07 — Reconnect + app-resume catch-up pull; re-stamp cleanup (issue #88)
+
+**What changed.** Devices missed cloud soft-deletes because Supabase realtime
+never replays events dropped while the socket was down, and the reconnect
+catch-up only fired after a *failed* pull. Live data confirmed the lingering
+"deleted" products were soft-deleted + recent (not hard-deleted).
+
+- **`catchUpPull(businessId)`** — new silent, 20s-debounced delta pull; guarded
+  by the in-flight full-pull flag + online check; pushes the outbox first (§3.4).
+- **Reconnect** (`_onOnlineChanged`) now calls it **unconditionally** on every
+  offline→online (dropped the "only if last pull failed" gate).
+- **App-resume** (`auto_lock_wrapper`) now also fires it (previously only
+  refreshed the businesses row + restarted realtime).
+- **Migration `0146_restamp_soft_deleted_rows.sql`** — one-time
+  `last_updated_at=now() WHERE is_deleted` on the catalog/entity tables so every
+  device re-pulls and drops them. Positive sync only (zero wipe-race). The local
+  "delete rows absent from snapshot" reconcile was explicitly rejected.
+
+**Tests** `test/sync/catch_up_pull_test.dart` (guards + debounce); full
+`test/sync/` suite green (183). **0146 deployed + verified** via `apply_migration`
+(2026-07-07): all 6 soft-deleted products re-stamped.
+
+**Files changed:** `lib/core/services/supabase_sync_service.dart`,
+`lib/shared/widgets/auto_lock_wrapper.dart`,
+`supabase/migrations/0146_restamp_soft_deleted_rows.sql`,
+`test/sync/catch_up_pull_test.dart`.
+
+---
+
+## 2026-07-07 — Fix POS crash on stale category selection (deleted-category dangle)
+
+**What changed.** `pos_home_screen.dart:272` built the active category chip
+label with `_controller!.categories.firstWhere((c) => c.id == selectedCategoryId)`.
+When the selected category disappears from the stream — renamed away,
+soft-deleted, or removed on the console then synced down — `firstWhere` throws
+`StateError: Bad state: No element` and the POS screen crashes.
+
+- **Root-cause fix (`pos_controller.dart` `_loadCategories`):** when the
+  `watchAllCategories()` stream emits a list that no longer contains
+  `selectedCategoryId`, reset the selection to `null` (→ "All").
+- **Defense-in-depth (`pos_home_screen.dart`):** new `_selectedCategoryLabel()`
+  helper does a plain loop with an `'All'` fallback instead of `firstWhere`, so
+  the label can never throw even during the momentary window before the
+  controller resets.
+
+`flutter analyze` on both files: no issues. Behavioural fix; no schema/sync
+change. Part of the deleted-product / downward-tombstone investigation — the
+crash is a *symptom* of category removals syncing down while the POS selection
+is stale.
+
+**Files changed:** `lib/features/pos/screens/pos_home_screen.dart`,
+`lib/features/pos/controllers/pos_controller.dart`.
+
+---
+
 ## 2026-07-07 — Terminology morph (Lexicon) on POS, inventory & guides (issue #81, PRD #76)
 
 **What changed.** Extends the industry Lexicon (from #80) to the remaining
