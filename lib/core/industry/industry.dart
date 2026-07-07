@@ -24,13 +24,12 @@ enum Industry {
   supermarket(label: 'Supermarket', icon: Icons.local_grocery_store_rounded),
   bar(label: 'Bar', icon: Icons.local_bar_rounded, crateEligible: true),
 
-  /// The one industry live today. The DB stores the legacy canonical string
-  /// `'Beer distributor'` for these tenants (mapped to this display label at
-  /// load/save), so [aliases] carries it for resolution.
+  /// The one industry that was live before the multi-industry unlock (#79). The
+  /// DB stores the legacy canonical `'Beer distributor'` for these tenants
+  /// (mapped to this display label at load/save), so [aliases] carries it.
   beverage(
     label: 'Beverage distributor',
     icon: Icons.sports_bar_rounded,
-    comingSoon: false,
     crateEligible: true,
     aliases: {'beer distributor'},
   ),
@@ -38,20 +37,32 @@ enum Industry {
   buildingMaterials(label: 'Building Materials', icon: Icons.foundation_rounded),
   boutique(label: 'Boutique', icon: Icons.checkroom_rounded),
 
+  /// New in the multi-industry unlock (#79). No crate features (bottle/crate
+  /// tracking stays Bar/Beverage-only); deeper serial/IMEI capture is a later,
+  /// separately-flagged slice (ADR 0015).
+  phoneAndGadgets(label: 'Phone & Gadgets', icon: Icons.smartphone_rounded),
+
+  /// New in the multi-industry unlock (#79). No crate features; cold-chain /
+  /// expiry emphasis is a later per-industry slice (ADR 0015).
+  frozenFoodsAndGrocery(
+    label: 'Frozen Foods & Grocery',
+    icon: Icons.ac_unit_rounded,
+  ),
+
   /// Safe fallback for an unknown, legacy, or null `businesses.type`. Never
   /// offered in a picker (excluded from [catalogue]); it exists so [industryOf]
   /// is total and the interior falls back to neutral words and no
   /// industry-only features.
-  generic(
-    label: 'Business',
-    icon: Icons.storefront_rounded,
-    comingSoon: false,
-  );
+  generic(label: 'Business', icon: Icons.storefront_rounded);
 
   const Industry({
     required this.label,
     required this.icon,
-    this.comingSoon = true,
+    // Retained per PRD #76 (registry carries a coming-soon flag) for a future
+    // gated industry; uniformly false after the #79 unlock, so no entry sets it
+    // today — hence the unused-parameter suppression.
+    // ignore: unused_element_parameter
+    this.comingSoon = false,
     this.crateEligible = false,
     this.aliases = const <String>{},
   });
@@ -63,8 +74,9 @@ enum Industry {
   /// Icon shown beside the label in the onboarding picker.
   final IconData icon;
 
-  /// Whether this industry is greyed-out as "coming soon" at onboarding. #77
-  /// preserves today's set (only [beverage] selectable); #79 flips all off.
+  /// Whether this industry is greyed-out as "coming soon" at onboarding. All
+  /// nine are unlocked (#79), so this is uniformly false today; the flag stays
+  /// in the registry (PRD #76) so a future industry can ship gated.
   final bool comingSoon;
 
   /// Whether this industry uses the empty-crate features (Bar / Beverage only).

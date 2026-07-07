@@ -2,6 +2,43 @@
 
 ---
 
+## 2026-07-07 — Enable all nine industries at onboarding (issue #79, PRD #76)
+
+**What changed.** Unlock every industry at signup — the existing seven plus new
+**Phone & Gadgets** and **Frozen Foods & Grocery** (nine total), all selectable.
+
+- **Registry-only change (the #77 prefactor paid off).** Added `phoneAndGadgets`
+  (icon `smartphone_rounded`) and `frozenFoodsAndGrocery` (icon `ac_unit_rounded`)
+  to the `Industry` enum, and flipped `comingSoon` off for all (made `false` the
+  constructor default, dropped the now-redundant explicit flags). The CEO Sign Up
+  picker and the Settings → Business Info dropdown already render from
+  `Industry.catalogue`, so **no UI code changed** — all nine now appear and are
+  selectable automatically, and the greyed-out "coming soon" state is gone.
+- **Crate opt-in unchanged.** "Track empty crates" still gates on
+  `isCrateBusiness` (Bar/Beverage only) — the two new industries never show it.
+- **Onboarding stores the canonical label** (unchanged path); the two new labels
+  equal their DB canonical (no `'Beer distributor'`-style mapping needed).
+- **Industry editable in Settings, data preserved** — switching only rewrites
+  `businesses.type`; product/stock/history rows are untouched (unchanged path).
+- `comingSoon` is retained in the registry per PRD #76 (for a future gated
+  industry) with a documented unused-parameter suppression, since no entry sets
+  it after the unlock.
+
+**Files changed:** `lib/core/industry/industry.dart`,
+`test/industry/industry_registry_test.dart` (catalogue → nine, all-selectable
+assertion, golden updated + two resolution cases).
+
+**Verification.**
+- `flutter analyze` → clean project-wide.
+- `flutter test test/industry` → 13/13 (resolution incl. the two new labels,
+  membership = nine in plan order, all selectable, crate-gate unchanged, golden).
+  Ran `test/auth test/settings test/crates test/providers` → green except the
+  known pre-existing flaky `who_is_working_screen_test.dart` (fails on pristine
+  main, unrelated).
+- `flutter run` on the Android emulator → built + booted cleanly.
+
+---
+
 ## 2026-07-07 — Optional synced product photo (issue #78, PRD #76)
 
 **What changed.** Owners can attach an optional photo to a product on Add /
