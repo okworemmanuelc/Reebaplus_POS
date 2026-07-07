@@ -265,15 +265,11 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
                           'All',
                           ..._controller!.categories.map((c) => c.name),
                         ],
-                        selectedCategory:
-                            _controller!.selectedCategoryId == null
-                            ? 'All'
-                            : _controller!.categories
-                                  .firstWhere(
-                                    (c) =>
-                                        c.id == _controller!.selectedCategoryId,
-                                  )
-                                  .name,
+                        // Defense-in-depth: the controller already resets a
+                        // dangling selectedCategoryId, but never let the chip
+                        // label `firstWhere` throw if the selected category is
+                        // momentarily absent from the list — fall back to 'All'.
+                        selectedCategory: _selectedCategoryLabel(),
                         onCategorySelected: (name) {
                           if (name == 'All') {
                             _controller!.selectCategory(null);
@@ -403,6 +399,19 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
         ),
       ),
     );
+  }
+
+  // Chip label for the active category filter. A plain lookup that falls back
+  // to 'All' rather than `firstWhere` (which throws StateError when the
+  // selected category is momentarily missing from the list — e.g. right after
+  // a soft-delete/console removal syncs down before the selection resets).
+  String _selectedCategoryLabel() {
+    final id = _controller!.selectedCategoryId;
+    if (id == null) return 'All';
+    for (final c in _controller!.categories) {
+      if (c.id == id) return c.name;
+    }
+    return 'All';
   }
 
   // Inline dismissible hint shown above the product grid (first couple of
