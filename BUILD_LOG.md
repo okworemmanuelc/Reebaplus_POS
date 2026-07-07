@@ -31,6 +31,32 @@ catch-up only fired after a *failed* pull. Live data confirmed the lingering
 
 ---
 
+## 2026-07-07 — Fix POS crash on stale category selection (deleted-category dangle)
+
+**What changed.** `pos_home_screen.dart:272` built the active category chip
+label with `_controller!.categories.firstWhere((c) => c.id == selectedCategoryId)`.
+When the selected category disappears from the stream — renamed away,
+soft-deleted, or removed on the console then synced down — `firstWhere` throws
+`StateError: Bad state: No element` and the POS screen crashes.
+
+- **Root-cause fix (`pos_controller.dart` `_loadCategories`):** when the
+  `watchAllCategories()` stream emits a list that no longer contains
+  `selectedCategoryId`, reset the selection to `null` (→ "All").
+- **Defense-in-depth (`pos_home_screen.dart`):** new `_selectedCategoryLabel()`
+  helper does a plain loop with an `'All'` fallback instead of `firstWhere`, so
+  the label can never throw even during the momentary window before the
+  controller resets.
+
+`flutter analyze` on both files: no issues. Behavioural fix; no schema/sync
+change. Part of the deleted-product / downward-tombstone investigation — the
+crash is a *symptom* of category removals syncing down while the POS selection
+is stale.
+
+**Files changed:** `lib/features/pos/screens/pos_home_screen.dart`,
+`lib/features/pos/controllers/pos_controller.dart`.
+
+---
+
 ## 2026-07-07 — Terminology morph (Lexicon) on POS, inventory & guides (issue #81, PRD #76)
 
 **What changed.** Extends the industry Lexicon (from #80) to the remaining

@@ -69,6 +69,14 @@ class PosController extends ChangeNotifier {
     _categoriesSub = _database.inventoryDao.watchAllCategories().listen((list) {
       if (_disposed) return;
       categories = list;
+      // A category the cashier had filtered on can disappear from the stream
+      // (renamed away, soft-deleted, or removed on the console then synced
+      // down). Drop the now-dangling selection back to "All" so the chip-row
+      // lookup in pos_home_screen can't `firstWhere` on a missing id and crash.
+      if (selectedCategoryId != null &&
+          !list.any((c) => c.id == selectedCategoryId)) {
+        selectedCategoryId = null;
+      }
       notifyListeners();
     });
   }
