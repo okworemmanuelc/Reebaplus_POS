@@ -3160,16 +3160,22 @@ class SupabaseSyncService {
   /// Stops listening to real-time changes (e.g., on logout).
   void stopRealtimeSync() {
     debugPrint('[SyncService] Stopping real-time sync.');
-    _tearDownRealtimeChannels();
+    unawaited(_tearDownRealtimeChannels());
     stopAutoPush();
   }
 
   /// Removes the active realtime channels without touching auto-push. Shared by
-  /// [stopRealtimeSync] (logout) and [restartRealtimeSync] (resubscribe). The
-  /// channel teardown is fire-and-forget (as the old `removeChannel` calls were).
-  void _tearDownRealtimeChannels() {
-    unawaited(_transport.stopRealtime());
+  /// [stopRealtimeSync] (logout) and [restartRealtimeSync] (resubscribe).
+  ///
+  /// `_realtimeActive` flips to false *synchronously* (before the await) so a
+  /// concurrent [restartRealtimeSync] can't slip past its own guard mid-teardown
+  /// and double-subscribe. The removal is then awaited so a resubscribing caller
+  /// sees a fully-cleared transport: `startRealtime` no-ops while any channel
+  /// object is still held, so re-creating before `stopRealtime` finished silently
+  /// dropped every channel — realtime dead for the whole session (#93).
+  Future<void> _tearDownRealtimeChannels() async {
     _realtimeActive = false;
+    await _transport.stopRealtime();
   }
 
   /// Re-establishes the realtime subscriptions after they may have been
@@ -3184,10 +3190,14 @@ class SupabaseSyncService {
   /// Driven by app-resume and connectivity-recovery. Idempotent and cheap (a
   /// few channels); a no-op when there were no channels to begin with (not yet
   /// signed in) — `startRealtimeSync` itself requires a logged-in business.
-  void restartRealtimeSync(String businessId) {
+  Future<void> restartRealtimeSync(String businessId) async {
     if (!_realtimeActive) return;
     debugPrint('[SyncService] Re-subscribing realtime for $businessId.');
-    _tearDownRealtimeChannels();
+    // Await the full teardown before re-subscribing: `startRealtime` no-ops while
+    // the previous channel objects are still held, so recreating before
+    // `stopRealtime` completes drops every channel and leaves realtime dead for
+    // the session (#93). Awaiting also avoids two live channels on one topic.
+    await _tearDownRealtimeChannels();
     startRealtimeSync(businessId);
   }
 
@@ -3447,7 +3457,7 @@ class SupabaseSyncService {
         // this listener) can leave the realtime websocket dead with no SDK
         // rejoin — resubscribe so live updates resume, not just the one-shot
         // catch-up pull below.
-        restartRealtimeSync(businessId);
+        unawaited(restartRealtimeSync(businessId));
         unawaited(() async {
           try {
             // Reconnect backstop for a staff device that was offline when the

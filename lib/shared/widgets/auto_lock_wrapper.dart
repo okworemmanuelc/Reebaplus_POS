@@ -98,7 +98,7 @@ class _AutoLockWrapperState extends ConsumerState<AutoLockWrapper>
         // channel rejoin is not guaranteed after a long suspension — without
         // this, "live" sync silently stays dead after the app comes back even
         // though refreshBusinessRow above does a one-shot catch-up.
-        _sync.restartRealtimeSync(subBizId);
+        unawaited(_sync.restartRealtimeSync(subBizId));
         // Beyond the businesses row above: pull the full delta since the last
         // watermark so any INSERT/UPDATE the realtime socket missed while the
         // app was backgrounded lands now — most importantly a product

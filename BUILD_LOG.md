@@ -2,6 +2,50 @@
 
 ---
 
+## 2026-07-07 — Fix realtime resubscribe teardown/re-create race (issue #93)
+
+**What changed.** Console edits/soft-deletes never propagated **live** to the
+app — a deleted product stayed sellable until a manual pull-to-refresh. Device
+logs showed `Starting real-time sync` twice but never
+`[CloudTransport] Realtime subscribed: <table>`. Root cause: a teardown/re-create
+race in `restartRealtimeSync` (fired on app-resume + connectivity-recovery, so
+≈ every launch).
+
+- `_tearDownRealtimeChannels()` fired `unawaited(_transport.stopRealtime())` then
+  synchronously re-created via `startRealtimeSync`. The real
+  `SupabaseCloudTransport.stopRealtime()` cleared `_tableChannels` **after** its
+  `await removeChannel` loop, so it suspended with the list still full; the
+  recreate's `startRealtime` guard (`if (_tableChannels.isNotEmpty ...) return;`)
+  then bailed and created **zero** channels. Net: no live channels for the whole
+  session (all ~40 synced tables), REST/pull unaffected.
+
+**Fix.**
+- `restartRealtimeSync` now **awaits** the full teardown before re-subscribing;
+  `_tearDownRealtimeChannels` flips `_realtimeActive=false` *synchronously* (before
+  the await) as a re-entrancy guard. Awaiting also removes the same-topic
+  two-live-channels hazard.
+- Hardened `SupabaseCloudTransport.stopRealtime()` to snapshot+clear its channel
+  holders **synchronously** before the awaited removals, so its own guard can't be
+  lied to by a fire-and-forget caller.
+- The two fire-and-forget call sites (`auto_lock_wrapper` resume,
+  `_onOnlineChanged` reconnect) wrapped in `unawaited(...)`.
+
+**Scope note.** Coverage was already all synced tables (`{..._pullOrder,
+'businesses'}`) — the race disabled every table together, so this restores live
+sync across every console-editable entity at once. No topology change.
+
+**Verified.** New `test/sync/realtime_resubscribe_test.dart` (3 tests) models a
+worst-case late-releasing transport; confirmed red with the fix reverted
+(`+1 -2`), green with it. Full `test/sync/` suite: 186 passing. `flutter analyze`
+clean on all four touched files.
+
+**Files changed:** `lib/core/services/supabase_sync_service.dart`,
+`lib/core/services/supabase_cloud_transport.dart`,
+`lib/shared/widgets/auto_lock_wrapper.dart`,
+`test/sync/realtime_resubscribe_test.dart`.
+
+---
+
 ## 2026-07-07 — Forbid client hard-delete of soft-delete tables (issue #87)
 
 **What changed.** Migration `0145_forbid_hard_delete_soft_tables.sql` —
