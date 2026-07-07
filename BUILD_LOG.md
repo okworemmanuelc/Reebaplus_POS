@@ -2,6 +2,43 @@
 
 ---
 
+## 2026-07-06 — Industry registry foundation + `industryOf()` (issue #77, ADR 0015)
+
+**What changed.** The prefactor for PRD #76: introduce **one Industry registry**
+as the single source of truth for the app's industries, plus a total
+`industryOf()` resolver — with **no user-visible change**.
+
+- **`lib/core/industry/industry.dart` (new).** An `Industry` enum whose entries
+  carry the facts that used to be duplicated across two lists: canonical `label`,
+  `icon`, `comingSoon`, `crateEligible` (+ lowercase `aliases` for legacy DB
+  values). `Industry.catalogue` = every entry except the `generic` fallback, in
+  plan order — what the pickers render from.
+- **`industryOf(String? type)`.** Total normalizer: trims/lowercases and matches
+  a stored `businesses.type` against each entry's label or aliases; the legacy
+  `'Beer distributor'` DB canonical and any casing map to `beverage`;
+  unknown/empty/null → `generic` (never throws, never blanks the app). No new
+  column, no migration — consistent with the existing `isCrateBusiness` string
+  gate (ADR 0015).
+- **`isCrateBusiness` is now a shim** — `industryOf(type).crateEligible` — so
+  Bar/Beverage-only crate-eligibility is derived from the same registry
+  everywhere. `business_types.dart` becomes a thin derivation: `kBusinessTypes`
+  maps `Industry.catalogue` labels and re-exports `isCrateBusiness`; the private
+  `_businessTypes` record list in `ceo_sign_up_screen.dart` is deleted and the
+  picker renders from `Industry.catalogue`. No duplicated industry facts remain.
+
+**Files changed:**
+- `lib/core/industry/industry.dart` — the registry + `industryOf` + `isCrateBusiness`.
+- `lib/core/data/business_types.dart` — thin derivation/re-export over the registry.
+- `lib/features/auth/screens/ceo_sign_up_screen.dart` — removed `_businessTypes`; picker reads `Industry.catalogue`.
+- `test/industry/industry_registry_test.dart` — 12 seam tests (resolution, membership, crate-gate, golden pin).
+
+**Verification:**
+- `flutter analyze` → clean (No issues found).
+- `flutter test test/industry` → 12/12 green; ran `test/crates test/settings test/auth test/providers` → all green except one **pre-existing** flaky widget test (`who_is_working_screen_test.dart`, confirmed failing on pristine `main`, unrelated).
+- `flutter run` on `emulator-5554` → built, installed, and booted `com.reebaplus.pos` cleanly (crate gate resolves live at startup for the Beverage tenant).
+
+---
+
 ## 2026-07-06 — Standardized daily closing: declutter + opt-in VAT
 
 **Context.** The Daily Reconciliation detail screen had grown to **9 cards that
@@ -45,6 +82,8 @@ default** and stored in the synced `settings` key/value table (like
 (19, incl. 2 new VAT) + new `vat_settings_test.dart` (8) green; ban test +
 dashboard + settings suites (77) green. On-device walkthrough (decluttered
 cards, VAT toggle, VAT line) pending.
+
+---
 
 ## 2026-07-05 — Closing report: integrity flag (issue #72, slice 3 — epic complete)
 
