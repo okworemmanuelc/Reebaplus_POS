@@ -1,14 +1,13 @@
-// Industry registry seam (issue #77, ADR 0015). The registry is the single
-// source of truth for the app's industries — display label, icon, coming-soon
-// flag, crate-eligibility — and `industryOf()` is the total normalizer that
-// resolves a stored `businesses.type` string to one canonical [Industry].
+// Industry registry seam (issues #77 + #79, ADR 0015). The registry is the
+// single source of truth for the app's industries — display label, icon,
+// coming-soon flag, crate-eligibility — and `industryOf()` is the total
+// normalizer that resolves a stored `businesses.type` string to one [Industry].
 //
 // These tests exercise the module's public behaviour, never its internals:
 //   (a) resolution   — canonical labels, legacy casings, unknown/null → generic;
-//   (b) membership   — the catalogue holds exactly the expected industries, in
-//                      plan order, with no duplicates and the same coming-soon
-//                      set the app shipped (proves the #77 prefactor is
-//                      user-visible-behaviour-preserving);
+//   (b) membership   — the catalogue holds exactly the nine master-plan
+//                      industries, in plan order, with no duplicates and every
+//                      one selectable (the #79 unlock flipped coming-soon off);
 //   (c) crate-gate   — crate-eligibility stays Bar/Beverage-only and reproduces
 //                      the old hardcoded `isCrateBusiness` truth table exactly;
 //   (d) golden pin   — a frozen snapshot of every catalogue entry, so any drift
@@ -53,12 +52,18 @@ void main() {
       expect(industryOf('   '), Industry.generic);
       expect(industryOf('Spaceship Repair'), Industry.generic);
     });
+
+    test('resolves the two industries added by the #79 unlock', () {
+      expect(industryOf('Phone & Gadgets'), Industry.phoneAndGadgets);
+      expect(
+          industryOf('Frozen Foods & Grocery'), Industry.frozenFoodsAndGrocery);
+    });
   });
 
-  // === (b) MEMBERSHIP — the catalogue is exactly today's seven ===========
+  // === (b) MEMBERSHIP — the catalogue is exactly the nine ================
 
   group('registry membership', () {
-    test('catalogue is the seven master-plan industries in plan order', () {
+    test('catalogue is the nine master-plan industries in plan order', () {
       expect(
         Industry.catalogue.map((i) => i.label).toList(),
         const [
@@ -69,6 +74,8 @@ void main() {
           'Pharmacy',
           'Building Materials',
           'Boutique',
+          'Phone & Gadgets',
+          'Frozen Foods & Grocery',
         ],
       );
     });
@@ -83,21 +90,14 @@ void main() {
           reason: 'duplicate label in the catalogue: $labels');
     });
 
-    test('only Beverage distributor is selectable today (rest coming soon)', () {
-      // #77 is a pure prefactor: the onboarding picker must show the same
-      // selectable/greyed set it shows today. #79 flips these all on.
-      final comingSoon = {
-        for (final i in Industry.catalogue) i.label: i.comingSoon,
-      };
-      expect(comingSoon, {
-        'Restaurant': true,
-        'Supermarket': true,
-        'Bar': true,
-        'Beverage distributor': false,
-        'Pharmacy': true,
-        'Building Materials': true,
-        'Boutique': true,
-      });
+    test('every catalogue industry is selectable — none coming soon (#79)', () {
+      // The multi-industry unlock makes all nine selectable at onboarding, so
+      // the picker greys out nothing.
+      expect(
+        Industry.catalogue.where((i) => i.comingSoon).map((i) => i.label),
+        isEmpty,
+        reason: 'no industry may be greyed-out after the #79 unlock',
+      );
     });
   });
 
@@ -129,6 +129,7 @@ void main() {
         'Building Materials',
         'Boutique',
         'Phone & Gadgets',
+        'Frozen Foods & Grocery',
         'nonsense',
         '',
       ];
@@ -159,18 +160,21 @@ void main() {
   // === (d) GOLDEN PIN — frozen snapshot of the catalogue =================
 
   group('catalogue golden', () {
-    // FROZEN GOLDEN DATA — the exact facts each catalogue entry held when the
-    // registry was introduced. A diff here means an industry's label, icon,
-    // coming-soon or crate flag changed: update this golden in the SAME commit,
-    // deliberately. (label | icon codepoint | comingSoon | crateEligible)
+    // FROZEN GOLDEN DATA — the exact facts each catalogue entry holds after the
+    // #79 unlock (nine industries, all selectable). A diff here means an
+    // industry's label, icon, coming-soon or crate flag changed: update this
+    // golden in the SAME commit, deliberately.
+    // (label | icon codepoint | comingSoon | crateEligible)
     const golden = <String>[
-      'Restaurant|0xf0108|true|false',
-      'Supermarket|0xf86e|true|false',
-      'Bar|0xf865|true|true',
+      'Restaurant|0xf0108|false|false',
+      'Supermarket|0xf86e|false|false',
+      'Bar|0xf865|false|true',
       'Beverage distributor|0xf01b8|false|true',
-      'Pharmacy|0xf877|true|false',
-      'Building Materials|0xf7a3|true|false',
-      'Boutique|0xf639|true|false',
+      'Pharmacy|0xf877|false|false',
+      'Building Materials|0xf7a3|false|false',
+      'Boutique|0xf639|false|false',
+      'Phone & Gadgets|0xf019b|false|false',
+      'Frozen Foods & Grocery|0xf516|false|false',
     ];
 
     test('catalogue matches the frozen golden', () {

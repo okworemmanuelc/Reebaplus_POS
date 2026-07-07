@@ -10,6 +10,24 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### Multi-industry onboarding & app morphing (PRD #76, ADR 0015) — in progress
+Slices: **#77** registry foundation → **#79** enable all nine → **#80** Lexicon on
+product forms → **#81** Lexicon on POS/inventory/guides; **#78** synced product
+photo (independent). Status:
+- ✅ **#77 registry foundation — SHIPPED** (PR #82 merged). One `Industry` enum
+  is the single source of truth; `industryOf()` total normalizer; `isCrateBusiness`
+  a registry shim. Pure prefactor.
+- ✅ **#78 synced product photo — SHIPPED** (PR #83 merged). See entry below.
+- ✅ **#79 enable all nine — IN REVIEW** (branch `feat/enable-all-industries`).
+  Added **Phone & Gadgets** + **Frozen Foods & Grocery** to the registry and
+  flipped every `comingSoon` off. Because onboarding + Settings render from
+  `Industry.catalogue` (the #77 prefactor), no UI code changed — all nine are now
+  selectable, crate opt-in still Bar/Beverage-only, industry editable in Settings
+  with data preserved. 13 registry tests green (catalogue → nine, all selectable,
+  golden updated); analyze clean; boots on emulator.
+- ⏭ **#80 Lexicon on product forms** — next, blocked by #79 (needs it on main).
+- ⏭ **#81 Lexicon on POS/inventory/guides** — blocked by #80.
+
 ### IN REVIEW: Optional synced product photo (issue #78, PRD #76 / ADR 0015)
 Branch `feat/product-photo-sync` (off main; independent slice of the
 multi-industry epic — no blocker). Owners attach an optional product photo on
