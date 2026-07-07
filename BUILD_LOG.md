@@ -2,6 +2,39 @@
 
 ---
 
+## 2026-07-07 — Periodic fallback pull: near-live convergence without postgres_changes (issue #98)
+
+**What changed.** Realtime `postgres_changes` is rejected server-side even with an
+authed socket (#97 — channelError, no CDC to the client). Per `architecture.md`,
+Realtime is a **best-effort signal that triggers a pull, not the data transport**,
+and the Pull path documents a **"periodic fallback poll"** — which was **never
+implemented**: the only `Timer.periodic` (30 s) drained the outbox (push). So a
+foregrounded, idle till never pulled, and console edits/soft-deletes only landed on
+a manual refresh / resume / reconnect.
+
+**Fix.** Added the documented periodic fallback **pull** to the existing 30 s sync
+tick in `SupabaseSyncService`: when foregrounded + online + business-bound, fire the
+already-working, guarded, debounced `catchUpPull(reason: 'periodic')` — *before* and
+*independent of* the push drain (so it runs even mid-push). A console-deleted product
+now stops being sellable within ~one tick, regardless of realtime health.
+
+- Reuses the existing timer lifecycle: starts at sign-in (`startAutoPush`), cancels
+  at logout (`stopAutoPush`), and naturally suspends when backgrounded (Dart timers
+  don't fire while paused) — so no battery cost off-screen.
+- `catchUpPull` self-guards (`_currentBusinessId`/`_fullPullRunning`/`isOnline`) and
+  is debounced (< 30 s tick ⇒ never overlaps the reconnect/resume catch-ups).
+- Aligns the implementation with the documented "realtime = signal, pull =
+  transport" model. The realtime channel subscription stays as a best-effort signal.
+
+**Verified.** `flutter analyze` clean; `test/sync/` 186 passing (the called
+`catchUpPull` is covered by `catch_up_pull_test`; the 30 s timer wiring is verified
+on-device — a console delete converges within ~30 s with no manual refresh).
+
+**Files changed:** `lib/core/services/supabase_sync_service.dart`,
+`context/progress-tracker.md`.
+
+---
+
 ## 2026-07-07 — Fix realtime resubscribe teardown/re-create race (issue #93)
 
 **What changed.** Console edits/soft-deletes never propagated **live** to the
