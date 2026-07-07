@@ -2,6 +2,38 @@
 
 ---
 
+## 2026-07-07 — Realtime: one channel with many bindings, not one-per-table (issue #95)
+
+**What changed.** After #93 let the channels actually attempt to subscribe, the
+device log showed **every** synced table's channel go `channelError` → `timedOut`
+(~55 of them) and never `subscribed`. Supabase realtime logs: tenant connects
+fine, healthy broadcast replication, but **zero postgres_changes (CDC) activity**
+and repeated `Stop tenant … no connected users` — i.e. the socket connects but all
+~55 `postgres_changes` joins are rejected before CDC setup, then the client
+disconnects.
+
+**Root cause.** `SupabaseCloudTransport.startRealtime` opened **one channel per
+synced table** (`channel('public:<table>')`), so sign-in fired ~55
+near-simultaneous `phx_join`s on one socket → past the realtime per-client
+channel/join ceiling → all error + time out.
+
+**Fix.** Collapse to **one channel with a `postgres_changes` binding per table**
+(single websocket join, N bindings) — the supported many-table pattern in
+realtime_client 2.x. Full coverage preserved (all synced tables; `businesses`
+filtered on `id`; `system_config` skipped). All bindings share one `onChange`;
+the engine still dispatches by `payload.table` (one binding per table → no double
+delivery). Single channel `_channel` replaces `_tableChannels`/`_businessesChannel`;
+the #93 synchronous-clear teardown preserved for it. One subscribe-status log for
+the whole tenant channel.
+
+**Verified.** `flutter analyze` clean; `test/sync/` 186 passing. Live
+subscribe/deliver requires on-device confirmation (emulator) — expect a single
+`Realtime subscribed (tenant channel)` on launch instead of ~55 error lines.
+
+**Files changed:** `lib/core/services/supabase_cloud_transport.dart`.
+
+---
+
 ## 2026-07-07 — Fix realtime resubscribe teardown/re-create race (issue #93)
 
 **What changed.** Console edits/soft-deletes never propagated **live** to the
