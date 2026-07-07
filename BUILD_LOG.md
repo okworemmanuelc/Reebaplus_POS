@@ -2,6 +2,63 @@
 
 ---
 
+## 2026-07-07 — Optional synced product photo (issue #78, PRD #76)
+
+**What changed.** Owners can attach an optional photo to a product on Add /
+Update Product; it uploads to Supabase Storage, its URL syncs onto the product
+so every device shows it, a local cache renders it instantly and offline, and
+skipping it never blocks a save.
+
+- **Data layer.** Drift **v58 → v59**: `products.image_url` (nullable text) with
+  an idempotent `from < 59` onUpgrade addColumn. Cloud migration **0143** —
+  additive `ALTER TABLE products ADD COLUMN image_url`; `products` is a
+  pass-through push table, so the column rides the normal outbox → upsert → pull
+  path with no RPC/whitelist change (dodges the overload trap). `CatalogDao.
+  setProductImageUrl` is a minimal partial upsert used after upload + by the
+  offline flush.
+- **Service + storage.** `ProductImageService` mirrors `BusinessLogoService`:
+  pick+resize, upload to the **product-images** bucket at
+  `<businessId>/<productId>.png`, local file cache, and a SharedPreferences
+  pending set so a photo saved offline is auto-uploaded when connectivity
+  returns (via a new `SupabaseSyncService.onReconnected` hook wired in
+  app_providers, business-scoped so the patch stays correct on multi-business
+  devices). Cloud migration **0144** creates the public bucket + business-scoped
+  storage RLS (writes gated on `current_user_business_ids()` via the first path
+  segment). **Note:** the `business-logos` bucket was never created on this
+  project — the logo cloud-upload has been a silent no-op; `product-images` is
+  created here fresh.
+- **UI.** `ProductPhotoField` — a shared, responsive, theme-aware picker widget
+  mirroring `_LogoSection`'s design-system idiom (`context.getRSize` /
+  `getRFontSize`, theme colours, no hardcoded values), used on Add Product. The
+  Update Product sheet and the Product detail screen route their existing
+  pickers through `ProductImageService` and resolve a renderable path via
+  `ensureCached` so a cross-device photo shows and renders offline. The legacy
+  local `imagePath` is preserved for offline render. Photo stays **off** the POS
+  grid and receipts; one photo per product.
+
+**Files changed:** `lib/core/database/app_database.dart` (+`.g.dart`),
+`daos_catalog.dart`, `lib/core/services/product_image_service.dart` (new),
+`lib/core/services/supabase_sync_service.dart`, `lib/core/providers/app_providers.dart`,
+`lib/features/inventory/widgets/product_photo_field.dart` (new),
+`add_product_screen.dart`, `update_product_sheet.dart`, `product_detail_screen.dart`,
+`supabase/migrations/0143_product_image_url.sql` + `0144_product_images_bucket.sql` (new),
+`test/sync/product_image_url_sync_test.dart` (new).
+
+**Migration ordering note.** 0142 belongs to the unmerged web-pos #56 branch
+(cloud-only); 0143/0144 are collision-free but leave a 0142 gap on main until #56
+lands. 0143 + 0144 were applied to the cloud via MCP `apply_migration` (the
+project's recorded migration versions already diverge — 0140/0141 are timestamped
+on the cloud — so a blind `db push` was avoided).
+
+**Verification.**
+- `flutter analyze` → clean project-wide.
+- `flutter test test/sync test/inventory test/crates test/database` → green (incl.
+  the new `product_image_url_sync_test`).
+- `flutter run` on `emulator-5554` → built + booted `com.reebaplus.pos`; log shows
+  `onUpgrade: v58 → v59` on the populated device DB with **no runtime errors**.
+- Cloud verified: `products.image_url` column present, `product-images` bucket
+  public with 4 storage policies.
+
 ## 2026-07-06 — Standardized daily closing: declutter + opt-in VAT
 
 **Context.** The Daily Reconciliation detail screen had grown to **9 cards that
