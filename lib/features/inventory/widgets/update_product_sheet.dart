@@ -3,10 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as p;
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/result.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
@@ -76,7 +74,11 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
 
   bool _isSaving = false;
   String? _errorMessage;
+  // Renderable local path of the current photo (legacy local file or the
+  // ProductImageService cache for a cross-device photo). [_pendingImageBytes]
+  // holds a freshly picked image not yet saved (#78).
   String? _imagePath;
+  Uint8List? _pendingImageBytes;
 
   static const _units = ['Crate', 'Bottle', 'Pack', 'Carton', 'Keg', 'Can'];
   List<String> _dynamicUnits = _units;
@@ -177,6 +179,13 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
     final manufacturers = await db.inventoryDao.getAllManufacturers();
     final cats = await db.inventoryDao.getAllCategories();
     final uniqueUnits = await db.catalogDao.getUniqueProductUnits();
+    // Resolve a renderable path for an existing photo (downloads from Storage
+    // once if only the cloud URL is known), so a cross-device photo shows in
+    // the edit preview. #78.
+    final cachedPhoto = await ref.read(productImageServiceProvider).ensureCached(
+          productId: widget.product.id,
+          imageUrl: widget.product.imageUrl,
+        );
 
     if (!mounted) return;
     setState(() {
@@ -186,6 +195,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
       _allCategories = cats;
       _dynamicUnits = <String>{..._units, _unit, ...uniqueUnits}.toList()
         ..sort();
+      if (cachedPhoto != null) _imagePath = cachedPhoto;
 
       // Pre-select store: prefer currentStoreId, else first
       if (widget.currentStoreId != null) {
@@ -388,29 +398,16 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
 
   Future<void> _pickImage() async {
     AutoLockWrapper.suppressNextResume = true;
-    final picker = ImagePicker();
-    try {
-      final XFile? image = await picker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 800,
-        maxHeight: 800,
-        imageQuality: 85,
-      );
-
-      if (image == null) return;
-
-      final appDir = await getApplicationDocumentsDirectory();
-      final fileName =
-          'product_${widget.product.id}_${DateTime.now().millisecondsSinceEpoch}${p.extension(image.path)}';
-      final savedImage = await File(
-        image.path,
-      ).copy('${appDir.path}/$fileName');
-
-      setState(() {
-        _imagePath = savedImage.path;
-      });
-    } catch (e) {
-      setState(() => _errorMessage = 'Failed to pick image: $e');
+    final svc = ref.read(productImageServiceProvider);
+    final result = await svc.pickAndProcess();
+    if (!mounted) return;
+    switch (result) {
+      case Ok(:final value):
+        setState(() => _pendingImageBytes = value);
+      case Err(:final error):
+        if (!error.isCancelled) {
+          setState(() => _errorMessage = 'Could not load image.');
+        }
     }
   }
 
@@ -507,6 +504,26 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
       final buyingKobo = (buyingPrice * 100).round();
       final lowStock = int.tryParse(_lowStockCtrl.text) ?? 5;
 
+      // Optional product photo (#78): upload a freshly picked image, keyed by
+      // the product id. The photo lives in image_url + the ProductImageService
+      // cache (never products.image_path, so it stays off the POS grid); the
+      // cache path drives the local preview here. Offline, save() caches locally
+      // + marks the product pending so the reconnect flush uploads it later.
+      String? newImageUrl;
+      if (_pendingImageBytes != null) {
+        final businessId = auth.currentUser?.businessId;
+        if (businessId != null) {
+          final imgSvc = ref.read(productImageServiceProvider);
+          final res = await imgSvc.save(
+            businessId: businessId,
+            productId: widget.product.id,
+            bytes: _pendingImageBytes!,
+          );
+          _imagePath = await imgSvc.localPathFor(widget.product.id);
+          if (res case Ok(:final value)) newImageUrl = value;
+        }
+      }
+
       // 1. Update product (core + cosmetic fields in one enqueue).
       await db.catalogDao.updateProductDetails(
         widget.product.id,
@@ -520,7 +537,6 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
         unit: _unit,
         trackEmpties: _effectiveTrackEmpties,
         allowFractionalSales: _allowFractionalSales,
-        imagePath: _imagePath,
         lowStockThreshold: lowStock,
         subtitle: _subtitleCtrl.text.trim().isEmpty
             ? null
@@ -530,6 +546,12 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
         size: _size,
         expiryDate: _expiryDate,
       );
+
+      // Patch the cloud image URL (separate minimal upsert) so the photo
+      // converges cross-device. Null when offline — the reconnect flush sets it.
+      if (newImageUrl != null) {
+        await db.catalogDao.setProductImageUrl(widget.product.id, newImageUrl);
+      }
 
       // 2. Persist the crate value at the manufacturer level so every product
       //    of this manufacturer shares one value (§16.5).
@@ -732,19 +754,28 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                               ).colorScheme.primary.withValues(alpha: 0.2),
                             ),
                           ),
-                          child: _imagePath != null
+                          child: _pendingImageBytes != null
                               ? ClipRRect(
                                   borderRadius: BorderRadius.circular(11),
-                                  child: Image.file(
-                                    File(_imagePath!),
+                                  child: Image.memory(
+                                    _pendingImageBytes!,
                                     fit: BoxFit.cover,
                                   ),
                                 )
-                              : Icon(
-                                  FontAwesomeIcons.image.data,
-                                  color: Theme.of(context).colorScheme.primary,
-                                  size: 18,
-                                ),
+                              : _imagePath != null
+                                  ? ClipRRect(
+                                      borderRadius: BorderRadius.circular(11),
+                                      child: Image.file(
+                                        File(_imagePath!),
+                                        fit: BoxFit.cover,
+                                      ),
+                                    )
+                                  : Icon(
+                                      FontAwesomeIcons.image.data,
+                                      color:
+                                          Theme.of(context).colorScheme.primary,
+                                      size: 18,
+                                    ),
                         ),
                         Positioned(
                           right: -2,

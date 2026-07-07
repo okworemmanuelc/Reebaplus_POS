@@ -394,6 +394,11 @@ class Products extends Table {
   // businesses that don't track expiry simply leave it null.
   DateTimeColumn get expiryDate => dateTime().nullable()();
   TextColumn get imagePath => text().nullable()();
+  // Optional cloud image URL for the product photo (schema v59, #78 / PRD #76).
+  // Synced cross-device via the normal outbox/pull path (products is a
+  // pass-through push table) so every device shows the same picture; the local
+  // [imagePath] continues to serve offline render. Null = no photo.
+  TextColumn get imageUrl => text().nullable()();
   IntColumn get version => integer().withDefault(const Constant(1))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
@@ -1830,7 +1835,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 58;
+  int get schemaVersion => 59;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3932,6 +3937,21 @@ class AppDatabase extends _$AppDatabase {
               [id, bid, pid, sid, qty, qty, r.read<int>('cost'), rec, rec, rec],
             );
           }
+        }
+      }
+      if (from < 59) {
+        // v59 (#78, PRD #76): products.image_url — the optional cloud image URL
+        // for a product's photo, synced cross-device (the local `image_path`
+        // continues to serve offline render). Nullable; photo-less products stay
+        // null. Mirrors supabase/migrations/0143_product_image_url.sql. Idempotency
+        // guard for a DB stepped back to < 59 by the revert-then-re-upgrade tests
+        // (same pattern as v57).
+        final has = await customSelect(
+          "SELECT 1 FROM pragma_table_info('products') "
+          "WHERE name = 'image_url'",
+        ).get();
+        if (has.isEmpty) {
+          await m.addColumn(products, products.imageUrl);
         }
       }
     },

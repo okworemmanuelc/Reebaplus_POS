@@ -7598,6 +7598,17 @@ class $ProductsTable extends Products
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _imageUrlMeta = const VerificationMeta(
+    'imageUrl',
+  );
+  @override
+  late final GeneratedColumn<String> imageUrl = GeneratedColumn<String>(
+    'image_url',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _versionMeta = const VerificationMeta(
     'version',
   );
@@ -7666,6 +7677,7 @@ class $ProductsTable extends Products
     barcode,
     expiryDate,
     imagePath,
+    imageUrl,
     version,
     createdAt,
     lastUpdatedAt,
@@ -7902,6 +7914,12 @@ class $ProductsTable extends Products
         imagePath.isAcceptableOrUnknown(data['image_path']!, _imagePathMeta),
       );
     }
+    if (data.containsKey('image_url')) {
+      context.handle(
+        _imageUrlMeta,
+        imageUrl.isAcceptableOrUnknown(data['image_url']!, _imageUrlMeta),
+      );
+    }
     if (data.containsKey('version')) {
       context.handle(
         _versionMeta,
@@ -8048,6 +8066,10 @@ class $ProductsTable extends Products
         DriftSqlType.string,
         data['${effectivePrefix}image_path'],
       ),
+      imageUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}image_url'],
+      ),
       version: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}version'],
@@ -8099,6 +8121,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
   final String? barcode;
   final DateTime? expiryDate;
   final String? imagePath;
+  final String? imageUrl;
   final int version;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
@@ -8132,6 +8155,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     this.barcode,
     this.expiryDate,
     this.imagePath,
+    this.imageUrl,
     required this.version,
     required this.createdAt,
     required this.lastUpdatedAt,
@@ -8192,6 +8216,9 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     if (!nullToAbsent || imagePath != null) {
       map['image_path'] = Variable<String>(imagePath);
     }
+    if (!nullToAbsent || imageUrl != null) {
+      map['image_url'] = Variable<String>(imageUrl);
+    }
     map['version'] = Variable<int>(version);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
@@ -8249,6 +8276,9 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       imagePath: imagePath == null && nullToAbsent
           ? const Value.absent()
           : Value(imagePath),
+      imageUrl: imageUrl == null && nullToAbsent
+          ? const Value.absent()
+          : Value(imageUrl),
       version: Value(version),
       createdAt: Value(createdAt),
       lastUpdatedAt: Value(lastUpdatedAt),
@@ -8296,6 +8326,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       barcode: serializer.fromJson<String?>(json['barcode']),
       expiryDate: serializer.fromJson<DateTime?>(json['expiryDate']),
       imagePath: serializer.fromJson<String?>(json['imagePath']),
+      imageUrl: serializer.fromJson<String?>(json['imageUrl']),
       version: serializer.fromJson<int>(json['version']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
@@ -8334,6 +8365,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       'barcode': serializer.toJson<String?>(barcode),
       'expiryDate': serializer.toJson<DateTime?>(expiryDate),
       'imagePath': serializer.toJson<String?>(imagePath),
+      'imageUrl': serializer.toJson<String?>(imageUrl),
       'version': serializer.toJson<int>(version),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
@@ -8370,6 +8402,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     Value<String?> barcode = const Value.absent(),
     Value<DateTime?> expiryDate = const Value.absent(),
     Value<String?> imagePath = const Value.absent(),
+    Value<String?> imageUrl = const Value.absent(),
     int? version,
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
@@ -8409,6 +8442,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     barcode: barcode.present ? barcode.value : this.barcode,
     expiryDate: expiryDate.present ? expiryDate.value : this.expiryDate,
     imagePath: imagePath.present ? imagePath.value : this.imagePath,
+    imageUrl: imageUrl.present ? imageUrl.value : this.imageUrl,
     version: version ?? this.version,
     createdAt: createdAt ?? this.createdAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -8482,6 +8516,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
           ? data.expiryDate.value
           : this.expiryDate,
       imagePath: data.imagePath.present ? data.imagePath.value : this.imagePath,
+      imageUrl: data.imageUrl.present ? data.imageUrl.value : this.imageUrl,
       version: data.version.present ? data.version.value : this.version,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       lastUpdatedAt: data.lastUpdatedAt.present
@@ -8522,6 +8557,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
           ..write('barcode: $barcode, ')
           ..write('expiryDate: $expiryDate, ')
           ..write('imagePath: $imagePath, ')
+          ..write('imageUrl: $imageUrl, ')
           ..write('version: $version, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt')
@@ -8560,6 +8596,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     barcode,
     expiryDate,
     imagePath,
+    imageUrl,
     version,
     createdAt,
     lastUpdatedAt,
@@ -8597,6 +8634,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
           other.barcode == this.barcode &&
           other.expiryDate == this.expiryDate &&
           other.imagePath == this.imagePath &&
+          other.imageUrl == this.imageUrl &&
           other.version == this.version &&
           other.createdAt == this.createdAt &&
           other.lastUpdatedAt == this.lastUpdatedAt);
@@ -8632,6 +8670,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
   final Value<String?> barcode;
   final Value<DateTime?> expiryDate;
   final Value<String?> imagePath;
+  final Value<String?> imageUrl;
   final Value<int> version;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
@@ -8666,6 +8705,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     this.barcode = const Value.absent(),
     this.expiryDate = const Value.absent(),
     this.imagePath = const Value.absent(),
+    this.imageUrl = const Value.absent(),
     this.version = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -8701,6 +8741,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     this.barcode = const Value.absent(),
     this.expiryDate = const Value.absent(),
     this.imagePath = const Value.absent(),
+    this.imageUrl = const Value.absent(),
     this.version = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -8737,6 +8778,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     Expression<String>? barcode,
     Expression<DateTime>? expiryDate,
     Expression<String>? imagePath,
+    Expression<String>? imageUrl,
     Expression<int>? version,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
@@ -8776,6 +8818,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
       if (barcode != null) 'barcode': barcode,
       if (expiryDate != null) 'expiry_date': expiryDate,
       if (imagePath != null) 'image_path': imagePath,
+      if (imageUrl != null) 'image_url': imageUrl,
       if (version != null) 'version': version,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
@@ -8813,6 +8856,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     Value<String?>? barcode,
     Value<DateTime?>? expiryDate,
     Value<String?>? imagePath,
+    Value<String?>? imageUrl,
     Value<int>? version,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
@@ -8848,6 +8892,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
       barcode: barcode ?? this.barcode,
       expiryDate: expiryDate ?? this.expiryDate,
       imagePath: imagePath ?? this.imagePath,
+      imageUrl: imageUrl ?? this.imageUrl,
       version: version ?? this.version,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -8947,6 +8992,9 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     if (imagePath.present) {
       map['image_path'] = Variable<String>(imagePath.value);
     }
+    if (imageUrl.present) {
+      map['image_url'] = Variable<String>(imageUrl.value);
+    }
     if (version.present) {
       map['version'] = Variable<int>(version.value);
     }
@@ -8994,6 +9042,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
           ..write('barcode: $barcode, ')
           ..write('expiryDate: $expiryDate, ')
           ..write('imagePath: $imagePath, ')
+          ..write('imageUrl: $imageUrl, ')
           ..write('version: $version, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
@@ -54897,6 +54946,7 @@ typedef $$ProductsTableCreateCompanionBuilder =
       Value<String?> barcode,
       Value<DateTime?> expiryDate,
       Value<String?> imagePath,
+      Value<String?> imageUrl,
       Value<int> version,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -54933,6 +54983,7 @@ typedef $$ProductsTableUpdateCompanionBuilder =
       Value<String?> barcode,
       Value<DateTime?> expiryDate,
       Value<String?> imagePath,
+      Value<String?> imageUrl,
       Value<int> version,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -55357,6 +55408,11 @@ class $$ProductsTableFilterComposer
 
   ColumnFilters<String> get imagePath => $composableBuilder(
     column: $table.imagePath,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get imageUrl => $composableBuilder(
+    column: $table.imageUrl,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -55846,6 +55902,11 @@ class $$ProductsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get imageUrl => $composableBuilder(
+    column: $table.imageUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get version => $composableBuilder(
     column: $table.version,
     builder: (column) => ColumnOrderings(column),
@@ -56085,6 +56146,9 @@ class $$ProductsTableAnnotationComposer
 
   GeneratedColumn<String> get imagePath =>
       $composableBuilder(column: $table.imagePath, builder: (column) => column);
+
+  GeneratedColumn<String> get imageUrl =>
+      $composableBuilder(column: $table.imageUrl, builder: (column) => column);
 
   GeneratedColumn<int> get version =>
       $composableBuilder(column: $table.version, builder: (column) => column);
@@ -56513,6 +56577,7 @@ class $$ProductsTableTableManager
                 Value<String?> barcode = const Value.absent(),
                 Value<DateTime?> expiryDate = const Value.absent(),
                 Value<String?> imagePath = const Value.absent(),
+                Value<String?> imageUrl = const Value.absent(),
                 Value<int> version = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -56547,6 +56612,7 @@ class $$ProductsTableTableManager
                 barcode: barcode,
                 expiryDate: expiryDate,
                 imagePath: imagePath,
+                imageUrl: imageUrl,
                 version: version,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
@@ -56583,6 +56649,7 @@ class $$ProductsTableTableManager
                 Value<String?> barcode = const Value.absent(),
                 Value<DateTime?> expiryDate = const Value.absent(),
                 Value<String?> imagePath = const Value.absent(),
+                Value<String?> imageUrl = const Value.absent(),
                 Value<int> version = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -56617,6 +56684,7 @@ class $$ProductsTableTableManager
                 barcode: barcode,
                 expiryDate: expiryDate,
                 imagePath: imagePath,
+                imageUrl: imageUrl,
                 version: version,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,

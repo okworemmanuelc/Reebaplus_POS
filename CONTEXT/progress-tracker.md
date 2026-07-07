@@ -10,6 +10,18 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### IN REVIEW: Optional synced product photo (issue #78, PRD #76 / ADR 0015)
+Branch `feat/product-photo-sync` (off main; independent slice of the
+multi-industry epic — no blocker). Owners attach an optional product photo on
+Add/Update Product; it uploads to the **product-images** Storage bucket, its URL
+syncs onto the product (`products.image_url`, Drift v59 + cloud 0143), a local
+cache renders it offline, and a reconnect flush uploads photos saved offline.
+`ProductImageService` mirrors `BusinessLogoService`; `ProductPhotoField` is the
+shared responsive/theme-aware picker. Off the POS grid + receipts; one per
+product. analyze clean, seam + migration tests green, boots on emulator
+(`onUpgrade v58→v59` clean); cloud column + bucket + RLS verified. Migration
+0142 (web-pos #56, unmerged) leaves a gap before 0143 — reconcile order at merge.
+
 ### SHIPPED: Standardized daily closing — declutter + opt-in VAT (2026-07-06)
 Reworked the Daily Reconciliation detail screen (§25.9) into one standardized
 closing and added opt-in VAT. Branch `feat/standardized-daily-close` (off

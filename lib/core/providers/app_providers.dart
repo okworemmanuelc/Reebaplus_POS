@@ -5,6 +5,8 @@
 /// here with proper dependency injection.
 library;
 
+import 'dart:async';
+
 import 'package:drift/drift.dart' show innerJoin;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,6 +17,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/business_scoped_stream.dart';
 import 'package:reebaplus_pos/core/services/biometric_service.dart';
 import 'package:reebaplus_pos/core/services/business_logo_service.dart';
+import 'package:reebaplus_pos/core/services/product_image_service.dart';
 import 'package:reebaplus_pos/core/theme/theme_notifier.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/customers/data/services/customer_service.dart';
@@ -355,11 +358,25 @@ final reorderAlertServiceProvider = Provider<ReorderAlertService>((ref) {
 });
 
 final supabaseSyncServiceProvider = Provider<SupabaseSyncService>((ref) {
-  return SupabaseSyncService(
+  final service = SupabaseSyncService(
     ref.read(databaseProvider),
     SupabaseCloudTransport(ref.read(supabaseClientProvider)),
     ref.read(secureStorageProvider),
   );
+  // On connectivity recovery, upload any product photos saved offline and write
+  // their public URLs onto the product rows (which then sync cross-device). #78.
+  service.onReconnected = () {
+    final db = ref.read(databaseProvider);
+    final businessId = db.currentBusinessId;
+    if (businessId == null) return;
+    unawaited(
+      ref.read(productImageServiceProvider).flushPending(
+            businessId,
+            (productId, url) => db.catalogDao.setProductImageUrl(productId, url),
+          ),
+    );
+  };
+  return service;
 });
 
 // ── Sync diagnostics ────────────────────────────────────────────────────────
@@ -512,6 +529,12 @@ final currentBusinessLogoPathProvider =
         logoUrl: business.logoUrl,
       );
     });
+
+// ── Product Image (#78) ─────────────────────────────────────────────────────
+
+final productImageServiceProvider = Provider<ProductImageService>((ref) {
+  return ProductImageService(ref.read(supabaseClientProvider));
+});
 
 /// Lifts the `SupabaseSyncService.pullStatus` ValueNotifier into Riverpod
 /// so the MainLayout catch-up banner (and SyncIssues) can `ref.watch` it.

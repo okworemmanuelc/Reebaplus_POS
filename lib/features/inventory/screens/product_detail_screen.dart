@@ -5,9 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as p;
+import 'package:reebaplus_pos/core/result.dart';
 
 import 'package:reebaplus_pos/shared/widgets/auto_lock_wrapper.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
@@ -168,6 +166,13 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     final manufacturers = await db.inventoryDao.getAllManufacturers();
     final suppliers = await db.catalogDao.getAllSuppliers();
     final uniqueUnits = await db.catalogDao.getUniqueProductUnits();
+    // Resolve a renderable path for the photo — downloads from Storage once if
+    // only the cloud URL is known, so a cross-device photo shows here and
+    // renders offline from the cache. #78.
+    final cachedPhoto = await ref.read(productImageServiceProvider).ensureCached(
+          productId: productId,
+          imageUrl: product?.imageUrl,
+        );
 
     if (mounted) {
       setState(() {
@@ -195,6 +200,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
           _lowStockController.text = product.lowStockThreshold.toString();
           _emptyCrateValueController.text = (product.emptyCrateValueKobo / 100)
               .toStringAsFixed(0);
+          if (cachedPhoto != null) _imagePath = cachedPhoto;
         }
       });
       // Load empty crate stock from manufacturer if linked
@@ -310,7 +316,10 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     _trackEmpties = product.trackEmpties;
     _size = product.size;
     _expiryDate = product.expiryDate;
-    _imagePath = product.imagePath;
+    // Only adopt a non-null legacy imagePath — a cross-device photo has its
+    // renderable path resolved via ensureCached (#78), so don't blank it here
+    // when a synced row carries a null/foreign imagePath.
+    if (product.imagePath != null) _imagePath = product.imagePath;
     // Keep the unit dropdown inclusive of a (possibly new) synced unit value.
     if (!_allUnits.contains(product.unit)) {
       _allUnits = ({..._allUnits, product.unit}.toList())..sort();
@@ -1587,59 +1596,48 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     if (!_editMode) return;
 
     AutoLockWrapper.suppressNextResume = true;
-    final picker = ImagePicker();
-    try {
-      final XFile? image = await picker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 800,
-        maxHeight: 800,
-        imageQuality: 85,
-      );
+    final imgSvc = ref.read(productImageServiceProvider);
+    final picked = await imgSvc.pickAndProcess();
+    if (!mounted) return;
 
-      if (image == null) return;
-
-      // Save image to app directory for persistence
-      final appDir = await getApplicationDocumentsDirectory();
-      final fileName =
-          'product_${widget.item.id}_${DateTime.now().millisecondsSinceEpoch}${p.extension(image.path)}';
-      final savedImage = await File(
-        image.path,
-      ).copy('${appDir.path}/$fileName');
-
-      setState(() {
-        _imagePath = savedImage.path;
-      });
-
-      // Update in DB
-      final productId = widget.item.id;
-      if (productId.isNotEmpty) {
-        await ref
-            .read(databaseProvider)
-            .catalogDao
-            .updateProductDetails(
-              productId,
-              name: _nameController.text.trim(),
-              manufacturerId: _selectedManufacturerId,
-              buyingPriceKobo:
-                  ((parseCurrency(_buyingPriceController.text)) * 100).round(),
-              retailerPriceKobo:
-                  ((parseCurrency(_retailPriceController.text)) * 100).round(),
-              wholesalerPriceKobo:
-                  ((parseCurrency(_wholesalerPriceController.text)) * 100)
-                      .round(),
-              emptyCrateValueKobo:
-                  (parseCurrency(_emptyCrateValueController.text) * 100)
-                      .toInt(),
-              categoryId: _selectedCategoryId,
-              unit: _selectedUnit,
-              lowStockThreshold: widget.item.lowStockThreshold.toInt(),
-              imagePath: _imagePath,
-            );
-
-        if (mounted) {
-          AppNotification.showSuccess(context, 'Product image updated');
-          widget.onUpdateStock(); // Refresh parent view
+    final Uint8List bytes;
+    switch (picked) {
+      case Ok(:final value):
+        bytes = value;
+      case Err(:final error):
+        if (!error.isCancelled) {
+          AppNotification.showError(context, 'Could not load image.');
         }
+        return;
+    }
+
+    final productId = widget.item.id;
+    final businessId = ref.read(authProvider).currentUser?.businessId;
+    if (productId.isEmpty || businessId == null) return;
+
+    try {
+      // Upload (keyed by product id) + local cache; offline it caches locally
+      // and queues for the reconnect flush. The photo lives in image_url + the
+      // ProductImageService cache (never products.image_path, so it stays off
+      // the POS grid); the cache path drives the local preview. #78.
+      final res = await imgSvc.save(
+        businessId: businessId,
+        productId: productId,
+        bytes: bytes,
+      );
+      final localPath = await imgSvc.localPathFor(productId);
+      if (!mounted) return;
+      setState(() => _imagePath = localPath);
+
+      final db = ref.read(databaseProvider);
+      if (res case Ok(:final value)) {
+        // Persists the URL and enqueues the FULL product row (coalesce-safe).
+        await db.catalogDao.setProductImageUrl(productId, value);
+      }
+
+      if (mounted) {
+        AppNotification.showSuccess(context, 'Product image updated');
+        widget.onUpdateStock(); // Refresh parent view
       }
     } catch (e, st) {
       CrashReporter.record(
@@ -1648,7 +1646,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         context: 'inventory.product_detail.update_image',
       );
       if (mounted) {
-        AppNotification.showError(context, 'Failed to pick image: $e');
+        AppNotification.showError(context, 'Failed to update image: $e');
       }
     }
   }

@@ -363,7 +363,10 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
     bool? trackEmpties,
     bool? allowFractionalSales,
     int? lowStockThreshold,
-    String? imagePath,
+    // Sentinel-defaulted: omit to leave the legacy local image_path untouched.
+    // #78 photos live in image_url + the ProductImageService cache, never here,
+    // so the POS grid (which renders image_path) stays photo-free.
+    Object? imagePath = _unset,
     int? monthlyTargetUnits,
     // Optional cosmetic / metadata fields. Wrapped with present-check
     // sentinels so the caller can leave any of them out and the column
@@ -400,7 +403,9 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
       monthlyTargetUnits: monthlyTargetUnits == null
           ? const Value.absent()
           : Value(monthlyTargetUnits),
-      imagePath: Value(imagePath),
+      imagePath: identical(imagePath, _unset)
+          ? const Value.absent()
+          : Value(imagePath as String?),
       subtitle: identical(subtitle, _unset)
           ? const Value.absent()
           : Value(subtitle as String?),
@@ -422,6 +427,29 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
       products,
     )..where((t) => t.id.equals(productId) & whereBusiness(t))).write(comp);
     await db.syncDao.enqueueUpsert('products', comp);
+  }
+
+  /// Writes the cloud [imageUrl] (or null to clear) onto [productId] and
+  /// enqueues the product for sync so the photo converges cross-device (#78).
+  /// Called after a successful image upload — on Add/Update Product, the detail
+  /// screen, and by the offline retry flush once connectivity returns.
+  ///
+  /// Enqueues the FULL row (via [_enqueueFullProduct]) rather than a partial
+  /// `{image_url}` upsert: the outbox coalesces one pending row per
+  /// `(action_type, id)`, so a partial upsert queued right after a full
+  /// `updateProductDetails` upsert would REPLACE it and silently drop the
+  /// concurrent name/price edits. Re-reading and pushing every column keeps
+  /// those edits (and satisfies the cloud's NOT NULL columns).
+  Future<void> setProductImageUrl(String productId, String? imageUrl) async {
+    await (update(products)
+          ..where((t) => t.id.equals(productId) & whereBusiness(t)))
+        .write(
+      ProductsCompanion(
+        imageUrl: Value(imageUrl),
+        lastUpdatedAt: Value(DateTime.now()),
+      ),
+    );
+    await _enqueueFullProduct(productId);
   }
 
   Future<void> updateProductPrices(
