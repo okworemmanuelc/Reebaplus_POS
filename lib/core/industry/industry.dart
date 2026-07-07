@@ -58,9 +58,8 @@ enum Industry {
   const Industry({
     required this.label,
     required this.icon,
-    // Retained per PRD #76 (registry carries a coming-soon flag) for a future
-    // gated industry; uniformly false after the #79 unlock, so no entry sets it
-    // today — hence the unused-parameter suppression.
+    // No entry sets this after the #79 unlock (see the [comingSoon] field doc),
+    // hence the suppression.
     // ignore: unused_element_parameter
     this.comingSoon = false,
     this.crateEligible = false,
