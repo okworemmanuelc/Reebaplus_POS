@@ -331,8 +331,21 @@ class SupabaseSyncService {
   /// transition, if the last pull failed and we have a businessId, kicks
   /// off `pullChanges` once. Single shot, not a retry loop — relying on
   /// the OS-provided connectivity signal instead of polling.
+  /// Wired by the app (app_providers) to run work that was deferred while
+  /// offline — e.g. the product-photo offline upload flush (#78). Fired once on
+  /// each `false → true` connectivity transition.
+  VoidCallback? onReconnected;
+
   void _onOnlineChanged() {
     final nowOnline = isOnline.value;
+    if (!_wasOnline && nowOnline) {
+      // Connectivity recovered: let deferred work (offline photo uploads) retry.
+      try {
+        onReconnected?.call();
+      } catch (e) {
+        debugPrint('[SyncService] onReconnected hook threw: $e');
+      }
+    }
     if (!_wasOnline &&
         nowOnline &&
         pullStatus.value.stage == PullStage.failed &&
