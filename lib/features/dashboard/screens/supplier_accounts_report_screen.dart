@@ -204,10 +204,12 @@ class _SupplierReportRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final owed = row.balanceKobo < 0;
     final balColor = owed ? danger : (row.balanceKobo > 0 ? success : subtext);
+    // Positive = we paid the supplier in advance (a prepayment), not credit we
+    // hold on their behalf; negative = a debt we owe for unpaid goods.
     final balLabel = owed
         ? 'Owed ${formatCurrency(row.balanceKobo.abs() / 100)}'
         : (row.balanceKobo > 0
-              ? 'Credit ${formatCurrency(row.balanceKobo / 100)}'
+              ? 'Prepaid ${formatCurrency(row.balanceKobo / 100)}'
               : 'Settled');
 
     return GlassyCard(

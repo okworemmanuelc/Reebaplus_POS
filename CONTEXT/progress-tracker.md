@@ -10,6 +10,30 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### SHIPPED: Standardized daily closing — declutter + opt-in VAT (2026-07-06)
+Reworked the Daily Reconciliation detail screen (§25.9) into one standardized
+closing and added opt-in VAT. Branch `feat/standardized-daily-close` (off
+`feat/closing-report-reconciliation`; web-pos WIP in `git stash@{0}`).
+- **Cash reconciliation dropped** (user: all cash is deposited to an account) —
+  no counted drawer / float / over-short, no `daily_closings` table; Hard Rule #8
+  stands. The close stays fully **derived + period-aggregatable** (existing
+  Day/Week/Month/Year grouping + store→business rollup satisfies "per store
+  first, then business-wide").
+- **Declutter (Phase A, no schema).** 9 duplicative cards → **5** for CEO
+  (Sales, P&L, Cash, Stock reconciliation, Position), **3** for Manager. Deleted
+  "Net result (flow)"; merged Shrinkage + Stock audit + Stock reconciliation +
+  Integrity into one `_stockReconciliationCard`. `recon_data.dart` model kept
+  (17 tests unchanged).
+- **VAT (Phase C, settings-backed, no migration).** OFF by default; synced
+  `settings` keys `vat_enabled` + `vat_rate_bps` (bps, 750 = 7.5%).
+  `vat_settings.dart` (pure `computeVatKobo`) + `vatConfigProvider` +
+  `ReconData.vatKobo` (derived on gross − discounts; **pass-through, not in the
+  P&L profit**). Sales card + CSV show "VAT due (7.5%)" when enabled; Settings →
+  Business Info → **Tax** toggle + rate field.
+- **Parked (user request):** VAT on cart/receipt at checkout (mobile + web).
+- `flutter analyze` clean; recon (19) + `vat_settings_test` (8) + dashboard/
+  settings/ban (77) green. On-device walkthrough pending.
+
 ### SHIPPED: Closing-report reconciliation (ADR 0014, 2026-07-05)
 Enhanced the Daily Reconciliation (§25.9) into a full closing report. Grilled;
 design in **ADR 0014**. Two issues off `main`:

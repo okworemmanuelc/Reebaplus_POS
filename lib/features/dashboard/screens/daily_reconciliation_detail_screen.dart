@@ -90,30 +90,18 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
           context.spacingM,
         ).copyWith(bottom: context.spacingM + context.deviceBottomPadding),
         children: [
-          if (isCeo) ...[
-            _netResultCard(context, theme, d),
-            SizedBox(height: context.spacingM),
-          ],
           _salesCard(context, theme, d),
           if (isCeo) ...[
             SizedBox(height: context.spacingM),
             _plCard(context, theme, d),
             SizedBox(height: context.spacingM),
             _cashFlowCard(context, theme, d),
+          ],
+          SizedBox(height: context.spacingM),
+          _stockReconciliationCard(context, theme, d, isCeo: isCeo),
+          if (isCeo) ...[
             SizedBox(height: context.spacingM),
             _businessWorthCard(context, theme, d),
-          ],
-          SizedBox(height: context.spacingM),
-          _shrinkageCard(context, theme, d, retail: !isCeo),
-          if (isCeo && d.hasStockFlow) ...[
-            SizedBox(height: context.spacingM),
-            _stockFlowCard(context, theme, d),
-          ],
-          SizedBox(height: context.spacingM),
-          _stockCard(context, theme, d),
-          if (isCeo && d.hasStockFlow) ...[
-            SizedBox(height: context.spacingM),
-            _integrityCard(context, theme, d),
           ],
           if (!isCeo) ...[
             SizedBox(height: context.spacingM),
@@ -151,6 +139,20 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
           formatCurrency(d.totalRevenueKobo / 100.0),
           strong: true,
         ),
+        if (d.refundsKobo > 0)
+          _line(
+            context,
+            theme,
+            'Refunds',
+            '− ${formatCurrency(d.refundsKobo / 100.0)}',
+          ),
+        if (d.vatEnabled)
+          _line(
+            context,
+            theme,
+            'VAT due (${d.vatRateLabel}%)',
+            formatCurrency(d.vatKobo / 100.0),
+          ),
         _line(
           context,
           theme,
@@ -302,17 +304,102 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
     );
   }
 
-  /// Stock reconciliation as a cost-valued flow equation (ADR 0014): Opening +
-  /// Goods received − COGS − Damages − Expired (± Other) = Expected closing (the
-  /// perpetual system figure), then Variance = Physical count − Expected. Every
-  /// figure is at CURRENT per-product cost (the stated basis — cost is
-  /// time-varying under FIFO). CEO-only (cost wall §25.3).
-  Widget _stockFlowCard(BuildContext context, ThemeData theme, ReconData d) {
+  /// The single stock section of the closing — replaces the former separate
+  /// Shrinkage, Stock audit, Stock reconciliation and Integrity cards, which
+  /// each re-showed the same shortage / damage / COGS figures. For the CEO it is
+  /// a cost-valued flow equation (Opening + Goods received − COGS − Damages −
+  /// Expired ± Other = Expected closing) reconciled to the physical count, then
+  /// the count-reconciled profit. For a Manager (cost wall §25.3) it is a
+  /// retail-valued shrinkage + count view with no cost/COGS/flow.
+  Widget _stockReconciliationCard(
+    BuildContext context,
+    ThemeData theme,
+    ReconData d, {
+    required bool isCeo,
+  }) {
     final successColor = theme.extension<AppSemanticColors>()!.success;
     final dangerColor = theme.colorScheme.error;
+    final hasShortage = d.shortageUnits > 0;
+
+    // Physical-count detail, shared by both roles.
+    List<Widget> countSection() => [
+      _line(context, theme, 'Products counted', fmtNumber(d.productsCounted)),
+      _line(
+        context,
+        theme,
+        'Short',
+        '${fmtNumber(d.shortageCount)} products · ${fmtNumber(d.shortageUnits)} units',
+        danger: hasShortage,
+      ),
+      _line(
+        context,
+        theme,
+        'Surplus',
+        '${fmtNumber(d.surplusCount)} products · ${fmtNumber(d.surplusUnits)} units',
+      ),
+      if (d.shortages.isNotEmpty) ...[
+        const SizedBox(height: 6),
+        Text(
+          'Shortages',
+          style: context.bodySmall.copyWith(fontWeight: FontWeight.w700),
+        ),
+        for (final s in d.shortages)
+          _line(
+            context,
+            theme,
+            s.name,
+            '${s.diff} (had ${s.system}, counted ${s.actual})',
+            danger: true,
+          ),
+      ],
+    ];
+
+    if (!isCeo) {
+      // Manager: retail-valued shrinkage + count. No cost, COGS or flow.
+      final shrinkVal = d.shortageRetailKobo + d.damageRetailKobo;
+      return _card(
+        context,
+        theme,
+        'Stock & shrinkage',
+        FontAwesomeIcons.boxesStacked.data,
+        Colors.blueAccent,
+        [
+          _line(
+            context,
+            theme,
+            'Stock shortages',
+            '${fmtNumber(d.shortageUnits)} unit(s) · ${formatCurrency(d.shortageRetailKobo / 100.0)}',
+            danger: hasShortage,
+          ),
+          _line(
+            context,
+            theme,
+            'Damages recorded',
+            '${fmtNumber(d.damageUnits)} unit(s) · ${formatCurrency(d.damageRetailKobo / 100.0)}',
+          ),
+          _divider(theme),
+          _line(
+            context,
+            theme,
+            'Sellable value unaccounted',
+            formatCurrency(shrinkVal / 100.0),
+            strong: true,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Valued at selling price — an accountability figure, not the '
+            'company\'s cost of the loss.',
+            style: context.bodySmall.copyWith(color: theme.hintColor),
+          ),
+          if (d.hasStockCount) ...[_divider(theme), ...countSection()],
+        ],
+        danger: hasShortage,
+      );
+    }
+
+    // CEO: cost-valued flow equation reconciled to the count.
     final variance = d.stockVarianceKobo;
     final hasVariance = d.hasStockCount && variance != 0;
-    final varianceColor = variance >= 0 ? successColor : dangerColor;
     return _card(
       context,
       theme,
@@ -320,150 +407,72 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
       FontAwesomeIcons.scaleBalanced.data,
       Colors.blueAccent,
       [
-        _line(context, theme, 'Opening stock',
-            formatCurrency(d.stockOpeningKobo / 100.0)),
-        _line(context, theme, 'Goods received',
-            '+ ${formatCurrency(d.stockReceivedKobo / 100.0)}'),
-        _line(context, theme, 'Cost of goods sold',
-            '− ${formatCurrency(d.stockCogsKobo / 100.0)}'),
-        _line(context, theme, 'Damages',
-            '− ${formatCurrency(d.stockDamagesKobo / 100.0)}'),
-        _line(context, theme, 'Expired',
-            '− ${formatCurrency(d.stockExpiredKobo / 100.0)}'),
-        if (d.stockOtherMovementsKobo != 0)
-          _line(
-            context,
-            theme,
-            'Other movements',
-            '${d.stockOtherMovementsKobo >= 0 ? '+ ' : '− '}'
-                '${formatCurrency(d.stockOtherMovementsKobo.abs() / 100.0)}',
-          ),
-        _divider(theme),
-        _line(context, theme, 'Expected closing',
-            formatCurrency(d.stockExpectedClosingKobo / 100.0),
-            strong: true),
-        if (d.hasStockCount) ...[
-          _line(
-            context,
-            theme,
-            'Variance (counted − expected)',
-            '${variance >= 0 ? '+ ' : '− '}'
-                '${formatCurrency(variance.abs() / 100.0)}',
-            strong: true,
-            color: hasVariance ? varianceColor : null,
-          ),
+        if (d.hasStockFlow) ...[
+          _line(context, theme, 'Opening stock',
+              formatCurrency(d.stockOpeningKobo / 100.0)),
+          _line(context, theme, 'Goods received',
+              '+ ${formatCurrency(d.stockReceivedKobo / 100.0)}'),
+          _line(context, theme, 'Cost of goods sold',
+              '− ${formatCurrency(d.stockCogsKobo / 100.0)}'),
+          _line(context, theme, 'Damages',
+              '− ${formatCurrency(d.stockDamagesKobo / 100.0)}'),
+          _line(context, theme, 'Expired',
+              '− ${formatCurrency(d.stockExpiredKobo / 100.0)}'),
+          if (d.stockOtherMovementsKobo != 0)
+            _line(
+              context,
+              theme,
+              'Other movements',
+              '${d.stockOtherMovementsKobo >= 0 ? '+ ' : '− '}'
+                  '${formatCurrency(d.stockOtherMovementsKobo.abs() / 100.0)}',
+            ),
+          _divider(theme),
+          _line(context, theme, 'Expected closing',
+              formatCurrency(d.stockExpectedClosingKobo / 100.0),
+              strong: true),
+          if (d.hasStockCount)
+            _line(
+              context,
+              theme,
+              'Variance (counted − expected)',
+              '${variance >= 0 ? '+ ' : '− '}'
+                  '${formatCurrency(variance.abs() / 100.0)}',
+              strong: true,
+              color: hasVariance ? dangerColor : null,
+            ),
         ],
-        const SizedBox(height: 6),
-        Text(
-          d.hasStockCount
-              ? 'Valued at current cost. Variance is the counted-vs-expected gap '
-                    'the recorded flows didn\'t explain.'
-              : 'Valued at current cost. No stock count in this period, so there '
-                    'is no variance to reconcile against.',
-          style: context.bodySmall.copyWith(color: theme.hintColor),
-        ),
-      ],
-    );
-  }
-
-  /// Integrity flag (ADR 0014 slice 3): reconciles reported P&L profit against
-  /// the independent physical stock count. Any gap is the stock-count variance
-  /// the recorded flows never booked — a recording error (shrinkage / theft /
-  /// miscount), not a separate loss, and NOT reflected in the reported profit.
-  /// No persistence — derived from flows + the count. CEO-only.
-  Widget _integrityCard(BuildContext context, ThemeData theme, ReconData d) {
-    final successColor = theme.extension<AppSemanticColors>()!.success;
-    final dangerColor = theme.colorScheme.error;
-    if (!d.hasStockCount) {
-      return _card(
-        context,
-        theme,
-        'Integrity check',
-        FontAwesomeIcons.shieldHalved.data,
-        theme.hintColor,
-        [
+        if (d.hasStockCount) ...[
+          _divider(theme),
+          ...countSection(),
+          _divider(theme),
+          _line(
+            context,
+            theme,
+            'Count-reconciled profit',
+            formatCurrency(d.integrityAdjustedProfitKobo / 100.0),
+            strong: true,
+            color: hasVariance ? dangerColor : successColor,
+          ),
+          const SizedBox(height: 6),
           Text(
-            'No physical stock count in this period, so the recorded flows can\'t '
-            'be reconciled against a real count. Take a stock count to verify '
-            'nothing left unrecorded.',
+            hasVariance
+                ? 'The physical count is off the recorded flows by '
+                      '${formatCurrency(variance.abs() / 100.0)} — an unbooked '
+                      'shrinkage or miscount, not reflected in reported profit.'
+                : 'The physical count matches recorded sales, receipts, damages '
+                      'and expiries — reported profit reconciles.',
+            style: context.bodySmall.copyWith(color: theme.hintColor),
+          ),
+        ] else ...[
+          const SizedBox(height: 6),
+          Text(
+            'Valued at current cost. No stock count in this period, so there is '
+            'no variance to reconcile against.',
             style: context.bodySmall.copyWith(color: theme.hintColor),
           ),
         ],
-      );
-    }
-    final gap = d.stockVarianceKobo;
-    final reconciled = gap == 0;
-    final color = reconciled ? successColor : dangerColor;
-    return _card(
-      context,
-      theme,
-      'Integrity check',
-      FontAwesomeIcons.shieldHalved.data,
-      color,
-      [
-        _line(context, theme, 'Reported net profit',
-            formatCurrency(d.netProfitKobo / 100.0)),
-        _line(
-          context,
-          theme,
-          'Unexplained stock variance',
-          reconciled
-              ? formatCurrency(0)
-              : '${gap >= 0 ? '+ ' : '− '}${formatCurrency(gap.abs() / 100.0)}',
-          danger: !reconciled,
-        ),
-        _divider(theme),
-        _line(
-          context,
-          theme,
-          'Count-reconciled profit',
-          formatCurrency(d.integrityAdjustedProfitKobo / 100.0),
-          strong: true,
-          color: color,
-        ),
-        const SizedBox(height: 6),
-        Text(
-          reconciled
-              ? 'The physical count matches recorded sales, receipts, damages and '
-                    'expiries — the reported profit reconciles.'
-              : 'The physical count is off the recorded flows by '
-                    '${formatCurrency(gap.abs() / 100.0)}. This is a recording gap '
-                    '(unbooked shrinkage / theft or a miscount), not reflected in '
-                    'the reported profit above.',
-          style: context.bodySmall.copyWith(color: theme.hintColor),
-        ),
       ],
-      danger: !reconciled,
-    );
-  }
-
-  /// Period flow: the inventory-on-hand asset plus supplier flows, netted of the
-  /// period's expenses and losses. Renders [ReconData.periodNetResultKobo]
-  /// line-for-line so the breakdown sums to the bold total.
-  Widget _netResultCard(BuildContext context, ThemeData theme, ReconData d) {
-    final successColor = theme.extension<AppSemanticColors>()!.success;
-    final dangerColor = theme.colorScheme.error;
-    final periodNetColor = d.periodNetResultKobo >= 0 ? successColor : dangerColor;
-
-    return _card(
-      context,
-      theme,
-      'Net result for this period (flow)',
-      FontAwesomeIcons.moneyBillTrendUp.data,
-      periodNetColor,
-      [
-        _line(context, theme, 'Inventory on hand (at cost)', '+ ${formatCurrency(d.inventoryOnHandKobo / 100.0)}'),
-        _line(context, theme, 'Goods received', '+ ${formatCurrency(d.goodsReceivedKobo / 100.0)}'),
-        _line(context, theme, 'Paid to suppliers', '− ${formatCurrency(d.supplierPaidKobo / 100.0)}'),
-        _line(context, theme, 'Refunds', '− ${formatCurrency(d.refundsKobo / 100.0)}'),
-        _line(context, theme, 'Expenses', '− ${formatCurrency(d.expensesKobo / 100.0)}'),
-        _line(context, theme, 'Damages (at cost)', '− ${formatCurrency(d.damageCostKobo / 100.0)}'),
-        if (d.crateDamageDepositKobo > 0)
-          _line(context, theme, 'Crate deposit loss', '− ${formatCurrency(d.crateDamageDepositKobo / 100.0)}'),
-        _line(context, theme, 'Stock shortages (at cost)', '− ${formatCurrency(d.shortageCostKobo / 100.0)}'),
-        _divider(theme),
-        _line(context, theme, 'Net result for period', formatCurrency(d.periodNetResultKobo / 100.0), strong: true, color: periodNetColor),
-      ],
+      danger: hasVariance,
     );
   }
 
@@ -485,12 +494,14 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
         if (d.showCrates)
           _line(context, theme, 'Empty crates held (now)', '+ ${formatCurrency(d.crateDepositKobo / 100.0)}'),
         _line(context, theme, 'Outstanding customer debt (at risk)', '+ ${formatCurrency(d.totalOwedKobo / 100.0)}', color: d.totalOwedKobo > 0 ? dangerColor : null),
-        // Supplier account position: a negative balance means we owe them
-        // (− red); a positive balance is credit we hold with them (+ green).
+        // Supplier account position — tracks payments made to suppliers vs
+        // goods received. Negative (red) = a debt we owe them for unpaid goods;
+        // positive (green) = money we paid them in advance (a prepayment), not
+        // money we hold on their behalf.
         if (d.supplierAccountBalanceKobo < 0)
           _line(context, theme, 'Owed to suppliers (now)', '− ${formatCurrency(d.supplierAccountBalanceKobo.abs() / 100.0)}', color: dangerColor)
         else
-          _line(context, theme, 'Supplier credit held (now)', '+ ${formatCurrency(d.supplierAccountBalanceKobo / 100.0)}', color: d.supplierAccountBalanceKobo > 0 ? successColor : null),
+          _line(context, theme, 'Paid in advance to suppliers (now)', '+ ${formatCurrency(d.supplierAccountBalanceKobo / 100.0)}', color: d.supplierAccountBalanceKobo > 0 ? successColor : null),
         _divider(theme),
         _line(context, theme, 'Business net position (now)', formatCurrency(d.businessNetPositionKobo / 100.0), strong: true, color: positionColor),
         if (d.uncostedInventoryItems > 0) ...[
@@ -503,111 +514,6 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
         const SizedBox(height: 6),
         Text('Point-in-time net position. Not a cash balance.', style: context.bodySmall.copyWith(color: theme.hintColor)),
       ],
-    );
-  }
-
-  Widget _shrinkageCard(
-    BuildContext context,
-    ThemeData theme,
-    ReconData d, {
-    required bool retail,
-  }) {
-    final shortageVal = retail ? d.shortageRetailKobo : d.shortageCostKobo;
-    final damageVal = retail ? d.damageRetailKobo : d.damageCostKobo;
-    final danger = d.shortageUnits > 0;
-    return _card(
-      context,
-      theme,
-      retail ? 'Sellable value unaccounted' : 'Stock shrinkage (at cost)',
-      FontAwesomeIcons.triangleExclamation.data,
-      Colors.redAccent,
-      [
-        _line(
-          context,
-          theme,
-          'Stock shortages',
-          '${fmtNumber(d.shortageUnits)} unit(s) · ${formatCurrency(shortageVal / 100.0)}',
-          danger: danger,
-        ),
-        _line(
-          context,
-          theme,
-          'Damages recorded',
-          '${fmtNumber(d.damageUnits)} unit(s) · ${formatCurrency(damageVal / 100.0)}',
-        ),
-        _divider(theme),
-        _line(
-          context,
-          theme,
-          'Total',
-          formatCurrency((shortageVal + damageVal) / 100.0),
-          strong: true,
-        ),
-        if (retail) ...[
-          const SizedBox(height: 6),
-          Text(
-            'Valued at selling price — an accountability figure, not the '
-            'company\'s cost of the loss.',
-            style: context.bodySmall.copyWith(color: theme.hintColor),
-          ),
-        ],
-      ],
-      danger: danger,
-    );
-  }
-
-  Widget _stockCard(BuildContext context, ThemeData theme, ReconData d) {
-    final hasShortage = d.shortageUnits > 0;
-    return _card(
-      context,
-      theme,
-      'Stock audit',
-      FontAwesomeIcons.boxesStacked.data,
-      Colors.blueAccent,
-      [
-        if (!d.hasStockCount)
-          Text(
-            'No stock count taken in this period.',
-            style: context.bodySmall.copyWith(color: theme.hintColor),
-          )
-        else ...[
-          _line(
-            context,
-            theme,
-            'Products counted',
-            fmtNumber(d.productsCounted),
-          ),
-          _line(
-            context,
-            theme,
-            'Short',
-            '${fmtNumber(d.shortageCount)} products · ${fmtNumber(d.shortageUnits)} units',
-            danger: hasShortage,
-          ),
-          _line(
-            context,
-            theme,
-            'Surplus',
-            '${fmtNumber(d.surplusCount)} products · ${fmtNumber(d.surplusUnits)} units',
-          ),
-          if (d.shortages.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text(
-              'Shortages',
-              style: context.bodySmall.copyWith(fontWeight: FontWeight.w700),
-            ),
-            for (final s in d.shortages)
-              _line(
-                context,
-                theme,
-                s.name,
-                '${s.diff} (had ${s.system}, counted ${s.actual})',
-                danger: true,
-              ),
-          ],
-        ],
-      ],
-      danger: hasShortage,
     );
   }
 
@@ -867,6 +773,7 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
       ['Items sold', '${d.itemsSold}'],
       ['Products (SKUs) sold', '${d.skus}'],
       ['Total sales', money(d.totalRevenueKobo)],
+      if (d.vatEnabled) ['VAT due (${d.vatRateLabel}%)', money(d.vatKobo)],
       if (isCeo) ...[
         // Net result for this period (flow) — mirrors _netResultCard.
         ['Inventory on hand (at cost)', money(d.inventoryOnHandKobo)],
@@ -888,7 +795,8 @@ class DailyReconciliationDetailScreen extends ConsumerWidget {
         ['Gross margin %', d.grossMarginPct],
         ['Net profit', money(d.netProfitKobo)],
         // Business worth right now (point-in-time) — mirrors _businessWorthCard.
-        // Supplier account position: negative = we owe, positive = credit held.
+        // Supplier account position: negative = a debt we owe for unpaid goods,
+        // positive = money we paid the supplier in advance (a prepayment).
         ['Supplier account balance (now)', money(d.supplierAccountBalanceKobo)],
         ['Business net position (now)', money(d.businessNetPositionKobo)],
         // Cash flow (business-wide) — mirrors _cashFlowCard.

@@ -2,6 +2,50 @@
 
 ---
 
+## 2026-07-06 — Standardized daily closing: declutter + opt-in VAT
+
+**Context.** The Daily Reconciliation detail screen had grown to **9 cards that
+repeated the same ~10 figures** (Inventory on hand ×2, COGS ×2, Damages ×4,
+Shortages ×4, Net profit ×2; `Total sales` = `Revenue` = `Cash sales`). User
+asked for one *standardized* closing, aggregatable by period, and — after
+grilling the spec against locked decisions — **cash reconciliation dropped
+entirely** (all cash is ultimately deposited to an account; no counted drawer,
+no float, no over/short → no `daily_closings` table), keeping Hard Rule #8
+intact. Branch `feat/standardized-daily-close` off `feat/closing-report-
+reconciliation` (the ADR 0014 base); web-pos WIP parked in `git stash@{0}`.
+
+**Phase A — declutter (pure Dart, no schema).** `daily_reconciliation_detail_
+screen.dart`: deleted the redundant "Net result for this period (flow)" card;
+**merged** Shrinkage + Stock audit + Stock reconciliation + Integrity into ONE
+`_stockReconciliationCard` (CEO = cost flow-equation → expected closing →
+variance → count-reconciled-profit line; Manager = retail shrinkage + count).
+CEO now sees **5** cards (Sales, P&L, Cash, Stock reconciliation, Position),
+Manager **3** (Sales, Stock & shrinkage, Debts & expenses). Refunds moved onto
+the Sales card. `recon_data.dart` model untouched (getters kept), so the 17
+existing tests pass unchanged.
+
+**Phase C — opt-in VAT (settings-backed, no migration).** VAT is **OFF by
+default** and stored in the synced `settings` key/value table (like
+`default_currency`) — so it needs **no schema/cloud migration**:
+`vat_enabled` (`'true'`/`'false'`) + `vat_rate_bps` (basis points, 750 = 7.5%).
+- `core/settings/vat_settings.dart` — keys, `VatConfig`, pure `computeVatKobo`,
+  `parseVatRateBps`.
+- `vatConfigProvider` (mirrors `currencyCodeProvider`, `businessScopedStream`).
+- `ReconData` gains `vatEnabled` / `vatRateBps` / `vatKobo` (+`vatRateLabel`);
+  `computeReconData` derives VAT = rate × (gross − discounts). **Pass-through —
+  it does NOT touch the P&L profit lines.** Sales card + CSV show a "VAT due
+  (7.5%)" line only when enabled.
+- Settings → Business Info: new **Tax** section — "Charge VAT" toggle (prefills
+  7.5% on first enable) + VAT rate (%) field; persists to the two settings keys.
+
+**Parked (explicit user request):** VAT on the cart/receipt at checkout (mobile
++ web) — a later slice; today VAT is the obligation surfaced on the closing only.
+
+**Verification.** `flutter analyze` clean project-wide. `recon_data_test.dart`
+(19, incl. 2 new VAT) + new `vat_settings_test.dart` (8) green; ban test +
+dashboard + settings suites (77) green. On-device walkthrough (decluttered
+cards, VAT toggle, VAT line) pending.
+
 ## 2026-07-05 — Closing report: integrity flag (issue #72, slice 3 — epic complete)
 
 **What changed.** Final slice of the closing-report enhancement (ADR 0014 §④):
