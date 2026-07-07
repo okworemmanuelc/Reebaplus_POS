@@ -23,13 +23,21 @@ photo (independent). Status:
   off. No UI code changed (onboarding + Settings render from `Industry.catalogue`);
   all nine selectable, crate opt-in still Bar/Beverage-only, industry editable
   with data preserved.
-- ✅ **#80 Lexicon on product forms — IN REVIEW** (branch `feat/lexicon-product-forms`).
-  New `Lexicon` module (per-industry item/unit/category nouns + starter presets +
-  hints, generic per-slot fallback; Beverage reproduces today's wording verbatim)
-  + `industryLexiconProvider` (Business-Scoped). Add/Update Product read all
-  industry-sensitive nouns from it; Add Product surfaces starter categories for a
-  fresh shop. 7 Lexicon seam tests; analyze clean; boots on emulator.
-- ⏭ **#81 Lexicon on POS/inventory/guides** — next, blocked by #80.
+- ✅ **#80 Lexicon on product forms — SHIPPED** (PR #85 merged). New `Lexicon`
+  module (per-industry item/unit/category nouns + starter presets + hints, generic
+  per-slot fallback; Beverage verbatim) + `industryLexiconProvider`. Add/Update
+  Product read all industry-sensitive nouns from it; starter categories surfaced.
+- ✅ **#81 Lexicon on POS/inventory/guides — IN REVIEW** (branch
+  `feat/lexicon-pos-inventory`). Added `Lexicon.itemPlural` and wired the item
+  noun into the POS grid empty state + coach tips, the Inventory tab/FAB/search,
+  and the Home/first-run/stock-count empty states + Get Started checklist.
+  Beverage unchanged; no slot-sprawl (manufacturer/supplier out of scope). 21
+  industry tests; analyze clean; boots on emulator. **Completes PRD #76's
+  terminology morph.**
+
+**PRD #76 status: all five slices (#77–#81) DONE.** #77/#78/#79/#80 merged to
+main; #81 in review (PR pending). Deeper per-industry features (IMEI, expiry,
+cold-chain) are the phased follow-ups (one industry per PR), not this PRD.
 
 ### IN REVIEW: Optional synced product photo (issue #78, PRD #76 / ADR 0015)
 Branch `feat/product-photo-sync` (off main; independent slice of the

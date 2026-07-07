@@ -2,6 +2,42 @@
 
 ---
 
+## 2026-07-07 — Terminology morph (Lexicon) on POS, inventory & guides (issue #81, PRD #76)
+
+**What changed.** Extends the industry Lexicon (from #80) to the remaining
+surfaces, so the whole selling + stock experience speaks the selected trade's
+words. Second half of the terminology morph.
+
+- **`Lexicon.itemPlural`** getter (Products → Medicines / Handsets — a simple
+  `+s` covers every shipped industry).
+- **Wired the item noun** (singular / plural / lowercased) into:
+  - **POS** — the product-grid empty state ("No {items} found") and the tap /
+    long-press coach tips ("Tap a {item} to add it to the cart").
+  - **Inventory** — the tab title ("{Items}"), the Add-{item} FAB (label +
+    "create a {item}…" description), the search tooltip/hint, and the
+    filter-miss empty state.
+  - **Guides / empty states** — the shared first-run empty state ("No {items}
+    yet", "Add your first {item}"), the Home empty state, the stock-count empty
+    state, and the Get Started checklist's Add-{item} step.
+- **Beverage unchanged** (`item = 'Product'`, `itemPlural = 'Products'`) — no
+  regression. Industries without a filled slot fall back to neutral words.
+- **No slot-sprawl** (the ADR audit): neutral labels (Suppliers, History,
+  Save, Price, Stock) stay literal; `manufacturer`/`supplier` nouns are out of
+  the item/unit/category scope and untouched; crate/empties stay `isCrateBusiness`-gated.
+
+**Files changed:** `lib/core/industry/lexicon.dart`, `test/industry/lexicon_test.dart`,
+`pos_home_screen.dart`, `product_grid.dart`, `inventory_screen.dart`,
+`stock_count_screen.dart`, `home_screen.dart`, `get_started_card.dart`,
+`shared/widgets/first_run_empty_state.dart`.
+
+**Verification.**
+- `flutter analyze` → clean project-wide.
+- `flutter test test/industry` → 21 green (incl. the new `itemPlural` case).
+- `flutter run` on the Android emulator → built + booted cleanly; the Beverage
+  business shows unchanged POS/inventory/guide wording.
+
+This completes PRD #76's terminology morph (#80 forms + #81 POS/inventory/guides).
+
 ## 2026-07-07 — Terminology morph (Lexicon) on Add/Update Product (issue #80, PRD #76)
 
 **What changed.** The Add Product and Update Product forms now speak the selected

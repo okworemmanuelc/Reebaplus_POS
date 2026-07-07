@@ -57,12 +57,14 @@ class ProductGrid extends StatelessWidget {
               color: subtextCol.withValues(alpha: 0.3),
             ),
             SizedBox(height: context.getRSize(16)),
-            Text(
-              'No products found',
-              style: TextStyle(
-                fontSize: context.getRFontSize(16),
-                color: subtextCol,
-                fontWeight: FontWeight.w600,
+            Consumer(
+              builder: (context, ref, _) => Text(
+                'No ${ref.watch(industryLexiconProvider).itemPluralLower} found',
+                style: TextStyle(
+                  fontSize: context.getRFontSize(16),
+                  color: subtextCol,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],

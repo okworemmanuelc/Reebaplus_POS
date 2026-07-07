@@ -113,7 +113,7 @@ class GetStartedCard extends ConsumerWidget {
     WidgetRef ref,
     GetStartedStep step,
   ) {
-    final meta = _metaFor(step.id);
+    final meta = _metaFor(step.id, ref.watch(industryLexiconProvider).item);
     final theme = Theme.of(context);
     final subtext =
         theme.textTheme.bodySmall?.color ?? theme.iconTheme.color!;
@@ -198,12 +198,13 @@ class GetStartedCard extends ConsumerWidget {
     }
   }
 
-  _StepMeta _metaFor(GetStartedStepId id) {
+  _StepMeta _metaFor(GetStartedStepId id, String item) {
+    final itemLower = item.toLowerCase();
     switch (id) {
       case GetStartedStepId.addProduct:
-        return const _StepMeta(
-          title: 'Add a product',
-          subtitle: "Create a product and set what's on your shelf",
+        return _StepMeta(
+          title: 'Add a $itemLower',
+          subtitle: "Create a $itemLower and set what's on your shelf",
         );
       case GetStartedStepId.makeSale:
         return const _StepMeta(

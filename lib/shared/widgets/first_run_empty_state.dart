@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
+import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart';
@@ -29,6 +30,7 @@ class FirstRunEmptyState extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final surface = ref.watch(firstRunSurfaceStateProvider);
+    final lex = ref.watch(industryLexiconProvider);
     final theme = Theme.of(context);
     final subtext =
         theme.textTheme.bodySmall?.color ?? theme.iconTheme.color!;
@@ -43,7 +45,7 @@ class FirstRunEmptyState extends ConsumerWidget {
       case FirstRunSurfaceState.neutralEmpty:
         return _EmptyMessage(
           icon: FontAwesomeIcons.boxOpen.data,
-          title: 'No products yet',
+          title: 'No ${lex.itemPluralLower} yet',
           subtitle: 'A manager can add them.',
           subtext: subtext,
         );
@@ -51,13 +53,13 @@ class FirstRunEmptyState extends ConsumerWidget {
       case FirstRunSurfaceState.addProductCta:
         return _EmptyMessage(
           icon: FontAwesomeIcons.boxOpen.data,
-          title: 'No products yet',
-          subtitle: 'Add your first product to start selling.',
+          title: 'No ${lex.itemPluralLower} yet',
+          subtitle: 'Add your first ${lex.itemLower} to start selling.',
           subtext: subtext,
           action: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: context.getRSize(280)),
             child: AppButton(
-              text: 'Add your first product',
+              text: 'Add your first ${lex.itemLower}',
               icon: FontAwesomeIcons.plus.data,
               onPressed: () => Navigator.of(context).push(
                 // Direct (non-receive) mode — the Fast-Add form (#30).
