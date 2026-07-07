@@ -176,7 +176,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     'suppliers' => 'Suppliers',
     'crates' => 'Empty Crates',
     'history' => 'History',
-    _ => ref.read(industryLexiconProvider).itemPlural,
+    _ => ref.watch(industryLexiconProvider).itemPlural,
   };
 
   Widget _tabBody(BuildContext context, String key) => switch (key) {
@@ -356,7 +356,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     // direct FAB when only one gate passes and shows nothing when neither does,
     // so a stock keeper with only `stock.add` still gets a direct Receive Stock
     // FAB but never the Add Product option.
-    final lex = ref.read(industryLexiconProvider);
+    final lex = ref.watch(industryLexiconProvider);
     final speedDialActions = <AppSpeedDialAction>[
       if (Gates.addProduct.allows(ref))
         AppSpeedDialAction(
@@ -432,7 +432,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
           IconButton(
             tooltip: _showSearch
                 ? 'Close search'
-                : 'Search ${ref.read(industryLexiconProvider).itemPlural.toLowerCase()}',
+                : 'Search ${ref.watch(industryLexiconProvider).itemPluralLower}',
             icon: Icon(_showSearch ? Icons.close : Icons.search),
             onPressed: () => setState(() {
               _showSearch = !_showSearch;
@@ -726,7 +726,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                     ? const FirstRunEmptyState()
                     : Center(
                         child: Text(
-                          'No ${ref.read(industryLexiconProvider).itemPlural.toLowerCase()} matching filters',
+                          'No ${ref.watch(industryLexiconProvider).itemPluralLower} matching filters',
                           style: TextStyle(color: _subtext),
                         ),
                       )
@@ -967,7 +967,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         decoration: InputDecoration(
           isDense: true,
           hintText:
-              'Search ${ref.read(industryLexiconProvider).itemPlural.toLowerCase()}…',
+              'Search ${ref.watch(industryLexiconProvider).itemPluralLower}…',
           prefixIcon: Icon(Icons.search, size: 18, color: _subtext),
           suffixIcon: _searchQuery.isEmpty
               ? null

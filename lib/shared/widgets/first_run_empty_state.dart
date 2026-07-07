@@ -45,7 +45,7 @@ class FirstRunEmptyState extends ConsumerWidget {
       case FirstRunSurfaceState.neutralEmpty:
         return _EmptyMessage(
           icon: FontAwesomeIcons.boxOpen.data,
-          title: 'No ${lex.itemPlural.toLowerCase()} yet',
+          title: 'No ${lex.itemPluralLower} yet',
           subtitle: 'A manager can add them.',
           subtext: subtext,
         );
@@ -53,13 +53,13 @@ class FirstRunEmptyState extends ConsumerWidget {
       case FirstRunSurfaceState.addProductCta:
         return _EmptyMessage(
           icon: FontAwesomeIcons.boxOpen.data,
-          title: 'No ${lex.itemPlural.toLowerCase()} yet',
-          subtitle: 'Add your first ${lex.item.toLowerCase()} to start selling.',
+          title: 'No ${lex.itemPluralLower} yet',
+          subtitle: 'Add your first ${lex.itemLower} to start selling.',
           subtext: subtext,
           action: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: context.getRSize(280)),
             child: AppButton(
-              text: 'Add your first ${lex.item.toLowerCase()}',
+              text: 'Add your first ${lex.itemLower}',
               icon: FontAwesomeIcons.plus.data,
               onPressed: () => Navigator.of(context).push(
                 // Direct (non-receive) mode — the Fast-Add form (#30).

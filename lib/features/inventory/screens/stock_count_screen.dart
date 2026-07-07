@@ -637,7 +637,8 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
             Future<void> submit() async {
               final qty = int.tryParse(_damageQtyCtrl.text.trim()) ?? 0;
               if (product == null) {
-                AppNotification.showError(sheetCtx, 'Choose a product.');
+                AppNotification.showError(sheetCtx,
+                    'Choose a ${ref.read(industryLexiconProvider).itemLower}.');
                 return;
               }
               if (qty <= 0) {
@@ -859,8 +860,9 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                     ),
                     SizedBox(height: context.getRSize(16)),
                     AppDropdown<ProductStockWithStore>(
-                      labelText: 'Product',
-                      hintText: 'Choose a product',
+                      labelText: ref.read(industryLexiconProvider).item,
+                      hintText:
+                          'Choose a ${ref.read(industryLexiconProvider).itemLower}',
                       value: product,
                       items: _items.map((it) {
                         return DropdownMenuItem(
@@ -1557,7 +1559,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                         ),
                         SizedBox(height: context.getRSize(16)),
                         Text(
-                          'No ${ref.read(industryLexiconProvider).itemPlural.toLowerCase()} found',
+                          'No ${ref.watch(industryLexiconProvider).itemPluralLower} found',
                           style: TextStyle(
                             color: _subtext,
                             fontSize: context.getRFontSize(16),

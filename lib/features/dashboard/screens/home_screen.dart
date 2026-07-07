@@ -637,7 +637,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           value: profit != null ? formatCurrency(profit) : '—',
           subtitle: profit != null
               ? 'Revenue minus cost of goods & expenses'
-              : 'Add buying prices to products to see profit',
+              : 'Add buying prices to '
+                    '${ref.watch(industryLexiconProvider).itemPluralLower} to '
+                    'see profit',
           icon: FontAwesomeIcons.chartLine.data,
           color: profit != null
               ? (profit >= 0 ? success : danger)
@@ -827,7 +829,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               Padding(
                 padding: EdgeInsets.all(context.spacingM),
                 child: Text(
-                  'No ${ref.read(industryLexiconProvider).itemPlural.toLowerCase()} yet',
+                  'No ${ref.watch(industryLexiconProvider).itemPluralLower} yet',
                   style: TextStyle(
                     color: _subtext,
                     fontSize: context.getRFontSize(13),

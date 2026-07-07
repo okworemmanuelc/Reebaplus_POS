@@ -59,7 +59,7 @@ class ProductGrid extends StatelessWidget {
             SizedBox(height: context.getRSize(16)),
             Consumer(
               builder: (context, ref, _) => Text(
-                'No ${ref.watch(industryLexiconProvider).itemPlural.toLowerCase()} found',
+                'No ${ref.watch(industryLexiconProvider).itemPluralLower} found',
                 style: TextStyle(
                   fontSize: context.getRFontSize(16),
                   color: subtextCol,

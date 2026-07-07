@@ -53,6 +53,11 @@ class Lexicon {
   /// "Handsets"). A simple `+s` covers every shipped industry's noun.
   String get itemPlural => '${item}s';
 
+  /// Lowercased [item] / [itemPlural] for mid-sentence use ("tap a product",
+  /// "no products found").
+  String get itemLower => item.toLowerCase();
+  String get itemPluralLower => itemPlural.toLowerCase();
+
   static const _genericUnits = ['Piece', 'Pack', 'Box', 'Carton', 'Bag', 'Other'];
   static const _genericCategories = ['General'];
 }
