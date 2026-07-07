@@ -123,15 +123,13 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   @override
   void initState() {
     super.initState();
-    // Fast-Add (direct mode) opens on the industry's default unit (#80), so a
-    // crate business still defaults to Bottle (engaging empty-crate tracking)
-    // while a pharmacy opens on Pack, etc. Receive Stock's mini-form keeps its
-    // existing Bottle default, untouched.
-    if (!widget.receiveMode) {
-      _unit = _lexicon.unit;
-      _dynamicUnits = _lexicon.starterUnits;
-      _trackEmpties = _unit.toLowerCase() == 'bottle';
-    }
+    // Open on the industry's default unit (#80): a crate business still defaults
+    // to Bottle (engaging empty-crate tracking), a pharmacy to Pack, etc. Applies
+    // to both the Fast-Add and Receive Stock mini-forms so neither shows a drink
+    // default to a non-beverage trade.
+    _unit = _lexicon.unit;
+    _dynamicUnits = _lexicon.starterUnits;
+    _trackEmpties = _unit.toLowerCase() == 'bottle';
     _loadData();
   }
 
@@ -348,10 +346,10 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     _categoryCtrl.clear();
     setState(() {
       _selectedExistingProduct = null;
-      _unit = 'Bottle';
+      _unit = _lexicon.unit;
       _size = null;
       _expiryDate = null;
-      _trackEmpties = true;
+      _trackEmpties = _unit.toLowerCase() == 'bottle';
       _allowFractionalSales = false;
       _selectedManufacturer = null;
       _selectedSupplier = null;
@@ -1657,7 +1655,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         prefixIcon: Icon(Icons.search, size: 18, color: subtext),
         onChanged: _onNameChanged,
       ),
-      _fieldHelper('Include the size — e.g. Star 60cl, Eva Water 75cl', subtext),
+      _fieldHelper('Include the size or key detail in the name.', subtext),
       if (_productSuggestions.isNotEmpty)
         _suggestionList(
           children: _productSuggestions
@@ -1705,7 +1703,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       // ── CATEGORY (optional, with examples) ──────────────────────────────
       AppInput(
         controller: _categoryCtrl,
-        labelText: 'Category',
+        labelText: _lexicon.category,
         hintText: 'Search or type category name…',
         prefixIcon: Icon(Icons.search, size: 18, color: subtext),
         onChanged: _onCategoryChanged,
@@ -1716,7 +1714,10 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
               )
             : null,
       ),
-      _fieldHelper('e.g. Water, Beer, Wine', subtext),
+      _fieldHelper(
+        'e.g. ${_lexicon.starterCategories.take(3).join(', ')}',
+        subtext,
+      ),
       if (_categorySuggestions.isNotEmpty ||
           (_categoryCtrl.text.trim().isNotEmpty && _selectedCategory == null))
         _categorySuggestionsList(card, textColor, border),
