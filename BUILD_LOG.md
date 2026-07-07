@@ -2,6 +2,27 @@
 
 ---
 
+## 2026-07-07 — Forbid client hard-delete of soft-delete tables (issue #87)
+
+**What changed.** Migration `0145_forbid_hard_delete_soft_tables.sql` —
+`REVOKE DELETE ... FROM authenticated, anon` on all 16 tables carrying an
+`is_deleted` column. Makes it structurally impossible for the console or phone
+app (both connect as `authenticated`) to permanently erase a row, enforcing the
+soft-delete mandate at the DB layer.
+
+- SECURITY DEFINER RPCs run as the function owner → `delete_business` (cascade
+  via `DELETE FROM businesses`) and `console_soft_delete_product` unaffected.
+- The app's `enqueueDelete` tables (role_permissions, user_permission_overrides,
+  store_role_permissions, user_stores, notifications, saved_carts) are a disjoint
+  set → nothing breaks. `service_role` left alone. Idempotent.
+
+**Deployed + verified** via `apply_migration` (2026-07-07). Post-deploy check:
+0 client DELETE grants remain on the 16 tables (baseline was 16 with DELETE).
+
+**Files changed:** `supabase/migrations/0145_forbid_hard_delete_soft_tables.sql`.
+
+---
+
 ## 2026-07-07 — Reconnect + app-resume catch-up pull; re-stamp cleanup (issue #88)
 
 **What changed.** Devices missed cloud soft-deletes because Supabase realtime
