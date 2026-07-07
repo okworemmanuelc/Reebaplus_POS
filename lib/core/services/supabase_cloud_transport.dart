@@ -250,13 +250,20 @@ class SupabaseCloudTransport implements CloudTransport {
 
   @override
   Future<void> stopRealtime() async {
-    for (final channel in _tableChannels) {
+    // Snapshot + clear the channel holders *synchronously* before the first
+    // await, so `startRealtime`'s `isNotEmpty` guard reflects reality the moment
+    // this yields control: a fire-and-forget stop immediately followed by a start
+    // must not see the not-yet-removed channels and bail (the #93 resubscribe
+    // race, where recreating mid-teardown created zero channels).
+    final channels = List<RealtimeChannel>.from(_tableChannels);
+    _tableChannels.clear();
+    final businessesChannel = _businessesChannel;
+    _businessesChannel = null;
+    for (final channel in channels) {
       await _client.removeChannel(channel);
     }
-    _tableChannels.clear();
-    if (_businessesChannel != null) {
-      await _client.removeChannel(_businessesChannel!);
-      _businessesChannel = null;
+    if (businessesChannel != null) {
+      await _client.removeChannel(businessesChannel);
     }
   }
 
