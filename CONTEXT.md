@@ -165,8 +165,9 @@ The trade a business operates in (Beverage distributor, Pharmacy, Phone &
 Gadgets, Frozen Foods & Grocery, …) — the single input that morphs the app's
 words, presets, and optional feature surfaces. Resolved from `businesses.type`
 by the total normalizer `industryOf(type)`; unknown/null → the `generic`
-Industry, never a crash. Nine ship, all selectable at onboarding and editable
-later (ADR 0015).
+Industry, never a crash. Across the epic all nine become selectable at
+onboarding and editable later; this foundation slice adds the registry without
+changing today's selectable set (ADR 0015).
 _Avoid_: reading `businesses.type` string directly to branch behaviour (use the
 resolved Industry); a new `industry_id` column (identity is the normalized type).
 
