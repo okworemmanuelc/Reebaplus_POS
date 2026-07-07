@@ -292,7 +292,9 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
                     !needsStoreSelection &&
                     _controller!.filteredProducts.isNotEmpty)
                   _buildInlineHint(
-                    message: 'Tap a product to add it to the cart.',
+                    message: 'Tap a '
+                        '${ref.read(industryLexiconProvider).item.toLowerCase()}'
+                        ' to add it to the cart.',
                     onDismiss: () {
                       setState(() => _showPosTapHint = false);
                       uiHintService.markShown(UiHintService.hintPosTapAdd);
@@ -300,7 +302,9 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
                   ),
                 if (!_controller!.isLoading && _showPosHint && !needsStoreSelection)
                   _buildInlineHint(
-                    message: 'Tap and hold a product to edit it.',
+                    message: 'Tap and hold a '
+                        '${ref.read(industryLexiconProvider).item.toLowerCase()}'
+                        ' to edit it.',
                     onDismiss: () {
                       setState(() => _showPosHint = false);
                       uiHintService.markShown(UiHintService.hintPosLongpress);

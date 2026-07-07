@@ -33,6 +33,13 @@ void main() {
       expect(lexiconFor(Industry.restaurant).item, 'Item');
     });
 
+    test('itemPlural pluralises the item noun for headings (#81)', () {
+      expect(lexiconFor(Industry.beverage).itemPlural, 'Products');
+      expect(lexiconFor(Industry.pharmacy).itemPlural, 'Medicines');
+      expect(lexiconFor(Industry.phoneAndGadgets).itemPlural, 'Handsets');
+      expect(lexiconFor(Industry.generic).itemPlural, 'Products');
+    });
+
     test('resolves through the registry: industryOf → lexicon', () {
       // The UI path: stored type → industryOf → lexiconFor.
       expect(lexiconFor(industryOf('Pharmacy')).item, 'Medicine');

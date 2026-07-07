@@ -49,6 +49,10 @@ class Lexicon {
   /// Example description hint text.
   final String itemDescriptionHint;
 
+  /// The plural of [item] for list/tab headings ("Products", "Medicines",
+  /// "Handsets"). A simple `+s` covers every shipped industry's noun.
+  String get itemPlural => '${item}s';
+
   static const _genericUnits = ['Piece', 'Pack', 'Box', 'Carton', 'Bag', 'Other'];
   static const _genericCategories = ['General'];
 }

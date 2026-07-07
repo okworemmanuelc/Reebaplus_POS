@@ -827,7 +827,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               Padding(
                 padding: EdgeInsets.all(context.spacingM),
                 child: Text(
-                  'No products yet',
+                  'No ${ref.read(industryLexiconProvider).itemPlural.toLowerCase()} yet',
                   style: TextStyle(
                     color: _subtext,
                     fontSize: context.getRFontSize(13),

@@ -1557,7 +1557,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                         ),
                         SizedBox(height: context.getRSize(16)),
                         Text(
-                          'No products found',
+                          'No ${ref.read(industryLexiconProvider).itemPlural.toLowerCase()} found',
                           style: TextStyle(
                             color: _subtext,
                             fontSize: context.getRFontSize(16),
