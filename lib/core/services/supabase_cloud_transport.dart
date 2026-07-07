@@ -212,6 +212,24 @@ class SupabaseCloudTransport implements CloudTransport {
       );
     }
 
+    // `postgres_changes` is RLS-gated: the channel join must carry the user's
+    // JWT or the realtime server rejects EVERY binding (channelError, no CDC —
+    // #97). A channel only reads `socket.accessToken` into its join payload at
+    // subscribe time; supabase_flutter's auto-setAuth runs on auth events, but
+    // nothing guarantees the socket holds the *user* token (vs the anon key) at
+    // this exact moment. Force it now — synchronous for a non-null token, so the
+    // subscribe below carries the JWT. The diagnostic reveals whether the socket
+    // was already authed (true → auth was fine, look elsewhere) or on the anon
+    // key (false → this is the fix).
+    final sessionToken = _client.auth.currentSession?.accessToken;
+    final socketAlreadyHadSessionToken =
+        _client.realtime.accessToken == sessionToken;
+    unawaited(_client.realtime.setAuth(sessionToken));
+    debugPrint(
+      '[CloudTransport] Realtime auth: session=${sessionToken != null} '
+      'socketAlreadyHadSessionToken=$socketAlreadyHadSessionToken',
+    );
+
     // One subscribe-status callback for the whole tenant channel — surfaces
     // SUBSCRIBED once (live) or CHANNEL_ERROR / TIMED_OUT once (dead).
     channel.subscribe((status, error) {
