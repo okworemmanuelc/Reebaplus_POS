@@ -9,9 +9,10 @@ import 'package:reebaplus_pos/core/services/cloud_transport.dart';
 ///
 /// A large adapter with a thin per-method implementation: it forwards the push
 /// verbs, owns the pull pagination loop (moved verbatim from the old
-/// `_fetchOneTable`), and owns the realtime channel lifecycle (one channel per
-/// table, the `businesses`-by-`id` filter quirk, subscribe-status logging, and
-/// teardown). Error modes are passed through untouched: PostgREST failures throw
+/// `_fetchOneTable`), and owns the realtime channel lifecycle (a single tenant
+/// channel with one `postgres_changes` binding per table, the `businesses`-by-`id`
+/// filter quirk, subscribe-status logging, and teardown). Error modes are passed
+/// through untouched: PostgREST failures throw
 /// [PostgrestException]; page/chunk timeouts throw [TimeoutException].
 class SupabaseCloudTransport implements CloudTransport {
   final SupabaseClient _client;
@@ -22,8 +23,9 @@ class SupabaseCloudTransport implements CloudTransport {
   /// a timeout is surfaced so the caller can classify the failure.
   static const int _minPullPageSize = 10;
 
-  final List<RealtimeChannel> _tableChannels = [];
-  RealtimeChannel? _businessesChannel;
+  /// Single realtime channel carrying one `postgres_changes` binding per synced
+  /// table — one websocket join for the whole tenant. See [startRealtime].
+  RealtimeChannel? _channel;
 
   // ── PUSH ──────────────────────────────────────────────────────────────────
   @override
@@ -178,92 +180,82 @@ class SupabaseCloudTransport implements CloudTransport {
     String businessId, {
     required void Function(PostgresChangePayload) onChange,
   }) {
-    if (_tableChannels.isNotEmpty || _businessesChannel != null) return;
+    if (_channel != null) return;
 
-    // One channel per synced tenant table, each with an explicit `table:` +
-    // `business_id` filter. A single `channel('public:*')` with a `business_id`
-    // filter but no `table:` cannot honour a filtered postgres_changes binding,
-    // so the whole channel silently fails — no inbound events for ANY table.
-    // Per-table channels also isolate a bad table to its own channel instead of
-    // tearing down every subscription. The permanent subscribe-status callback
-    // surfaces SUBSCRIBED / CHANNEL_ERROR / TIMED_OUT.
+    // ONE channel carrying a `postgres_changes` binding per synced table — a
+    // single websocket join for the whole tenant — instead of one channel per
+    // table. Signing in fans out ~55 tables; one-channel-per-table fired ~55
+    // near-simultaneous `phx_join`s on the socket, blew past the realtime
+    // per-client channel/join ceiling, and every channel came back
+    // CHANNEL_ERROR → TIMED_OUT with no CDC subscription ever established (#95).
+    // Multiple bindings on a single channel is the supported many-table pattern
+    // (realtime_client 2.x) and needs just one join.
     //
-    // `businesses` (no `business_id` column — its `id` IS the business id) is
-    // handled by the separate channel below; `system_config` is global.
+    // All bindings share `onChange`; the engine dispatches by `payload.table`
+    // (there is exactly one binding per table, so no event is delivered twice).
+    // `businesses` has no `business_id` column — its `id` IS the business id, so
+    // it filters on `id`. `system_config` is global and skipped.
+    var channel = _client.channel('public:tenant:$businessId');
     for (final table in tables) {
-      if (table == 'businesses' || table == 'system_config') continue;
-      try {
-        final channel =
-            _client
-                .channel('public:$table')
-                .onPostgresChanges(
-                  event: PostgresChangeEvent.all,
-                  schema: 'public',
-                  table: table,
-                  filter: PostgresChangeFilter(
-                    type: PostgresChangeFilterType.eq,
-                    column: 'business_id',
-                    value: businessId,
-                  ),
-                  callback: onChange,
-                )
-              ..subscribe((status, error) {
-                if (status == RealtimeSubscribeStatus.channelError ||
-                    status == RealtimeSubscribeStatus.timedOut) {
-                  debugPrint(
-                    '[CloudTransport] Realtime channel "$table" $status'
-                    '${error != null ? ' — $error' : ''}',
-                  );
-                } else if (status == RealtimeSubscribeStatus.subscribed) {
-                  debugPrint('[CloudTransport] Realtime subscribed: $table');
-                }
-              });
-        _tableChannels.add(channel);
-      } catch (e) {
-        debugPrint('[CloudTransport] Realtime subscribe failed for "$table": $e');
-      }
+      if (table == 'system_config') continue;
+      final isBusinesses = table == 'businesses';
+      channel = channel.onPostgresChanges(
+        event: PostgresChangeEvent.all,
+        schema: 'public',
+        table: table,
+        filter: PostgresChangeFilter(
+          type: PostgresChangeFilterType.eq,
+          column: isBusinesses ? 'id' : 'business_id',
+          value: businessId,
+        ),
+        callback: onChange,
+      );
     }
 
-    // Separate channel for `businesses` filtered by `id` (no business_id column).
-    if (tables.contains('businesses')) {
-      try {
-        _businessesChannel =
-            _client
-                .channel('public:businesses')
-                .onPostgresChanges(
-                  event: PostgresChangeEvent.all,
-                  schema: 'public',
-                  table: 'businesses',
-                  filter: PostgresChangeFilter(
-                    type: PostgresChangeFilterType.eq,
-                    column: 'id',
-                    value: businessId,
-                  ),
-                  callback: onChange,
-                )
-              ..subscribe();
-      } catch (e) {
-        debugPrint('[CloudTransport] Businesses realtime subscribe failed: $e');
+    // `postgres_changes` is RLS-gated: the channel join must carry the user's
+    // JWT or the realtime server rejects EVERY binding (channelError, no CDC —
+    // #97). A channel only reads `socket.accessToken` into its join payload at
+    // subscribe time; supabase_flutter's auto-setAuth runs on auth events, but
+    // nothing guarantees the socket holds the *user* token (vs the anon key) at
+    // this exact moment. Force it now — synchronous for a non-null token, so the
+    // subscribe below carries the JWT. The diagnostic reveals whether the socket
+    // was already authed (true → auth was fine, look elsewhere) or on the anon
+    // key (false → this is the fix).
+    final sessionToken = _client.auth.currentSession?.accessToken;
+    final socketAlreadyHadSessionToken =
+        _client.realtime.accessToken == sessionToken;
+    unawaited(_client.realtime.setAuth(sessionToken));
+    debugPrint(
+      '[CloudTransport] Realtime auth: session=${sessionToken != null} '
+      'socketAlreadyHadSessionToken=$socketAlreadyHadSessionToken',
+    );
+
+    // One subscribe-status callback for the whole tenant channel — surfaces
+    // SUBSCRIBED once (live) or CHANNEL_ERROR / TIMED_OUT once (dead).
+    channel.subscribe((status, error) {
+      if (status == RealtimeSubscribeStatus.channelError ||
+          status == RealtimeSubscribeStatus.timedOut) {
+        debugPrint(
+          '[CloudTransport] Realtime tenant channel $status'
+          '${error != null ? ' — $error' : ''}',
+        );
+      } else if (status == RealtimeSubscribeStatus.subscribed) {
+        debugPrint('[CloudTransport] Realtime subscribed (tenant channel)');
       }
-    }
+    });
+    _channel = channel;
   }
 
   @override
   Future<void> stopRealtime() async {
-    // Snapshot + clear the channel holders *synchronously* before the first
-    // await, so `startRealtime`'s `isNotEmpty` guard reflects reality the moment
-    // this yields control: a fire-and-forget stop immediately followed by a start
-    // must not see the not-yet-removed channels and bail (the #93 resubscribe
-    // race, where recreating mid-teardown created zero channels).
-    final channels = List<RealtimeChannel>.from(_tableChannels);
-    _tableChannels.clear();
-    final businessesChannel = _businessesChannel;
-    _businessesChannel = null;
-    for (final channel in channels) {
+    // Clear the holder *synchronously* before the await so `startRealtime`'s
+    // guard reflects reality the moment this yields control — a fire-and-forget
+    // stop immediately followed by a start must not see the not-yet-removed
+    // channel and bail (the #93 resubscribe race).
+    final channel = _channel;
+    _channel = null;
+    if (channel != null) {
       await _client.removeChannel(channel);
-    }
-    if (businessesChannel != null) {
-      await _client.removeChannel(businessesChannel);
     }
   }
 

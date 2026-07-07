@@ -2,6 +2,67 @@
 
 ---
 
+## 2026-07-07 — Realtime: authorize the socket for postgres_changes (issue #97)
+
+**What changed.** After the single-channel change (#95), **every** `postgres_changes`
+binding still failed `channelError` → `timedOut` — including `products` (valid, in
+publication, RLS-OK for REST). Realtime server logs: socket connects, broadcast
+replication healthy, but **no `supabase_realtime` CDC slot ever starts**. That is a
+global authorization rejection, not a per-table or channel-count issue.
+
+**Root cause.** `postgres_changes` is RLS-gated: the channel join must carry the
+user's JWT. A realtime channel only reads `socket.accessToken` into its join
+payload **at subscribe time** (realtime_channel.dart). supabase_flutter's
+auto-`setAuth` runs on auth events, but nothing guarantees the socket holds the
+*user* token (vs the anon key) at the instant `startRealtime` subscribes — so joins
+went out unauthenticated. REST/pull always worked because the JWT rides each HTTPS
+request independently.
+
+**Fix.** In `startRealtime`, explicitly `realtime.setAuth(currentSession.accessToken)`
+immediately before `channel.subscribe()` (synchronous for a non-null token, so the
+join carries the JWT). Added a diagnostic — `socketAlreadyHadSessionToken` — that
+prints on-device whether the socket was already authed (true) or on the anon key
+(false → this was the fix).
+
+**Verified.** `flutter analyze` clean; `test/sync/` 186 passing. On-device
+confirmation pending (expect `Realtime subscribed (tenant channel)`).
+
+**Files changed:** `lib/core/services/supabase_cloud_transport.dart`.
+
+---
+
+## 2026-07-07 — Realtime: one channel with many bindings, not one-per-table (issue #95)
+
+**What changed.** After #93 let the channels actually attempt to subscribe, the
+device log showed **every** synced table's channel go `channelError` → `timedOut`
+(~55 of them) and never `subscribed`. Supabase realtime logs: tenant connects
+fine, healthy broadcast replication, but **zero postgres_changes (CDC) activity**
+and repeated `Stop tenant … no connected users` — i.e. the socket connects but all
+~55 `postgres_changes` joins are rejected before CDC setup, then the client
+disconnects.
+
+**Root cause.** `SupabaseCloudTransport.startRealtime` opened **one channel per
+synced table** (`channel('public:<table>')`), so sign-in fired ~55
+near-simultaneous `phx_join`s on one socket → past the realtime per-client
+channel/join ceiling → all error + time out.
+
+**Fix.** Collapse to **one channel with a `postgres_changes` binding per table**
+(single websocket join, N bindings) — the supported many-table pattern in
+realtime_client 2.x. Full coverage preserved (all synced tables; `businesses`
+filtered on `id`; `system_config` skipped). All bindings share one `onChange`;
+the engine still dispatches by `payload.table` (one binding per table → no double
+delivery). Single channel `_channel` replaces `_tableChannels`/`_businessesChannel`;
+the #93 synchronous-clear teardown preserved for it. One subscribe-status log for
+the whole tenant channel.
+
+**Verified.** `flutter analyze` clean; `test/sync/` 186 passing. Live
+subscribe/deliver requires on-device confirmation (emulator) — expect a single
+`Realtime subscribed (tenant channel)` on launch instead of ~55 error lines.
+
+**Files changed:** `lib/core/services/supabase_cloud_transport.dart`.
+
+---
+
 ## 2026-07-07 — Periodic fallback pull: near-live convergence without postgres_changes (issue #98)
 
 **What changed.** Realtime `postgres_changes` is rejected server-side even with an
