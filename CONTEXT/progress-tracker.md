@@ -18,15 +18,18 @@ photo (independent). Status:
   is the single source of truth; `industryOf()` total normalizer; `isCrateBusiness`
   a registry shim. Pure prefactor.
 - ✅ **#78 synced product photo — SHIPPED** (PR #83 merged). See entry below.
-- ✅ **#79 enable all nine — IN REVIEW** (branch `feat/enable-all-industries`).
-  Added **Phone & Gadgets** + **Frozen Foods & Grocery** to the registry and
-  flipped every `comingSoon` off. Because onboarding + Settings render from
-  `Industry.catalogue` (the #77 prefactor), no UI code changed — all nine are now
-  selectable, crate opt-in still Bar/Beverage-only, industry editable in Settings
-  with data preserved. 13 registry tests green (catalogue → nine, all selectable,
-  golden updated); analyze clean; boots on emulator.
-- ⏭ **#80 Lexicon on product forms** — next, blocked by #79 (needs it on main).
-- ⏭ **#81 Lexicon on POS/inventory/guides** — blocked by #80.
+- ✅ **#79 enable all nine — SHIPPED** (PR #84 merged). Added **Phone & Gadgets**
+  + **Frozen Foods & Grocery** to the registry and flipped every `comingSoon`
+  off. No UI code changed (onboarding + Settings render from `Industry.catalogue`);
+  all nine selectable, crate opt-in still Bar/Beverage-only, industry editable
+  with data preserved.
+- ✅ **#80 Lexicon on product forms — IN REVIEW** (branch `feat/lexicon-product-forms`).
+  New `Lexicon` module (per-industry item/unit/category nouns + starter presets +
+  hints, generic per-slot fallback; Beverage reproduces today's wording verbatim)
+  + `industryLexiconProvider` (Business-Scoped). Add/Update Product read all
+  industry-sensitive nouns from it; Add Product surfaces starter categories for a
+  fresh shop. 7 Lexicon seam tests; analyze clean; boots on emulator.
+- ⏭ **#81 Lexicon on POS/inventory/guides** — next, blocked by #80.
 
 ### IN REVIEW: Optional synced product photo (issue #78, PRD #76 / ADR 0015)
 Branch `feat/product-photo-sync` (off main; independent slice of the

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/industry/lexicon.dart';
 import 'package:reebaplus_pos/core/result.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/product_photo_field.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -104,11 +105,14 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     'Manufacturer',
   };
 
-  static const _units = kProductUnits;
-  List<String> _dynamicUnits = _units;
+  List<String> _dynamicUnits = kProductUnits;
 
-  String get _nameHint => _isCrateBusiness ? 'Eva water 75cl' : 'e.g. Heineken 60cl';
-  String get _descriptionHint => _isCrateBusiness ? 'sparkling water' : 'e.g. Premium Lager';
+  /// The active industry's words + presets (#80). Read (not watched) in helpers
+  /// called during build; the form is opened for one business so it is stable.
+  Lexicon get _lexicon => ref.read(industryLexiconProvider);
+
+  String get _nameHint => _lexicon.itemNameHint;
+  String get _descriptionHint => _lexicon.itemDescriptionHint;
 
   /// Whether the current role may see / set the buying price (master plan
   /// §16.5 / §16.7). Reads (not watches) so it is safe to call from `_save`.
@@ -119,15 +123,13 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   @override
   void initState() {
     super.initState();
-    // Fast-Add (direct mode) opens on the business-type-aware unit default so a
-    // crate business engages empty-crate tracking automatically (ADR 0006).
-    // Receive Stock's mini-form keeps its existing Bottle default, untouched.
-    if (!widget.receiveMode) {
-      _unit = fastAddDefaultUnit(
-        tracksCrates: businessTracksCrates(ref.read(currentBusinessProvider)),
-      );
-      _trackEmpties = _unit.toLowerCase() == 'bottle';
-    }
+    // Open on the industry's default unit (#80): a crate business still defaults
+    // to Bottle (engaging empty-crate tracking), a pharmacy to Pack, etc. Applies
+    // to both the Fast-Add and Receive Stock mini-forms so neither shows a drink
+    // default to a non-beverage trade.
+    _unit = _lexicon.unit;
+    _dynamicUnits = _lexicon.starterUnits;
+    _trackEmpties = _unit.toLowerCase() == 'bottle';
     _loadData();
   }
 
@@ -151,9 +153,9 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         _allManufacturers = manufacturers;
         _allCategories = cats;
         _allProducts = productsList;
-        // Merge fetched units with defaults to ensure a rich list
+        // Merge the industry's starter units (#80) with any already in use.
         final mergedUnits = {
-          ..._units, // static defaults
+          ..._lexicon.starterUnits,
           ...uniqueUnits,
         }.toList()..sort();
         _dynamicUnits = mergedUnits;
@@ -344,10 +346,10 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     _categoryCtrl.clear();
     setState(() {
       _selectedExistingProduct = null;
-      _unit = 'Bottle';
+      _unit = _lexicon.unit;
       _size = null;
       _expiryDate = null;
-      _trackEmpties = true;
+      _trackEmpties = _unit.toLowerCase() == 'bottle';
       _allowFractionalSales = false;
       _selectedManufacturer = null;
       _selectedSupplier = null;
@@ -541,7 +543,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         return;
       }
       if (existingName.isEmpty) {
-        AppNotification.showError(context, 'Product Name is required.');
+        AppNotification.showError(context, '${_lexicon.item} Name is required.');
         return;
       }
       if (_retailPriceCtrl.text.trim().isEmpty) {
@@ -700,11 +702,11 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
 
     String? missingField;
     if (name.isEmpty) {
-      missingField = 'Product Name';
+      missingField = '${_lexicon.item} Name';
     } else if (_subtitleCtrl.text.trim().isEmpty) {
       missingField = 'Description / Subtitle';
     } else if (_selectedCategory == null) {
-      missingField = 'Category';
+      missingField = _lexicon.category;
     } else if (_retailPriceCtrl.text.trim().isEmpty) {
       missingField = 'Retailer Price';
     } else if (_wholesalePriceCtrl.text.trim().isEmpty) {
@@ -1213,7 +1215,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                 // ── NAME SEARCH (new product mode only) ────────────────
                 AppInput(
                   controller: _nameCtrl,
-                  labelText: 'Product Name *',
+                  labelText: '${_lexicon.item} Name *',
                   hintText: _nameHint,
                   prefixIcon: Icon(Icons.search, size: 18, color: subtext),
                   onChanged: _onNameChanged,
@@ -1244,7 +1246,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
               ...[
                 AppInput(
                   controller: _categoryCtrl,
-                  labelText: 'CATEGORY *',
+                  labelText: '${_lexicon.category.toUpperCase()} *',
                   hintText: 'Search or type category name…',
                   prefixIcon: Icon(Icons.search, size: 18, color: subtext),
                   onChanged: _onCategoryChanged,
@@ -1255,6 +1257,30 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                         )
                       : null,
                 ),
+                // Starter category suggestions for a fresh shop (#80) — shown
+                // before the owner types and only while they have no categories
+                // yet, so a new business isn't a blank slate.
+                if (_allCategories.isEmpty &&
+                    _selectedCategory == null &&
+                    _categoryCtrl.text.trim().isEmpty)
+                  _suggestionList(
+                    children: [
+                      for (final name in _lexicon.starterCategories)
+                        _suggestionTile(
+                          label: name,
+                          icon: Icons.add_circle_outline,
+                          textColor: textColor,
+                          card: card,
+                          border: border,
+                          onTap: () {
+                            _categoryCtrl.text = name;
+                            _onCategoryChanged(name);
+                          },
+                        ),
+                    ],
+                    card: card,
+                    border: border,
+                  ),
                 if (_categorySuggestions.isNotEmpty ||
                     (_categoryCtrl.text.trim().isNotEmpty &&
                         _selectedCategory == null))
@@ -1624,12 +1650,12 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       // ── NAME (include the size) ─────────────────────────────────────────
       AppInput(
         controller: _nameCtrl,
-        labelText: 'Product Name *',
+        labelText: '${_lexicon.item} Name *',
         hintText: _nameHint,
         prefixIcon: Icon(Icons.search, size: 18, color: subtext),
         onChanged: _onNameChanged,
       ),
-      _fieldHelper('Include the size — e.g. Star 60cl, Eva Water 75cl', subtext),
+      _fieldHelper('Include the size or key detail in the name.', subtext),
       if (_productSuggestions.isNotEmpty)
         _suggestionList(
           children: _productSuggestions
@@ -1677,7 +1703,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       // ── CATEGORY (optional, with examples) ──────────────────────────────
       AppInput(
         controller: _categoryCtrl,
-        labelText: 'Category',
+        labelText: _lexicon.category,
         hintText: 'Search or type category name…',
         prefixIcon: Icon(Icons.search, size: 18, color: subtext),
         onChanged: _onCategoryChanged,
@@ -1688,7 +1714,10 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
               )
             : null,
       ),
-      _fieldHelper('e.g. Water, Beer, Wine', subtext),
+      _fieldHelper(
+        'e.g. ${_lexicon.starterCategories.take(3).join(', ')}',
+        subtext,
+      ),
       if (_categorySuggestions.isNotEmpty ||
           (_categoryCtrl.text.trim().isNotEmpty && _selectedCategory == null))
         _categorySuggestionsList(card, textColor, border),

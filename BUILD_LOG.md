@@ -2,6 +2,40 @@
 
 ---
 
+## 2026-07-07 — Terminology morph (Lexicon) on Add/Update Product (issue #80, PRD #76)
+
+**What changed.** The Add Product and Update Product forms now speak the selected
+industry's words instead of hardcoded drink terms.
+
+- **Lexicon module** (`lib/core/industry/lexicon.dart`). A `Lexicon` holds an
+  industry's domain nouns (`item`, `category`, `unit`) + starter unit/category
+  suggestions + example hints, with **per-slot generic defaults** (an unfilled
+  slot resolves to the neutral word). `lexiconFor(Industry)` is total. Beverage
+  reproduces today's product-form wording **verbatim** ("Product Name", "Eva
+  water 75cl", "sparkling water", Bottle default) — no regression.
+- **Business-Scoped provider** (`industryLexiconProvider`, app_providers). Watches
+  `currentBusinessProvider`, resolves the `Industry` via `industryOf`, returns
+  its `Lexicon`. Rebuilds on an industry switch (words follow, no restart).
+- **Add & Update Product** read every industry-sensitive noun from the Lexicon:
+  the `"{item} Name"` label, name/description hints, category label, default unit
+  + unit suggestions, and validation messages. Add Product also surfaces the
+  industry's **starter category** suggestions for a fresh shop (no categories
+  yet). Neutral words (Save, Price, Stock, Search) stay literal. Crate/empties
+  nouns are untouched — already gated by `isCrateBusiness`, so they can't leak.
+
+**Files changed:** `lib/core/industry/lexicon.dart` (new),
+`lib/core/providers/app_providers.dart`, `add_product_screen.dart`,
+`update_product_sheet.dart`, `test/industry/lexicon_test.dart` (new).
+
+**Verification.**
+- `flutter analyze` → clean project-wide.
+- `flutter test test/industry` → Lexicon seam (7) + registry (13) green;
+  `test/inventory` green.
+- `flutter run` on the Android emulator → built + booted cleanly; the Beverage
+  business shows unchanged product-form wording.
+
+Next: **#81** extends the same Lexicon to POS, inventory tabs, and guides.
+
 ## 2026-07-07 — Enable all nine industries at onboarding (issue #79, PRD #76)
 
 **What changed.** Unlock every industry at signup — the existing seven plus new

@@ -12,7 +12,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'package:reebaplus_pos/core/data/business_types.dart';
+import 'package:reebaplus_pos/core/industry/industry.dart';
+import 'package:reebaplus_pos/core/industry/lexicon.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/business_scoped_stream.dart';
 import 'package:reebaplus_pos/core/services/biometric_service.dart';
@@ -506,6 +507,18 @@ bool businessTracksCrates(BusinessData? business) {
 /// no business is bound yet.
 final currentBusinessNameProvider = Provider.autoDispose<String>((ref) {
   return ref.watch(currentBusinessProvider)?.name ?? '';
+});
+
+/// The active business's [Lexicon] — its industry's domain nouns + starter
+/// presets (#80, ADR 0015). A Business-Scoped read: it watches
+/// [currentBusinessProvider], resolves the [Industry] from `businesses.type`
+/// via [industryOf], and returns [lexiconFor] that industry. Rebuilds when the
+/// business (or its type) changes, so the UI's words follow an industry switch
+/// without a restart. Falls back to the generic Lexicon when no business is
+/// bound or the type is unknown.
+final industryLexiconProvider = Provider.autoDispose<Lexicon>((ref) {
+  final business = ref.watch(currentBusinessProvider);
+  return lexiconFor(industryOf(business?.type));
 });
 
 // ── Business Logo ──────────────────────────────────────────────────────────
