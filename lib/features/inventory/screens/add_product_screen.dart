@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/result.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/product_photo_field.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
@@ -83,6 +85,10 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   ProductData? _selectedExistingProduct;
   bool _isSaving = false;
   String? _errorMessage;
+
+  /// Optional product photo picked but not yet saved (#78). Uploaded after the
+  /// new product row is created, in [_persistNewProduct].
+  Uint8List? _pendingImageBytes;
 
   /// Fast-Add: the "More details" section is collapsed by default (ADR 0006).
   bool _showMoreDetails = false;
@@ -981,6 +987,22 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         );
       }
 
+      // Optional product photo (#78): the row exists now, so upload keyed by its
+      // id and write the URL (which syncs). The service also caches the bytes
+      // locally, so the photo renders offline; if the upload fails (offline) the
+      // reconnect flush patches image_url later.
+      if (_pendingImageBytes != null) {
+        final imgSvc = ref.read(productImageServiceProvider);
+        final res = await imgSvc.save(
+          businessId: businessId,
+          productId: productId,
+          bytes: _pendingImageBytes!,
+        );
+        if (res case Ok(:final value)) {
+          await db.catalogDao.setProductImageUrl(productId, value);
+        }
+      }
+
       final newProduct = await (db.select(
         db.products,
       )..where((t) => t.id.equals(productId))).getSingle();
@@ -1006,6 +1028,22 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  /// Pick + process an optional product photo, held in memory until the product
+  /// is saved (#78). Cancelling or a decode error leaves the current selection.
+  Future<void> _pickPhoto() async {
+    final svc = ref.read(productImageServiceProvider);
+    final result = await svc.pickAndProcess();
+    if (!mounted) return;
+    switch (result) {
+      case Ok(:final value):
+        setState(() => _pendingImageBytes = value);
+      case Err(:final error):
+        if (!error.isCancelled) {
+          AppNotification.showError(context, 'Could not load image.');
+        }
     }
   }
 
@@ -1710,6 +1748,17 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     required Color border,
   }) {
     return [
+      // ── PHOTO (optional, new products only — edits use Update Product) ───
+      if (_selectedExistingProduct == null && !widget.receiveMode) ...[
+        ProductPhotoField(
+          pendingBytes: _pendingImageBytes,
+          onPick: _pickPhoto,
+          onRemove: _pendingImageBytes == null
+              ? null
+              : () => setState(() => _pendingImageBytes = null),
+        ),
+        const SizedBox(height: 14),
+      ],
       // ── DESCRIPTION (optional) ──────────────────────────────────────────
       AppInput(
         controller: _subtitleCtrl,
