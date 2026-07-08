@@ -42,7 +42,7 @@ On-device debugging of "console changes don't reach the app live." Findings + fi
   independent of the broken postgres_changes). Chasing server-side
   `postgres_changes` deferred. #96 (one channel + setAuth) stays as a best-effort
   realtime *signal*.
-- **#98 periodic fallback pull — SHIPPED (PR pending).** Added the documented
+- **#98 periodic fallback pull — SHIPPED (PR #99, MERGED).** Added the documented
   "periodic fallback poll" to the existing 30 s sync tick: foregrounded + online +
   business-bound → silent, debounced `catchUpPull(reason: 'periodic')` (runs before
   and independent of the push drain). A console edit/soft-delete now converges
@@ -50,6 +50,38 @@ On-device debugging of "console changes don't reach the app live." Findings + fi
   lifecycle reused (starts at sign-in, cancels at logout, suspends when
   backgrounded). test/sync 186 green; analyze clean. On-device: a deleted product
   stops being sellable within ~30 s.
+- **#95/#96/#97 — MERGED (PR #96).** One-channel/N-bindings + `setAuth` landed on
+  `main` (`eda0b95`) as a best-effort signal; `postgres_changes` still refused
+  server-side (root cause deferred, deprecated path).
+
+#### PRD: live-sync signal + offline-first integrity + exactly-once (2026-07-07)
+Investigation → proposal, no code this pass. Spec:
+`context/specs/brief-live-sync-signal-and-exactly-once.md`. **Root finding:** fast
+convergence makes conflicts *visible* faster but does **not** prevent duplicate
+application. IDs are already client-`UuidV7` and push is idempotent `upsert(onConflict:
+id)` (single-device retry is exactly-once), and money ledgers are already append-
+only/derived (immune). **The gap is on-hand stock: a mutable `inventory.quantity`
+balance decremented in place (`daos_orders.dart:539-557`) and pushed as an *absolute*
+LWW cache (`sync_registry.dart:652-665`)** — two offline tills selling the last unit
+both pass the local guard, both push `quantity=0`, LWW keeps one → **silent oversell**.
+The oversell-safe path already exists (`pos_record_sale_v2` `FOR UPDATE` + relative
+decrement + `ON CONFLICT (id) DO NOTHING`) but **the flag `feature.domain_rpcs_v2.
+record_sale` defaults `'false'`** (0011:1368) so mobile runs the unsafe v1 path; web's
+`checkout_order` (0135) is already guarded. **Decision — three sequenced, separable
+workstreams (correctness before speed):**
+- **A (ship first): exactly-once integrity.** Make stock convergence-safe — flip to the
+  server RPC relative-decrement path (fast) and/or derive on-hand from `stock_transactions`
+  (structural); audit other mutable-balance caches; lock idempotency backstops with tests.
+- **B (on A): Broadcast live-signal.** One generic `TG_TABLE_NAME` trigger over
+  `kSyncPullOrder`, one topic per store, one RLS policy, minimal `{table,id,op}` payload,
+  client single-channel subscribe → `catchUpPull`. **Emitter is a shared-schema DB trigger,
+  writer-agnostic → every device's change (mobile/web/console) broadcasts to all
+  subscribers; reception is per-client** (mobile→pull, web→refetch). Never writes Drift.
+  **Gated on an on-device proof that Broadcast joins where `postgres_changes` is refused.**
+- **C: retain the periodic pull** as the safety net / reconnect-replay backstop (already
+  shipped); tighten cadence only if B is delayed/fails.
+Tracked as three issues: **#100 (A)**, **#101 (B)**, **#102 (C)**. `postgres_changes`
+debugging is an explicit non-goal.
 
 ### Multi-industry onboarding & app morphing (PRD #76, ADR 0015) — in progress
 Slices: **#77** registry foundation → **#79** enable all nine → **#80** Lexicon on
