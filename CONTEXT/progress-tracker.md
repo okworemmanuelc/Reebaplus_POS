@@ -10,6 +10,53 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### Exactly-once stock integrity (#100, Workstream A) — in progress (2026-07-08)
+Implementing Workstream A of the live-sync/exactly-once loop (plan:
+`docs/design/live-sync-exactly-once-implementation-plan.md`, PRD:
+`context/specs/brief-live-sync-signal-and-exactly-once.md` — both live on the
+`docs/live-sync-exactly-once-prd` branch, not yet on `main`). Branch
+`fix/exactly-once-stock-integrity` off `origin/main`.
+- **A-S0/A-S1 done.** `test/sync/exactly_once_stock_integrity_test.dart` RED-first
+  reproduces the silent oversell on the current v1 path: two devices, stock 1,
+  both sell 1 offline (walk-in, so it's a pure stock movement), both push the
+  absolute `inventory.quantity=0` row; the natural-key LWW cache collapses them to
+  one row at 0 while **two** orders land — 2 sold from 1, no error. Green (it
+  documents today's behaviour); flips to the fixed path in A-S3.
+- **A-S2 done — committed A1-flag path is UNVIABLE as-is; re-scoped to "Option ①"
+  (client-side wallet on the v2 path).** Verified `pos_record_sale_v2` against the
+  LIVE db: its STOCK write is exactly what A wants (`SELECT … FOR UPDATE`, relative
+  `quantity = quantity - n`, `insufficient_stock`/`inventory_row_missing` P0001,
+  `ON CONFLICT (id) DO NOTHING`) with **no schema drift** (`store_id`,
+  `stock_transactions.location_id`, null-product quick-sale handled), and
+  `_applyDomainResponse` writes back authoritative `inventory_after` as the sole
+  local writer (no dup). BUT its **wallet model is incompatible** with the live v1
+  path: the RPC posts only a single `p_wallet_amount_kobo` debit (and only when
+  >0), whereas v1 posts full double-entry for every registered sale (goods debit of
+  total + cash credit of paid + held-deposit carve-out). A blanket flag flip would
+  (a) drop wallet history on cash sales and (b) **reject "register-as-credit" sales**
+  (`insufficient_wallet_balance` — the RPC has no debt-limit/negative path). The
+  inline comment `daos_orders.dart:796-798` ("R2") already flagged this; PRD risk #2
+  now confirmed negative. The narrow "route only the inventory delta" alternative is
+  forbidden by design (`pos_inventory_delta_v2` rejects `movement_type='sale'`).
+  **Human decision (2026-07-08): Option ①** — restructure `createOrder` so the full
+  wallet double-entry posts client-side on the v2 path too (exactly as
+  `crate_ledger`/`cost_batches` already do), pass `p_wallet_amount_kobo=0` so the
+  RPC owns only the oversell-safe stock/order/items/payment, then flip. No
+  migration, no money-model change; wallet stays append-only/derived (invariant #3),
+  so credit sales work and aren't gated by the RPC's balance check.
+- **FK-ordering note for A-S3:** `wallet_transactions.order_id`,
+  `crate_ledger.reference_order_id`, `order_crate_lines.order_id` all have enforced
+  cloud FKs to `orders`. On v2 the order is minted by the RPC (which must run to
+  enforce the guard), so these client-authored children are enqueued before the
+  order exists and converge via the engine's FK-deferred retry — the same behaviour
+  crate rows already have on the v2 path; the new wallet legs match it.
+- **Open question (A-S3 rollout — for the human):** how to actually flip
+  `feature.domain_rpcs_v2.record_sale` — a global cloud `system_config` UPDATE
+  (affects all businesses at once) vs. a client-default change shipped in the PR.
+  The v2 dispatch path has never run in production (flag off since 0011), so the
+  flip activates dormant code (crate/cost/wallet client rows, thin-item flow); A-S3
+  will land it behind tests but the go-live flip is a deployment decision.
+
 ### Live cross-device sync ("deleted product still sellable") — in progress (2026-07-07)
 On-device debugging of "console changes don't reach the app live." Findings + fixes:
 - **Pull works; realtime never delivered.** DB soft-delete + guard already correct

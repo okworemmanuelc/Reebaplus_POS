@@ -2,6 +2,38 @@
 
 ---
 
+## 2026-07-08 — Exactly-once stock: reproduce the silent oversell + RPC viability (issue #100, A-S1/A-S2)
+
+**What changed.** Added `test/sync/exactly_once_stock_integrity_test.dart` — a RED-first
+regression that reproduces the headline defect on the current v1 checkout path: two
+devices, stock 1, both sell 1 unit offline (walk-in, so the sale is a pure stock
+movement), both push the **absolute** `inventory.quantity=0` row; the natural-key LWW
+cache collapses them onto one cloud row at 0 while **two** orders land — 2 units sold
+from a stock of 1, silently, no error. It passes today (documents the bug) and flips to
+the fixed path in A-S3. Uses two `AppDatabase` instances sharing one
+`InMemoryCloudTransport` (the "cloud"); the shared `inventoryId` is what makes the two
+absolute pushes collapse (mirrors the real `onConflict (business_id, product_id,
+store_id)` merge).
+
+**A-S2 verification (no code — findings drive the fix).** Verified `pos_record_sale_v2`
+against the LIVE database. Its stock write is exactly the guarded, serialized relative
+decrement A wants, with no schema drift, and `_applyDomainResponse` writes back the
+authoritative `inventory_after` as the sole local writer. **But** its wallet model is
+incompatible with the live v1 path (single `p_wallet_amount_kobo` debit vs. v1's full
+double-entry per registered sale), so a blanket flag flip would drop wallet history on
+cash sales and outright reject register-as-credit sales. Re-scoped (human decision) to
+**Option ①**: keep the wallet double-entry client-side on the v2 path (as
+`crate_ledger`/`cost_batches` already are), pass `p_wallet_amount_kobo=0`, let the RPC
+own only the oversell-safe stock/order/items/payment. Details in
+`progress-tracker.md` → "Exactly-once stock integrity (#100, Workstream A)".
+
+**Verified.** `flutter analyze` clean on the new test; the test passes (bug reproduced).
+
+**Files changed:** `test/sync/exactly_once_stock_integrity_test.dart` (new);
+`context/progress-tracker.md`.
+
+---
+
 ## 2026-07-07 — Realtime: authorize the socket for postgres_changes (issue #97)
 
 **What changed.** After the single-channel change (#95), **every** `postgres_changes`
