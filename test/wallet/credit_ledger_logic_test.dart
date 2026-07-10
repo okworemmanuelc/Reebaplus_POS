@@ -86,7 +86,6 @@ void main() {
       amountPaidKobo: 0,
       totalAmountKobo: 4000,
       staffId: 'staff1',
-      walletDebitKobo: 4000,
     );
 
     final balance = await db.walletTransactionsDao.getBalanceKobo(customerId);
@@ -111,7 +110,6 @@ void main() {
       amountPaidKobo: 0,
       totalAmountKobo: 3000,
       staffId: 'staff1',
-      walletDebitKobo: 3000,
     );
 
     expect(await db.walletTransactionsDao.getBalanceKobo(customerId),

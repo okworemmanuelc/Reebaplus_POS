@@ -2,6 +2,51 @@
 
 ---
 
+## 2026-07-08 — Exactly-once stock: route checkout through the guarded RPC, wallet legs client-side (issue #100, A-S3/A-S4)
+
+**What changed.** Implemented Option ①. `OrdersDao.createOrder` now posts the §14.3
+wallet double-entry through a new private `_postSaleWalletLegs` helper called **before**
+the v1/v2 path split, so the legs are client-authored on BOTH paths (invariant #3 —
+wallet ledgers append-only/derived, never server-minted). The v2 `pos_record_sale_v2`
+envelope is passed **no** `p_wallet_amount_kobo` (its wallet branch stays a no-op), and
+the now-dead v2-only `walletDebitKobo` parameter was removed from `createOrder`. On the
+v2 path the guarded RPC owns only the oversell-safe order/items/stock/payment: server
+`SELECT … FOR UPDATE` + relative `quantity = quantity - n WHERE quantity >= n` +
+`insufficient_stock`/`inventory_row_missing` (P0001) + `ON CONFLICT (id) DO NOTHING`.
+The local pre-check is kept for fast offline UX, but the server decision is authoritative.
+
+Beyond fixing the flag-flip viability, this removes a latent v2 split-brain: the old v2
+path minted only a server-side wallet debit with no local mirror, which would have broken
+cancel/refund/reports on v2. v2's wallet rows are now byte-identical to v1's.
+
+**Tests.** `exactly_once_stock_integrity_test.dart` gains the A-S3 v2 group: two devices
+race the last unit through a faithful in-memory model of the RPC's guard — the server
+accepts the first sale and **rejects the second** (`insufficient_stock`), on-hand never
+goes below 0, and the loser's envelope **orphans visibly** in `sync_queue_orphans`
+(Invariant #12 — the A-S4 coverage); plus a lost-ack replay proving idempotency (no
+second decrement). Updated `record_sale_dispatch_test` (v2 registered sale → 2 local
+wallet legs + 1 envelope, no `p_wallet_amount_kobo`; new register-as-credit case nets
+−150000, never gated by the RPC), `credit_ledger_logic_test`, `pr_4c_test` (dropped the
+removed arg — behaviour identical, the legs never used it).
+
+**Known v2 characteristic (documented).** An **offline** registered/crate sale's wallet
++ crate legs FK-reference the RPC-minted order; the reconnect drain pushes table rows
+before domain envelopes, so they FK-defer once and converge on retry. The **online**
+path front-runs this via `flushSale`. Matches existing crate behaviour; cheap follow-up
+noted. The go-live flag flip is a per-env ops decision, surfaced in the PR, not applied.
+
+**Verified.** `flutter analyze` clean project-wide; sync/dispatch/wallet/orders/crates/
+golden/costing suites green.
+
+**Files changed:** `lib/core/database/daos_orders.dart`,
+`lib/shared/services/orders/order_commands.dart`,
+`test/sync/exactly_once_stock_integrity_test.dart`,
+`test/sync/dispatch/record_sale_dispatch_test.dart`,
+`test/wallet/credit_ledger_logic_test.dart`, `test/orders/pr_4c_test.dart`,
+`context/progress-tracker.md`.
+
+---
+
 ## 2026-07-08 — Exactly-once stock: reproduce the silent oversell + RPC viability (issue #100, A-S1/A-S2)
 
 **What changed.** Added `test/sync/exactly_once_stock_integrity_test.dart` — a RED-first

@@ -145,8 +145,8 @@ void main() {
     });
 
     test(
-        'flag ON: one envelope, only order header + inventory mirrored '
-        'locally, thin item shape', () async {
+        'flag ON: envelope + client wallet legs; order_items/stock/payment '
+        'wait for the RPC; thin item shape; no p_wallet_amount_kobo', () async {
       await setFlag(db, 'feature.domain_rpcs_v2.record_sale', on: true);
       final s = await _seedSaleFixtures(db, businessId);
       // Drain the customers + customer_wallets enqueues from addCustomer
@@ -164,8 +164,9 @@ void main() {
         paymentMethod: 'cash',
       );
 
-      // Local: order header + inventory deduction. NOT order_items, stock_tx,
-      // or payment_tx — those land via _applyDomainResponse from the RPC.
+      // Local: order header + inventory deduction + the client-authored wallet
+      // double-entry. NOT order_items, stock_tx, or payment_tx — those land via
+      // _applyDomainResponse from the RPC (server mints their ids).
       expect((await db.select(db.orders).getSingle()).id, orderId);
       expect(await db.select(db.orderItems).get(), isEmpty,
           reason: 'order_items wait for the RPC response (server mints ids)');
@@ -174,11 +175,31 @@ void main() {
       final inv = await db.select(db.inventory).getSingle();
       expect(inv.quantity, 8, reason: 'inventory still deducted on v2 path');
 
-      final pending = await getPendingQueue(db);
-      expect(pending, hasLength(1));
-      expect(pending.first.actionType, 'domain:pos_record_sale_v2');
+      // §14.3 wallet legs are client-authored on BOTH paths (invariant #3) —
+      // pos_record_sale_v2 is passed NO wallet amount. A fully-paid registered
+      // sale posts a goods debit (−total) and a cash credit (+paid).
+      final wallet = await db.select(db.walletTransactions).get();
+      expect(wallet, hasLength(2));
+      expect(
+        wallet.where((w) => w.type == 'debit' && w.signedAmountKobo == -200000),
+        hasLength(1),
+      );
+      expect(
+        wallet.where((w) => w.type == 'credit' && w.signedAmountKobo == 200000),
+        hasLength(1),
+      );
 
-      final payload = decodePayload(pending.first);
+      // The pending queue: exactly one domain envelope + the two wallet legs.
+      final pending = await getPendingQueue(db);
+      final domainRows =
+          pending.where((r) => r.actionType == 'domain:pos_record_sale_v2');
+      final walletRows =
+          pending.where((r) => r.actionType == 'wallet_transactions:upsert');
+      expect(domainRows, hasLength(1));
+      expect(walletRows, hasLength(2));
+      expect(pending, hasLength(3));
+
+      final payload = decodePayload(domainRows.single);
       expect(payload['p_business_id'], businessId);
       expect(payload['p_actor_id'], s.staffId);
       expect(payload['p_order_id'], orderId);
@@ -189,6 +210,8 @@ void main() {
       expect(payload['p_amount_paid_kobo'], 200000);
       expect(payload['p_customer_id'], s.customerId);
       expect(payload['p_status'], 'completed');
+      // The RPC's wallet branch stays a no-op — the legs above own the ledger.
+      expect(payload.containsKey('p_wallet_amount_kobo'), isFalse);
 
       final items = payload['p_items'] as List;
       expect(items, hasLength(1));
@@ -248,38 +271,61 @@ void main() {
       expect((await db.select(db.inventory).getSingle()).quantity, 10);
     });
 
-    test('flag ON (wallet portion): payload carries p_wallet_amount_kobo',
+    test(
+        'flag ON (register-as-credit): wallet legs client-authored, envelope '
+        'carries NO p_wallet_amount_kobo — the RPC cannot reject a debt sale',
         () async {
       await setFlag(db, 'feature.domain_rpcs_v2.record_sale', on: true);
       final s = await _seedSaleFixtures(db, businessId);
       await db.delete(db.syncQueue).go();
 
-      // Topup the wallet so the v1-style local guard would pass; on v2
-      // the server is authoritative for the balance check, but the local
-      // DAO still requires a customer wallet to exist for the OFF path
-      // to compile. For dispatch-shape testing, we only care that the
-      // envelope carries the wallet portion.
-      final wallet = await (db.select(db.customerWallets)
-            ..where((t) => t.customerId.equals(s.customerId)))
-          .getSingle();
-      expect(wallet, isNotNull);
-
+      // A register-as-credit sale: pay part now, owe the rest. On the OLD v2
+      // path this set p_wallet_amount_kobo and pos_record_sale_v2 rejected it
+      // (insufficient_wallet_balance — the customer's balance is 0, cannot be
+      // debited). Now the double-entry is posted client-side and the RPC is
+      // passed no wallet amount, so the sale is never gated by the balance —
+      // exactly the regression Option ① fixes.
       await db.ordersDao.createOrder(
-        order: _orderCompanion(s, businessId, orderNumber: 'ORD-WAL'),
+        order: _orderCompanion(
+          s,
+          businessId,
+          orderNumber: 'ORD-CREDIT',
+          amountPaidKobo: 50000,
+        ),
         items: [_itemCompanion(s, businessId)],
         customerId: s.customerId,
-        amountPaidKobo: 200000,
+        amountPaidKobo: 50000,
         totalAmountKobo: 200000,
         staffId: s.staffId,
         storeId: s.storeId,
-        walletDebitKobo: 50000,
         paymentMethod: 'cash',
       );
 
+      // Two legs: a −200000 goods debit and a +50000 cash credit, netting to
+      // −150000 — the customer now owes 150000 (the RPC never sees this).
+      final wallet = await db.select(db.walletTransactions).get();
+      expect(wallet, hasLength(2));
+      expect(
+        wallet.where((w) => w.type == 'debit' && w.signedAmountKobo == -200000),
+        hasLength(1),
+      );
+      expect(
+        wallet.where((w) => w.type == 'credit' && w.signedAmountKobo == 50000),
+        hasLength(1),
+      );
+      expect(
+        await db.walletTransactionsDao.getBalanceKobo(s.customerId),
+        -150000,
+      );
+
+      // The envelope carries the customer + amount paid, but NO wallet amount.
       final pending = await getPendingQueue(db);
-      final payload = decodePayload(pending.first);
-      expect(payload['p_wallet_amount_kobo'], 50000);
+      final domainRow =
+          pending.firstWhere((r) => r.actionType == 'domain:pos_record_sale_v2');
+      final payload = decodePayload(domainRow);
       expect(payload['p_customer_id'], s.customerId);
+      expect(payload['p_amount_paid_kobo'], 50000);
+      expect(payload.containsKey('p_wallet_amount_kobo'), isFalse);
     });
   });
 }

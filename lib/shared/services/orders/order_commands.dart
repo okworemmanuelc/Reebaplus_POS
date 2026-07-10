@@ -135,7 +135,6 @@ class OrderCommands {
       totalAmountKobo: totalAmountKobo,
       staffId: staffId,
       storeId: storeId,
-      walletDebitKobo: walletDebitKobo,
       paymentMethod: _resolvePaymentMethod(paymentSubType),
       crateDepositPaidByManufacturer: crateDepositPaidByManufacturer,
     );

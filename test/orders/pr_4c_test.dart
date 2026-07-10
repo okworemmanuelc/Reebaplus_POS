@@ -204,7 +204,6 @@ void main() {
         totalAmountKobo: 100000,
         staffId: s.staffId,
         storeId: s.storeId,
-        walletDebitKobo: 100000,
       );
 
       final wallet = await db.select(db.walletTransactions).get();

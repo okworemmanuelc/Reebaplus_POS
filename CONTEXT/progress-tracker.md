@@ -50,12 +50,41 @@ Implementing Workstream A of the live-sync/exactly-once loop (plan:
   enforce the guard), so these client-authored children are enqueued before the
   order exists and converge via the engine's FK-deferred retry — the same behaviour
   crate rows already have on the v2 path; the new wallet legs match it.
-- **Open question (A-S3 rollout — for the human):** how to actually flip
-  `feature.domain_rpcs_v2.record_sale` — a global cloud `system_config` UPDATE
-  (affects all businesses at once) vs. a client-default change shipped in the PR.
-  The v2 dispatch path has never run in production (flag off since 0011), so the
-  flip activates dormant code (crate/cost/wallet client rows, thin-item flow); A-S3
-  will land it behind tests but the go-live flip is a deployment decision.
+- **A-S3 done (Option ① implemented) + A-S4 proven.** `OrdersDao.createOrder` now
+  posts the wallet double-entry via a new `_postSaleWalletLegs` helper called
+  **before** the v1/v2 split, so the legs are client-authored on BOTH paths
+  (invariant #3). The v2 envelope no longer carries `p_wallet_amount_kobo` (the RPC's
+  wallet branch stays a no-op), and the v2-only `walletDebitKobo` param was removed
+  from `createOrder` (it fed only `p_wallet_amount_kobo`; the v1 legs always derived
+  from total/paid/deposit). This ALSO removes a latent v2 split-brain: previously v2
+  minted only a server-side wallet debit with no local mirror, which would have
+  broken cancel/refund/reports on v2 — now v2's wallet rows are byte-identical to
+  v1's, so every downstream flow already tested on v1 holds on v2. Tests: the
+  headline `exactly_once_stock_integrity_test.dart` gains the v2 group — two devices
+  race the last unit, the server accepts the first and **rejects the second**
+  (`insufficient_stock` P0001), on-hand never goes below 0, and the loser's envelope
+  **orphans visibly** in `sync_queue_orphans` (that orphan assertion is the **A-S4**
+  coverage) — plus a lost-ack replay proving `ON CONFLICT DO NOTHING` idempotency (no
+  second decrement). Updated `record_sale_dispatch_test` (registered v2 sale posts 2
+  local wallet legs + 1 envelope, no `p_wallet_amount_kobo`; and a
+  register-as-credit v2 sale nets −150000 and is never gated by the RPC),
+  `credit_ledger_logic_test` (2 args), `pr_4c_test` (1 arg). `flutter analyze` clean;
+  the affected suites (sync/dispatch/wallet/orders/crates/golden/costing) green.
+- **Known v2 convergence characteristic (documented, not a defect).** For a
+  registered/crate sale created **offline**, the wallet + crate legs FK-reference an
+  `orders` row the RPC mints, but the reconnect drain pushes table rows *before*
+  domain envelopes — so the legs FK-fail once (23503) and converge on the next
+  FK-deferred retry (~15 min). The **online** checkout path front-runs this: it calls
+  `flushSale` right after `createOrder`, which pushes the domain envelope (creating
+  the order) before the background drain reaches the legs. This matches the existing
+  crate-leg behaviour on v2 and is invisible online; a cheap follow-up (teach the
+  push to flush a sale's envelope before its child legs) could remove the offline
+  lag. Not fixed here (Option ①: no migration; global push-reorder is out of scope).
+- **Go-live flip NOT executed (human/ops decision).** The code is correct on both
+  flag states; flipping `feature.domain_rpcs_v2.record_sale` is a per-environment,
+  production-wide runtime change that activates the dormant v2 path (crate/cost/wallet
+  client rows, thin-item flow, the offline FK-defer above) — surfaced in the PR as a
+  one-line reversible config step, not applied autonomously in this loop.
 
 ### Live cross-device sync ("deleted product still sellable") — in progress (2026-07-07)
 On-device debugging of "console changes don't reach the app live." Findings + fixes:
