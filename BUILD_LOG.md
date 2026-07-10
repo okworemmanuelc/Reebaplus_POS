@@ -2,6 +2,40 @@
 
 ---
 
+## 2026-07-08 — Exactly-once stock: idempotency backstops + mutable-balance-cache audit (issue #100, A-S5/A-S6)
+
+**A-S5 (idempotency backstops).** Added `test/sync/stock_reprocess_idempotency_test.dart`:
+restoring the till's OWN just-pushed inventory cache + append-only stock ledger (and
+re-restoring it, modelling a second pull / broadcast re-pull) does not double-decrement —
+on-hand stays 4 and equals opening + SUM(ledger deltas). This pins the PULL-side
+idempotency; A-S3's lost-ack replay pins the PUSH side (`ON CONFLICT DO NOTHING`). The
+"no blind insert" property is structural — the only cloud-write paths are
+`enqueueUpsert`/`enqueueDelete` (no `enqueueInsert`) and the transport always `.upsert()`s;
+the clobber-guard is already pinned by `outbox_sacred_restore_test`.
+
+**A-S6 (audit of every `isCache` table).** `inventory` is FIXED (A-S3 guarded RPC). The
+four crate balance caches (`customer`/`manufacturer`/`store`/`supplier`) share inventory's
+push-absolute-LWW shape, so concurrent OFFLINE crate movements to the same owner can drift
+the cache — BUT they are backed by append-only ledgers (`crate_ledger` /
+`supplier_crate_ledger`, both movements survive), the movement writes are relative
+(`balance = balance + δ`), and the balance is recomputable via
+`verifyCrateReconciliation`. Lower severity than the stock oversell (a deposit tally
+reconciliation fixes, not silent money-for-nothing). Genuine gap found but DEFERRED:
+`verifyCrateReconciliation` is not auto-wired → follow-up issue (auto-schedule, or
+derive-on-read, or a server-guarded crate RPC). The `store_crate_balances` absolute
+`setBalance` is an intentional manual override, not a race.
+
+**Open question (human).** The recovery UX for a background-reconnect-rejected oversell
+(auto-cancel / notify / re-ring?) is undefined product behaviour — logged, not invented
+(the detect-and-surface mechanism, which is #100's goal, is complete).
+
+**Verified.** `flutter analyze` clean; the new test green.
+
+**Files changed:** `test/sync/stock_reprocess_idempotency_test.dart` (new),
+`context/progress-tracker.md`.
+
+---
+
 ## 2026-07-08 — Exactly-once stock: route checkout through the guarded RPC, wallet legs client-side (issue #100, A-S3/A-S4)
 
 **What changed.** Implemented Option ①. `OrdersDao.createOrder` now posts the §14.3

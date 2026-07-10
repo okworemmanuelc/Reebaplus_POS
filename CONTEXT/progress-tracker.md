@@ -85,6 +85,49 @@ Implementing Workstream A of the live-sync/exactly-once loop (plan:
   production-wide runtime change that activates the dormant v2 path (crate/cost/wallet
   client rows, thin-item flow, the offline FK-defer above) — surfaced in the PR as a
   one-line reversible config step, not applied autonomously in this loop.
+- **A-S5 done (idempotency backstops locked).** (a) *No blind insert* is structural:
+  the only cloud-write paths are `enqueueUpsert`/`enqueueDelete` (there is no
+  `enqueueInsert`) and the transport always `.upsert()`s — client-id minting is pinned
+  by the existing dispatch tests; A-S3's lost-ack replay pins the sale envelope's
+  push-side idempotency (`ON CONFLICT DO NOTHING`). (b) *Clobber-guard* (a pending
+  local row survives an incoming newer cloud row) is pinned by
+  `outbox_sacred_restore_test`. (c) NEW `stock_reprocess_idempotency_test.dart` pins
+  the PULL side — restoring the till's OWN just-pushed inventory cache + append-only
+  stock ledger (and re-restoring it) does not double-decrement; on-hand equals opening
+  + SUM(ledger deltas). Events applied exactly once.
+- **A-S6 audit — mutable-balance caches (`isCache` tables).** Verdict per table:
+  | Cache table | Movement write | Push shape | Backing ledger | Verdict |
+  |---|---|---|---|---|
+  | `inventory` | relative (pre-check) | absolute LWW | `stock_transactions` | **FIXED** — v2 guarded RPC (`FOR UPDATE`+relative+`>=n` reject) is authoritative |
+  | `customer_crate_balances` | relative (`balance+δ`) | absolute LWW | `crate_ledger` (append-only) | mitigated gap → follow-up |
+  | `manufacturer_crate_balances` | relative | absolute LWW | `crate_ledger` | mitigated gap → follow-up |
+  | `store_crate_balances` | relative (+ intentional `setBalance` absolute override) | absolute LWW | `crate_ledger` | mitigated gap → follow-up |
+  | `supplier_crate_balances` | relative | absolute LWW | `supplier_crate_ledger` | mitigated gap → follow-up |
+  The 4 crate caches share inventory's push-absolute-LWW shape, so two devices making
+  concurrent **offline** crate movements to the same (owner, manufacturer) can drift
+  the cache. **Why lower severity than the stock oversell, and not a #100 gap:** the
+  truth is the append-only ledger (both movements survive, id-keyed — no data loss),
+  the balance is recomputable (`CrateLedgerDao.verifyCrateReconciliation` = SUM of
+  ledger deltas), and a crate tally is not a hard-limited sellable resource that
+  silently takes money for nothing — it's a deposit tally reconciliation corrects. The
+  `setBalance` absolute write is an intentional manual management-dialog override
+  (set-to-known), correctly LWW — not a race. **Genuine gap found (deferred):**
+  `verifyCrateReconciliation` is **not auto-wired** (no caller), so cache drift is not
+  auto-healed. **Follow-up issue (not #100):** either auto-schedule the reconciliation,
+  derive crate balances from the ledger on read (wallet-style), or route crate
+  movements through a server-guarded relative RPC mirroring `pos_record_sale_v2`. Not
+  fixed here — it's a structural change of A1-ledger's magnitude, outside #100's
+  "close the silent stock oversell" scope, and the drift is mitigated, not unbounded.
+- **OPEN QUESTION (A-S6, human decision — surfaced, not invented).** When the server
+  rejects the 2nd offline sale on the **background reconnect** path (not the foreground
+  `flushSale` path, which already compensates + surfaces), the envelope orphans
+  **visibly** (Sync Issues) but the local device still shows the order (`pending`) +
+  the local inventory pre-check decrement. The cashier **recovery flow** — auto-cancel
+  the orphaned order? notify the cashier to re-ring / refund / restock? re-price? — is
+  **undefined product behaviour**. The mechanism (detect + surface, never silently
+  absorb) is complete and is the #100 goal; the recovery UX is a separate product +
+  UI decision (a feature-folder change, which the split rules keep out of this
+  sync-integrity PR). Logged for the human; NOT invented here.
 
 ### Live cross-device sync ("deleted product still sellable") — in progress (2026-07-07)
 On-device debugging of "console changes don't reach the app live." Findings + fixes:
