@@ -10,7 +10,12 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
-### Exactly-once stock integrity (#100, Workstream A) — in progress (2026-07-08)
+### Exactly-once stock integrity (#100, Workstream A) — PR #105 OPEN, awaiting human merge (2026-07-08)
+All 8 slices (A-S0…A-S7) done; **PR #105** (`fix/exactly-once-stock-integrity` →
+`main`) opened `Closes #100`. Stop-for-human-merge. Two decisions carried in the PR:
+the **go-live flag flip** (per-env ops, fix inert until flipped) and the **orphan-UX
+recovery flow** (undefined product behaviour, logged not invented). Workstream C (#102)
+is independent and may proceed alongside; B (#101) stays blocked until A merges + B0.
 Implementing Workstream A of the live-sync/exactly-once loop (plan:
 `docs/design/live-sync-exactly-once-implementation-plan.md`, PRD:
 `context/specs/brief-live-sync-signal-and-exactly-once.md` — both live on the
