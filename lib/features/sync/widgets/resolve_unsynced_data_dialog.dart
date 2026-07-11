@@ -14,11 +14,18 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 ///
 /// Returns `true` if the user discarded + logged out (the caller should treat
 /// the session as gone), `false` if they cancelled.
+///
+/// [isResign] switches the terminal action from a plain logout
+/// ([AuthService.discardUnsyncedAndLogout]) to a self-resign
+/// ([AuthService.discardUnsyncedAndResign], #117), which additionally detaches
+/// the caller's membership server-side (frees their email). Same export → typed
+/// discard UX; only the confirmed terminal + button copy differ.
 Future<bool> showResolveUnsyncedDataDialog(
   BuildContext context,
   WidgetRef ref, {
   required int pendingCount,
   required int orphanCount,
+  bool isResign = false,
 }) async {
   final result = await showDialog<bool>(
     context: context,
@@ -26,6 +33,7 @@ Future<bool> showResolveUnsyncedDataDialog(
     builder: (ctx) => _ResolveUnsyncedDataDialog(
       pendingCount: pendingCount,
       orphanCount: orphanCount,
+      isResign: isResign,
     ),
   );
   return result ?? false;
@@ -35,10 +43,12 @@ class _ResolveUnsyncedDataDialog extends ConsumerStatefulWidget {
   const _ResolveUnsyncedDataDialog({
     required this.pendingCount,
     required this.orphanCount,
+    required this.isResign,
   });
 
   final int pendingCount;
   final int orphanCount;
+  final bool isResign;
 
   @override
   ConsumerState<_ResolveUnsyncedDataDialog> createState() =>
@@ -99,12 +109,22 @@ class _ResolveUnsyncedDataDialogState
   Future<void> _discardAndLogout() async {
     setState(() => _discarding = true);
     try {
-      await ref.read(authProvider).discardUnsyncedAndLogout();
+      final auth = ref.read(authProvider);
+      if (widget.isResign) {
+        await auth.discardUnsyncedAndResign();
+      } else {
+        await auth.discardUnsyncedAndLogout();
+      }
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) {
         setState(() => _discarding = false);
-        AppNotification.showError(context, 'Could not complete logout: $e');
+        AppNotification.showError(
+          context,
+          widget.isResign
+              ? 'Could not leave your account: $e'
+              : 'Could not complete logout: $e',
+        );
       }
     }
   }
@@ -144,7 +164,7 @@ class _ResolveUnsyncedDataDialogState
             Text(
               _hasExported
                   ? 'Type $_confirmWord to permanently discard these records '
-                      'and log out.'
+                      '${widget.isResign ? "and leave your account." : "and log out."}'
                   : 'Export the records to unlock discard.',
               style: theme.textTheme.bodySmall,
             ),
@@ -179,7 +199,7 @@ class _ResolveUnsyncedDataDialogState
                   height: context.getRSize(18),
                   child: const CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Discard & log out'),
+              : Text(widget.isResign ? 'Discard & leave' : 'Discard & log out'),
         ),
       ],
     );

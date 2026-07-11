@@ -28,6 +28,8 @@ import 'package:reebaplus_pos/shared/widgets/main_layout.dart';
 import 'package:reebaplus_pos/shared/widgets/auto_lock_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/force_update_wrapper.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
+import 'package:reebaplus_pos/features/auth/membership_status_reaction.dart';
+import 'package:reebaplus_pos/features/sync/widgets/resolve_unsynced_data_dialog.dart';
 import 'package:reebaplus_pos/features/auth/screens/success_dashboard_entry_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/access_granted_screen.dart';
 import 'package:reebaplus_pos/features/diagnostics/screens/schema_error_screen.dart';
@@ -160,6 +162,11 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
   /// removed; only these informational badges depend on the tick now.)
   Timer? _subscriptionClockTimer;
 
+  /// Re-entrancy guard for the admin-removed offboarding (#117). The membership
+  /// listener can re-emit `removed` while the gate is mid-flight; without this
+  /// the offboarding could stack (double dialogs / double wipe).
+  bool _handlingSelfRemoved = false;
+
   @override
   void initState() {
     super.initState();
@@ -249,6 +256,43 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
     }
   }
 
+  /// Admin-removed offboarding (#117). Runs when the current user's own
+  /// membership flips to `removed` (an admin ran `remove_staff_member` on
+  /// another device; the change arrives via the next pull / broadcast). Reuses
+  /// [AuthService.logOutCurrentUser] — the exact drawer-logout path — so the
+  /// unsynced-data gate runs and local business data is wiped ONLY when they
+  /// were the sole member on this device (otherwise just this user is dropped to
+  /// the Who's Working picker). Surfaces the gate's two-tier outcome exactly as
+  /// the drawer does: retryable rows → error toast ("connect and sync first");
+  /// orphans only → the Resolve-unsynced-data flow. The admin already detached
+  /// them server-side, so the plain (non-resign) terminals apply here.
+  Future<void> _handleSelfRemoved() async {
+    if (_handlingSelfRemoved) return;
+    _handlingSelfRemoved = true;
+    try {
+      await _auth.logOutCurrentUser();
+    } on LogoutBlockedByUnsyncedDataException catch (e) {
+      final ctx = _navigatorKey.currentContext;
+      if (ctx != null && ctx.mounted) {
+        await showResolveUnsyncedDataDialog(
+          ctx,
+          ref,
+          pendingCount: e.pendingCount,
+          orphanCount: e.orphanCount,
+        );
+      }
+    } on LogoutWipeException catch (e) {
+      final ctx = _navigatorKey.currentContext;
+      if (ctx != null && ctx.mounted) {
+        AppNotification.showError(ctx, e.message);
+      }
+    } catch (e) {
+      debugPrint('[main] _handleSelfRemoved error: $e');
+    } finally {
+      _handlingSelfRemoved = false;
+    }
+  }
+
   void _onDeviceUserChanged() {
     if (mounted) {
       setState(() {
@@ -307,16 +351,26 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
       if (ds != null) themeController.setDesignSystem(ds);
     });
 
-    // Live suspend → sign-out (master plan §9.5 / §8.3). When the signed-in
-    // user is suspended on another device, the `user_businesses` realtime
-    // update flips the local membership status; drop them to the Who's Working
-    // picker immediately. The picker hides suspended staff (§8.3), so they
-    // can't re-select themselves. lockApp() (UI-only, keeps the Supabase
-    // session) once `value` is null re-emissions are ignored — the guard below
-    // makes this fire exactly once per active session.
+    // Live membership-status reactions (master plan §9.5 / §8.3 + #117). When
+    // the signed-in user's own membership changes on another device — a peer
+    // suspends them, or an admin removes them (the `remove_staff_member` RPC) —
+    // the `user_businesses` realtime/broadcast pull flips the local status and
+    // this provider re-emits. Guard on `value != null` so a null (logged-out)
+    // re-emission is ignored.
+    //   • suspended → lockApp() (UI-only; keeps the Supabase session): drop to
+    //     the Who's Working picker, which hides suspended staff so they can't
+    //     re-select themselves.
+    //   • removed → run the SAME offboarding the drawer logout uses (unsynced-
+    //     data gate → log out; wipe only if sole member on this device).
     ref.listen(currentUserMembershipStatusProvider, (_, next) {
-      if (next == 'suspended' && _auth.value != null) {
-        _auth.lockApp();
+      if (_auth.value == null) return;
+      switch (membershipStatusReaction(next)) {
+        case MembershipStatusReaction.none:
+          break;
+        case MembershipStatusReaction.lockToPicker:
+          _auth.lockApp();
+        case MembershipStatusReaction.offboard:
+          unawaited(_handleSelfRemoved());
       }
     });
 
