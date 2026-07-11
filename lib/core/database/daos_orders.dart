@@ -559,6 +559,17 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         }
       }
 
+      // Oversell recovery: on the v2 path the sale's child rows (cost_batches,
+      // crate rows, wallet legs) are enqueued below but must NOT push until the
+      // guarded pos_record_sale_v2 envelope CONFIRMS the order — otherwise a
+      // rejected (oversold) sale would leak the non-FK rows (cost_batches,
+      // customer_crate_balances) to the cloud. Snapshot the outbox now so we can
+      // hold exactly the rows this sale adds (the set difference), then release
+      // them on confirm / discard them on reject. v1 never rejects → no hold.
+      final queueBeforeChildren = useDomainRpc
+          ? await db.syncDao.queueRowIds(requireBusinessId())
+          : const <String>{};
+
       // Epic 2 / ADR 0005 — FIFO cost draw-down. Snapshot each line's
       // provisional per-unit COGS from the local batch queue and decrement the
       // consumed cost_batches (both within this sale transaction). Quick-sale
@@ -746,10 +757,17 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
           // forwarded. (pos_record_sale_v2's single p_wallet_amount_kobo debit
           // cannot express a register-as-credit sale, so we never use it.)
         };
+        // The rows this sale enqueued (cost_batches, crate, wallet) — everything
+        // added since the pre-child snapshot, i.e. NOT the envelope (enqueued
+        // next). Hold them so the drain skips them until the envelope resolves.
+        final childQueueIds = (await db.syncDao.queueRowIds(requireBusinessId()))
+            .difference(queueBeforeChildren)
+            .toList();
         await db.syncDao.enqueue(
           'domain:pos_record_sale_v2',
           jsonEncode(payload),
         );
+        await db.syncDao.holdRowsByOrder(childQueueIds, orderId);
         return orderId;
       }
 

@@ -1259,6 +1259,15 @@ class SupabaseSyncService {
         if (recostPairs != null && rpcName == 'pos_record_sale_v2') {
           collectSaleEnvelopePairs(payload, recostPairs);
         }
+        // Oversell recovery: the sale is CONFIRMED (the cloud order now exists),
+        // so RELEASE this order's held child rows (cost/crate/wallet) back into
+        // the drain — they can now push cleanly (no FK-fail, no leak). Covers the
+        // replay path too (replayed ⇒ the order already exists). A crash before
+        // this runs is recovered by reconcileHeldRows.
+        if (rpcName == 'pos_record_sale_v2') {
+          final oid = payload['p_order_id'];
+          if (oid is String) await _db.syncDao.releaseHeldByOrder(oid);
+        }
         final replayed = response is Map && response['replayed'] == true;
         debugPrint('[SyncService] domain $rpcName ok (replayed=$replayed)');
       } on PostgrestException catch (e) {
@@ -1295,6 +1304,12 @@ class SupabaseSyncService {
         // notification failure must never break the drain.
         if (isPermanent && rpcName == 'pos_record_sale_v2') {
           await _notifyCashierSaleRejected(payload, e.message);
+          // The sale is permanently REJECTED, so its held child rows must NEVER
+          // push (the cloud has, and will have, no such order). Discard them —
+          // this is what stops the cost_batches / customer_crate_balances leak.
+          // reconcileHeldRows is the crash-safe backstop.
+          final oid = payload['p_order_id'];
+          if (oid is String) await _db.syncDao.discardHeldByOrder(oid);
         }
       } catch (e) {
         debugPrint('[SyncService] Domain RPC $rpcName transient error: $e');
@@ -3376,6 +3391,13 @@ class SupabaseSyncService {
         try {
           if (_pushing) return;
           await _db.syncDao.resetStuckInProgress();
+          // Oversell recovery: crash-safe reconcile of any HELD child rows whose
+          // sale envelope already resolved (release the confirmed, discard the
+          // rejected) — the backstop for a crash between an envelope resolving
+          // and the inline release/discard in _pushDomainItems.
+          if (pullBizId != null) {
+            await _db.syncDao.reconcileHeldRows(pullBizId);
+          }
           // §6.8.1: re-enqueue any now-healable orphans before draining so a
           // recovered row goes up on this same tick.
           await _recoverDueOrphans();

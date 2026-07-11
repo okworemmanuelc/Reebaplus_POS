@@ -32,13 +32,26 @@ go-live flag flip (below).
   `test/orders/reverse_rejected_sale_test.dart` (walk-in, register-as-credit balance
   restored, idempotency) green; sync/wallet/crates/costing suites green. **This closes
   the #105-introduced money-safety finding** (local wallet correctness on rejection).
-- **⚠ Deeper PRE-EXISTING v2 finding (also gates a fully-safe go-live).** On the v2 path
+- **Cloud-leak fix (held-outbox mechanism) — DONE.** The deeper pre-existing v2 finding
+  (below) is fixed the clean way the human chose: Drift **v60** adds
+  `sync_queue.held_by_order_id`; on the v2 path `createOrder` HOLDS the sale's child rows
+  (cost_batches/crate/wallet — the delta the sale enqueues) so the drain
+  (`getPendingItems`) skips them until the `pos_record_sale_v2` envelope CONFIRMS
+  (`releaseHeldByOrder`) or is REJECTED (`discardHeldByOrder` → never leak).
+  `reconcileHeldRows` (on the periodic tick) is the crash-safe backstop, deciding each
+  held order from durable state (pending envelope → keep; orphaned → discard; gone →
+  release). Bonus: also removes the offline FK-defer clutter (FK-bound legs no longer
+  push before the order exists). Tests `test/sync/held_child_rows_test.dart` (hold /
+  release / discard / keep) green; migration v57→v60 green; sync/orders/costing/crates
+  (305) green. **Remaining for the Cancel button:** extend `reverseRejectedSaleLocal` to
+  also reverse the LOCAL crate balance (customer_crate_balances is LWW, won't self-heal).
+- **⚠ Deeper PRE-EXISTING v2 finding (FIXED above by the held mechanism).** On the v2 path
   `createOrder` eagerly ENQUEUES the sale's child rows, and two of them —
   `cost_batches` (FIFO draw-down) and `customer_crate_balances` — **do NOT FK to the
   order**, so on a rejection they PUSH successfully and **corrupt the cloud** (FIFO queue
   wrongly drawn down; a customer wrongly shows owing empties). The FK-bound rows
   (`wallet_transactions`, `crate_ledger`, `order_crate_lines`) correctly orphan instead.
-  This predates #105 (v1 never rejects, so it never surfaced). The clean root fix is to
+  This predates #105 (v1 never rejects, so it never surfaced). The clean root fix was to
   **defer the child enqueues on the v2 path until the RPC confirms** (write locally, push
   after `_applyDomainResponse`), OR clean the orphaned/pending child rows out of the
   outbox on reversal. Local crate + cost reversal is entangled with this (a purely-local
