@@ -9,6 +9,7 @@ import 'package:reebaplus_pos/core/utils/csv_export.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/dashboard/reconciliation/recon_data.dart';
+import 'package:reebaplus_pos/features/dashboard/reports_attention.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/daily_reconciliation_detail_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
@@ -33,6 +34,18 @@ class _DailyReconciliationListScreenState
   ReconGrouping _grouping = ReconGrouping.day;
   DateTimeRange? _customRange;
   bool _isScrolled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Opening the Daily Reconciliation report marks its daily stock counts
+    // reviewed for this viewer, clearing the Home Reports attention dot's
+    // stock-count reason (issue #119). Per-user, device-local; deferred past
+    // first build so it never mutates a provider mid-build.
+    Future.microtask(
+      () => ref.read(reconReviewMarkerProvider.notifier).markOpenedNow(),
+    );
+  }
 
   Future<void> _exportCsv(List<ReconBucket> buckets, String scope) async {
     final rows = <List<String>>[
