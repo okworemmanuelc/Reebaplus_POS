@@ -559,6 +559,17 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         }
       }
 
+      // Oversell recovery: on the v2 path the sale's child rows (cost_batches,
+      // crate rows, wallet legs) are enqueued below but must NOT push until the
+      // guarded pos_record_sale_v2 envelope CONFIRMS the order — otherwise a
+      // rejected (oversold) sale would leak the non-FK rows (cost_batches,
+      // customer_crate_balances) to the cloud. Snapshot the outbox now so we can
+      // hold exactly the rows this sale adds (the set difference), then release
+      // them on confirm / discard them on reject. v1 never rejects → no hold.
+      final queueBeforeChildren = useDomainRpc
+          ? await db.syncDao.queueRowIds(requireBusinessId())
+          : const <String>{};
+
       // Epic 2 / ADR 0005 — FIFO cost draw-down. Snapshot each line's
       // provisional per-unit COGS from the local batch queue and decrement the
       // consumed cost_batches (both within this sale transaction). Quick-sale
@@ -746,10 +757,17 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
           // forwarded. (pos_record_sale_v2's single p_wallet_amount_kobo debit
           // cannot express a register-as-credit sale, so we never use it.)
         };
+        // The rows this sale enqueued (cost_batches, crate, wallet) — everything
+        // added since the pre-child snapshot, i.e. NOT the envelope (enqueued
+        // next). Hold them so the drain skips them until the envelope resolves.
+        final childQueueIds = (await db.syncDao.queueRowIds(requireBusinessId()))
+            .difference(queueBeforeChildren)
+            .toList();
         await db.syncDao.enqueue(
           'domain:pos_record_sale_v2',
           jsonEncode(payload),
         );
+        await db.syncDao.holdRowsByOrder(childQueueIds, orderId);
         return orderId;
       }
 
@@ -1270,6 +1288,116 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         await into(walletTransactions).insert(compReverse);
         await db.syncDao.enqueueUpsert('wallet_transactions', compReverse);
       }
+    });
+  }
+
+  /// Completely undoes a sale the server PERMANENTLY REJECTED (an oversell:
+  /// `pos_record_sale_v2` raised `insufficient_stock` / `inventory_row_missing`
+  /// because a concurrent till took the last unit). Unlike [markCancelled] —
+  /// which compensates a sale the cloud ACCEPTED and therefore pushes the
+  /// reversal — a rejected sale never reached the cloud (the RPC rolled back its
+  /// own transaction, and on the v2 path the local order/wallet/inventory writes
+  /// were never enqueued as table rows). So this reversal is **purely local and
+  /// never enqueued**: it returns this device to its pre-sale state by cancelling
+  /// the order, refunding inventory, reversing the §14.3 wallet double-entry, and
+  /// un-issuing any §13.4 crate balance (customer_crate_balances is an LWW cache
+  /// that won't self-heal). The original sale's orphaned outbox rows stay visible
+  /// on the Sync Issues screen (Invariant #12 — surfaced, never silently
+  /// destroyed).
+  ///
+  /// [items] are the sold lines (product/store/qty) — sourced from the cart on
+  /// the foreground path, or from the orphaned envelope's `p_items` on the
+  /// background (cashier-tapped Cancel) path, because a v2 sale writes no local
+  /// `order_items` to read back. Idempotent: a no-op if the order is already
+  /// cancelled or absent.
+  Future<void> reverseRejectedSaleLocal({
+    required String orderId,
+    required List<({String productId, String storeId, int quantity})> items,
+    required String staffId,
+  }) async {
+    await db.transaction(() async {
+      final order = await (select(
+        orders,
+      )..where((o) => o.id.equals(orderId) & whereBusiness(o))).getSingleOrNull();
+      // Idempotent: nothing to undo if the order is gone or already reversed.
+      if (order == null || order.status == 'cancelled') return;
+
+      final now = DateTime.now();
+
+      // 1. Cancel the order header (local-only — the v2 order never pushed).
+      await (update(orders)..where((o) => o.id.equals(orderId))).write(
+        OrdersCompanion(
+          status: const Value('cancelled'),
+          cancellationReason: const Value('rejected_by_server'),
+          cancelledAt: Value(now.toUtc()),
+          lastUpdatedAt: Value(now),
+        ),
+      );
+
+      // 2. Refund the optimistic inventory pre-check deduction. Sourced from
+      // [items] (a v2 sale writes no local stock_transactions to rewind). No
+      // enqueue: on the v2 path the cloud's inventory_after is authoritative and
+      // this cache re-converges on the next pull.
+      for (final line in items) {
+        await customUpdate(
+          'UPDATE inventory SET quantity = quantity + ?, last_updated_at = ? '
+          'WHERE business_id = ? AND product_id = ? AND store_id = ?',
+          variables: [
+            Variable<int>(line.quantity),
+            Variable<DateTime>(now),
+            Variable<String>(requireBusinessId()),
+            Variable<String>(line.productId),
+            Variable<String>(line.storeId),
+          ],
+          updates: {inventory},
+        );
+      }
+
+      // 3. Reverse the §14.3 wallet double-entry so the customer's balance
+      // returns to its exact pre-sale value. Same shape as [markCancelled]
+      // (debit → 'refund' credit, credit → 'void' debit; net effect
+      // +total − paid), but LOCAL-ONLY: the cloud never held these legs, so
+      // pushing compensations would just FK-fail against the rejected order.
+      // Walk-in sales have no wallet legs → this is a no-op.
+      final saleWalletLegs =
+          await (select(walletTransactions)..where(
+                (t) =>
+                    whereBusiness(t) &
+                    t.orderId.equals(orderId) &
+                    t.referenceType.isNotIn(const ['refund', 'void']),
+              ))
+              .get();
+      for (final leg in saleWalletLegs) {
+        final toCredit = leg.type == 'debit';
+        final compReverse = WalletTransactionsCompanion.insert(
+          id: Value(UuidV7.generate()),
+          businessId: requireBusinessId(),
+          walletId: leg.walletId,
+          customerId: leg.customerId,
+          type: toCredit ? 'credit' : 'debit',
+          amountKobo: leg.amountKobo,
+          signedAmountKobo: toCredit ? leg.amountKobo : -leg.amountKobo,
+          referenceType: toCredit ? 'refund' : 'void',
+          orderId: Value(orderId),
+          performedBy: Value(staffId),
+          createdAt: Value(now),
+          lastUpdatedAt: Value(now),
+        );
+        await into(walletTransactions).insert(compReverse);
+        // Intentionally NOT enqueued — local-only reversal of a rejected sale.
+      }
+
+      // 4. Reverse the §13.4 crate dispatch (no-deposit "crate-track" brands
+      // only). Delegated to the crate DAO, which owns customer_crate_balances /
+      // crate_ledger. LOCAL-ONLY like the wallet legs above: the sale's crate
+      // rows were held then discarded (the cloud never saw them), and
+      // customer_crate_balances is an LWW cache that won't self-heal on pull —
+      // so undo the "issued" balance here. Walk-in / money-track sales issue no
+      // customer crate balance, so this is a no-op for them.
+      await db.crateLedgerDao.reverseIssuedByCustomerLocal(
+        orderId: orderId,
+        staffId: staffId,
+      );
     });
   }
 

@@ -10,6 +10,73 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### Oversell orphan recovery (notify cashier + cancel) — reversal CODE-COMPLETE; go-live gated on device rollout (2026-07-08; Slice 2c 2026-07-11)
+Resolves the A-S6 open question — the human chose: **notify the cashier + offer a
+cancel**. Branch `feat/oversell-orphan-recovery` off `main` (post-#105). Gates the
+go-live flag flip (below).
+- **Slice 1 (notify) — DONE.** When `pos_record_sale_v2` permanently rejects a sale
+  (`insufficient_stock`/`inventory_row_missing`), `_pushDomainItems` fires an **alert**
+  notification via `_notifyCashierSaleRejected` — targeted at the cashier
+  (`recipientUserId = p_actor_id`), linked to the order (`linkedRecordId = p_order_id`):
+  "out of stock (likely sold on another till). Review and cancel it." Best-effort (never
+  breaks the drain); synced like any notification.
+  Test `test/sync/oversell_orphan_notification_test.dart` green.
+- **Slice 2b (core local undo) — DONE.** `OrdersDao.reverseRejectedSaleLocal(orderId,
+  items, staffId)` returns a device to its pre-sale state after a permanent rejection —
+  **local-only, never enqueued** (the rejected sale never reached the cloud): cancels the
+  order, refunds inventory from `items` (a v2 sale has no local `stock_transactions` to
+  rewind), and reverses the §14.3 wallet double-entry via compensating legs
+  (debit→refund credit, credit→void debit). Idempotent. The foreground
+  `_compensateRejectedSale` now delegates to it (so the online-checkout rejection path
+  ALSO reverses the wallet — previously it left the customer debited). Tests:
+  `test/orders/reverse_rejected_sale_test.dart` (walk-in, register-as-credit balance
+  restored, idempotency) green; sync/wallet/crates/costing suites green. **This closes
+  the #105-introduced money-safety finding** (local wallet correctness on rejection).
+- **Cloud-leak fix (held-outbox mechanism) — DONE.** The deeper pre-existing v2 finding
+  (below) is fixed the clean way the human chose: Drift **v60** adds
+  `sync_queue.held_by_order_id`; on the v2 path `createOrder` HOLDS the sale's child rows
+  (cost_batches/crate/wallet — the delta the sale enqueues) so the drain
+  (`getPendingItems`) skips them until the `pos_record_sale_v2` envelope CONFIRMS
+  (`releaseHeldByOrder`) or is REJECTED (`discardHeldByOrder` → never leak).
+  `reconcileHeldRows` (on the periodic tick) is the crash-safe backstop, deciding each
+  held order from durable state (pending envelope → keep; orphaned → discard; gone →
+  release). Bonus: also removes the offline FK-defer clutter (FK-bound legs no longer
+  push before the order exists). Tests `test/sync/held_child_rows_test.dart` (hold /
+  release / discard / keep) green; migration v57→v60 green; sync/orders/costing/crates
+  (305) green. **Crate-balance reversal — DONE (Slice 2c).** `reverseRejectedSaleLocal`
+  now un-issues the LOCAL crate balance too, via `CrateLedgerDao.reverseIssuedByCustomerLocal`
+  (customer_crate_balances is LWW, won't self-heal): a compensating `-qty` 'adjusted' ledger
+  row nets the sale's 'issued' `+qty` and the cache decrements to pre-sale — local-only, never
+  enqueued (the cloud never saw the issue).
+- **⚠ Deeper PRE-EXISTING v2 finding (FIXED above by the held mechanism).** On the v2 path
+  `createOrder` eagerly ENQUEUES the sale's child rows, and two of them —
+  `cost_batches` (FIFO draw-down) and `customer_crate_balances` — **do NOT FK to the
+  order**, so on a rejection they PUSH successfully and **corrupt the cloud** (FIFO queue
+  wrongly drawn down; a customer wrongly shows owing empties). The FK-bound rows
+  (`wallet_transactions`, `crate_ledger`, `order_crate_lines`) correctly orphan instead.
+  This predates #105 (v1 never rejects, so it never surfaced). The clean root fix was to
+  **defer the child enqueues on the v2 path until the RPC confirms** (write locally, push
+  after `_applyDomainResponse`), OR clean the orphaned/pending child rows out of the
+  outbox on reversal. Local crate + cost reversal is entangled with this (a purely-local
+  crate undo wouldn't stop the cloud leak). Held for a coherent fix + human alignment —
+  it's an architecture change to the sale-sync path touching the sacred outbox (#12).
+- **Slice 2c (Cancel button UI + background item-sourcing) — DONE (2026-07-11).** The
+  `sale_rejected` alert in the notifications modal is now tappable → a plain-language confirm
+  dialog → `OrderService.cancelRejectedSale(orderId, staffId)` →
+  `OrderCommands.cancelRejectedSale`. Because a v2 sale writes no local `order_items`, the
+  command re-sources the sold lines from the orphaned envelope via
+  `SyncDao.rejectedSalePayload` (reads `p_items`/`p_store_id` out of `sync_queue_orphans`),
+  then runs the complete local reversal (order + inventory + wallet + crate). Idempotent;
+  gracefully cancels the phantom header even if the orphan is already gone. Tests:
+  `test/orders/cancel_rejected_sale_test.dart` (source-from-envelope / orphan-gone /
+  idempotent) + a crate-reversal case in `test/orders/reverse_rejected_sale_test.dart`;
+  analyze clean, orders/crates/sync (270) green. **The complete reversal (incl. the crate
+  balance) is now shipped in-code.**
+- **Go-live flip: HELD** — the reversal is now code-complete (local wallet/inventory/crate all
+  FIXED; the cloud cost/crate leak is fixed by the held-outbox mechanism). Still gated on
+  shipping this branch to devices + flipping `feature.domain_rpcs_v2.record_sale` per-env.
+  (Supabase MCP is disconnected this session, so the flip can't be applied from here anyway.)
+
 ### Workstream C (#102) — periodic pull safety net GUARDED — PR #120 OPEN, rebased on main post-B-merge (2026-07-11)
 Closes the live-sync/exactly-once loop's independent leg (plan §Workstream C).
 Branch `chore/retain-periodic-pull-safety-net` off `origin/main` (post-#105). The
@@ -101,7 +168,7 @@ it is a separate follow-up decision.
   schedules a pull), #5 (per-tenant RLS, no cross-tenant leak), #10 (pull cursor
   path unchanged), #12 (outbox untouched).
 
-### Exactly-once stock integrity (#100, Workstream A) — PR #105 OPEN, awaiting human merge (2026-07-08)
+### Exactly-once stock integrity (#100, Workstream A) — MERGED via PR #105 (2026-07-08)
 All 8 slices (A-S0…A-S7) done; **PR #105** (`fix/exactly-once-stock-integrity` →
 `main`) opened `Closes #100`. Stop-for-human-merge. Two decisions carried in the PR:
 the **go-live flag flip** (per-env ops, fix inert until flipped) and the **orphan-UX

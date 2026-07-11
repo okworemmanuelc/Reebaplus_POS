@@ -527,6 +527,77 @@ class CrateLedgerDao extends DatabaseAccessor<AppDatabase>
     await db.syncDao.enqueueUpsert('customer_crate_balances', updatedBalance);
   }
 
+  /// Oversell recovery — LOCAL reversal of the crates a REJECTED sale "issued".
+  /// A rejected v2 sale never happened: its `+quantity` 'issued' crate_ledger
+  /// rows and the `customer_crate_balances` increment were HELD then discarded
+  /// (they never reached the cloud). Unlike inventory — which the cloud's
+  /// authoritative `inventory_after` re-converges on the next pull —
+  /// `customer_crate_balances` is an LWW cache that WON'T self-heal: its
+  /// post-sale value carries the newest timestamp and would win. So undo both
+  /// here, append-only and LOCAL-ONLY:
+  ///   • append a compensating `-quantity` 'adjusted' ledger row (a system
+  ///     correction, not a phantom customer 'returned') so the ledger↔cache
+  ///     sums stay consistent for [verifyCrateReconciliation]; and
+  ///   • decrement the cache back to its pre-sale value.
+  /// NOTHING is enqueued — the cloud never saw the issue, so a compensation
+  /// pushed there would wrongly decrement a balance it never held (or FK-fail
+  /// against the rejected order). No own transaction: the caller
+  /// ([OrdersDao.reverseRejectedSaleLocal]) is already inside one, and its
+  /// already-cancelled guard makes this idempotent. Only no-deposit
+  /// ("crate-track") brands ever accrue a customer crate balance, so most
+  /// rejected sales are a no-op here.
+  Future<void> reverseIssuedByCustomerLocal({
+    required String orderId,
+    required String staffId,
+  }) async {
+    final issuedRows =
+        await (select(crateLedger)..where(
+              (l) =>
+                  whereBusiness(l) &
+                  l.referenceOrderId.equals(orderId) &
+                  l.movementType.equals('issued') &
+                  l.customerId.isNotNull() &
+                  l.manufacturerId.isNotNull(),
+            ))
+            .get();
+    final now = DateTime.now();
+    for (final issued in issuedRows) {
+      final customerId = issued.customerId!;
+      final manufacturerId = issued.manufacturerId!;
+
+      // Compensating ledger row — the exact inverse of the 'issued' delta.
+      await into(crateLedger).insert(
+        CrateLedgerCompanion.insert(
+          id: Value(UuidV7.generate()),
+          businessId: requireBusinessId(),
+          customerId: Value(customerId),
+          manufacturerId: Value(manufacturerId),
+          quantityDelta: -issued.quantityDelta,
+          movementType: 'adjusted',
+          referenceOrderId: Value(orderId),
+          performedBy: Value(staffId),
+          lastUpdatedAt: Value(now),
+        ),
+      );
+
+      // Decrement the LWW cache back toward its pre-sale value. customUpdate
+      // (not customStatement) so Drift invalidates the watching crate streams.
+      await customUpdate(
+        'UPDATE customer_crate_balances SET balance = balance - ?, '
+        "last_updated_at = CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER) "
+        'WHERE business_id = ? AND customer_id = ? AND manufacturer_id = ?',
+        variables: [
+          Variable<int>(issued.quantityDelta),
+          Variable<String>(requireBusinessId()),
+          Variable<String>(customerId),
+          Variable<String>(manufacturerId),
+        ],
+        updates: {customerCrateBalances},
+      );
+      // Intentionally NOT enqueued — local-only reversal of a rejected sale.
+    }
+  }
+
   /// Verification logic to ensure cache tables match ledger sums.
   /// To be scheduled nightly or run on-demand.
   Future<void> verifyCrateReconciliation() async {

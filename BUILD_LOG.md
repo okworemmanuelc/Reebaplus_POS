@@ -2,6 +2,74 @@
 
 ---
 
+## 2026-07-11 — Oversell orphan recovery: one-tap Cancel + local crate reversal (Slice 2c)
+
+Completes the reversal on branch `feat/oversell-orphan-recovery`. The go-live flip stays
+HELD (gated on device rollout), but the undo is now code-complete.
+
+**Crate-balance reversal.** `OrdersDao.reverseRejectedSaleLocal` gained a 4th step: it un-issues
+the LOCAL crate balance via new `CrateLedgerDao.reverseIssuedByCustomerLocal`. A rejected v2
+sale's 'issued' crate rows were held then discarded (never reached the cloud), and
+`customer_crate_balances` is an LWW cache that won't self-heal on pull — so it must be undone
+locally. Mirrors the wallet step: append a compensating `-qty` 'adjusted' crate_ledger row (so
+ledger↔cache stays consistent for `verifyCrateReconciliation`) + decrement the cache back to
+pre-sale. Local-only, never enqueued.
+
+**One-tap Cancel (the cashier action).** New `OrderCommands.cancelRejectedSale(orderId,
+staffId)` (surfaced on the `OrderService` facade). A v2 sale writes no local `order_items`, so
+it re-sources the sold lines from the orphaned envelope via new `SyncDao.rejectedSalePayload`
+(reads `p_items` / `p_store_id` out of `sync_queue_orphans`), then runs the complete local
+reversal (order + inventory + wallet + crate). Idempotent; still cancels the phantom order
+header even if the orphan is already gone.
+
+**UI wiring.** The `sale_rejected` alert in `notifications_modal.dart` is now tappable → a
+plain-language confirm dialog ("Sale could not be completed" / "Cancel the sale" / "Keep") →
+`cancelRejectedSale`, with success/error toasts and the alert cleared on success. Added the
+alert icon/colour for the type.
+
+**Verify.** `flutter analyze` clean; `test/orders` + `test/crates` + `test/sync` (270) green,
+incl. new `cancel_rejected_sale_test.dart` (source-from-envelope / orphan-gone / idempotent)
+and a crate-reversal case in `reverse_rejected_sale_test.dart`. Also dropped an unused
+`drift/native.dart` import in `oversell_orphan_notification_test.dart`.
+
+---
+
+## 2026-07-08 — Oversell orphan recovery: notify the cashier + complete local undo (Slices 1 + 2b)
+
+Resolves the A-S6 orphan-UX open question (human chose: notify + cancel). Branch
+`feat/oversell-orphan-recovery` off `main` (post-#105).
+
+**Slice 1 — notify.** When `pos_record_sale_v2` permanently rejects a sale
+(`insufficient_stock` / `inventory_row_missing` — a concurrent till took the last unit),
+`_pushDomainItems` fires an alert notification via `_notifyCashierSaleRejected`, targeted
+at the cashier (`recipientUserId`) and linked to the order (`linkedRecordId`). Best-effort.
+Test `oversell_orphan_notification_test.dart`.
+
+**Slice 2b — complete local undo.** New `OrdersDao.reverseRejectedSaleLocal(orderId, items,
+staffId)`: local-only (a rejected sale never reached the cloud), never enqueued — cancels the
+order, refunds inventory from `items` (a v2 sale writes no local `stock_transactions`), and
+reverses the §14.3 wallet double-entry via compensating legs. Idempotent. The foreground
+`_compensateRejectedSale` now delegates to it, so the online-checkout rejection path ALSO
+reverses the wallet (it previously left the customer debited — the money-safety gap #105
+introduced). Test `reverse_rejected_sale_test.dart` (walk-in, register-as-credit balance
+restored, idempotency).
+
+**Deeper pre-existing finding (surfaced, held).** On v2, `createOrder` eagerly enqueues the
+sale's child rows; `cost_batches` and `customer_crate_balances` do NOT FK the order, so a
+rejection leaks them to the cloud (FK-bound wallet/crate_ledger rows correctly orphan). Root
+fix = defer the v2 child enqueues until the RPC confirms (or outbox-clean on reversal). Crate
++ cost reversal is entangled with this. Held for a coherent fix + alignment. Go-live flag
+flip stays HELD until the reversal is complete + shipped.
+
+**Verified.** `flutter analyze` clean; orders/sync/wallet/crates/costing suites green.
+
+**Files:** `lib/core/services/supabase_sync_service.dart`, `lib/core/database/daos_orders.dart`,
+`lib/shared/services/orders/order_commands.dart`,
+`test/sync/oversell_orphan_notification_test.dart`, `test/orders/reverse_rejected_sale_test.dart`,
+`context/progress-tracker.md`.
+
+---
+
 ## 2026-07-11 — Guard the periodic pull "safety net" against silent removal (issue #102, Workstream C)
 
 **Context.** The periodic `catchUpPull` on the 30 s sync tick (shipped #98/#99) is the

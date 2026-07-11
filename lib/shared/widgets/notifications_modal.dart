@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/shared/models/notification.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
 import 'package:reebaplus_pos/features/orders/screens/crate_return_approval_screen.dart';
@@ -267,6 +268,8 @@ class _NotificationCard extends ConsumerWidget {
           ? () => _showProductUpdateSummary(context, notification, ref)
           : notification.type == 'crate_short_return'
           ? () => _openCrateReturnApproval(context, notification, ref)
+          : notification.type == 'sale_rejected'
+          ? () => _openSaleRejectedReview(context, notification, ref)
           : null,
       child: Container(
         padding: EdgeInsets.all(context.getRSize(16)),
@@ -433,6 +436,8 @@ class _NotificationCard extends ConsumerWidget {
         return FontAwesomeIcons.userGear.data;
       case 'staff.profile_updated':
         return FontAwesomeIcons.userPen.data;
+      case 'sale_rejected':
+        return FontAwesomeIcons.triangleExclamation.data;
       default:
         return FontAwesomeIcons.bell.data;
     }
@@ -478,6 +483,8 @@ class _NotificationCard extends ConsumerWidget {
         return scheme.primary;
       case 'staff.profile_updated':
         return scheme.primary;
+      case 'sale_rejected':
+        return scheme.error;
       default:
         return scheme.primary;
     }
@@ -499,6 +506,88 @@ class _NotificationCard extends ConsumerWidget {
           pendingReturnId: pendingReturnId,
           notificationId: notifId,
         ),
+      ),
+    );
+  }
+
+  /// The cashier tapped a `sale_rejected` alert: the server permanently rejected
+  /// this sale (an oversell — a concurrent till took the last unit), leaving a
+  /// phantom sale on this device. Confirm, then run the complete LOCAL undo
+  /// (order + inventory + wallet + crate) via [OrderService.cancelRejectedSale].
+  /// `linkedRecordId` carries the plain order id.
+  void _openSaleRejectedReview(
+    BuildContext context,
+    NotificationModel notification,
+    WidgetRef ref,
+  ) {
+    final orderId = notification.linkedRecordId;
+    if (orderId == null || orderId.isEmpty) return;
+    final notifId = notification.id;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              FontAwesomeIcons.triangleExclamation.data,
+              size: 16,
+              color: Theme.of(ctx).colorScheme.error,
+            ),
+            const SizedBox(width: 8),
+            const Expanded(child: Text('Sale could not be completed')),
+          ],
+        ),
+        content: Text(
+          '${notification.message}\n\nCancelling removes it from this device — '
+          'the stock and any customer empties balance go back to what they were '
+          'before the sale.',
+          style: const TextStyle(fontSize: 14),
+        ),
+        actions: [
+          AppButton(
+            text: 'Keep',
+            variant: AppButtonVariant.ghost,
+            isFullWidth: false,
+            onPressed: () => Navigator.pop(ctx),
+          ),
+          AppButton(
+            text: 'Cancel the sale',
+            variant: AppButtonVariant.danger,
+            isFullWidth: false,
+            onPressed: () async {
+              final staffId = ref.read(authProvider).currentUser?.id;
+              if (staffId == null) {
+                AppNotification.showError(
+                  ctx,
+                  'Please sign in again to cancel this sale.',
+                );
+                return;
+              }
+              // Resolve providers before the await (no ref use afterwards).
+              final orderService = ref.read(orderServiceProvider);
+              final notifService = ref.read(notificationProvider);
+              Navigator.pop(ctx);
+              try {
+                await orderService.cancelRejectedSale(orderId, staffId);
+                await notifService.deleteNotification(notifId);
+                if (context.mounted) {
+                  AppNotification.showSuccess(
+                    context,
+                    'Sale cancelled. Stock and balances restored.',
+                  );
+                }
+              } catch (_) {
+                if (context.mounted) {
+                  AppNotification.showError(
+                    context,
+                    'Could not cancel the sale. Please try again.',
+                  );
+                }
+              }
+            },
+          ),
+        ],
       ),
     );
   }

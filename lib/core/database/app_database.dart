@@ -1650,6 +1650,13 @@ class SyncQueue extends Table {
   // orphan row, and the sweep stamps `count + 1` when it re-enqueues. 0 for a
   // normal first-time write.
   IntColumn get autoRetryCount => integer().withDefault(const Constant(0))();
+  // Oversell recovery: a v2 sale's child rows (cost_batches, crate rows, wallet
+  // legs) are enqueued HELD by their order id — the drain skips them until the
+  // guarded `pos_record_sale_v2` envelope for that order CONFIRMS (then they're
+  // released → pushed) or is REJECTED (then they're discarded → never leak to
+  // the cloud). Null = a normal, immediately-drainable row. Device-local only
+  // (sync_queue never syncs), so no cloud column.
+  TextColumn get heldByOrderId => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -1835,7 +1842,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 59;
+  int get schemaVersion => 60;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3952,6 +3959,20 @@ class AppDatabase extends _$AppDatabase {
         ).get();
         if (has.isEmpty) {
           await m.addColumn(products, products.imageUrl);
+        }
+      }
+      if (from < 60) {
+        // v60 (oversell recovery): sync_queue.held_by_order_id — a v2 sale's
+        // child rows (cost_batches / crate / wallet) are held until their
+        // pos_record_sale_v2 envelope confirms, so a rejected sale never leaks
+        // them to the cloud. Device-local only. Idempotency guard for a DB
+        // stepped back to < 60 by the revert-then-re-upgrade tests.
+        final has = await customSelect(
+          "SELECT 1 FROM pragma_table_info('sync_queue') "
+          "WHERE name = 'held_by_order_id'",
+        ).get();
+        if (has.isEmpty) {
+          await m.addColumn(syncQueue, syncQueue.heldByOrderId);
         }
       }
     },
