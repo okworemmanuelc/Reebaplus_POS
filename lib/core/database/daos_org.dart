@@ -186,11 +186,14 @@ class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
     return rows.map((r) => r.readTable(userBusinesses).userId).toList();
   }
 
-  /// All active memberships for the current business. Drives the
-  /// Staff Management list and the Who Is Working picker.
+  /// Memberships for the current business, excluding terminally-`removed` staff
+  /// (#107). Drives the Staff Management list and the Who Is Working picker.
+  /// Keeps `active` and `suspended` (both surface in Staff Management — suspended
+  /// greyed out); `removed` staff no longer appear in any active staff list,
+  /// though their users row is retained as an attribution stub for history.
   Stream<List<UserBusinessData>> watchForCurrentBusiness() {
     return (select(userBusinesses)
-          ..where((t) => whereBusiness(t))
+          ..where((t) => whereBusiness(t) & t.status.equals('removed').not())
           ..orderBy([(t) => OrderingTerm.asc(t.status)]))
         .watch();
   }
@@ -325,8 +328,26 @@ class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
     await db.syncDao.enqueueUpsert('user_businesses', row);
   }
 
+  /// Sync-exempt local mirror of a server-confirmed removal (#107 offboarding).
+  /// The authoritative write is the `remove_staff_member` SECURITY DEFINER RPC
+  /// (see [AuthService.removeStaffMember]) — it sets the membership `removed` and
+  /// nulls the identity's cloud auth link atomically. This only reflects that
+  /// confirmed terminal status into the local row so the member drops out of the
+  /// active staff list immediately; a background pull converges the rest.
+  /// Deliberately does NOT enqueue: the RPC already wrote the cloud row, and the
+  /// §6 outbox must not re-push a status the server owns.
+  Future<void> markRemovedLocal(String membershipId) async {
+    await (update(
+      userBusinesses,
+    )..where((t) => t.id.equals(membershipId))).write(
+      const UserBusinessesCompanion(status: Value('removed')),
+    );
+  }
+
   /// Suspend or reactivate a membership. [status] is `'active'` or
-  /// `'suspended'` (matches the CHECK constraint). Enqueues the updated
+  /// `'suspended'` — the two non-terminal states. The terminal `'removed'`
+  /// state is NEVER set through this outbox path; it is server-authoritative
+  /// (see [markRemovedLocal] / `remove_staff_member`). Enqueues the updated
   /// row for sync.
   Future<void> setStatus(String membershipId, String status) async {
     await (update(
