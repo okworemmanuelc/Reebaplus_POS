@@ -47,7 +47,165 @@ ground truth.
   unsynced-data wipe gate). Reserve migration numbers (0147+) late to dodge
   cross-branch collisions.
 
-### Exactly-once stock integrity (#100, Workstream A) — PR #105 OPEN, awaiting human merge (2026-07-08)
+### Oversell orphan recovery (notify cashier + cancel) — reversal CODE-COMPLETE; go-live gated on device rollout (2026-07-08; Slice 2c 2026-07-11)
+Resolves the A-S6 open question — the human chose: **notify the cashier + offer a
+cancel**. Branch `feat/oversell-orphan-recovery` off `main` (post-#105). Gates the
+go-live flag flip (below).
+- **Slice 1 (notify) — DONE.** When `pos_record_sale_v2` permanently rejects a sale
+  (`insufficient_stock`/`inventory_row_missing`), `_pushDomainItems` fires an **alert**
+  notification via `_notifyCashierSaleRejected` — targeted at the cashier
+  (`recipientUserId = p_actor_id`), linked to the order (`linkedRecordId = p_order_id`):
+  "out of stock (likely sold on another till). Review and cancel it." Best-effort (never
+  breaks the drain); synced like any notification.
+  Test `test/sync/oversell_orphan_notification_test.dart` green.
+- **Slice 2b (core local undo) — DONE.** `OrdersDao.reverseRejectedSaleLocal(orderId,
+  items, staffId)` returns a device to its pre-sale state after a permanent rejection —
+  **local-only, never enqueued** (the rejected sale never reached the cloud): cancels the
+  order, refunds inventory from `items` (a v2 sale has no local `stock_transactions` to
+  rewind), and reverses the §14.3 wallet double-entry via compensating legs
+  (debit→refund credit, credit→void debit). Idempotent. The foreground
+  `_compensateRejectedSale` now delegates to it (so the online-checkout rejection path
+  ALSO reverses the wallet — previously it left the customer debited). Tests:
+  `test/orders/reverse_rejected_sale_test.dart` (walk-in, register-as-credit balance
+  restored, idempotency) green; sync/wallet/crates/costing suites green. **This closes
+  the #105-introduced money-safety finding** (local wallet correctness on rejection).
+- **Cloud-leak fix (held-outbox mechanism) — DONE.** The deeper pre-existing v2 finding
+  (below) is fixed the clean way the human chose: Drift **v60** adds
+  `sync_queue.held_by_order_id`; on the v2 path `createOrder` HOLDS the sale's child rows
+  (cost_batches/crate/wallet — the delta the sale enqueues) so the drain
+  (`getPendingItems`) skips them until the `pos_record_sale_v2` envelope CONFIRMS
+  (`releaseHeldByOrder`) or is REJECTED (`discardHeldByOrder` → never leak).
+  `reconcileHeldRows` (on the periodic tick) is the crash-safe backstop, deciding each
+  held order from durable state (pending envelope → keep; orphaned → discard; gone →
+  release). Bonus: also removes the offline FK-defer clutter (FK-bound legs no longer
+  push before the order exists). Tests `test/sync/held_child_rows_test.dart` (hold /
+  release / discard / keep) green; migration v57→v60 green; sync/orders/costing/crates
+  (305) green. **Crate-balance reversal — DONE (Slice 2c).** `reverseRejectedSaleLocal`
+  now un-issues the LOCAL crate balance too, via `CrateLedgerDao.reverseIssuedByCustomerLocal`
+  (customer_crate_balances is LWW, won't self-heal): a compensating `-qty` 'adjusted' ledger
+  row nets the sale's 'issued' `+qty` and the cache decrements to pre-sale — local-only, never
+  enqueued (the cloud never saw the issue).
+- **⚠ Deeper PRE-EXISTING v2 finding (FIXED above by the held mechanism).** On the v2 path
+  `createOrder` eagerly ENQUEUES the sale's child rows, and two of them —
+  `cost_batches` (FIFO draw-down) and `customer_crate_balances` — **do NOT FK to the
+  order**, so on a rejection they PUSH successfully and **corrupt the cloud** (FIFO queue
+  wrongly drawn down; a customer wrongly shows owing empties). The FK-bound rows
+  (`wallet_transactions`, `crate_ledger`, `order_crate_lines`) correctly orphan instead.
+  This predates #105 (v1 never rejects, so it never surfaced). The clean root fix was to
+  **defer the child enqueues on the v2 path until the RPC confirms** (write locally, push
+  after `_applyDomainResponse`), OR clean the orphaned/pending child rows out of the
+  outbox on reversal. Local crate + cost reversal is entangled with this (a purely-local
+  crate undo wouldn't stop the cloud leak). Held for a coherent fix + human alignment —
+  it's an architecture change to the sale-sync path touching the sacred outbox (#12).
+- **Slice 2c (Cancel button UI + background item-sourcing) — DONE (2026-07-11).** The
+  `sale_rejected` alert in the notifications modal is now tappable → a plain-language confirm
+  dialog → `OrderService.cancelRejectedSale(orderId, staffId)` →
+  `OrderCommands.cancelRejectedSale`. Because a v2 sale writes no local `order_items`, the
+  command re-sources the sold lines from the orphaned envelope via
+  `SyncDao.rejectedSalePayload` (reads `p_items`/`p_store_id` out of `sync_queue_orphans`),
+  then runs the complete local reversal (order + inventory + wallet + crate). Idempotent;
+  gracefully cancels the phantom header even if the orphan is already gone. Tests:
+  `test/orders/cancel_rejected_sale_test.dart` (source-from-envelope / orphan-gone /
+  idempotent) + a crate-reversal case in `test/orders/reverse_rejected_sale_test.dart`;
+  analyze clean, orders/crates/sync (270) green. **The complete reversal (incl. the crate
+  balance) is now shipped in-code.**
+- **Go-live flip: HELD** — the reversal is now code-complete (local wallet/inventory/crate all
+  FIXED; the cloud cost/crate leak is fixed by the held-outbox mechanism). Still gated on
+  shipping this branch to devices + flipping `feature.domain_rpcs_v2.record_sale` per-env.
+  (Supabase MCP is disconnected this session, so the flip can't be applied from here anyway.)
+
+### Workstream C (#102) — periodic pull safety net GUARDED — PR #120 OPEN, rebased on main post-B-merge (2026-07-11)
+Closes the live-sync/exactly-once loop's independent leg (plan §Workstream C).
+Branch `chore/retain-periodic-pull-safety-net` off `origin/main` (post-#105). The
+periodic `catchUpPull` was already SHIPPED (#98/#99); C's job is to **keep** it and
+make it un-removable, because it is the reconnect-replay backstop that makes
+Workstream B's (Broadcast) deliberate "no replay" acceptable.
+- **C-S1 (guard the safety net) — DONE.** Behaviour-preserving refactor of the 30 s
+  tick in `supabase_sync_service.dart`: the inline `Timer.periodic` body is now
+  `_installPeriodicSafetyNet()` (idempotent `??=`) → `_periodicSafetyNetTick()`, with
+  four `@visibleForTesting` seams (`installPeriodicSafetyNetForTesting`,
+  `isPeriodicSafetyNetActiveForTesting`, `periodicSafetyNetIntervalForTesting`,
+  `runPeriodicSafetyNetTickForTesting`). New `test/sync/periodic_safety_net_test.dart`
+  (5 tests, green) pins, via the **same** private installer/tick production uses:
+  the timer is scheduled idempotently at the **30 s** cadence and **cancelled on
+  logout** (`stopAutoPush`); each tick fires the silent `catchUpPull(reason:
+  'periodic')` when foreground + online + business-bound; a tick **pulls nothing**
+  when logged-out (backgrounded/suspended state) or offline; and — under `fakeAsync`
+  — the scheduled 30 s timer actually invokes the pull tick and stops after logout.
+  It fails if the safety net is ever silently removed or repointed.
+- **C-S2 (cadence) — RESOLVED: KEEP 30 s** (human, 2026-07-11). B (Broadcast) has
+  since landed (PR #126, merged) and gives near-instant convergence, so 30 s is the
+  right backstop cadence; tighten toward ~10 s only if that proves too slow. No code
+  change; the 30 s cadence is now test-pinned so any future change is forced through
+  review.
+- **C-S3 — DoD + PR.** `flutter analyze` clean; `flutter test test/sync/` 195 green.
+  PR `Closes #102`; stop for human merge. Invariants: none touched — behaviour-
+  preserving refactor, no schema/migration, outbox/append-only ledgers untouched.
+
+### Broadcast live-signal (#101, Workstream B) — MERGED (PR #126, commit 3a8c1af, 2026-07-11)
+All slices (B0–B7) done on branch `feat/broadcast-live-signal` (off `origin/main`
+post-A-merge). A (#100) is merged (PR #105). **Re-framing:** the B0 gate (run
+2026-07-11) found the original premise stale — `postgres_changes` is **no longer
+refused** (the full 54-binding channel joins + delivers CDC after #96/#97), so B is
+now **additive** (a writer-agnostic signal + a signal the web can subscribe to),
+not a rescue. **Decision surfaced for the human:** the plan intended B to *replace*
+`postgres_changes`, but it works now — so this PR **keeps both** (belt-and-
+suspenders) and does **not** rip out the working `postgres_changes` path; retiring
+it is a separate follow-up decision.
+- **B1 — emit trigger (migration `0147`, DEPLOYED + verified).** One generic
+  `zz_broadcast_sync_signal()` `AFTER INSERT/UPDATE/DELETE` trigger, attached to
+  every `public` base table with a `business_id` (+ `businesses`) via a DB-driven
+  loop — **60 tables**. Emits minimal `{table,id,op}` (no row data) to
+  `store_<business_id>` via `realtime.send(...,'sync',...,private:=true)`.
+  Write-safe (`EXCEPTION WHEN OTHERS THEN NULL`), fires last (`zz_` name, AFTER),
+  skips no-op updates, `SECURITY DEFINER SET search_path=''`, and `EXECUTE`
+  revoked from client roles (advisor flagged the RPC exposure — trigger fires
+  regardless of the grant). Verified live via a rolled-back txn: an UPDATE emits
+  the exact payload; the write succeeds; no-op-vs-bump behaviour understood
+  (a bump trigger moves `last_updated_at`, so peers correctly learn the row
+  changed). **Redundant-emit note:** a few not-app-synced tables (`devices`,
+  `console_audit`, …) also emit — harmless (a debounced, redundant pull), never a
+  correctness issue. Possible future optimisation (not done, keeps to spec):
+  STATEMENT-level triggers would cut per-row volume (a multi-row INSERT = 1 emit).
+- **B2 — RLS (migration `0148`, DEPLOYED + verified).** Exactly one `SELECT`
+  policy on `realtime.messages` scoping topic `store_<business_id>` to
+  `current_user_business_ids()` (profiles-based). **No `INSERT` policy** — clients
+  only receive; the trigger emits as a definer, so a client can't spoof a signal.
+  Verified via JWT-claim impersonation: own topic allowed, another tenant's
+  denied, `realtime.topic()` integrates. **Op note (surface to human):** full
+  private-channel *enforcement* also wants "Allow public access" OFF in the
+  dashboard Realtime settings (can't be set from SQL); the app always joins with
+  `private:true`, so the RLS gate applies regardless.
+- **B3 — transport seam (ADR 0001).** `CloudTransport.startBroadcast(businessId,
+  {onSignal})` / `stopBroadcast()`. `SupabaseCloudTransport` opens one private
+  channel on `store_<biz>` (`setAuth` before subscribe, `replay` deliberately
+  unset — ephemeral). `InMemoryCloudTransport` fake captures the callback +
+  `emitBroadcastSignal()`; `onSignal` is a **bare `void Function()`** (no payload)
+  — the structural guarantee that a signal can't write Drift.
+- **B4 — signal → pull.** Broadcast starts/stops on the SAME lifecycle as
+  realtime (piggybacks `startRealtimeSync` / `_tearDownRealtimeChannels`, so
+  sign-in / resume / connectivity / logout all covered). `_onBroadcastSignal`
+  resolves the *current* business (like the periodic tick) → debounced
+  `catchUpPull(reason:'broadcast')`. Coexists with `postgres_changes`.
+- **B5 — coexistence + no-replay.** Test proves convergence rides the periodic /
+  reconnect pull (C), independent of any broadcast — a missed signal still
+  recovers.
+- **B6 — web reception is OUT OF SCOPE here.** Filed follow-up
+  **`okworemmanuelc/reebaplus-web#55`** (web subscribes to the same
+  `store_<biz>` topic, reacts by refetch/invalidate, NOT a Drift pull). web-pos
+  moved to `reebaplus-web` per PR #104.
+- **B7 — DoD.** `flutter analyze` clean project-wide (0 err/0 warn). `flutter
+  test test/sync/` 198 green (incl. new `broadcast_signal_test.dart` +
+  `cloud_transport_seam_test` broadcast fidelity). **End-to-end Tier-2 test**
+  (`test/integration/broadcast_signal_live_test.dart`, `@Tags(['integration'])`,
+  committed + env-gated) proves the full path against real dev Supabase: a
+  service-role write on TEST_BUSINESS_ID delivered `{table:products,id,op:UPDATE}`
+  to a subscribed private-channel client on `store_<biz>` in ~4s — B1+B2+B3
+  composed. Invariants confirmed by name: #1 (Broadcast never writes Drift; only
+  schedules a pull), #5 (per-tenant RLS, no cross-tenant leak), #10 (pull cursor
+  path unchanged), #12 (outbox untouched).
+
+### Exactly-once stock integrity (#100, Workstream A) — MERGED via PR #105 (2026-07-08)
 All 8 slices (A-S0…A-S7) done; **PR #105** (`fix/exactly-once-stock-integrity` →
 `main`) opened `Closes #100`. Stop-for-human-merge. Two decisions carried in the PR:
 the **go-live flag flip** (per-env ops, fix inert until flipped) and the **orphan-UX
@@ -203,7 +361,7 @@ On-device debugging of "console changes don't reach the app live." Findings + fi
   independent of the broken postgres_changes). Chasing server-side
   `postgres_changes` deferred. #96 (one channel + setAuth) stays as a best-effort
   realtime *signal*.
-- **#98 periodic fallback pull — SHIPPED (PR pending).** Added the documented
+- **#98 periodic fallback pull — SHIPPED (PR #99, MERGED).** Added the documented
   "periodic fallback poll" to the existing 30 s sync tick: foregrounded + online +
   business-bound → silent, debounced `catchUpPull(reason: 'periodic')` (runs before
   and independent of the push drain). A console edit/soft-delete now converges
@@ -211,6 +369,38 @@ On-device debugging of "console changes don't reach the app live." Findings + fi
   lifecycle reused (starts at sign-in, cancels at logout, suspends when
   backgrounded). test/sync 186 green; analyze clean. On-device: a deleted product
   stops being sellable within ~30 s.
+- **#95/#96/#97 — MERGED (PR #96).** One-channel/N-bindings + `setAuth` landed on
+  `main` (`eda0b95`) as a best-effort signal; `postgres_changes` still refused
+  server-side (root cause deferred, deprecated path).
+
+#### PRD: live-sync signal + offline-first integrity + exactly-once (2026-07-07)
+Investigation → proposal, no code this pass. Spec:
+`context/specs/brief-live-sync-signal-and-exactly-once.md`. **Root finding:** fast
+convergence makes conflicts *visible* faster but does **not** prevent duplicate
+application. IDs are already client-`UuidV7` and push is idempotent `upsert(onConflict:
+id)` (single-device retry is exactly-once), and money ledgers are already append-
+only/derived (immune). **The gap is on-hand stock: a mutable `inventory.quantity`
+balance decremented in place (`daos_orders.dart:539-557`) and pushed as an *absolute*
+LWW cache (`sync_registry.dart:652-665`)** — two offline tills selling the last unit
+both pass the local guard, both push `quantity=0`, LWW keeps one → **silent oversell**.
+The oversell-safe path already exists (`pos_record_sale_v2` `FOR UPDATE` + relative
+decrement + `ON CONFLICT (id) DO NOTHING`) but **the flag `feature.domain_rpcs_v2.
+record_sale` defaults `'false'`** (0011:1368) so mobile runs the unsafe v1 path; web's
+`checkout_order` (0135) is already guarded. **Decision — three sequenced, separable
+workstreams (correctness before speed):**
+- **A (ship first): exactly-once integrity.** Make stock convergence-safe — flip to the
+  server RPC relative-decrement path (fast) and/or derive on-hand from `stock_transactions`
+  (structural); audit other mutable-balance caches; lock idempotency backstops with tests.
+- **B (on A): Broadcast live-signal.** One generic `TG_TABLE_NAME` trigger over
+  `kSyncPullOrder`, one topic per store, one RLS policy, minimal `{table,id,op}` payload,
+  client single-channel subscribe → `catchUpPull`. **Emitter is a shared-schema DB trigger,
+  writer-agnostic → every device's change (mobile/web/console) broadcasts to all
+  subscribers; reception is per-client** (mobile→pull, web→refetch). Never writes Drift.
+  **Gated on an on-device proof that Broadcast joins where `postgres_changes` is refused.**
+- **C: retain the periodic pull** as the safety net / reconnect-replay backstop (already
+  shipped); tighten cadence only if B is delayed/fails.
+Tracked as three issues: **#100 (A)**, **#101 (B)**, **#102 (C)**. `postgres_changes`
+debugging is an explicit non-goal.
 
 ### Multi-industry onboarding & app morphing (PRD #76, ADR 0015) — in progress
 Slices: **#77** registry foundation → **#79** enable all nine → **#80** Lexicon on

@@ -38,10 +38,16 @@ import 'package:reebaplus_pos/features/payments/widgets/supplier_form_sheet.dart
 class AddProductScreen extends ConsumerStatefulWidget {
   final void Function(ProductData)? onProductAdded;
   final bool receiveMode;
+
+  /// Optional barcode to pre-fill the Barcode field with (#118). Set when this
+  /// screen is opened from a POS scan of an unknown barcode, so the cashier can
+  /// catalogue the just-scanned product without retyping the code.
+  final String? prefilledBarcode;
   const AddProductScreen({
     super.key,
     this.onProductAdded,
     this.receiveMode = false,
+    this.prefilledBarcode,
   });
 
   @override
@@ -60,8 +66,16 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   final _supplierCtrl = TextEditingController();
   final _manufacturerCtrl = TextEditingController();
   final _categoryCtrl = TextEditingController();
+  final _barcodeCtrl = TextEditingController();
 
-  String _unit = 'Bottle';
+  /// The name of another product already using the typed barcode (#113). Non-
+  /// null ⇒ a soft collision the form warns about; it never blocks the save.
+  String? _barcodeCollisionName;
+
+  // Nullable (#108): null = no unit. Pre-filled with the trade's Lexicon unit
+  // as a clearable suggestion (initState / _clearExistingProduct); clearing it
+  // via the dropdown's "No unit" option saves null.
+  String? _unit;
   bool _trackEmpties = true; // defaults true when unit is Bottle
   bool _allowFractionalSales = false;
   // Colour selector is deferred (master plan §16.5); products keep a default.
@@ -96,9 +110,11 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
 
   /// The required fields that live in the always-visible fast section. A
   /// validation error naming anything else (only Store today) expands "More
-  /// details" first, so an error never points at a collapsed field.
-  static const _fastSectionFields = {
-    'Product Name',
+  /// details" first, so an error never points at a collapsed field. The item
+  /// label morphs per trade (#112), so the name entry is built from the active
+  /// Lexicon — a hardcoded 'Product Name' would never match 'Medicine Name'.
+  Set<String> get _fastSectionFields => {
+    '${_lexicon.item} Name',
     'Selling Price',
     'Quantity',
     'Buying Price',
@@ -129,7 +145,11 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     // default to a non-beverage trade.
     _unit = _lexicon.unit;
     _dynamicUnits = _lexicon.starterUnits;
-    _trackEmpties = _unit.toLowerCase() == 'bottle';
+    _trackEmpties = _unit?.toLowerCase() == 'bottle';
+    // #118: seed the Barcode field from a POS scan of an unknown code so the
+    // cashier catalogues the just-scanned product without retyping it.
+    final prefillBarcode = widget.prefilledBarcode?.trim() ?? '';
+    if (prefillBarcode.isNotEmpty) _barcodeCtrl.text = prefillBarcode;
     _loadData();
   }
 
@@ -178,7 +198,32 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     _supplierCtrl.dispose();
     _manufacturerCtrl.dispose();
     _categoryCtrl.dispose();
+    _barcodeCtrl.dispose();
     super.dispose();
+  }
+
+  /// Soft barcode-collision check (#113): looks up the typed barcode and, if a
+  /// DIFFERENT product already uses it, records that product's name so the field
+  /// can warn. Never blocks — barcodes are only softly unique (no DB UNIQUE, to
+  /// avoid jamming the offline outbox).
+  Future<void> _onBarcodeChanged(String value) async {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      if (_barcodeCollisionName != null) {
+        setState(() => _barcodeCollisionName = null);
+      }
+      return;
+    }
+    final db = ref.read(databaseProvider);
+    final match = await db.catalogDao.findProductByBarcode(trimmed);
+    if (!mounted) return;
+    final collision =
+        (match != null && match.id != _selectedExistingProduct?.id)
+        ? match.name
+        : null;
+    if (collision != _barcodeCollisionName) {
+      setState(() => _barcodeCollisionName = collision);
+    }
   }
 
   void _onSupplierChanged(String query) {
@@ -297,9 +342,11 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         ? (product.emptyCrateValueKobo / 100).toStringAsFixed(2)
         : '';
     _lowStockCtrl.text = product.lowStockThreshold.toString();
+    _barcodeCtrl.text = product.barcode ?? '';
 
     setState(() {
       _selectedExistingProduct = product;
+      _barcodeCollisionName = null;
       _unit = product.unit;
       _size = product.size;
       _trackEmpties = product.trackEmpties;
@@ -344,12 +391,14 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     _manufacturerCtrl.clear();
     _supplierCtrl.clear();
     _categoryCtrl.clear();
+    _barcodeCtrl.clear();
     setState(() {
       _selectedExistingProduct = null;
+      _barcodeCollisionName = null;
       _unit = _lexicon.unit;
       _size = null;
       _expiryDate = null;
-      _trackEmpties = _unit.toLowerCase() == 'bottle';
+      _trackEmpties = _unit?.toLowerCase() == 'bottle';
       _allowFractionalSales = false;
       _selectedManufacturer = null;
       _selectedSupplier = null;
@@ -515,7 +564,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
 
   /// Empty-crate value in kobo, or null when not tracking empties / left blank.
   int? get _emptyCrateValueKobo {
-    if (!(_effectiveTrackEmpties && _unit.toLowerCase() == 'bottle')) {
+    if (!(_effectiveTrackEmpties && _unit?.toLowerCase() == 'bottle')) {
       return null;
     }
     final raw = _emptyCrateValueCtrl.text.trim();
@@ -627,6 +676,9 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
           supplierId: _selectedSupplier?.id,
           size: _size,
           expiryDate: _expiryDate,
+          barcode: _barcodeCtrl.text.trim().isEmpty
+              ? null
+              : _barcodeCtrl.text.trim(),
         );
 
         // Persist the crate value at the manufacturer level (§16.5).
@@ -668,7 +720,10 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         CrashReporter.record(e, st, context: 'inventory.add_product');
         debugPrint('AddProductScreen._save (existing) error: $e');
         if (mounted) {
-          AppNotification.showError(context, 'Could not update product: $e');
+          AppNotification.showError(
+            context,
+            'Could not update ${_lexicon.itemLower}: $e',
+          );
         }
       } finally {
         if (mounted) setState(() => _isSaving = false);
@@ -746,7 +801,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       if (mounted) {
         AppNotification.showError(
           context,
-          'A product named "$name" already exists.',
+          'A ${_lexicon.itemLower} named "$name" already exists.',
         );
       }
       return;
@@ -814,6 +869,9 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
           colorHex: drift.Value(_colorHex),
           size: drift.Value(_size),
           expiryDate: drift.Value(_expiryDate),
+          barcode: drift.Value(
+            _barcodeCtrl.text.trim().isEmpty ? null : _barcodeCtrl.text.trim(),
+          ),
           lowStockThreshold: drift.Value(lowStock),
           manufacturerId: drift.Value(_selectedManufacturer?.id),
           supplierId: drift.Value(_selectedSupplier?.id),
@@ -856,7 +914,10 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       CrashReporter.record(e, st, context: 'inventory.add_product');
       debugPrint('AddProductScreen._save error: $e');
       if (mounted) {
-        AppNotification.showError(context, 'Could not save product: $e');
+        AppNotification.showError(
+          context,
+          'Could not save ${_lexicon.itemLower}: $e',
+        );
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -886,6 +947,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         hasManufacturer: _selectedManufacturer != null ||
             _manufacturerCtrl.text.trim().isNotEmpty,
         selectedStoreId: _selectedStore?.id,
+        barcode: _barcodeCtrl.text,
       ),
       FastAddContext(
         tracksCrates: _isCrateBusiness,
@@ -923,7 +985,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       if (mounted) {
         AppNotification.showError(
           context,
-          'A product named "${intent.name}" already exists.',
+          'A ${_lexicon.itemLower} named "${intent.name}" already exists.',
         );
       }
       return;
@@ -970,6 +1032,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
           colorHex: drift.Value(_colorHex),
           size: drift.Value(_size),
           expiryDate: drift.Value(_expiryDate),
+          barcode: drift.Value(intent.barcode),
           lowStockThreshold: drift.Value(intent.lowStockThreshold),
           manufacturerId: drift.Value(_selectedManufacturer?.id),
           supplierId: drift.Value(_selectedSupplier?.id),
@@ -1026,7 +1089,10 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       CrashReporter.record(e, st, context: 'inventory.add_product');
       debugPrint('AddProductScreen._persistNewProduct error: $e');
       if (mounted) {
-        AppNotification.showError(context, 'Could not save product: $e');
+        AppNotification.showError(
+          context,
+          'Could not save ${_lexicon.itemLower}: $e',
+        );
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -1067,7 +1133,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     final border = Theme.of(context).dividerColor;
     final isExisting = _selectedExistingProduct != null;
     final canEditBuying = Gates.editBuyingPrice.allows(ref);
-    final manufacturerRequired = _unit.toLowerCase() == 'bottle' && _isCrateBusiness && _trackEmpties;
+    final manufacturerRequired = _unit?.toLowerCase() == 'bottle' && _isCrateBusiness && _trackEmpties;
 
     return Scaffold(
       // Keep the body + save button above the keyboard. This screen is pushed
@@ -1085,7 +1151,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
         leading: const BackButton(),
-        title: Text(isExisting ? 'Add Stock' : 'Add Product'),
+        title: Text(isExisting ? 'Add Stock' : 'Add ${_lexicon.item}'),
         titleTextStyle: TextStyle(
           fontSize: 18,
           fontWeight: FontWeight.w800,
@@ -1181,7 +1247,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Adding stock to existing product',
+                              'Adding stock to existing ${_lexicon.itemLower}',
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
@@ -1322,6 +1388,9 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                   hintText: _descriptionHint,
                 ),
                 const SizedBox(height: 14),
+                // ── BARCODE (optional) ─────────────────────────────────
+                _barcodeField(),
+                const SizedBox(height: 14),
                 Row(
                   children: [
                     Expanded(
@@ -1371,23 +1440,31 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // ── PRODUCT UNIT SELECTOR ──────────────────────────────
-                _sectionLabel('PRODUCT UNIT *', subtext),
+                // ── PRODUCT UNIT SELECTOR (optional, #108) ─────────────
+                _sectionLabel('PRODUCT UNIT', subtext),
                 const SizedBox(height: 8),
-                AppDropdown<String>(
+                AppDropdown<String?>(
                   value: _unit,
-                  items: _dynamicUnits
-                      .map((u) => DropdownMenuItem(value: u, child: Text(u)))
-                      .toList(),
+                  hintText: 'No unit',
+                  // "No unit" (#108) clears the unit — the product saves with
+                  // just its name and is hidden wherever the unit would render.
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('No unit'),
+                    ),
+                    ..._dynamicUnits.map(
+                      (u) =>
+                          DropdownMenuItem<String?>(value: u, child: Text(u)),
+                    ),
+                  ],
                   onChanged: (v) {
-                    if (v != null) {
-                      setState(() {
-                        _unit = v;
-                        // Auto-enable tracking for bottle products,
-                        // clear it for everything else.
-                        _trackEmpties = v.toLowerCase() == 'bottle';
-                      });
-                    }
+                    setState(() {
+                      _unit = v;
+                      // Auto-enable tracking for bottle products, off otherwise
+                      // (a null unit is not a bottle).
+                      _trackEmpties = v?.toLowerCase() == 'bottle';
+                    });
                   },
                 ),
                 const SizedBox(height: 8),
@@ -1398,8 +1475,8 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                   onChanged: (v) =>
                       setState(() => _allowFractionalSales = v ?? false),
                   title: const Text('Allow fractional sales'),
-                  subtitle: const Text(
-                    'Enables ±0.5 quantity steps when selling this product',
+                  subtitle: Text(
+                    'Enables ±0.5 quantity steps when selling this ${_lexicon.itemLower}',
                   ),
                   controlAffinity: ListTileControlAffinity.leading,
                   contentPadding: EdgeInsets.zero,
@@ -1477,14 +1554,14 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                 // ── TRACK EMPTIES + CRATE VALUE (directly below Manufacturer) ─
                 // Crate-only (rule #13): hidden for non-Bar/Beer-distributor
                 // businesses; _effectiveTrackEmpties also forces it off on save.
-                if (_unit.toLowerCase() == 'bottle' && _isCrateBusiness) ...[
+                if (_unit?.toLowerCase() == 'bottle' && _isCrateBusiness) ...[
                   CheckboxListTile(
                     value: _trackEmpties,
                     onChanged: (v) =>
                         setState(() => _trackEmpties = v ?? false),
                     title: const Text('Track empty crate returns'),
-                    subtitle: const Text(
-                      'Enables deposit collection and crate return flow for this product',
+                    subtitle: Text(
+                      'Enables deposit collection and crate return flow for this ${_lexicon.itemLower}',
                     ),
                     controlAffinity: ListTileControlAffinity.leading,
                     contentPadding: EdgeInsets.zero,
@@ -1624,7 +1701,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
           12 + context.deviceBottomPadding,
         ),
         child: AppButton(
-          text: isExisting ? 'Add Stock' : 'Add Product',
+          text: isExisting ? 'Add Stock' : 'Add ${_lexicon.item}',
           variant: AppButtonVariant.primary,
           isLoading: _isSaving,
           onPressed: _save,
@@ -1796,6 +1873,10 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       ),
       const SizedBox(height: 14),
 
+      // ── BARCODE (optional) ──────────────────────────────────────────────
+      _barcodeField(),
+      const SizedBox(height: 14),
+
       // ── WHOLESALER PRICE (optional; mirrors selling on save) ────────────
       AppInput(
         controller: _wholesalePriceCtrl,
@@ -1809,19 +1890,27 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       // ── PRODUCT UNIT ────────────────────────────────────────────────────
       _sectionLabel('PRODUCT UNIT', subtext),
       const SizedBox(height: 8),
-      AppDropdown<String>(
+      AppDropdown<String?>(
         value: _unit,
-        items: _dynamicUnits
-            .map((u) => DropdownMenuItem(value: u, child: Text(u)))
-            .toList(),
+        hintText: 'No unit',
+        // "No unit" (#108) clears the unit — the product saves with just its
+        // name and is hidden wherever the unit would render.
+        items: [
+          const DropdownMenuItem<String?>(
+            value: null,
+            child: Text('No unit'),
+          ),
+          ..._dynamicUnits.map(
+            (u) => DropdownMenuItem<String?>(value: u, child: Text(u)),
+          ),
+        ],
         onChanged: (v) {
-          if (v != null) {
-            setState(() {
-              _unit = v;
-              // Auto-enable tracking for bottle products, clear it otherwise.
-              _trackEmpties = v.toLowerCase() == 'bottle';
-            });
-          }
+          setState(() {
+            _unit = v;
+            // Auto-enable tracking for bottle products, off otherwise (a null
+            // unit is not a bottle).
+            _trackEmpties = v?.toLowerCase() == 'bottle';
+          });
         },
       ),
       const SizedBox(height: 8),
@@ -1831,8 +1920,8 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         value: _allowFractionalSales,
         onChanged: (v) => setState(() => _allowFractionalSales = v ?? false),
         title: const Text('Allow fractional sales'),
-        subtitle: const Text(
-          'Enables ±0.5 quantity steps when selling this product',
+        subtitle: Text(
+          'Enables ±0.5 quantity steps when selling this ${_lexicon.itemLower}',
         ),
         controlAffinity: ListTileControlAffinity.leading,
         contentPadding: EdgeInsets.zero,
@@ -1841,13 +1930,13 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       const SizedBox(height: 16),
 
       // ── TRACK EMPTIES + CRATE VALUE (crate business + bottle only) ──────
-      if (_unit.toLowerCase() == 'bottle' && _isCrateBusiness) ...[
+      if (_unit?.toLowerCase() == 'bottle' && _isCrateBusiness) ...[
         CheckboxListTile(
           value: _trackEmpties,
           onChanged: (v) => setState(() => _trackEmpties = v ?? false),
           title: const Text('Track empty crate returns'),
-          subtitle: const Text(
-            'Enables deposit collection and crate return flow for this product',
+          subtitle: Text(
+            'Enables deposit collection and crate return flow for this ${_lexicon.itemLower}',
           ),
           controlAffinity: ListTileControlAffinity.leading,
           contentPadding: EdgeInsets.zero,
@@ -1943,6 +2032,40 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     padding: const EdgeInsets.only(top: 6, left: 4),
     child: Text(text, style: TextStyle(fontSize: 11, color: subtext)),
   );
+
+  /// Optional barcode field (#113) with a live soft-collision warning. Shared by
+  /// the Fast-Add and classic layouts. Typing runs [_onBarcodeChanged], which
+  /// warns (never blocks) if another product already uses the code.
+  Widget _barcodeField() {
+    final error = Theme.of(context).colorScheme.error;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AppInput(
+          controller: _barcodeCtrl,
+          labelText: 'Barcode (optional)',
+          hintText: 'Type or scan the ${_lexicon.itemLower} barcode',
+          onChanged: _onBarcodeChanged,
+        ),
+        if (_barcodeCollisionName != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6, left: 4),
+            child: Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, size: 14, color: error),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Already used by "$_barcodeCollisionName". You can still save.',
+                    style: TextStyle(fontSize: 11, color: error),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
 
   Widget _moreDetailsHeader(Color subtext, Color textColor) => InkWell(
     onTap: () => setState(() => _showMoreDetails = !_showMoreDetails),

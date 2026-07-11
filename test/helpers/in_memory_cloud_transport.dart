@@ -228,6 +228,42 @@ class InMemoryCloudTransport implements CloudTransport {
     subscribedTables.clear();
   }
 
+  // ── BROADCAST (live signal, #101) ────────────────────────────────────────────
+  void Function()? _onBroadcastSignal;
+
+  /// The business id the broadcast channel is currently bound to (null when no
+  /// broadcast subscription is live). Spy for lifecycle assertions.
+  String? broadcastBusinessId;
+
+  /// Count of [startBroadcast] / [stopBroadcast] calls, for lifecycle tests.
+  int startBroadcastCount = 0;
+  int stopBroadcastCount = 0;
+
+  /// Whether a broadcast subscription is currently live.
+  bool get broadcastActive => _onBroadcastSignal != null;
+
+  @override
+  void startBroadcast(String businessId, {required void Function() onSignal}) {
+    if (_onBroadcastSignal != null) return; // idempotent, mirrors the adapter
+    _onBroadcastSignal = onSignal;
+    broadcastBusinessId = businessId;
+    startBroadcastCount++;
+  }
+
+  @override
+  Future<void> stopBroadcast() async {
+    _onBroadcastSignal = null;
+    broadcastBusinessId = null;
+    stopBroadcastCount++;
+  }
+
+  /// Pump one server-emitted broadcast signal to the registered handler. The
+  /// real message carries `{table, id, op}`, but the mobile client's reaction
+  /// to any signal is identical (schedule a pull), so the fake models the
+  /// signal as a bare nudge — deliberately giving the handler no row data,
+  /// which is exactly why a broadcast can never write Drift.
+  void emitBroadcastSignal() => _onBroadcastSignal?.call();
+
   /// Pump an upsert realtime event for [table]/[row] to the registered handler.
   void emitUpsert(String table, Map<String, dynamic> row) => _onChange?.call(
     PostgresChangePayload(

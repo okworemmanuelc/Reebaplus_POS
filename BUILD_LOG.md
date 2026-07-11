@@ -2,6 +2,167 @@
 
 ---
 
+## 2026-07-11 — Oversell orphan recovery: one-tap Cancel + local crate reversal (Slice 2c)
+
+Completes the reversal on branch `feat/oversell-orphan-recovery`. The go-live flip stays
+HELD (gated on device rollout), but the undo is now code-complete.
+
+**Crate-balance reversal.** `OrdersDao.reverseRejectedSaleLocal` gained a 4th step: it un-issues
+the LOCAL crate balance via new `CrateLedgerDao.reverseIssuedByCustomerLocal`. A rejected v2
+sale's 'issued' crate rows were held then discarded (never reached the cloud), and
+`customer_crate_balances` is an LWW cache that won't self-heal on pull — so it must be undone
+locally. Mirrors the wallet step: append a compensating `-qty` 'adjusted' crate_ledger row (so
+ledger↔cache stays consistent for `verifyCrateReconciliation`) + decrement the cache back to
+pre-sale. Local-only, never enqueued.
+
+**One-tap Cancel (the cashier action).** New `OrderCommands.cancelRejectedSale(orderId,
+staffId)` (surfaced on the `OrderService` facade). A v2 sale writes no local `order_items`, so
+it re-sources the sold lines from the orphaned envelope via new `SyncDao.rejectedSalePayload`
+(reads `p_items` / `p_store_id` out of `sync_queue_orphans`), then runs the complete local
+reversal (order + inventory + wallet + crate). Idempotent; still cancels the phantom order
+header even if the orphan is already gone.
+
+**UI wiring.** The `sale_rejected` alert in `notifications_modal.dart` is now tappable → a
+plain-language confirm dialog ("Sale could not be completed" / "Cancel the sale" / "Keep") →
+`cancelRejectedSale`, with success/error toasts and the alert cleared on success. Added the
+alert icon/colour for the type.
+
+**Verify.** `flutter analyze` clean; `test/orders` + `test/crates` + `test/sync` (270) green,
+incl. new `cancel_rejected_sale_test.dart` (source-from-envelope / orphan-gone / idempotent)
+and a crate-reversal case in `reverse_rejected_sale_test.dart`. Also dropped an unused
+`drift/native.dart` import in `oversell_orphan_notification_test.dart`.
+
+---
+
+## 2026-07-08 — Oversell orphan recovery: notify the cashier + complete local undo (Slices 1 + 2b)
+
+Resolves the A-S6 orphan-UX open question (human chose: notify + cancel). Branch
+`feat/oversell-orphan-recovery` off `main` (post-#105).
+
+**Slice 1 — notify.** When `pos_record_sale_v2` permanently rejects a sale
+(`insufficient_stock` / `inventory_row_missing` — a concurrent till took the last unit),
+`_pushDomainItems` fires an alert notification via `_notifyCashierSaleRejected`, targeted
+at the cashier (`recipientUserId`) and linked to the order (`linkedRecordId`). Best-effort.
+Test `oversell_orphan_notification_test.dart`.
+
+**Slice 2b — complete local undo.** New `OrdersDao.reverseRejectedSaleLocal(orderId, items,
+staffId)`: local-only (a rejected sale never reached the cloud), never enqueued — cancels the
+order, refunds inventory from `items` (a v2 sale writes no local `stock_transactions`), and
+reverses the §14.3 wallet double-entry via compensating legs. Idempotent. The foreground
+`_compensateRejectedSale` now delegates to it, so the online-checkout rejection path ALSO
+reverses the wallet (it previously left the customer debited — the money-safety gap #105
+introduced). Test `reverse_rejected_sale_test.dart` (walk-in, register-as-credit balance
+restored, idempotency).
+
+**Deeper pre-existing finding (surfaced, held).** On v2, `createOrder` eagerly enqueues the
+sale's child rows; `cost_batches` and `customer_crate_balances` do NOT FK the order, so a
+rejection leaks them to the cloud (FK-bound wallet/crate_ledger rows correctly orphan). Root
+fix = defer the v2 child enqueues until the RPC confirms (or outbox-clean on reversal). Crate
++ cost reversal is entangled with this. Held for a coherent fix + alignment. Go-live flag
+flip stays HELD until the reversal is complete + shipped.
+
+**Verified.** `flutter analyze` clean; orders/sync/wallet/crates/costing suites green.
+
+**Files:** `lib/core/services/supabase_sync_service.dart`, `lib/core/database/daos_orders.dart`,
+`lib/shared/services/orders/order_commands.dart`,
+`test/sync/oversell_orphan_notification_test.dart`, `test/orders/reverse_rejected_sale_test.dart`,
+`context/progress-tracker.md`.
+
+---
+
+## 2026-07-11 — Guard the periodic pull "safety net" against silent removal (issue #102, Workstream C)
+
+**Context.** The periodic `catchUpPull` on the 30 s sync tick (shipped #98/#99) is the
+reconnect-replay backstop that makes Workstream B's (Broadcast) deliberate *no-replay*
+acceptable — a device that misses an ephemeral broadcast re-converges within one tick.
+Workstream C's job is to **keep** it and make it un-removable.
+
+**C-S1 (guard).** Behaviour-preserving refactor in
+`lib/core/services/supabase_sync_service.dart`: the inline `Timer.periodic` body was
+extracted into `_installPeriodicSafetyNet()` (keeps the idempotent `??=`) →
+`_periodicSafetyNetTick()`, plus four `@visibleForTesting` seams. New
+`test/sync/periodic_safety_net_test.dart` (5 tests) drives the **same** private
+installer/tick production uses, so it fails if that wiring drifts:
+- timer scheduled idempotently, at the **30 s** cadence, and **cancelled on logout**
+  (`stopAutoPush`);
+- a tick fires the silent `catchUpPull(reason: 'periodic')` when foreground + online +
+  business-bound;
+- a tick **pulls nothing** when logged-out (backgrounded/suspended state) or offline;
+- under `fakeAsync`, elapsing 30 s actually invokes the pull tick, and after logout no
+  further ticks fire.
+
+The best-effort push/pull inside the tick throws in the test env (Supabase not
+initialized, `shared_preferences` MissingPlugin) and is swallowed exactly as in prod;
+the assertions ride on the synchronous `_lastCatchUpAt` stamp, which is set before any
+await, so they're unaffected.
+
+**C-S2 (cadence decision, human).** **KEEP 30 s.** Broadcast (B) is not built yet, so
+30 s remains the plan default; tighten toward ~10 s only if B is later delayed or fails
+B0 verification. No code change — the 30 s cadence is now pinned by the test, so any
+future change is forced through review.
+
+**Verify.** `flutter analyze` clean; `flutter test test/sync/` → 195 green (the 5 new +
+190 existing). No schema/migration; outbox and append-only ledgers untouched.
+
+---
+
+## 2026-07-11 — Broadcast live-signal layer (issue #101, Workstream B, slices B1–B7)
+
+**What shipped.** A writer-agnostic live-sync **signal** via Supabase Broadcast, entirely
+additive alongside the existing `postgres_changes` path (belt-and-suspenders — the B0 gate
+found `postgres_changes` is no longer refused, so B does NOT rip it out; retiring it is a
+separate follow-up decision surfaced to the human).
+
+**B1 — emit trigger (migration `0147_broadcast_sync_signal.sql`, DEPLOYED via
+apply_migration + verified).** One generic `zz_broadcast_sync_signal()` AFTER
+INSERT/UPDATE/DELETE trigger attached to every business-scoped `public` base table (+
+`businesses`) via a DB-driven loop = **60 tables**. Emits minimal `{table,id,op}` (no row
+data) to `store_<business_id>` through `realtime.send(...,'sync',...,private:=true)`.
+Write-safe (`EXCEPTION WHEN OTHERS THEN NULL`), fires last (`zz_` name, AFTER row), skips
+no-op updates, `SECURITY DEFINER SET search_path=''`, `EXECUTE` revoked from client roles
+(the security advisor flagged the SECURITY DEFINER function's RPC exposure — a trigger
+fires regardless of the grant, so revoking is safe). Verified live in a rolled-back txn:
+an UPDATE emits the exact payload and the write still succeeds.
+
+**B2 — RLS (migration `0148_realtime_broadcast_authorization.sql`, DEPLOYED + verified).**
+Exactly one `SELECT` policy on `realtime.messages` scoping topic `store_<business_id>` to
+`current_user_business_ids()`; NO `INSERT` policy (clients only receive; the definer trigger
+emits, so a client can't spoof a signal). Verified by JWT-claim impersonation: own topic
+allowed, another tenant's denied.
+
+**B3/B4 — client seam + wiring.** `CloudTransport.startBroadcast(businessId,{onSignal})` /
+`stopBroadcast()` (bare `void Function()` callback — structurally can't write Drift).
+`SupabaseCloudTransport` opens one private channel (`setAuth` before subscribe, `replay`
+unset). Broadcast rides realtime's exact lifecycle (piggybacks `startRealtimeSync` /
+`_tearDownRealtimeChannels`). `_onBroadcastSignal` → debounced `catchUpPull('broadcast')`.
+
+**B5.** A missed signal still converges on the periodic/reconnect pull (Workstream C) — no
+dependency on broadcast replay.
+
+**B6.** Web reception filed as `okworemmanuelc/reebaplus-web#55` (out of scope here).
+
+**Verified.** `flutter analyze` clean project-wide (0 err / 0 new warn). `flutter test
+test/sync/` 198 green — new `test/sync/broadcast_signal_test.dart` (lifecycle, signal →
+debounced pull, no-Drift-write invariant, no-replay) + broadcast fidelity added to
+`cloud_transport_seam_test.dart`. **End-to-end Tier-2** `test/integration/
+broadcast_signal_live_test.dart` (`@Tags(['integration'])`, env-gated) PASSED against real
+dev Supabase: a service-role write delivered `{table:products,id,op:UPDATE}` to a
+subscribed private-channel client on `store_<biz>` in ~4s.
+
+**Invariants (by name):** #1 Broadcast never writes Drift (only schedules a pull); #5 no
+cross-tenant signal leak (per-tenant RLS); #10 pull-cursor path untouched; #12 outbox
+untouched.
+
+**Files:** `supabase/migrations/0147_broadcast_sync_signal.sql` (new),
+`supabase/migrations/0148_realtime_broadcast_authorization.sql` (new),
+`lib/core/services/cloud_transport.dart`, `lib/core/services/supabase_cloud_transport.dart`,
+`lib/core/services/supabase_sync_service.dart`, `test/helpers/in_memory_cloud_transport.dart`,
+`test/sync/broadcast_signal_test.dart` (new), `test/sync/cloud_transport_seam_test.dart`,
+`test/integration/broadcast_signal_live_test.dart` (new), `CONTEXT/architecture.md`,
+`CONTEXT/progress-tracker.md`.
+
+---
+
 ## 2026-07-08 — Exactly-once stock: idempotency backstops + mutable-balance-cache audit (issue #100, A-S5/A-S6)
 
 **A-S5 (idempotency backstops).** Added `test/sync/stock_reprocess_idempotency_test.dart`:

@@ -179,6 +179,45 @@ abstract final class Restore {
     }
   };
 
+  /// Like [plain], but for an approval-request table whose `status` is
+  /// MONOTONIC: a row goes `pending` → a terminal state (`approved` /
+  /// `rejected` / `cancelled`) and never back. The generic LWW clobber-guard is
+  /// status-blind, and its same-second `>=` tie rule (and clock skew) can let a
+  /// stale or out-of-order cloud snapshot carrying the pre-resolution `pending`
+  /// state win once the protecting outbox entry has drained — resurrecting a
+  /// resolved request into the pending approvals count (issue #115). This
+  /// restore drops an incoming `pending` row whenever the local row is already
+  /// resolved; every other transition (including the normal cross-device
+  /// `pending` → terminal convergence, and terminal → terminal) applies exactly
+  /// as [plain].
+  static RestoreFn monotonicStatus<T extends Table, D extends Insertable<D>>(
+    TableInfo<T, D> Function(AppDatabase db) tableOf,
+    D Function(Map<String, dynamic> json) fromJson, {
+    bool resilient = true,
+  }) => (ex, table, rows, fkSkipped) async {
+    final t = tableOf(ex.db);
+    for (final r in rows) {
+      final data = fromJson(r);
+      Future<void> doInsert() async {
+        final id = r['id'];
+        if (r['status'] == 'pending' && id is String) {
+          final local = await ex.localStatusFor(table, id);
+          if (local != null && local != 'pending') {
+            // Resolved locally — a stale/duplicate pending snapshot must not
+            // revert it back into the pending set.
+            return;
+          }
+        }
+        await ex.db.into(t).insertOnConflictUpdate(data);
+      }
+      if (resilient) {
+        await ex.insertResilient(table, r, fkSkipped, doInsert);
+      } else {
+        await doInsert();
+      }
+    }
+  };
+
   /// Upsert on a NATURAL key rather than the surrogate `id`: two id-minting
   /// authorities (client UuidV7 vs cloud gen_random_uuid) produce different ids
   /// for the same logical row, so a PK-keyed upsert trips the cloud UNIQUE
@@ -293,6 +332,20 @@ class SyncRestoreExecutor {
   /// `_healLocalOrderNumberBlocker`. Returns false when no heal is wired.
   Future<bool> healLocalOrderNumberBlocker(OrderData cloudOrder) =>
       _healOrderBlocker?.call(cloudOrder) ?? Future.value(false);
+
+  /// Current local `status` of one row of [table] (by `id`), or null when the
+  /// row is absent locally. Backs [Restore.monotonicStatus] — a terminal local
+  /// row must never regress to `pending` on a stale/out-of-order pull. [table]
+  /// is a registry name (trusted, never user input).
+  Future<String?> localStatusFor(String table, String id) async {
+    final row = await db
+        .customSelect(
+          'SELECT status FROM $table WHERE id = ?',
+          variables: [Variable.withString(id)],
+        )
+        .getSingleOrNull();
+    return row?.read<String>('status');
+  }
 
   /// Inserts one restore row, isolating FOREIGN KEY violations so a single
   /// orphaned child can't abort the whole restore transaction and crash the
@@ -812,7 +865,10 @@ final List<SyncedTable> kSyncRegistry = [
   SyncedTable(
     name: 'stock_adjustment_requests',
     tenantScoped: true,
-    restore: Restore.plain(
+    // Monotonic status (pending → approved/rejected, never back): a stale/
+    // out-of-order pending snapshot must not resurrect a resolved request into
+    // the pending approvals count (issue #115).
+    restore: Restore.monotonicStatus(
       (db) => db.stockAdjustmentRequests,
       StockAdjustmentRequestData.fromJson,
       resilient: true,
@@ -821,7 +877,10 @@ final List<SyncedTable> kSyncRegistry = [
   SyncedTable(
     name: 'quick_sale_requests',
     tenantScoped: true,
-    restore: Restore.plain(
+    // Same monotonic-status guard as stock_adjustment_requests — the sibling
+    // feeder of the Reports approvals count (pending → approved/rejected/
+    // cancelled, never back).
+    restore: Restore.monotonicStatus(
       (db) => db.quickSaleRequests,
       QuickSaleRequestData.fromJson,
       resilient: true,

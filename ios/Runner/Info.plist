@@ -61,7 +61,7 @@
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>Reebaplus POS uses Bluetooth to connect to thermal receipt printers.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Reebaplus POS needs camera access to take product photos.</string>
+	<string>Reebaplus POS needs camera access to take product photos and scan product barcodes.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Reebaplus POS uses Face ID to unlock the app.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

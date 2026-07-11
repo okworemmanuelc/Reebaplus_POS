@@ -6,12 +6,15 @@
 // These tests exercise the module's public behaviour, never its internals:
 //   (a) resolution   — canonical labels, legacy casings, unknown/null → generic;
 //   (b) membership   — the catalogue holds exactly the nine master-plan
-//                      industries, in plan order, with no duplicates and every
-//                      one selectable (the #79 unlock flipped coming-soon off);
+//                      industries, in plan order, with no duplicates and none
+//                      coming-soon (the #79 unlock flipped that off);
 //   (c) crate-gate   — crate-eligibility stays Bar/Beverage-only and reproduces
 //                      the old hardcoded `isCrateBusiness` truth table exactly;
 //   (d) golden pin   — a frozen snapshot of every catalogue entry, so any drift
-//                      in a label/icon/flag surfaces here for deliberate review.
+//                      in a label/icon/flag surfaces here for deliberate review;
+//   (e) selectable   — the pickers offer only the three selectable trades
+//                      (#112) while the registry keeps all nine, so hidden
+//                      trades still normalize + keep features (no migration).
 //
 // Prior art: test/permissions/gate_registry_membership_test.dart (membership)
 // and test/sync/sync_registry_golden_test.dart (frozen golden).
@@ -90,9 +93,10 @@ void main() {
           reason: 'duplicate label in the catalogue: $labels');
     });
 
-    test('every catalogue industry is selectable — none coming soon (#79)', () {
-      // The multi-industry unlock makes all nine selectable at onboarding, so
-      // the picker greys out nothing.
+    test('no catalogue industry is coming-soon (#79 unlock)', () {
+      // The multi-industry unlock flipped every coming-soon flag off, so the
+      // picker greys out nothing. (Whether a trade is *offered* is the separate
+      // `selectable` flag exercised in group (e).)
       expect(
         Industry.catalogue.where((i) => i.comingSoon).map((i) => i.label),
         isEmpty,
@@ -160,30 +164,94 @@ void main() {
   // === (d) GOLDEN PIN — frozen snapshot of the catalogue =================
 
   group('catalogue golden', () {
-    // FROZEN GOLDEN DATA — the exact facts each catalogue entry holds after the
-    // #79 unlock (nine industries, all selectable). A diff here means an
-    // industry's label, icon, coming-soon or crate flag changed: update this
-    // golden in the SAME commit, deliberately.
-    // (label | icon codepoint | comingSoon | crateEligible)
+    // FROZEN GOLDEN DATA — the exact facts each catalogue entry holds. The nine
+    // industries stay in the registry; #112 makes only three selectable. A diff
+    // here means an industry's label, icon, coming-soon, crate, or selectable
+    // flag changed: update this golden in the SAME commit, deliberately.
+    // (label | icon codepoint | comingSoon | crateEligible | selectable)
     const golden = <String>[
-      'Restaurant|0xf0108|false|false',
-      'Supermarket|0xf86e|false|false',
-      'Bar|0xf865|false|true',
-      'Beverage distributor|0xf01b8|false|true',
-      'Pharmacy|0xf877|false|false',
-      'Building Materials|0xf7a3|false|false',
-      'Boutique|0xf639|false|false',
-      'Phone & Gadgets|0xf019b|false|false',
-      'Frozen Foods & Grocery|0xf516|false|false',
+      'Restaurant|0xf0108|false|false|false',
+      'Supermarket|0xf86e|false|false|false',
+      'Bar|0xf865|false|true|false',
+      'Beverage distributor|0xf01b8|false|true|true',
+      'Pharmacy|0xf877|false|false|true',
+      'Building Materials|0xf7a3|false|false|false',
+      'Boutique|0xf639|false|false|false',
+      'Phone & Gadgets|0xf019b|false|false|false',
+      'Frozen Foods & Grocery|0xf516|false|false|true',
     ];
 
     test('catalogue matches the frozen golden', () {
       final actual = Industry.catalogue
           .map((i) =>
               '${i.label}|0x${i.icon.codePoint.toRadixString(16)}|'
-              '${i.comingSoon}|${i.crateEligible}')
+              '${i.comingSoon}|${i.crateEligible}|${i.selectable}')
           .toList();
       expect(actual, golden);
+    });
+  });
+
+  // === (e) SELECTABLE — pickers offer only the three (#112) ==============
+
+  group('selectable industries', () {
+    test('selectableCatalogue is exactly the three, in plan order', () {
+      expect(
+        Industry.selectableCatalogue.map((i) => i.label).toList(),
+        const [
+          'Beverage distributor',
+          'Pharmacy',
+          'Frozen Foods & Grocery',
+        ],
+      );
+    });
+
+    test('the other six trades + generic are not selectable', () {
+      final hidden =
+          Industry.values.where((i) => !i.selectable).map((i) => i.label);
+      expect(
+        hidden,
+        unorderedEquals(const [
+          'Restaurant',
+          'Supermarket',
+          'Bar',
+          'Building Materials',
+          'Boutique',
+          'Phone & Gadgets',
+          'Business', // generic
+        ]),
+      );
+      expect(Industry.generic.selectable, isFalse);
+    });
+
+    test('selectableCatalogue is a strict subset of the full catalogue', () {
+      for (final ind in Industry.selectableCatalogue) {
+        expect(Industry.catalogue, contains(ind));
+      }
+      expect(
+        Industry.selectableCatalogue.length,
+        lessThan(Industry.catalogue.length),
+        reason: 'the registry must keep more than the offered three',
+      );
+    });
+
+    test('a hidden-trade tenant still normalizes and keeps its features', () {
+      // The registry keeps all nine (#112): a tenant onboarded on a now-hidden
+      // trade must still resolve to its own profile (words + feature flags),
+      // never generic, with no data migration.
+      expect(industryOf('Boutique'), Industry.boutique);
+      expect(industryOf('Bar'), Industry.bar);
+      expect(Industry.boutique.selectable, isFalse);
+      // Bar keeps its crate features even though it is no longer offered.
+      expect(isCrateBusiness('Bar'), isTrue);
+    });
+
+    test('the legacy "beer distributor" alias resolves to selectable Beverage',
+        () {
+      final ind = industryOf('beer distributor');
+      expect(ind, Industry.beverage);
+      expect(ind.selectable, isTrue);
+      // No DB rewrite: the legacy canonical string still normalizes in code.
+      expect(industryOf('Beer distributor'), Industry.beverage);
     });
   });
 }

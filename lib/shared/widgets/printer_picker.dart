@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
 
 class PrinterPicker extends ConsumerStatefulWidget {
   final Function(BluetoothInfo) onSelected;
@@ -18,11 +19,24 @@ class PrinterPicker extends ConsumerStatefulWidget {
 class _PrinterPickerState extends ConsumerState<PrinterPicker> {
   bool _isLoading = true;
   List<BluetoothInfo> _devices = [];
+  ReceiptPaperSize _paperSize = ReceiptPaperSize.mm58;
 
   @override
   void initState() {
     super.initState();
+    _loadPaperSize();
     _loadDevices();
+  }
+
+  Future<void> _loadPaperSize() async {
+    final size = await ref.read(printerServiceProvider).getPaperSize();
+    if (mounted) setState(() => _paperSize = size);
+  }
+
+  void _onPaperSizeChanged(ReceiptPaperSize size) {
+    setState(() => _paperSize = size);
+    // Device-local, set-once hardware setting — applies to the next receipt.
+    ref.read(printerServiceProvider).savePaperSize(size);
   }
 
   Future<void> _loadDevices() async {
@@ -74,6 +88,47 @@ class _PrinterPickerState extends ConsumerState<PrinterPicker> {
                 IconButton(
                   icon: Icon(Icons.refresh, size: context.getRSize(20)),
                   onPressed: _loadDevices,
+                ),
+              ],
+            ),
+          ),
+          Divider(height: 1, color: border),
+          Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: context.getRSize(16),
+              vertical: context.getRSize(12),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Paper size',
+                  style: TextStyle(
+                    color: text,
+                    fontSize: context.getRFontSize(14),
+                  ),
+                ),
+                SegmentedButton<ReceiptPaperSize>(
+                  showSelectedIcon: false,
+                  segments: [
+                    ButtonSegment(
+                      value: ReceiptPaperSize.mm58,
+                      label: Text(
+                        '58mm',
+                        style: TextStyle(fontSize: context.getRFontSize(13)),
+                      ),
+                    ),
+                    ButtonSegment(
+                      value: ReceiptPaperSize.mm80,
+                      label: Text(
+                        '80mm',
+                        style: TextStyle(fontSize: context.getRFontSize(13)),
+                      ),
+                    ),
+                  ],
+                  selected: {_paperSize},
+                  onSelectionChanged: (selection) =>
+                      _onPaperSizeChanged(selection.first),
                 ),
               ],
             ),

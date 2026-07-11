@@ -321,8 +321,9 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     // when a synced row carries a null/foreign imagePath.
     if (product.imagePath != null) _imagePath = product.imagePath;
     // Keep the unit dropdown inclusive of a (possibly new) synced unit value.
-    if (!_allUnits.contains(product.unit)) {
-      _allUnits = ({..._allUnits, product.unit}.toList())..sort();
+    // A unitless product (#108) has nothing to add.
+    if (product.unit != null && !_allUnits.contains(product.unit)) {
+      _allUnits = ({..._allUnits, product.unit!}.toList())..sort();
     }
   }
 
@@ -958,9 +959,19 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                 width: context.getRSize(150),
                 child: AppDropdown<String?>(
                   value: _selectedUnit,
-                  items: _allUnits
-                      .map((u) => DropdownMenuItem(value: u, child: Text(u)))
-                      .toList(),
+                  hintText: 'No unit',
+                  // "No unit" (#108) clears the unit — a product with just a
+                  // name, hidden everywhere the unit would render.
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('No unit'),
+                    ),
+                    ..._allUnits.map(
+                      (u) =>
+                          DropdownMenuItem<String?>(value: u, child: Text(u)),
+                    ),
+                  ],
                   onChanged: _editMode
                       ? (val) => setState(() => _selectedUnit = val)
                       : (_) {},
@@ -1751,7 +1762,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                   : (notes.isEmpty ? 'Stock added by $actorName' : notes);
               final summary =
                   '$actorName ${isRemove ? 'removed' : 'added'} $qty '
-                  '${product.unit}(s) of ${product.name} '
+                  '${product.unit != null ? '${product.unit}(s) ' : ''}of ${product.name} '
                   '(${store.name})'
                   '${isRemove ? ' — ${reason!}' : ''}';
               final isStockKeeper =

@@ -3,6 +3,10 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
 
+    <!-- Camera: product photos (image_picker) and POS barcode scanning
+         (mobile_scanner, #118). Requested at runtime on first use. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+
     <!-- Photo gallery access for product images (pre-API 33 only) -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />

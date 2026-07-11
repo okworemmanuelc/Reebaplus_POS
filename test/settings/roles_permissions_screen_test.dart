@@ -121,8 +121,8 @@ void main() {
     expect(find.text('Cashier'), findsOneWidget);
     expect(find.text('Stock keeper'), findsOneWidget);
 
-    expect(find.text('All 35 permissions'), findsOneWidget); // CEO, locked
-    expect(find.text('2 of 35 permissions'), findsOneWidget); // Cashier
+    expect(find.text('All 36 permissions'), findsOneWidget); // CEO, locked
+    expect(find.text('2 of 36 permissions'), findsOneWidget); // Cashier
   });
 
   testWidgets('tapping a role card opens its detail', (tester) async {

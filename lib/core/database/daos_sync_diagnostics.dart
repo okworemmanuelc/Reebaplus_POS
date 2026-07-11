@@ -30,6 +30,11 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
             t.isSynced.not() &
             t.status.equals('pending') &
             tenantFilter &
+            // Oversell recovery: a HELD child row (of an unconfirmed v2 sale)
+            // is invisible to the drain until its envelope confirms (release)
+            // or is rejected (discard) — so a rejected sale never leaks its
+            // cost/crate/wallet rows to the cloud.
+            t.heldByOrderId.isNull() &
             (t.nextAttemptAt.isNull() |
                 t.nextAttemptAt.isSmallerOrEqualValue(now)),
       )
@@ -39,6 +44,94 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
       ..limit(limit);
 
     return query.get();
+  }
+
+  /// All `sync_queue` row ids for [businessId] (any status). Used by
+  /// `createOrder`'s v2 hold path to compute exactly which rows a sale just
+  /// enqueued (the set difference before/after the child writes), so they can be
+  /// held without threading an order id through every child DAO.
+  Future<Set<String>> queueRowIds(String businessId) async {
+    final rows = await (selectOnly(syncQueue)
+          ..addColumns([syncQueue.id])
+          ..where(syncQueue.businessId.equals(businessId)))
+        .map((r) => r.read(syncQueue.id)!)
+        .get();
+    return rows.toSet();
+  }
+
+  /// Oversell recovery — mark a set of just-enqueued child rows as HELD by
+  /// [orderId] (a v2 sale's cost/crate/wallet rows). Held rows are skipped by
+  /// [getPendingItems] until [releaseHeldByOrder] (envelope confirmed) or
+  /// [discardHeldByOrder] (envelope rejected). No-op on an empty set.
+  Future<void> holdRowsByOrder(List<String> queueIds, String orderId) async {
+    if (queueIds.isEmpty) return;
+    await (update(syncQueue)..where((t) => t.id.isIn(queueIds))).write(
+      SyncQueueCompanion(heldByOrderId: Value(orderId)),
+    );
+  }
+
+  /// Release the rows held for [orderId] back into the drain — the sale's
+  /// `pos_record_sale_v2` envelope CONFIRMED, so its child rows may now push
+  /// (the cloud order they reference exists).
+  Future<void> releaseHeldByOrder(String orderId) async {
+    await (update(syncQueue)..where((t) => t.heldByOrderId.equals(orderId)))
+        .write(const SyncQueueCompanion(heldByOrderId: Value(null)));
+  }
+
+  /// Discard the rows held for [orderId] — the sale was permanently REJECTED
+  /// (oversell), so the cloud has (and will have) no such order; its held child
+  /// rows must never push. A deliberate consequence of a rejected sale, so this
+  /// removal is sanctioned under Invariant #12 (not a silent destruction: the
+  /// rejected envelope itself is visible in `sync_queue_orphans`). Returns the
+  /// number of rows discarded.
+  Future<int> discardHeldByOrder(String orderId) {
+    return (delete(syncQueue)..where((t) => t.heldByOrderId.equals(orderId)))
+        .go();
+  }
+
+  /// Crash-safe reconciliation of HELD child rows (oversell recovery). For every
+  /// order that still has held rows, decide their fate from durable state — so a
+  /// crash between an envelope resolving and its release/discard can never
+  /// strand rows (silently un-pushed → Invariant #12):
+  ///   • the `pos_record_sale_v2` envelope is still in `sync_queue` (any status)
+  ///     → keep held (the sale hasn't resolved yet);
+  ///   • the envelope sits in `sync_queue_orphans` (REJECTED) → discard;
+  ///   • the envelope is gone from both (CONFIRMED — pushed + markDone) → release.
+  /// Runs at sign-in, on the periodic tick, and right after the domain drain.
+  /// Returns (released, discarded) order counts.
+  Future<({int released, int discarded})> reconcileHeldRows(
+    String businessId,
+  ) async {
+    final heldOrders = await customSelect(
+      'SELECT DISTINCT held_by_order_id AS oid FROM sync_queue '
+      'WHERE held_by_order_id IS NOT NULL AND business_id = ?1',
+      variables: [Variable.withString(businessId)],
+    ).get();
+    var released = 0;
+    var discarded = 0;
+    for (final row in heldOrders) {
+      final orderId = row.read<String>('oid');
+      final envelopePending = await customSelect(
+        "SELECT 1 FROM sync_queue "
+        "WHERE action_type = 'domain:pos_record_sale_v2' "
+        "AND json_extract(payload, '\$.p_order_id') = ?1 LIMIT 1",
+        variables: [Variable.withString(orderId)],
+      ).get();
+      if (envelopePending.isNotEmpty) continue; // still in flight
+      final envelopeOrphaned = await customSelect(
+        "SELECT 1 FROM sync_queue_orphans "
+        "WHERE action_type = 'domain:pos_record_sale_v2' "
+        "AND json_extract(payload, '\$.p_order_id') = ?1 LIMIT 1",
+        variables: [Variable.withString(orderId)],
+      ).get();
+      if (envelopeOrphaned.isNotEmpty) {
+        discarded += await discardHeldByOrder(orderId);
+      } else {
+        await releaseHeldByOrder(orderId);
+        released++;
+      }
+    }
+    return (released: released, discarded: discarded);
   }
 
   Future<void> markInProgress(String id) async {
@@ -446,6 +539,22 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
 
   Future<SyncQueueData?> getQueueItem(String id) {
     return (select(syncQueue)..where((t) => t.id.equals(id))).getSingleOrNull();
+  }
+
+  /// Oversell recovery — the payload of the REJECTED `pos_record_sale_v2`
+  /// envelope for [orderId] (now in `sync_queue_orphans`). The cashier's Cancel
+  /// action reads its `p_items` to rebuild the sold lines for the local reversal
+  /// (a v2 sale writes no local `order_items`). Null if not found.
+  Future<String?> rejectedSalePayload(String orderId) async {
+    final result = await customSelect(
+      "SELECT payload FROM sync_queue_orphans "
+      "WHERE action_type = 'domain:pos_record_sale_v2' "
+      "  AND json_extract(payload, '\$.p_order_id') = ?1 "
+      "ORDER BY moved_at DESC LIMIT 1",
+      variables: [Variable.withString(orderId)],
+      readsFrom: {syncQueueOrphans},
+    ).getSingleOrNull();
+    return result?.read<String>('payload');
   }
 
   /// Looks up a row in `sync_queue_orphans` by its ORIGINAL queue id —

@@ -360,7 +360,13 @@ class Products extends Table {
   TextColumn get subtitle => text().nullable()();
   TextColumn get sku => text().nullable()();
   TextColumn get size => text().nullable()();
-  TextColumn get unit => text().withDefault(const Constant('Bottle'))();
+  // Nullable (#108): a product may have NO unit. When absent it renders nothing
+  // anywhere (inventory, POS grid, receipts, product/category detail) — just the
+  // name — and crate-eligibility treats it as "not a bottle". The Add/Edit form
+  // pre-fills the trade's Lexicon unit as a CLEARABLE suggestion; clearing it
+  // saves null. No DB default: absence is a real "no unit" state, never a silent
+  // 'Bottle'. See supabase/migrations/0151_products_unit_nullable.sql.
+  TextColumn get unit => text().nullable()();
   // Reebaplus pivot step 14 (schema v18): the four legacy price columns
   // (retail / bulk breaker / distributor / selling) were dropped; products
   // now hold exactly three prices — buying (already here), retailer,
@@ -410,8 +416,9 @@ class Products extends Table {
   @override
   List<String> get customConstraints => [
     "CHECK (size IS NULL OR size IN ('big','medium','small'))",
-    // Keep in lock-step with [kProductUnits] above.
-    "CHECK (unit IN ('Bottle','Can','PET','Sachet','Keg','Crate','Pack','Carton','Piece','Bag','Box','Tin','Other'))",
+    // Keep in lock-step with [kProductUnits] above. NULL allowed (#108): a
+    // product may have no unit.
+    "CHECK (unit IS NULL OR unit IN ('Bottle','Can','PET','Sachet','Keg','Crate','Pack','Carton','Piece','Bag','Box','Tin','Other'))",
   ];
 }
 
@@ -1558,7 +1565,11 @@ class UserBusinesses extends Table {
 
   @override
   List<String> get customConstraints => [
-    "CHECK (status IN ('active','suspended'))",
+    // #107 staff offboarding added the terminal `removed` status. Widening this
+    // CHECK is a runtime-resolved change (customConstraints is not baked into
+    // the generated code), so no build_runner regen is needed; existing installs
+    // rebuild the table under the new CHECK via the schemaVersion 61 upgrade step.
+    "CHECK (status IN ('active','suspended','removed'))",
     'UNIQUE (user_id, business_id)',
   ];
 }
@@ -1650,6 +1661,13 @@ class SyncQueue extends Table {
   // orphan row, and the sweep stamps `count + 1` when it re-enqueues. 0 for a
   // normal first-time write.
   IntColumn get autoRetryCount => integer().withDefault(const Constant(0))();
+  // Oversell recovery: a v2 sale's child rows (cost_batches, crate rows, wallet
+  // legs) are enqueued HELD by their order id — the drain skips them until the
+  // guarded `pos_record_sale_v2` envelope for that order CONFIRMS (then they're
+  // released → pushed) or is REJECTED (then they're discarded → never leak to
+  // the cloud). Null = a normal, immediately-drainable row. Device-local only
+  // (sync_queue never syncs), so no cloud column.
+  TextColumn get heldByOrderId => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -1835,7 +1853,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 59;
+  int get schemaVersion => 62;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3954,6 +3972,86 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(products, products.imageUrl);
         }
       }
+      if (from < 60) {
+        // v60 (oversell recovery): sync_queue.held_by_order_id — a v2 sale's
+        // child rows (cost_batches / crate / wallet) are held until their
+        // pos_record_sale_v2 envelope confirms, so a rejected sale never leaks
+        // them to the cloud. Device-local only. Idempotency guard for a DB
+        // stepped back to < 60 by the revert-then-re-upgrade tests.
+        final has = await customSelect(
+          "SELECT 1 FROM pragma_table_info('sync_queue') "
+          "WHERE name = 'held_by_order_id'",
+        ).get();
+        if (has.isEmpty) {
+          await m.addColumn(syncQueue, syncQueue.heldByOrderId);
+        }
+      }
+      if (from < 61) {
+        // v61 (#107 staff offboarding): widen the user_businesses.status CHECK to
+        // admit the terminal `removed` state (was active/suspended only), and seed
+        // the new `staff.remove` permission key into the local catalog. Mirrors
+        // supabase/migrations/0149_remove_staff_member.sql.
+        //
+        // (1) SQLite can't ALTER a CHECK constraint, so rebuild user_businesses to
+        //     pick up the 3-value CHECK from the current Drift customConstraints.
+        //     TableMigration copies every row 1:1 — WIDENING keeps all existing
+        //     active/suspended rows valid, so the copy never fails. drift's
+        //     alterTable re-applies the table's EXISTING indexes (with their old
+        //     definitions), so DROP-then-CREATE each AFTER the rebuild to stay
+        //     idempotent (same fix as the v29 crate_ledger rebuild). Triggers are
+        //     NOT re-applied by alterTable, but DROP IF EXISTS keeps a partial
+        //     re-run (revert-then-re-upgrade migration tests) safe. The index +
+        //     trigger definitions match onCreate exactly.
+        await m.alterTable(TableMigration(userBusinesses));
+        await customStatement(
+          'DROP INDEX IF EXISTS idx_user_businesses_business_lua',
+        );
+        await customStatement(
+          'CREATE INDEX idx_user_businesses_business_lua '
+          'ON user_businesses (business_id, last_updated_at)',
+        );
+        await customStatement('DROP INDEX IF EXISTS idx_user_businesses_user');
+        await customStatement(
+          'CREATE INDEX idx_user_businesses_user ON user_businesses (user_id)',
+        );
+        await customStatement(
+          'DROP TRIGGER IF EXISTS bump_user_businesses_last_updated_at',
+        );
+        await customStatement(
+          'CREATE TRIGGER bump_user_businesses_last_updated_at '
+          'AFTER UPDATE ON user_businesses '
+          'FOR EACH ROW '
+          'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+          'BEGIN '
+          "UPDATE user_businesses SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+          'END',
+        );
+
+        // (2) Seed the staff.remove permission key. CEO-only by default; the CEO
+        //     grant arrives from the cloud via pull (CEO backfill in 0149). Hidden
+        //     from nothing — it is a grantable Staff permission (the CEO can grant
+        //     it to a Manager). Idempotent — key is the PK. Mirrors the v48
+        //     settings.delete_business seed pattern.
+        await customStatement(
+          "INSERT OR IGNORE INTO permissions (key, description, category) "
+          "VALUES ('staff.remove', "
+          "'Permanently remove staff (frees their email)', 'Staff')",
+        );
+      }
+      if (from < 62) {
+        // v62 (#108 optional product units): products.unit becomes NULLABLE
+        // with a relaxed CHECK (null allowed) and no DB default — a product may
+        // have no unit. SQLite can't ALTER a column's NOT NULL / DEFAULT / CHECK
+        // in place, so rebuild the table from the current Drift schema (nullable
+        // unit, relaxed CHECK, no default) and copy every row. RELAXING keeps
+        // every existing non-null unit valid, so the 1:1 copy never fails — no
+        // backfill, existing units are unchanged. alterTable preserves the
+        // table's indexes and the bump_products_version trigger (re-creates them
+        // from sqlite_master), so nothing here needs manual recreation (same as
+        // the v24 products rebuild). Mirrors
+        // supabase/migrations/0151_products_unit_nullable.sql.
+        await m.alterTable(TableMigration(products));
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -4174,7 +4272,7 @@ const List<String> _v13HotPathIndexStatements = [
 // Identical on every device and on the cloud (mirror this list in
 // supabase/migrations/0043_seed_permissions_and_backfill_businesses.sql).
 // Each row: (key, description, category). Category groups toggles in
-// the CEO Settings > Roles & Permissions sub-page. 38 keys total.
+// the CEO Settings > Roles & Permissions sub-page. 39 keys total.
 const List<List<String>> _defaultPermissionRows = [
   // Stores — rendered first on the role page (§10.2). CEO-only by default.
   ['stores.manage', 'Add, edit, and remove stores', 'Stores'],
@@ -4239,6 +4337,9 @@ const List<List<String>> _defaultPermissionRows = [
   ['staff.suspend', 'Suspend or reactivate staff', 'Staff'],
   ['staff.change_role', 'Change a staff member\'s role', 'Staff'],
   ['staff.assign_stores', 'Assign staff to stores', 'Staff'],
+  // #107 staff offboarding. CEO-only by default; cloud catalog + CEO backfill:
+  // 0149. The key exists everywhere before any grant syncs (role_permissions FK).
+  ['staff.remove', 'Permanently remove staff (frees their email)', 'Staff'],
   // System
   ['activity_logs.view', 'View activity logs', 'System'],
   ['sync.view', 'View sync issues', 'System'],

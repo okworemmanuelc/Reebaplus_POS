@@ -1036,7 +1036,11 @@ class _UserPickerSheet extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           ...users.map(
-            (u) => ListTile(
+            // Transparent Material gives the row an ink target above the
+            // surface-coloured wrapper so its tap-ripple shows (cf. cart_screen).
+            (u) => Material(
+              type: MaterialType.transparency,
+              child: ListTile(
               contentPadding: EdgeInsets.zero,
               leading: CircleAvatar(
                 backgroundColor: _hexColor(context, u.avatarColor),
@@ -1073,6 +1077,7 @@ class _UserPickerSheet extends StatelessWidget {
                 },
               ),
               onTap: () => onSelected(u),
+            ),
             ),
           ),
         ],

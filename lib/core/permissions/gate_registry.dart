@@ -487,6 +487,20 @@ abstract final class Gates {
     rule: Gate.key('staff.suspend'),
   );
 
+  /// Permanently remove a staff member (#107 staff offboarding, `staff.remove`,
+  /// CEO-only by default) — the staff-detail "Remove" action. Terminal: it runs
+  /// the server-authoritative `remove_staff_member` RPC, which nulls the
+  /// identity's auth link (freeing the email for a fresh business) and sets the
+  /// membership status to `removed`, while KEEPING the users row as an
+  /// attribution stub so historical sales still show the person's name. Removing
+  /// the business owner is rejected. More destructive than suspend, so it is
+  /// CEO-only by default (the CEO can grant it to a Manager via the role page).
+  static const NamedGate staffRemove = NamedGate(
+    name: 'staffRemove',
+    action: 'Remove Staff',
+    rule: Gate.key('staff.remove'),
+  );
+
   /// Refund a pending order (§19.7, `sales.cancel`, CEO + Manager by default) —
   /// the Orders Pending-tab Refund action, gated at render.
   static const NamedGate refundOrder = NamedGate(
@@ -590,6 +604,7 @@ abstract final class Gates {
     assignStaffStores,
     changeStaffRole,
     suspendStaff,
+    staffRemove,
     refundOrder,
     seeOrderMoney,
     seeExtendedDateRanges,

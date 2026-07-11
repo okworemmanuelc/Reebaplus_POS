@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/core/constants/category_filter.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
-import 'package:reebaplus_pos/core/widgets/app_fab.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -19,6 +19,7 @@ import 'package:reebaplus_pos/features/pos/controllers/pos_controller.dart';
 import 'package:reebaplus_pos/features/pos/widgets/product_grid.dart';
 import 'package:reebaplus_pos/features/pos/widgets/category_filter_bar.dart';
 import 'package:reebaplus_pos/features/pos/widgets/quick_sale_modal.dart';
+import 'package:reebaplus_pos/features/pos/widgets/pos_barcode_scan_button.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 
@@ -240,7 +241,6 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
           activeRoute: 'pos',
           backgroundColor: bgCol,
           appBar: _buildAppBar(context, surfaceCol, textCol, subtextCol),
-          floatingActionButton: context.isPhone ? _buildCartFab(context) : null,
           body: SafeArea(
             top: false,
             // Pull-to-refresh wraps the WHOLE body (above the header) so the
@@ -256,14 +256,18 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
                   subtextCol,
                   borderCol,
                 ),
-                if (_controller!.isSearching)
-                  _buildSearchField(surfaceCol, cardCol, textCol, subtextCol),
+                // #111: the search field is always visible in its position
+                // between the price/manufacturer dropdowns and the category
+                // chips — no show/hide toggle, no app-bar search icon.
+                _buildSearchField(surfaceCol, cardCol, textCol, subtextCol),
                 _controller!.isLoading
                     ? const SizedBox.shrink()
                     : CategoryFilterBar(
                         categories: [
                           'All',
                           ..._controller!.categories.map((c) => c.name),
+                          // #109: bucket for products with no category.
+                          'Uncategorized',
                         ],
                         // Defense-in-depth: the controller already resets a
                         // dangling selectedCategoryId, but never let the chip
@@ -273,6 +277,10 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
                         onCategorySelected: (name) {
                           if (name == 'All') {
                             _controller!.selectCategory(null);
+                          } else if (name == 'Uncategorized') {
+                            _controller!.selectCategory(
+                              kUncategorizedCategoryId,
+                            );
                           } else {
                             final cat = _controller!.categories.firstWhere(
                               (c) => c.name == name,
@@ -408,6 +416,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
   String _selectedCategoryLabel() {
     final id = _controller!.selectedCategoryId;
     if (id == null) return 'All';
+    if (id == kUncategorizedCategoryId) return 'Uncategorized';
     for (final c in _controller!.categories) {
       if (c.id == id) return c.name;
     }
@@ -491,6 +500,11 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
         truncateTitleWithReveal: true,
       ),
       actions: [
+        // #118: always-visible one-shot barcode scan. Not gated on the cart.
+        PosBarcodeScanButton(
+          tier: _controller!.selectedGroup,
+          loadedProducts: _controller!.allProducts,
+        ),
         IconButton(
           icon: Icon(
             _isListView ? FontAwesomeIcons.list.data : FontAwesomeIcons.borderAll.data,
@@ -498,19 +512,6 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
             color: subtextCol,
           ),
           onPressed: _showViewSelectorModal,
-        ),
-        IconButton(
-          icon: Icon(
-            _controller!.isSearching
-                ? FontAwesomeIcons.xmark.data
-                : FontAwesomeIcons.magnifyingGlass.data,
-            size: 17,
-            color: subtextCol,
-          ),
-          onPressed: () {
-            _controller!.toggleSearch();
-            if (!_controller!.isSearching) _searchController.clear();
-          },
         ),
         const NotificationBell(),
         SizedBox(width: context.getRSize(16)),
@@ -614,51 +615,6 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
     );
   }
 
-  Widget _buildCartFab(BuildContext context) {
-    return ValueListenableBuilder<List<Map<String, dynamic>>>(
-      valueListenable: ref.read(cartProvider),
-      builder: (context, cartItems, _) {
-        if (cartItems.isEmpty) return const SizedBox.shrink();
-
-        final double totalQty = cartItems.fold(
-          0.0,
-          (sum, item) => sum + (item['qty'] as num).toDouble(),
-        );
-        final String badgeText = totalQty == totalQty.roundToDouble()
-            ? totalQty.toInt().toString()
-            : totalQty.toStringAsFixed(1);
-
-        return AppFAB(
-          // POS is a bottom-nav tab root — the visible bottom bar already lifts
-          // the FAB above the system nav; don't add the inset.
-          reserveBottomInset: false,
-          onPressed: () {
-            ref
-                .read(navigationProvider)
-                .setIndex(8); // 8 = CartScreen (9 is Deliveries)
-          },
-          icon: FontAwesomeIcons.cartShopping.data,
-          label: 'Go to Cart',
-          trailing: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              badgeText,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.primary,
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   Widget _buildSearchField(
     Color surfaceCol,
     Color cardCol,
@@ -675,7 +631,9 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
       ),
       child: AppInput(
         controller: _searchController,
-        autofocus: true,
+        // #111: the field is now always visible, so it must not steal focus
+        // and pop the keyboard every time POS opens — the cashier taps it when
+        // they want to search.
         onChanged: (v) => _controller!.updateSearch(v),
         hintText:
             'Search ${ref.watch(industryLexiconProvider).itemPluralLower}...',

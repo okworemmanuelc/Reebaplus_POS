@@ -53,8 +53,15 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
   late final TextEditingController _supplierCtrl;
   late final TextEditingController _manufacturerCtrl;
   late final TextEditingController _categoryCtrl;
+  late final TextEditingController _barcodeCtrl;
 
-  late String _unit;
+  /// The name of another product already using the typed barcode (#113). Non-
+  /// null ⇒ a soft collision the sheet warns about; it never blocks the save.
+  String? _barcodeCollisionName;
+
+  // Nullable (#108): null = no unit. Seeded from the product (which may already
+  // have no unit) and cleared via the dropdown's "No unit" option.
+  String? _unit;
   late bool _trackEmpties;
   late bool _allowFractionalSales;
   late String _colorHex;
@@ -115,7 +122,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
 
   /// Empty-crate value in kobo, or null when not tracking empties / left blank.
   int? get _emptyCrateValueKobo {
-    if (!(_effectiveTrackEmpties && _unit.toLowerCase() == 'bottle')) {
+    if (!(_effectiveTrackEmpties && _unit?.toLowerCase() == 'bottle')) {
       return null;
     }
     final raw = _emptyCrateValueCtrl.text.trim();
@@ -164,12 +171,16 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
     // Manufacturer name is populated in _loadData() via FK lookup.
     _manufacturerCtrl = TextEditingController();
     _categoryCtrl = TextEditingController();
+    _barcodeCtrl = TextEditingController(text: p.barcode ?? '');
     _imagePath = p.imagePath;
 
     _unit = p.unit;
     // The industry's starter units, plus this product's own unit so the
-    // dropdown always includes the selected value (#80).
-    _dynamicUnits = <String>{..._lexicon.starterUnits, p.unit}.toList()..sort();
+    // dropdown always includes the selected value (#80). A unitless product
+    // (#108) contributes nothing.
+    _dynamicUnits =
+        <String>{..._lexicon.starterUnits, if (p.unit != null) p.unit!}.toList()
+          ..sort();
     _trackEmpties = p.trackEmpties;
     _allowFractionalSales = p.allowFractionalSales;
     _size = p.size;
@@ -202,9 +213,13 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
       _allSuppliers = suppliers;
       _allManufacturers = manufacturers;
       _allCategories = cats;
-      _dynamicUnits = <String>{..._lexicon.starterUnits, _unit, ...uniqueUnits}
-          .toList()
-        ..sort();
+      _dynamicUnits =
+          <String>{
+              ..._lexicon.starterUnits,
+              if (_unit != null) _unit!,
+              ...uniqueUnits,
+            }.toList()
+            ..sort();
       if (cachedPhoto != null) _imagePath = cachedPhoto;
 
       // Pre-select store: prefer currentStoreId, else first
@@ -261,7 +276,31 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
     _supplierCtrl.dispose();
     _manufacturerCtrl.dispose();
     _categoryCtrl.dispose();
+    _barcodeCtrl.dispose();
     super.dispose();
+  }
+
+  /// Soft barcode-collision check (#113): looks up the typed barcode and, if a
+  /// DIFFERENT product already uses it, records that product's name so the field
+  /// can warn. Never blocks — barcodes are only softly unique (no DB UNIQUE, to
+  /// avoid jamming the offline outbox).
+  Future<void> _onBarcodeChanged(String value) async {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      if (_barcodeCollisionName != null) {
+        setState(() => _barcodeCollisionName = null);
+      }
+      return;
+    }
+    final db = ref.read(databaseProvider);
+    final match = await db.catalogDao.findProductByBarcode(trimmed);
+    if (!mounted) return;
+    final collision = (match != null && match.id != widget.product.id)
+        ? match.name
+        : null;
+    if (collision != _barcodeCollisionName) {
+      setState(() => _barcodeCollisionName = collision);
+    }
   }
 
   void _onSupplierChanged(String query) {
@@ -430,7 +469,8 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
     // bail if `products.edit_price` was revoked while the sheet was open.
     if (!_canEditPrice) {
       setState(
-        () => _errorMessage = 'You no longer have permission to edit products.',
+        () => _errorMessage =
+            'You no longer have permission to edit ${_lexicon.itemPluralLower}.',
       );
       return;
     }
@@ -555,6 +595,9 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
         supplierId: _selectedSupplier?.id,
         size: _size,
         expiryDate: _expiryDate,
+        barcode: _barcodeCtrl.text.trim().isEmpty
+            ? null
+            : _barcodeCtrl.text.trim(),
       );
 
       // Patch the cloud image URL (separate minimal upsert) so the photo
@@ -633,7 +676,9 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
     } catch (e, st) {
       CrashReporter.record(e, st, context: 'inventory.update_product');
       debugPrint('UpdateProductSheet._save error: $e');
-      setState(() => _errorMessage = 'Could not update product: $e');
+      setState(
+        () => _errorMessage = 'Could not update ${_lexicon.itemLower}: $e',
+      );
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -696,7 +741,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
         Theme.of(context).textTheme.bodySmall?.color ??
         Theme.of(context).iconTheme.color!;
     final border = Theme.of(context).dividerColor;
-    final manufacturerRequired = _unit.toLowerCase() == 'bottle' && _isCrateBusiness && _trackEmpties;
+    final manufacturerRequired = _unit?.toLowerCase() == 'bottle' && _isCrateBusiness && _trackEmpties;
 
     return Padding(
       padding: EdgeInsets.only(bottom: context.deviceBottomPadding),
@@ -813,7 +858,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Update Product',
+                          'Update ${_lexicon.item}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -972,6 +1017,10 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                     ),
                     const SizedBox(height: 14),
 
+                    // ── BARCODE (optional) ───────────────────────────────────
+                    _barcodeField(),
+                    const SizedBox(height: 14),
+
                     // ── PRICES ───────────────────────────────────────────────
                     Row(
                       children: [
@@ -1026,27 +1075,32 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                     ),
                     const SizedBox(height: 16),
 
-                    // ── PRODUCT UNIT ─────────────────────────────────────────
-                    _sectionLabel('PRODUCT UNIT *', subtext),
+                    // ── PRODUCT UNIT (optional, #108) ────────────────────────
+                    _sectionLabel('PRODUCT UNIT', subtext),
                     const SizedBox(height: 8),
-                    AppDropdown<String>(
+                    AppDropdown<String?>(
                       value: _unit,
-                      items: _dynamicUnits
-                          .map(
-                            (u) => DropdownMenuItem(value: u, child: Text(u)),
-                          )
-                          .toList(),
+                      hintText: 'No unit',
+                      // "No unit" (#108) clears the unit — the product keeps
+                      // just its name and is hidden wherever the unit renders.
+                      items: [
+                        const DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('No unit'),
+                        ),
+                        ..._dynamicUnits.map(
+                          (u) => DropdownMenuItem<String?>(
+                            value: u,
+                            child: Text(u),
+                          ),
+                        ),
+                      ],
                       onChanged: (v) {
-                        if (v != null) {
-                          setState(() {
-                            _unit = v;
-                            if (v.toLowerCase() == 'bottle') {
-                              _trackEmpties = true;
-                            } else {
-                              _trackEmpties = false;
-                            }
-                          });
-                        }
+                        setState(() {
+                          _unit = v;
+                          // A null unit is not a bottle → no crate tracking.
+                          _trackEmpties = v?.toLowerCase() == 'bottle';
+                        });
                       },
                     ),
                     const SizedBox(height: 8),
@@ -1059,8 +1113,8 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                         onChanged: (v) =>
                             setState(() => _allowFractionalSales = v ?? false),
                         title: const Text('Allow fractional sales'),
-                        subtitle: const Text(
-                          'Enables ±0.5 quantity steps when selling this product',
+                        subtitle: Text(
+                          'Enables ±0.5 quantity steps when selling this ${_lexicon.itemLower}',
                         ),
                         controlAffinity: ListTileControlAffinity.leading,
                         contentPadding: EdgeInsets.zero,
@@ -1161,7 +1215,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                     // ── TRACK EMPTIES + CRATE VALUE (directly below Manufacturer) ─
                     // Crate-only (rule #13): hidden for non-Bar/Beer-distributor
                     // businesses; _effectiveTrackEmpties forces it off on save.
-                    if (_unit.toLowerCase() == 'bottle' &&
+                    if (_unit?.toLowerCase() == 'bottle' &&
                         _isCrateBusiness) ...[
                       Material(
                         type: MaterialType.transparency,
@@ -1170,8 +1224,8 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                           onChanged: (v) =>
                               setState(() => _trackEmpties = v ?? false),
                           title: const Text('Track empty crate returns'),
-                          subtitle: const Text(
-                            'Enables deposit collection and crate return flow for this product',
+                          subtitle: Text(
+                            'Enables deposit collection and crate return flow for this ${_lexicon.itemLower}',
                           ),
                           controlAffinity: ListTileControlAffinity.leading,
                           contentPadding: EdgeInsets.zero,
@@ -1298,7 +1352,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'This will set the quantity of this product in the receive cart.',
+                        'This will set the quantity of this ${_lexicon.itemLower} in the receive cart.',
                         style: TextStyle(fontSize: 11, color: subtext),
                       ),
                       const SizedBox(height: 14),
@@ -1351,7 +1405,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
               child: AppButton(
-                text: 'Update Product',
+                text: 'Update ${_lexicon.item}',
                 variant: AppButtonVariant.primary,
                 isLoading: _isSaving,
                 onPressed: _save,
@@ -1421,6 +1475,40 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
       letterSpacing: 0.8,
     ),
   );
+
+  /// Optional barcode field (#113) with a live soft-collision warning. Typing
+  /// runs [_onBarcodeChanged], which warns (never blocks) when another product
+  /// already uses the code.
+  Widget _barcodeField() {
+    final error = Theme.of(context).colorScheme.error;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AppInput(
+          controller: _barcodeCtrl,
+          labelText: 'Barcode (optional)',
+          hintText: 'Type or scan the ${_lexicon.itemLower} barcode',
+          onChanged: _onBarcodeChanged,
+        ),
+        if (_barcodeCollisionName != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6, left: 4),
+            child: Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, size: 14, color: error),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Already used by "$_barcodeCollisionName". You can still save.',
+                    style: TextStyle(fontSize: 11, color: error),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
 
   Widget _suggestionList({
     required List<Widget> children,

@@ -656,7 +656,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
               // and only when the business opted into crate tracking.
               final isTrackedBottle =
                   tracksCrates &&
-                  p.product.unit.toLowerCase() == 'bottle' &&
+                  p.product.unit?.toLowerCase() == 'bottle' &&
                   p.product.trackEmpties;
               final fate = isTrackedBottle ? crateFate : 'none';
 
@@ -880,7 +880,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                         final tb =
                             tracksCrates &&
                             v != null &&
-                            v.product.unit.toLowerCase() == 'bottle' &&
+                            v.product.unit?.toLowerCase() == 'bottle' &&
                             v.product.trackEmpties;
                         if (!tb) crateFate = 'none';
                       }),
@@ -912,7 +912,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                     // deposit too. Ask whether the empty crate went with it.
                     if (tracksCrates &&
                         product != null &&
-                        product!.product.unit.toLowerCase() == 'bottle' &&
+                        product!.product.unit?.toLowerCase() == 'bottle' &&
                         product!.product.trackEmpties) ...[
                       SizedBox(height: context.getRSize(14)),
                       AppDropdown<String>(
@@ -1099,7 +1099,11 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                         (n, c) => n + c.shortageCount,
                       );
 
-                      return ListTile(
+                      // Transparent Material gives the row an ink target above
+                      // the sheet's coloured fill so its tap-ripple shows.
+                      return Material(
+                        type: MaterialType.transparency,
+                        child: ListTile(
                         contentPadding: EdgeInsets.symmetric(
                           horizontal: context.getRSize(20),
                           vertical: context.getRSize(4),
@@ -1143,6 +1147,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                           Navigator.pop(ctx);
                           _showDayDetail(context, label, dayCounts);
                         },
+                        ),
                       );
                     },
                   ),

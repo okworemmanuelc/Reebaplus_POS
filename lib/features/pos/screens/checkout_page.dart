@@ -1460,6 +1460,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         return;
       }
 
+      final paperSize = await printer.getPaperSize();
       final List<int> receiptBytes = await ThermalReceiptService.buildReceipt(
         orderId: _currentOrderId,
         cart: widget.cart,
@@ -1479,6 +1480,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         storeAddress: _storeAddress,
         businessName: ref.read(currentBusinessNameProvider),
         manufacturerNames: _manufacturerNames,
+        paperSize: paperSize,
       );
 
       if (!mounted) return;
