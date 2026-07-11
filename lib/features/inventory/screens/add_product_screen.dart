@@ -110,9 +110,11 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
 
   /// The required fields that live in the always-visible fast section. A
   /// validation error naming anything else (only Store today) expands "More
-  /// details" first, so an error never points at a collapsed field.
-  static const _fastSectionFields = {
-    'Product Name',
+  /// details" first, so an error never points at a collapsed field. The item
+  /// label morphs per trade (#112), so the name entry is built from the active
+  /// Lexicon — a hardcoded 'Product Name' would never match 'Medicine Name'.
+  Set<String> get _fastSectionFields => {
+    '${_lexicon.item} Name',
     'Selling Price',
     'Quantity',
     'Buying Price',
@@ -718,7 +720,10 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         CrashReporter.record(e, st, context: 'inventory.add_product');
         debugPrint('AddProductScreen._save (existing) error: $e');
         if (mounted) {
-          AppNotification.showError(context, 'Could not update product: $e');
+          AppNotification.showError(
+            context,
+            'Could not update ${_lexicon.itemLower}: $e',
+          );
         }
       } finally {
         if (mounted) setState(() => _isSaving = false);
@@ -796,7 +801,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       if (mounted) {
         AppNotification.showError(
           context,
-          'A product named "$name" already exists.',
+          'A ${_lexicon.itemLower} named "$name" already exists.',
         );
       }
       return;
@@ -909,7 +914,10 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       CrashReporter.record(e, st, context: 'inventory.add_product');
       debugPrint('AddProductScreen._save error: $e');
       if (mounted) {
-        AppNotification.showError(context, 'Could not save product: $e');
+        AppNotification.showError(
+          context,
+          'Could not save ${_lexicon.itemLower}: $e',
+        );
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -977,7 +985,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       if (mounted) {
         AppNotification.showError(
           context,
-          'A product named "${intent.name}" already exists.',
+          'A ${_lexicon.itemLower} named "${intent.name}" already exists.',
         );
       }
       return;
@@ -1081,7 +1089,10 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       CrashReporter.record(e, st, context: 'inventory.add_product');
       debugPrint('AddProductScreen._persistNewProduct error: $e');
       if (mounted) {
-        AppNotification.showError(context, 'Could not save product: $e');
+        AppNotification.showError(
+          context,
+          'Could not save ${_lexicon.itemLower}: $e',
+        );
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -1140,7 +1151,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
         leading: const BackButton(),
-        title: Text(isExisting ? 'Add Stock' : 'Add Product'),
+        title: Text(isExisting ? 'Add Stock' : 'Add ${_lexicon.item}'),
         titleTextStyle: TextStyle(
           fontSize: 18,
           fontWeight: FontWeight.w800,
@@ -1236,7 +1247,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Adding stock to existing product',
+                              'Adding stock to existing ${_lexicon.itemLower}',
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
@@ -1464,8 +1475,8 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                   onChanged: (v) =>
                       setState(() => _allowFractionalSales = v ?? false),
                   title: const Text('Allow fractional sales'),
-                  subtitle: const Text(
-                    'Enables ±0.5 quantity steps when selling this product',
+                  subtitle: Text(
+                    'Enables ±0.5 quantity steps when selling this ${_lexicon.itemLower}',
                   ),
                   controlAffinity: ListTileControlAffinity.leading,
                   contentPadding: EdgeInsets.zero,
@@ -1549,8 +1560,8 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                     onChanged: (v) =>
                         setState(() => _trackEmpties = v ?? false),
                     title: const Text('Track empty crate returns'),
-                    subtitle: const Text(
-                      'Enables deposit collection and crate return flow for this product',
+                    subtitle: Text(
+                      'Enables deposit collection and crate return flow for this ${_lexicon.itemLower}',
                     ),
                     controlAffinity: ListTileControlAffinity.leading,
                     contentPadding: EdgeInsets.zero,
@@ -1690,7 +1701,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
           12 + context.deviceBottomPadding,
         ),
         child: AppButton(
-          text: isExisting ? 'Add Stock' : 'Add Product',
+          text: isExisting ? 'Add Stock' : 'Add ${_lexicon.item}',
           variant: AppButtonVariant.primary,
           isLoading: _isSaving,
           onPressed: _save,
@@ -1909,8 +1920,8 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         value: _allowFractionalSales,
         onChanged: (v) => setState(() => _allowFractionalSales = v ?? false),
         title: const Text('Allow fractional sales'),
-        subtitle: const Text(
-          'Enables ±0.5 quantity steps when selling this product',
+        subtitle: Text(
+          'Enables ±0.5 quantity steps when selling this ${_lexicon.itemLower}',
         ),
         controlAffinity: ListTileControlAffinity.leading,
         contentPadding: EdgeInsets.zero,
@@ -1924,8 +1935,8 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
           value: _trackEmpties,
           onChanged: (v) => setState(() => _trackEmpties = v ?? false),
           title: const Text('Track empty crate returns'),
-          subtitle: const Text(
-            'Enables deposit collection and crate return flow for this product',
+          subtitle: Text(
+            'Enables deposit collection and crate return flow for this ${_lexicon.itemLower}',
           ),
           controlAffinity: ListTileControlAffinity.leading,
           contentPadding: EdgeInsets.zero,
@@ -2033,7 +2044,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         AppInput(
           controller: _barcodeCtrl,
           labelText: 'Barcode (optional)',
-          hintText: 'Type or scan the product barcode',
+          hintText: 'Type or scan the ${_lexicon.itemLower} barcode',
           onChanged: _onBarcodeChanged,
         ),
         if (_barcodeCollisionName != null)

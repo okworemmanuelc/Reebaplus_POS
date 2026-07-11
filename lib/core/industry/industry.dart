@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 /// words, presets, and optional feature surfaces (CONTEXT.md → *Industry*).
 ///
 /// This enum **is** the one Industry registry (ADR 0015): the single source of
-/// truth for each industry's display label, icon, coming-soon flag, and
-/// crate-eligibility. It supersedes the two lists these facts used to be split
+/// truth for each industry's display label, icon, coming-soon flag,
+/// crate-eligibility, and picker selectability. It supersedes the two lists
+/// these facts used to be split
 /// across — the `kBusinessTypes` display list and the private `_businessTypes`
 /// record list in CEO Sign Up — so the two can no longer drift.
 ///
@@ -31,9 +32,14 @@ enum Industry {
     label: 'Beverage distributor',
     icon: Icons.sports_bar_rounded,
     crateEligible: true,
+    selectable: true,
     aliases: {'beer distributor'},
   ),
-  pharmacy(label: 'Pharmacy', icon: Icons.local_pharmacy_rounded),
+  pharmacy(
+    label: 'Pharmacy',
+    icon: Icons.local_pharmacy_rounded,
+    selectable: true,
+  ),
   buildingMaterials(label: 'Building Materials', icon: Icons.foundation_rounded),
   boutique(label: 'Boutique', icon: Icons.checkroom_rounded),
 
@@ -47,6 +53,7 @@ enum Industry {
   frozenFoodsAndGrocery(
     label: 'Frozen Foods & Grocery',
     icon: Icons.ac_unit_rounded,
+    selectable: true,
   ),
 
   /// Safe fallback for an unknown, legacy, or null `businesses.type`. Never
@@ -63,6 +70,7 @@ enum Industry {
     // ignore: unused_element_parameter
     this.comingSoon = false,
     this.crateEligible = false,
+    this.selectable = false,
     this.aliases = const <String>{},
   });
 
@@ -83,15 +91,33 @@ enum Industry {
   /// the `tracks_empty_crates` opt-in for the full surface gate.
   final bool crateEligible;
 
+  /// Whether this industry is offered in the onboarding + Settings pickers.
+  /// Only Beverage distributor, Pharmacy, and Frozen Foods & Grocery ship
+  /// selectable today (issue #112); the other trades stay in the registry so
+  /// existing tenants keep normalizing + their features, but appear in no
+  /// picker. New industries default to hidden — flip this deliberately once
+  /// their flow is ready. [generic] is never selectable.
+  final bool selectable;
+
   /// Extra lowercase strings (besides the lowercased [label]) that resolve to
   /// this industry — legacy DB canonicals and casings. See [industryOf].
   final Set<String> aliases;
 
-  /// The industries offered in pickers, in plan order — every entry except
-  /// [generic]. Onboarding and Settings render from this so the two lists can
-  /// never diverge from the registry. Computed once (used inside `build`).
+  /// The full registry of real industries, in plan order — every entry except
+  /// [generic]. This is what [industryOf] normalizes against and what the
+  /// business-type round-trip validates against, so it keeps ALL nine even
+  /// though the pickers now offer only [selectableCatalogue]: a tenant on a
+  /// now-hidden trade must still resolve to its own profile and keep its
+  /// features (no data migration, issue #112). Computed once.
   static final List<Industry> catalogue =
       values.where((i) => i != generic).toList(growable: false);
+
+  /// The industries actually offered in the onboarding + Settings pickers — the
+  /// [selectable] subset of [catalogue], in plan order (issue #112). Onboarding
+  /// and Settings render from this so the two pickers can never diverge from the
+  /// registry or offer a hidden trade. Computed once (used inside `build`).
+  static final List<Industry> selectableCatalogue =
+      values.where((i) => i.selectable).toList(growable: false);
 }
 
 /// Resolves a stored `businesses.type` string to its [Industry]. Total: known

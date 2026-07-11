@@ -50,9 +50,10 @@ class CeoSignUpScreen extends ConsumerStatefulWidget {
 class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
   static const int _totalSteps = 9;
 
-  // The business-type picker is rendered from [Industry.catalogue] — the one
-  // Industry registry (ADR 0015). Each entry carries its own label, icon and
-  // coming-soon flag, so this screen no longer keeps a private duplicate list.
+  // The business-type picker is rendered from [Industry.selectableCatalogue] —
+  // the selectable subset of the one Industry registry (ADR 0015, #112). Only
+  // the three offered trades appear here; each entry carries its own label,
+  // icon and coming-soon flag, so this screen keeps no private duplicate list.
 
   // Obvious PINs to block (master plan §5.1). Mirrors create_pin_screen.dart.
   static const Set<String> _blockedPins = {
@@ -850,7 +851,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
       title: 'What type of business?',
       subtitle: 'Pick the one that fits best.',
       children: [
-        ...Industry.catalogue.map((t) {
+        ...Industry.selectableCatalogue.map((t) {
           final selected = _businessType == t.label;
           return Padding(
             padding: const EdgeInsets.only(bottom: 12),
