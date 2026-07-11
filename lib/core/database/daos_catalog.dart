@@ -378,7 +378,11 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
     required int wholesalerPriceKobo,
     int? emptyCrateValueKobo,
     String? categoryId,
-    String? unit,
+    // Sentinel-defaulted (#108): omit to leave unit untouched, pass an explicit
+    // null to CLEAR it (a product with no unit), or a String to set it. A plain
+    // `null` therefore clears rather than "no change" — the edit form always
+    // passes the field's current value, so a cleared field persists as null.
+    Object? unit = _unset,
     bool? trackEmpties,
     bool? allowFractionalSales,
     int? lowStockThreshold,
@@ -414,7 +418,9 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
           ? const Value.absent()
           : Value(emptyCrateValueKobo),
       categoryId: Value(categoryId),
-      unit: unit == null ? const Value.absent() : Value(unit),
+      unit: identical(unit, _unset)
+          ? const Value.absent()
+          : Value(unit as String?),
       trackEmpties: trackEmpties == null
           ? const Value.absent()
           : Value(trackEmpties),
@@ -504,7 +510,9 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
       ..addColumns([products.unit])
       ..where(whereBusiness(products) & products.isDeleted.not());
     final rows = await query.get();
-    return rows.map((r) => r.read(products.unit)!).toList();
+    // A product may have no unit (#108) — drop the null so the form's unit
+    // suggestions never include a blank entry.
+    return rows.map((r) => r.read(products.unit)).whereType<String>().toList();
   }
 
   Future<void> updateMonthlyTarget(String productId, int targetUnits) async {

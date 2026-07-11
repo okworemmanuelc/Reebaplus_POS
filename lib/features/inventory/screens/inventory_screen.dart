@@ -1335,13 +1335,15 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                       ),
                     ),
                   ),
-                  Text(
-                    product.unit,
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(11),
-                      color: _subtext,
+                  // A unitless product (#108) shows just the count — no label.
+                  if ((product.unit ?? '').isNotEmpty)
+                    Text(
+                      product.unit!,
+                      style: TextStyle(
+                        fontSize: context.getRFontSize(11),
+                        color: _subtext,
+                      ),
                     ),
-                  ),
                 ],
               ),
             ],

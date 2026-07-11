@@ -656,7 +656,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
               // and only when the business opted into crate tracking.
               final isTrackedBottle =
                   tracksCrates &&
-                  p.product.unit.toLowerCase() == 'bottle' &&
+                  p.product.unit?.toLowerCase() == 'bottle' &&
                   p.product.trackEmpties;
               final fate = isTrackedBottle ? crateFate : 'none';
 
@@ -880,7 +880,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                         final tb =
                             tracksCrates &&
                             v != null &&
-                            v.product.unit.toLowerCase() == 'bottle' &&
+                            v.product.unit?.toLowerCase() == 'bottle' &&
                             v.product.trackEmpties;
                         if (!tb) crateFate = 'none';
                       }),
@@ -912,7 +912,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                     // deposit too. Ask whether the empty crate went with it.
                     if (tracksCrates &&
                         product != null &&
-                        product!.product.unit.toLowerCase() == 'bottle' &&
+                        product!.product.unit?.toLowerCase() == 'bottle' &&
                         product!.product.trackEmpties) ...[
                       SizedBox(height: context.getRSize(14)),
                       AppDropdown<String>(

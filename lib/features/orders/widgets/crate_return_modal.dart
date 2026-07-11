@@ -57,7 +57,7 @@ class CrateReturnModal extends ConsumerStatefulWidget {
     // Guard 1: skip if no bottle items with trackEmpties enabled
     final hasBottles = orderWithItems.items.any((i) {
       final p = i.product; // null for a Quick Sale line — never a crate product
-      return p != null && p.unit.toLowerCase() == 'bottle' && p.trackEmpties;
+      return p != null && p.unit?.toLowerCase() == 'bottle' && p.trackEmpties;
     });
     if (!hasBottles) return CrateReturnResult.empty; // no crates to track
 
@@ -149,7 +149,7 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
         if (product == null) {
           continue; // Quick Sale line — never a crate product
         }
-        if (product.unit.toLowerCase() != 'bottle') continue;
+        if (product.unit?.toLowerCase() != 'bottle') continue;
         if (!product.trackEmpties) continue;
         final mfId = product.manufacturerId ?? '';
         if (mfId.isEmpty) continue; // can't track crates without a manufacturer

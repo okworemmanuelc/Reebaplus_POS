@@ -1738,7 +1738,7 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
         if (product == null) {
           throw StateError('Product ${transfer.productId} not found.');
         }
-        final isEligible = product.unit.toLowerCase() == 'bottle' && product.trackEmpties;
+        final isEligible = product.unit?.toLowerCase() == 'bottle' && product.trackEmpties;
         if (!isEligible) {
           throw StateError(
             'Product ${product.name} is not crate eligible (unit: ${product.unit}, trackEmpties: ${product.trackEmpties}).',

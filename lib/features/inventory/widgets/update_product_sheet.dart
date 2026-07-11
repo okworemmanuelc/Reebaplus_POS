@@ -59,7 +59,9 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
   /// null ⇒ a soft collision the sheet warns about; it never blocks the save.
   String? _barcodeCollisionName;
 
-  late String _unit;
+  // Nullable (#108): null = no unit. Seeded from the product (which may already
+  // have no unit) and cleared via the dropdown's "No unit" option.
+  String? _unit;
   late bool _trackEmpties;
   late bool _allowFractionalSales;
   late String _colorHex;
@@ -120,7 +122,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
 
   /// Empty-crate value in kobo, or null when not tracking empties / left blank.
   int? get _emptyCrateValueKobo {
-    if (!(_effectiveTrackEmpties && _unit.toLowerCase() == 'bottle')) {
+    if (!(_effectiveTrackEmpties && _unit?.toLowerCase() == 'bottle')) {
       return null;
     }
     final raw = _emptyCrateValueCtrl.text.trim();
@@ -174,8 +176,11 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
 
     _unit = p.unit;
     // The industry's starter units, plus this product's own unit so the
-    // dropdown always includes the selected value (#80).
-    _dynamicUnits = <String>{..._lexicon.starterUnits, p.unit}.toList()..sort();
+    // dropdown always includes the selected value (#80). A unitless product
+    // (#108) contributes nothing.
+    _dynamicUnits =
+        <String>{..._lexicon.starterUnits, if (p.unit != null) p.unit!}.toList()
+          ..sort();
     _trackEmpties = p.trackEmpties;
     _allowFractionalSales = p.allowFractionalSales;
     _size = p.size;
@@ -208,9 +213,13 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
       _allSuppliers = suppliers;
       _allManufacturers = manufacturers;
       _allCategories = cats;
-      _dynamicUnits = <String>{..._lexicon.starterUnits, _unit, ...uniqueUnits}
-          .toList()
-        ..sort();
+      _dynamicUnits =
+          <String>{
+              ..._lexicon.starterUnits,
+              if (_unit != null) _unit!,
+              ...uniqueUnits,
+            }.toList()
+            ..sort();
       if (cachedPhoto != null) _imagePath = cachedPhoto;
 
       // Pre-select store: prefer currentStoreId, else first
@@ -729,7 +738,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
         Theme.of(context).textTheme.bodySmall?.color ??
         Theme.of(context).iconTheme.color!;
     final border = Theme.of(context).dividerColor;
-    final manufacturerRequired = _unit.toLowerCase() == 'bottle' && _isCrateBusiness && _trackEmpties;
+    final manufacturerRequired = _unit?.toLowerCase() == 'bottle' && _isCrateBusiness && _trackEmpties;
 
     return Padding(
       padding: EdgeInsets.only(bottom: context.deviceBottomPadding),
@@ -1063,27 +1072,32 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                     ),
                     const SizedBox(height: 16),
 
-                    // ── PRODUCT UNIT ─────────────────────────────────────────
-                    _sectionLabel('PRODUCT UNIT *', subtext),
+                    // ── PRODUCT UNIT (optional, #108) ────────────────────────
+                    _sectionLabel('PRODUCT UNIT', subtext),
                     const SizedBox(height: 8),
-                    AppDropdown<String>(
+                    AppDropdown<String?>(
                       value: _unit,
-                      items: _dynamicUnits
-                          .map(
-                            (u) => DropdownMenuItem(value: u, child: Text(u)),
-                          )
-                          .toList(),
+                      hintText: 'No unit',
+                      // "No unit" (#108) clears the unit — the product keeps
+                      // just its name and is hidden wherever the unit renders.
+                      items: [
+                        const DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('No unit'),
+                        ),
+                        ..._dynamicUnits.map(
+                          (u) => DropdownMenuItem<String?>(
+                            value: u,
+                            child: Text(u),
+                          ),
+                        ),
+                      ],
                       onChanged: (v) {
-                        if (v != null) {
-                          setState(() {
-                            _unit = v;
-                            if (v.toLowerCase() == 'bottle') {
-                              _trackEmpties = true;
-                            } else {
-                              _trackEmpties = false;
-                            }
-                          });
-                        }
+                        setState(() {
+                          _unit = v;
+                          // A null unit is not a bottle → no crate tracking.
+                          _trackEmpties = v?.toLowerCase() == 'bottle';
+                        });
                       },
                     ),
                     const SizedBox(height: 8),
@@ -1198,7 +1212,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                     // ── TRACK EMPTIES + CRATE VALUE (directly below Manufacturer) ─
                     // Crate-only (rule #13): hidden for non-Bar/Beer-distributor
                     // businesses; _effectiveTrackEmpties forces it off on save.
-                    if (_unit.toLowerCase() == 'bottle' &&
+                    if (_unit?.toLowerCase() == 'bottle' &&
                         _isCrateBusiness) ...[
                       Material(
                         type: MaterialType.transparency,
