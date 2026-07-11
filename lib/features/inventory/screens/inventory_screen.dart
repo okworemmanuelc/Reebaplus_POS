@@ -31,6 +31,8 @@ import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/inventory_history_tab.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/update_product_sheet.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/manage_categories_sheet.dart';
+import 'package:reebaplus_pos/core/constants/category_filter.dart';
 import 'package:reebaplus_pos/core/utils/product_name.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
@@ -240,7 +242,20 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       }, onError: (e) => debugPrint('Error watching manufacturers: $e'));
 
       _categoriesSub = db.inventoryDao.watchAllCategories().listen((data) {
-        if (mounted) setState(() => _dbCategories = data);
+        if (!mounted) return;
+        setState(() {
+          _dbCategories = data;
+          // #109: a category the user had filtered on can vanish (deleted via
+          // Manage categories here, or on another device). Drop the dangling
+          // selection back to "All" so the filter doesn't strand the list on a
+          // category that no longer exists. The Uncategorized sentinel is not a
+          // real category id, so it's preserved.
+          if (_selectedCategoryId != null &&
+              _selectedCategoryId != kUncategorizedCategoryId &&
+              !data.any((c) => c.id == _selectedCategoryId)) {
+            _selectedCategoryId = null;
+          }
+        });
       }, onError: (e) => debugPrint('Error watching categories: $e'));
 
       // Per-manufacturer full/empty crate figures are read reactively in the
@@ -713,7 +728,11 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
           .firstOrNull;
       list = list.where((p) => p.product.manufacturerId == mfrId).toList();
     }
-    if (_selectedCategoryId != null) {
+    if (_selectedCategoryId == kUncategorizedCategoryId) {
+      // The Uncategorized bucket (#109): products with no category — e.g. those
+      // orphaned when their category was deleted.
+      list = list.where((p) => p.product.categoryId == null).toList();
+    } else if (_selectedCategoryId != null) {
       list = list
           .where((p) => p.product.categoryId == _selectedCategoryId)
           .toList();
@@ -981,6 +1000,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       ),
       color: _surface,
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           // Category dropdown (§16.4, amended): replaces the old chip row,
           // drives `_selectedCategoryId`. The store is now picked in the nav bar.
@@ -1003,6 +1023,15 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(color: _text),
                           ),
+                        ),
+                      ),
+                      // #109: filter to products with no category.
+                      DropdownMenuItem(
+                        value: kUncategorizedCategoryId,
+                        child: Text(
+                          'Uncategorized',
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: _text),
                         ),
                       ),
                     ],
@@ -1036,7 +1065,36 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                         setState(() => _selectedManufacturer = val ?? 'all'),
                   ),
           ),
+          // #109: Manage categories (rename / delete → Uncategorized). Gated on
+          // the same permission as adding a product — product-catalogue
+          // management. Bottom-aligned with the dropdown fields.
+          if (Gates.addProduct.allows(ref)) ...[
+            SizedBox(width: context.getRSize(8)),
+            _buildManageCategoriesButton(context),
+          ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildManageCategoriesButton(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    return InkWell(
+      onTap: () => showManageCategoriesSheet(context),
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        height: context.getRSize(52),
+        width: context.getRSize(52),
+        decoration: BoxDecoration(
+          color: primary.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: primary.withValues(alpha: 0.25)),
+        ),
+        child: Icon(
+          FontAwesomeIcons.tag.data,
+          size: context.getRSize(16),
+          color: primary,
+        ),
       ),
     );
   }
