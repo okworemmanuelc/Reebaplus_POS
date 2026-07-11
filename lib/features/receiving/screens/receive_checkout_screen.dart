@@ -834,9 +834,14 @@ class _SupplierPickerSheetState extends ConsumerState<_SupplierPickerSheet> {
                           Divider(height: 1, color: theme.dividerColor),
                       itemBuilder: (context, index) {
                         final s = filtered[index];
-                        return ListTile(
+                        // Transparent Material gives the row an ink target above
+                        // the sheet's coloured fill so its tap-ripple shows.
+                        return Material(
+                          type: MaterialType.transparency,
+                          child: ListTile(
                           title: Text(s.name),
                           onTap: () => Navigator.pop(context, s),
+                          ),
                         );
                       },
                     ),

@@ -106,6 +106,27 @@ abstract interface class CloudTransport {
   /// Tear down all realtime channels.
   Future<void> stopRealtime();
 
+  // ── BROADCAST (live signal, #101 / ADR 0001) ───────────────────────────────
+  /// Subscribe to the tenant's **private** Broadcast topic `store_<businessId>`
+  /// (emitted by the generic DB trigger, migration 0147) and invoke [onSignal]
+  /// once per server-emitted signal.
+  ///
+  /// The signal payload (`{table, id, op}`) is deliberately **not** surfaced:
+  /// every signal means the same thing — "peer changes may exist" — so the
+  /// engine's only reaction is to schedule a pull. **A signal MUST NEVER write
+  /// Drift.** Making the callback argument-less is what enforces that at the
+  /// seam: there is no row data to apply.
+  ///
+  /// Private-channel joins are RLS-gated on `realtime.messages` (migration
+  /// 0148), so the adapter forces the user JWT onto the socket before
+  /// subscribing (same discipline as [startRealtime]). Idempotent while a
+  /// subscription is live. Broadcast is ephemeral (no replay) — a device that
+  /// misses a signal converges on the next periodic / reconnect pull.
+  void startBroadcast(String businessId, {required void Function() onSignal});
+
+  /// Tear down the Broadcast channel.
+  Future<void> stopBroadcast();
+
   // ── IDENTITY ───────────────────────────────────────────────────────────────
   /// The signed-in user's id, or null when there is no session.
   String? get currentAuthUserId;
