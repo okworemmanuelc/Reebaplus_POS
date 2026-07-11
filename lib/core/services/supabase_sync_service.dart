@@ -3337,45 +3337,83 @@ class SupabaseSyncService {
         _handleConnectivityTransition,
       );
 
-      // Periodic safety net. The watcher only fires when the queue *count*
-      // changes, which leaves rows in exponential-backoff (status='pending'
-      // with future nextAttemptAt) and 'syncing' zombies invisible until the
-      // user makes another mutation, signs in, or reconnects. The tick re-
-      // evaluates eligibility — getPendingItems naturally filters by
-      // nextAttemptAt, so the cost is one indexed select per tick when
-      // nothing is due.
-      _autoPushPeriodic ??= Timer.periodic(_autoPushPeriodicInterval, (
-        _,
-      ) async {
-        // Architecture §Pull path — the documented "periodic fallback poll".
-        // Realtime is a best-effort *signal* that triggers a pull, not the data
-        // transport; when it is unhealthy nothing else pulls while the till sits
-        // foregrounded and idle, so a console edit / soft-delete never converges
-        // without a manual refresh. This silent catch-up pull guarantees
-        // convergence within one tick. It runs before — and independently of —
-        // the push drain below (it must fire even while a push is in flight),
-        // and self-guards on business-bound + online + not-mid-full-pull, with a
-        // debounce inside catchUpPull so it never overlaps the reconnect/resume
-        // catch-ups.
-        final pullBizId = _db.businessIdResolver.call();
-        if (pullBizId != null) {
-          unawaited(catchUpPull(pullBizId, reason: 'periodic'));
-        }
-        try {
-          if (_pushing) return;
-          await _db.syncDao.resetStuckInProgress();
-          // §6.8.1: re-enqueue any now-healable orphans before draining so a
-          // recovered row goes up on this same tick.
-          await _recoverDueOrphans();
-          await _runPushOnce();
-        } catch (e) {
-          debugPrint('[SyncService] periodic drain tick failed: $e');
-        }
-      });
+      _installPeriodicSafetyNet();
     } finally {
       _autoPushStarting = false;
     }
   }
+
+  /// Installs the periodic "safety-net" timer (idempotent). Extracted from
+  /// [_initAutoPush] so the #102 (Workstream C) regression test can prove the
+  /// backstop is scheduled, fires the silent catch-up pull on every tick, and
+  /// is torn down on logout — it must **never** be silently removed while it is
+  /// the reconnect-replay backstop that makes Broadcast's "no replay"
+  /// acceptable. One tick == [_periodicSafetyNetTick].
+  ///
+  /// Rationale: the queue watcher only fires when the queue *count* changes,
+  /// which leaves rows in exponential-backoff (status='pending' with future
+  /// nextAttemptAt) and 'syncing' zombies invisible until the user makes
+  /// another mutation, signs in, or reconnects. The tick re-evaluates
+  /// eligibility — getPendingItems naturally filters by nextAttemptAt, so the
+  /// cost is one indexed select per tick when nothing is due.
+  void _installPeriodicSafetyNet() {
+    _autoPushPeriodic ??= Timer.periodic(
+      _autoPushPeriodicInterval,
+      (_) => unawaited(_periodicSafetyNetTick()),
+    );
+  }
+
+  /// One periodic safety-net tick: a silent catch-up pull followed by an
+  /// opportunistic push drain.
+  ///
+  /// Architecture §Pull path — the documented "periodic fallback poll".
+  /// Realtime is a best-effort *signal* that triggers a pull, not the data
+  /// transport; when it is unhealthy nothing else pulls while the till sits
+  /// foregrounded and idle, so a console edit / soft-delete never converges
+  /// without a manual refresh. This silent catch-up pull guarantees convergence
+  /// within one tick. It runs before — and independently of — the push drain
+  /// below (it must fire even while a push is in flight), and self-guards on
+  /// business-bound + online + not-mid-full-pull, with a debounce inside
+  /// catchUpPull so it never overlaps the reconnect/resume catch-ups.
+  Future<void> _periodicSafetyNetTick() async {
+    final pullBizId = _db.businessIdResolver.call();
+    if (pullBizId != null) {
+      unawaited(catchUpPull(pullBizId, reason: 'periodic'));
+    }
+    try {
+      if (_pushing) return;
+      await _db.syncDao.resetStuckInProgress();
+      // §6.8.1: re-enqueue any now-healable orphans before draining so a
+      // recovered row goes up on this same tick.
+      await _recoverDueOrphans();
+      await _runPushOnce();
+    } catch (e) {
+      debugPrint('[SyncService] periodic drain tick failed: $e');
+    }
+  }
+
+  /// Test seam (#102 / Workstream C): install just the periodic safety-net
+  /// timer, bypassing [startAutoPush]'s platform-channel init, via the *same*
+  /// private installer production uses — so the regression test can't pass
+  /// against wiring that has silently drifted from the real path.
+  @visibleForTesting
+  void installPeriodicSafetyNetForTesting() => _installPeriodicSafetyNet();
+
+  /// Test seam (#102): true while the periodic safety-net timer is scheduled.
+  @visibleForTesting
+  bool get isPeriodicSafetyNetActiveForTesting =>
+      _autoPushPeriodic?.isActive ?? false;
+
+  /// Test seam (#102): the safety-net cadence — the C-S2 cadence decision
+  /// surface (default 30 s; tighten only if Broadcast (B) is delayed / fails).
+  @visibleForTesting
+  Duration get periodicSafetyNetIntervalForTesting => _autoPushPeriodicInterval;
+
+  /// Test seam (#102): run one tick body directly (exactly what the timer
+  /// invokes), so the test can assert the pull fires / is guarded without
+  /// driving the virtual clock.
+  @visibleForTesting
+  Future<void> runPeriodicSafetyNetTickForTesting() => _periodicSafetyNetTick();
 
   /// Coalesce-window for bursty writes. Long enough to merge the 5–8
   /// enqueues of a single createOrder transaction (they happen within

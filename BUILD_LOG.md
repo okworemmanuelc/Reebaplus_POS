@@ -2,6 +2,42 @@
 
 ---
 
+## 2026-07-11 — Guard the periodic pull "safety net" against silent removal (issue #102, Workstream C)
+
+**Context.** The periodic `catchUpPull` on the 30 s sync tick (shipped #98/#99) is the
+reconnect-replay backstop that makes Workstream B's (Broadcast) deliberate *no-replay*
+acceptable — a device that misses an ephemeral broadcast re-converges within one tick.
+Workstream C's job is to **keep** it and make it un-removable.
+
+**C-S1 (guard).** Behaviour-preserving refactor in
+`lib/core/services/supabase_sync_service.dart`: the inline `Timer.periodic` body was
+extracted into `_installPeriodicSafetyNet()` (keeps the idempotent `??=`) →
+`_periodicSafetyNetTick()`, plus four `@visibleForTesting` seams. New
+`test/sync/periodic_safety_net_test.dart` (5 tests) drives the **same** private
+installer/tick production uses, so it fails if that wiring drifts:
+- timer scheduled idempotently, at the **30 s** cadence, and **cancelled on logout**
+  (`stopAutoPush`);
+- a tick fires the silent `catchUpPull(reason: 'periodic')` when foreground + online +
+  business-bound;
+- a tick **pulls nothing** when logged-out (backgrounded/suspended state) or offline;
+- under `fakeAsync`, elapsing 30 s actually invokes the pull tick, and after logout no
+  further ticks fire.
+
+The best-effort push/pull inside the tick throws in the test env (Supabase not
+initialized, `shared_preferences` MissingPlugin) and is swallowed exactly as in prod;
+the assertions ride on the synchronous `_lastCatchUpAt` stamp, which is set before any
+await, so they're unaffected.
+
+**C-S2 (cadence decision, human).** **KEEP 30 s.** Broadcast (B) is not built yet, so
+30 s remains the plan default; tighten toward ~10 s only if B is later delayed or fails
+B0 verification. No code change — the 30 s cadence is now pinned by the test, so any
+future change is forced through review.
+
+**Verify.** `flutter analyze` clean; `flutter test test/sync/` → 195 green (the 5 new +
+190 existing). No schema/migration; outbox and append-only ledgers untouched.
+
+---
+
 ## 2026-07-11 — Broadcast live-signal layer (issue #101, Workstream B, slices B1–B7)
 
 **What shipped.** A writer-agnostic live-sync **signal** via Supabase Broadcast, entirely

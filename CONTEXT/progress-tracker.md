@@ -10,7 +10,35 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
-### Broadcast live-signal (#101, Workstream B) — PR OPEN, awaiting human merge (2026-07-11)
+### Workstream C (#102) — periodic pull safety net GUARDED — PR #120 OPEN, rebased on main post-B-merge (2026-07-11)
+Closes the live-sync/exactly-once loop's independent leg (plan §Workstream C).
+Branch `chore/retain-periodic-pull-safety-net` off `origin/main` (post-#105). The
+periodic `catchUpPull` was already SHIPPED (#98/#99); C's job is to **keep** it and
+make it un-removable, because it is the reconnect-replay backstop that makes
+Workstream B's (Broadcast) deliberate "no replay" acceptable.
+- **C-S1 (guard the safety net) — DONE.** Behaviour-preserving refactor of the 30 s
+  tick in `supabase_sync_service.dart`: the inline `Timer.periodic` body is now
+  `_installPeriodicSafetyNet()` (idempotent `??=`) → `_periodicSafetyNetTick()`, with
+  four `@visibleForTesting` seams (`installPeriodicSafetyNetForTesting`,
+  `isPeriodicSafetyNetActiveForTesting`, `periodicSafetyNetIntervalForTesting`,
+  `runPeriodicSafetyNetTickForTesting`). New `test/sync/periodic_safety_net_test.dart`
+  (5 tests, green) pins, via the **same** private installer/tick production uses:
+  the timer is scheduled idempotently at the **30 s** cadence and **cancelled on
+  logout** (`stopAutoPush`); each tick fires the silent `catchUpPull(reason:
+  'periodic')` when foreground + online + business-bound; a tick **pulls nothing**
+  when logged-out (backgrounded/suspended state) or offline; and — under `fakeAsync`
+  — the scheduled 30 s timer actually invokes the pull tick and stops after logout.
+  It fails if the safety net is ever silently removed or repointed.
+- **C-S2 (cadence) — RESOLVED: KEEP 30 s** (human, 2026-07-11). B (Broadcast) has
+  since landed (PR #126, merged) and gives near-instant convergence, so 30 s is the
+  right backstop cadence; tighten toward ~10 s only if that proves too slow. No code
+  change; the 30 s cadence is now test-pinned so any future change is forced through
+  review.
+- **C-S3 — DoD + PR.** `flutter analyze` clean; `flutter test test/sync/` 195 green.
+  PR `Closes #102`; stop for human merge. Invariants: none touched — behaviour-
+  preserving refactor, no schema/migration, outbox/append-only ledgers untouched.
+
+### Broadcast live-signal (#101, Workstream B) — MERGED (PR #126, commit 3a8c1af, 2026-07-11)
 All slices (B0–B7) done on branch `feat/broadcast-live-signal` (off `origin/main`
 post-A-merge). A (#100) is merged (PR #105). **Re-framing:** the B0 gate (run
 2026-07-11) found the original premise stale — `postgres_changes` is **no longer
