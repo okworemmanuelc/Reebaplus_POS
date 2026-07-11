@@ -256,8 +256,10 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
                   subtextCol,
                   borderCol,
                 ),
-                if (_controller!.isSearching)
-                  _buildSearchField(surfaceCol, cardCol, textCol, subtextCol),
+                // #111: the search field is always visible in its position
+                // between the price/manufacturer dropdowns and the category
+                // chips — no show/hide toggle, no app-bar search icon.
+                _buildSearchField(surfaceCol, cardCol, textCol, subtextCol),
                 _controller!.isLoading
                     ? const SizedBox.shrink()
                     : CategoryFilterBar(
@@ -499,19 +501,6 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
           ),
           onPressed: _showViewSelectorModal,
         ),
-        IconButton(
-          icon: Icon(
-            _controller!.isSearching
-                ? FontAwesomeIcons.xmark.data
-                : FontAwesomeIcons.magnifyingGlass.data,
-            size: 17,
-            color: subtextCol,
-          ),
-          onPressed: () {
-            _controller!.toggleSearch();
-            if (!_controller!.isSearching) _searchController.clear();
-          },
-        ),
         const NotificationBell(),
         SizedBox(width: context.getRSize(16)),
       ],
@@ -675,7 +664,9 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
       ),
       child: AppInput(
         controller: _searchController,
-        autofocus: true,
+        // #111: the field is now always visible, so it must not steal focus
+        // and pop the keyboard every time POS opens — the cashier taps it when
+        // they want to search.
         onChanged: (v) => _controller!.updateSearch(v),
         hintText:
             'Search ${ref.watch(industryLexiconProvider).itemPluralLower}...',
