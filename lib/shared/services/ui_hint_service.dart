@@ -17,6 +17,11 @@ class UiHintService {
   // staff member, stored locally, never synced.
   static const hintInventoryLongpress = 'hint_inventory_longpress';
 
+  // A hint stops surfacing once its stored view-count reaches this threshold —
+  // whether it got there by repeated views (markShown) or a deliberate
+  // dismissal (markDismissed).
+  static const _retireAfter = 2;
+
   Future<int> viewCount(String hintKey) async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getInt(hintKey) ?? 0;
@@ -24,13 +29,21 @@ class UiHintService {
 
   Future<bool> shouldShow(String hintKey) async {
     final count = await viewCount(hintKey);
-    return count < 2;
+    return count < _retireAfter;
   }
 
   Future<void> markShown(String hintKey) async {
     final prefs = await SharedPreferences.getInstance();
     final count = (prefs.getInt(hintKey) ?? 0) + 1;
     await prefs.setInt(hintKey, count);
+  }
+
+  /// Permanently retires a hint (e.g. the user dismissed it deliberately),
+  /// regardless of how many times it has been shown. Uses the same local store
+  /// as [markShown] — no new persistence mechanism.
+  Future<void> markDismissed(String hintKey) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(hintKey, _retireAfter);
   }
 }
 

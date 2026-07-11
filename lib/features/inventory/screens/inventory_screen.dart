@@ -73,10 +73,19 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   // Products-tab header search (§16.4, amended — reuses the POS toggle pattern).
   bool _showSearch = false;
   // Discoverability banner (issue #110): "press and hold to edit". Seeded from
-  // the UI-hint service in initState (shown a couple of times, per staff member,
-  // local-only); the render also checks Gates.editProductPrice so it only
-  // reaches users who can actually long-press-edit.
+  // the UI-hint service in initState (per staff member, local-only); the render
+  // also checks Gates.editProductPrice so it only reaches users who can actually
+  // long-press-edit. Dismissing it retires the banner permanently for that user.
   bool _showLongPressHint = false;
+  // The banner's dismissal is "per staff member" (issue #110 AC), so scope the
+  // shared UI-hint key to the current device user. Falls back to the bare key
+  // when no user is resolved (not expected on this authenticated screen).
+  String get _longPressHintKey {
+    final userId = ref.read(deviceUserIdProvider).value;
+    return userId == null || userId.isEmpty
+        ? UiHintService.hintInventoryLongpress
+        : '${UiHintService.hintInventoryLongpress}_$userId';
+  }
   String _searchQuery = '';
   final _searchCtrl = TextEditingController();
   int _totalCrateAssetsSum = 0;
@@ -208,7 +217,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     // Issue #110: surface the "press and hold to edit" banner a couple of times
     // per staff member. Visibility is further gated on Gates.editProductPrice at
     // render time, so it only reaches users who can use the gesture.
-    uiHintService.shouldShow(UiHintService.hintInventoryLongpress).then((show) {
+    uiHintService.shouldShow(_longPressHintKey).then((show) {
       if (show && mounted) setState(() => _showLongPressHint = true);
     });
 
@@ -731,7 +740,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         // Issue #110: press-and-hold-to-edit discoverability banner. Shown only
         // to staff the price-edit gate lets long-press-edit (matching the
         // gesture's own guard on `_buildProductRow`), only while there are
-        // products to hold, and only until dismissed / view-count exhausted.
+        // products to hold, and only until this staff member dismisses it
+        // (which retires it permanently for them).
         if (_showLongPressHint &&
             list.isNotEmpty &&
             Gates.editProductPrice.allows(ref))
@@ -741,7 +751,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                 ' to edit it.',
             onDismiss: () {
               setState(() => _showLongPressHint = false);
-              uiHintService.markShown(UiHintService.hintInventoryLongpress);
+              uiHintService.markDismissed(_longPressHintKey);
             },
           ),
         Expanded(
