@@ -6,9 +6,11 @@ import 'package:image/image.dart' as img;
 import 'package:reebaplus_pos/core/utils/number_format.dart'; // assuming fmtNumber is exported here
 import 'package:reebaplus_pos/core/utils/product_name.dart';
 import 'package:reebaplus_pos/core/utils/stock_calculator.dart';
+import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
 
 class ThermalReceiptService {
-  /// Builds a byte array of ESC/POS commands formatted for 58mm (32 chars/line)
+  /// Builds a byte array of ESC/POS commands for the given [paperSize].
+  /// Defaults to 58mm (32 chars/line) so existing callers are unchanged.
   static Future<List<int>> buildReceipt({
     required String orderId,
     required List<Map<String, dynamic>> cart,
@@ -35,10 +37,13 @@ class ThermalReceiptService {
     /// converted to a monochrome raster and emitted before the business name.
     /// Falls back to name-only when null or the file is missing.
     String? logoPath,
+    /// Physical paper width. Defaults to 58mm so existing callers and the
+    /// existing 58mm output are unchanged.
+    ReceiptPaperSize paperSize = ReceiptPaperSize.mm58,
   }) async {
-    // Generate profile for 58mm printer
     final profile = await CapabilityProfile.load();
-    final generator = Generator(PaperSize.mm58, profile);
+    final generator = Generator(paperSize.escPos, profile);
+    final int charsPerLine = paperSize.charsPerLine;
     List<int> bytes = [];
 
     // --- 0. REFUND STAMP ---
@@ -91,8 +96,8 @@ class ThermalReceiptService {
         final rawBytes = await logoFile.readAsBytes();
         final decoded = img.decodeImage(rawBytes);
         if (decoded != null) {
-          // Resize to 58mm print width (≈200px at 203 DPI), convert to mono.
-          final resized = img.copyResize(decoded, width: 200);
+          // Resize to the paper's print width in dots, convert to mono.
+          final resized = img.copyResize(decoded, width: paperSize.logoWidthPx);
           img.grayscale(resized);
           bytes += generator.image(resized, align: PosAlign.center);
         }
@@ -174,21 +179,13 @@ class ThermalReceiptService {
       final String qtyStr = '${qty.toStringAsFixed(1)}x ';
       final String priceStr = formatCurrency(lineTotal).replaceAll('₦', 'N');
 
-      // Calculate max length for product name to fit in 32 characters
-      int maxNameLen =
-          32 - qtyStr.length - priceStr.length - 1; // 1 space minimum
-      String nameStr = name;
-      if (nameStr.length > maxNameLen) {
-        nameStr = nameStr.substring(0, maxNameLen);
-      }
-
-      final String leftPart = '$qtyStr$nameStr';
-      int spaceCount = 32 - leftPart.length - priceStr.length;
-      if (spaceCount < 1) spaceCount = 1;
-
-      final String spacing = ' ' * spaceCount;
       bytes += generator.text(
-        '$leftPart$spacing$priceStr',
+        formatItemLine(
+          qtyLabel: qtyStr,
+          name: name,
+          priceLabel: priceStr,
+          charsPerLine: charsPerLine,
+        ),
         styles: const PosStyles(bold: false, fontType: PosFontType.fontA),
       );
     }
@@ -229,6 +226,7 @@ class ThermalReceiptService {
       generator,
       'Subtotal',
       formatCurrency(subtotal).replaceAll('₦', 'N'),
+      charsPerLine,
     );
 
     if (crateDeposit > 0) {
@@ -236,6 +234,7 @@ class ThermalReceiptService {
         generator,
         'Crate Deposit',
         formatCurrency(crateDeposit).replaceAll('₦', 'N'),
+        charsPerLine,
       );
     }
     bytes += generator.hr();
@@ -265,6 +264,7 @@ class ThermalReceiptService {
       generator,
       'Amount Paid:',
       formatCurrency(cashReceived ?? total).replaceAll('₦', 'N'),
+      charsPerLine,
     );
 
     // §15.1 — wallet info, only when ticked at checkout. Sign conveys credit
@@ -274,6 +274,7 @@ class ThermalReceiptService {
         generator,
         'Credits Balance:',
         formatCurrency(walletBalance).replaceAll('₦', 'N'),
+        charsPerLine,
       );
     }
 
@@ -304,15 +305,58 @@ class ThermalReceiptService {
     return bytes;
   }
 
-  /// Helper to create exactly 32-character lines for 58mm
+  /// Emits a label/value row padded to [charsPerLine] characters.
   static List<int> _buildTwoColumnRow(
     Generator generator,
     String label,
     String value,
+    int charsPerLine,
   ) {
-    int spaceCount = 32 - label.length - value.length;
+    return generator.text(
+      formatTwoColumnLine(
+        label: label,
+        value: value,
+        charsPerLine: charsPerLine,
+      ),
+    );
+  }
+
+  /// Formats one item line — `"[qty]x [name]      [price]"` — to fit exactly
+  /// [charsPerLine] characters: the name is truncated when too long, and the
+  /// gap between name and price is padded (at least one space). Pure so the
+  /// 32-char (58mm) / 48-char (80mm) contract is unit-testable directly.
+  static String formatItemLine({
+    required String qtyLabel,
+    required String name,
+    required String priceLabel,
+    required int charsPerLine,
+  }) {
+    // Leave room for the qty label, the price, and at least one space.
+    final int maxNameLen = charsPerLine - qtyLabel.length - priceLabel.length - 1;
+    String nameStr = name;
+    if (maxNameLen <= 0) {
+      // Qty + price already consume the whole line; drop the name.
+      nameStr = '';
+    } else if (nameStr.length > maxNameLen) {
+      nameStr = nameStr.substring(0, maxNameLen);
+    }
+
+    final String leftPart = '$qtyLabel$nameStr';
+    int spaceCount = charsPerLine - leftPart.length - priceLabel.length;
     if (spaceCount < 1) spaceCount = 1;
-    final spacing = ' ' * spaceCount;
-    return generator.text('$label$spacing$value');
+    return '$leftPart${' ' * spaceCount}$priceLabel';
+  }
+
+  /// Formats a `"label        value"` row padded to [charsPerLine] characters
+  /// (at least one space between the two). Pure; shared by the totals and
+  /// payment rows via [_buildTwoColumnRow].
+  static String formatTwoColumnLine({
+    required String label,
+    required String value,
+    required int charsPerLine,
+  }) {
+    int spaceCount = charsPerLine - label.length - value.length;
+    if (spaceCount < 1) spaceCount = 1;
+    return '$label${' ' * spaceCount}$value';
   }
 }

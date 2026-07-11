@@ -1107,6 +1107,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
         return;
       }
 
+      final paperSize = await ref.read(printerServiceProvider).getPaperSize();
       final bytes = await ThermalReceiptService.buildReceipt(
         orderId: order.orderNumber,
         cart: items,
@@ -1124,6 +1125,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
         storeAddress: storeAddress,
         businessName: ref.read(currentBusinessNameProvider),
         manufacturerNames: manufacturerNames,
+        paperSize: paperSize,
       );
 
       if (!ctx.mounted) return;
