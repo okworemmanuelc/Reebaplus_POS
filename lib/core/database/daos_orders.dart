@@ -1298,9 +1298,12 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
   /// reversal — a rejected sale never reached the cloud (the RPC rolled back its
   /// own transaction, and on the v2 path the local order/wallet/inventory writes
   /// were never enqueued as table rows). So this reversal is **purely local and
-  /// never enqueued**: it just returns this device to its pre-sale state. The
-  /// original sale's orphaned outbox rows stay visible on the Sync Issues screen
-  /// (Invariant #12 — surfaced, never silently destroyed).
+  /// never enqueued**: it returns this device to its pre-sale state by cancelling
+  /// the order, refunding inventory, reversing the §14.3 wallet double-entry, and
+  /// un-issuing any §13.4 crate balance (customer_crate_balances is an LWW cache
+  /// that won't self-heal). The original sale's orphaned outbox rows stay visible
+  /// on the Sync Issues screen (Invariant #12 — surfaced, never silently
+  /// destroyed).
   ///
   /// [items] are the sold lines (product/store/qty) — sourced from the cart on
   /// the foreground path, or from the orphaned envelope's `p_items` on the
@@ -1383,6 +1386,18 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         await into(walletTransactions).insert(compReverse);
         // Intentionally NOT enqueued — local-only reversal of a rejected sale.
       }
+
+      // 4. Reverse the §13.4 crate dispatch (no-deposit "crate-track" brands
+      // only). Delegated to the crate DAO, which owns customer_crate_balances /
+      // crate_ledger. LOCAL-ONLY like the wallet legs above: the sale's crate
+      // rows were held then discarded (the cloud never saw them), and
+      // customer_crate_balances is an LWW cache that won't self-heal on pull —
+      // so undo the "issued" balance here. Walk-in / money-track sales issue no
+      // customer crate balance, so this is a no-op for them.
+      await db.crateLedgerDao.reverseIssuedByCustomerLocal(
+        orderId: orderId,
+        staffId: staffId,
+      );
     });
   }
 

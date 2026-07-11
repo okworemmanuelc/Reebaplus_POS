@@ -459,6 +459,39 @@ class OrderCommands {
     );
   }
 
+  /// Cashier-initiated Cancel of a sale the server permanently REJECTED
+  /// (invoked from the `sale_rejected` notification's Cancel action). The v2
+  /// sale wrote no local `order_items`, so the sold lines are rebuilt from the
+  /// orphaned envelope's `p_items`, then the complete local reversal runs
+  /// (cancel order + refund inventory + reverse wallet). Idempotent — safe to
+  /// tap twice, and safe if the orphan has already been cleaned up.
+  Future<void> cancelRejectedSale(String orderId, String staffId) async {
+    final payloadJson = await _db.syncDao.rejectedSalePayload(orderId);
+    final lines = <({String productId, String storeId, int quantity})>[];
+    if (payloadJson != null) {
+      final payload = jsonDecode(payloadJson) as Map<String, dynamic>;
+      final storeId = payload['p_store_id'];
+      final rawItems = payload['p_items'];
+      if (rawItems is List && storeId is String) {
+        for (final it in rawItems) {
+          if (it is! Map) continue;
+          final pid = it['product_id'];
+          final qty = it['quantity'];
+          if (pid is String && qty is int) {
+            lines.add((productId: pid, storeId: storeId, quantity: qty));
+          }
+        }
+      }
+    }
+    // Even with no recoverable lines (orphan already gone), still cancel the
+    // phantom order header so the local view is consistent.
+    await _ordersDao.reverseRejectedSaleLocal(
+      orderId: orderId,
+      items: lines,
+      staffId: staffId,
+    );
+  }
+
   String _resolvePaymentType({
     required String paymentSubType,
     required int amountPaidKobo,

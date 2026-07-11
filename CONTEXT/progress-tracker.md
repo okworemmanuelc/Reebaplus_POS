@@ -10,7 +10,7 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
-### Oversell orphan recovery (notify cashier + cancel) — in progress (2026-07-08)
+### Oversell orphan recovery (notify cashier + cancel) — reversal CODE-COMPLETE; go-live gated on device rollout (2026-07-08; Slice 2c 2026-07-11)
 Resolves the A-S6 open question — the human chose: **notify the cashier + offer a
 cancel**. Branch `feat/oversell-orphan-recovery` off `main` (post-#105). Gates the
 go-live flag flip (below).
@@ -43,8 +43,11 @@ go-live flag flip (below).
   release). Bonus: also removes the offline FK-defer clutter (FK-bound legs no longer
   push before the order exists). Tests `test/sync/held_child_rows_test.dart` (hold /
   release / discard / keep) green; migration v57→v60 green; sync/orders/costing/crates
-  (305) green. **Remaining for the Cancel button:** extend `reverseRejectedSaleLocal` to
-  also reverse the LOCAL crate balance (customer_crate_balances is LWW, won't self-heal).
+  (305) green. **Crate-balance reversal — DONE (Slice 2c).** `reverseRejectedSaleLocal`
+  now un-issues the LOCAL crate balance too, via `CrateLedgerDao.reverseIssuedByCustomerLocal`
+  (customer_crate_balances is LWW, won't self-heal): a compensating `-qty` 'adjusted' ledger
+  row nets the sale's 'issued' `+qty` and the cache decrements to pre-sale — local-only, never
+  enqueued (the cloud never saw the issue).
 - **⚠ Deeper PRE-EXISTING v2 finding (FIXED above by the held mechanism).** On the v2 path
   `createOrder` eagerly ENQUEUES the sale's child rows, and two of them —
   `cost_batches` (FIFO draw-down) and `customer_crate_balances` — **do NOT FK to the
@@ -57,11 +60,22 @@ go-live flag flip (below).
   outbox on reversal. Local crate + cost reversal is entangled with this (a purely-local
   crate undo wouldn't stop the cloud leak). Held for a coherent fix + human alignment —
   it's an architecture change to the sale-sync path touching the sacred outbox (#12).
-- **Slice 2c (Cancel button UI) + background item-sourcing — pending.**
-- **Go-live flip: HELD** until the reversal is complete (incl. the leak fix) + shipped to
-  devices. Severity ranking: local wallet/inventory (customer money/stock) = FIXED;
-  cloud cost/crate leak = important, pre-existing, needs the defer-enqueue fix. (Supabase
-  MCP is also disconnected this session, so the flip can't be applied from here anyway.)
+- **Slice 2c (Cancel button UI + background item-sourcing) — DONE (2026-07-11).** The
+  `sale_rejected` alert in the notifications modal is now tappable → a plain-language confirm
+  dialog → `OrderService.cancelRejectedSale(orderId, staffId)` →
+  `OrderCommands.cancelRejectedSale`. Because a v2 sale writes no local `order_items`, the
+  command re-sources the sold lines from the orphaned envelope via
+  `SyncDao.rejectedSalePayload` (reads `p_items`/`p_store_id` out of `sync_queue_orphans`),
+  then runs the complete local reversal (order + inventory + wallet + crate). Idempotent;
+  gracefully cancels the phantom header even if the orphan is already gone. Tests:
+  `test/orders/cancel_rejected_sale_test.dart` (source-from-envelope / orphan-gone /
+  idempotent) + a crate-reversal case in `test/orders/reverse_rejected_sale_test.dart`;
+  analyze clean, orders/crates/sync (270) green. **The complete reversal (incl. the crate
+  balance) is now shipped in-code.**
+- **Go-live flip: HELD** — the reversal is now code-complete (local wallet/inventory/crate all
+  FIXED; the cloud cost/crate leak is fixed by the held-outbox mechanism). Still gated on
+  shipping this branch to devices + flipping `feature.domain_rpcs_v2.record_sale` per-env.
+  (Supabase MCP is disconnected this session, so the flip can't be applied from here anyway.)
 
 ### Exactly-once stock integrity (#100, Workstream A) — MERGED via PR #105 (2026-07-08)
 All 8 slices (A-S0…A-S7) done; **PR #105** (`fix/exactly-once-stock-integrity` →

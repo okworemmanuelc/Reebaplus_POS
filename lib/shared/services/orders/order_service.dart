@@ -94,6 +94,15 @@ class OrderService {
     return _commands.cancel(orderId, reason, staffId);
   }
 
+  /// **Cancel a server-REJECTED sale** — the cashier tapped Cancel on the
+  /// `sale_rejected` alert (an oversell: a concurrent till took the last unit).
+  /// Rebuilds the sold lines from the orphaned `pos_record_sale_v2` envelope and
+  /// runs the complete LOCAL reversal (order + inventory + wallet + crate). The
+  /// rejected sale never reached the cloud, so nothing is enqueued. Idempotent.
+  Future<void> cancelRejectedSale(String orderId, String staffId) {
+    return _commands.cancelRejectedSale(orderId, staffId);
+  }
+
   Future<void> assignRider(String orderId, String riderName) {
     return _commands.assignRider(orderId, riderName);
   }

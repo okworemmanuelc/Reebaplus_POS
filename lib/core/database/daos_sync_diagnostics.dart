@@ -541,6 +541,22 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
     return (select(syncQueue)..where((t) => t.id.equals(id))).getSingleOrNull();
   }
 
+  /// Oversell recovery — the payload of the REJECTED `pos_record_sale_v2`
+  /// envelope for [orderId] (now in `sync_queue_orphans`). The cashier's Cancel
+  /// action reads its `p_items` to rebuild the sold lines for the local reversal
+  /// (a v2 sale writes no local `order_items`). Null if not found.
+  Future<String?> rejectedSalePayload(String orderId) async {
+    final result = await customSelect(
+      "SELECT payload FROM sync_queue_orphans "
+      "WHERE action_type = 'domain:pos_record_sale_v2' "
+      "  AND json_extract(payload, '\$.p_order_id') = ?1 "
+      "ORDER BY moved_at DESC LIMIT 1",
+      variables: [Variable.withString(orderId)],
+      readsFrom: {syncQueueOrphans},
+    ).getSingleOrNull();
+    return result?.read<String>('payload');
+  }
+
   /// Looks up a row in `sync_queue_orphans` by its ORIGINAL queue id —
   /// what callers stored before §6.8's auto-archive moved permanent
   /// failures out of `sync_queue`. Used by `flushSale` to surface a
