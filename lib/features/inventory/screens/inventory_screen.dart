@@ -43,6 +43,7 @@ import 'package:reebaplus_pos/features/sync/controllers/first_load_overlay_contr
 import 'package:reebaplus_pos/shared/widgets/skeletons/first_load_skeletons.dart';
 import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/shared/widgets/first_run_empty_state.dart';
+import 'package:reebaplus_pos/shared/services/ui_hint_service.dart';
 
 class InventoryScreen extends ConsumerStatefulWidget {
   const InventoryScreen({super.key});
@@ -71,6 +72,20 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   String? _selectedCategoryId;
   // Products-tab header search (§16.4, amended — reuses the POS toggle pattern).
   bool _showSearch = false;
+  // Discoverability banner (issue #110): "press and hold to edit". Seeded from
+  // the UI-hint service in initState (per staff member, local-only); the render
+  // also checks Gates.editProductPrice so it only reaches users who can actually
+  // long-press-edit. Dismissing it retires the banner permanently for that user.
+  bool _showLongPressHint = false;
+  // The banner's dismissal is "per staff member" (issue #110 AC), so scope the
+  // shared UI-hint key to the current device user. Falls back to the bare key
+  // when no user is resolved (not expected on this authenticated screen).
+  String get _longPressHintKey {
+    final userId = ref.read(deviceUserIdProvider).value;
+    return userId == null || userId.isEmpty
+        ? UiHintService.hintInventoryLongpress
+        : '${UiHintService.hintInventoryLongpress}_$userId';
+  }
   String _searchQuery = '';
   final _searchCtrl = TextEditingController();
   int _totalCrateAssetsSum = 0;
@@ -198,6 +213,13 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     super.initState();
     _tabController = TabController(length: _tabKeys.length, vsync: this);
     _tabController.addListener(_onTabChanged);
+
+    // Issue #110: surface the "press and hold to edit" banner a couple of times
+    // per staff member. Visibility is further gated on Gates.editProductPrice at
+    // render time, so it only reaches users who can use the gesture.
+    uiHintService.shouldShow(_longPressHintKey).then((show) {
+      if (show && mounted) setState(() => _showLongPressHint = true);
+    });
 
     // Defer all DB stream subscriptions until after the first frame so the
     // shimmer skeleton renders immediately without competing with 8+ SQL
@@ -715,6 +737,23 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       children: [
         if (_showSearch) _buildSearchField(context),
         _buildSupplierFilter(context),
+        // Issue #110: press-and-hold-to-edit discoverability banner. Shown only
+        // to staff the price-edit gate lets long-press-edit (matching the
+        // gesture's own guard on `_buildProductRow`), only while there are
+        // products to hold, and only until this staff member dismisses it
+        // (which retires it permanently for them).
+        if (_showLongPressHint &&
+            list.isNotEmpty &&
+            Gates.editProductPrice.allows(ref))
+          _buildInlineHint(
+            message: 'Press and hold a '
+                '${ref.watch(industryLexiconProvider).itemLower}'
+                ' to edit it.',
+            onDismiss: () {
+              setState(() => _showLongPressHint = false);
+              uiHintService.markDismissed(_longPressHintKey);
+            },
+          ),
         Expanded(
           child: list.isEmpty
               // Genuinely empty catalogue (not a filter/search miss) hands off
@@ -742,6 +781,58 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                 ),
         ),
       ],
+    );
+  }
+
+  // Inline dismissible hint shown at the top of the Products list (first couple
+  // of visits). Mirrors the POS home screen's "tap and hold to edit" banner
+  // (issue #110); view-counted under UiHintService.hintInventoryLongpress.
+  Widget _buildInlineHint({
+    required String message,
+    required VoidCallback onDismiss,
+  }) {
+    final primary = Theme.of(context).colorScheme.primary;
+    return Container(
+      margin: EdgeInsets.fromLTRB(
+        context.getRSize(16),
+        context.getRSize(8),
+        context.getRSize(16),
+        0,
+      ),
+      padding: EdgeInsets.all(context.getRSize(12)),
+      decoration: BoxDecoration(
+        color: primary.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            FontAwesomeIcons.circleInfo.data,
+            size: context.getRSize(16),
+            color: primary,
+          ),
+          SizedBox(width: context.getRSize(12)),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(
+                fontSize: context.getRFontSize(13),
+                color: primary,
+              ),
+            ),
+          ),
+          IconButton(
+            icon: Icon(
+              FontAwesomeIcons.xmark.data,
+              size: context.getRSize(16),
+              color: primary,
+            ),
+            onPressed: onDismiss,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+        ],
+      ),
     );
   }
 
