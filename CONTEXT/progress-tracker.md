@@ -10,7 +10,33 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
-### Exactly-once stock integrity (#100, Workstream A) — PR #105 OPEN, awaiting human merge (2026-07-08)
+### Live-sync + exactly-once loop (#100/#101/#102) — re-verified 2026-07-11
+Independently re-verified this session (not from memory):
+- **A (#100) exactly-once — MERGED to `main` (PR #105, merge `a3a2524`).** `OrdersDao.createOrder`
+  routes through guarded `pos_record_sale_v2` behind `feature.domain_rpcs_v2.record_sale` and
+  posts the full wallet double-entry client-side on BOTH paths (`_postSaleWalletLegs`). Verified:
+  code + all 7 `exactly_once_stock_integrity` / `stock_reprocess_idempotency` /
+  `store_crate_balances_id_divergence` tests GREEN. **Go-live flag still HELD** — the key defaults
+  off and is never seeded `true`, so production checkout still runs the v1 path. Flip is gated on
+  orphan-recovery (#121).
+- **C (#102) periodic safety net — PR #120 READY (green; 5 guard tests), awaiting human merge.**
+  Cadence decision KEEP 30 s (`_autoPushPeriodicInterval`).
+- **Orphan recovery (#121, gates the flag flip; not A/B/C) — PR READY (green).** All 5 slice
+  symbols present (`reverseRejectedSaleLocal`, `cancelRejectedSale`, `rejectedSalePayload`,
+  `held_by_order_id`, `reverseIssuedByCustomerLocal`).
+- **B (#101) Broadcast — B0 GATE RUN 2026-07-11: Broadcast PASSES, but the premise is STALE.**
+  Headless Tier-2 spikes (real dev Supabase, TEST business, since deleted) proved on the authed
+  socket: (1) Broadcast channel JOINS; (2) delivers a client round-trip; (3) delivers a
+  SERVER-originated broadcast (`POST /realtime/v1/api/broadcast` → subscribed client received it).
+  **BUT postgres_changes is NO LONGER refused:** the full 54-binding app-parity channel SUBSCRIBES,
+  and a CDC UPDATE (touched a product's `last_updated_at`) was DELIVERED to the client. The #96/#97
+  fixes (one channel + `setAuth` before `subscribe`) resolved the refusal that motivated B.
+  **Recommendation: B is likely UNNECESSARY** — the app already has a working near-instant live
+  signal via postgres_changes; C stays the reconnect-replay backstop. Building B now would be
+  belt-and-suspenders + the writer-agnostic web-signal benefit only. **HUMAN DECISION needed:
+  retire B (rely on postgres_changes + C), or build it anyway for the web/writer-agnostic signal.**
+
+### Exactly-once stock integrity (#100, Workstream A) — MERGED (PR #105, 2026-07-08); flag HELD
 All 8 slices (A-S0…A-S7) done; **PR #105** (`fix/exactly-once-stock-integrity` →
 `main`) opened `Closes #100`. Stop-for-human-merge. Two decisions carried in the PR:
 the **go-live flag flip** (per-env ops, fix inert until flipped) and the **orphan-UX
