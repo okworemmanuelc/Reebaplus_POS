@@ -1356,7 +1356,11 @@ class _CrateTrackingToggle extends StatelessWidget {
           color: onSurface.withValues(alpha: 0.12),
         ),
       ),
-      child: SwitchListTile(
+      // Transparent Material gives the switch an ink target above the
+      // surface-coloured container so its tap-ripple shows.
+      child: Material(
+        type: MaterialType.transparency,
+        child: SwitchListTile(
         value: value,
         onChanged: onChanged,
         activeThumbColor: primary,
@@ -1377,6 +1381,7 @@ class _CrateTrackingToggle extends StatelessWidget {
           ),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        ),
       ),
     );
   }

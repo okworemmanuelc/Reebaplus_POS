@@ -77,6 +77,97 @@ go-live flag flip (below).
   shipping this branch to devices + flipping `feature.domain_rpcs_v2.record_sale` per-env.
   (Supabase MCP is disconnected this session, so the flip can't be applied from here anyway.)
 
+### Workstream C (#102) — periodic pull safety net GUARDED — PR #120 OPEN, rebased on main post-B-merge (2026-07-11)
+Closes the live-sync/exactly-once loop's independent leg (plan §Workstream C).
+Branch `chore/retain-periodic-pull-safety-net` off `origin/main` (post-#105). The
+periodic `catchUpPull` was already SHIPPED (#98/#99); C's job is to **keep** it and
+make it un-removable, because it is the reconnect-replay backstop that makes
+Workstream B's (Broadcast) deliberate "no replay" acceptable.
+- **C-S1 (guard the safety net) — DONE.** Behaviour-preserving refactor of the 30 s
+  tick in `supabase_sync_service.dart`: the inline `Timer.periodic` body is now
+  `_installPeriodicSafetyNet()` (idempotent `??=`) → `_periodicSafetyNetTick()`, with
+  four `@visibleForTesting` seams (`installPeriodicSafetyNetForTesting`,
+  `isPeriodicSafetyNetActiveForTesting`, `periodicSafetyNetIntervalForTesting`,
+  `runPeriodicSafetyNetTickForTesting`). New `test/sync/periodic_safety_net_test.dart`
+  (5 tests, green) pins, via the **same** private installer/tick production uses:
+  the timer is scheduled idempotently at the **30 s** cadence and **cancelled on
+  logout** (`stopAutoPush`); each tick fires the silent `catchUpPull(reason:
+  'periodic')` when foreground + online + business-bound; a tick **pulls nothing**
+  when logged-out (backgrounded/suspended state) or offline; and — under `fakeAsync`
+  — the scheduled 30 s timer actually invokes the pull tick and stops after logout.
+  It fails if the safety net is ever silently removed or repointed.
+- **C-S2 (cadence) — RESOLVED: KEEP 30 s** (human, 2026-07-11). B (Broadcast) has
+  since landed (PR #126, merged) and gives near-instant convergence, so 30 s is the
+  right backstop cadence; tighten toward ~10 s only if that proves too slow. No code
+  change; the 30 s cadence is now test-pinned so any future change is forced through
+  review.
+- **C-S3 — DoD + PR.** `flutter analyze` clean; `flutter test test/sync/` 195 green.
+  PR `Closes #102`; stop for human merge. Invariants: none touched — behaviour-
+  preserving refactor, no schema/migration, outbox/append-only ledgers untouched.
+
+### Broadcast live-signal (#101, Workstream B) — MERGED (PR #126, commit 3a8c1af, 2026-07-11)
+All slices (B0–B7) done on branch `feat/broadcast-live-signal` (off `origin/main`
+post-A-merge). A (#100) is merged (PR #105). **Re-framing:** the B0 gate (run
+2026-07-11) found the original premise stale — `postgres_changes` is **no longer
+refused** (the full 54-binding channel joins + delivers CDC after #96/#97), so B is
+now **additive** (a writer-agnostic signal + a signal the web can subscribe to),
+not a rescue. **Decision surfaced for the human:** the plan intended B to *replace*
+`postgres_changes`, but it works now — so this PR **keeps both** (belt-and-
+suspenders) and does **not** rip out the working `postgres_changes` path; retiring
+it is a separate follow-up decision.
+- **B1 — emit trigger (migration `0147`, DEPLOYED + verified).** One generic
+  `zz_broadcast_sync_signal()` `AFTER INSERT/UPDATE/DELETE` trigger, attached to
+  every `public` base table with a `business_id` (+ `businesses`) via a DB-driven
+  loop — **60 tables**. Emits minimal `{table,id,op}` (no row data) to
+  `store_<business_id>` via `realtime.send(...,'sync',...,private:=true)`.
+  Write-safe (`EXCEPTION WHEN OTHERS THEN NULL`), fires last (`zz_` name, AFTER),
+  skips no-op updates, `SECURITY DEFINER SET search_path=''`, and `EXECUTE`
+  revoked from client roles (advisor flagged the RPC exposure — trigger fires
+  regardless of the grant). Verified live via a rolled-back txn: an UPDATE emits
+  the exact payload; the write succeeds; no-op-vs-bump behaviour understood
+  (a bump trigger moves `last_updated_at`, so peers correctly learn the row
+  changed). **Redundant-emit note:** a few not-app-synced tables (`devices`,
+  `console_audit`, …) also emit — harmless (a debounced, redundant pull), never a
+  correctness issue. Possible future optimisation (not done, keeps to spec):
+  STATEMENT-level triggers would cut per-row volume (a multi-row INSERT = 1 emit).
+- **B2 — RLS (migration `0148`, DEPLOYED + verified).** Exactly one `SELECT`
+  policy on `realtime.messages` scoping topic `store_<business_id>` to
+  `current_user_business_ids()` (profiles-based). **No `INSERT` policy** — clients
+  only receive; the trigger emits as a definer, so a client can't spoof a signal.
+  Verified via JWT-claim impersonation: own topic allowed, another tenant's
+  denied, `realtime.topic()` integrates. **Op note (surface to human):** full
+  private-channel *enforcement* also wants "Allow public access" OFF in the
+  dashboard Realtime settings (can't be set from SQL); the app always joins with
+  `private:true`, so the RLS gate applies regardless.
+- **B3 — transport seam (ADR 0001).** `CloudTransport.startBroadcast(businessId,
+  {onSignal})` / `stopBroadcast()`. `SupabaseCloudTransport` opens one private
+  channel on `store_<biz>` (`setAuth` before subscribe, `replay` deliberately
+  unset — ephemeral). `InMemoryCloudTransport` fake captures the callback +
+  `emitBroadcastSignal()`; `onSignal` is a **bare `void Function()`** (no payload)
+  — the structural guarantee that a signal can't write Drift.
+- **B4 — signal → pull.** Broadcast starts/stops on the SAME lifecycle as
+  realtime (piggybacks `startRealtimeSync` / `_tearDownRealtimeChannels`, so
+  sign-in / resume / connectivity / logout all covered). `_onBroadcastSignal`
+  resolves the *current* business (like the periodic tick) → debounced
+  `catchUpPull(reason:'broadcast')`. Coexists with `postgres_changes`.
+- **B5 — coexistence + no-replay.** Test proves convergence rides the periodic /
+  reconnect pull (C), independent of any broadcast — a missed signal still
+  recovers.
+- **B6 — web reception is OUT OF SCOPE here.** Filed follow-up
+  **`okworemmanuelc/reebaplus-web#55`** (web subscribes to the same
+  `store_<biz>` topic, reacts by refetch/invalidate, NOT a Drift pull). web-pos
+  moved to `reebaplus-web` per PR #104.
+- **B7 — DoD.** `flutter analyze` clean project-wide (0 err/0 warn). `flutter
+  test test/sync/` 198 green (incl. new `broadcast_signal_test.dart` +
+  `cloud_transport_seam_test` broadcast fidelity). **End-to-end Tier-2 test**
+  (`test/integration/broadcast_signal_live_test.dart`, `@Tags(['integration'])`,
+  committed + env-gated) proves the full path against real dev Supabase: a
+  service-role write on TEST_BUSINESS_ID delivered `{table:products,id,op:UPDATE}`
+  to a subscribed private-channel client on `store_<biz>` in ~4s — B1+B2+B3
+  composed. Invariants confirmed by name: #1 (Broadcast never writes Drift; only
+  schedules a pull), #5 (per-tenant RLS, no cross-tenant leak), #10 (pull cursor
+  path unchanged), #12 (outbox untouched).
+
 ### Exactly-once stock integrity (#100, Workstream A) — MERGED via PR #105 (2026-07-08)
 All 8 slices (A-S0…A-S7) done; **PR #105** (`fix/exactly-once-stock-integrity` →
 `main`) opened `Closes #100`. Stop-for-human-merge. Two decisions carried in the PR:

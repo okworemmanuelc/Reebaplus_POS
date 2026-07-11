@@ -27,6 +27,10 @@ class SupabaseCloudTransport implements CloudTransport {
   /// table — one websocket join for the whole tenant. See [startRealtime].
   RealtimeChannel? _channel;
 
+  /// Single private Broadcast channel on the tenant topic `store_<businessId>`
+  /// — the writer-agnostic live signal (#101). See [startBroadcast].
+  RealtimeChannel? _broadcastChannel;
+
   // ── PUSH ──────────────────────────────────────────────────────────────────
   @override
   Future<void> upsertRows(
@@ -254,6 +258,60 @@ class SupabaseCloudTransport implements CloudTransport {
     // channel and bail (the #93 resubscribe race).
     final channel = _channel;
     _channel = null;
+    if (channel != null) {
+      await _client.removeChannel(channel);
+    }
+  }
+
+  // ── BROADCAST (live signal, #101) ───────────────────────────────────────────
+  @override
+  void startBroadcast(String businessId, {required void Function() onSignal}) {
+    if (_broadcastChannel != null) return;
+
+    // Force the socket to carry the user JWT before subscribing: a private
+    // channel join is authorized against the RLS policy on `realtime.messages`
+    // (migration 0148), which resolves the tenant from the caller's JWT. On the
+    // anon key the join is refused and no signal is ever delivered — the exact
+    // #97 discipline that fixed the postgres_changes join.
+    unawaited(
+      _client.realtime.setAuth(_client.auth.currentSession?.accessToken),
+    );
+
+    // One private channel on the tenant topic. `private: true` is what makes
+    // the join RLS-checked; `replay` is deliberately left unset — Broadcast is
+    // an ephemeral signal, and a missed signal is recovered by the periodic /
+    // reconnect pull (Workstream C), never by replaying stale messages.
+    final channel = _client.channel(
+      'store_$businessId',
+      opts: const RealtimeChannelConfig(private: true),
+    );
+
+    // Every signal ({table,id,op}) triggers the SAME reaction, so the payload
+    // is discarded here — the engine only learns "peer changes may exist" and
+    // schedules a pull. This is the seam that guarantees a broadcast can never
+    // write Drift: the callback is handed no row data to apply.
+    channel.onBroadcast(event: 'sync', callback: (_) => onSignal());
+
+    channel.subscribe((status, error) {
+      if (status == RealtimeSubscribeStatus.channelError ||
+          status == RealtimeSubscribeStatus.timedOut) {
+        debugPrint(
+          '[CloudTransport] Broadcast channel $status'
+          '${error != null ? ' — $error' : ''}',
+        );
+      } else if (status == RealtimeSubscribeStatus.subscribed) {
+        debugPrint('[CloudTransport] Broadcast subscribed (store_$businessId)');
+      }
+    });
+    _broadcastChannel = channel;
+  }
+
+  @override
+  Future<void> stopBroadcast() async {
+    // Same synchronous-clear-before-await discipline as [stopRealtime] so a
+    // stop→start (resubscribe) can't see the not-yet-removed channel and bail.
+    final channel = _broadcastChannel;
+    _broadcastChannel = null;
     if (channel != null) {
       await _client.removeChannel(channel);
     }
