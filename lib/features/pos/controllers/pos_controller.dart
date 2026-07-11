@@ -17,7 +17,6 @@ class PosController extends ChangeNotifier {
   String selectedManufacturerId = 'All';
   PriceTier selectedGroup = PriceTier.retailer;
   String searchQuery = '';
-  bool isSearching = false;
   String? currentStoreName;
 
   /// The concrete store POS sells from when the global active store is "All
@@ -162,14 +161,6 @@ class PosController extends ChangeNotifier {
 
   void selectGroup(PriceTier group) {
     selectedGroup = group;
-    notifyListeners();
-  }
-
-  void toggleSearch() {
-    isSearching = !isSearching;
-    if (!isSearching) {
-      searchQuery = '';
-    }
     notifyListeners();
   }
 
