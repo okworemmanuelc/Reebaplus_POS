@@ -60,6 +60,7 @@ class FastAddInput {
     this.emptyCrateValue = '',
     this.hasManufacturer = false,
     this.selectedStoreId,
+    this.barcode = '',
   });
 
   /// Product name (required). Trimmed by the model.
@@ -98,6 +99,11 @@ class FastAddInput {
   /// The chosen store for a multi-store business. Ignored (resolved silently)
   /// for a single-store business.
   final String? selectedStoreId;
+
+  /// Optional product barcode (#113). Blank ⇒ no barcode (null). Never blocks
+  /// the save; a soft collision warning is surfaced by the screen, not here (a
+  /// lookup is a DB call, which this pure model does not do).
+  final String barcode;
 }
 
 /// The outcome of validating + shaping a Fast-Add submission.
@@ -136,6 +142,7 @@ final class FastAddIntent extends FastAddResult {
     required this.lowStockThreshold,
     required this.initialStock,
     required this.storeId,
+    this.barcode,
   });
 
   final String name;
@@ -157,6 +164,9 @@ final class FastAddIntent extends FastAddResult {
   final int lowStockThreshold;
   final int initialStock;
   final String storeId;
+
+  /// Optional product barcode (#113); null when the field was left blank.
+  final String? barcode;
 
   /// A product saved with no buying price is Uncosted (ADR 0006 / CONTEXT.md
   /// §Inventory & Costing): reports exclude it from COGS and count it
@@ -254,6 +264,10 @@ FastAddResult resolveFastAdd(FastAddInput input, FastAddContext context) {
 
   final lowStockThreshold = int.tryParse(input.lowStock.trim()) ?? 5;
 
+  // Optional barcode: a blank field is no barcode (null), never a save blocker.
+  final barcodeRaw = input.barcode.trim();
+  final barcode = barcodeRaw.isEmpty ? null : barcodeRaw;
+
   return FastAddIntent(
     name: name,
     retailerPriceKobo: retailerPriceKobo,
@@ -265,6 +279,7 @@ FastAddResult resolveFastAdd(FastAddInput input, FastAddContext context) {
     lowStockThreshold: lowStockThreshold,
     initialStock: quantity,
     storeId: storeId,
+    barcode: barcode,
   );
 }
 

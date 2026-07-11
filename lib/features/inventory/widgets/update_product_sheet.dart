@@ -53,6 +53,11 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
   late final TextEditingController _supplierCtrl;
   late final TextEditingController _manufacturerCtrl;
   late final TextEditingController _categoryCtrl;
+  late final TextEditingController _barcodeCtrl;
+
+  /// The name of another product already using the typed barcode (#113). Non-
+  /// null ⇒ a soft collision the sheet warns about; it never blocks the save.
+  String? _barcodeCollisionName;
 
   late String _unit;
   late bool _trackEmpties;
@@ -164,6 +169,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
     // Manufacturer name is populated in _loadData() via FK lookup.
     _manufacturerCtrl = TextEditingController();
     _categoryCtrl = TextEditingController();
+    _barcodeCtrl = TextEditingController(text: p.barcode ?? '');
     _imagePath = p.imagePath;
 
     _unit = p.unit;
@@ -261,7 +267,31 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
     _supplierCtrl.dispose();
     _manufacturerCtrl.dispose();
     _categoryCtrl.dispose();
+    _barcodeCtrl.dispose();
     super.dispose();
+  }
+
+  /// Soft barcode-collision check (#113): looks up the typed barcode and, if a
+  /// DIFFERENT product already uses it, records that product's name so the field
+  /// can warn. Never blocks — barcodes are only softly unique (no DB UNIQUE, to
+  /// avoid jamming the offline outbox).
+  Future<void> _onBarcodeChanged(String value) async {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      if (_barcodeCollisionName != null) {
+        setState(() => _barcodeCollisionName = null);
+      }
+      return;
+    }
+    final db = ref.read(databaseProvider);
+    final match = await db.catalogDao.findProductByBarcode(trimmed);
+    if (!mounted) return;
+    final collision = (match != null && match.id != widget.product.id)
+        ? match.name
+        : null;
+    if (collision != _barcodeCollisionName) {
+      setState(() => _barcodeCollisionName = collision);
+    }
   }
 
   void _onSupplierChanged(String query) {
@@ -555,6 +585,9 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
         supplierId: _selectedSupplier?.id,
         size: _size,
         expiryDate: _expiryDate,
+        barcode: _barcodeCtrl.text.trim().isEmpty
+            ? null
+            : _barcodeCtrl.text.trim(),
       );
 
       // Patch the cloud image URL (separate minimal upsert) so the photo
@@ -970,6 +1003,10 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                       labelText: 'Description / Subtitle',
                       hintText: _lexicon.itemDescriptionHint,
                     ),
+                    const SizedBox(height: 14),
+
+                    // ── BARCODE (optional) ───────────────────────────────────
+                    _barcodeField(),
                     const SizedBox(height: 14),
 
                     // ── PRICES ───────────────────────────────────────────────
@@ -1421,6 +1458,40 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
       letterSpacing: 0.8,
     ),
   );
+
+  /// Optional barcode field (#113) with a live soft-collision warning. Typing
+  /// runs [_onBarcodeChanged], which warns (never blocks) when another product
+  /// already uses the code.
+  Widget _barcodeField() {
+    final error = Theme.of(context).colorScheme.error;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AppInput(
+          controller: _barcodeCtrl,
+          labelText: 'Barcode (optional)',
+          hintText: 'Type or scan the product barcode',
+          onChanged: _onBarcodeChanged,
+        ),
+        if (_barcodeCollisionName != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6, left: 4),
+            child: Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, size: 14, color: error),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Already used by "$_barcodeCollisionName". You can still save.',
+                    style: TextStyle(fontSize: 11, color: error),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
 
   Widget _suggestionList({
     required List<Widget> children,

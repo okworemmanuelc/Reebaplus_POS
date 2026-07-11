@@ -60,6 +60,11 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   final _supplierCtrl = TextEditingController();
   final _manufacturerCtrl = TextEditingController();
   final _categoryCtrl = TextEditingController();
+  final _barcodeCtrl = TextEditingController();
+
+  /// The name of another product already using the typed barcode (#113). Non-
+  /// null ⇒ a soft collision the form warns about; it never blocks the save.
+  String? _barcodeCollisionName;
 
   String _unit = 'Bottle';
   bool _trackEmpties = true; // defaults true when unit is Bottle
@@ -178,7 +183,32 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     _supplierCtrl.dispose();
     _manufacturerCtrl.dispose();
     _categoryCtrl.dispose();
+    _barcodeCtrl.dispose();
     super.dispose();
+  }
+
+  /// Soft barcode-collision check (#113): looks up the typed barcode and, if a
+  /// DIFFERENT product already uses it, records that product's name so the field
+  /// can warn. Never blocks — barcodes are only softly unique (no DB UNIQUE, to
+  /// avoid jamming the offline outbox).
+  Future<void> _onBarcodeChanged(String value) async {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      if (_barcodeCollisionName != null) {
+        setState(() => _barcodeCollisionName = null);
+      }
+      return;
+    }
+    final db = ref.read(databaseProvider);
+    final match = await db.catalogDao.findProductByBarcode(trimmed);
+    if (!mounted) return;
+    final collision =
+        (match != null && match.id != _selectedExistingProduct?.id)
+        ? match.name
+        : null;
+    if (collision != _barcodeCollisionName) {
+      setState(() => _barcodeCollisionName = collision);
+    }
   }
 
   void _onSupplierChanged(String query) {
@@ -297,9 +327,11 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         ? (product.emptyCrateValueKobo / 100).toStringAsFixed(2)
         : '';
     _lowStockCtrl.text = product.lowStockThreshold.toString();
+    _barcodeCtrl.text = product.barcode ?? '';
 
     setState(() {
       _selectedExistingProduct = product;
+      _barcodeCollisionName = null;
       _unit = product.unit;
       _size = product.size;
       _trackEmpties = product.trackEmpties;
@@ -344,8 +376,10 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     _manufacturerCtrl.clear();
     _supplierCtrl.clear();
     _categoryCtrl.clear();
+    _barcodeCtrl.clear();
     setState(() {
       _selectedExistingProduct = null;
+      _barcodeCollisionName = null;
       _unit = _lexicon.unit;
       _size = null;
       _expiryDate = null;
@@ -627,6 +661,9 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
           supplierId: _selectedSupplier?.id,
           size: _size,
           expiryDate: _expiryDate,
+          barcode: _barcodeCtrl.text.trim().isEmpty
+              ? null
+              : _barcodeCtrl.text.trim(),
         );
 
         // Persist the crate value at the manufacturer level (§16.5).
@@ -814,6 +851,9 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
           colorHex: drift.Value(_colorHex),
           size: drift.Value(_size),
           expiryDate: drift.Value(_expiryDate),
+          barcode: drift.Value(
+            _barcodeCtrl.text.trim().isEmpty ? null : _barcodeCtrl.text.trim(),
+          ),
           lowStockThreshold: drift.Value(lowStock),
           manufacturerId: drift.Value(_selectedManufacturer?.id),
           supplierId: drift.Value(_selectedSupplier?.id),
@@ -886,6 +926,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         hasManufacturer: _selectedManufacturer != null ||
             _manufacturerCtrl.text.trim().isNotEmpty,
         selectedStoreId: _selectedStore?.id,
+        barcode: _barcodeCtrl.text,
       ),
       FastAddContext(
         tracksCrates: _isCrateBusiness,
@@ -970,6 +1011,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
           colorHex: drift.Value(_colorHex),
           size: drift.Value(_size),
           expiryDate: drift.Value(_expiryDate),
+          barcode: drift.Value(intent.barcode),
           lowStockThreshold: drift.Value(intent.lowStockThreshold),
           manufacturerId: drift.Value(_selectedManufacturer?.id),
           supplierId: drift.Value(_selectedSupplier?.id),
@@ -1321,6 +1363,9 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                   labelText: 'Description / Subtitle *',
                   hintText: _descriptionHint,
                 ),
+                const SizedBox(height: 14),
+                // ── BARCODE (optional) ─────────────────────────────────
+                _barcodeField(),
                 const SizedBox(height: 14),
                 Row(
                   children: [
@@ -1796,6 +1841,10 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       ),
       const SizedBox(height: 14),
 
+      // ── BARCODE (optional) ──────────────────────────────────────────────
+      _barcodeField(),
+      const SizedBox(height: 14),
+
       // ── WHOLESALER PRICE (optional; mirrors selling on save) ────────────
       AppInput(
         controller: _wholesalePriceCtrl,
@@ -1943,6 +1992,40 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     padding: const EdgeInsets.only(top: 6, left: 4),
     child: Text(text, style: TextStyle(fontSize: 11, color: subtext)),
   );
+
+  /// Optional barcode field (#113) with a live soft-collision warning. Shared by
+  /// the Fast-Add and classic layouts. Typing runs [_onBarcodeChanged], which
+  /// warns (never blocks) if another product already uses the code.
+  Widget _barcodeField() {
+    final error = Theme.of(context).colorScheme.error;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AppInput(
+          controller: _barcodeCtrl,
+          labelText: 'Barcode (optional)',
+          hintText: 'Type or scan the product barcode',
+          onChanged: _onBarcodeChanged,
+        ),
+        if (_barcodeCollisionName != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6, left: 4),
+            child: Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, size: 14, color: error),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Already used by "$_barcodeCollisionName". You can still save.',
+                    style: TextStyle(fontSize: 11, color: error),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
 
   Widget _moreDetailsHeader(Color subtext, Color textColor) => InkWell(
     onTap: () => setState(() => _showMoreDetails = !_showMoreDetails),
