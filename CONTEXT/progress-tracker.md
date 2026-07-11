@@ -10,6 +10,43 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### 11-item feature/bug batch — PRD #106 + 13 issues filed; Phase 2 implementation STARTED (2026-07-11)
+Ran the full idea→issues flow (`/ask-matt` → `/grill-with-docs` → `/to-prd` →
+`/to-issues`) over a raw 11-item backlog (staff offboarding, optional units,
+category CRUD, long-press hint, persistent POS search, industry form copy,
+beer→beverage, barcode scanning, ListTile ink-splash bug, reports badge, printer
+paper size). Grilled item-by-item against the code; several premises corrected by
+ground truth.
+- **PRD:** issue **#106** (`ready-for-agent`). **Sliced into 13 vertical-slice
+  issues #107–#119** (all `ready-for-agent`, parent #106). Dependency chains:
+  **#107→#117** (offboarding core→device-wipe/self-resign), **#113→#118** (barcode
+  field→POS scan), **#115→#119** (fix stuck approvals count→reports dot). Other ten
+  start immediately.
+- **New ADRs:** **0016** (staff offboarding — detach-not-delete, free email by
+  nulling `auth_user_id`, keep the `users` Attribution Stub, membership→`removed`,
+  reuse the invariant-#12 wipe-gate) and **0017** (barcode — build one-shot now via
+  `mobile_scanner` + optional `products.barcode`, soft uniqueness). **ADR 0015
+  amended:** offer only 3 industries (Beverage/Pharmacy/Frozen Foods) via a
+  `selectable` flag; registry keeps all nine so existing tenants don't regress.
+- **Glossary (CONTEXT.md):** added Suspend / Offboard / Attribution Stub; refreshed
+  the Industry entry. **project-overview.md:** barcode moved into scope (one-shot),
+  continuous deferred.
+- **Ground-truth corrections found while grilling:** items 6/7 (industry form copy +
+  beer→beverage) already ~shipped by ADR 0015 — residual is a small copy audit;
+  item 9's bug is `Container(color:)` not `DecoratedBox`, and only **4** real sites
+  exist (login picker, stock-count sheet, receive-checkout sheet, CEO-signup crate
+  toggle), all fixed by "keep bg, add a see-through Material"; item 10's badge/query
+  logic is correct+live — "always 3" = pending approval rows that never clear
+  (needs diagnosis).
+- **Phase 2 (implementation) STARTED 2026-07-11** via `/git-issue-workflow` per
+  issue, each branched off fresh `main` → PR (no self-merge). **First up: this
+  foundation docs PR** (`docs/prd-106-domain-model`) landing the CONTEXT/ADR changes
+  so every issue branch inherits the glossary + ADRs. Order after: independent quick
+  wins (#114/#111/#110/#116, #115→#119), product-form group (#108→#112→#109), barcode
+  (#113→#118), then offboarding (#107→#117) **after** the oversell PR #121 (shared
+  unsynced-data wipe gate). Reserve migration numbers (0147+) late to dodge
+  cross-branch collisions.
+
 ### Oversell orphan recovery (notify cashier + cancel) — reversal CODE-COMPLETE; go-live gated on device rollout (2026-07-08; Slice 2c 2026-07-11)
 Resolves the A-S6 open question — the human chose: **notify the cashier + offer a
 cancel**. Branch `feat/oversell-orphan-recovery` off `main` (post-#105). Gates the

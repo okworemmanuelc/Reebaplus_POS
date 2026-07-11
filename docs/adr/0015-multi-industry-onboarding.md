@@ -1,6 +1,21 @@
 # Industry is a configuration profile over one shared model, resolved by a normalizer
 
-**Status:** accepted (2026-07-06)
+**Status:** accepted (2026-07-06); rollout amended 2026-07-11 (see Amendment)
+
+> **Amendment (2026-07-11) — narrow the *offered* set to three, keep the registry
+> whole.** The "unlock all nine now" rollout below is superseded for the current
+> phase: onboarding and the Settings → Business Info picker offer **only three**
+> industries — **Beverage distributor, Pharmacy, Frozen Foods & Grocery** — chosen
+> as the focus verticals "for now." The other six are **retained in the registry
+> and *removed from the pickers*** (rendered nowhere, not greyed "coming soon"),
+> gated by a `selectable` flag on the `Industry` entry. Crucially this is a
+> *picker* filter only: `industryOf()` still iterates the full registry, so any
+> tenant already onboarded on a now-hidden type keeps normalizing correctly and
+> keeps its lexicon + crate gate (no `generic` fallback, no data migration). The
+> per-industry Lexicons for all nine stay in place for the same reason. The
+> reduction is a deliberately reversible flag flip, not a deletion. Everything
+> else in this ADR (config-over-one-model, the normalizer, the lexicon, the
+> product photo) stands unchanged.
 
 The app ships built for a Beverage distributor: onboarding shows seven industries
 but only Beverage distributor is selectable (`business_types.dart` +
