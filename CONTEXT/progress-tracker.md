@@ -10,7 +10,32 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
-### Exactly-once stock integrity (#100, Workstream A) — PR #105 OPEN, awaiting human merge (2026-07-08)
+### Oversell orphan recovery (notify cashier + cancel) — in progress (2026-07-08)
+Resolves the A-S6 open question — the human chose: **notify the cashier + offer a
+cancel**. Branch `feat/oversell-orphan-recovery` off `main` (post-#105). Gates the
+go-live flag flip (below).
+- **Slice 1 (notify) — DONE.** When `pos_record_sale_v2` permanently rejects a sale
+  (`insufficient_stock`/`inventory_row_missing`), `_pushDomainItems` fires an **alert**
+  notification via `_notifyCashierSaleRejected` — targeted at the cashier
+  (`recipientUserId = p_actor_id`), linked to the order (`linkedRecordId = p_order_id`):
+  "out of stock (likely sold on another till). Review and cancel it." Best-effort (never
+  breaks the drain); synced like any notification.
+  Test `test/sync/oversell_orphan_notification_test.dart` green.
+- **⚠ Money-safety finding (must fix before the flag flip).** #105 posts the wallet
+  double-entry client-side on the v2 path, so a **rejected** registered sale now leaves
+  local wallet legs (+ crate legs + a `cost_batches` draw-down) that the existing
+  `_compensateRejectedSale` does NOT reverse (it only cancels the order + refunds the
+  inventory cache). On the live flag, a rejected credit sale would wrongly leave the
+  customer debited. **Slice 2 must make the undo COMPLETE** (inventory + wallet + crate +
+  cost batches), sourcing item qtys from the orphaned envelope's `p_items` (v2 has no
+  local `order_items`/`stock_transactions`), on BOTH the foreground `flushSale` path and
+  the new background cancel, and reconcile the orphaned wallet/crate outbox rows
+  (invariant #12 — they FK-reference an order the cloud rejected). Design + tests pending.
+- **Go-live flip: HELD** until (a) Slice 2 lands + ships AND (b) devices run the #105
+  build — else a rejected registered sale corrupts the wallet. (Supabase MCP is also
+  disconnected this session, so the flip can't be applied from here right now.)
+
+### Exactly-once stock integrity (#100, Workstream A) — MERGED via PR #105 (2026-07-08)
 All 8 slices (A-S0…A-S7) done; **PR #105** (`fix/exactly-once-stock-integrity` →
 `main`) opened `Closes #100`. Stop-for-human-merge. Two decisions carried in the PR:
 the **go-live flag flip** (per-env ops, fix inert until flipped) and the **orphan-UX

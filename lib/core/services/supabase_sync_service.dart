@@ -1287,10 +1287,52 @@ class SupabaseSyncService {
           permanent: isPermanent,
           fkDeferred: isFkViolation,
         );
+        // Oversell recovery: when the guarded pos_record_sale_v2 REJECTS a sale
+        // (a concurrent till took the last unit → insufficient_stock /
+        // inventory_row_missing), the envelope has just orphaned. Actively
+        // surface it to the cashier who rang it — not only on the Sync Issues
+        // screen — so the phantom local sale can be cancelled. Best-effort: a
+        // notification failure must never break the drain.
+        if (isPermanent && rpcName == 'pos_record_sale_v2') {
+          await _notifyCashierSaleRejected(payload, e.message);
+        }
       } catch (e) {
         debugPrint('[SyncService] Domain RPC $rpcName transient error: $e');
         await _db.syncDao.markFailed(item.id, e.toString());
       }
+    }
+  }
+
+  /// Fire an alert notification to the cashier who rang a sale the server
+  /// permanently rejected — most importantly an oversell, where a concurrent
+  /// till took the last unit (`insufficient_stock` / `inventory_row_missing`).
+  /// Targeted at the actor via `recipientUserId` and linked to the order via
+  /// `linkedRecordId` so the UI can offer a one-tap cancel. Best-effort: never
+  /// throws into the drain.
+  Future<void> _notifyCashierSaleRejected(
+    Map<String, dynamic> payload,
+    String serverMessage,
+  ) async {
+    try {
+      final orderId = payload['p_order_id'];
+      if (orderId is! String) return;
+      final actorId = payload['p_actor_id'];
+      final isStockReject =
+          serverMessage.contains('insufficient_stock') ||
+          serverMessage.contains('inventory_row_missing');
+      final message = isStockReject
+          ? 'A sale could not be completed — an item was out of stock '
+                '(likely sold on another till). Review and cancel it.'
+          : 'A sale was rejected during sync. Review and cancel it.';
+      await _db.notificationsDao.fireNotification(
+        type: 'sale_rejected',
+        message: message,
+        severity: 'alert',
+        linkedRecordId: orderId,
+        recipientUserId: actorId is String ? actorId : null,
+      );
+    } catch (e) {
+      debugPrint('[SyncService] sale-rejected notification failed: $e');
     }
   }
 
