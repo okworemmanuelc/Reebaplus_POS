@@ -329,6 +329,25 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
         .getSingleOrNull();
   }
 
+  /// Look up a product by its [barcode] (#113 — foundation for scanning, #118).
+  /// Returns the first business-scoped, non-deleted match, or null. Barcodes are
+  /// softly unique (no DB UNIQUE — that would jam the offline outbox), so a
+  /// collision is possible; callers that need to warn on one compare the match's
+  /// id to the product being edited. An empty [barcode] never matches.
+  Future<ProductData?> findProductByBarcode(String barcode) {
+    final trimmed = barcode.trim();
+    if (trimmed.isEmpty) return Future.value(null);
+    return (select(products)
+          ..where(
+            (t) =>
+                t.barcode.equals(trimmed) &
+                whereBusiness(t) &
+                t.isDeleted.not(),
+          )
+          ..limit(1))
+        .getSingleOrNull();
+  }
+
   Future<void> softDeleteProduct(String productId) async {
     // Soft-delete: flip is_deleted and push it as an UPSERT, never a hard
     // tombstone. A `products:delete` makes the cloud run `DELETE FROM products`,
@@ -377,6 +396,11 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
     Object? supplierId = _unset,
     Object? size = _unset,
     Object? expiryDate = _unset,
+    // Optional product barcode (#113). Sentinel-defaulted like the cosmetic
+    // fields above: omit to leave the column untouched. A concrete String (or
+    // null to clear locally) is written; a set value pushes because the partial
+    // companion enqueued below serializes present, non-null values.
+    Object? barcode = _unset,
   }) async {
     final now = DateTime.now();
     final comp = ProductsCompanion(
@@ -421,6 +445,9 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
       expiryDate: identical(expiryDate, _unset)
           ? const Value.absent()
           : Value(expiryDate as DateTime?),
+      barcode: identical(barcode, _unset)
+          ? const Value.absent()
+          : Value(barcode as String?),
       lastUpdatedAt: Value(now),
     );
     await (update(
