@@ -3030,7 +3030,33 @@ class SupabaseSyncService {
         }
       },
     );
+
+    // Live signal via Broadcast (#101), on the SAME lifecycle as realtime — it
+    // starts here (sign-in) and is torn down / restarted by the same
+    // [_tearDownRealtimeChannels] / [restartRealtimeSync] paths that drive
+    // realtime (resume, connectivity handoff, logout). Belt-and-suspenders: it
+    // runs ALONGSIDE the postgres_changes bindings above (a change reaches the
+    // engine whichever path delivers first); it does not replace them here.
+    _transport.startBroadcast(businessId, onSignal: _onBroadcastSignal);
+
     _realtimeActive = true;
+  }
+
+  /// Reaction to one Broadcast signal (#101). The signal carries no row data by
+  /// construction (see [CloudTransport.startBroadcast]); its ONLY effect is to
+  /// schedule a catch-up pull. This is what keeps Broadcast a *signal* and not a
+  /// transport — **it must never write Drift** (invariant #1 / architecture
+  /// "Realtime = signal"). [catchUpPull] self-guards on business-bound + online +
+  /// not-mid-full-pull and shares the 20 s debounce with the reconnect / resume /
+  /// periodic catch-ups, so a burst of signals from one multi-row write collapses
+  /// to a single pull and never overlaps another catch-up. Resolves the *current*
+  /// business (like the periodic tick), so a signal that races a business switch
+  /// can't pull the wrong tenant.
+  void _onBroadcastSignal() {
+    final businessId = _db.businessIdResolver.call();
+    if (businessId == null) return;
+    debugPrint('[SyncService] Broadcast signal → catch-up pull');
+    unawaited(catchUpPull(businessId, reason: 'broadcast'));
   }
 
   /// Realtime dispatch for the `businesses` row (its own id-filtered channel).
@@ -3176,6 +3202,10 @@ class SupabaseSyncService {
   Future<void> _tearDownRealtimeChannels() async {
     _realtimeActive = false;
     await _transport.stopRealtime();
+    // The Broadcast signal channel shares realtime's lifecycle (#101): tear it
+    // down here so logout and the resubscribe race (#93) drop it in lockstep
+    // with the postgres_changes channel.
+    await _transport.stopBroadcast();
   }
 
   /// Re-establishes the realtime subscriptions after they may have been
