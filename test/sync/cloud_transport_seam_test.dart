@@ -170,6 +170,32 @@ void main() {
       expect(received!.newRecord['id'], 'c1');
     });
 
+    test('startBroadcast captures the tenant + callback; emitBroadcastSignal '
+        'pumps a data-less nudge; stopBroadcast tears it down', () async {
+      var signals = 0;
+      t.startBroadcast('B', onSignal: () => signals++);
+      expect(t.broadcastActive, isTrue);
+      expect(t.broadcastBusinessId, 'B');
+      expect(t.startBroadcastCount, 1);
+
+      // A second start is idempotent while a subscription is live (mirrors the
+      // real adapter's `_broadcastChannel != null` guard).
+      t.startBroadcast('B', onSignal: () => signals += 100);
+      expect(t.startBroadcastCount, 1);
+
+      t.emitBroadcastSignal();
+      t.emitBroadcastSignal();
+      expect(signals, 2); // the first callback fired; the second never bound
+
+      await t.stopBroadcast();
+      expect(t.broadcastActive, isFalse);
+      expect(t.broadcastBusinessId, isNull);
+      expect(t.stopBroadcastCount, 1);
+      // After teardown a stray signal is dropped, never delivered.
+      t.emitBroadcastSignal();
+      expect(signals, 2);
+    });
+
     test('identity: currentAuthUserId is settable and authEvents pumps',
         () async {
       t.setAuthUserId('u-42');

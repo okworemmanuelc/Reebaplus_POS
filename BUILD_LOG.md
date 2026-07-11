@@ -2,6 +2,63 @@
 
 ---
 
+## 2026-07-11 — Broadcast live-signal layer (issue #101, Workstream B, slices B1–B7)
+
+**What shipped.** A writer-agnostic live-sync **signal** via Supabase Broadcast, entirely
+additive alongside the existing `postgres_changes` path (belt-and-suspenders — the B0 gate
+found `postgres_changes` is no longer refused, so B does NOT rip it out; retiring it is a
+separate follow-up decision surfaced to the human).
+
+**B1 — emit trigger (migration `0147_broadcast_sync_signal.sql`, DEPLOYED via
+apply_migration + verified).** One generic `zz_broadcast_sync_signal()` AFTER
+INSERT/UPDATE/DELETE trigger attached to every business-scoped `public` base table (+
+`businesses`) via a DB-driven loop = **60 tables**. Emits minimal `{table,id,op}` (no row
+data) to `store_<business_id>` through `realtime.send(...,'sync',...,private:=true)`.
+Write-safe (`EXCEPTION WHEN OTHERS THEN NULL`), fires last (`zz_` name, AFTER row), skips
+no-op updates, `SECURITY DEFINER SET search_path=''`, `EXECUTE` revoked from client roles
+(the security advisor flagged the SECURITY DEFINER function's RPC exposure — a trigger
+fires regardless of the grant, so revoking is safe). Verified live in a rolled-back txn:
+an UPDATE emits the exact payload and the write still succeeds.
+
+**B2 — RLS (migration `0148_realtime_broadcast_authorization.sql`, DEPLOYED + verified).**
+Exactly one `SELECT` policy on `realtime.messages` scoping topic `store_<business_id>` to
+`current_user_business_ids()`; NO `INSERT` policy (clients only receive; the definer trigger
+emits, so a client can't spoof a signal). Verified by JWT-claim impersonation: own topic
+allowed, another tenant's denied.
+
+**B3/B4 — client seam + wiring.** `CloudTransport.startBroadcast(businessId,{onSignal})` /
+`stopBroadcast()` (bare `void Function()` callback — structurally can't write Drift).
+`SupabaseCloudTransport` opens one private channel (`setAuth` before subscribe, `replay`
+unset). Broadcast rides realtime's exact lifecycle (piggybacks `startRealtimeSync` /
+`_tearDownRealtimeChannels`). `_onBroadcastSignal` → debounced `catchUpPull('broadcast')`.
+
+**B5.** A missed signal still converges on the periodic/reconnect pull (Workstream C) — no
+dependency on broadcast replay.
+
+**B6.** Web reception filed as `okworemmanuelc/reebaplus-web#55` (out of scope here).
+
+**Verified.** `flutter analyze` clean project-wide (0 err / 0 new warn). `flutter test
+test/sync/` 198 green — new `test/sync/broadcast_signal_test.dart` (lifecycle, signal →
+debounced pull, no-Drift-write invariant, no-replay) + broadcast fidelity added to
+`cloud_transport_seam_test.dart`. **End-to-end Tier-2** `test/integration/
+broadcast_signal_live_test.dart` (`@Tags(['integration'])`, env-gated) PASSED against real
+dev Supabase: a service-role write delivered `{table:products,id,op:UPDATE}` to a
+subscribed private-channel client on `store_<biz>` in ~4s.
+
+**Invariants (by name):** #1 Broadcast never writes Drift (only schedules a pull); #5 no
+cross-tenant signal leak (per-tenant RLS); #10 pull-cursor path untouched; #12 outbox
+untouched.
+
+**Files:** `supabase/migrations/0147_broadcast_sync_signal.sql` (new),
+`supabase/migrations/0148_realtime_broadcast_authorization.sql` (new),
+`lib/core/services/cloud_transport.dart`, `lib/core/services/supabase_cloud_transport.dart`,
+`lib/core/services/supabase_sync_service.dart`, `test/helpers/in_memory_cloud_transport.dart`,
+`test/sync/broadcast_signal_test.dart` (new), `test/sync/cloud_transport_seam_test.dart`,
+`test/integration/broadcast_signal_live_test.dart` (new), `CONTEXT/architecture.md`,
+`CONTEXT/progress-tracker.md`.
+
+---
+
 ## 2026-07-08 — Exactly-once stock: idempotency backstops + mutable-balance-cache audit (issue #100, A-S5/A-S6)
 
 **A-S5 (idempotency backstops).** Added `test/sync/stock_reprocess_idempotency_test.dart`:
