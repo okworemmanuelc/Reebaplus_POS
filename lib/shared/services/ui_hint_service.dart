@@ -11,6 +11,11 @@ class UiHintService {
   // (issue #32 / ADR 0006): "tap a product to add it to the cart". Only shown
   // when the POS grid actually has products to tap.
   static const hintPosTapAdd = 'hint_pos_tap_add';
+  // Discoverability banner on the Inventory Products list (issue #110): "press
+  // and hold a product to edit it". Only surfaced to staff the price-edit gate
+  // (Gates.editProductPrice) lets long-press-edit; dismissal is permanent per
+  // staff member, stored locally, never synced.
+  static const hintInventoryLongpress = 'hint_inventory_longpress';
 
   Future<int> viewCount(String hintKey) async {
     final prefs = await SharedPreferences.getInstance();

@@ -41,5 +41,23 @@ void main() {
       expect(await service.shouldShow(UiHintService.hintPosLongpress), true);
       expect(await service.viewCount(UiHintService.hintPosLongpress), 0);
     });
+
+    test('inventory long-press hint is view-counted independently (#110)',
+        () async {
+      // The Inventory "press and hold to edit" banner reuses the shared hint
+      // service under its own key: dismissing it twice hides it permanently for
+      // that staff member without touching the POS banners' view counts.
+      await service.markShown(UiHintService.hintInventoryLongpress);
+      expect(await service.shouldShow(UiHintService.hintInventoryLongpress),
+          true);
+
+      await service.markShown(UiHintService.hintInventoryLongpress);
+      expect(await service.shouldShow(UiHintService.hintInventoryLongpress),
+          false);
+
+      // POS keys are untouched by the inventory dismissal.
+      expect(await service.shouldShow(UiHintService.hintPosLongpress), true);
+      expect(await service.shouldShow(UiHintService.hintPosTapAdd), true);
+    });
   });
 }
