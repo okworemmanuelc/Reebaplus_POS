@@ -165,9 +165,11 @@ The trade a business operates in (Beverage distributor, Pharmacy, Phone &
 Gadgets, Frozen Foods & Grocery, …) — the single input that morphs the app's
 words, presets, and optional feature surfaces. Resolved from `businesses.type`
 by the total normalizer `industryOf(type)`; unknown/null → the `generic`
-Industry, never a crash. Across the epic all nine become selectable at
-onboarding and editable later; this foundation slice adds the registry without
-changing today's selectable set (ADR 0015).
+Industry, never a crash. The registry retains all nine (+`generic`) so any
+existing tenant still normalizes and keeps its features, but only **three are
+*offered*** in the onboarding/Settings pickers for now — Beverage distributor,
+Pharmacy, Frozen Foods & Grocery — via a `selectable` flag; the other six are
+kept-but-unselectable, not deleted (ADR 0015, amended 2026-07-11).
 _Avoid_: reading `businesses.type` string directly to branch behaviour (use the
 resolved Industry); a new `industry_id` column (identity is the normalized type).
 
@@ -208,6 +210,38 @@ business is bound, hands the closure `(ref, db, businessId)` with the resolved
 non-null id, and rebuilds on bind or switch — so a tenant-scoped read cannot be
 baked to a missing or stale business at build time.
 _Avoid_: raw `StreamProvider` over a DAO `watch*`, inline businessId guards.
+
+### Staff & Identity
+
+**Suspend**:
+The **reversible** block of a staff membership (`user_businesses.status =
+'suspended'`): the member can no longer sign in or make sales, but they stay
+linked to the business — email not freed, `users` row and `auth_user_id`
+intact — and **Reactivate** restores full access. A holding state, not an exit.
+The business owner can never be suspended.
+_Avoid_: treating Suspend as removal or as a way to free an email; conflating it
+with Offboard.
+
+**Offboard**:
+The **terminal** removal of a staff member from a business. Severs the auth link
+(nulls `users.auth_user_id`, which is what **frees the email** to create a new
+business), soft-marks the membership `removed`, wipes/logs-out the person on
+their own device, and **preserves the `users` row** as an Attribution Stub.
+Triggered either by the staffer themselves (resign / "delete my account" — one
+operation) or by an admin. Distinct from Suspend (reversible) and from
+`delete_business` (whole-tenant). The **owner has no Offboard** — an owner's
+exit is `delete_business`.
+_Avoid_: "resign"/"remove"/"delete account" as if they were different
+operations; hard-deleting the `users` row; freeing an email by deleting
+`auth.users` (unnecessary and blocked on managed Supabase).
+
+**Attribution Stub**:
+The `users` row left behind by an Offboard, with `auth_user_id` nulled: it backs
+no live login but keeps every historical record correctly attributed, because
+all `performed_by` / `recorded_by` / `staff_id` / `initiated_by` FKs point at
+`users.id`. Retained forever; **never hard-deleted**. Its display name/email are
+kept so past sales still read "Sold by <name>".
+_Avoid_: anonymizing or deleting the stub; re-pointing historical FKs.
 
 ### Web
 
