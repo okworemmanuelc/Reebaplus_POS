@@ -209,14 +209,20 @@ class ReceiveCartScreen extends ConsumerWidget {
                                     SizedBox(height: context.getRSize(4)),
                                     Row(
                                       children: [
-                                        Text(
-                                          line.unit ?? 'Unit',
-                                          style: TextStyle(
-                                            fontSize: context.getRFontSize(13),
-                                            color: text.withValues(alpha: 0.6),
+                                        // A unitless product (#108) shows no
+                                        // unit label — just its cost.
+                                        if ((line.unit ?? '').isNotEmpty) ...[
+                                          Text(
+                                            line.unit!,
+                                            style: TextStyle(
+                                              fontSize:
+                                                  context.getRFontSize(13),
+                                              color:
+                                                  text.withValues(alpha: 0.6),
+                                            ),
                                           ),
-                                        ),
-                                        SizedBox(width: context.getRSize(8)),
+                                          SizedBox(width: context.getRSize(8)),
+                                        ],
                                         Flexible(
                                           child: Container(
                                             padding: EdgeInsets.symmetric(

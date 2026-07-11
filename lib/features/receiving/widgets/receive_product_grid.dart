@@ -283,7 +283,7 @@ class _ReceiveProductCard extends ConsumerWidget {
               ),
               SizedBox(height: context.getRSize(2)),
               Text(
-                '${product.size != null && product.size!.isNotEmpty ? '${product.size} ' : ''}${product.unit}'.trim(),
+                '${product.size != null && product.size!.isNotEmpty ? '${product.size} ' : ''}${product.unit ?? ''}'.trim(),
                 style: TextStyle(
                   fontSize: context.getRFontSize(11),
                   color: subtextCol,

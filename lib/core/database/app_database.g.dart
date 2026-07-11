@@ -7374,10 +7374,9 @@ class $ProductsTable extends Products
   late final GeneratedColumn<String> unit = GeneratedColumn<String>(
     'unit',
     aliasedName,
-    false,
+    true,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
-    defaultValue: const Constant('Bottle'),
   );
   static const VerificationMeta _retailerPriceKoboMeta = const VerificationMeta(
     'retailerPriceKobo',
@@ -7993,7 +7992,7 @@ class $ProductsTable extends Products
       unit: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}unit'],
-      )!,
+      ),
       retailerPriceKobo: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}retailer_price_kobo'],
@@ -8102,7 +8101,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
   final String? subtitle;
   final String? sku;
   final String? size;
-  final String unit;
+  final String? unit;
   final int retailerPriceKobo;
   final int wholesalerPriceKobo;
   final int buyingPriceKobo;
@@ -8136,7 +8135,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     this.subtitle,
     this.sku,
     this.size,
-    required this.unit,
+    this.unit,
     required this.retailerPriceKobo,
     required this.wholesalerPriceKobo,
     required this.buyingPriceKobo,
@@ -8187,7 +8186,9 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     if (!nullToAbsent || size != null) {
       map['size'] = Variable<String>(size);
     }
-    map['unit'] = Variable<String>(unit);
+    if (!nullToAbsent || unit != null) {
+      map['unit'] = Variable<String>(unit);
+    }
     map['retailer_price_kobo'] = Variable<int>(retailerPriceKobo);
     map['wholesaler_price_kobo'] = Variable<int>(wholesalerPriceKobo);
     map['buying_price_kobo'] = Variable<int>(buyingPriceKobo);
@@ -8247,7 +8248,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
           : Value(subtitle),
       sku: sku == null && nullToAbsent ? const Value.absent() : Value(sku),
       size: size == null && nullToAbsent ? const Value.absent() : Value(size),
-      unit: Value(unit),
+      unit: unit == null && nullToAbsent ? const Value.absent() : Value(unit),
       retailerPriceKobo: Value(retailerPriceKobo),
       wholesalerPriceKobo: Value(wholesalerPriceKobo),
       buyingPriceKobo: Value(buyingPriceKobo),
@@ -8301,7 +8302,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       subtitle: serializer.fromJson<String?>(json['subtitle']),
       sku: serializer.fromJson<String?>(json['sku']),
       size: serializer.fromJson<String?>(json['size']),
-      unit: serializer.fromJson<String>(json['unit']),
+      unit: serializer.fromJson<String?>(json['unit']),
       retailerPriceKobo: serializer.fromJson<int>(json['retailerPriceKobo']),
       wholesalerPriceKobo: serializer.fromJson<int>(
         json['wholesalerPriceKobo'],
@@ -8346,7 +8347,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       'subtitle': serializer.toJson<String?>(subtitle),
       'sku': serializer.toJson<String?>(sku),
       'size': serializer.toJson<String?>(size),
-      'unit': serializer.toJson<String>(unit),
+      'unit': serializer.toJson<String?>(unit),
       'retailerPriceKobo': serializer.toJson<int>(retailerPriceKobo),
       'wholesalerPriceKobo': serializer.toJson<int>(wholesalerPriceKobo),
       'buyingPriceKobo': serializer.toJson<int>(buyingPriceKobo),
@@ -8383,7 +8384,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     Value<String?> subtitle = const Value.absent(),
     Value<String?> sku = const Value.absent(),
     Value<String?> size = const Value.absent(),
-    String? unit,
+    Value<String?> unit = const Value.absent(),
     int? retailerPriceKobo,
     int? wholesalerPriceKobo,
     int? buyingPriceKobo,
@@ -8421,7 +8422,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     subtitle: subtitle.present ? subtitle.value : this.subtitle,
     sku: sku.present ? sku.value : this.sku,
     size: size.present ? size.value : this.size,
-    unit: unit ?? this.unit,
+    unit: unit.present ? unit.value : this.unit,
     retailerPriceKobo: retailerPriceKobo ?? this.retailerPriceKobo,
     wholesalerPriceKobo: wholesalerPriceKobo ?? this.wholesalerPriceKobo,
     buyingPriceKobo: buyingPriceKobo ?? this.buyingPriceKobo,
@@ -8651,7 +8652,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
   final Value<String?> subtitle;
   final Value<String?> sku;
   final Value<String?> size;
-  final Value<String> unit;
+  final Value<String?> unit;
   final Value<int> retailerPriceKobo;
   final Value<int> wholesalerPriceKobo;
   final Value<int> buyingPriceKobo;
@@ -8837,7 +8838,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     Value<String?>? subtitle,
     Value<String?>? sku,
     Value<String?>? size,
-    Value<String>? unit,
+    Value<String?>? unit,
     Value<int>? retailerPriceKobo,
     Value<int>? wholesalerPriceKobo,
     Value<int>? buyingPriceKobo,
@@ -54983,7 +54984,7 @@ typedef $$ProductsTableCreateCompanionBuilder =
       Value<String?> subtitle,
       Value<String?> sku,
       Value<String?> size,
-      Value<String> unit,
+      Value<String?> unit,
       Value<int> retailerPriceKobo,
       Value<int> wholesalerPriceKobo,
       Value<int> buyingPriceKobo,
@@ -55020,7 +55021,7 @@ typedef $$ProductsTableUpdateCompanionBuilder =
       Value<String?> subtitle,
       Value<String?> sku,
       Value<String?> size,
-      Value<String> unit,
+      Value<String?> unit,
       Value<int> retailerPriceKobo,
       Value<int> wholesalerPriceKobo,
       Value<int> buyingPriceKobo,
@@ -56614,7 +56615,7 @@ class $$ProductsTableTableManager
                 Value<String?> subtitle = const Value.absent(),
                 Value<String?> sku = const Value.absent(),
                 Value<String?> size = const Value.absent(),
-                Value<String> unit = const Value.absent(),
+                Value<String?> unit = const Value.absent(),
                 Value<int> retailerPriceKobo = const Value.absent(),
                 Value<int> wholesalerPriceKobo = const Value.absent(),
                 Value<int> buyingPriceKobo = const Value.absent(),
@@ -56686,7 +56687,7 @@ class $$ProductsTableTableManager
                 Value<String?> subtitle = const Value.absent(),
                 Value<String?> sku = const Value.absent(),
                 Value<String?> size = const Value.absent(),
-                Value<String> unit = const Value.absent(),
+                Value<String?> unit = const Value.absent(),
                 Value<int> retailerPriceKobo = const Value.absent(),
                 Value<int> wholesalerPriceKobo = const Value.absent(),
                 Value<int> buyingPriceKobo = const Value.absent(),

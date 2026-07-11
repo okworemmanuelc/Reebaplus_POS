@@ -483,10 +483,10 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
                                     color: _text,
                                   ),
                                 ),
-                                if (item.product.unit.isNotEmpty) ...[
+                                if ((item.product.unit ?? '').isNotEmpty) ...[
                                   SizedBox(height: rSize(context, 2)),
                                   Text(
-                                    item.product.unit,
+                                    item.product.unit!,
                                     style: TextStyle(
                                       fontSize: rFontSize(context, 11),
                                       color: _subtext,
