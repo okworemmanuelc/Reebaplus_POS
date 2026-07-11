@@ -1392,14 +1392,15 @@ final currentUserRoleProvider = Provider<RoleData?>((ref) {
   return ref.watch(userRoleProvider(userId));
 });
 
-/// The current user's membership status ('active' | 'suspended') for the bound
-/// business, or null when logged out / not yet resolved locally. Reactive: a
-/// suspension performed on another device arrives via the `user_businesses`
-/// realtime channel, flips the local row, and re-emits here. Drives the live
-/// suspend → sign-out guard in main.dart (master plan §9.5 / §8.3): when this
-/// turns 'suspended' for an active session, the device drops to the Who's
-/// Working picker (which hides suspended staff, so they can't re-select
-/// themselves).
+/// The current user's membership status ('active' | 'suspended' | 'removed')
+/// for the bound business, or null when logged out / not yet resolved locally.
+/// Reactive: a suspension or removal performed on another device arrives via the
+/// `user_businesses` realtime channel, flips the local row, and re-emits here.
+/// Drives the live membership guard in main.dart (master plan §9.5 / §8.3 +
+/// #117): 'suspended' drops the device to the Who's Working picker (which hides
+/// suspended staff, so they can't re-select themselves); 'removed' (an admin ran
+/// `remove_staff_member`) runs the offboarding gate → logout, wiping local data
+/// only when they were the sole member on this device.
 final currentUserMembershipStatusProvider = Provider<String?>((ref) {
   final user = ref.watch(authProvider).currentUser;
   if (user == null) return null;

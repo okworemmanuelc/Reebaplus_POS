@@ -48,6 +48,18 @@ class StaffRemoveException implements Exception {
   String toString() => message;
 }
 
+/// Thrown by [AuthService.resignOwnMembership] / [AuthService.discardUnsyncedAndResign]
+/// (#117 self-resign) when the server-authoritative self-removal cannot proceed
+/// (offline, the caller is the owner, or no live membership). Carries a
+/// plain-English [message] safe to show; no local state is changed when this is
+/// thrown BEFORE the wipe (a failed RPC leaves the device fully intact).
+class StaffResignException implements Exception {
+  final String message;
+  const StaffResignException(this.message);
+  @override
+  String toString() => message;
+}
+
 class LogoutWipeException implements Exception {
   final String message;
   const LogoutWipeException(this.message);
@@ -1291,49 +1303,12 @@ class AuthService extends ValueNotifier<UserData?> {
     if (isSoleUser) {
       // §3.1 wipe gate (E) / Invariant #12: a sole-user logout WIPES the device,
       // so it may never destroy a committed local row that still has an
-      // un-uploaded outbox entry. The outbox is the union of retryable pending
-      // rows (`sync_queue`) and un-pushable orphans (`sync_queue_orphans`).
-      var pendingCount = await _db.syncDao.countPending(businessId: businessId);
-      var orphanCount = await _db.syncDao.countOrphans(businessId: businessId);
-
-      if (pendingCount + orphanCount > 0) {
-        // E3: online → push-and-CONFIRM the queue is empty before wiping. A
-        // partial/failed push must not let the wipe proceed on the remainder,
-        // so we re-count AFTER the drain and decide on the confirmed state.
-        if (_sync.isOnline.value) {
-          try {
-            await _sync.pushPending();
-          } catch (e) {
-            debugPrint(
-              '[AuthService] logOutCurrentUser final push before wipe failed: $e',
-            );
-          }
-          pendingCount = await _db.syncDao.countPending(businessId: businessId);
-          orphanCount = await _db.syncDao.countOrphans(businessId: businessId);
-        }
-
-        // Two-tier resolution on whatever remains after the (possible) drain.
-        if (pendingCount > 0) {
-          // Retryable rows remain (transient — offline, or a row mid-flight, or
-          // a mix that still includes pending). Refuse and keep the user logged
-          // in; it resolves itself on reconnect / the next drain (E1).
-          throw LogoutWipeException(
-            'You have ${pendingCount + orphanCount} change'
-            '${pendingCount + orphanCount == 1 ? "" : "s"} not yet synced. '
-            'Connect to the internet and let it sync before logging out.',
-          );
-        }
-        if (orphanCount > 0) {
-          // Un-pushable orphans ONLY (the cloud is actively rejecting them).
-          // Do NOT trap the user — route to the "Resolve unsynced data" flow
-          // (export → typed-confirm discard → logout) via the dedicated
-          // exception. The wipe does not run here.
-          throw LogoutBlockedByUnsyncedDataException(
-            pendingCount: pendingCount,
-            orphanCount: orphanCount,
-          );
-        }
-      }
+      // un-uploaded outbox entry. The gate throws LogoutWipeException (retryable
+      // rows remain → "connect and sync first") or
+      // LogoutBlockedByUnsyncedDataException (only un-pushable orphans remain →
+      // the Resolve-unsynced-data flow), and returns only when the outbox is
+      // confirmed clean.
+      await _assertOutboxClearBeforeWipe(businessId);
 
       // Outbox confirmed empty — safe to wipe.
       try {
@@ -1345,11 +1320,68 @@ class AuthService extends ValueNotifier<UserData?> {
       return;
     }
 
-    // Multiple device-authenticated users: drop this user from the device set.
+    // Multiple device-authenticated users (shared till): drop this user from
+    // the device set and return to the Who's Working picker — the others keep
+    // their PINs and the till's shared data + outbox are untouched.
+    await _dropCurrentUserToPickerLocal(user);
+  }
+
+  /// §3.1 wipe gate (E) / Invariant #12. Guards any device-wiping offboard (a
+  /// sole-user logout or a sole-member self-resign): a wipe may never destroy a
+  /// committed local row that still has an un-uploaded outbox entry. The outbox
+  /// is the union of retryable pending rows (`sync_queue`) and un-pushable
+  /// orphans (`sync_queue_orphans`).
+  ///
+  /// If anything is queued and we are online, it push-and-CONFIRMS by re-counting
+  /// AFTER the drain (a partial/failed push must not let the wipe proceed on the
+  /// remainder). It then throws:
+  ///   • [LogoutWipeException] — retryable rows remain (transient: offline, or a
+  ///     row mid-flight). Refuse; it resolves itself on reconnect / next drain.
+  ///   • [LogoutBlockedByUnsyncedDataException] — ONLY un-pushable orphans remain
+  ///     (the cloud is actively rejecting them). Do NOT trap the user; the caller
+  ///     routes to the "Resolve unsynced data" flow (export → typed-confirm
+  ///     discard) via this exception.
+  /// Returns normally only when the outbox is confirmed clean (safe to wipe).
+  Future<void> _assertOutboxClearBeforeWipe(String businessId) async {
+    var pendingCount = await _db.syncDao.countPending(businessId: businessId);
+    var orphanCount = await _db.syncDao.countOrphans(businessId: businessId);
+    if (pendingCount + orphanCount == 0) return;
+
+    if (_sync.isOnline.value) {
+      try {
+        await _sync.pushPending();
+      } catch (e) {
+        debugPrint('[AuthService] pre-wipe final push failed: $e');
+      }
+      pendingCount = await _db.syncDao.countPending(businessId: businessId);
+      orphanCount = await _db.syncDao.countOrphans(businessId: businessId);
+    }
+
+    if (pendingCount > 0) {
+      throw LogoutWipeException(
+        'You have ${pendingCount + orphanCount} change'
+        '${pendingCount + orphanCount == 1 ? "" : "s"} not yet synced. '
+        'Connect to the internet and let it sync before signing out.',
+      );
+    }
+    if (orphanCount > 0) {
+      throw LogoutBlockedByUnsyncedDataException(
+        pendingCount: pendingCount,
+        orphanCount: orphanCount,
+      );
+    }
+  }
+
+  /// Shared-till teardown for a single leaving user (drawer logout OR self-resign
+  /// when other device staff remain): reset THIS user's PIN so the old PIN can't
+  /// unlock again, revoke their session, drop the Supabase/Google tokens, and
+  /// return to the Who's Working picker. It is NOT a device wipe — the business's
+  /// shared data, the sync queue, and OTHER staff's PINs are all kept.
+  Future<void> _dropCurrentUserToPickerLocal(UserData user) async {
     try {
       await clearUserPin(user.id);
     } catch (e) {
-      debugPrint('[AuthService] logOutCurrentUser clearUserPin error: $e');
+      debugPrint('[AuthService] _dropCurrentUserToPickerLocal clearUserPin error: $e');
     }
 
     final sid = currentSessionId;
@@ -1357,7 +1389,7 @@ class AuthService extends ValueNotifier<UserData?> {
       try {
         await _db.sessionsDao.revokeSession(sid);
       } catch (e) {
-        debugPrint('[AuthService] logOutCurrentUser revokeSession error: $e');
+        debugPrint('[AuthService] _dropCurrentUserToPickerLocal revokeSession error: $e');
       }
       currentSessionId = null;
     }
@@ -1365,13 +1397,13 @@ class AuthService extends ValueNotifier<UserData?> {
     try {
       await _supabase.auth.signOut(scope: SignOutScope.local);
     } catch (e) {
-      debugPrint('[AuthService] logOutCurrentUser signOut error: $e');
+      debugPrint('[AuthService] _dropCurrentUserToPickerLocal signOut error: $e');
     }
 
     try {
       await GoogleSignIn().signOut();
     } catch (e) {
-      debugPrint('[AuthService] logOutCurrentUser Google signOut error: $e');
+      debugPrint('[AuthService] _dropCurrentUserToPickerLocal Google signOut error: $e');
     }
 
     // Set picker and navigation state, return to the WhoIsWorking picker.
@@ -1408,6 +1440,145 @@ class AuthService extends ValueNotifier<UserData?> {
       debugPrint('[AuthService] discardUnsyncedAndLogout clearAllData error: $e');
     }
     await fullLogout();
+  }
+
+  /// Voluntary self-resign (#117 staff offboarding). A non-owner staff member
+  /// leaves & deletes their own account from Profile — "one action, no
+  /// permission needed". Server-authoritative via the `resign_own_membership`
+  /// SECURITY DEFINER RPC (migration 0152), which sets the caller's OWN
+  /// membership status to `removed` AND nulls their cloud `users.auth_user_id`
+  /// (freeing the email so the one-email-one-business guard passes and they can
+  /// create a brand-new business), while KEEPING the users row intact as an
+  /// attribution stub. The business owner cannot resign — the RPC rejects them
+  /// (their exit is [deleteBusinessAndAccount]).
+  ///
+  /// The device side REUSES the sole-user wipe machinery, and — crucially — the
+  /// unsynced-data gate runs BEFORE the RPC detaches us: once the RPC nulls our
+  /// auth link our JWT loses access, so any un-pushed row would orphan. Pushing
+  /// while we still have access is what keeps "no offline sale is lost" true.
+  ///   • Sole member on this device → gate (push + confirm clean) → RPC → wipe.
+  ///     If the gate finds retryable rows it throws [LogoutWipeException]; if it
+  ///     finds only orphans it throws [LogoutBlockedByUnsyncedDataException] and
+  ///     the UI routes to the Resolve-unsynced-data flow, whose terminal is
+  ///     [discardUnsyncedAndResign] (NOT the plain logout terminal). The RPC has
+  ///     not run in either throw path, so a blocked/deferred resign is a no-op.
+  ///   • Shared till (other device staff remain) → RPC → drop this user to the
+  ///     Who's Working picker (no wipe; their queued rows stay in the shared
+  ///     outbox and other members sync them).
+  ///
+  /// Online-only (like [removeStaffMember] / [deleteBusinessAndAccount]): throws
+  /// [StaffResignException] WITHOUT changing local state when offline.
+  // sync-exempt: #117 — the cloud `resign_own_membership` RPC is the
+  // authoritative writer of both the membership status and the auth-link null;
+  // the local wipe / picker-drop mirrors a server-already-applied state, so there
+  // is nothing to enqueue. No raw synced-table write leaves the device here.
+  Future<void> resignOwnMembership() async {
+    final user = value;
+    if (user == null) return;
+    final businessId = user.businessId;
+
+    // Block offline up front — the resign is server-authoritative and the gate
+    // must push before we detach; never queue it blindly.
+    if (!_sync.isOnline.value) {
+      throw const StaffResignException(
+        'You must be online to leave your account. '
+        'Connect to the internet and try again.',
+      );
+    }
+
+    final count =
+        await _db.userBusinessesDao.countDeviceStaffForBusiness(businessId);
+    final isSoleUser = count <= 1;
+
+    if (isSoleUser) {
+      // Gate BEFORE detaching (throws on retryable/orphan rows). Only when it
+      // returns cleanly do we detach server-side and wipe.
+      await _assertOutboxClearBeforeWipe(businessId);
+      await _resignViaRpc(businessId);
+      try {
+        await _db.clearAllData();
+      } catch (e) {
+        debugPrint('[AuthService] resignOwnMembership clearAllData error: $e');
+      }
+      await fullLogout();
+      return;
+    }
+
+    // Shared till: detach server-side, then drop this user to the picker.
+    await _resignViaRpc(businessId);
+    await _dropCurrentUserToPickerLocal(user);
+  }
+
+  /// §3.1 "Resolve unsynced data" terminal for a self-resign (#117). Called by
+  /// the UI ONLY after [resignOwnMembership] surfaced a
+  /// [LogoutBlockedByUnsyncedDataException] (sole member, orphans only), the user
+  /// exported the stuck records, and typed-confirmed the discard. Detaches
+  /// server-side FIRST (so a failed RPC discards nothing and leaves the device
+  /// intact), then records the loss, discards the un-pushable outbox, wipes, and
+  /// logs out — the deliberate, confirmed user action Invariant #12 permits.
+  Future<void> discardUnsyncedAndResign() async {
+    final user = value;
+    if (user == null) return;
+    final businessId = user.businessId;
+    // Detach server-side before discarding: on failure this throws
+    // StaffResignException without touching the outbox, so the user can retry.
+    await _resignViaRpc(businessId);
+    await _recordWipeLoss(businessId, 'resign:user_discarded_unsynced');
+    try {
+      final discarded =
+          await _db.syncDao.discardUnsyncedForBusiness(businessId);
+      debugPrint(
+        '[AuthService] discardUnsyncedAndResign: discarded $discarded '
+        'outbox row(s) for $businessId',
+      );
+    } catch (e) {
+      debugPrint('[AuthService] discardUnsyncedAndResign discard error: $e');
+    }
+    try {
+      await _db.clearAllData();
+    } catch (e) {
+      debugPrint('[AuthService] discardUnsyncedAndResign clearAllData error: $e');
+    }
+    await fullLogout();
+  }
+
+  /// Calls the `resign_own_membership` RPC directly (NOT via the §6 outbox), the
+  /// same shape as [removeStaffMember]'s call. Throws [StaffResignException] with
+  /// plain-English copy on any failure, leaving local state untouched.
+  Future<void> _resignViaRpc(String businessId) async {
+    try {
+      await _supabase.rpc(
+        'resign_own_membership',
+        params: {'p_business_id': businessId},
+      );
+    } on PostgrestException catch (e) {
+      debugPrint(
+        '[AuthService] resign_own_membership RPC failed: ${e.code} ${e.message}',
+      );
+      throw StaffResignException(_resignMessage(e));
+    } catch (e) {
+      debugPrint('[AuthService] resign_own_membership network error: $e');
+      throw const StaffResignException(
+        'Could not reach the server to leave your account. '
+        'Check your connection and try again.',
+      );
+    }
+  }
+
+  /// Maps a `resign_own_membership` RPC error to plain English.
+  String _resignMessage(PostgrestException e) {
+    final msg = e.message;
+    if (msg.contains('cannot_resign_owner')) {
+      return "The business owner can't leave this way. Use Delete Business instead.";
+    }
+    if (msg.contains('no_active_membership') ||
+        msg.contains('member_not_found')) {
+      return 'You are no longer a member of this business.';
+    }
+    if (msg.contains('unauthenticated') || e.code == '42501') {
+      return 'You must be signed in to leave your account.';
+    }
+    return 'Could not leave your account. Please try again.';
   }
 
   /// Returns true if [pin] matches at least one local user. The lone
