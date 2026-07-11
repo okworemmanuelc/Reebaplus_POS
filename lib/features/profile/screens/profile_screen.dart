@@ -10,9 +10,14 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/shared/models/order_status.dart';
 import 'package:reebaplus_pos/shared/utils/role_display.dart';
+import 'package:reebaplus_pos/core/utils/notifications.dart';
+import 'package:reebaplus_pos/core/settings/delete_business_screen.dart';
 import 'package:reebaplus_pos/features/profile/widgets/edit_profile_sheet.dart';
 import 'package:reebaplus_pos/features/profile/widgets/profile_ui.dart';
+import 'package:reebaplus_pos/features/profile/self_resign.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
+import 'package:reebaplus_pos/features/sync/widgets/resolve_unsynced_data_dialog.dart';
+import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/app_bar_header.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
@@ -189,6 +194,31 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               _openEditProfileSheet(u);
             },
           ),
+          // Offboarding (#117). The OWNER has no resign path — their exit is
+          // Delete Business (the existing danger-zone flow). Every other staff
+          // member can leave & delete their own account (no permission needed).
+          // Both hidden while the role is still resolving (hide-don't-block).
+          if (isOwnerRole(role)) ...[
+            SizedBox(height: context.getRSize(16)),
+            AppButton(
+              text: 'Delete Business',
+              variant: AppButtonVariant.danger,
+              icon: FontAwesomeIcons.triangleExclamation.data,
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const DeleteBusinessScreen(),
+                ),
+              ),
+            ),
+          ] else if (canSelfResign(role)) ...[
+            SizedBox(height: context.getRSize(16)),
+            AppButton(
+              text: 'Leave / delete my account',
+              variant: AppButtonVariant.danger,
+              icon: FontAwesomeIcons.rightFromBracket.data,
+              onPressed: _confirmAndResign,
+            ),
+          ],
           SizedBox(height: context.getRSize(100)),
         ],
       ),
@@ -224,6 +254,86 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         color: const Color(0xFFA855F7),
       ),
     ];
+  }
+
+  /// #117 self-resign. Confirms, then hands off to
+  /// [AuthService.resignOwnMembership] (server-authoritative detach + free the
+  /// email). The device side reuses the sole-user wipe gate, so the two-tier
+  /// unsynced-data outcome is surfaced exactly as the drawer logout does —
+  /// retryable rows → an error ("connect and sync first"); orphans only → the
+  /// Resolve-unsynced-data flow (here with `isResign: true`, whose terminal also
+  /// completes the server detach). On success, main.dart routes to Welcome (sole
+  /// member) or the Who's Working picker (shared till).
+  Future<void> _confirmAndResign() async {
+    final auth = ref.read(authProvider);
+    final db = ref.read(databaseProvider);
+    final user = auth.currentUser;
+    if (user == null) return;
+
+    // Sole member on this device → the resign wipes local data (as a sole-user
+    // logout); otherwise only this user is removed from the shared till. Used to
+    // word the confirmation honestly.
+    final deviceStaffCount =
+        await db.userBusinessesDao.countDeviceStaffForBusiness(user.businessId);
+    final isSoleUser = deviceStaffCount <= 1;
+    if (!mounted) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Leave and delete your account?'),
+        content: Text(
+          isSoleUser
+              ? 'You will be signed out and removed from this business. Your '
+                  'email is freed so you can start a new business with it '
+                  'later.\n\nYou are the only user on this device, so all local '
+                  'data will be erased. You can re-download it after signing in '
+                  'to another business.'
+              : 'You will be signed out and removed from this business. Your '
+                  'email is freed so you can start a new business with it '
+                  'later.\n\nOther staff on this device keep their data and '
+                  'stay signed in.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Leave'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await auth.resignOwnMembership();
+    } on LogoutBlockedByUnsyncedDataException catch (e) {
+      // Orphans only (sole member): route to export → typed-confirm discard,
+      // whose terminal (isResign) also completes the server-side detach.
+      if (mounted) {
+        await showResolveUnsyncedDataDialog(
+          context,
+          ref,
+          pendingCount: e.pendingCount,
+          orphanCount: e.orphanCount,
+          isResign: true,
+        );
+      }
+    } on LogoutWipeException catch (e) {
+      if (mounted) AppNotification.showError(context, e.message);
+    } on StaffResignException catch (e) {
+      if (mounted) AppNotification.showError(context, e.message);
+    } catch (e) {
+      if (mounted) {
+        AppNotification.showError(
+          context,
+          'An unexpected error occurred while leaving your account.',
+        );
+      }
+    }
   }
 
   /// Self-service edit of the logged-in user's own name + avatar colour.
