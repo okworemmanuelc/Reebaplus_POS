@@ -245,6 +245,14 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
     // Screen-level gate (hard rule #6) + keeps the permission chain warm for
     // the save-site guard.
     final canManage = Gates.manageSettings.allows(ref);
+    // Offer only the selectable trades (#112). If this tenant is already on a
+    // now-hidden trade, keep its current type visible + selected (grandfathered)
+    // so opening this screen can never blank or silently change their industry —
+    // switching still offers only the three.
+    final typeOptions = <String>[
+      ...kSelectableBusinessTypes,
+      if (_type != null && !kSelectableBusinessTypes.contains(_type)) _type!,
+    ];
     return GlassyScaffold(
       title: 'Business Info',
       body: !canManage
@@ -315,7 +323,7 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
                           prefixIcon:
                               const Icon(Icons.category_rounded, size: 20),
                           items: [
-                            for (final type in kBusinessTypes)
+                            for (final type in typeOptions)
                               DropdownMenuItem(
                                 value: type,
                                 child: Text(type),

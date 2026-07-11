@@ -469,7 +469,8 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
     // bail if `products.edit_price` was revoked while the sheet was open.
     if (!_canEditPrice) {
       setState(
-        () => _errorMessage = 'You no longer have permission to edit products.',
+        () => _errorMessage =
+            'You no longer have permission to edit ${_lexicon.itemPluralLower}.',
       );
       return;
     }
@@ -675,7 +676,9 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
     } catch (e, st) {
       CrashReporter.record(e, st, context: 'inventory.update_product');
       debugPrint('UpdateProductSheet._save error: $e');
-      setState(() => _errorMessage = 'Could not update product: $e');
+      setState(
+        () => _errorMessage = 'Could not update ${_lexicon.itemLower}: $e',
+      );
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -855,7 +858,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Update Product',
+                          'Update ${_lexicon.item}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -1110,8 +1113,8 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                         onChanged: (v) =>
                             setState(() => _allowFractionalSales = v ?? false),
                         title: const Text('Allow fractional sales'),
-                        subtitle: const Text(
-                          'Enables ±0.5 quantity steps when selling this product',
+                        subtitle: Text(
+                          'Enables ±0.5 quantity steps when selling this ${_lexicon.itemLower}',
                         ),
                         controlAffinity: ListTileControlAffinity.leading,
                         contentPadding: EdgeInsets.zero,
@@ -1221,8 +1224,8 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                           onChanged: (v) =>
                               setState(() => _trackEmpties = v ?? false),
                           title: const Text('Track empty crate returns'),
-                          subtitle: const Text(
-                            'Enables deposit collection and crate return flow for this product',
+                          subtitle: Text(
+                            'Enables deposit collection and crate return flow for this ${_lexicon.itemLower}',
                           ),
                           controlAffinity: ListTileControlAffinity.leading,
                           contentPadding: EdgeInsets.zero,
@@ -1349,7 +1352,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'This will set the quantity of this product in the receive cart.',
+                        'This will set the quantity of this ${_lexicon.itemLower} in the receive cart.',
                         style: TextStyle(fontSize: 11, color: subtext),
                       ),
                       const SizedBox(height: 14),
@@ -1402,7 +1405,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
               child: AppButton(
-                text: 'Update Product',
+                text: 'Update ${_lexicon.item}',
                 variant: AppButtonVariant.primary,
                 isLoading: _isSaving,
                 onPressed: _save,
@@ -1484,7 +1487,7 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
         AppInput(
           controller: _barcodeCtrl,
           labelText: 'Barcode (optional)',
-          hintText: 'Type or scan the product barcode',
+          hintText: 'Type or scan the ${_lexicon.itemLower} barcode',
           onChanged: _onBarcodeChanged,
         ),
         if (_barcodeCollisionName != null)

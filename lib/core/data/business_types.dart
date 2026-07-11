@@ -6,10 +6,19 @@ import 'package:reebaplus_pos/core/industry/industry.dart';
 /// existing callers keep working without a second copy of the list.
 export 'package:reebaplus_pos/core/industry/industry.dart' show isCrateBusiness;
 
-/// The business-type display labels shown in settings/dropdowns, in plan order.
-/// Derived from [Industry.catalogue] — no longer a hand-maintained list, so it
-/// cannot drift from the registry. DB stores the canonical 'Beer distributor'
-/// string for Beverage distributor tenants; the Business Info screen maps the
-/// display ↔ DB label at load/save time.
+/// All known business-type display labels, in plan order — the full registry
+/// via [Industry.catalogue]. Used to VALIDATE / round-trip a stored type on
+/// load (so a tenant already on a now-hidden trade keeps its selection), not to
+/// populate a picker: pickers OFFER only [kSelectableBusinessTypes] (#112).
+/// Derived from the registry so it cannot drift. DB stores the canonical
+/// 'Beer distributor' string for Beverage distributor tenants; the Business
+/// Info screen maps the display ↔ DB label at load/save time.
 final List<String> kBusinessTypes =
     Industry.catalogue.map((i) => i.label).toList(growable: false);
+
+/// The business-type labels OFFERED in the onboarding + Settings pickers — the
+/// [Industry.selectable] subset only (Beverage distributor, Pharmacy, Frozen
+/// Foods & Grocery), issue #112. Derived from [Industry.selectableCatalogue] so
+/// it can never drift from the registry.
+final List<String> kSelectableBusinessTypes =
+    Industry.selectableCatalogue.map((i) => i.label).toList(growable: false);
