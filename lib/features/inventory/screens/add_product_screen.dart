@@ -38,10 +38,16 @@ import 'package:reebaplus_pos/features/payments/widgets/supplier_form_sheet.dart
 class AddProductScreen extends ConsumerStatefulWidget {
   final void Function(ProductData)? onProductAdded;
   final bool receiveMode;
+
+  /// Optional barcode to pre-fill the Barcode field with (#118). Set when this
+  /// screen is opened from a POS scan of an unknown barcode, so the cashier can
+  /// catalogue the just-scanned product without retyping the code.
+  final String? prefilledBarcode;
   const AddProductScreen({
     super.key,
     this.onProductAdded,
     this.receiveMode = false,
+    this.prefilledBarcode,
   });
 
   @override
@@ -135,6 +141,10 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     _unit = _lexicon.unit;
     _dynamicUnits = _lexicon.starterUnits;
     _trackEmpties = _unit.toLowerCase() == 'bottle';
+    // #118: seed the Barcode field from a POS scan of an unknown code so the
+    // cashier catalogues the just-scanned product without retyping it.
+    final prefillBarcode = widget.prefilledBarcode?.trim() ?? '';
+    if (prefillBarcode.isNotEmpty) _barcodeCtrl.text = prefillBarcode;
     _loadData();
   }
 

@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
-import 'package:reebaplus_pos/core/widgets/app_fab.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -19,6 +18,7 @@ import 'package:reebaplus_pos/features/pos/controllers/pos_controller.dart';
 import 'package:reebaplus_pos/features/pos/widgets/product_grid.dart';
 import 'package:reebaplus_pos/features/pos/widgets/category_filter_bar.dart';
 import 'package:reebaplus_pos/features/pos/widgets/quick_sale_modal.dart';
+import 'package:reebaplus_pos/features/pos/widgets/pos_barcode_scan_button.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 
@@ -240,7 +240,6 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
           activeRoute: 'pos',
           backgroundColor: bgCol,
           appBar: _buildAppBar(context, surfaceCol, textCol, subtextCol),
-          floatingActionButton: context.isPhone ? _buildCartFab(context) : null,
           body: SafeArea(
             top: false,
             // Pull-to-refresh wraps the WHOLE body (above the header) so the
@@ -493,6 +492,11 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
         truncateTitleWithReveal: true,
       ),
       actions: [
+        // #118: always-visible one-shot barcode scan. Not gated on the cart.
+        PosBarcodeScanButton(
+          tier: _controller!.selectedGroup,
+          loadedProducts: _controller!.allProducts,
+        ),
         IconButton(
           icon: Icon(
             _isListView ? FontAwesomeIcons.list.data : FontAwesomeIcons.borderAll.data,
@@ -600,51 +604,6 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
           color: Theme.of(context).colorScheme.primary,
         ),
       ),
-    );
-  }
-
-  Widget _buildCartFab(BuildContext context) {
-    return ValueListenableBuilder<List<Map<String, dynamic>>>(
-      valueListenable: ref.read(cartProvider),
-      builder: (context, cartItems, _) {
-        if (cartItems.isEmpty) return const SizedBox.shrink();
-
-        final double totalQty = cartItems.fold(
-          0.0,
-          (sum, item) => sum + (item['qty'] as num).toDouble(),
-        );
-        final String badgeText = totalQty == totalQty.roundToDouble()
-            ? totalQty.toInt().toString()
-            : totalQty.toStringAsFixed(1);
-
-        return AppFAB(
-          // POS is a bottom-nav tab root — the visible bottom bar already lifts
-          // the FAB above the system nav; don't add the inset.
-          reserveBottomInset: false,
-          onPressed: () {
-            ref
-                .read(navigationProvider)
-                .setIndex(8); // 8 = CartScreen (9 is Deliveries)
-          },
-          icon: FontAwesomeIcons.cartShopping.data,
-          label: 'Go to Cart',
-          trailing: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              badgeText,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.primary,
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-              ),
-            ),
-          ),
-        );
-      },
     );
   }
 
