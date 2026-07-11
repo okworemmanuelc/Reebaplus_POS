@@ -10,6 +10,130 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### Exactly-once stock integrity (#100, Workstream A) — PR #105 OPEN, awaiting human merge (2026-07-08)
+All 8 slices (A-S0…A-S7) done; **PR #105** (`fix/exactly-once-stock-integrity` →
+`main`) opened `Closes #100`. Stop-for-human-merge. Two decisions carried in the PR:
+the **go-live flag flip** (per-env ops, fix inert until flipped) and the **orphan-UX
+recovery flow** (undefined product behaviour, logged not invented). Workstream C (#102)
+is independent and may proceed alongside; B (#101) stays blocked until A merges + B0.
+Implementing Workstream A of the live-sync/exactly-once loop (plan:
+`docs/design/live-sync-exactly-once-implementation-plan.md`, PRD:
+`context/specs/brief-live-sync-signal-and-exactly-once.md` — both live on the
+`docs/live-sync-exactly-once-prd` branch, not yet on `main`). Branch
+`fix/exactly-once-stock-integrity` off `origin/main`.
+- **A-S0/A-S1 done.** `test/sync/exactly_once_stock_integrity_test.dart` RED-first
+  reproduces the silent oversell on the current v1 path: two devices, stock 1,
+  both sell 1 offline (walk-in, so it's a pure stock movement), both push the
+  absolute `inventory.quantity=0` row; the natural-key LWW cache collapses them to
+  one row at 0 while **two** orders land — 2 sold from 1, no error. Green (it
+  documents today's behaviour); flips to the fixed path in A-S3.
+- **A-S2 done — committed A1-flag path is UNVIABLE as-is; re-scoped to "Option ①"
+  (client-side wallet on the v2 path).** Verified `pos_record_sale_v2` against the
+  LIVE db: its STOCK write is exactly what A wants (`SELECT … FOR UPDATE`, relative
+  `quantity = quantity - n`, `insufficient_stock`/`inventory_row_missing` P0001,
+  `ON CONFLICT (id) DO NOTHING`) with **no schema drift** (`store_id`,
+  `stock_transactions.location_id`, null-product quick-sale handled), and
+  `_applyDomainResponse` writes back authoritative `inventory_after` as the sole
+  local writer (no dup). BUT its **wallet model is incompatible** with the live v1
+  path: the RPC posts only a single `p_wallet_amount_kobo` debit (and only when
+  >0), whereas v1 posts full double-entry for every registered sale (goods debit of
+  total + cash credit of paid + held-deposit carve-out). A blanket flag flip would
+  (a) drop wallet history on cash sales and (b) **reject "register-as-credit" sales**
+  (`insufficient_wallet_balance` — the RPC has no debt-limit/negative path). The
+  inline comment `daos_orders.dart:796-798` ("R2") already flagged this; PRD risk #2
+  now confirmed negative. The narrow "route only the inventory delta" alternative is
+  forbidden by design (`pos_inventory_delta_v2` rejects `movement_type='sale'`).
+  **Human decision (2026-07-08): Option ①** — restructure `createOrder` so the full
+  wallet double-entry posts client-side on the v2 path too (exactly as
+  `crate_ledger`/`cost_batches` already do), pass `p_wallet_amount_kobo=0` so the
+  RPC owns only the oversell-safe stock/order/items/payment, then flip. No
+  migration, no money-model change; wallet stays append-only/derived (invariant #3),
+  so credit sales work and aren't gated by the RPC's balance check.
+- **FK-ordering note for A-S3:** `wallet_transactions.order_id`,
+  `crate_ledger.reference_order_id`, `order_crate_lines.order_id` all have enforced
+  cloud FKs to `orders`. On v2 the order is minted by the RPC (which must run to
+  enforce the guard), so these client-authored children are enqueued before the
+  order exists and converge via the engine's FK-deferred retry — the same behaviour
+  crate rows already have on the v2 path; the new wallet legs match it.
+- **A-S3 done (Option ① implemented) + A-S4 proven.** `OrdersDao.createOrder` now
+  posts the wallet double-entry via a new `_postSaleWalletLegs` helper called
+  **before** the v1/v2 split, so the legs are client-authored on BOTH paths
+  (invariant #3). The v2 envelope no longer carries `p_wallet_amount_kobo` (the RPC's
+  wallet branch stays a no-op), and the v2-only `walletDebitKobo` param was removed
+  from `createOrder` (it fed only `p_wallet_amount_kobo`; the v1 legs always derived
+  from total/paid/deposit). This ALSO removes a latent v2 split-brain: previously v2
+  minted only a server-side wallet debit with no local mirror, which would have
+  broken cancel/refund/reports on v2 — now v2's wallet rows are byte-identical to
+  v1's, so every downstream flow already tested on v1 holds on v2. Tests: the
+  headline `exactly_once_stock_integrity_test.dart` gains the v2 group — two devices
+  race the last unit, the server accepts the first and **rejects the second**
+  (`insufficient_stock` P0001), on-hand never goes below 0, and the loser's envelope
+  **orphans visibly** in `sync_queue_orphans` (that orphan assertion is the **A-S4**
+  coverage) — plus a lost-ack replay proving `ON CONFLICT DO NOTHING` idempotency (no
+  second decrement). Updated `record_sale_dispatch_test` (registered v2 sale posts 2
+  local wallet legs + 1 envelope, no `p_wallet_amount_kobo`; and a
+  register-as-credit v2 sale nets −150000 and is never gated by the RPC),
+  `credit_ledger_logic_test` (2 args), `pr_4c_test` (1 arg). `flutter analyze` clean;
+  the affected suites (sync/dispatch/wallet/orders/crates/golden/costing) green.
+- **Known v2 convergence characteristic (documented, not a defect).** For a
+  registered/crate sale created **offline**, the wallet + crate legs FK-reference an
+  `orders` row the RPC mints, but the reconnect drain pushes table rows *before*
+  domain envelopes — so the legs FK-fail once (23503) and converge on the next
+  FK-deferred retry (~15 min). The **online** checkout path front-runs this: it calls
+  `flushSale` right after `createOrder`, which pushes the domain envelope (creating
+  the order) before the background drain reaches the legs. This matches the existing
+  crate-leg behaviour on v2 and is invisible online; a cheap follow-up (teach the
+  push to flush a sale's envelope before its child legs) could remove the offline
+  lag. Not fixed here (Option ①: no migration; global push-reorder is out of scope).
+- **Go-live flip NOT executed (human/ops decision).** The code is correct on both
+  flag states; flipping `feature.domain_rpcs_v2.record_sale` is a per-environment,
+  production-wide runtime change that activates the dormant v2 path (crate/cost/wallet
+  client rows, thin-item flow, the offline FK-defer above) — surfaced in the PR as a
+  one-line reversible config step, not applied autonomously in this loop.
+- **A-S5 done (idempotency backstops locked).** (a) *No blind insert* is structural:
+  the only cloud-write paths are `enqueueUpsert`/`enqueueDelete` (there is no
+  `enqueueInsert`) and the transport always `.upsert()`s — client-id minting is pinned
+  by the existing dispatch tests; A-S3's lost-ack replay pins the sale envelope's
+  push-side idempotency (`ON CONFLICT DO NOTHING`). (b) *Clobber-guard* (a pending
+  local row survives an incoming newer cloud row) is pinned by
+  `outbox_sacred_restore_test`. (c) NEW `stock_reprocess_idempotency_test.dart` pins
+  the PULL side — restoring the till's OWN just-pushed inventory cache + append-only
+  stock ledger (and re-restoring it) does not double-decrement; on-hand equals opening
+  + SUM(ledger deltas). Events applied exactly once.
+- **A-S6 audit — mutable-balance caches (`isCache` tables).** Verdict per table:
+  | Cache table | Movement write | Push shape | Backing ledger | Verdict |
+  |---|---|---|---|---|
+  | `inventory` | relative (pre-check) | absolute LWW | `stock_transactions` | **FIXED** — v2 guarded RPC (`FOR UPDATE`+relative+`>=n` reject) is authoritative |
+  | `customer_crate_balances` | relative (`balance+δ`) | absolute LWW | `crate_ledger` (append-only) | mitigated gap → follow-up |
+  | `manufacturer_crate_balances` | relative | absolute LWW | `crate_ledger` | mitigated gap → follow-up |
+  | `store_crate_balances` | relative (+ intentional `setBalance` absolute override) | absolute LWW | `crate_ledger` | mitigated gap → follow-up |
+  | `supplier_crate_balances` | relative | absolute LWW | `supplier_crate_ledger` | mitigated gap → follow-up |
+  The 4 crate caches share inventory's push-absolute-LWW shape, so two devices making
+  concurrent **offline** crate movements to the same (owner, manufacturer) can drift
+  the cache. **Why lower severity than the stock oversell, and not a #100 gap:** the
+  truth is the append-only ledger (both movements survive, id-keyed — no data loss),
+  the balance is recomputable (`CrateLedgerDao.verifyCrateReconciliation` = SUM of
+  ledger deltas), and a crate tally is not a hard-limited sellable resource that
+  silently takes money for nothing — it's a deposit tally reconciliation corrects. The
+  `setBalance` absolute write is an intentional manual management-dialog override
+  (set-to-known), correctly LWW — not a race. **Genuine gap found (deferred):**
+  `verifyCrateReconciliation` is **not auto-wired** (no caller), so cache drift is not
+  auto-healed. **Follow-up issue (not #100):** either auto-schedule the reconciliation,
+  derive crate balances from the ledger on read (wallet-style), or route crate
+  movements through a server-guarded relative RPC mirroring `pos_record_sale_v2`. Not
+  fixed here — it's a structural change of A1-ledger's magnitude, outside #100's
+  "close the silent stock oversell" scope, and the drift is mitigated, not unbounded.
+- **OPEN QUESTION (A-S6, human decision — surfaced, not invented).** When the server
+  rejects the 2nd offline sale on the **background reconnect** path (not the foreground
+  `flushSale` path, which already compensates + surfaces), the envelope orphans
+  **visibly** (Sync Issues) but the local device still shows the order (`pending`) +
+  the local inventory pre-check decrement. The cashier **recovery flow** — auto-cancel
+  the orphaned order? notify the cashier to re-ring / refund / restock? re-price? — is
+  **undefined product behaviour**. The mechanism (detect + surface, never silently
+  absorb) is complete and is the #100 goal; the recovery UX is a separate product +
+  UI decision (a feature-folder change, which the split rules keep out of this
+  sync-integrity PR). Logged for the human; NOT invented here.
+
 ### Live cross-device sync ("deleted product still sellable") — in progress (2026-07-07)
 On-device debugging of "console changes don't reach the app live." Findings + fixes:
 - **Pull works; realtime never delivered.** DB soft-delete + guard already correct

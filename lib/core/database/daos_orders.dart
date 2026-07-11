@@ -490,9 +490,12 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
   /// Atomic order + items + inventory + ledger + payment + wallet in a single txn.
   /// Returns the new order ID.
   ///
-  /// [walletDebitKobo] is the amount to debit from the customer's wallet. Used
-  /// for wallet payments (full balance), partial payments (the remainder put on
-  /// account), and credit sales (the full total). Requires [customerId].
+  /// For a registered [customerId] the wallet double-entry is derived here from
+  /// [totalAmountKobo], [amountPaidKobo], and [crateDepositPaidByManufacturer]
+  /// (see [_postSaleWalletLegs]) — the customer's position is net (paid − total),
+  /// so a wallet/partial/credit sale simply pays less than the total and the
+  /// wallet goes negative by the balance owed. Walk-ins ([customerId] == null)
+  /// never touch the wallet.
   Future<String> createOrder({
     required OrdersCompanion order,
     required List<OrderItemsCompanion> items,
@@ -501,7 +504,6 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     required int totalAmountKobo,
     required String staffId,
     String? storeId,
-    int walletDebitKobo = 0,
     String paymentMethod = 'cash',
     // §13.4 — deposit actually paid at checkout, per manufacturer/brand. Empty
     // = no per-brand deposit captured yet (every crate brand is "no deposit" →
@@ -676,6 +678,21 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         }
       }
 
+      // §14.3 wallet double-entry — client-authored on BOTH sync paths
+      // (invariant #3: wallet ledgers are append-only/derived, never
+      // server-minted). pos_record_sale_v2 owns only the oversell-safe
+      // stock/order/items/payment and receives no wallet amount, so these legs
+      // must be posted here, before the path split. Walk-ins are a no-op.
+      await _postSaleWalletLegs(
+        customerId: customerId,
+        orderId: orderId,
+        staffId: staffId,
+        totalAmountKobo: totalAmountKobo,
+        amountPaidKobo: amountPaidKobo,
+        paymentMethod: paymentMethod,
+        crateDepositPaidByManufacturer: crateDepositPaidByManufacturer,
+      );
+
       if (useDomainRpc) {
         // v2 thin-intent: server mints order_items, stock_tx, payment_tx,
         // and wallet_tx ids (gen_random_uuid). _applyDomainResponse is
@@ -723,7 +740,11 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
           if (orderJson.containsKey('barcode'))
             'p_barcode': orderJson['barcode'],
           if (amountPaidKobo > 0) 'p_payment_method': paymentMethod,
-          if (walletDebitKobo > 0) 'p_wallet_amount_kobo': walletDebitKobo,
+          // The wallet ledger is client-authored on BOTH paths (invariant #3):
+          // the full double-entry is posted by _postSaleWalletLegs before this
+          // split, so the RPC's wallet branch stays a no-op — no wallet amount is
+          // forwarded. (pos_record_sale_v2's single p_wallet_amount_kobo debit
+          // cannot express a register-as-credit sale, so we never use it.)
         };
         await db.syncDao.enqueue(
           'domain:pos_record_sale_v2',
@@ -782,132 +803,8 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         await db.syncDao.enqueueUpsert('payment_transactions', payComp);
       }
 
-      // §14.3 full wallet ledger (rule #4): every registered sale runs through
-      // the wallet. Post TWO legs — a debit for the order total (goods leave)
-      // and a credit for the amount paid at checkout (money in) — so the net
-      // (paid − total) is the customer's position: 0 when fully paid, negative
-      // when they owe. This includes fully-paid cash sales (debit total +
-      // credit total, net 0), so the wallet history is complete. The credit leg
-      // records the money against the customer's wallet. It reuses the existing
-      // top-up reference types (by method, mirroring WalletService) so no CHECK
-      // widening is needed. Walk-ins (customerId == null) never touch the wallet
-      // (rule #14).
-      //
-      // v1 path. The v2 RPC (pos_record_sale_v2) still mints only the debit via
-      // p_wallet_amount_kobo — it MUST also mint this credit leg before
-      // record_sale v2 is enabled, or cloud wallets will miss payments (R2).
-      if (customerId != null) {
-        final cid = customerId;
-        final wallet =
-            await (select(customerWallets)
-                  ..where(
-                    (w) =>
-                        whereBusiness(w) &
-                        w.customerId.equals(cid) &
-                        w.isDeleted.not(),
-                  )
-                  ..limit(1))
-                .getSingleOrNull();
-        if (wallet == null) {
-          throw StateError('Customer $cid has no wallet — cannot post sale');
-        }
-
-        // §14.3 — both legs of the sale are one event, so stamp them with the
-        // SAME created_at. The wallet history is newest-first; on this tie the
-        // DISPLAY query (WalletTransactionsDao.watchHistory) puts the order
-        // DEBIT above the payment CREDIT via signed_amount_kobo ASC, so the
-        // order charge (the last step of the sale) sits at the top. Net
-        // (paid − total) is unchanged by the timestamp/ordering.
-        final legTime = DateTime.now();
-
-        // §13.4 Ring 6 — held-deposit carve-out. The deposit actually paid at
-        // checkout (sum of the per-brand map) is refundable money the business
-        // HOLDS, not goods revenue and not spendable wallet credit. So it must
-        // not inflate the goods debt nor count as spendable. We carve it out of
-        // BOTH legs and re-post it as a single `crate_deposit` held credit:
-        //   • goods debit   = totalAmountKobo − depositHeld  (the real purchase)
-        //   • goods credit  = amountPaidKobo  − depositHeld  (cash toward goods)
-        //   • held credit   = depositHeld                    (deposit family)
-        // Net SPENDABLE = (paid − held) − (total − held) = paid − total — exactly
-        // the same position as before; only the deposit slice moves to the held
-        // bucket (excluded from the spendable balance, §5 read-side). When no
-        // deposit was paid this reduces to the original two legs unchanged.
-        // [totalAmountKobo] is the grand total (goods + deposit) the checkout
-        // passes, and the checkout guards paid ≥ deposit, so neither leg goes
-        // negative; clamp defensively anyway.
-        final depositHeldKobo = crateDepositPaidByManufacturer.values
-            .fold<int>(0, (s, v) => s + v)
-            .clamp(0, totalAmountKobo);
-        final goodsDebitKobo = totalAmountKobo - depositHeldKobo;
-        final goodsCreditKobo = (amountPaidKobo - depositHeldKobo).clamp(
-          0,
-          amountPaidKobo,
-        );
-        //
-        // Leg 1 — debit the goods total (the purchase leaves the wallet).
-        final debitComp = WalletTransactionsCompanion.insert(
-          id: Value(UuidV7.generate()),
-          businessId: requireBusinessId(),
-          walletId: wallet.id,
-          customerId: cid,
-          type: 'debit',
-          amountKobo: goodsDebitKobo,
-          signedAmountKobo: -goodsDebitKobo,
-          referenceType: 'order_payment',
-          orderId: Value(orderId),
-          performedBy: Value(staffId),
-          createdAt: Value(legTime),
-          lastUpdatedAt: Value(legTime),
-        );
-        await into(walletTransactions).insert(debitComp);
-        await db.syncDao.enqueueUpsert('wallet_transactions', debitComp);
-
-        // Leg 2 — credit the cash applied to goods (money into the wallet).
-        // Skipped when nothing is left after the deposit carve-out (pure
-        // credit / pay-from-wallet sale, or the payment only covered deposit).
-        if (goodsCreditKobo > 0) {
-          final creditComp = WalletTransactionsCompanion.insert(
-            id: Value(UuidV7.generate()),
-            businessId: requireBusinessId(),
-            walletId: wallet.id,
-            customerId: cid,
-            type: 'credit',
-            amountKobo: goodsCreditKobo,
-            signedAmountKobo: goodsCreditKobo,
-            referenceType: paymentMethod == 'cash'
-                ? 'topup_cash'
-                : 'topup_transfer',
-            orderId: Value(orderId),
-            performedBy: Value(staffId),
-            createdAt: Value(legTime),
-            lastUpdatedAt: Value(legTime),
-          );
-          await into(walletTransactions).insert(creditComp);
-          await db.syncDao.enqueueUpsert('wallet_transactions', creditComp);
-        }
-
-        // Leg 3 — the held deposit (refundable, excluded from spendable). One
-        // `crate_deposit` credit for the whole sale's paid deposit; the per-brand
-        // split lives on order_crate_lines for the return modal to settle.
-        if (depositHeldKobo > 0) {
-          final heldComp = WalletTransactionsCompanion.insert(
-            id: Value(UuidV7.generate()),
-            businessId: requireBusinessId(),
-            walletId: wallet.id,
-            customerId: cid,
-            type: 'credit',
-            amountKobo: depositHeldKobo,
-            signedAmountKobo: depositHeldKobo,
-            referenceType: 'crate_deposit',
-            orderId: Value(orderId),
-            performedBy: Value(staffId),
-            createdAt: Value(legTime),
-            lastUpdatedAt: Value(legTime),
-          );
-          await into(walletTransactions).insert(heldComp);
-          await db.syncDao.enqueueUpsert('wallet_transactions', heldComp);
-        }
-      }
+      // NOTE: the wallet double-entry was posted by _postSaleWalletLegs above,
+      // before the v1/v2 split — client-authored on both paths (invariant #3).
 
       // v1 also enqueues the updated inventory cache so the cloud converges.
       for (final item in items) {
@@ -928,6 +825,147 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
 
       return orderId;
     });
+  }
+
+  /// §14.3 full wallet ledger (rule #4): every registered sale runs through
+  /// the wallet. Post TWO legs — a debit for the order total (goods leave)
+  /// and a credit for the amount paid at checkout (money in) — so the net
+  /// (paid − total) is the customer's position: 0 when fully paid, negative
+  /// when they owe. This includes fully-paid cash sales (debit total +
+  /// credit total, net 0), so the wallet history is complete. The credit leg
+  /// records the money against the customer's wallet. It reuses the existing
+  /// top-up reference types (by method, mirroring WalletService) so no CHECK
+  /// widening is needed. Walk-ins (customerId == null) never touch the wallet
+  /// (rule #14).
+  ///
+  /// Client-authored on BOTH sync paths (invariant #3: wallet ledgers are
+  /// append-only / derived, never server-minted). `pos_record_sale_v2` owns
+  /// only the oversell-safe stock/order/items/payment and is passed NO wallet
+  /// amount — its single `p_wallet_amount_kobo` debit cannot express a
+  /// register-as-credit sale (it guards on an existing positive balance and
+  /// would reject the customer owing money), so the full double-entry lives
+  /// here for v1 and v2 alike. Must be called INSIDE the createOrder
+  /// transaction, before the path split.
+  Future<void> _postSaleWalletLegs({
+    required String? customerId,
+    required String orderId,
+    required String staffId,
+    required int totalAmountKobo,
+    required int amountPaidKobo,
+    required String paymentMethod,
+    required Map<String, int> crateDepositPaidByManufacturer,
+  }) async {
+    if (customerId == null) return;
+    final cid = customerId;
+    final wallet =
+        await (select(customerWallets)
+              ..where(
+                (w) =>
+                    whereBusiness(w) &
+                    w.customerId.equals(cid) &
+                    w.isDeleted.not(),
+              )
+              ..limit(1))
+            .getSingleOrNull();
+    if (wallet == null) {
+      throw StateError('Customer $cid has no wallet — cannot post sale');
+    }
+
+    // §14.3 — both legs of the sale are one event, so stamp them with the
+    // SAME created_at. The wallet history is newest-first; on this tie the
+    // DISPLAY query (WalletTransactionsDao.watchHistory) puts the order
+    // DEBIT above the payment CREDIT via signed_amount_kobo ASC, so the
+    // order charge (the last step of the sale) sits at the top. Net
+    // (paid − total) is unchanged by the timestamp/ordering.
+    final legTime = DateTime.now();
+
+    // §13.4 Ring 6 — held-deposit carve-out. The deposit actually paid at
+    // checkout (sum of the per-brand map) is refundable money the business
+    // HOLDS, not goods revenue and not spendable wallet credit. So it must
+    // not inflate the goods debt nor count as spendable. We carve it out of
+    // BOTH legs and re-post it as a single `crate_deposit` held credit:
+    //   • goods debit   = totalAmountKobo − depositHeld  (the real purchase)
+    //   • goods credit  = amountPaidKobo  − depositHeld  (cash toward goods)
+    //   • held credit   = depositHeld                    (deposit family)
+    // Net SPENDABLE = (paid − held) − (total − held) = paid − total — exactly
+    // the same position as before; only the deposit slice moves to the held
+    // bucket (excluded from the spendable balance, §5 read-side). When no
+    // deposit was paid this reduces to the original two legs unchanged.
+    // [totalAmountKobo] is the grand total (goods + deposit) the checkout
+    // passes, and the checkout guards paid ≥ deposit, so neither leg goes
+    // negative; clamp defensively anyway.
+    final depositHeldKobo = crateDepositPaidByManufacturer.values
+        .fold<int>(0, (s, v) => s + v)
+        .clamp(0, totalAmountKobo);
+    final goodsDebitKobo = totalAmountKobo - depositHeldKobo;
+    final goodsCreditKobo = (amountPaidKobo - depositHeldKobo).clamp(
+      0,
+      amountPaidKobo,
+    );
+    //
+    // Leg 1 — debit the goods total (the purchase leaves the wallet).
+    final debitComp = WalletTransactionsCompanion.insert(
+      id: Value(UuidV7.generate()),
+      businessId: requireBusinessId(),
+      walletId: wallet.id,
+      customerId: cid,
+      type: 'debit',
+      amountKobo: goodsDebitKobo,
+      signedAmountKobo: -goodsDebitKobo,
+      referenceType: 'order_payment',
+      orderId: Value(orderId),
+      performedBy: Value(staffId),
+      createdAt: Value(legTime),
+      lastUpdatedAt: Value(legTime),
+    );
+    await into(walletTransactions).insert(debitComp);
+    await db.syncDao.enqueueUpsert('wallet_transactions', debitComp);
+
+    // Leg 2 — credit the cash applied to goods (money into the wallet).
+    // Skipped when nothing is left after the deposit carve-out (pure
+    // credit / pay-from-wallet sale, or the payment only covered deposit).
+    if (goodsCreditKobo > 0) {
+      final creditComp = WalletTransactionsCompanion.insert(
+        id: Value(UuidV7.generate()),
+        businessId: requireBusinessId(),
+        walletId: wallet.id,
+        customerId: cid,
+        type: 'credit',
+        amountKobo: goodsCreditKobo,
+        signedAmountKobo: goodsCreditKobo,
+        referenceType: paymentMethod == 'cash'
+            ? 'topup_cash'
+            : 'topup_transfer',
+        orderId: Value(orderId),
+        performedBy: Value(staffId),
+        createdAt: Value(legTime),
+        lastUpdatedAt: Value(legTime),
+      );
+      await into(walletTransactions).insert(creditComp);
+      await db.syncDao.enqueueUpsert('wallet_transactions', creditComp);
+    }
+
+    // Leg 3 — the held deposit (refundable, excluded from spendable). One
+    // `crate_deposit` credit for the whole sale's paid deposit; the per-brand
+    // split lives on order_crate_lines for the return modal to settle.
+    if (depositHeldKobo > 0) {
+      final heldComp = WalletTransactionsCompanion.insert(
+        id: Value(UuidV7.generate()),
+        businessId: requireBusinessId(),
+        walletId: wallet.id,
+        customerId: cid,
+        type: 'credit',
+        amountKobo: depositHeldKobo,
+        signedAmountKobo: depositHeldKobo,
+        referenceType: 'crate_deposit',
+        orderId: Value(orderId),
+        performedBy: Value(staffId),
+        createdAt: Value(legTime),
+        lastUpdatedAt: Value(legTime),
+      );
+      await into(walletTransactions).insert(heldComp);
+      await db.syncDao.enqueueUpsert('wallet_transactions', heldComp);
+    }
   }
 
   /// §13.4 Ring 5 — settle a MONEY-TRACK brand's deposit when its crates come

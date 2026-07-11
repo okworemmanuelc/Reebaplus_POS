@@ -2,6 +2,117 @@
 
 ---
 
+## 2026-07-08 — Exactly-once stock: idempotency backstops + mutable-balance-cache audit (issue #100, A-S5/A-S6)
+
+**A-S5 (idempotency backstops).** Added `test/sync/stock_reprocess_idempotency_test.dart`:
+restoring the till's OWN just-pushed inventory cache + append-only stock ledger (and
+re-restoring it, modelling a second pull / broadcast re-pull) does not double-decrement —
+on-hand stays 4 and equals opening + SUM(ledger deltas). This pins the PULL-side
+idempotency; A-S3's lost-ack replay pins the PUSH side (`ON CONFLICT DO NOTHING`). The
+"no blind insert" property is structural — the only cloud-write paths are
+`enqueueUpsert`/`enqueueDelete` (no `enqueueInsert`) and the transport always `.upsert()`s;
+the clobber-guard is already pinned by `outbox_sacred_restore_test`.
+
+**A-S6 (audit of every `isCache` table).** `inventory` is FIXED (A-S3 guarded RPC). The
+four crate balance caches (`customer`/`manufacturer`/`store`/`supplier`) share inventory's
+push-absolute-LWW shape, so concurrent OFFLINE crate movements to the same owner can drift
+the cache — BUT they are backed by append-only ledgers (`crate_ledger` /
+`supplier_crate_ledger`, both movements survive), the movement writes are relative
+(`balance = balance + δ`), and the balance is recomputable via
+`verifyCrateReconciliation`. Lower severity than the stock oversell (a deposit tally
+reconciliation fixes, not silent money-for-nothing). Genuine gap found but DEFERRED:
+`verifyCrateReconciliation` is not auto-wired → follow-up issue (auto-schedule, or
+derive-on-read, or a server-guarded crate RPC). The `store_crate_balances` absolute
+`setBalance` is an intentional manual override, not a race.
+
+**Open question (human).** The recovery UX for a background-reconnect-rejected oversell
+(auto-cancel / notify / re-ring?) is undefined product behaviour — logged, not invented
+(the detect-and-surface mechanism, which is #100's goal, is complete).
+
+**Verified.** `flutter analyze` clean; the new test green.
+
+**Files changed:** `test/sync/stock_reprocess_idempotency_test.dart` (new),
+`context/progress-tracker.md`.
+
+---
+
+## 2026-07-08 — Exactly-once stock: route checkout through the guarded RPC, wallet legs client-side (issue #100, A-S3/A-S4)
+
+**What changed.** Implemented Option ①. `OrdersDao.createOrder` now posts the §14.3
+wallet double-entry through a new private `_postSaleWalletLegs` helper called **before**
+the v1/v2 path split, so the legs are client-authored on BOTH paths (invariant #3 —
+wallet ledgers append-only/derived, never server-minted). The v2 `pos_record_sale_v2`
+envelope is passed **no** `p_wallet_amount_kobo` (its wallet branch stays a no-op), and
+the now-dead v2-only `walletDebitKobo` parameter was removed from `createOrder`. On the
+v2 path the guarded RPC owns only the oversell-safe order/items/stock/payment: server
+`SELECT … FOR UPDATE` + relative `quantity = quantity - n WHERE quantity >= n` +
+`insufficient_stock`/`inventory_row_missing` (P0001) + `ON CONFLICT (id) DO NOTHING`.
+The local pre-check is kept for fast offline UX, but the server decision is authoritative.
+
+Beyond fixing the flag-flip viability, this removes a latent v2 split-brain: the old v2
+path minted only a server-side wallet debit with no local mirror, which would have broken
+cancel/refund/reports on v2. v2's wallet rows are now byte-identical to v1's.
+
+**Tests.** `exactly_once_stock_integrity_test.dart` gains the A-S3 v2 group: two devices
+race the last unit through a faithful in-memory model of the RPC's guard — the server
+accepts the first sale and **rejects the second** (`insufficient_stock`), on-hand never
+goes below 0, and the loser's envelope **orphans visibly** in `sync_queue_orphans`
+(Invariant #12 — the A-S4 coverage); plus a lost-ack replay proving idempotency (no
+second decrement). Updated `record_sale_dispatch_test` (v2 registered sale → 2 local
+wallet legs + 1 envelope, no `p_wallet_amount_kobo`; new register-as-credit case nets
+−150000, never gated by the RPC), `credit_ledger_logic_test`, `pr_4c_test` (dropped the
+removed arg — behaviour identical, the legs never used it).
+
+**Known v2 characteristic (documented).** An **offline** registered/crate sale's wallet
++ crate legs FK-reference the RPC-minted order; the reconnect drain pushes table rows
+before domain envelopes, so they FK-defer once and converge on retry. The **online**
+path front-runs this via `flushSale`. Matches existing crate behaviour; cheap follow-up
+noted. The go-live flag flip is a per-env ops decision, surfaced in the PR, not applied.
+
+**Verified.** `flutter analyze` clean project-wide; sync/dispatch/wallet/orders/crates/
+golden/costing suites green.
+
+**Files changed:** `lib/core/database/daos_orders.dart`,
+`lib/shared/services/orders/order_commands.dart`,
+`test/sync/exactly_once_stock_integrity_test.dart`,
+`test/sync/dispatch/record_sale_dispatch_test.dart`,
+`test/wallet/credit_ledger_logic_test.dart`, `test/orders/pr_4c_test.dart`,
+`context/progress-tracker.md`.
+
+---
+
+## 2026-07-08 — Exactly-once stock: reproduce the silent oversell + RPC viability (issue #100, A-S1/A-S2)
+
+**What changed.** Added `test/sync/exactly_once_stock_integrity_test.dart` — a RED-first
+regression that reproduces the headline defect on the current v1 checkout path: two
+devices, stock 1, both sell 1 unit offline (walk-in, so the sale is a pure stock
+movement), both push the **absolute** `inventory.quantity=0` row; the natural-key LWW
+cache collapses them onto one cloud row at 0 while **two** orders land — 2 units sold
+from a stock of 1, silently, no error. It passes today (documents the bug) and flips to
+the fixed path in A-S3. Uses two `AppDatabase` instances sharing one
+`InMemoryCloudTransport` (the "cloud"); the shared `inventoryId` is what makes the two
+absolute pushes collapse (mirrors the real `onConflict (business_id, product_id,
+store_id)` merge).
+
+**A-S2 verification (no code — findings drive the fix).** Verified `pos_record_sale_v2`
+against the LIVE database. Its stock write is exactly the guarded, serialized relative
+decrement A wants, with no schema drift, and `_applyDomainResponse` writes back the
+authoritative `inventory_after` as the sole local writer. **But** its wallet model is
+incompatible with the live v1 path (single `p_wallet_amount_kobo` debit vs. v1's full
+double-entry per registered sale), so a blanket flag flip would drop wallet history on
+cash sales and outright reject register-as-credit sales. Re-scoped (human decision) to
+**Option ①**: keep the wallet double-entry client-side on the v2 path (as
+`crate_ledger`/`cost_batches` already are), pass `p_wallet_amount_kobo=0`, let the RPC
+own only the oversell-safe stock/order/items/payment. Details in
+`progress-tracker.md` → "Exactly-once stock integrity (#100, Workstream A)".
+
+**Verified.** `flutter analyze` clean on the new test; the test passes (bug reproduced).
+
+**Files changed:** `test/sync/exactly_once_stock_integrity_test.dart` (new);
+`context/progress-tracker.md`.
+
+---
+
 ## 2026-07-07 — Realtime: authorize the socket for postgres_changes (issue #97)
 
 **What changed.** After the single-channel change (#95), **every** `postgres_changes`
