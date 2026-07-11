@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/core/constants/category_filter.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -265,6 +266,8 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
                         categories: [
                           'All',
                           ..._controller!.categories.map((c) => c.name),
+                          // #109: bucket for products with no category.
+                          'Uncategorized',
                         ],
                         // Defense-in-depth: the controller already resets a
                         // dangling selectedCategoryId, but never let the chip
@@ -274,6 +277,10 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
                         onCategorySelected: (name) {
                           if (name == 'All') {
                             _controller!.selectCategory(null);
+                          } else if (name == 'Uncategorized') {
+                            _controller!.selectCategory(
+                              kUncategorizedCategoryId,
+                            );
                           } else {
                             final cat = _controller!.categories.firstWhere(
                               (c) => c.name == name,
@@ -409,6 +416,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
   String _selectedCategoryLabel() {
     final id = _controller!.selectedCategoryId;
     if (id == null) return 'All';
+    if (id == kUncategorizedCategoryId) return 'Uncategorized';
     for (final c in _controller!.categories) {
       if (c.id == id) return c.name;
     }

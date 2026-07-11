@@ -294,6 +294,107 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
     return id;
   }
 
+  /// True if a **non-deleted** category in this business already uses [name]
+  /// (case-insensitive, trimmed), excluding [excludeId] (the category being
+  /// renamed). Backs the rename collision guard (#109 AC #1). Compared in Dart
+  /// — Drift has no `equalsInsensitive`, a business's category list is small,
+  /// and this mirrors the `_getOrCreateCategory` lower-case match already in
+  /// add_product_screen.dart.
+  Future<bool> categoryNameExists(String name, {String? excludeId}) async {
+    final target = name.trim().toLowerCase();
+    final rows = await (select(categories)
+          ..where((t) => whereBusiness(t) & t.isDeleted.not()))
+        .get();
+    return rows.any(
+      (c) => c.id != excludeId && c.name.trim().toLowerCase() == target,
+    );
+  }
+
+  /// Rename category [id] to [name] (#109 AC #1). Writes the new name, then
+  /// full-row enqueues: a partial `categories` upsert would omit the NOT NULL
+  /// name/business_id (Postgres 23502), exactly as [updateSupplier] documents.
+  /// The full re-read preserves the untouched `description`. The caller guards
+  /// against a collision via [categoryNameExists] first.
+  Future<void> renameCategory(String id, {required String name}) async {
+    await (update(categories)..where((t) => t.id.equals(id) & whereBusiness(t)))
+        .write(
+      CategoriesCompanion(
+        name: Value(name),
+        lastUpdatedAt: Value(DateTime.now()),
+      ),
+    );
+    final row = await (select(
+      categories,
+    )..where((t) => t.id.equals(id) & whereBusiness(t))).getSingleOrNull();
+    if (row != null) {
+      await db.syncDao.enqueueUpsert('categories', row.toCompanion(true));
+    }
+  }
+
+  /// How many live products sit in category [id] (this business). Drives the
+  /// delete confirmation's "N products will move to Uncategorized" (#109 AC #2).
+  Future<int> countProductsInCategory(String id) async {
+    final countCol = products.id.count();
+    final row =
+        await (selectOnly(products)
+              ..addColumns([countCol])
+              ..where(
+                products.categoryId.equals(id) &
+                    whereBusiness(products) &
+                    products.isDeleted.not(),
+              ))
+            .getSingle();
+    return row.read(countCol) ?? 0;
+  }
+
+  /// Soft-delete category [id] and move its products to Uncategorized (#109 AC
+  /// #2/#3), atomically. Never a hard delete — the tombstone (`is_deleted`)
+  /// syncs via `enqueueUpsert`, exactly like [softDeleteSupplier]. Each
+  /// reassigned product is enqueued individually (sync is per-row) with an
+  /// **explicit** `category_id: null`: a plain `toCompanion(true)` turns the
+  /// now-null FK into `Value.absent()` (dropped from the push) and the cloud
+  /// would keep the stale category, so the null is re-forced via `copyWith`.
+  /// Returns the number of products moved.
+  Future<int> softDeleteCategoryAndReassign(String id) async {
+    final now = DateTime.now();
+    return transaction(() async {
+      final affected = await (select(products)
+            ..where(
+              (t) =>
+                  t.categoryId.equals(id) &
+                  whereBusiness(t) &
+                  t.isDeleted.not(),
+            ))
+          .get();
+      for (final p in affected) {
+        final comp = p.toCompanion(true).copyWith(
+          categoryId: const Value(null),
+          lastUpdatedAt: Value(now),
+        );
+        await (update(
+          products,
+        )..where((t) => t.id.equals(p.id) & whereBusiness(t))).write(comp);
+        await db.syncDao.enqueueUpsert('products', comp);
+      }
+
+      await (update(categories)
+            ..where((t) => t.id.equals(id) & whereBusiness(t)))
+          .write(
+        CategoriesCompanion(
+          isDeleted: const Value(true),
+          lastUpdatedAt: Value(now),
+        ),
+      );
+      final catRow = await (select(
+        categories,
+      )..where((t) => t.id.equals(id) & whereBusiness(t))).getSingleOrNull();
+      if (catRow != null) {
+        await db.syncDao.enqueueUpsert('categories', catRow.toCompanion(true));
+      }
+      return affected.length;
+    });
+  }
+
   Future<List<ManufacturerData>> getAllManufacturers() {
     return (select(manufacturers)
           ..where((t) => whereBusiness(t) & t.isDeleted.not())

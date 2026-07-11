@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/core/constants/category_filter.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/shared/services/cart_service.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
@@ -73,6 +74,7 @@ class PosController extends ChangeNotifier {
       // down). Drop the now-dangling selection back to "All" so the chip-row
       // lookup in pos_home_screen can't `firstWhere` on a missing id and crash.
       if (selectedCategoryId != null &&
+          selectedCategoryId != kUncategorizedCategoryId &&
           !list.any((c) => c.id == selectedCategoryId)) {
         selectedCategoryId = null;
       }
@@ -122,7 +124,13 @@ class PosController extends ChangeNotifier {
     } else {
       currentStoreName = null;
       _productsSub = _database.inventoryDao
-          .watchProductsByCategory(selectedCategoryId)
+          .watchProductsByCategory(
+            // The Uncategorized sentinel is not a real category id — fetch all
+            // and let `filteredProducts` narrow to null-category products.
+            selectedCategoryId == kUncategorizedCategoryId
+                ? null
+                : selectedCategoryId,
+          )
           .listen((data) {
             if (_disposed) return;
             allProducts = data;
@@ -182,6 +190,9 @@ class PosController extends ChangeNotifier {
         })
         .where((item) {
           if (selectedCategoryId == null) return true;
+          if (selectedCategoryId == kUncategorizedCategoryId) {
+            return item.product.categoryId == null;
+          }
           return item.product.categoryId == selectedCategoryId;
         })
         .toList();
