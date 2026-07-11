@@ -38,10 +38,16 @@ import 'package:reebaplus_pos/features/payments/widgets/supplier_form_sheet.dart
 class AddProductScreen extends ConsumerStatefulWidget {
   final void Function(ProductData)? onProductAdded;
   final bool receiveMode;
+
+  /// Optional barcode to pre-fill the Barcode field with (#118). Set when this
+  /// screen is opened from a POS scan of an unknown barcode, so the cashier can
+  /// catalogue the just-scanned product without retyping the code.
+  final String? prefilledBarcode;
   const AddProductScreen({
     super.key,
     this.onProductAdded,
     this.receiveMode = false,
+    this.prefilledBarcode,
   });
 
   @override
@@ -66,7 +72,10 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   /// null ⇒ a soft collision the form warns about; it never blocks the save.
   String? _barcodeCollisionName;
 
-  String _unit = 'Bottle';
+  // Nullable (#108): null = no unit. Pre-filled with the trade's Lexicon unit
+  // as a clearable suggestion (initState / _clearExistingProduct); clearing it
+  // via the dropdown's "No unit" option saves null.
+  String? _unit;
   bool _trackEmpties = true; // defaults true when unit is Bottle
   bool _allowFractionalSales = false;
   // Colour selector is deferred (master plan §16.5); products keep a default.
@@ -134,7 +143,11 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     // default to a non-beverage trade.
     _unit = _lexicon.unit;
     _dynamicUnits = _lexicon.starterUnits;
-    _trackEmpties = _unit.toLowerCase() == 'bottle';
+    _trackEmpties = _unit?.toLowerCase() == 'bottle';
+    // #118: seed the Barcode field from a POS scan of an unknown code so the
+    // cashier catalogues the just-scanned product without retyping it.
+    final prefillBarcode = widget.prefilledBarcode?.trim() ?? '';
+    if (prefillBarcode.isNotEmpty) _barcodeCtrl.text = prefillBarcode;
     _loadData();
   }
 
@@ -383,7 +396,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       _unit = _lexicon.unit;
       _size = null;
       _expiryDate = null;
-      _trackEmpties = _unit.toLowerCase() == 'bottle';
+      _trackEmpties = _unit?.toLowerCase() == 'bottle';
       _allowFractionalSales = false;
       _selectedManufacturer = null;
       _selectedSupplier = null;
@@ -549,7 +562,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
 
   /// Empty-crate value in kobo, or null when not tracking empties / left blank.
   int? get _emptyCrateValueKobo {
-    if (!(_effectiveTrackEmpties && _unit.toLowerCase() == 'bottle')) {
+    if (!(_effectiveTrackEmpties && _unit?.toLowerCase() == 'bottle')) {
       return null;
     }
     final raw = _emptyCrateValueCtrl.text.trim();
@@ -1109,7 +1122,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     final border = Theme.of(context).dividerColor;
     final isExisting = _selectedExistingProduct != null;
     final canEditBuying = Gates.editBuyingPrice.allows(ref);
-    final manufacturerRequired = _unit.toLowerCase() == 'bottle' && _isCrateBusiness && _trackEmpties;
+    final manufacturerRequired = _unit?.toLowerCase() == 'bottle' && _isCrateBusiness && _trackEmpties;
 
     return Scaffold(
       // Keep the body + save button above the keyboard. This screen is pushed
@@ -1416,23 +1429,31 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // ── PRODUCT UNIT SELECTOR ──────────────────────────────
-                _sectionLabel('PRODUCT UNIT *', subtext),
+                // ── PRODUCT UNIT SELECTOR (optional, #108) ─────────────
+                _sectionLabel('PRODUCT UNIT', subtext),
                 const SizedBox(height: 8),
-                AppDropdown<String>(
+                AppDropdown<String?>(
                   value: _unit,
-                  items: _dynamicUnits
-                      .map((u) => DropdownMenuItem(value: u, child: Text(u)))
-                      .toList(),
+                  hintText: 'No unit',
+                  // "No unit" (#108) clears the unit — the product saves with
+                  // just its name and is hidden wherever the unit would render.
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('No unit'),
+                    ),
+                    ..._dynamicUnits.map(
+                      (u) =>
+                          DropdownMenuItem<String?>(value: u, child: Text(u)),
+                    ),
+                  ],
                   onChanged: (v) {
-                    if (v != null) {
-                      setState(() {
-                        _unit = v;
-                        // Auto-enable tracking for bottle products,
-                        // clear it for everything else.
-                        _trackEmpties = v.toLowerCase() == 'bottle';
-                      });
-                    }
+                    setState(() {
+                      _unit = v;
+                      // Auto-enable tracking for bottle products, off otherwise
+                      // (a null unit is not a bottle).
+                      _trackEmpties = v?.toLowerCase() == 'bottle';
+                    });
                   },
                 ),
                 const SizedBox(height: 8),
@@ -1522,7 +1543,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                 // ── TRACK EMPTIES + CRATE VALUE (directly below Manufacturer) ─
                 // Crate-only (rule #13): hidden for non-Bar/Beer-distributor
                 // businesses; _effectiveTrackEmpties also forces it off on save.
-                if (_unit.toLowerCase() == 'bottle' && _isCrateBusiness) ...[
+                if (_unit?.toLowerCase() == 'bottle' && _isCrateBusiness) ...[
                   CheckboxListTile(
                     value: _trackEmpties,
                     onChanged: (v) =>
@@ -1858,19 +1879,27 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       // ── PRODUCT UNIT ────────────────────────────────────────────────────
       _sectionLabel('PRODUCT UNIT', subtext),
       const SizedBox(height: 8),
-      AppDropdown<String>(
+      AppDropdown<String?>(
         value: _unit,
-        items: _dynamicUnits
-            .map((u) => DropdownMenuItem(value: u, child: Text(u)))
-            .toList(),
+        hintText: 'No unit',
+        // "No unit" (#108) clears the unit — the product saves with just its
+        // name and is hidden wherever the unit would render.
+        items: [
+          const DropdownMenuItem<String?>(
+            value: null,
+            child: Text('No unit'),
+          ),
+          ..._dynamicUnits.map(
+            (u) => DropdownMenuItem<String?>(value: u, child: Text(u)),
+          ),
+        ],
         onChanged: (v) {
-          if (v != null) {
-            setState(() {
-              _unit = v;
-              // Auto-enable tracking for bottle products, clear it otherwise.
-              _trackEmpties = v.toLowerCase() == 'bottle';
-            });
-          }
+          setState(() {
+            _unit = v;
+            // Auto-enable tracking for bottle products, off otherwise (a null
+            // unit is not a bottle).
+            _trackEmpties = v?.toLowerCase() == 'bottle';
+          });
         },
       ),
       const SizedBox(height: 8),
@@ -1890,7 +1919,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       const SizedBox(height: 16),
 
       // ── TRACK EMPTIES + CRATE VALUE (crate business + bottle only) ──────
-      if (_unit.toLowerCase() == 'bottle' && _isCrateBusiness) ...[
+      if (_unit?.toLowerCase() == 'bottle' && _isCrateBusiness) ...[
         CheckboxListTile(
           value: _trackEmpties,
           onChanged: (v) => setState(() => _trackEmpties = v ?? false),

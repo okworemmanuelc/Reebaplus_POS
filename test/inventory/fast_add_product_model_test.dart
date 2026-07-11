@@ -44,32 +44,43 @@ void main() {
     selectedStoreId: selectedStoreId,
   );
 
-  group('business-type-aware unit default', () {
-    test('defaults to Bottle for a crate-tracking business', () {
-      expect(fastAddDefaultUnit(tracksCrates: true), 'Bottle');
-    });
-
-    test('defaults to Pack otherwise', () {
-      expect(fastAddDefaultUnit(tracksCrates: false), 'Pack');
-    });
-
-    test('an unset unit resolves to the business-type default (crate)', () {
+  group('optional unit (#108)', () {
+    // The form pre-fills the trade's Lexicon unit as a clearable suggestion, so
+    // the model no longer invents a trade default: a blank/cleared unit means
+    // the user deliberately chose "no unit" and resolves to null.
+    test('an unset unit resolves to null — no unit, no trade default', () {
       final result = resolveFastAdd(
         input(unit: null, hasManufacturer: true),
         ctx(tracksCrates: true),
       );
       expect(result, isA<FastAddIntent>());
-      expect((result as FastAddIntent).unit, 'Bottle');
+      expect((result as FastAddIntent).unit, isNull);
     });
 
-    test('an unset unit resolves to the business-type default (non-crate)', () {
-      final result = resolveFastAdd(input(unit: null), ctx());
-      expect((result as FastAddIntent).unit, 'Pack');
+    test('a cleared (blank) unit resolves to null', () {
+      final result = resolveFastAdd(input(unit: ''), ctx());
+      expect((result as FastAddIntent).unit, isNull);
     });
 
-    test('an explicit unit is preserved', () {
-      final result = resolveFastAdd(input(unit: 'Can'), ctx());
+    test('a whitespace-only unit resolves to null', () {
+      final result = resolveFastAdd(input(unit: '   '), ctx());
+      expect((result as FastAddIntent).unit, isNull);
+    });
+
+    test('an explicit unit is preserved (and trimmed)', () {
+      final result = resolveFastAdd(input(unit: '  Can '), ctx());
       expect((result as FastAddIntent).unit, 'Can');
+    });
+
+    test('a null unit is not a bottle → no crate deposit value', () {
+      // A crate business tracking empties: with no unit the deposit value is
+      // dropped because a null unit is never a bottle.
+      final result = resolveFastAdd(
+        input(unit: null, hasManufacturer: true, emptyCrateValue: '500'),
+        ctx(tracksCrates: true),
+      );
+      expect((result as FastAddIntent).unit, isNull);
+      expect(result.emptyCrateValueKobo, isNull);
     });
   });
 
@@ -88,7 +99,8 @@ void main() {
       expect(intent.name, 'Eva Water 75cl');
       expect(intent.retailerPriceKobo, 25000);
       expect(intent.initialStock, 6);
-      expect(intent.unit, 'Pack');
+      // No unit supplied and none invented (#108): a blank field is "no unit".
+      expect(intent.unit, isNull);
       expect(intent.storeId, 'store-1');
     });
   });

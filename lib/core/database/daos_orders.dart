@@ -646,7 +646,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
           if (product == null) continue;
           final mfrId = product.manufacturerId;
           if (mfrId == null) continue;
-          if (product.unit.toLowerCase() != 'bottle' || !product.trackEmpties) {
+          if (product.unit?.toLowerCase() != 'bottle' || !product.trackEmpties) {
             continue;
           }
           cratesByManufacturer.update(

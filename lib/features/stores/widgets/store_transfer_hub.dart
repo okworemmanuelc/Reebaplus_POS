@@ -111,7 +111,7 @@ class StoreTransferHub extends ConsumerWidget {
           builder: (t) {
             final p = productMap[t.productId];
             final manufacturerId = p?.manufacturerId;
-            final isCrateEligible = p != null && p.unit.toLowerCase() == 'bottle' && p.trackEmpties;
+            final isCrateEligible = p != null && p.unit?.toLowerCase() == 'bottle' && p.trackEmpties;
             final availableEmpties = manufacturerId != null ? (emptiesMap[manufacturerId] ?? 0) : 0;
             return _TransferActionCard(
               transfer: t,

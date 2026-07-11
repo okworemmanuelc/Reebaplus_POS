@@ -11,13 +11,6 @@ library;
 
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 
-/// The business-type-aware default unit (ADR 0006): `Bottle` when the business
-/// tracks crates — so empty-crate tracking auto-engages on its first product —
-/// and `Pack` otherwise. Written as an expression so later business types can
-/// supply their own default without touching call sites.
-String fastAddDefaultUnit({required bool tracksCrates}) =>
-    tracksCrates ? 'Bottle' : 'Pack';
-
 /// The business context the Fast-Add model needs, decoupled from widgets and
 /// the database. Built by the screen from the current business + role + stores.
 class FastAddContext {
@@ -154,7 +147,10 @@ final class FastAddIntent extends FastAddResult {
   /// 0 when the buying price was skipped or the role cannot edit it — an
   /// Uncosted product.
   final int buyingPriceKobo;
-  final String unit;
+
+  /// The resolved unit, or null (#108) when the clearable unit field was left
+  /// blank — a product with no unit, hidden everywhere it would render.
+  final String? unit;
 
   /// Effective track-empties (crate business AND the toggle on).
   final bool trackEmpties;
@@ -251,14 +247,16 @@ FastAddResult resolveFastAdd(FastAddInput input, FastAddContext context) {
   final wholesalerPriceKobo =
       wholesaleRaw.isEmpty ? retailerPriceKobo : _toKobo(wholesaleRaw);
 
-  // Unit + effective crate tracking.
-  final unit = (input.unit == null || input.unit!.trim().isEmpty)
-      ? fastAddDefaultUnit(tracksCrates: context.tracksCrates)
-      : input.unit!.trim();
+  // Unit + effective crate tracking. A blank/cleared unit (#108) resolves to
+  // null — no unit — not a trade default; the form pre-fills the trade's
+  // Lexicon unit as a clearable suggestion, so a non-blank value here is the
+  // user's kept choice and a blank one is a deliberate clear.
+  final unitRaw = input.unit?.trim() ?? '';
+  final String? unit = unitRaw.isEmpty ? null : unitRaw;
   final trackEmpties = context.tracksCrates && input.trackEmpties;
   final crateRaw = input.emptyCrateValue.trim();
   final int? emptyCrateValueKobo =
-      (trackEmpties && unit.toLowerCase() == 'bottle' && crateRaw.isNotEmpty)
+      (trackEmpties && unit?.toLowerCase() == 'bottle' && crateRaw.isNotEmpty)
       ? _toKobo(crateRaw)
       : null;
 

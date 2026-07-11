@@ -360,7 +360,13 @@ class Products extends Table {
   TextColumn get subtitle => text().nullable()();
   TextColumn get sku => text().nullable()();
   TextColumn get size => text().nullable()();
-  TextColumn get unit => text().withDefault(const Constant('Bottle'))();
+  // Nullable (#108): a product may have NO unit. When absent it renders nothing
+  // anywhere (inventory, POS grid, receipts, product/category detail) — just the
+  // name — and crate-eligibility treats it as "not a bottle". The Add/Edit form
+  // pre-fills the trade's Lexicon unit as a CLEARABLE suggestion; clearing it
+  // saves null. No DB default: absence is a real "no unit" state, never a silent
+  // 'Bottle'. See supabase/migrations/0151_products_unit_nullable.sql.
+  TextColumn get unit => text().nullable()();
   // Reebaplus pivot step 14 (schema v18): the four legacy price columns
   // (retail / bulk breaker / distributor / selling) were dropped; products
   // now hold exactly three prices — buying (already here), retailer,
@@ -410,8 +416,9 @@ class Products extends Table {
   @override
   List<String> get customConstraints => [
     "CHECK (size IS NULL OR size IN ('big','medium','small'))",
-    // Keep in lock-step with [kProductUnits] above.
-    "CHECK (unit IN ('Bottle','Can','PET','Sachet','Keg','Crate','Pack','Carton','Piece','Bag','Box','Tin','Other'))",
+    // Keep in lock-step with [kProductUnits] above. NULL allowed (#108): a
+    // product may have no unit.
+    "CHECK (unit IS NULL OR unit IN ('Bottle','Can','PET','Sachet','Keg','Crate','Pack','Carton','Piece','Bag','Box','Tin','Other'))",
   ];
 }
 
@@ -1846,7 +1853,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 61;
+  int get schemaVersion => 62;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4030,6 +4037,20 @@ class AppDatabase extends _$AppDatabase {
           "VALUES ('staff.remove', "
           "'Permanently remove staff (frees their email)', 'Staff')",
         );
+      }
+      if (from < 62) {
+        // v62 (#108 optional product units): products.unit becomes NULLABLE
+        // with a relaxed CHECK (null allowed) and no DB default — a product may
+        // have no unit. SQLite can't ALTER a column's NOT NULL / DEFAULT / CHECK
+        // in place, so rebuild the table from the current Drift schema (nullable
+        // unit, relaxed CHECK, no default) and copy every row. RELAXING keeps
+        // every existing non-null unit valid, so the 1:1 copy never fails — no
+        // backfill, existing units are unchanged. alterTable preserves the
+        // table's indexes and the bump_products_version trigger (re-creates them
+        // from sqlite_master), so nothing here needs manual recreation (same as
+        // the v24 products rebuild). Mirrors
+        // supabase/migrations/0151_products_unit_nullable.sql.
+        await m.alterTable(TableMigration(products));
       }
     },
     beforeOpen: (details) async {
