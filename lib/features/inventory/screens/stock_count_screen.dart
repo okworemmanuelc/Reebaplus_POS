@@ -1099,7 +1099,11 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                         (n, c) => n + c.shortageCount,
                       );
 
-                      return ListTile(
+                      // Transparent Material gives the row an ink target above
+                      // the sheet's coloured fill so its tap-ripple shows.
+                      return Material(
+                        type: MaterialType.transparency,
+                        child: ListTile(
                         contentPadding: EdgeInsets.symmetric(
                           horizontal: context.getRSize(20),
                           vertical: context.getRSize(4),
@@ -1143,6 +1147,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                           Navigator.pop(ctx);
                           _showDayDetail(context, label, dayCounts);
                         },
+                        ),
                       );
                     },
                   ),
