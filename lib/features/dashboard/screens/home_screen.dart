@@ -23,6 +23,7 @@ import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/features/dashboard/widgets/get_started_card.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/sales_detail_screen.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/reports_hub_screen.dart';
+import 'package:reebaplus_pos/features/dashboard/reports_attention.dart';
 import 'package:reebaplus_pos/features/customers/screens/customers_screen.dart';
 import 'package:reebaplus_pos/features/expenses/screens/expenses_screen.dart';
 import 'package:reebaplus_pos/features/orders/screens/orders_screen.dart';
@@ -479,6 +480,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildReportButton() {
+    // Attention dot (issue #119): a single dot — no number — lights when this
+    // viewer has pending approvals OR an un-reviewed daily stock count. The
+    // button itself is already CEO/Manager-gated (showReports); the dot clears
+    // when they open Daily Reconciliation. The in-hub Approvals card keeps its
+    // own numeric badge.
+    final showDot = ref.watch(reportsAttentionDotProvider);
     return Material(
       color: context.primaryColor.withValues(alpha: 0.1),
       borderRadius: BorderRadius.circular(context.radiusM),
@@ -512,22 +519,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   fontSize: context.getRFontSize(14),
                 ),
               ),
-              SizedBox(width: context.getRSize(6)),
-              Container(
-                padding: EdgeInsets.all(context.getRSize(5)),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.error,
-                  shape: BoxShape.circle,
-                ),
-                child: Text(
-                  '3',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: context.getRFontSize(10),
-                    fontWeight: FontWeight.bold,
+              if (showDot) ...[
+                SizedBox(width: context.getRSize(6)),
+                Container(
+                  width: context.getRSize(8),
+                  height: context.getRSize(8),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.error,
+                    shape: BoxShape.circle,
                   ),
                 ),
-              ),
+              ],
             ],
           ),
         ),

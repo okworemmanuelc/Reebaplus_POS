@@ -1382,6 +1382,16 @@ final activeInviteCodesProvider = businessScopedStream<List<InviteCodeData>>(
 
 // ── Current-user role & permission checks (PIVOT_PLAN step 8A) ───────────────
 
+/// The current session user's id, or null when logged out / not yet resolved
+/// locally. A lightweight watchable seam over [authProvider] — the identity
+/// counterpart of the businessId seam `currentBusinessIdProvider` — so per-user
+/// device-local state (e.g. the Daily Reconciliation review marker, issue #119)
+/// can key on it and tests can flip it via `overrideWith` without constructing
+/// an [AuthService].
+final currentUserIdProvider = Provider<String?>((ref) {
+  return ref.watch(authProvider.select((a) => a.currentUser?.id));
+});
+
 /// The [RoleData] for the currently logged-in user. Resolves the session
 /// user's id via [authProvider] and reuses [userRoleProvider]. Returns null
 /// while no one is logged in or before the membership + role rows have
