@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:drift/drift.dart' show Value, Variable;
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/foundation.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
@@ -152,7 +152,7 @@ class OrderCommands {
         await _flusher.flushSale(orderId);
       } on SaleSyncException catch (e) {
         debugPrint('[OrderCommands] Sale rejected by server: $e');
-        await _compensateRejectedSale(orderId, items);
+        await _compensateRejectedSale(orderId, items, staffId);
         rethrow;
       } catch (e) {
         // Transient error — the queue row stays pending and the
@@ -431,51 +431,32 @@ class OrderCommands {
   /// the server's `pos_record_sale` RPC permanently rejected the sale
   /// (e.g. insufficient_stock from a concurrent device). The cloud never
   /// saw any of this — the RPC rolled back its own transaction — so the
-  /// compensation is purely local: we don't enqueue it. The original
-  /// `domain:pos_record_sale` queue row was already marked failed by
-  /// SyncService.
+  /// compensation is purely local. Delegates to
+  /// [OrdersDao.reverseRejectedSaleLocal] so the foreground (online checkout)
+  /// path and the background cashier-Cancel path share ONE complete reversal:
+  /// order cancelled + inventory refunded + the wallet double-entry reversed
+  /// (a v2 registered sale posts wallet legs locally, so this MUST undo them or
+  /// a rejected credit sale would leave the customer wrongly debited).
   Future<void> _compensateRejectedSale(
     String orderId,
     List<OrderItemsCompanion> items,
+    String staffId,
   ) async {
-    // sync-exempt: §5 #3 — local-only reversal of writes the cloud's RPC
-    // already rolled back (insufficient_stock etc.); nothing to push.
-    await _db.transaction(() async {
-      // 1. Mark order cancelled.
-      await (_db.update(_db.orders)..where((t) => t.id.equals(orderId))).write(
-        OrdersCompanion(
-          status: const Value('cancelled'),
-          cancellationReason: const Value('rejected_by_server'),
-          cancelledAt: Value(DateTime.now().toUtc()),
-          lastUpdatedAt: Value(DateTime.now()),
-        ),
-      );
-
-      // 2. Refund inventory cache. Each item's optimistic deduction is
-      // undone by adding the quantity back. The corresponding
-      // stock_transactions ledger rows are append-only — we leave them
-      // in place; they're orphaned but harmless because the cloud's
-      // ledger never received them either.
-      for (final item in items) {
-        final qty = item.quantity.value;
-        final productId = item.productId.value;
-        // Quick-sale line (§26.4): never deducted inventory → nothing to refund.
-        if (productId == null) continue;
-        final whId = item.storeId.value;
-        await _db.customUpdate(
-          'UPDATE inventory SET quantity = quantity + ?, last_updated_at = ? '
-          'WHERE business_id = ? AND product_id = ? AND store_id = ?',
-          variables: [
-            Variable<int>(qty),
-            Variable<DateTime>(DateTime.now()),
-            Variable<String>(_ordersDao.requireBusinessId()),
-            Variable<String>(productId),
-            Variable<String>(whId),
-          ],
-          updates: {_db.inventory},
-        );
-      }
-    });
+    final lines = <({String productId, String storeId, int quantity})>[
+      for (final item in items)
+        // Quick-sale line (§26.4): no product → nothing was deducted.
+        if (item.productId.value != null)
+          (
+            productId: item.productId.value!,
+            storeId: item.storeId.value,
+            quantity: item.quantity.value,
+          ),
+    ];
+    await _ordersDao.reverseRejectedSaleLocal(
+      orderId: orderId,
+      items: lines,
+      staffId: staffId,
+    );
   }
 
   String _resolvePaymentType({

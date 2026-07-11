@@ -21,19 +21,34 @@ go-live flag flip (below).
   "out of stock (likely sold on another till). Review and cancel it." Best-effort (never
   breaks the drain); synced like any notification.
   Test `test/sync/oversell_orphan_notification_test.dart` green.
-- **⚠ Money-safety finding (must fix before the flag flip).** #105 posts the wallet
-  double-entry client-side on the v2 path, so a **rejected** registered sale now leaves
-  local wallet legs (+ crate legs + a `cost_batches` draw-down) that the existing
-  `_compensateRejectedSale` does NOT reverse (it only cancels the order + refunds the
-  inventory cache). On the live flag, a rejected credit sale would wrongly leave the
-  customer debited. **Slice 2 must make the undo COMPLETE** (inventory + wallet + crate +
-  cost batches), sourcing item qtys from the orphaned envelope's `p_items` (v2 has no
-  local `order_items`/`stock_transactions`), on BOTH the foreground `flushSale` path and
-  the new background cancel, and reconcile the orphaned wallet/crate outbox rows
-  (invariant #12 — they FK-reference an order the cloud rejected). Design + tests pending.
-- **Go-live flip: HELD** until (a) Slice 2 lands + ships AND (b) devices run the #105
-  build — else a rejected registered sale corrupts the wallet. (Supabase MCP is also
-  disconnected this session, so the flip can't be applied from here right now.)
+- **Slice 2b (core local undo) — DONE.** `OrdersDao.reverseRejectedSaleLocal(orderId,
+  items, staffId)` returns a device to its pre-sale state after a permanent rejection —
+  **local-only, never enqueued** (the rejected sale never reached the cloud): cancels the
+  order, refunds inventory from `items` (a v2 sale has no local `stock_transactions` to
+  rewind), and reverses the §14.3 wallet double-entry via compensating legs
+  (debit→refund credit, credit→void debit). Idempotent. The foreground
+  `_compensateRejectedSale` now delegates to it (so the online-checkout rejection path
+  ALSO reverses the wallet — previously it left the customer debited). Tests:
+  `test/orders/reverse_rejected_sale_test.dart` (walk-in, register-as-credit balance
+  restored, idempotency) green; sync/wallet/crates/costing suites green. **This closes
+  the #105-introduced money-safety finding** (local wallet correctness on rejection).
+- **⚠ Deeper PRE-EXISTING v2 finding (also gates a fully-safe go-live).** On the v2 path
+  `createOrder` eagerly ENQUEUES the sale's child rows, and two of them —
+  `cost_batches` (FIFO draw-down) and `customer_crate_balances` — **do NOT FK to the
+  order**, so on a rejection they PUSH successfully and **corrupt the cloud** (FIFO queue
+  wrongly drawn down; a customer wrongly shows owing empties). The FK-bound rows
+  (`wallet_transactions`, `crate_ledger`, `order_crate_lines`) correctly orphan instead.
+  This predates #105 (v1 never rejects, so it never surfaced). The clean root fix is to
+  **defer the child enqueues on the v2 path until the RPC confirms** (write locally, push
+  after `_applyDomainResponse`), OR clean the orphaned/pending child rows out of the
+  outbox on reversal. Local crate + cost reversal is entangled with this (a purely-local
+  crate undo wouldn't stop the cloud leak). Held for a coherent fix + human alignment —
+  it's an architecture change to the sale-sync path touching the sacred outbox (#12).
+- **Slice 2c (Cancel button UI) + background item-sourcing — pending.**
+- **Go-live flip: HELD** until the reversal is complete (incl. the leak fix) + shipped to
+  devices. Severity ranking: local wallet/inventory (customer money/stock) = FIXED;
+  cloud cost/crate leak = important, pre-existing, needs the defer-enqueue fix. (Supabase
+  MCP is also disconnected this session, so the flip can't be applied from here anyway.)
 
 ### Exactly-once stock integrity (#100, Workstream A) — MERGED via PR #105 (2026-07-08)
 All 8 slices (A-S0…A-S7) done; **PR #105** (`fix/exactly-once-stock-integrity` →

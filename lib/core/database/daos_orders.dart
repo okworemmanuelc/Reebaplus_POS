@@ -1273,6 +1273,101 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
+  /// Completely undoes a sale the server PERMANENTLY REJECTED (an oversell:
+  /// `pos_record_sale_v2` raised `insufficient_stock` / `inventory_row_missing`
+  /// because a concurrent till took the last unit). Unlike [markCancelled] —
+  /// which compensates a sale the cloud ACCEPTED and therefore pushes the
+  /// reversal — a rejected sale never reached the cloud (the RPC rolled back its
+  /// own transaction, and on the v2 path the local order/wallet/inventory writes
+  /// were never enqueued as table rows). So this reversal is **purely local and
+  /// never enqueued**: it just returns this device to its pre-sale state. The
+  /// original sale's orphaned outbox rows stay visible on the Sync Issues screen
+  /// (Invariant #12 — surfaced, never silently destroyed).
+  ///
+  /// [items] are the sold lines (product/store/qty) — sourced from the cart on
+  /// the foreground path, or from the orphaned envelope's `p_items` on the
+  /// background (cashier-tapped Cancel) path, because a v2 sale writes no local
+  /// `order_items` to read back. Idempotent: a no-op if the order is already
+  /// cancelled or absent.
+  Future<void> reverseRejectedSaleLocal({
+    required String orderId,
+    required List<({String productId, String storeId, int quantity})> items,
+    required String staffId,
+  }) async {
+    await db.transaction(() async {
+      final order = await (select(
+        orders,
+      )..where((o) => o.id.equals(orderId) & whereBusiness(o))).getSingleOrNull();
+      // Idempotent: nothing to undo if the order is gone or already reversed.
+      if (order == null || order.status == 'cancelled') return;
+
+      final now = DateTime.now();
+
+      // 1. Cancel the order header (local-only — the v2 order never pushed).
+      await (update(orders)..where((o) => o.id.equals(orderId))).write(
+        OrdersCompanion(
+          status: const Value('cancelled'),
+          cancellationReason: const Value('rejected_by_server'),
+          cancelledAt: Value(now.toUtc()),
+          lastUpdatedAt: Value(now),
+        ),
+      );
+
+      // 2. Refund the optimistic inventory pre-check deduction. Sourced from
+      // [items] (a v2 sale writes no local stock_transactions to rewind). No
+      // enqueue: on the v2 path the cloud's inventory_after is authoritative and
+      // this cache re-converges on the next pull.
+      for (final line in items) {
+        await customUpdate(
+          'UPDATE inventory SET quantity = quantity + ?, last_updated_at = ? '
+          'WHERE business_id = ? AND product_id = ? AND store_id = ?',
+          variables: [
+            Variable<int>(line.quantity),
+            Variable<DateTime>(now),
+            Variable<String>(requireBusinessId()),
+            Variable<String>(line.productId),
+            Variable<String>(line.storeId),
+          ],
+          updates: {inventory},
+        );
+      }
+
+      // 3. Reverse the §14.3 wallet double-entry so the customer's balance
+      // returns to its exact pre-sale value. Same shape as [markCancelled]
+      // (debit → 'refund' credit, credit → 'void' debit; net effect
+      // +total − paid), but LOCAL-ONLY: the cloud never held these legs, so
+      // pushing compensations would just FK-fail against the rejected order.
+      // Walk-in sales have no wallet legs → this is a no-op.
+      final saleWalletLegs =
+          await (select(walletTransactions)..where(
+                (t) =>
+                    whereBusiness(t) &
+                    t.orderId.equals(orderId) &
+                    t.referenceType.isNotIn(const ['refund', 'void']),
+              ))
+              .get();
+      for (final leg in saleWalletLegs) {
+        final toCredit = leg.type == 'debit';
+        final compReverse = WalletTransactionsCompanion.insert(
+          id: Value(UuidV7.generate()),
+          businessId: requireBusinessId(),
+          walletId: leg.walletId,
+          customerId: leg.customerId,
+          type: toCredit ? 'credit' : 'debit',
+          amountKobo: leg.amountKobo,
+          signedAmountKobo: toCredit ? leg.amountKobo : -leg.amountKobo,
+          referenceType: toCredit ? 'refund' : 'void',
+          orderId: Value(orderId),
+          performedBy: Value(staffId),
+          createdAt: Value(now),
+          lastUpdatedAt: Value(now),
+        );
+        await into(walletTransactions).insert(compReverse);
+        // Intentionally NOT enqueued — local-only reversal of a rejected sale.
+      }
+    });
+  }
+
   /// Builds the next order number for this business+device.
   ///
   /// `ORD-NNNNNN-XXXXXX` (master plan §30.8.1): `NNNNNN` is this device's
