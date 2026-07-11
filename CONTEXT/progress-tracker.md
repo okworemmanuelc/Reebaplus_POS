@@ -10,6 +10,33 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### Workstream C (#102) — periodic pull safety net GUARDED — PR pending, stop-for-human-merge (2026-07-11)
+Closes the live-sync/exactly-once loop's independent leg (plan §Workstream C).
+Branch `chore/retain-periodic-pull-safety-net` off `origin/main` (post-#105). The
+periodic `catchUpPull` was already SHIPPED (#98/#99); C's job is to **keep** it and
+make it un-removable, because it is the reconnect-replay backstop that makes
+Workstream B's (Broadcast) deliberate "no replay" acceptable.
+- **C-S1 (guard the safety net) — DONE.** Behaviour-preserving refactor of the 30 s
+  tick in `supabase_sync_service.dart`: the inline `Timer.periodic` body is now
+  `_installPeriodicSafetyNet()` (idempotent `??=`) → `_periodicSafetyNetTick()`, with
+  four `@visibleForTesting` seams (`installPeriodicSafetyNetForTesting`,
+  `isPeriodicSafetyNetActiveForTesting`, `periodicSafetyNetIntervalForTesting`,
+  `runPeriodicSafetyNetTickForTesting`). New `test/sync/periodic_safety_net_test.dart`
+  (5 tests, green) pins, via the **same** private installer/tick production uses:
+  the timer is scheduled idempotently at the **30 s** cadence and **cancelled on
+  logout** (`stopAutoPush`); each tick fires the silent `catchUpPull(reason:
+  'periodic')` when foreground + online + business-bound; a tick **pulls nothing**
+  when logged-out (backgrounded/suspended state) or offline; and — under `fakeAsync`
+  — the scheduled 30 s timer actually invokes the pull tick and stops after logout.
+  It fails if the safety net is ever silently removed or repointed.
+- **C-S2 (cadence) — RESOLVED: KEEP 30 s** (human, 2026-07-11). B (Broadcast) is not
+  built yet, so 30 s stays as the plan default; tighten toward ~10 s only if B is
+  later delayed or fails B0. No code change; the 30 s cadence is now test-pinned so
+  any future change is forced through review.
+- **C-S3 — DoD + PR.** `flutter analyze` clean; `flutter test test/sync/` 195 green.
+  PR `Closes #102`; stop for human merge. Invariants: none touched — behaviour-
+  preserving refactor, no schema/migration, outbox/append-only ledgers untouched.
+
 ### Exactly-once stock integrity (#100, Workstream A) — PR #105 OPEN, awaiting human merge (2026-07-08)
 All 8 slices (A-S0…A-S7) done; **PR #105** (`fix/exactly-once-stock-integrity` →
 `main`) opened `Closes #100`. Stop-for-human-merge. Two decisions carried in the PR:
