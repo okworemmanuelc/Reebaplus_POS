@@ -1558,7 +1558,11 @@ class UserBusinesses extends Table {
 
   @override
   List<String> get customConstraints => [
-    "CHECK (status IN ('active','suspended'))",
+    // #107 staff offboarding added the terminal `removed` status. Widening this
+    // CHECK is a runtime-resolved change (customConstraints is not baked into
+    // the generated code), so no build_runner regen is needed; existing installs
+    // rebuild the table under the new CHECK via the schemaVersion 61 upgrade step.
+    "CHECK (status IN ('active','suspended','removed'))",
     'UNIQUE (user_id, business_id)',
   ];
 }
@@ -1842,7 +1846,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 60;
+  int get schemaVersion => 61;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3975,6 +3979,58 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(syncQueue, syncQueue.heldByOrderId);
         }
       }
+      if (from < 61) {
+        // v61 (#107 staff offboarding): widen the user_businesses.status CHECK to
+        // admit the terminal `removed` state (was active/suspended only), and seed
+        // the new `staff.remove` permission key into the local catalog. Mirrors
+        // supabase/migrations/0149_remove_staff_member.sql.
+        //
+        // (1) SQLite can't ALTER a CHECK constraint, so rebuild user_businesses to
+        //     pick up the 3-value CHECK from the current Drift customConstraints.
+        //     TableMigration copies every row 1:1 — WIDENING keeps all existing
+        //     active/suspended rows valid, so the copy never fails. drift's
+        //     alterTable re-applies the table's EXISTING indexes (with their old
+        //     definitions), so DROP-then-CREATE each AFTER the rebuild to stay
+        //     idempotent (same fix as the v29 crate_ledger rebuild). Triggers are
+        //     NOT re-applied by alterTable, but DROP IF EXISTS keeps a partial
+        //     re-run (revert-then-re-upgrade migration tests) safe. The index +
+        //     trigger definitions match onCreate exactly.
+        await m.alterTable(TableMigration(userBusinesses));
+        await customStatement(
+          'DROP INDEX IF EXISTS idx_user_businesses_business_lua',
+        );
+        await customStatement(
+          'CREATE INDEX idx_user_businesses_business_lua '
+          'ON user_businesses (business_id, last_updated_at)',
+        );
+        await customStatement('DROP INDEX IF EXISTS idx_user_businesses_user');
+        await customStatement(
+          'CREATE INDEX idx_user_businesses_user ON user_businesses (user_id)',
+        );
+        await customStatement(
+          'DROP TRIGGER IF EXISTS bump_user_businesses_last_updated_at',
+        );
+        await customStatement(
+          'CREATE TRIGGER bump_user_businesses_last_updated_at '
+          'AFTER UPDATE ON user_businesses '
+          'FOR EACH ROW '
+          'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+          'BEGIN '
+          "UPDATE user_businesses SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+          'END',
+        );
+
+        // (2) Seed the staff.remove permission key. CEO-only by default; the CEO
+        //     grant arrives from the cloud via pull (CEO backfill in 0149). Hidden
+        //     from nothing — it is a grantable Staff permission (the CEO can grant
+        //     it to a Manager). Idempotent — key is the PK. Mirrors the v48
+        //     settings.delete_business seed pattern.
+        await customStatement(
+          "INSERT OR IGNORE INTO permissions (key, description, category) "
+          "VALUES ('staff.remove', "
+          "'Permanently remove staff (frees their email)', 'Staff')",
+        );
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -4195,7 +4251,7 @@ const List<String> _v13HotPathIndexStatements = [
 // Identical on every device and on the cloud (mirror this list in
 // supabase/migrations/0043_seed_permissions_and_backfill_businesses.sql).
 // Each row: (key, description, category). Category groups toggles in
-// the CEO Settings > Roles & Permissions sub-page. 38 keys total.
+// the CEO Settings > Roles & Permissions sub-page. 39 keys total.
 const List<List<String>> _defaultPermissionRows = [
   // Stores — rendered first on the role page (§10.2). CEO-only by default.
   ['stores.manage', 'Add, edit, and remove stores', 'Stores'],
@@ -4260,6 +4316,9 @@ const List<List<String>> _defaultPermissionRows = [
   ['staff.suspend', 'Suspend or reactivate staff', 'Staff'],
   ['staff.change_role', 'Change a staff member\'s role', 'Staff'],
   ['staff.assign_stores', 'Assign staff to stores', 'Staff'],
+  // #107 staff offboarding. CEO-only by default; cloud catalog + CEO backfill:
+  // 0149. The key exists everywhere before any grant syncs (role_permissions FK).
+  ['staff.remove', 'Permanently remove staff (frees their email)', 'Staff'],
   // System
   ['activity_logs.view', 'View activity logs', 'System'],
   ['sync.view', 'View sync issues', 'System'],

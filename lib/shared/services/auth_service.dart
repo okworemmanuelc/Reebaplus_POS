@@ -37,6 +37,17 @@ class DeleteBusinessException implements Exception {
   String toString() => message;
 }
 
+/// Thrown by [AuthService.removeStaffMember] (#107 staff offboarding) when the
+/// server-authoritative removal cannot proceed (offline, not permitted, owner
+/// target, member missing). Carries a plain-English [message] safe to show; no
+/// local state is changed when this is thrown.
+class StaffRemoveException implements Exception {
+  final String message;
+  const StaffRemoveException(this.message);
+  @override
+  String toString() => message;
+}
+
 class LogoutWipeException implements Exception {
   final String message;
   const LogoutWipeException(this.message);
@@ -1150,6 +1161,93 @@ class AuthService extends ValueNotifier<UserData?> {
       return 'Only the business owner can delete the business.';
     }
     return 'Could not delete your business. Please try again.';
+  }
+
+  /// Permanently removes a staff member (#107 staff offboarding). Server-
+  /// authoritative: the SECURITY DEFINER `remove_staff_member` RPC atomically
+  /// sets the target's membership status to `removed` AND nulls their cloud
+  /// `users.auth_user_id` — freeing the email so the one-email-one-business
+  /// guard passes and they can create a brand-new business — while KEEPING the
+  /// users row intact as an attribution stub (name / email / phone retained,
+  /// never hard-deleted) so every historical sale still shows the person's name.
+  /// The business owner cannot be removed (the RPC rejects it).
+  ///
+  /// Called DIRECTLY via `supabase.rpc`, NOT through the §6 outbox — like
+  /// [deleteBusinessAndAccount] — because the removal must be server-confirmed
+  /// and the §6 queue would retry it blindly. Online-only: it throws a
+  /// [StaffRemoveException] WITHOUT changing local state on any failure.
+  ///
+  /// On success it mirrors the confirmed `removed` status into the local
+  /// `user_businesses` row (sync-exempt, no enqueue — the RPC is the
+  /// authoritative writer, the same shape as the delete_business local wipe) so
+  /// the member drops out of the active staff list immediately, then schedules a
+  /// pull to converge the nulled auth link and any peer state.
+  // sync-exempt: §9/#107 — the cloud `remove_staff_member` RPC is the
+  // authoritative writer of both the membership status and the auth-link null;
+  // the local status mirror reflects a server-already-applied state, so there is
+  // nothing to enqueue. No raw synced-table write leaves the device here.
+  Future<void> removeStaffMember({
+    required String businessId,
+    required String userId,
+    required String membershipId,
+  }) async {
+    // Block offline up front — removal must be server-confirmed before anything
+    // local changes (mirrors [deleteBusinessAndAccount]); never queue it blindly.
+    if (!_sync.isOnline.value) {
+      throw const StaffRemoveException(
+        'You must be online to remove a staff member. '
+        'Connect to the internet and try again.',
+      );
+    }
+
+    try {
+      await _supabase.rpc(
+        'remove_staff_member',
+        params: {'p_business_id': businessId, 'p_user_id': userId},
+      );
+    } on PostgrestException catch (e) {
+      debugPrint(
+        '[AuthService] remove_staff_member RPC failed: ${e.code} ${e.message}',
+      );
+      throw StaffRemoveException(_removeStaffMessage(e));
+    } catch (e) {
+      debugPrint('[AuthService] remove_staff_member network error: $e');
+      throw const StaffRemoveException(
+        'Could not reach the server to remove this staff member. '
+        'Check your connection and try again.',
+      );
+    }
+
+    // The cloud confirmed the removal. Mirror the terminal status locally so the
+    // member drops out of the active staff list immediately (sync-exempt — no
+    // enqueue). A failure to mirror must NOT surface as an error: the
+    // authoritative removal already succeeded and the pull below still converges.
+    try {
+      await _db.userBusinessesDao.markRemovedLocal(membershipId);
+    } catch (e) {
+      debugPrint('[AuthService] removeStaffMember local mirror error: $e');
+    }
+    unawaited(_sync.pullChanges(businessId));
+  }
+
+  /// Maps a `remove_staff_member` RPC error to plain English.
+  String _removeStaffMessage(PostgrestException e) {
+    final msg = e.message;
+    if (msg.contains('cannot_remove_owner')) {
+      return 'You cannot remove the business owner.';
+    }
+    if (msg.contains('cannot_remove_self')) {
+      return 'You cannot remove yourself. Ask another manager or the owner.';
+    }
+    if (msg.contains('member_not_found')) {
+      return 'That staff member was not found.';
+    }
+    if (msg.contains('forbidden') ||
+        msg.contains('not_a_member') ||
+        e.code == '42501') {
+      return 'You do not have permission to remove this staff member.';
+    }
+    return 'Could not remove this staff member. Please try again.';
   }
 
   /// Resets a user's local PIN to setup-required so the OLD PIN can no longer

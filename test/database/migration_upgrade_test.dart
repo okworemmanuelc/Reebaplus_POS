@@ -851,4 +851,132 @@ void main() {
       );
     });
   });
+
+  group('onUpgrade v60 → v61 (staff.remove permission + `removed` status CHECK, '
+      '#107)', () {
+    Future<int> permCount(AppDatabase db) async {
+      final r = await db
+          .customSelect(
+            "SELECT COUNT(*) c FROM permissions WHERE key = 'staff.remove'",
+          )
+          .getSingle();
+      return r.read<int>('c');
+    }
+
+    Future<bool> objectExists(AppDatabase db, String type, String name) async {
+      final r = await db
+          .customSelect(
+            "SELECT 1 FROM sqlite_master WHERE type='$type' AND name='$name'",
+          )
+          .get();
+      return r.isNotEmpty;
+    }
+
+    test(
+        're-seeds staff.remove AND widens the user_businesses.status CHECK to '
+        'admit `removed` (index + bump trigger recreated)', () async {
+      final biz = UuidV7.generate();
+      final userId = UuidV7.generate();
+      final roleId = UuidV7.generate();
+
+      final db1 = await openAndInit();
+
+      // FK targets for the membership inserted after the upgrade — must survive
+      // the user_businesses revert below (only that table is dropped).
+      await db1.customStatement(
+        "INSERT INTO businesses (id, name) VALUES (?, 'Biz')",
+        [biz],
+      );
+      await db1.customStatement(
+        "INSERT INTO roles (id, business_id, name, slug) "
+        "VALUES (?, ?, 'CEO', 'ceo')",
+        [roleId, biz],
+      );
+      await db1.customStatement(
+        "INSERT INTO users (id, business_id, name, pin) "
+        "VALUES (?, ?, 'Rita', '__H__')",
+        [userId, biz],
+      );
+
+      // A fresh v61 DB already seeds staff.remove in onCreate (it's in
+      // _defaultPermissionRows) — delete it so the v61 block has work to do.
+      await db1.customStatement(
+        "DELETE FROM permissions WHERE key = 'staff.remove'",
+      );
+      expect(await permCount(db1), 0);
+
+      // Revert user_businesses to the OLD 2-value CHECK so the widening has
+      // teeth. Drop + recreate with the pre-v61 constraint; the column NAMES
+      // match the Drift schema, so the migration's TableMigration copy works.
+      await db1.customStatement('PRAGMA foreign_keys = OFF');
+      await db1.customStatement('DROP TABLE IF EXISTS user_businesses');
+      await db1.customStatement(
+        'CREATE TABLE user_businesses ('
+        'id TEXT NOT NULL PRIMARY KEY, business_id TEXT NOT NULL, '
+        'user_id TEXT NOT NULL, role_id TEXT NOT NULL, '
+        "status TEXT NOT NULL DEFAULT 'active', last_login_at INTEGER, "
+        'created_at INTEGER NOT NULL DEFAULT 0, '
+        'last_updated_at INTEGER NOT NULL DEFAULT 0, '
+        "CHECK (status IN ('active','suspended')), "
+        'UNIQUE (user_id, business_id))',
+      );
+      await db1.customStatement('PRAGMA foreign_keys = ON');
+
+      // Before the upgrade, the old 2-value CHECK rejects `removed`.
+      await expectLater(
+        db1.customStatement(
+          'INSERT INTO user_businesses '
+          '(id, business_id, user_id, role_id, status) '
+          "VALUES (?, ?, ?, ?, 'removed')",
+          [UuidV7.generate(), biz, userId, roleId],
+        ),
+        throwsA(anything),
+        reason: 'the pre-v61 2-value CHECK must reject `removed`',
+      );
+
+      await db1.customStatement('PRAGMA user_version = 60');
+      await db1.close();
+
+      // Re-open → onUpgrade(60 → 61).
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+
+      // (1) permission catalog re-seeded.
+      expect(await permCount(db2), 1, reason: 'v61 must seed staff.remove');
+
+      // (2) the widened CHECK now accepts `removed`.
+      await db2.customStatement(
+        'INSERT INTO user_businesses '
+        '(id, business_id, user_id, role_id, status) '
+        "VALUES (?, ?, ?, ?, 'removed')",
+        [UuidV7.generate(), biz, userId, roleId],
+      );
+      final row = await db2
+          .customSelect(
+            'SELECT status FROM user_businesses WHERE user_id = ?',
+            variables: [Variable<String>(userId)],
+          )
+          .getSingle();
+      expect(row.read<String>('status'), 'removed');
+
+      // (3) the rebuild recreated the sync cursor index + bump trigger, so a
+      //     fresh install (onCreate) and an upgrade converge.
+      expect(
+        await objectExists(db2, 'index', 'idx_user_businesses_business_lua'),
+        isTrue,
+        reason: 'v61 must recreate the (business_id, last_updated_at) index',
+      );
+      expect(
+        await objectExists(db2, 'index', 'idx_user_businesses_user'),
+        isTrue,
+        reason: 'v61 must recreate the user_id hot-path index',
+      );
+      expect(
+        await objectExists(
+            db2, 'trigger', 'bump_user_businesses_last_updated_at'),
+        isTrue,
+        reason: 'v61 must recreate the last_updated_at bump trigger',
+      );
+    });
+  });
 }

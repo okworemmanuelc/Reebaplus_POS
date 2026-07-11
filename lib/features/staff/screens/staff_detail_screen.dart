@@ -13,6 +13,7 @@ import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/profile/widgets/profile_ui.dart';
 import 'package:reebaplus_pos/features/staff/screens/staff_permissions_screen.dart';
+import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/shared/utils/role_display.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 
@@ -351,6 +352,101 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
     }
   }
 
+  /// Permanently remove a staff member (#107 offboarding). Server-authoritative:
+  /// runs the `remove_staff_member` RPC via [AuthService.removeStaffMember],
+  /// which nulls the identity's cloud auth link (freeing their email for a fresh
+  /// business) and sets the membership `removed`, while KEEPING the users row as
+  /// an attribution stub so historical sales still show their name. The owner
+  /// cannot be removed, and you cannot remove yourself, so this is a terminal,
+  /// permitted-roles-only action gated on [Gates.staffRemove].
+  Future<void> _removeStaff(UserBusinessData membership, UserData user) async {
+    // Defense-in-depth (hard rule #6): re-check the specific permission before
+    // running, not only at button render.
+    if (!ref.read(currentUserPermissionsProvider).contains('staff.remove')) {
+      return;
+    }
+    // Owner protection: the original business creator can never be removed by
+    // anyone — including an appointed CEO. The RPC rejects it too; this is the
+    // client-side mirror so we never even fire the call.
+    final ownerId = ref.read(currentBusinessProvider)?.ownerId;
+    if (ownerId != null &&
+        user.authUserId != null &&
+        user.authUserId == ownerId) {
+      if (mounted) {
+        AppNotification.showError(context, 'You cannot remove the business owner.');
+      }
+      return;
+    }
+    // Self-removal is out of scope for #107 (that is self-resign, #117) and would
+    // orphan the actor's own membership through the admin path — reject it.
+    final currentUser = ref.read(authProvider).currentUser;
+    if (currentUser != null && membership.userId == currentUser.id) {
+      if (mounted) {
+        AppNotification.showError(context, 'You cannot remove yourself.');
+      }
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: const Text('Remove staff?'),
+        content: Text(
+          '${user.name} will permanently lose access to this business and their '
+          'email is freed to start their own business.\n\n'
+          'Their past sales and records are kept and still show their name. This '
+          'cannot be undone — to bring them back you must invite them again.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(ctx).colorScheme.error,
+            ),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await ref.read(authProvider).removeStaffMember(
+            businessId: membership.businessId,
+            userId: membership.userId,
+            membershipId: membership.id,
+          );
+      final db = ref.read(databaseProvider);
+      await db.activityLogDao.log(
+        action: 'staff.remove',
+        description: 'Removed staff member ${user.name}',
+        staffId: currentUser?.id,
+      );
+      if (!mounted) return;
+      // The membership is now `removed` and drops out of the active staff list,
+      // so this detail screen would render "not found" — return to the list.
+      Navigator.of(context).pop();
+      AppNotification.showSuccess(context, '${user.name} removed.');
+    } on StaffRemoveException catch (e) {
+      if (mounted) AppNotification.showError(context, e.message);
+    } catch (_) {
+      if (mounted) {
+        AppNotification.showError(
+          context,
+          'Could not remove this staff member. Please try again.',
+        );
+      }
+    }
+  }
+
   /// One-line summary of the staff member's assigned stores for the header pill.
   String _storeSummary(List<String> names) {
     if (names.isEmpty) return 'Unassigned';
@@ -647,17 +743,17 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                 // Manage actions — hidden in view-only (own card). Each action
                 // has its OWN permission (§9): Change role -> staff.change_role,
                 // Suspend/Reactivate -> staff.suspend (both CEO + Manager by
-                // default; the CEO can revoke either independently). Hidden, not
-                // greyed (hard rule #7). The manageable→readOnly logic already
-                // restricts which staff a viewer can act on.
+                // default; the CEO can revoke either independently), Remove ->
+                // staff.remove (#107, CEO-only by default). Hidden, not greyed
+                // (hard rule #7). The manageable→readOnly logic already restricts
+                // which staff a viewer can act on, and the owner is never a target.
                 if (!widget.readOnly &&
-                    ((Gates.changeStaffRole.allows(ref) &&
-                            !isTargetOwner) ||
-                        (Gates.suspendStaff.allows(ref) &&
-                            !isTargetOwner))) ...[
+                    !isTargetOwner &&
+                    (Gates.changeStaffRole.allows(ref) ||
+                        Gates.suspendStaff.allows(ref) ||
+                        Gates.staffRemove.allows(ref))) ...[
                   SizedBox(height: context.getRSize(24)),
-                  if (Gates.changeStaffRole.allows(ref) &&
-                      !isTargetOwner) ...[
+                  if (Gates.changeStaffRole.allows(ref)) ...[
                     AppButton(
                       text: 'Change role',
                       icon: FontAwesomeIcons.userGear.data,
@@ -667,7 +763,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                     ),
                     SizedBox(height: context.getRSize(12)),
                   ],
-                  if (Gates.suspendStaff.allows(ref) && !isTargetOwner)
+                  if (Gates.suspendStaff.allows(ref)) ...[
                     AppButton(
                       text: suspended ? 'Reactivate' : 'Suspend',
                       icon: suspended
@@ -677,6 +773,15 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                           ? AppButtonVariant.success
                           : AppButtonVariant.danger,
                       onPressed: () => _toggleSuspend(membership),
+                    ),
+                    SizedBox(height: context.getRSize(12)),
+                  ],
+                  if (Gates.staffRemove.allows(ref))
+                    AppButton(
+                      text: 'Remove',
+                      icon: FontAwesomeIcons.userXmark.data,
+                      variant: AppButtonVariant.danger,
+                      onPressed: () => _removeStaff(membership, user),
                     ),
                 ],
               ],

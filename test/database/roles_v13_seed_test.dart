@@ -2,7 +2,7 @@
 //
 // Verifies schema v13 (PIVOT_PLAN step 2):
 //   * The seven new tables exist.
-//   * The global `permissions` table is seeded with 38 rows (the live
+//   * The global `permissions` table is seeded with 39 rows (the live
 //     catalogue grows over time; the fresh-seed matrix below is a frozen
 //     v13/0043 baseline and intentionally does not track newer keys).
 //   * A fresh business gets 4 roles (with the right slugs), 65
@@ -62,10 +62,10 @@ void main() {
       );
     });
 
-    test('permissions table seeded with 38 default rows on fresh install',
+    test('permissions table seeded with 39 default rows on fresh install',
         () async {
       final perms = await db.permissionsDao.getAll();
-      expect(perms.length, equals(38));
+      expect(perms.length, equals(39));
 
       // Spot-check a few keys + categories.
       final keys = perms.map((p) => p.key).toSet();
@@ -74,6 +74,7 @@ void main() {
       expect(keys.contains('expenses.approve'), isTrue);
       expect(keys.contains('settings.manage'), isTrue);
       expect(keys.contains('settings.delete_business'), isTrue);
+      expect(keys.contains('staff.remove'), isTrue); // #107 staff offboarding
       expect(keys.contains('stores.manage'), isTrue); // §10.2
       expect(keys.contains('stores.request_transfer'), isTrue); // §16.8.2
       expect(keys.contains('stores.dispatch_transfer'), isTrue); // §16.8.2
