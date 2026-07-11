@@ -1172,6 +1172,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       final mfrList = await db.inventoryDao.watchAllManufacturers().first;
       final manufacturerNames = {for (final m in mfrList) m.id: m.name};
 
+      final paperSize = await printer.getPaperSize();
       final bytes = await ThermalReceiptService.buildReceipt(
         orderId: order.orderNumber,
         cart: receiptMapping,
@@ -1193,6 +1194,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
         storeAddress: finalStoreAddress,
         businessName: ref.read(currentBusinessNameProvider),
         manufacturerNames: manufacturerNames,
+        paperSize: paperSize,
       );
 
       if (!context.mounted) return;

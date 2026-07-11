@@ -3,9 +3,11 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reebaplus_pos/core/utils/logger.dart';
+import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
 
 class PrinterService {
   static const _lastMacKey = 'last_printer_mac';
+  static const _paperSizeKey = 'printer_paper_size';
 
   PrinterService();
 
@@ -107,6 +109,19 @@ class PrinterService {
   Future<void> saveLastConnectedMac(String mac) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_lastMacKey, mac);
+  }
+
+  /// Persists the receipt paper width chosen near [PrinterPicker] (#116).
+  /// Device-local, never synced — a hardware setting per till.
+  Future<void> savePaperSize(ReceiptPaperSize size) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_paperSizeKey, size.name);
+  }
+
+  /// Reads the saved receipt paper width, defaulting to 58mm when unset.
+  Future<ReceiptPaperSize> getPaperSize() async {
+    final prefs = await SharedPreferences.getInstance();
+    return ReceiptPaperSize.fromStorage(prefs.getString(_paperSizeKey));
   }
 
   Future<bool> autoConnect() async {
