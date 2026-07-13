@@ -10,6 +10,47 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### Push notifications for console broadcasts (FCM) + severity rendering — CLOUD FOUNDATION DEPLOYED + VERIFIED (#138, PRD, ADR 0018, 2026-07-13)
+OS push (FCM) so a console `console_broadcast` announcement alerts staff even when
+the app is closed; also fixes cosmetically-dead severity on mobile. Branch
+`feat/push-notifications-fcm` off main (b89e0bb). The **reception half already
+existed** (bell/modal/`NotificationsDao`/severity model + the console inserts the
+rows) — this adds the **OS-push half** + severity rendering. ADR renumbered
+**0016→0018** (0016/0017 were taken by staff-offboarding/barcode on the fast-forward).
+- **Slice 1a — cloud migration `0153_push_notifications.sql` DEPLOYED + VERIFIED.**
+  Extends the cloud-only `devices` registry (0129) with `fcm_token` /
+  `push_permission_granted` / `fcm_token_updated_at` + a partial index;
+  `notifications.push_sent_at` (cloud-only observability, absent from Drift).
+  **Token-uniqueness** trigger `_devices_enforce_token_uniqueness` (SECURITY DEFINER)
+  — a token maps to exactly ONE devices row / most-recent login (invariant #5);
+  **functionally proven live** (older row's token nulled, new row keeps it, rolled
+  back — no test data left). **AFTER INSERT** trigger `trg_send_push_broadcast` on
+  `notifications` WHERE type='console_broadcast' → pg_net → send-push (mirrors 0126;
+  AFTER INSERT only so a re-push UPDATE never re-sends; Vault-secret guard →
+  unconfigured project degrades to "no push", never a broken insert). EXECUTE revoked
+  from public/anon/authenticated on both trigger fns → security advisor clean.
+- **Slice 1b — `send-push` Edge Function DEPLOYED + VERIFIED (`verify_jwt=false`).**
+  Shared-secret gate (`x-push-hook-secret` / `PUSH_HOOK_SECRET`) → resolve the
+  business's live tokens (service_role) → FCM HTTP v1 (OAuth2 minted from the service
+  account) → prune UNREGISTERED tokens → stamp `push_sent_at`. Pure
+  `buildFcmMessages` / `sendAll` / `titleForSeverity` in `fcm.ts` (+ `fcm_test.ts`
+  Deno unit tests — not yet CI-wired, no deno tier); I/O in `index.ts`. Live smoke
+  test: bad secret → `401 unauthenticated` envelope, OPTIONS → `200 ok`. (Deployed
+  == committed source functionally; the PEM-strip regex is provably equivalent.)
+- **USER PREREQUISITE (blocks go-live + Slice 2 end-to-end verification):** create a
+  Firebase project, add the Android app, place `google-services.json` (gitignored per
+  the secret guard), and set Edge Function secrets `FCM_SERVICE_ACCOUNT`
+  (service-account JSON) + `PUSH_HOOK_SECRET`, plus Vault `push_hook_secret` (same
+  value). Until then the whole pipeline is inert — "no push", never a broken
+  insert/login/sync.
+- **NEXT:** Slice 2 = client `PushService` behind a `PushMessagingPort` + firebase
+  deps + native Android config + soft-ask permission UX + tap routing (needs the
+  Firebase creds above to verify). Slice 3 = in-app severity/megaphone rendering in
+  `_NotificationCard` (**independent, no prerequisite**).
+- **New invariant** (ADR 0018 / CONTEXT Notifications glossary): **push never writes
+  Drift** — it is an alert only; the notification row of record still arrives via the
+  Sync Engine, so a push failure loses nothing.
+
 ### 11-item feature/bug batch — PRD #106 + 13 issues filed; Phase 2 implementation STARTED (2026-07-11)
 Ran the full idea→issues flow (`/ask-matt` → `/grill-with-docs` → `/to-prd` →
 `/to-issues`) over a raw 11-item backlog (staff offboarding, optional units,
