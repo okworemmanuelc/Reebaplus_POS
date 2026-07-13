@@ -19,6 +19,7 @@ import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/widgets/tab_navigator.dart';
 import 'package:reebaplus_pos/shared/widgets/sync_pull_banner.dart';
 import 'package:reebaplus_pos/shared/widgets/app_drawer.dart';
+import 'package:reebaplus_pos/shared/widgets/push_permission_sheet.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 
 // The LazyIndexedStack has been replaced with the direct Offstage + Set approach
@@ -99,6 +100,13 @@ class _MainLayoutState extends ConsumerState<MainLayout>
     _previousTabIndex = _nav.currentIndex.value;
     WidgetsBinding.instance.addPostFrameCallback((_) => _warmNextTab());
 
+    // Push (#138 Slice 2): the app shell is mounted (authed, past PIN) — replay
+    // a cold-start broadcast tap and, once per install, soft-ask for
+    // notification permission. Post-frame so `context`/navigator are ready.
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _bootstrapPushForShell(),
+    );
+
     _tabSwitchController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 200),
@@ -126,6 +134,17 @@ class _MainLayoutState extends ConsumerState<MainLayout>
     _tabSwitchController.dispose();
     _pendingOrdersSub?.cancel();
     super.dispose();
+  }
+
+  /// Push (#138 Slice 2): ensure the FCM port is started (idempotent), replay a
+  /// killed-app broadcast tap now that we're safely past auth/PIN, then run the
+  /// once-per-install permission soft-ask.
+  Future<void> _bootstrapPushForShell() async {
+    final push = ref.read(pushNotificationServiceProvider);
+    await push.start();
+    await push.replayInitialTap();
+    if (!mounted) return;
+    await maybePromptForPushPermission(context, ref);
   }
 
   void _onTabIndexChanged() {

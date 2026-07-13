@@ -56,12 +56,40 @@ rows) — this adds the **OS-push half** + severity rendering. ADR renumbered
   per severity (alert/warning/info) + the non-broadcast guard. `flutter analyze` clean;
   `flutter test test/notifications/` green (7). No model/DB/DAO/sync change — severity
   (0066) + business-wide recipient already existed.
-- **NEXT:** Slice 2 = client `PushService` behind a `PushMessagingPort` + firebase
-  deps + native Android config + soft-ask permission UX + tap routing (needs the
-  Firebase creds above to verify).
-- **New invariant** (ADR 0018 / CONTEXT Notifications glossary): **push never writes
-  Drift** — it is an alert only; the notification row of record still arrives via the
-  Sync Engine, so a push failure loses nothing.
+- **Slice 2 — Flutter FCM client DONE (this session).** Deps `firebase_core` +
+  `firebase_messaging` + `flutter_local_notifications`, **pinned to firebase 3.x /
+  messaging 15.x**: the latest 4.x/16.x pub pairing is broken (messaging 16.4.2
+  still `extends FirebasePlugin`, which `firebase_core_platform_interface` 7.1.0
+  renamed to `FirebasePluginPlatform` → won't compile). Native: core-library
+  desugaring (for FLN 18), `POST_NOTIFICATIONS` perm, FCM default-channel meta-data
+  (`reebaplus_announcements`); minSdk unchanged (firebase self-floors at 21).
+  `PushMessagingPort` seam (ADR 0001) + `FirebasePushMessaging` adapter (Android-
+  guarded, degrades to a no-op when unconfigured) + `InMemoryPushMessaging` fake
+  (`test/helpers/`). `PushNotificationService` orchestrates: register the token on
+  sign-in / permission-grant / token-refresh / reconnect via new
+  `DeviceRegistryService.recordPushToken`; clear on **full logout only**
+  (deviceUserId→null) via `clearPushToken` + `deleteToken` — a lock / sole-user
+  logout KEEPS the token so a locked device still receives broadcasts. Foreground
+  display + tap routing (`console_broadcast` → open the bell + `markAsRead`, which
+  tolerates the row not being local yet) + killed-app replay after `MainLayout`
+  mounts; wired from `main.dart` (sign-in/out edges + tap actions) and `MainLayout`
+  (replay + soft-ask). Once-per-install soft-ask sheet + a per-device **Notifications
+  tile on the Profile screen** (ungated, so every staff member manages their own).
+  Tests (`test/notifications/`): `push_notification_service_test` (11 — display / tap
+  routing / token lifecycle / reconnect), `push_messaging_contract_test` (channel-id +
+  payload keys vs `fcm.ts`), `device_registry_push_token_test` (error-swallow).
+  `flutter analyze` clean; full `flutter test` green **except one PRE-EXISTING
+  unrelated failure** (`who_is_working_screen_test` — confirmed failing at branch HEAD
+  `a528f1b` without this work).
+- **Firebase creds:** CONFIGURED + cloud pipeline VERIFIED LIVE (2026-07-13) — the
+  earlier "USER PREREQUISITE" is satisfied.
+- **REMAINING (user):** on-emulator eyeball — grant permission, confirm
+  `devices.fcm_token` populates, send a real `console_broadcast`, verify the OS buzz +
+  severity title + tap opens the bell. Then Slice 1+2+3 ship as ONE PR for #138 (branch
+  push needs the user — publication classifier on the public repo).
+- **New invariant** (architecture.md #13 / ADR 0018 / CONTEXT Notifications glossary):
+  **push never writes Drift** — it is an alert only; the notification row of record
+  still arrives via the Sync Engine, so a push failure loses nothing.
 
 ### 11-item feature/bug batch — PRD #106 + 13 issues filed; Phase 2 implementation STARTED (2026-07-11)
 Ran the full idea→issues flow (`/ask-matt` → `/grill-with-docs` → `/to-prd` →

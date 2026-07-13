@@ -259,6 +259,44 @@ in order.
 - **Ordering & idempotency:** outbox entries are ordered and carry client-generated UUIDv7 IDs so replays are idempotent — re-sending a batch after a dropped connection can never double-apply a sale.
 - **Crash capture as background work:** the global error handler writes an `error_logs` row through the same `sync_queue`, so an error report syncs by the same mechanism as a sale, without ever interrupting the till.
 
+## Push Notifications (OS alerts, #138 / ADR 0018)
+
+A **console broadcast** (an operator announcement — a cloud `notifications` row
+with `type = 'console_broadcast'` and `recipient_user_id = NULL`, business-wide)
+reaches staff **even when the app is closed**, via Firebase Cloud Messaging (FCM).
+This is an **alert channel only** — it never carries or persists business data.
+
+- **Cloud (migration `0153`).** The cloud-only `devices` registry (0129) gained
+  `fcm_token` / `push_permission_granted` / `fcm_token_updated_at` (+ a partial
+  index). An `AFTER INSERT` trigger on `notifications` (WHEN
+  `type = 'console_broadcast'`) calls the `send-push` Edge Function via `pg_net`,
+  which resolves the business's live tokens (`service_role`), mints an FCM OAuth2
+  token from the service account, fans one HTTP v1 message out per device, prunes
+  the tokens FCM reports dead, and stamps `push_sent_at`. A `BEFORE INSERT/UPDATE`
+  trigger enforces **one token → exactly one `devices` row** so a token addresses
+  the most-recent login only (invariant #5). Everything null-guards to a no-op
+  when unconfigured (never a broken insert).
+- **Client (Slice 2).** `PushMessagingPort` (`lib/core/services/`) is the seam
+  (ADR 0001): a `FirebasePushMessaging` adapter (firebase_messaging +
+  flutter_local_notifications) and an in-memory fake. `PushNotificationService`
+  (`lib/shared/services/`) owns the token lifecycle — it registers the FCM token
+  into `devices` (via `DeviceRegistryService`) on sign-in / permission-grant /
+  token-refresh / reconnect, and clears it on **full logout** (client-side
+  `deleteToken()` **and** nulling `devices.fcm_token`). A lock / sole-user logout
+  keeps the token, so a locked device still receives broadcasts. A foreground push
+  is displayed via the `reebaplus_announcements` channel (Android does not
+  auto-show foreground pushes); a tap in any state (foreground, background, or a
+  killed-app cold start replayed after `MainLayout` mounts) opens the in-app bell
+  and marks the row read.
+- **Severity.** The push title and the in-app card colour both derive from the
+  broadcast's `severity` (`info` / `warning` / `alert`) — `severityColor` and the
+  edge function's `titleForSeverity` are kept in lockstep.
+- **Graceful degradation.** Every part no-ops when unconfigured (non-Android, no
+  `google-services.json`, permission denied). Token writes are fire-and-forget and
+  swallow all errors, so push can never block or break login/sync.
+- **Android-first.** The client is written to be portable but iOS (APNs) is
+  deferred; the Firebase adapter is inert on non-Android platforms and in tests.
+
 ## Invariants
 
 These are rules, not guidelines. Code that breaks one of these is wrong even if it compiles and the feature appears to work.
@@ -290,3 +328,5 @@ These are rules, not guidelines. Code that breaks one of these is wrong even if 
     - **Reconcile exclusion (B):** `_reconcileHardDeletes` deletes a local row only if its id is absent from the cloud snapshot **and** absent from `pendingRowIds`, and only reconciles a table whose slice is **known-complete** (never a deferred/failed/truncated slice).
     - **Clobber prevention (C):** in `_restoreTableData`, a row with a pending outbox entry is never overwritten by an incoming cloud row regardless of `last_updated_at`. Timestamp-LWW (`incoming >= local`, cloud-wins on same-second ties) is the tiebreaker for **non-pending** rows only — correctness no longer depends on a DAO write bumping `last_updated_at`.
     - **Two-ways-only uploader rule (F):** a row leaves `sync_queue` **only** by confirmed upload (`markDone`) or by moving to `sync_queue_orphans` (visible) — never silently. A per-drain self-count check writes an `error_logs` breadcrumb if any handled row vanishes from both tables.
+
+13. **A push never writes Drift.** An OS push (FCM) is an *alert only*: the notification row of record still arrives through the Sync Engine, so a push payload is never persisted into local Drift. The client's only reactions to a push are to display it and, on tap, open the in-app bell and mark the row read — a mark-read that must **tolerate the row not being local yet** (a cold-tap can precede the pull) and never write a notification into Drift itself. (ADR 0018 / #138.)

@@ -23,6 +23,9 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        // flutter_local_notifications (18.x) uses java.time APIs that need core
+        // library desugaring to run on the minSdk floor below.
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -36,6 +39,8 @@ android {
         applicationId = "com.reebaplus.pos"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
+        // firebase_core 3.x / firebase_messaging 15.x support API 21+ (their own
+        // module floor), so the app's existing minSdk is kept — no devices dropped.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -66,4 +71,10 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // Required by flutter_local_notifications (18.x) when
+    // isCoreLibraryDesugaringEnabled is on.
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

@@ -110,4 +110,58 @@ class DeviceRegistryService {
       debugPrint('[DeviceRegistry] recordPresence failed (non-fatal): $e');
     }
   }
+
+  /// Fire-and-forget upsert of this device's FCM token onto its `devices` row,
+  /// on the same `(business_id, device_id)` conflict target as [recordPresence]
+  /// (migration `0153`). The server's `_devices_enforce_token_uniqueness`
+  /// trigger nulls this token on every *other* row, so one token addresses
+  /// exactly one device / most-recent login (invariant #5). Called on
+  /// permission-grant, token refresh, and each sign-in where a token exists.
+  ///
+  /// Like [recordPresence], it is fire-and-forget and swallows every error:
+  /// token registration must never block or break login/sync (#138).
+  Future<void> recordPushToken({
+    required String businessId,
+    required String token,
+    required bool permissionGranted,
+  }) async {
+    try {
+      final deviceId = await _secure.getOrCreateDeviceId();
+      await _supabase.from('devices').upsert(
+        {
+          'business_id': businessId,
+          'device_id': deviceId,
+          'fcm_token': token,
+          'push_permission_granted': permissionGranted,
+          'fcm_token_updated_at': DateTime.now().toUtc().toIso8601String(),
+        },
+        onConflict: 'business_id,device_id',
+      );
+    } catch (e) {
+      debugPrint('[DeviceRegistry] recordPushToken failed (non-fatal): $e');
+    }
+  }
+
+  /// Fire-and-forget clear of this device's FCM token on logout — nulls
+  /// `fcm_token` via the same upsert path (a null token never trips the
+  /// uniqueness trigger). The client MUST clear its own token on logout
+  /// (invariant #2); the server trigger is the backstop, not a licence to skip
+  /// cleanup. Leaves `push_permission_granted` untouched (OS permission
+  /// survives a logout). Never throws.
+  Future<void> clearPushToken({required String businessId}) async {
+    try {
+      final deviceId = await _secure.getOrCreateDeviceId();
+      await _supabase.from('devices').upsert(
+        {
+          'business_id': businessId,
+          'device_id': deviceId,
+          'fcm_token': null,
+          'fcm_token_updated_at': DateTime.now().toUtc().toIso8601String(),
+        },
+        onConflict: 'business_id,device_id',
+      );
+    } catch (e) {
+      debugPrint('[DeviceRegistry] clearPushToken failed (non-fatal): $e');
+    }
+  }
 }

@@ -13,6 +13,7 @@ import 'package:reebaplus_pos/shared/utils/role_display.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/settings/delete_business_screen.dart';
 import 'package:reebaplus_pos/features/profile/widgets/edit_profile_sheet.dart';
+import 'package:reebaplus_pos/features/profile/widgets/notification_settings_tile.dart';
 import 'package:reebaplus_pos/features/profile/widgets/profile_ui.dart';
 import 'package:reebaplus_pos/features/profile/self_resign.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
@@ -183,6 +184,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
             ],
           ),
+          SizedBox(height: context.getRSize(24)),
+          // Per-device push permission for console broadcasts (#138 Slice 2) —
+          // ungated so every staff member can manage their own notifications.
+          const NotificationSettingsTile(),
           SizedBox(height: context.getRSize(24)),
           AppButton(
             text: 'Edit Profile',

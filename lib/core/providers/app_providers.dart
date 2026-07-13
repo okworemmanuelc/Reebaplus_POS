@@ -41,6 +41,10 @@ import 'package:reebaplus_pos/shared/services/reorder_alert_service.dart';
 import 'package:reebaplus_pos/core/diagnostics/sync_diagnostic.dart';
 import 'package:reebaplus_pos/core/services/supabase_cloud_transport.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
+import 'package:reebaplus_pos/core/services/push_messaging_port.dart';
+import 'package:reebaplus_pos/core/services/firebase_push_messaging.dart';
+import 'package:reebaplus_pos/shared/services/device_registry_service.dart';
+import 'package:reebaplus_pos/shared/services/push_notification_service.dart';
 import 'package:reebaplus_pos/main.dart' show googleWebClientId;
 
 // ── Crate Return Approval ──────────────────────────────────────────────────
@@ -163,6 +167,31 @@ final activeCustomerProvider = ChangeNotifierProvider<ValueNotifier<Customer?>>(
 // ── Notification ────────────────────────────────────────────────────────────
 final notificationProvider = ChangeNotifierProvider<NotificationService>((ref) {
   return NotificationService(ref.read(databaseProvider));
+});
+
+// ── Push notifications (OS push for console broadcasts, #138 Slice 2) ────────
+/// Cloud-only `devices` registry writer. Its own instance (not AuthService's
+/// private one) so the push token lifecycle is wired without touching auth.
+final deviceRegistryServiceProvider = Provider<DeviceRegistryService>((ref) {
+  return DeviceRegistryService(
+    ref.read(supabaseClientProvider),
+    ref.read(secureStorageProvider),
+  );
+});
+
+/// The OS push seam (ADR 0001). The Firebase adapter degrades to a no-op on
+/// non-Android / unconfigured builds, so reading it is always safe.
+final pushMessagingPortProvider = Provider<PushMessagingPort>((ref) {
+  return FirebasePushMessaging();
+});
+
+/// App-level push orchestrator: token lifecycle, foreground display, tap
+/// routing. Started once from `main.dart` after the first frame.
+final pushNotificationServiceProvider = Provider<PushNotificationService>((ref) {
+  return PushNotificationService(
+    port: ref.read(pushMessagingPortProvider),
+    deviceRegistry: ref.read(deviceRegistryServiceProvider),
+  );
 });
 
 // ── Activity Log ────────────────────────────────────────────────────────────

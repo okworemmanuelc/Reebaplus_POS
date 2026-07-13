@@ -28,6 +28,9 @@ import 'package:reebaplus_pos/shared/widgets/main_layout.dart';
 import 'package:reebaplus_pos/shared/widgets/auto_lock_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/force_update_wrapper.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
+import 'package:reebaplus_pos/shared/services/notification_service.dart';
+import 'package:reebaplus_pos/shared/services/push_notification_service.dart';
+import 'package:reebaplus_pos/shared/widgets/notifications_modal.dart';
 import 'package:reebaplus_pos/features/auth/membership_status_reaction.dart';
 import 'package:reebaplus_pos/features/sync/widgets/resolve_unsynced_data_dialog.dart';
 import 'package:reebaplus_pos/features/auth/screens/success_dashboard_entry_screen.dart';
@@ -146,6 +149,18 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
   // riverpod invalidation.
   late final AuthService _auth;
 
+  // Push (#138 Slice 2) — captured up front (same reason as `_auth`): the
+  // auth/device-user listeners drive token register/clear and must not touch
+  // `ref` from their bodies.
+  late final PushNotificationService _pushService;
+  late final NotificationService _notifService;
+
+  /// Business bound for push registration, tracked to detect the sign-in edge
+  /// (`_onAuthChanged`) and the full-logout edge (`_onDeviceUserChanged`). A
+  /// lock / sole-user logout keeps it — a locked device still receives pushes;
+  /// only a full logout (device-user cleared → Welcome) nulls the token.
+  String? _pushBusinessId;
+
   /// Tracks whether Supabase currently has an active JWT. Seeded `true`
   /// because Supabase.initialize is fire-and-forget and we'd otherwise
   /// false-positive during the cold-start restore window; the auth-state
@@ -171,10 +186,19 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
   void initState() {
     super.initState();
     _auth = ref.read(authProvider);
+    _pushService = ref.read(pushNotificationServiceProvider);
+    _notifService = ref.read(notificationProvider);
 
     _checkDeviceUser();
     _auth.deviceUserIdNotifier.addListener(_onDeviceUserChanged);
     _auth.addListener(_onAuthChanged);
+
+    // Push (#138 Slice 2): start the FCM port + bind tap actions after the
+    // first frame. Never blocks app entry (invariant #11) — Firebase init is a
+    // local read; the token upsert is fire-and-forget behind supabaseReady.
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => unawaited(_bootstrapPush()),
+    );
 
     // Watch Supabase auth state so the home() gate flips when the JWT
     // appears (initialSession / signedIn / tokenRefreshed) or disappears
@@ -251,6 +275,7 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
   /// This is why AuthService.value stays null throughout onboarding — calling
   /// setCurrentUser here would destroy the in-progress onboarding stack.
   void _onAuthChanged() {
+    _syncPushSignIn();
     if (mounted) {
       setState(() => _navigatorKey = GlobalKey<NavigatorState>());
     }
@@ -294,6 +319,7 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
   }
 
   void _onDeviceUserChanged() {
+    _syncPushSignOut();
     if (mounted) {
       setState(() {
         _hasDeviceUser = _auth.deviceUserIdNotifier.value != null;
@@ -301,6 +327,52 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
         // screens (MainLayout) are replaced by the correct auth screen.
         _navigatorKey = GlobalKey<NavigatorState>();
       });
+    }
+  }
+
+  // ── Push notifications (#138 Slice 2) ───────────────────────────────────────
+  /// Start the FCM port and bind the tap actions the app shell supplies (open
+  /// the in-app bell + mark the row read). Binding is synchronous so a
+  /// cold-start tap replayed from [MainLayout] always finds the callbacks; the
+  /// port start awaits [supabaseReady] so the token upsert has a live session.
+  Future<void> _bootstrapPush() async {
+    _pushService.bindTapActions(
+      openNotifications: () {
+        // Only over the app shell — never over the PIN/lock screen.
+        if (_auth.currentUser == null) return;
+        final ctx = _navigatorKey.currentContext;
+        if (ctx != null) NotificationsModal.show(ctx);
+      },
+      markRead: (id) {
+        if (_auth.currentUser == null) return;
+        unawaited(_notifService.markAsRead(id));
+      },
+    );
+    await supabaseReady;
+    if (!mounted) return;
+    await _pushService.start();
+    // Seed registration from the already-signed-in state (warm launch).
+    _syncPushSignIn();
+  }
+
+  /// The sign-in edge: a business became bound (login or app-open unlock).
+  /// Registers the FCM token if OS permission is already granted.
+  void _syncPushSignIn() {
+    final businessId = _auth.currentUser?.businessId;
+    if (businessId != null && businessId != _pushBusinessId) {
+      _pushBusinessId = businessId;
+      unawaited(_pushService.onSignedIn(businessId));
+    }
+  }
+
+  /// The full-logout edge: the device user was cleared (→ Welcome). Null the
+  /// token client-side + in `devices`. A lock / sole-user logout does NOT hit
+  /// this (device user retained), so a locked device keeps receiving pushes.
+  void _syncPushSignOut() {
+    if (_auth.deviceUserIdNotifier.value == null && _pushBusinessId != null) {
+      final previous = _pushBusinessId!;
+      _pushBusinessId = null;
+      unawaited(_pushService.onSignedOut(previous));
     }
   }
 
