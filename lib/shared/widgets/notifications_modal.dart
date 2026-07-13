@@ -165,7 +165,7 @@ class NotificationsModal extends ConsumerWidget {
                               SizedBox(height: context.getRSize(12)),
                           itemBuilder: (context, index) {
                             final n = notifications[index];
-                            return _NotificationCard(notification: n);
+                            return NotificationCard(notification: n);
                           },
                         );
                       },
@@ -246,10 +246,17 @@ class NotificationsModal extends ConsumerWidget {
   }
 }
 
-class _NotificationCard extends ConsumerWidget {
+/// A single notification row in [NotificationsModal].
+///
+/// Public + [visibleForTesting] only so the widget test can pump it directly
+/// (icon + severity colour) without standing up the modal's full provider/DB
+/// harness. A `console_broadcast` row is colour-coded by its severity; every
+/// other type keeps its fixed icon + colour.
+@visibleForTesting
+class NotificationCard extends ConsumerWidget {
   final NotificationModel notification;
 
-  const _NotificationCard({required this.notification});
+  const NotificationCard({super.key, required this.notification});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -261,7 +268,12 @@ class _NotificationCard extends ConsumerWidget {
     final Color borderCol = Theme.of(context).dividerColor;
 
     final IconData icon = _getIconForType(notification.type);
-    final Color iconColor = _getColorForType(context, notification.type);
+    // A console broadcast is colour-coded by its severity (info / warning /
+    // alert) so an urgent announcement reads differently from a routine one;
+    // every other type keeps its fixed per-type colour.
+    final Color iconColor = notification.type == 'console_broadcast'
+        ? severityColor(context, notification.severity)
+        : _getColorForType(context, notification.type);
 
     return GestureDetector(
       onTap: notification.type == 'product_update'
@@ -402,6 +414,8 @@ class _NotificationCard extends ConsumerWidget {
 
   IconData _getIconForType(String type) {
     switch (type) {
+      case 'console_broadcast':
+        return FontAwesomeIcons.bullhorn.data;
       case 'new_order':
         return FontAwesomeIcons.receipt.data;
       case 'low_stock':

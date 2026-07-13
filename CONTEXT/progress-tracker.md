@@ -10,7 +10,7 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
-### Push notifications for console broadcasts (FCM) + severity rendering — CLOUD FOUNDATION DEPLOYED + VERIFIED (#138, PRD, ADR 0018, 2026-07-13)
+### Push notifications for console broadcasts (FCM) + severity rendering — CLOUD FOUNDATION DEPLOYED + VERIFIED; SEVERITY RENDERING (Slice 3) DONE (#138, PRD, ADR 0018, 2026-07-13)
 OS push (FCM) so a console `console_broadcast` announcement alerts staff even when
 the app is closed; also fixes cosmetically-dead severity on mobile. Branch
 `feat/push-notifications-fcm` off main (b89e0bb). The **reception half already
@@ -43,10 +43,22 @@ rows) — this adds the **OS-push half** + severity rendering. ADR renumbered
   (service-account JSON) + `PUSH_HOOK_SECRET`, plus Vault `push_hook_secret` (same
   value). Until then the whole pipeline is inert — "no push", never a broken
   insert/login/sync.
+- **Slice 3 — in-app severity + megaphone rendering DONE (display-only; no
+  Firebase/cloud/push).** `_NotificationCard` → **public `NotificationCard`**
+  (`@visibleForTesting`) so it pumps without the modal's provider/DB harness. New
+  shared `severityColor(context, severity)` in `core/theme/semantic_colors.dart`
+  (`warning`→`semantic.warning`, `alert`→`colorScheme.error` [no semantic "alert"
+  token], `info`/default→`semantic.info`) — shared so Slice 2's push/tap rendering
+  resolves severity identically. A `console_broadcast` card now shows
+  `FontAwesomeIcons.bullhorn` coloured by `notification.severity`; every other type
+  keeps its existing icon + colour (regression-guarded). Widget test
+  `test/notifications/notification_card_widget_test.dart` asserts exact icon + colour
+  per severity (alert/warning/info) + the non-broadcast guard. `flutter analyze` clean;
+  `flutter test test/notifications/` green (7). No model/DB/DAO/sync change — severity
+  (0066) + business-wide recipient already existed.
 - **NEXT:** Slice 2 = client `PushService` behind a `PushMessagingPort` + firebase
   deps + native Android config + soft-ask permission UX + tap routing (needs the
-  Firebase creds above to verify). Slice 3 = in-app severity/megaphone rendering in
-  `_NotificationCard` (**independent, no prerequisite**).
+  Firebase creds above to verify).
 - **New invariant** (ADR 0018 / CONTEXT Notifications glossary): **push never writes
   Drift** — it is an alert only; the notification row of record still arrives via the
   Sync Engine, so a push failure loses nothing.
