@@ -241,6 +241,16 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
           activeRoute: 'pos',
           backgroundColor: bgCol,
           appBar: _buildAppBar(context, surfaceCol, textCol, subtextCol),
+          // #118: the always-visible one-shot scan control lives at the
+          // bottom-right (the FAB slot the removed cart FAB used, ADR 0017).
+          // Hidden only while a multi-store user still has to pick a store —
+          // there's no catalogue loaded to scan into yet.
+          floatingActionButton: needsStoreSelection
+              ? null
+              : PosBarcodeScanButton(
+                  tier: _controller!.selectedGroup,
+                  loadedProducts: _controller!.allProducts,
+                ),
           body: SafeArea(
             top: false,
             // Pull-to-refresh wraps the WHOLE body (above the header) so the
@@ -304,7 +314,16 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
                       uiHintService.markShown(UiHintService.hintPosTapAdd);
                     },
                   ),
-                if (!_controller!.isLoading && _showPosHint && !needsStoreSelection)
+                // Only ONE POS hint banner at a time: the tap-to-add and
+                // hold-to-edit banners are near-identical blue boxes with "Tap
+                // … a product …" copy, so stacking both reads as the same hint
+                // shown twice. Tap-to-add is the primary first-run action, so it
+                // wins; hold-to-edit surfaces only once tap-to-add is gone
+                // (dismissed or already retired).
+                if (!_controller!.isLoading &&
+                    _showPosHint &&
+                    !_showPosTapHint &&
+                    !needsStoreSelection)
                   _buildInlineHint(
                     message: 'Tap and hold a '
                         '${ref.watch(industryLexiconProvider).itemLower}'
@@ -500,11 +519,6 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
         truncateTitleWithReveal: true,
       ),
       actions: [
-        // #118: always-visible one-shot barcode scan. Not gated on the cart.
-        PosBarcodeScanButton(
-          tier: _controller!.selectedGroup,
-          loadedProducts: _controller!.allProducts,
-        ),
         IconButton(
           icon: Icon(
             _isListView ? FontAwesomeIcons.list.data : FontAwesomeIcons.borderAll.data,
