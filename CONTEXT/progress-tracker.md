@@ -2852,6 +2852,26 @@ Spec: `context/specs/brief-sync-data-safety-and-efficiency.md`. Branch
 
 ## Session Notes
 
+**2026-07-19 — #149: rejected v2 oversell no longer leaks a phantom `completed`
+cloud order.** Hardens Invariant #12 on the order *header*. On the guarded path
+(`feature.domain_rpcs_v2.record_sale`), the Confirm-time header push
+(`OrdersDao.markCompleted → _enqueueFullOrder`) was a plain LWW `orders` upsert
+uncovered by #121's `held_by_order_id`, so a rejected (oversold) sale still left a
+cloud order `status='completed'` with zero children (`reverseRejectedSaleLocal` is
+local-only, so the cashier's Cancel never reconciled it). Fix: every order-header
+push routes through the now envelope-aware `_enqueueFullOrder`, which classifies
+the sale via new `SyncDao.saleEnvelopeState` → `{pending, confirmed, rejected}` and
+**skips** (rejected) / **holds by order** (pending — reuses #121's release/discard/
+`reconcileHeldRows`) / **pushes immediately** (confirmed, incl. v1 with no
+envelope). `assignRider` + `renumberForCollisionHeal` inherit the guard, so
+`_enqueueFullOrder` is the sole header-push site. Chose Option 1 (hold the header),
+not Option 2 — the RPC inserts `ON CONFLICT (id) DO NOTHING` and never updates, so
+dropping the push would strand the cloud at `pending`. No schema change. Tests:
+`test/sync/rejected_sale_header_hold_test.dart` (12). Branch
+`fix/rejected-v2-phantom-cloud-order`; full detail in `BUILD_LOG.md` (2026-07-19).
+Follow-up: preventive only — phantoms already in the cloud need a one-off cleanup;
+pairs with **#150** (Sync-Issues entry point to the recovery).
+
 **2026-07-03 — Settings & sidebar migrated to named gates (issue #21, epic #16).**
 The Settings/nav batch: all 11 `lib/core/settings/` screens, `app_drawer.dart`,
 `main_layout.dart`, and the Sync Issues screen guard now cite named registry

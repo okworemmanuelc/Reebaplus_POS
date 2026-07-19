@@ -2,6 +2,62 @@
 
 ---
 
+## 2026-07-19 — #149: a rejected v2 oversell no longer leaks a phantom `completed` cloud order
+
+Branch `fix/rejected-v2-phantom-cloud-order`. Fixes the leak found during QA of #100/#121: on the
+guarded path (`feature.domain_rpcs_v2.record_sale` ON), when `pos_record_sale_v2` **rejects** a sale
+for oversell, the cloud was still left with a phantom order `status='completed'` — a real
+`net_amount_kobo` but **zero** items/stock/payments — because the order **header** reached the cloud
+independently of the envelope.
+
+**Root cause.** The header is pushed at Confirm by `OrdersDao.markCompleted → _enqueueFullOrder`, a
+plain LWW `orders` upsert with **no stock guard** and **not** covered by #121's `held_by_order_id`.
+So it drained regardless of whether the envelope later confirmed or rejected. `pos_record_sale_v2`
+itself rolls back correctly on the oversell (its own txn), and `reverseRejectedSaleLocal` is
+local-only — so the phone showed `cancelled` while the cloud kept `completed` forever. Proof it was
+the client upsert: cloud `created_at` = client ring-time, not the RPC's exec-time `now()`.
+
+**Fix (issue's preferred Option 1 — hold the header).** Every order-header push now routes through
+one envelope-aware primitive, `OrdersDao._enqueueFullOrder`, which classifies the sale's
+`pos_record_sale_v2` envelope via new `SyncDao.saleEnvelopeState(orderId)` → `{pending, confirmed,
+rejected}`:
+- **REJECTED** (envelope in `sync_queue_orphans`) → **skip** the header push (never resurrect a
+  rolled-back sale);
+- **PENDING** (un-synced envelope still in `sync_queue`) → enqueue the header **HELD** by the order
+  (new optional `heldByOrderId` on `SyncDao.enqueueUpsert`), so #121's existing
+  release-on-confirm / discard-on-reject / `reconcileHeldRows` machinery covers it verbatim;
+- **CONFIRMED** (envelope synced-and-lingering, purged, or a **v1** sale with no envelope) → enqueue
+  normally; it drains immediately, exactly as before — no completion-sync delay on the online path.
+
+`assignRider` and `markCancelled`'s v1 path already went through `_enqueueFullOrder` and inherit the
+guard; `renumberForCollisionHeal` was re-routed through it too, so `_enqueueFullOrder` is now the
+**sole** order-header push site (the only remaining direct `enqueueUpsert('orders')` is v1
+`createOrder`, the sale record itself). `reconcileHeldRows` and `saleEnvelopeState` now share two
+private envelope-lookup helpers (`_saleEnvelopeQueued` with an explicit `onlyUnsynced` flag +
+`_saleEnvelopeOrphaned`) — the `is_synced` divergence is a visible parameter, not duplicated SQL.
+
+**Why Option 1, not Option 2.** The RPC inserts the header `ON CONFLICT (id) DO NOTHING` and **never
+updates** it, and the envelope's `p_status` is frozen at ring-time `'pending'`. So dropping the
+Confirm header push (Option 2) would strand the cloud order at `pending` forever — only the released
+header LWW upsert carries `completed`/`completed_at`. Confirmed by reading `0091` + `daos_orders`.
+
+**No schema change** (the `held_by_order_id` column already exists; no migration, no `build_runner`).
+
+**Tests.** New `test/sync/rejected_sale_header_hold_test.dart` (12 cases): classifier for all four
+envelope states, header HELD while pending, **DISCARDED on reject (no phantom)**, released on
+confirm, `reconcileHeldRows` backstop, and the no-regression cases (confirmed/v1 push unheld;
+already-rejected-at-Confirm never enqueues a header). `flutter analyze` clean; full suite green
+(963 pass) except one **pre-existing, unrelated** failure (`who_is_working_screen_test`, verified
+failing on the pristine baseline).
+
+**Follow-up (not this fix).** This is preventive — it does not reconcile phantoms that already
+reached the cloud before it ships. The QA repro's own `ORD-000002-GF0C4C` was manually set to
+`cancelled` during QA; any other device that leaked a phantom while the flag was live needs a one-off
+cloud cleanup (`UPDATE orders SET status='cancelled' … WHERE status='completed' AND no children`).
+Pairs with **#150** (a second, Sync-Issues entry point to the one-tap recovery).
+
+---
+
 ## 2026-07-11 — Oversell orphan recovery: one-tap Cancel + local crate reversal (Slice 2c)
 
 Completes the reversal on branch `feat/oversell-orphan-recovery`. The go-live flip stays

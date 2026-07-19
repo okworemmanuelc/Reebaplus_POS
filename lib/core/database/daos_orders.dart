@@ -462,15 +462,32 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
 
   // ── Writes ─────────────────────────────────────────────────────────────────
 
-  /// Enqueues the FULL order row for sync. Per-column order updates build a
-  /// partial companion; a partial `orders` upsert omits NOT NULL columns
-  /// (order_number, total_amount_kobo, …) and the cloud rejects it (23502).
+  /// Enqueues the FULL order row for sync (a partial companion would omit NOT
+  /// NULL columns — order_number, total_amount_kobo, … — and the cloud rejects
+  /// it, 23502). Every order-header push routes through here, so the v2
+  /// sale-envelope guard (#149) lives in one place: on the guarded path the
+  /// cloud order exists ONLY once `pos_record_sale_v2` confirms, so the header
+  /// must never reach the cloud ahead of — or instead of — its sale.
+  ///   • REJECTED (envelope orphaned) → skip: pushing the header would
+  ///     resurrect the phantom `completed` order the cloud already rolled back;
+  ///   • PENDING (envelope still in flight) → enqueue HELD by the order,
+  ///     released when it confirms / discarded when it rejects, with
+  ///     `reconcileHeldRows` as the crash-safe backstop;
+  ///   • CONFIRMED (envelope done/purged, or a v1 sale that never had one) →
+  ///     enqueue normally; it drains immediately, exactly as before.
   Future<void> _enqueueFullOrder(String id) async {
     final row = await (select(
       orders,
     )..where((o) => o.id.equals(id) & whereBusiness(o))).getSingleOrNull();
-    if (row != null) {
-      await db.syncDao.enqueueUpsert('orders', row.toCompanion(true));
+    if (row == null) return;
+    final companion = row.toCompanion(true);
+    switch (await db.syncDao.saleEnvelopeState(id)) {
+      case SaleEnvelopeState.rejected:
+        return; // never resurrect a rolled-back sale's header
+      case SaleEnvelopeState.pending:
+        await db.syncDao.enqueueUpsert('orders', companion, heldByOrderId: id);
+      case SaleEnvelopeState.confirmed:
+        await db.syncDao.enqueueUpsert('orders', companion);
     }
   }
 
@@ -1447,11 +1464,9 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         lastUpdatedAt: Value(DateTime.now()),
       ),
     );
-    // Re-enqueue a FULL row so the cloud upsert carries every NOT NULL column.
-    final updated = await (select(
-      orders,
-    )..where((t) => t.id.equals(orderId) & whereBusiness(t))).getSingle();
-    await db.syncDao.enqueueUpsert('orders', updated.toCompanion(true));
+    // Re-enqueue via the shared header path so the FULL row carries every NOT
+    // NULL column AND respects the v2 sale-envelope guard (#149).
+    await _enqueueFullOrder(orderId);
     return newNumber;
   }
 
