@@ -28,7 +28,6 @@ import 'package:reebaplus_pos/shared/widgets/main_layout.dart';
 import 'package:reebaplus_pos/shared/widgets/auto_lock_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/force_update_wrapper.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
-import 'package:reebaplus_pos/shared/services/notification_service.dart';
 import 'package:reebaplus_pos/shared/services/push_notification_service.dart';
 import 'package:reebaplus_pos/shared/widgets/notifications_modal.dart';
 import 'package:reebaplus_pos/features/auth/membership_status_reaction.dart';
@@ -151,9 +150,12 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
 
   // Push (#138 Slice 2) — captured up front (same reason as `_auth`): the
   // auth/device-user listeners drive token register/clear and must not touch
-  // `ref` from their bodies.
+  // `ref` from their bodies. The notification service is deliberately NOT
+  // captured here — reading `notificationProvider` builds NotificationService,
+  // whose `_init` runs a business-scoped `NotificationsDao.watchAll` that
+  // throws before a business is bound (cold-start crash). It is read lazily at
+  // the guarded tap site instead, so it's only constructed post-login.
   late final PushNotificationService _pushService;
-  late final NotificationService _notifService;
 
   /// Business bound for push registration, tracked to detect the sign-in edge
   /// (`_onAuthChanged`) and the full-logout edge (`_onDeviceUserChanged`). A
@@ -187,7 +189,6 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
     super.initState();
     _auth = ref.read(authProvider);
     _pushService = ref.read(pushNotificationServiceProvider);
-    _notifService = ref.read(notificationProvider);
 
     _checkDeviceUser();
     _auth.deviceUserIdNotifier.addListener(_onDeviceUserChanged);
@@ -344,8 +345,11 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
         if (ctx != null) NotificationsModal.show(ctx);
       },
       markRead: (id) {
+        // Read lazily — constructing NotificationService runs a
+        // business-scoped DAO query, only safe once a business is bound
+        // (guaranteed here by the signed-in guard above).
         if (_auth.currentUser == null) return;
-        unawaited(_notifService.markAsRead(id));
+        unawaited(ref.read(notificationProvider).markAsRead(id));
       },
     );
     await supabaseReady;
