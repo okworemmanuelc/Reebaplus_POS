@@ -139,9 +139,14 @@ final authProvider = ChangeNotifierProvider<AuthService>((ref) {
     googleWebClientId: googleWebClientId,
   );
 });
-final deviceUserIdProvider = ChangeNotifierProvider<ValueNotifier<String?>>((
-  ref,
-) {
+// Plain Provider, NOT ChangeNotifierProvider: the notifier is OWNED by
+// AuthService, not by this provider. A ChangeNotifierProvider disposes the
+// notifier it exposes on every recompute (runOnDispose runs on recompute, not
+// just teardown), and this provider recomputes whenever AuthService notifies —
+// so it would dispose the shared deviceUserIdNotifier out from under logout /
+// PIN-screen "login with a different account", which then throws "used after
+// being disposed" on the next `deviceUserIdNotifier.value = …`.
+final deviceUserIdProvider = Provider<ValueNotifier<String?>>((ref) {
   return ref.watch(authProvider).deviceUserIdNotifier;
 });
 
@@ -154,11 +159,12 @@ final themeProvider = ChangeNotifierProvider<ThemeController>(
 final cartProvider = ChangeNotifierProvider<CartService>((ref) {
   return CartService(ref.read(authProvider), ref.read(navigationProvider));
 });
-final activeCustomerProvider = ChangeNotifierProvider<ValueNotifier<Customer?>>(
-  (ref) {
-    return ref.watch(cartProvider).activeCustomer;
-  },
-);
+// Plain Provider, NOT ChangeNotifierProvider — same reason as
+// [deviceUserIdProvider]: `activeCustomer` is owned by CartService, so this
+// provider must not dispose it on recompute.
+final activeCustomerProvider = Provider<ValueNotifier<Customer?>>((ref) {
+  return ref.watch(cartProvider).activeCustomer;
+});
 
 // ── Notification ────────────────────────────────────────────────────────────
 final notificationProvider = ChangeNotifierProvider<NotificationService>((ref) {

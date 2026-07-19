@@ -2,6 +2,95 @@
 
 ---
 
+## 2026-07-19 — POS: only one first-run hint banner at a time (dedupe near-identical hints)
+
+**Symptom.** On the POS home screen a fresh user saw two stacked blue hint banners —
+"Tap a product to add it to the cart." directly above "Tap and hold a product to edit
+it." Same box style, same "Tap … a product …" opening, so it read as the same hint
+shown twice.
+
+**Root cause.** `pos_home_screen.dart` renders the two hints from independent flags
+(`_showPosTapHint` for `hintPosTapAdd`, `_showPosHint` for `hintPosLongpress`), each
+gated only on its own `shouldShow`. On first run both are true, so both banners render
+together. Not a literal duplicate — two distinct hints whose copy is near-identical.
+
+**Fix.** Gated the hold-to-edit banner on `!_showPosTapHint` so only one POS hint shows
+at a time. Tap-to-add is the primary first-run action, so it wins; hold-to-edit surfaces
+only once tap-to-add is gone (dismissed → `setState` flips the flag, or already retired).
+No change to `UiHintService` retirement/counting.
+
+---
+
+## 2026-07-19 — Fix blank shell (no bottom nav) after a fresh device-join login
+
+**Symptom.** After OTP + PIN on a fresh install joining an existing business, the
+app showed a blank white screen with only the drawer hamburger — no bottom nav, no
+way out. Logs showed the background full pull timing out on every table (page shrinking
+500→…→15, all 15s timeouts; realtime channels also `timedOut`) → `PartialPullException`.
+
+**Root cause.** Two layers:
+1. *Proximate:* the emulator's link to Supabase was degraded, so the full pull (which
+   fires ~30 tables concurrently via `Future.wait` on the "Wi-Fi" path) self-congested
+   and every page timed out. This is largely environmental (network), amplified by the
+   unbounded concurrency.
+2. *The actual bug:* `syncMinimumLogin` (the fast pre-MainLayout pull) restored only
+   `profiles / businesses / stores / users` — NOT the role/permission tables. MainLayout
+   lands every login on the POS tab (`setCurrentUser` → index 1), then hides that tab
+   from the bottom nav for a role without `sales.make` and bounces it to Home — but the
+   bounce only fires once permissions RESOLVE (`currentUserRoleProvider` +
+   `rolePermissionsProvider`, backed by `roles` / `user_businesses` / `role_permissions`).
+   On a fresh device those rows arrive only via the full pull; when it stalled, the CEO's
+   role stayed null → POS hidden AND the bounce skipped → stranded on a hidden tab with
+   no nav (`main_layout.dart` renders `SizedBox.shrink()` for the whole nav when the
+   current tab isn't in `tabOrder`).
+
+**Fix.** Added `roles`, `role_permissions`, `user_businesses` to `syncMinimumLogin` (tiny
+tables, FK-safe restore order, `tablesTotal` 4→7). The permission gate now resolves within
+a frame or two of login, so the existing `permsResolved && !canSell` bounce works and the
+shell is always navigable — even when the later full pull times out. No MainLayout change
+needed (the guard was correct; it just never had data to act on). If the minimum pull
+itself fails, it throws → the auth screen shows a retryable error instead of a blank shell.
+
+**Not changed (noted for follow-up).** The full pull's unbounded `Future.wait` over ~30
+tables is a resilience weak point on weak links; bounding it to a small concurrency pool
+would help but is a riskier sync-engine change — left for a dedicated pass. The immediate
+trigger here was the degraded emulator connection (check DNS/VPN per the Sync Issues screen).
+
+**Test.** `test/sync/minimum_login_permission_tables_test.dart` asserts the minimum-login
+pull queries the role/permission trio (fails if the set is trimmed back to render-chrome).
+
+---
+
+## 2026-07-19 — Fix "ValueNotifier used after being disposed" on PIN-screen account switch
+
+**Symptom.** Tapping "Login with a different account" from the PIN entry screen threw
+`FlutterError: A ValueNotifier<String?> was used after being disposed` at
+`clearDeviceUserId()` (`deviceUserIdNotifier.value = null`).
+
+**Root cause.** `deviceUserIdProvider` was a `ChangeNotifierProvider` that RETURNED
+`AuthService.deviceUserIdNotifier` — a notifier owned by AuthService, not by the provider.
+Riverpod's `ChangeNotifierProviderElement.runOnDispose` calls `.dispose()` on the notifier it
+exposes, and `runOnDispose` runs on every **recompute**, not just teardown. Because the provider
+did `ref.watch(authProvider)` (itself a ChangeNotifierProvider), it recomputed on every
+`AuthService.value` change (login / lock / logout) — disposing the shared `deviceUserIdNotifier`
+out from under `main.dart`'s root router and the logout paths. Once the inventory screen had read
+the provider (arming it), the next account switch crashed. Confirmed with a repro test whose stack
+trace shows `runOnDispose → ChangeNotifier.dispose`.
+
+**Fix.** Converted `deviceUserIdProvider` to a plain `Provider` (borrows, never disposes). Its one
+consumer (`inventory_screen.dart`) only does `ref.read(...).value`, so no reactive behaviour is
+lost. Fixed the identical latent anti-pattern in `activeCustomerProvider` (returns
+`CartService.activeCustomer`; currently 0 consumers, so never fired — but a live crash the moment
+anything read it). Left `pullStatusProvider` as-is: it also borrows a service-owned notifier, but
+watches a plain `Provider` that never notifies (so never recomputes / disposes) AND its consumers
+genuinely rely on the CNP rebuild-on-notify semantics.
+
+**Test.** `test/providers/borrowed_notifier_provider_test.dart` — drives a real `AuthService.value`
+change + a force-refresh through a `ProviderContainer` and asserts the borrowed notifier survives.
+Verified it fails (same disposed-error) when either provider is reverted to a ChangeNotifierProvider.
+
+---
+
 ## 2026-07-11 — Oversell orphan recovery: one-tap Cancel + local crate reversal (Slice 2c)
 
 Completes the reversal on branch `feat/oversell-orphan-recovery`. The go-live flip stays

@@ -2074,12 +2074,29 @@ class SupabaseSyncService {
   set currentBusinessIdForTesting(String? id) => _currentBusinessId = id;
 
   /// Minimum-login pull: fetches only the tables required for `MainLayout`
-  /// to render. Designed to complete in ~1-6 seconds depending on link
-  /// speed (math in the plan file). Throws [PartialPullException] on
-  /// any failure so the calling screen surfaces "check your connection".
+  /// to render **and gate correctly**. Designed to complete in ~1-6 seconds
+  /// depending on link speed (math in the plan file). Throws
+  /// [PartialPullException] on any failure so the calling screen surfaces
+  /// "check your connection".
   ///
   /// Tables (FK-safe order for restore):
-  ///   profiles → businesses → users → stores
+  ///   profiles → businesses → stores → users → roles → role_permissions →
+  ///   user_businesses
+  ///
+  /// The role/permission trio (`roles`, `role_permissions`, `user_businesses`)
+  /// is on the critical path — not just the render-chrome tables — because
+  /// MainLayout's nav is permission-gated: it lands every login on the POS tab
+  /// (`setCurrentUser` sets index 1), then HIDES that tab from the bottom nav
+  /// for a role without `sales.make` and bounces it to Home. That bounce only
+  /// fires once the permission set has RESOLVED (`currentUserRoleProvider` +
+  /// `rolePermissionsProvider`). On a fresh device-join these rows arrive only
+  /// via the heavy background full pull; if that pull is slow or fails, the
+  /// user's role never resolves, so POS stays hidden AND the bounce never runs
+  /// — stranding them on a hidden tab with no bottom nav (a blank shell with
+  /// only the drawer). Pulling the trio here (tiny tables) makes the gate
+  /// resolve within a frame or two of login, so the shell is always navigable
+  /// even when the full pull later times out. See [userRoleProvider] /
+  /// [MainLayoutState.build].
   ///
   /// Parallel fetch via `Future.wait` of `_fetchOneTable` calls (HTTP/2
   /// multiplexes the connection; on bandwidth-bound 3G the wins are
@@ -2090,21 +2107,32 @@ class SupabaseSyncService {
     debugPrint('[SyncService] Minimum-login pull for business $businessId...');
     pullStatus.value = const PullStatus(
       stage: PullStage.minimum,
-      tablesTotal: 4,
+      tablesTotal: 7,
     );
-    // FK-safe restore order:
-    //   businesses  → no inbound deps among this set
-    //   stores  → references businesses
-    //   users       → references businesses AND stores
-    //   profiles    → cloud-only; no local Drift table so _restoreTableData
-    //                 is a no-op. Kept in the fetch set so the 4-call
-    //                 round-trip count matches the plan; safe to drop later
-    //                 if we want one fewer request on the critical path.
-    // The download is parallel via Future.wait — list ordering only
-    // controls the sequential restore below.
+    // FK-safe restore order (the loop below restores sequentially in list
+    // order; the download itself is parallel via Future.wait):
+    //   businesses       → no inbound deps among this set
+    //   stores           → references businesses
+    //   users            → references businesses AND stores
+    //   roles            → references businesses
+    //   role_permissions → references roles (+ the locally-seeded permissions
+    //                      catalogue); drives the `sales.make` nav gate
+    //   user_businesses  → references users, businesses AND roles; resolves the
+    //                      current user's role
+    //   profiles         → cloud-only; no local Drift table so
+    //                      _restoreTableData is a no-op. Kept in the fetch set
+    //                      for the round-trip count; safe to drop later.
     final minConnectivity = await Connectivity().checkConnectivity();
     final minPageSize = _pullPageCeilingFor(minConnectivity);
-    const tables = ['profiles', 'businesses', 'stores', 'users'];
+    const tables = [
+      'profiles',
+      'businesses',
+      'stores',
+      'users',
+      'roles',
+      'role_permissions',
+      'user_businesses',
+    ];
     try {
       final fetched = await Future.wait(
         tables.map(
