@@ -26,8 +26,17 @@ Net behaviour, uniform across all 5 banners: shows on up to 2 ignored visits the
 single ✕ retires it for good (never reappears). No service/schema change — `UiHintService` was
 already correct; only the call sites were wrong.
 
-**Verify.** `flutter analyze` on the 5 touched files clean. Logic traced per-hint; pending a
-device eyeball (dismiss a hint, reopen the screen → stays gone).
+**POS follow-up — combine the two banners + fix wrong copy.** POS stacked two coach banners
+("Tap to add" + "Tap and hold to edit"), which read as "double" to the user, and the second one
+was *inaccurate*: on POS, long-press opens the qty/discount sheet to add several at once — it does
+NOT edit the product (that's the Products screen). Merged them into a single banner —
+`'Tap a {item} to add it to the cart, or tap and hold to choose the quantity.'` — under one new hint
+key `hintPosGestures` (`hint_pos_gestures`), replacing `hintPosLongpress` + `hintPosTapAdd`. Same
+retire contract (view-count on display, `markDismissed` on ✕); gated on the grid having products.
+Receive/Inventory keep their single "hold to edit" banner (accurate there).
+
+**Verify.** `flutter analyze` clean on all touched files. Logic traced per-hint; pending a
+device eyeball (dismiss a hint, reopen the screen → stays gone; POS shows one banner, correct copy).
 
 ---
 
