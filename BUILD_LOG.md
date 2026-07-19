@@ -2,6 +2,35 @@
 
 ---
 
+## 2026-07-19 — Discoverability hints stop "appearing twice": unify UiHint retire contract
+
+Fixes the parked "tap-and-hold-to-edit hint shows double" report. Root cause was `UiHintService`
+being used inconsistently across the 5 inline hint banners. The service's documented contract is
+`markShown` = count one passive VIEW (auto-retire after `_retireAfter = 2` displays), `markDismissed`
+= deliberate ✕ close (retire immediately). Screens misused it: POS (both banners) and Receive called
+`markShown` on the ✕, so a dismiss only took the count 0→1 and the banner **surfaced a second time**
+before retiring (dismiss-twice = "appears twice"); none of POS/Receive/Inventory counted passive
+views, so an ignored banner showed on every visit.
+
+**Fix — every hint now honours the contract:**
+- POS `pos_home_screen.dart` (`hintPosLongpress`, `hintPosTapAdd`): count the view on display in
+  `initState`; ✕ now calls `markDismissed`.
+- Receive `receive_stock_screen.dart` (`hintReceiveLongpress`): same — view-count on display, ✕ →
+  `markDismissed`.
+- Cart `cart_screen.dart` (`hintCartTapEdit`): already view-counted on display; ✕ was `markShown` →
+  now `markDismissed`.
+- Inventory `inventory_screen.dart` (`_longPressHintKey`): already ✕ → `markDismissed` (correct);
+  added the missing passive view-count on display.
+
+Net behaviour, uniform across all 5 banners: shows on up to 2 ignored visits then self-retires; a
+single ✕ retires it for good (never reappears). No service/schema change — `UiHintService` was
+already correct; only the call sites were wrong.
+
+**Verify.** `flutter analyze` on the 5 touched files clean. Logic traced per-hint; pending a
+device eyeball (dismiss a hint, reopen the screen → stays gone).
+
+---
+
 ## 2026-07-11 — Oversell orphan recovery: one-tap Cancel + local crate reversal (Slice 2c)
 
 Completes the reversal on branch `feat/oversell-orphan-recovery`. The go-live flip stays

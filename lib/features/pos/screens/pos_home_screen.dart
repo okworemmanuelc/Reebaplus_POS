@@ -53,10 +53,18 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
     super.initState();
     _loadViewPreferences();
     uiHintService.shouldShow(UiHintService.hintPosLongpress).then((show) {
-      if (show && mounted) setState(() => _showPosHint = true);
+      if (show && mounted) {
+        setState(() => _showPosHint = true);
+        // Count this display as a passive view so an ignored hint still retires
+        // after `_retireAfter` visits (never shown forever).
+        uiHintService.markShown(UiHintService.hintPosLongpress);
+      }
     });
     uiHintService.shouldShow(UiHintService.hintPosTapAdd).then((show) {
-      if (show && mounted) setState(() => _showPosTapHint = true);
+      if (show && mounted) {
+        setState(() => _showPosTapHint = true);
+        uiHintService.markShown(UiHintService.hintPosTapAdd);
+      }
     });
     Future.microtask(() {
       if (!mounted) return;
@@ -301,7 +309,10 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
                         ' to add it to the cart.',
                     onDismiss: () {
                       setState(() => _showPosTapHint = false);
-                      uiHintService.markShown(UiHintService.hintPosTapAdd);
+                      // Deliberate close retires the hint immediately so it
+                      // never reappears (was markShown → count 0→1, which let it
+                      // surface a second time before retiring).
+                      uiHintService.markDismissed(UiHintService.hintPosTapAdd);
                     },
                   ),
                 if (!_controller!.isLoading && _showPosHint && !needsStoreSelection)
@@ -311,7 +322,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
                         ' to edit it.',
                     onDismiss: () {
                       setState(() => _showPosHint = false);
-                      uiHintService.markShown(UiHintService.hintPosLongpress);
+                      uiHintService.markDismissed(UiHintService.hintPosLongpress);
                     },
                   ),
                 Expanded(

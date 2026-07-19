@@ -1184,7 +1184,11 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                     ),
                                     onPressed: () {
                                       setState(() => _showCartHint = false);
-                                      uiHintService.markShown(
+                                      // Deliberate close retires the hint
+                                      // immediately so it never reappears (the
+                                      // display in initState already counted the
+                                      // view via markShown).
+                                      uiHintService.markDismissed(
                                         UiHintService.hintCartTapEdit,
                                       );
                                     },
