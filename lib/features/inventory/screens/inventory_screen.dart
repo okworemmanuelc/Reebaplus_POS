@@ -220,7 +220,12 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     // per staff member. Visibility is further gated on Gates.editProductPrice at
     // render time, so it only reaches users who can use the gesture.
     uiHintService.shouldShow(_longPressHintKey).then((show) {
-      if (show && mounted) setState(() => _showLongPressHint = true);
+      if (show && mounted) {
+        setState(() => _showLongPressHint = true);
+        // Count this display as a passive view so an ignored hint still retires
+        // after `_retireAfter` visits (never shown forever).
+        uiHintService.markShown(_longPressHintKey);
+      }
     });
 
     // Defer all DB stream subscriptions until after the first frame so the

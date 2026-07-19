@@ -46,17 +46,19 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
   bool _isListView = false;
   int _gridColumns = 3;
   bool _showPosHint = false;
-  bool _showPosTapHint = false;
 
   @override
   void initState() {
     super.initState();
     _loadViewPreferences();
-    uiHintService.shouldShow(UiHintService.hintPosLongpress).then((show) {
-      if (show && mounted) setState(() => _showPosHint = true);
-    });
-    uiHintService.shouldShow(UiHintService.hintPosTapAdd).then((show) {
-      if (show && mounted) setState(() => _showPosTapHint = true);
+    // One combined POS coach banner (tap = add to cart, hold = choose quantity),
+    // so POS never stacks two coach tips. Counted as a passive view on display so
+    // an ignored banner still self-retires after `_retireAfter` visits.
+    uiHintService.shouldShow(UiHintService.hintPosGestures).then((show) {
+      if (show && mounted) {
+        setState(() => _showPosHint = true);
+        uiHintService.markShown(UiHintService.hintPosGestures);
+      }
     });
     Future.microtask(() {
       if (!mounted) return;
@@ -291,27 +293,24 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
                         textCol: textCol,
                         borderCol: borderCol,
                       ),
+                // One combined coach banner. Tap adds to the cart; tap-and-hold
+                // opens the qty/discount sheet to add several at once (it does
+                // NOT edit the product — that's done from the Products screen).
+                // Only shown when there are products to tap/hold.
                 if (!_controller!.isLoading &&
-                    _showPosTapHint &&
+                    _showPosHint &&
                     !needsStoreSelection &&
                     _controller!.filteredProducts.isNotEmpty)
                   _buildInlineHint(
                     message: 'Tap a '
                         '${ref.watch(industryLexiconProvider).itemLower}'
-                        ' to add it to the cart.',
-                    onDismiss: () {
-                      setState(() => _showPosTapHint = false);
-                      uiHintService.markShown(UiHintService.hintPosTapAdd);
-                    },
-                  ),
-                if (!_controller!.isLoading && _showPosHint && !needsStoreSelection)
-                  _buildInlineHint(
-                    message: 'Tap and hold a '
-                        '${ref.watch(industryLexiconProvider).itemLower}'
-                        ' to edit it.',
+                        ' to add it to the cart, or tap and hold to choose the'
+                        ' quantity.',
                     onDismiss: () {
                       setState(() => _showPosHint = false);
-                      uiHintService.markShown(UiHintService.hintPosLongpress);
+                      // Deliberate close retires the hint immediately so it
+                      // never reappears.
+                      uiHintService.markDismissed(UiHintService.hintPosGestures);
                     },
                   ),
                 Expanded(

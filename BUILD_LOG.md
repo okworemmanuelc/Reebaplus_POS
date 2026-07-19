@@ -2,6 +2,44 @@
 
 ---
 
+## 2026-07-19 — Discoverability hints stop "appearing twice": unify UiHint retire contract
+
+Fixes the parked "tap-and-hold-to-edit hint shows double" report. Root cause was `UiHintService`
+being used inconsistently across the 5 inline hint banners. The service's documented contract is
+`markShown` = count one passive VIEW (auto-retire after `_retireAfter = 2` displays), `markDismissed`
+= deliberate ✕ close (retire immediately). Screens misused it: POS (both banners) and Receive called
+`markShown` on the ✕, so a dismiss only took the count 0→1 and the banner **surfaced a second time**
+before retiring (dismiss-twice = "appears twice"); none of POS/Receive/Inventory counted passive
+views, so an ignored banner showed on every visit.
+
+**Fix — every hint now honours the contract:**
+- POS `pos_home_screen.dart` (`hintPosLongpress`, `hintPosTapAdd`): count the view on display in
+  `initState`; ✕ now calls `markDismissed`.
+- Receive `receive_stock_screen.dart` (`hintReceiveLongpress`): same — view-count on display, ✕ →
+  `markDismissed`.
+- Cart `cart_screen.dart` (`hintCartTapEdit`): already view-counted on display; ✕ was `markShown` →
+  now `markDismissed`.
+- Inventory `inventory_screen.dart` (`_longPressHintKey`): already ✕ → `markDismissed` (correct);
+  added the missing passive view-count on display.
+
+Net behaviour, uniform across all 5 banners: shows on up to 2 ignored visits then self-retires; a
+single ✕ retires it for good (never reappears). No service/schema change — `UiHintService` was
+already correct; only the call sites were wrong.
+
+**POS follow-up — combine the two banners + fix wrong copy.** POS stacked two coach banners
+("Tap to add" + "Tap and hold to edit"), which read as "double" to the user, and the second one
+was *inaccurate*: on POS, long-press opens the qty/discount sheet to add several at once — it does
+NOT edit the product (that's the Products screen). Merged them into a single banner —
+`'Tap a {item} to add it to the cart, or tap and hold to choose the quantity.'` — under one new hint
+key `hintPosGestures` (`hint_pos_gestures`), replacing `hintPosLongpress` + `hintPosTapAdd`. Same
+retire contract (view-count on display, `markDismissed` on ✕); gated on the grid having products.
+Receive/Inventory keep their single "hold to edit" banner (accurate there).
+
+**Verify.** `flutter analyze` clean on all touched files. Logic traced per-hint; pending a
+device eyeball (dismiss a hint, reopen the screen → stays gone; POS shows one banner, correct copy).
+
+---
+
 ## 2026-07-11 — Oversell orphan recovery: one-tap Cancel + local crate reversal (Slice 2c)
 
 Completes the reversal on branch `feat/oversell-orphan-recovery`. The go-live flip stays
