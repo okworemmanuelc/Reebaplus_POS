@@ -103,6 +103,24 @@ class OrderService {
     return _commands.cancelRejectedSale(orderId, staffId);
   }
 
+  /// **Cancel a server-REJECTED sale from Sync Issues** (#150) — the fallback
+  /// route when the `sale_rejected` alert was swipe-dismissed. Runs the same
+  /// complete local reversal as [cancelRejectedSale] and then clears the
+  /// orphaned envelope ([orphanId]). Reverses BEFORE clearing — the reversal
+  /// reads the sold lines out of that orphan — so it is never discard-then-
+  /// recover. Idempotent.
+  Future<void> cancelRejectedSaleFromOrphan({
+    required String orderId,
+    required String orphanId,
+    required String staffId,
+  }) {
+    return _commands.cancelRejectedSaleFromOrphan(
+      orderId: orderId,
+      orphanId: orphanId,
+      staffId: staffId,
+    );
+  }
+
   Future<void> assignRider(String orderId, String riderName) {
     return _commands.assignRider(orderId, riderName);
   }

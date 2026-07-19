@@ -492,6 +492,25 @@ class OrderCommands {
     );
   }
 
+  /// Cashier-initiated Cancel of a rejected sale from the **Sync Issues** screen
+  /// (#150) — the fallback route when the `sale_rejected` notification was
+  /// swipe-dismissed. Runs the complete local reversal FIRST via
+  /// [cancelRejectedSale] — which sources the sold lines from the orphaned
+  /// envelope's `p_items` — and only THEN clears the orphan ([orphanId]).
+  ///
+  /// The order is load-bearing: discarding the orphan first would delete the
+  /// `p_items` payload the reversal depends on, so inventory would never be
+  /// refunded (never discard-then-recover). Idempotent, and safe if the orphan
+  /// has already been cleaned up.
+  Future<void> cancelRejectedSaleFromOrphan({
+    required String orderId,
+    required String orphanId,
+    required String staffId,
+  }) async {
+    await cancelRejectedSale(orderId, staffId);
+    await _db.syncDao.discardOrphan(orphanId);
+  }
+
   String _resolvePaymentType({
     required String paymentSubType,
     required int amountPaidKobo,

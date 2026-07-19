@@ -2,6 +2,52 @@
 
 ---
 
+## 2026-07-19 — #150: a Sync Issues entry point for oversell recovery (fallback for a dismissed alert)
+
+Branch `feat/sync-issues-cancel-rejected-sale` (off `origin/main` = #149's merge). Pairs with #149
+(PR #151, which stops the *cloud* phantom) — #150 is the *client* fallback route.
+
+**Problem.** The one-tap recovery `OrderService.cancelRejectedSale` (full local undo of a
+server-rejected v2 sale — order + inventory + wallet + crate) was reachable from **exactly one**
+place: the tappable `sale_rejected` notification (`notifications_modal.dart`). If the cashier
+swipe-dismisses / clears that alert, the phantom `completed` order is stranded on the device with no
+recovery affordance. The Sync Issues screen *surfaces* the orphaned `domain:pos_record_sale_v2`
+envelope but only offered **Retry** (re-orphans an oversell) / **Discard** (deletes the very
+`p_items` payload the reversal needs).
+
+**Fix (issue's preferred route).** Added a **second entry point** — a "Cancel this sale" action on
+the Sync Issues orphan tile for a `domain:pos_record_sale_v2` row:
+- `OrderCommands.cancelRejectedSaleFromOrphan({orderId, orphanId, staffId})` (exposed via
+  `OrderService`) runs the **same** reversal as the notification (`cancelRejectedSale`, which sources
+  the sold lines from the orphan's `p_items` via `SyncDao.rejectedSalePayload`) and **then**
+  `discardOrphan(orphanId)`.
+- **Critical ordering — reverse BEFORE clear.** The reversal reads the orphan payload, so
+  discard-then-recover would delete the `p_items` and refund nothing. The command awaits the reversal
+  first, then clears the orphan. Idempotent (a second tap finds the orphan gone → empty lines →
+  no-op; `reverseRejectedSaleLocal` early-returns on an already-`cancelled` order).
+- **UI.** `sync_issues_screen.dart`'s orphan tile computes `_rejectedSaleOrderId(item)` (gated on
+  `actionType == 'domain:pos_record_sale_v2'`, parses `p_order_id`) and, when present, renders a
+  "Cancel this sale" `TextButton` → a plain-language confirm dialog mirroring the notification's copy
+  → the command → a success/error snackbar. The action row became a `Wrap` (WrapAlignment.end) so a
+  third button can't overflow (the now-invalid `Spacer` was dropped — Spacer only works in a Flex).
+  Retry/Discard left intact. All `ref` reads happen before any `await` (element-unmount race, per the
+  screen's existing initState-capture note).
+
+**Scope kept minimal.** The *"and/or"* phantom-order-detail entry point was not added (explicit
+alternative to the *preferred* Sync Issues route). No schema/migration; the reversal is local-only
+(the rejected sale never reached the cloud). No invariant touched — #12 (the orphan stays visible
+until the cashier's deliberate confirmed Cancel), #3 (wallet legs reversed by compensating rows, not
+edits), #1/#4 (no direct cloud read/write; reversal is pure Drift).
+
+**TDD.** `test/orders/cancel_rejected_sale_from_orphan_test.dart` (mirrors
+`cancel_rejected_sale_test.dart`): reverse-AND-clear; reverse-BEFORE-clear (inventory 5 not 3 proves
+the payload was still present); idempotent second Cancel; orphan-already-gone still cancels the
+phantom header. `flutter analyze` clean on all touched files; `test/orders/` + `test/sync/` 254 green;
+full suite green except the **pre-existing** `who_is_working_screen_test.dart` failure (confirmed
+failing on clean `origin/main`, unrelated).
+
+---
+
 ## 2026-07-19 — #149: a rejected v2 oversell no longer leaks a phantom `completed` cloud order
 
 Branch `fix/rejected-v2-phantom-cloud-order`. Fixes the leak found during QA of #100/#121: on the

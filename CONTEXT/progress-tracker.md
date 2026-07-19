@@ -2852,6 +2852,33 @@ Spec: `context/specs/brief-sync-data-safety-and-efficiency.md`. Branch
 
 ## Session Notes
 
+**2026-07-19 — #150: a Sync Issues entry point for oversell recovery (client
+fallback).** Pairs with #149 (which stops the *cloud* phantom); this is the
+*client* fallback route. `OrderService.cancelRejectedSale` (full local undo of a
+server-rejected v2 sale) was reachable from **one** place — the tappable
+`sale_rejected` notification — so a swipe-dismiss stranded the phantom with no
+recovery affordance. Added a **second entry point**: a "Cancel this sale" action
+on the Sync Issues orphan tile for a `domain:pos_record_sale_v2` row →
+`OrderCommands.cancelRejectedSaleFromOrphan({orderId, orphanId, staffId})`, which
+runs the **same** reversal (`cancelRejectedSale`, sourcing `p_items` from the
+orphan via `SyncDao.rejectedSalePayload`) and **then** `discardOrphan`. **Critical
+ordering — reverse BEFORE clear** (the reversal reads the orphan payload, so
+discard-first would refund nothing); idempotent. UI: the tile computes
+`_rejectedSaleOrderId(item)` (gated on the action type + `p_order_id`) and renders
+a `TextButton` → a plain-language confirm dialog mirroring the notification copy →
+snackbar; the orphan action row became a `Wrap` so a third button can't overflow;
+all `ref` reads precede any `await`. Retry/Discard kept. No schema/migration
+(reversal is local-only). Invariants untouched (#12 orphan stays visible until the
+deliberate confirmed Cancel; #3 wallet reversed by compensating rows; #1/#4 no
+direct cloud read/write). The *"and/or"* order-detail entry point was left out
+(explicit alternative to the *preferred* route). TDD:
+`test/orders/cancel_rejected_sale_from_orphan_test.dart` (reverse-AND-clear;
+reverse-BEFORE-clear proven by inventory 5≠3; idempotent; orphan-gone still cancels
+the header). `flutter analyze` clean; `test/orders/`+`test/sync/` 254 green; full
+suite green except the pre-existing `who_is_working_screen_test` failure (verified
+failing on clean `origin/main`). Branch `feat/sync-issues-cancel-rejected-sale`;
+full detail in `BUILD_LOG.md` (2026-07-19).
+
 **2026-07-19 — #149: rejected v2 oversell no longer leaks a phantom `completed`
 cloud order.** Hardens Invariant #12 on the order *header*. On the guarded path
 (`feature.domain_rpcs_v2.record_sale`), the Confirm-time header push
