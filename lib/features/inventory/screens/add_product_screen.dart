@@ -139,11 +139,11 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   @override
   void initState() {
     super.initState();
-    // Open on the industry's default unit (#80): a crate business still defaults
-    // to Bottle (engaging empty-crate tracking), a pharmacy to Pack, etc. Applies
-    // to both the Fast-Add and Receive Stock mini-forms so neither shows a drink
-    // default to a non-beverage trade.
-    _unit = _lexicon.unit;
+    // Default to "No unit" (owner request): the unit is a deliberate, up-front
+    // choice, not a pre-filled trade guess. The trade's starter units are still
+    // OFFERED in the dropdown (via _dynamicUnits) — just not pre-selected — so a
+    // crate business picks Bottle itself to engage empty-crate tracking.
+    _unit = null;
     _dynamicUnits = _lexicon.starterUnits;
     _trackEmpties = _unit?.toLowerCase() == 'bottle';
     // #118: seed the Barcode field from a POS scan of an unknown code so the
@@ -395,7 +395,9 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     setState(() {
       _selectedExistingProduct = null;
       _barcodeCollisionName = null;
-      _unit = _lexicon.unit;
+      // Clearing an existing selection to add fresh resets to "No unit" (owner
+      // request) — the same up-front, non-pre-filled default as initState.
+      _unit = null;
       _size = null;
       _expiryDate = null;
       _trackEmpties = _unit?.toLowerCase() == 'bottle';
@@ -1832,6 +1834,35 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       ),
       const SizedBox(height: 20),
 
+      // ── PRODUCT UNIT (surfaced up-front, owner request) ─────────────────
+      // Always visible — not tucked inside "More details". Defaults to "No
+      // unit"; the trade's starter units are offered but not pre-selected.
+      // "No unit" is a real, always-valid choice, so save is never blocked.
+      _sectionLabel('PRODUCT UNIT', subtext),
+      const SizedBox(height: 8),
+      AppDropdown<String?>(
+        value: _unit,
+        hintText: 'No unit',
+        items: [
+          const DropdownMenuItem<String?>(
+            value: null,
+            child: Text('No unit'),
+          ),
+          ..._dynamicUnits.map(
+            (u) => DropdownMenuItem<String?>(value: u, child: Text(u)),
+          ),
+        ],
+        onChanged: (v) {
+          setState(() {
+            _unit = v;
+            // Auto-enable tracking for bottle products, off otherwise (a null
+            // unit is not a bottle).
+            _trackEmpties = v?.toLowerCase() == 'bottle';
+          });
+        },
+      ),
+      const SizedBox(height: 20),
+
       // ── MORE DETAILS (collapsible) ──────────────────────────────────────
       _moreDetailsHeader(subtext, textColor),
       if (_showMoreDetails) ...[
@@ -1886,34 +1917,6 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         inputFormatters: [CurrencyInputFormatter()],
       ),
       const SizedBox(height: 16),
-
-      // ── PRODUCT UNIT ────────────────────────────────────────────────────
-      _sectionLabel('PRODUCT UNIT', subtext),
-      const SizedBox(height: 8),
-      AppDropdown<String?>(
-        value: _unit,
-        hintText: 'No unit',
-        // "No unit" (#108) clears the unit — the product saves with just its
-        // name and is hidden wherever the unit would render.
-        items: [
-          const DropdownMenuItem<String?>(
-            value: null,
-            child: Text('No unit'),
-          ),
-          ..._dynamicUnits.map(
-            (u) => DropdownMenuItem<String?>(value: u, child: Text(u)),
-          ),
-        ],
-        onChanged: (v) {
-          setState(() {
-            _unit = v;
-            // Auto-enable tracking for bottle products, off otherwise (a null
-            // unit is not a bottle).
-            _trackEmpties = v?.toLowerCase() == 'bottle';
-          });
-        },
-      ),
-      const SizedBox(height: 8),
 
       // ── ALLOW FRACTIONAL SALES ──────────────────────────────────────────
       CheckboxListTile(
