@@ -241,6 +241,12 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
           activeRoute: 'pos',
           backgroundColor: bgCol,
           appBar: _buildAppBar(context, surfaceCol, textCol, subtextCol),
+          // #118 barcode scan, moved from the app bar to a FAB (owner request)
+          // in the slot the old cart FAB used. Always visible (not cart-gated).
+          floatingActionButton: PosBarcodeScanButton(
+            tier: _controller!.selectedGroup,
+            loadedProducts: _controller!.allProducts,
+          ),
           body: SafeArea(
             top: false,
             // Pull-to-refresh wraps the WHOLE body (above the header) so the
@@ -500,11 +506,6 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
         truncateTitleWithReveal: true,
       ),
       actions: [
-        // #118: always-visible one-shot barcode scan. Not gated on the cart.
-        PosBarcodeScanButton(
-          tier: _controller!.selectedGroup,
-          loadedProducts: _controller!.allProducts,
-        ),
         IconButton(
           icon: Icon(
             _isListView ? FontAwesomeIcons.list.data : FontAwesomeIcons.borderAll.data,

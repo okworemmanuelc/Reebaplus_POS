@@ -5,7 +5,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
-import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/core/widgets/app_fab.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart';
 import 'package:reebaplus_pos/features/pos/providers/pos_providers.dart';
@@ -42,14 +42,16 @@ class PosBarcodeScanButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return IconButton(
-      tooltip: 'Scan barcode',
-      icon: Icon(
-        FontAwesomeIcons.barcode.data,
-        size: context.getRSize(18),
-        color: Theme.of(context).colorScheme.primary,
-      ),
+    // Rendered as a FAB in the POS scaffold's FAB slot — the spot the old cart
+    // FAB used before #118 removed it (owner request). Still always visible: a
+    // one-shot scan is never gated on the cart. reserveBottomInset:false because
+    // the POS is a bottom-nav tab root whose visible bar already lifts the FAB
+    // clear of the system nav (see AppFAB).
+    return AppFAB(
+      label: 'Scan',
+      icon: FontAwesomeIcons.barcode.data,
       onPressed: () => _scan(context, ref),
+      reserveBottomInset: false,
     );
   }
 
