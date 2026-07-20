@@ -2,6 +2,131 @@
 
 ---
 
+## 2026-07-20 — QA: #117 self-resign + admin-removed device offboarding PASSED (+ bug #153 found)
+
+**Context.** #117 = the person's own exit: a non-owner staffer's "Leave / delete my account" (Profile),
+the owner seeing "Delete Business" instead (no resign), and a device auto-logging-out when its own
+membership flips to `removed`. All reuse `AuthService.logOutCurrentUser` so the unsynced-data wipe gate
+runs and local data is wiped only when the user is the sole member on the device.
+
+**Method / outcome.** PASSED.
+- **Owner path** — owner's Profile shows "Delete Business", no "Leave / delete my account" ✅ (user confirmed).
+- **Admin-removed auto-logout** — flipped the owner's own `user_businesses.status`→`removed` cloud-side;
+  app detected it on the next pull and **logged itself out automatically** (sole-member local wipe) ✅.
+  Restored membership→`active` immediately after; user signed back in and data re-synced from cloud
+  (cloud never touched — `clearAllData()`/`fullLogout()` are local-only). `_handleSelfRemoved` path:
+  [main.dart:365-374](lib/main.dart#L365) → [main.dart:269](lib/main.dart#L269) → [auth_service.dart:1294](lib/shared/services/auth_service.dart#L1294).
+- **Staffer self-resign** — accepted on code review (needs a non-owner login to observe live); same
+  `logOutCurrentUser` gate as the auto-logout that was verified firing.
+
+**Bug found during re-login → filed #153.** Signing back in threw `A ValueNotifier<String?> was used after
+being disposed`. Root cause: `ChangeNotifierProvider` disposes the notifier it returns, but four providers
+return a **service-owned** notifier (`deviceUserIdProvider`→AuthService.deviceUserIdNotifier — the crash;
+`activeCustomerProvider`, `pullStatusProvider`, `isOnlineNotifierProvider`). Fix = convert to the existing
+proxy/mirror pattern (`lockedStoreProvider` et al.) + a guard test. Not a #117 defect; filed ready-for-agent.
+
+---
+
+## 2026-07-20 — QA: #107 staff offboarding (admin Remove, frees email) PASSED
+
+**Context.** #107 = terminal **Remove** (Offboard) of a staff member, distinct from reversible Suspend.
+Server-authoritative RPC `remove_staff_member(p_business_id, p_user_id)` ([0149](supabase/migrations/0149_remove_staff_member.sql))
+called direct (not via outbox, like delete_business): sets `user_businesses.status='removed'` + nulls
+`users.auth_user_id` (frees the email) while KEEPING the users row as an Attribution Stub. Gated on
+`Gates.staffRemove` (`staff.remove`, CEO-only) at [staff_detail_screen.dart:779](lib/features/staff/screens/staff_detail_screen.dart#L779);
+owner + self removal rejected client- and server-side.
+
+**Method.** No real staff in test business `019f7aeb-…`, so seeded a disposable Cashier "QA Test Staffer"
+(fixed IDs `…000107` / `…0000b1`, fake `auth_user_id …0000a1`) cloud-side. User pulled it in, confirmed
+own CEO card shows **no Remove button** (owner lock), then removed the staffer via the red Remove button.
+
+**Outcome.** PASSED. In-app: Remove button visible for CEO, absent on own card, staffer vanished from
+active list with success toast. Cloud verified post-remove: `status='removed'`, `auth_user_id=NULL`
+(login freed), **name + email retained** (attribution stub intact) — all six acceptance criteria met.
+Disposable staffer hard-deleted afterward (leftover=0). "Freed email creates a brand-new business" not
+separately exercised end-to-end; nulled `auth_user_id` (the guard key for complete_onboarding 0121 /
+current_user_linked_business 0128) confirms the mechanism.
+
+---
+
+## 2026-07-20 — QA: #102 periodic 30s catch-up pull PASSED (observed)
+
+**Context.** #102 = keep the periodic `catchUpPull(reason:'periodic')` (30s tick,
+`_periodicSafetyNetTick`) + reconnect catch-up (`catchUpPull(reason:'reconnect')`) as the live-sync
+safety net that makes Broadcast's "no replay" acceptable.
+
+**Outcome.** PASSED by direct observation. Throughout the #101 session every cloud-side price change
+to Titus Sardine was converged to the device within 30s via `[SyncService] Catch-up pull (periodic)`
+— the periodic tick demonstrably delivered on every attempt (3×+), which is precisely #102's backstop
+guarantee. Cadence confirmed at 30s (`_autoPushPeriodicInterval`). The offline→reconnect variant
+(`reason:'reconnect'`) was not separately exercised (user accepted the observed periodic passes).
+
+---
+
+## 2026-07-20 — QA: #101 Broadcast live signal verified-by-evidence (live delivery blocked by emulator websocket)
+
+**Context.** Manual QA pass of closed issues #81–#119. #101 = the Broadcast "doorbell": a per-tenant
+Realtime signal (migration 0147 trigger → topic `store_<businessId>`, RLS 0148) that the client
+subscribes to (`CloudTransport.startBroadcast`) and reacts to with a debounced
+`catchUpPull(reason:'broadcast')`. Ran against business `019f7aeb-480b-7ea6-91a5-43719c3c8d85`,
+product Titus Sardine, changing `retailer_price_kobo` cloud-side and watching the `flutter run`
+console for `[SyncService] Catch-up pull (broadcast)`.
+
+**Outcome.** Verified-by-evidence — NOT a live-fire pass, and **no bug filed**. Across three attempts
+(one with the phone's Realtime connection confirmed up cloud-side at 09:44:59Z, change made at
+09:46:54Z) the doorbell never fired; every change was instead caught by the 30-second periodic pull
+(#102). The console showed `[CloudTransport] Broadcast subscribed` immediately followed by
+`RealtimeSubscribeStatus.timedOut` / `channelError`, and the #93 `postgres_changes` path
+(`[SyncService] Realtime Event:`) was **also** silent for the same changes.
+
+**Why this is environment, not a #101 defect.**
+- Cloud plumbing verified live: policy `tenant receives own store broadcast signal` (SELECT/
+  authenticated) on `realtime.messages`; trigger `zz_broadcast_sync_signal` attached to
+  products/orders/businesses; function present + SECURITY DEFINER; `supabase_realtime_messages`
+  replication slot streaming.
+- Client code verified on `main` (PR #126): `startBroadcast` → `_onBroadcastSignal` → `catchUpPull`;
+  `auto_lock_wrapper.dart:101` restarts realtime on resume; no path stops realtime on pause.
+- Realtime logs show tenant `ewwyofbvfjyqqirrcaou` repeatedly `Stop tenant … no connected users` →
+  `:shutdown`; the socket connects but its **channels won't hold** on this emulator.
+- **Both** live paths (#101 broadcast + #93 postgres_changes) died together while the HTTPS periodic
+  pull kept working — they share one websocket, so a channel-level failure silences both. A
+  broadcast-only failure would have been a real finding; a joint failure is the connection.
+- The doorbell fired live **earlier in this same session** — proves the feature works here under a
+  healthy connection.
+
+**Correctness guarantee holds.** #101's promise ("a missed signal is recovered by the periodic /
+reconnect pull") was demonstrated 3×: every cloud change reached the device within 30s. Live-delivery
+speed is the only thing not reproducible today; retry the live-fire on a physical device.
+
+---
+
+## 2026-07-19 — Fix: 38 phantom analyzer errors under build/ios & build/macos blocking run/debug
+
+**Problem.** `flutter analyze` reported **38 errors**, all from two stray files:
+`build/{ios,macos}/SourcePackages/firebase_messaging-16.4.2/lib/src/messaging.dart`. These are
+orphaned copies of `firebase_messaging`'s `messaging.dart` that Xcode's Swift Package Manager cache
+dumped into the `SourcePackages/` build dir. Out of their package context they reference undefined
+symbols (`FirebaseMessagingPlatform`, `FirebaseApp`, `RemoteMessage`, `NotificationSettings`…), so
+the analyzer flagged them. `analysis_options.yaml` had **no `analyzer.exclude`**, so the analysis
+server (which also powers the IDE Problems panel) walked the entire generated `build/` output tree.
+The errors surfaced as "ios and macos folder" problems and gated the run/debug flow.
+
+**Root cause.** Generated build output was being statically analyzed. `build/` is gitignored but the
+Dart analyzer does not read `.gitignore` — it only skips what `analyzer.exclude` lists.
+
+**Fix.**
+- `analysis_options.yaml`: added `analyzer.exclude: [build/**]` so generated output is never analyzed
+  (standard Flutter best practice; durable — survives future stray files in the build cache).
+- Deleted the two stray `messaging.dart` files from the build cache to clear the state immediately.
+- `.vscode/settings.json`: added `search.exclude` / `files.watcherExclude` for `**/build` and
+  `**/.dart_tool`, plus `java.import.exclusions` for `**/build/**`, so no IDE extension re-indexes the
+  ~1,700 native Swift/ObjC/C++ files under `build/{ios,macos}/SourcePackages` (also speeds indexing).
+
+**Verified.** `flutter analyze` → **"No issues found!"** (was 38 errors). No app code touched; the
+real build is unaffected — only which files the analyzer/IDE look at changed.
+
+---
+
 ## 2026-07-19 — #150: a Sync Issues entry point for oversell recovery (fallback for a dismissed alert)
 
 Branch `feat/sync-issues-cancel-rejected-sale` (off `origin/main` = #149's merge). Pairs with #149
