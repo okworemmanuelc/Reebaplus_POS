@@ -10,6 +10,19 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### #153 provider-lifecycle crash (re-login) — FIXED (2026-07-20)
+QA of the closed batch (during #117 offboarding) surfaced a re-login crash: four
+`ChangeNotifierProvider`s returned a **service-owned** `ValueNotifier`, so Riverpod
+disposed it out from under its owner (`A ValueNotifier<String?> was used after being
+disposed`). Fixed with a non-owning `mirrorNotifier` factory
+([mirror_notifier.dart](../lib/core/providers/mirror_notifier.dart)) — all 4 unsafe
+sites (`deviceUserId`/`activeCustomer`/`pullStatus`/`isOnline`) plus the 3 pre-existing
+safe proxy sites (`currentIndex`/`lockedStore`/`storeExplicitlyChosen`) routed through
+it — and a static ban-test guard against any `ChangeNotifierProvider` returning a
+borrowed notifier. `flutter analyze` clean, 6 new tests green. Branch
+`fix/provider-disposes-service-owned-notifier`, commit `bd1f755` (PR pending). Details
+in BUILD_LOG.
+
 ### 11-item feature/bug batch — PRD #106 + 13 issues filed; Phase 2 implementation STARTED (2026-07-11)
 Ran the full idea→issues flow (`/ask-matt` → `/grill-with-docs` → `/to-prd` →
 `/to-issues`) over a raw 11-item backlog (staff offboarding, optional units,
