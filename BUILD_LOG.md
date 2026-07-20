@@ -2,6 +2,35 @@
 
 ---
 
+## 2026-07-20 — Fix: #153 ChangeNotifierProvider disposing service-owned notifiers (re-login crash)
+
+**Context.** Re-login after an admin-removed device wipe threw `A ValueNotifier<String?> was used after
+being disposed` (found during #117 QA). `ChangeNotifierProvider<T>` disposes whatever notifier its body
+returns — on teardown AND every rebuild — but four providers returned a **service-owned** notifier, so
+Riverpod disposed a notifier the owning service still writes to. `deviceUserIdProvider` fired readily
+because `AuthService` is itself a `ChangeNotifier` (notifies on every login/logout → rebuilds the provider
+→ re-disposes the same foreign notifier).
+
+**Fix.** New non-owning factory `mirrorNotifier<T>` ([mirror_notifier.dart](lib/core/providers/mirror_notifier.dart)):
+Riverpod owns a local proxy; the service notifier is only ever listened to (two-way mirrored, listener
+removed on dispose, original never disposed). Converted the 4 unsafe sites (`deviceUserIdProvider`,
+`activeCustomerProvider`, `pullStatusProvider`, `isOnlineNotifierProvider`) AND folded the 3 pre-existing
+safe proxy sites (`currentIndexProvider`, `lockedStoreProvider`, `storeExplicitlyChosenProvider`) onto the
+same helper — deleting ~80 lines of duplicated boilerplate. Behaviour unchanged for consumers (value-
+identical two-way mirror; consumers only read/listen).
+
+**Guard.** [mirror_notifier_ban_test.dart](test/providers/mirror_notifier_ban_test.dart) — a source scan
+that fails if any `ChangeNotifierProvider` body returns a borrowed `ref.watch`/`ref.read` notifier (any
+`ChangeNotifier` subtype, not just `ValueNotifier`); a provider that constructs+owns its notifier is left
+alone. Plus [mirror_notifier_test.dart](test/providers/mirror_notifier_test.dart) proving the original
+survives provider dispose AND rebuild (the crash repro).
+
+**Verified.** `flutter analyze` clean; 6 new tests green; full suite otherwise unchanged (the one
+pre-existing unrelated failure in `who_is_working_screen_test.dart` fails identically on base main).
+Branch `fix/provider-disposes-service-owned-notifier`, commit `bd1f755`.
+
+---
+
 ## 2026-07-20 — QA: #117 self-resign + admin-removed device offboarding PASSED (+ bug #153 found)
 
 **Context.** #117 = the person's own exit: a non-owner staffer's "Leave / delete my account" (Profile),
