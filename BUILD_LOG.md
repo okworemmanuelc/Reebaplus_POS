@@ -31,6 +31,24 @@ Branch `fix/provider-disposes-service-owned-notifier`, commit `bd1f755`.
 
 ---
 
+## 2026-07-20 — QA: #113 product barcode field + lookup PASSED
+
+**Context.** #113 = optional `products.barcode` with SOFT uniqueness (no DB UNIQUE, to avoid jamming the
+offline outbox) + a live "already used by…" warning + a lookup-by-barcode method. Foundation for #118 scan.
+
+**Outcome.** PASSED. Cloud verified: `products.barcode` is nullable `text`, **no unique constraint**.
+In-app: the "Barcode (optional)" field is present on Add + Edit; typing a barcode already on another product
+shows *'Already used by "X". You can still save.'* and the save is **not blocked** (user confirmed). User
+noted a barcode CAN be assigned to more than one product — confirmed that is the intended soft-uniqueness
+(offline-first: a hard UNIQUE would 23505-reject one of two offline tills and jam the queue). Self-exclusion
+verified in code (`match.id != currentProduct.id`). Lookup `catalogDao.findProductByBarcode` powers the
+warning (first match); trade-off carried to #118: a scan of a shared barcode resolves to the first match.
+
+Also seeded 3 QA products (Frozen Chicken 223 / Whole Turkey 55 / Frozen Fish 300 cartons) cloud-side with
+product+inventory+cost_batch rows (IDs prefix `00000113`) as scan/sell fixtures for #118.
+
+---
+
 ## 2026-07-20 — QA: #117 self-resign + admin-removed device offboarding PASSED (+ bug #153 found)
 
 **Context.** #117 = the person's own exit: a non-owner staffer's "Leave / delete my account" (Profile),
