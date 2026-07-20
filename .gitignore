@@ -43,6 +43,11 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+/android/build/
+
+# web-pos was moved to the reebaplus_web repo (#104); nothing here should be
+# tracked. Ignore any stray regenerated tree (e.g. its Next.js build trace).
+/web-pos/
 
 # Claude Code
 .claude/
