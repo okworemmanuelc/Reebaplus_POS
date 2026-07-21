@@ -297,26 +297,26 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
                         textCol: textCol,
                         borderCol: borderCol,
                       ),
+                // Combined discoverability hint (owner request): the tap-to-add
+                // and tap-and-hold tips used to render as TWO stacked banners
+                // that cluttered the grid. They are now ONE banner. Each tip
+                // still keeps its own retire count in the UI-hint service;
+                // dismissing the combined banner retires both. Both gestures act
+                // on a product tile, so gate on a non-empty grid.
                 if (!_controller!.isLoading &&
-                    _showPosTapHint &&
                     !needsStoreSelection &&
-                    _controller!.filteredProducts.isNotEmpty)
+                    _controller!.filteredProducts.isNotEmpty &&
+                    (_showPosTapHint || _showPosHint))
                   _buildInlineHint(
-                    message: 'Tap a '
-                        '${ref.watch(industryLexiconProvider).itemLower}'
-                        ' to add it to the cart.',
+                    message: _posGridHintMessage(
+                      ref.watch(industryLexiconProvider).itemLower,
+                    ),
                     onDismiss: () {
-                      setState(() => _showPosTapHint = false);
+                      setState(() {
+                        _showPosTapHint = false;
+                        _showPosHint = false;
+                      });
                       uiHintService.markShown(UiHintService.hintPosTapAdd);
-                    },
-                  ),
-                if (!_controller!.isLoading && _showPosHint && !needsStoreSelection)
-                  _buildInlineHint(
-                    message: 'Tap and hold a '
-                        '${ref.watch(industryLexiconProvider).itemLower}'
-                        ' to edit it.',
-                    onDismiss: () {
-                      setState(() => _showPosHint = false);
                       uiHintService.markShown(UiHintService.hintPosLongpress);
                     },
                   ),
@@ -429,10 +429,28 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
     return 'All';
   }
 
+  /// Copy for the combined POS grid hint. Reflects whichever tips are still
+  /// live for this user: when both apply, one sentence carries both gestures.
+  /// The hold gesture opens the quantity/discount sheet (it does NOT edit the
+  /// product — see product_grid `_openAddModal`), so it reads "choose a
+  /// quantity", not "edit".
+  String _posGridHintMessage(String item) {
+    final tapAdd = _showPosTapHint;
+    final hold = _showPosHint;
+    if (tapAdd && hold) {
+      return 'Tap a $item to add it to the cart, or tap and hold to '
+          'choose a quantity.';
+    }
+    if (hold) {
+      return 'Tap and hold a $item to choose a quantity.';
+    }
+    return 'Tap a $item to add it to the cart.';
+  }
+
   // Inline dismissible hint shown above the product grid (first couple of
-  // visits). Mirrors the cart screen's "tap an item to edit" banner. Drives
-  // both the POS long-press-to-edit tip and the joining-staff "tap to add"
-  // coach tip (issue #32); each is view-counted under its own hint key.
+  // visits). Mirrors the cart screen's "tap an item to edit" banner. Renders
+  // the single combined tap-to-add / tap-and-hold tip; view-counted under each
+  // tip's own hint key (issue #32 + the long-press coach tip).
   Widget _buildInlineHint({
     required String message,
     required VoidCallback onDismiss,
