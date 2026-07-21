@@ -2,6 +2,231 @@
 
 ---
 
+## 2026-07-21 — QA: #116 receipt paper size manual 58/80mm (default 58mm) PASSED
+
+**Context.** #116 = a device-local paper-size setting (58mm default, 80mm option) near the printer picker, and
+a receipt layout that renders correctly at both widths (58mm = 32 chars, 80mm = 48 chars). Auto-detect is
+impossible over Bluetooth ESC/POS, so it's manual. Commit landed under the #106 batch.
+
+**Outcome.** PASSED (code + tests; live-limited to the setting UI — no physical printer on the emulator).
+[receipt_paper_size.dart](lib/features/pos/services/receipt_paper_size.dart): `ReceiptPaperSize{mm58,mm80}`
+with `charsPerLine` 32/48, `escPos` mapping, `logoWidthPx` 200/384; `fromStorage` defaults unknown/absent →
+mm58. Setting UI is a 58/80mm `SegmentedButton` inside
+[printer_picker.dart:111](lib/shared/widgets/printer_picker.dart#L111), persisted device-local via
+`PrinterService.savePaperSize/getPaperSize` on SharedPreferences key `printer_paper_size` (never synced,
+default 58mm). [receipt_builder.dart](lib/features/pos/services/receipt_builder.dart) is parameterized by
+`paperSize` (defaults mm58) — threads `escPos`, `charsPerLine`, `logoWidthPx` through every line + the logo
+raster, so 58mm output is byte-identical to pre-#116. Ran
+[test/receipt_builder_test.dart](test/receipt_builder_test.dart) — 11/11 green, incl. the exact AC #4: "58mm
+renders a 32-char line" + "80mm renders a 48-char line from the identical input", plus truncation/padding
+edges and the two-column totals rows. Owner confirmed the 58/80mm toggle appears near the printer picker,
+defaults to 58mm, and persists.
+
+---
+
+## 2026-07-21 — QA: #114 fix invisible ListTile tap-ripple (4 sites) PASSED
+
+**Context.** #114 = four coloured list rows swallowed their Material ink-ripple because a surface-coloured
+wrapper sat above the ink layer, so a tap looked "dead". Fix = the cart-screen pattern: a see-through
+`Material(type: MaterialType.transparency)` above the coloured wrapper so the ripple shows, background
+unchanged. Ripple-only (no row sets its own tile colour). Commit `34fe743` (PR #124).
+
+**Outcome.** PASSED (live on the two reachable sites + identical code on all four). All four match the
+canonical cart pattern ([cart_screen.dart:276](lib/features/pos/screens/cart_screen.dart#L276)):
+login user-picker ([login_screen.dart:1041](lib/features/auth/screens/login_screen.dart#L1041)), stock-count
+sheet row ([stock_count_screen.dart:1104](lib/features/inventory/screens/stock_count_screen.dart#L1104)),
+receive-checkout sheet row ([receive_checkout_screen.dart:839](lib/features/receiving/screens/receive_checkout_screen.dart#L839)),
+CEO sign-up crate toggle ([ceo_sign_up_screen.dart:1362](lib/features/auth/screens/ceo_sign_up_screen.dart#L1362),
+a `SwitchListTile`). Owner confirmed the tap-ripple appears on the stock-count date row + receive-checkout
+picker row on the emulator. The two setup-gated sites (login picker needs a shared PIN; crate toggle needs a
+fresh Beverage onboarding — live business is Frozen Foods) taken on the identical one-line pattern. Visual-only
+change, no unit test.
+
+---
+
+## 2026-07-21 — QA: #111 persistent POS search bar (remove search icon) PASSED
+
+**Context.** #111 = the POS search box is always visible in its existing position (between the
+price/manufacturer dropdowns and the category chips); the app-bar search icon + show/hide toggle are retired;
+searching filters the grid exactly as before. Commit `0378000` (PR #125).
+
+**Outcome.** PASSED (live + code). `_buildSearchField` renders unconditionally between `_buildHeader` and
+`CategoryFilterBar` — no `if` guard ([pos_home_screen.dart:268](lib/features/pos/screens/pos_home_screen.dart#L268)).
+No `_showSearch`/`_isSearching`/toggle state anywhere; the app bar carries only the grid/list view toggle + the
+notification bell — no search icon ([pos_home_screen.dart:526-537](lib/features/pos/screens/pos_home_screen.dart#L526-L537)).
+`onChanged` still calls `_controller!.updateSearch(v)`, driving the same `filteredProducts` grid. Owner
+confirmed the always-visible search box on the emulator (also visible in the #110/banner screenshot).
+
+---
+
+## 2026-07-21 — Fix: combine the two POS grid coaching banners into one
+
+**Context.** On the POS product grid the tap-to-add tip ("Tap a product to add it to the cart.") and the
+tap-and-hold tip stacked as TWO separate `_buildInlineHint` banners, cluttering the screen (owner reported
+with a screenshot). Also the hold tip's copy was wrong: it read "…to edit it", but on POS a long-press opens
+the quantity/discount sheet (`EditItemModal.showForProduct` via product_grid `_openAddModal`) — it does NOT
+edit the product (a known-copy issue, cf. PR #148).
+
+**Fix (commit `bdd1cd8`, pushed to main).** Merged the two into ONE banner in
+[pos_home_screen.dart](lib/features/pos/screens/pos_home_screen.dart). New `_posGridHintMessage(item)` adapts
+the copy: both tips live → "Tap a {item} to add it to the cart, or tap and hold to choose a quantity."; only
+hold → "Tap and hold a {item} to choose a quantity."; only tap-add → the original add copy. A single ✕
+dismisses both (each still `markShown` under its own `hintPosTapAdd` / `hintPosLongpress` key, retire-after-2
+intact). Banner now gated on a non-empty grid (both gestures need a tile). Fixed the hold copy to "choose a
+quantity". `flutter analyze` clean; `ui_hint_service_test` 4/4 green (keys unchanged). NOTE: Inventory's
+"…press and hold to edit it" banner (#110) is CORRECT and untouched — there, hold really does edit.
+
+---
+
+## 2026-07-21 — QA: #110 Inventory press-and-hold-to-edit hint PASSED
+
+**Context.** #110 = a dismissible "press and hold a product to edit it" banner atop the Inventory Products
+list. Shown once per staff member, only to those who can edit (permission-gated), permanent local-only
+dismissal, reusing the existing UI-hint service. Commit `6b825db` (PR #127) + fix `01b6187`.
+
+**Outcome.** PASSED (live + tests). Banner renders above the product list
+([inventory_screen.dart:764](lib/features/inventory/screens/inventory_screen.dart#L764)), gated on
+`Gates.editProductPrice.allows(ref)` (same gate as the long-press gesture at
+[inventory_screen.dart:1243](lib/features/inventory/screens/inventory_screen.dart#L1243)) + a non-empty list +
+not-yet-dismissed. Dismissal key is scoped per staff member (`hint_inventory_longpress_<userId>`); the ✕ calls
+`markDismissed` → retires it in ONE tap (fix `01b6187` made per-staff + permanent-on-first-dismiss deliberate).
+Local-only via SharedPreferences (never synced). Ran
+[test/shared/services/ui_hint_service_test.dart](test/shared/services/ui_hint_service_test.dart) — 4/4 green,
+incl. "inventory long-press hint retires permanently on first dismissal (#110)".
+
+---
+
+## 2026-07-21 — QA: #112 offer only 3 industries + trade-aware product form copy PASSED
+
+**Context.** #112 = onboarding + Settings pickers offer only three trades (Beverage distributor, Pharmacy,
+Frozen Foods & Grocery); the other six stay in the registry (no migration) so existing tenants keep
+normalizing + their features; product form copy morphs per trade; confirm "Beverage distributor" label +
+legacy "beer distributor" alias. Commit `0b4cbc6` (PR #137).
+
+**Outcome.** PASSED (code + tests). A `selectable` flag on [industry.dart](lib/core/industry/industry.dart):
+only the three are `selectable: true`; `selectableCatalogue` = exactly those three in plan order; the other
+six + generic are not selectable. `catalogue` keeps all nine (minus generic) so a hidden-trade tenant still
+resolves + keeps features. Both pickers derive from the registry — onboarding renders `selectableCatalogue`
+([ceo_sign_up_screen.dart:854](lib/features/auth/screens/ceo_sign_up_screen.dart#L854)); Settings uses
+`kSelectableBusinessTypes` and grandfathers a hidden-trade tenant's current type
+([business_info_screen.dart:254](lib/core/settings/business_info_screen.dart#L254)) — both non-drifting
+(derived from `Industry`). Product form copy uses `_lexicon.*` throughout (no hardcoded "Product"/"Item"
+stragglers). "Beverage distributor" label + "beer distributor" alias present; DB keeps legacy 'Beer
+distributor', mapped display↔DB at load/save (no rewrite). Ran
+[test/industry/industry_registry_test.dart](test/industry/industry_registry_test.dart) — 18/18 green.
+
+---
+
+## 2026-07-21 — QA: #109 category edit & delete (rename; delete → Uncategorized) PASSED
+
+**Context.** #109 = a "Manage categories" surface in Inventory to rename or delete a category. Rename updates
+everywhere + rejects a collision; delete soft-deletes + moves products to Uncategorized after a confirmation
+showing the affected count; category filter gains an Uncategorized bucket; reuses the product-add permission.
+Commit `b0f7019` (PR #129).
+
+**Outcome.** PASSED (code + tests). [manage_categories_sheet.dart](lib/features/inventory/widgets/manage_categories_sheet.dart)
++ DAO ([daos_catalog.dart:303-396](lib/core/database/daos_catalog.dart#L303-L396)): `renameCategory` writes
+the new name + full-row enqueues (preserves description); collision guard `categoryNameExists` is
+case-insensitive, excludes self (case-only self-edit allowed). `softDeleteCategoryAndReassign` tombstones the
+category + reassigns its products to `category_id: null` atomically, pushing an EXPLICIT null (copyWith, not
+Value.absent) so the cloud clears it. `countProductsInCategory` drives the confirmation count. Uncategorized
+bucket via `kUncategorizedCategoryId` sentinel ([category_filter.dart](lib/core/constants/category_filter.dart)),
+wired into the Inventory filter. Gated on `Gates.addProduct` at the button + re-checked at each write boundary.
+Ran [test/inventory/category_manage_dao_test.dart](test/inventory/category_manage_dao_test.dart) — 7/7 green,
+incl. the explicit-null-push sync-correctness test.
+
+---
+
+## 2026-07-20 — Feature+QA: #108 optional product unit surfaced up-front + default "No unit" PASSED
+
+**Context.** #108 shipped nullable `products.unit` (clearable trade unit, absent renders nothing, null treated
+as not-a-bottle). Owner then requested a UX change: surface the unit selector OUT of the collapsed "More
+details" section into the always-visible Add Product form, default it to "No unit" (no trade pre-fill), and
+make it an explicit always-valid choice ("No unit" pre-selected so Save is never blocked).
+
+**Outcome.** PASSED (live + tests) + change SHIPPED (commit `5ccd354`, pushed to main). In
+[add_product_screen.dart](lib/features/inventory/screens/add_product_screen.dart): `_unit` now defaults to
+`null` at both fresh-add init sites; the PRODUCT UNIT `AppDropdown` moved from `_moreDetailsChildren` into
+`_fastFormChildren` (right under Quantity). "No unit" is a real, always-valid selection. `flutter analyze`
+clean; #108's 36 tests green. Flagged to owner: defaulting to null removes the auto-Bottle default (#80) that
+engages crate tracking for beverage tenants — accepted (test business is Frozen Foods).
+
+---
+
+## 2026-07-20 — QA: #119 Reports attention dot PASSED
+
+**Context.** #119 (builds on #115) = replace the number on the Home Reports button with a single dot. Dot
+lights when the viewer has pending approvals OR an un-reviewed daily stock count; clears when they open Daily
+Reconciliation. CEO/Manager only; the in-hub Approvals card keeps its numeric badge. Commit `ecd5366`
+(PR #136).
+
+**Outcome.** PASSED (live + unit test). Live on emulator (owner = CEO): the Home Reports button shows a
+**dot, not a number** ([home_screen.dart:522](lib/features/dashboard/screens/home_screen.dart#L522), 8×8
+`colorScheme.error` circle, gated `isCeo || isManager` at
+[home_screen.dart:382](lib/features/dashboard/screens/home_screen.dart#L382)). Seeded ONE pending
+`stock_adjustment_requests` row cloud-side (id `00000119-…-01`, "add 3 cartons Frozen Chicken"); after
+pull-to-refresh the user confirmed the Home dot lit AND the in-hub **Approvals card showed the number `1`**.
+Clarified a non-bug: the card badge only draws `if (badgeCount > 0)`
+([reports_hub_screen.dart:261](lib/features/dashboard/screens/reports_hub_screen.dart#L261)) — it is a
+notification badge, so zero pending correctly shows no number (unchanged pre-#119 behaviour). Seeded row
+DELETED afterwards (test data reverted).
+
+Ran [test/dashboard/reports_attention_test.dart](test/dashboard/reports_attention_test.dart) — 14/14 green,
+covering the parts not driven by hand: un-reviewed stock count lights the dot, a later-reviewed count clears
+it, and `ReconReviewMarkerNotifier` stamps on opening Daily Reconciliation + persists per-user across restart
+(clear wired via `daily_reconciliation_list_screen` initState → `markOpenedNow`).
+
+**Test-data ledger.** Seeded + reverted: pending request `00000119-0001-4000-8000-000000000001` (deleted).
+Note: the Supabase MCP `execute_sql` tool never registered this session; used `supabase db query --linked`
+(elevated Management API path) for the seed/read/delete instead.
+
+---
+
+## 2026-07-20 — QA: #115 stuck approvals count (root cause) PASSED
+
+**Context.** #115 = the Reports "pending approvals" count froze (observed stuck on 3). Root cause was NOT the
+count query — it was the PULL path resurrecting resolved rows: the generic LWW clobber-guard is status-blind
+and its same-second `>=` tie (plus clock skew) let a stale/out-of-order cloud snapshot carrying the pre-
+resolution `pending` overwrite a locally-resolved request, re-adding it to the pending set. Fix (commit
+`6f8467a`, PR #131) = `Restore.monotonicStatus` on both count feeders (`stock_adjustment_requests` +
+`quick_sale_requests`).
+
+**Outcome.** PASSED on code + live regression test. Code confirmed: the guard at
+[sync_registry.dart:203-209](lib/core/database/sync_registry.dart#L203-L209) is PURELY status-based — an
+incoming `pending` is dropped whenever the local row is already terminal, regardless of timestamp (so even a
+newer/clock-skewed `pending` cannot revert a resolution). Ran the real-restore-seam regression
+[test/inventory/stock_approval_pending_clear_test.dart](test/inventory/stock_approval_pending_clear_test.dart)
+— 5/5 green: (1) approve→stale-pending-repull stays resolved, (2) reject→stale-pending-repull stays resolved,
+(3) a NEWER pending re-pull (clock skew) still cannot revert, (4) the guard does NOT block genuine cross-
+device `pending→approved` convergence, (5) sibling `quick_sale_requests` guarded identically. Test #3 is the
+exact "resurrection" scenario reproduced and defeated — the count can no longer bounce back up.
+
+**Environment-accepted (per emulator/tooling limits, stated to user).** The optional live app-visible seed
+(insert a fake pending → watch the badge drop on resolve) was blocked only because the Supabase
+`execute_sql` MCP tool would not register in this session (server showed Connected at the CLI, tool never
+surfaced); its outcome is a strict subset of regression #1/#2. Cross-device promptness needs two live devices
++ websocket (same limit as #101). Root cause verified, not just the symptom.
+
+---
+
+## 2026-07-20 — QA: #118 POS barcode scan at checkout PASSED
+
+**Context.** #118 = a one-shot barcode scan on the POS/checkout screen. An owner-requested tweak already
+shipped to main (commits `755d8fe` + `2a035c5`): the scan control moved from the app bar to a floating
+**"Scan"** `AppFAB` in the old cart-FAB slot ([pos_barcode_scan_button.dart](lib/features/pos/widgets/pos_barcode_scan_button.dart),
+wired at [pos_home_screen.dart:246](lib/features/pos/screens/pos_home_screen.dart#L246)).
+
+**Outcome.** PASSED (user confirmed on emulator). Scan FAB is always visible incl. empty cart (never
+cart-gated); old floating cart button removed, cart still reachable from the bottom nav bar; tapping Scan
+opens the camera and requests Android CAMERA permission on first use. Found→add-to-cart path uses the SAME
+`cartProvider.addItem` with store-scoped `maxStock` + active price `tier` a tap would apply; unknown→
+`AppNotification.showError` + `AddProductScreen(prefilledBarcode:)`; camera auto-closes after one scan
+(`scanner.scanOnce`). Scanner sits behind the `barcodeScannerProvider` seam (test seam + emulator-camera
+independent). Fixture barcode `12345678` on 3 products resolves to first match (`findProductByBarcode`) —
+the #113 soft-uniqueness trade-off, verified in code. CAMERA declared in AndroidManifest.
+
+---
+
 ## 2026-07-20 — Fix: #153 ChangeNotifierProvider disposing service-owned notifiers (re-login crash)
 
 **Context.** Re-login after an admin-removed device wipe threw `A ValueNotifier<String?> was used after
