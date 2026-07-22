@@ -39116,9 +39116,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final OrderCrateLinesDao orderCrateLinesDao = OrderCrateLinesDao(
     this as AppDatabase,
   );
-  late final CrateLedgerDao crateLedgerDao = CrateLedgerDao(
-    this as AppDatabase,
-  );
+  late final CratePoolDao cratePoolDao = CratePoolDao(this as AppDatabase);
   late final SettingsDao settingsDao = SettingsDao(this as AppDatabase);
   late final BusinessesDao businessesDao = BusinessesDao(this as AppDatabase);
   late final SystemConfigDao systemConfigDao = SystemConfigDao(

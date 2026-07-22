@@ -158,6 +158,66 @@ _Avoid_: server-arrival order as the FIFO key; prompting the user per corrected
 sale; treating an assignment as permanent (it is stable only until an earlier
 sale arrives).
 
+### Crates
+
+Beverage-only vocabulary — every term is gated by `isCrateBusiness` and never
+leaks to another trade (so these nouns stay out of the `Lexicon`, by design).
+See ADR 0020 and PRD #156.
+
+**Empties Pool**:
+The empty returnable crates a business physically holds, per manufacturer. The
+"empties on hand" figure. Its truth is `SUM(quantity_delta)` over the business-
+side [Crate Ledger] rows (per manufacturer, and per store when store-stamped) —
+the same number at every store-rollup level, so the All-Stores total always
+equals the sum of the store totals. Historically also mirrored in the
+`manufacturers.empty_crate_stock` scalar and the `*_crate_balances` caches; those
+are being demoted to derived/local projections (ADR 0020).
+_Avoid_: reading a stored total as authoritative; letting the business total and
+the per-store totals disagree; treating a customer's or supplier's owed crates as
+part of the pool (those are debts, not on-hand stock).
+
+**Crate Ledger**:
+The append-only record of every crate movement — `crate_ledger` (customer- and
+business-side) and `supplier_crate_ledger`. One signed, store-stamped row per
+movement (`issued` / `returned` / `damaged` / `adjusted` / `transferred_in` /
+`transferred_out`; supplier side: `received` / `returned` / `adjusted`). It is
+the single source of truth; every crate balance is derived from it, exactly as
+the wallet balance is derived from `wallet_transactions`. Corrections are new
+compensating rows, never edits. Every movement routes through the one Crate Pool
+seam (`CratePoolDao`).
+_Avoid_: updating or deleting a ledger row; writing a crate table outside the
+seam; shipping a balance as an absolute value (only ledger rows sync).
+
+**Crate Deposit**:
+The refundable money a returnable crate is worth — its per-crate **rate** is
+`manufacturers.deposit_amount_kobo`, snapshotted onto `order_crate_lines.
+deposit_rate_kobo` at sale time so a later rate edit never changes a historic
+settlement. A crate sale is either **Money-Track** or **Crate-Track** (below).
+_Avoid_: recomputing a historic deposit at today's rate; conflating the deposit
+*money* flow (largely unmodelled app-wide — a separate PRD) with the crate
+*count*, which #156 makes trustworthy.
+
+**Held Deposit**:
+Deposit money the shop is currently holding for a customer against crates they
+took but haven't returned — the `crate_deposit`-family legs on the customer
+wallet ledger (net = paid-in − refunded − forfeited). It is a liability: money
+owed back. Net-position honesty (#163) subtracts it from business worth.
+_Avoid_: counting held deposits as income; leaving them inflated after a return
+or a cancel (the deposit legs must be reversed with a deposit-family reference
+type, not a generic `void`).
+
+**Money-Track vs Crate-Track**:
+The two ways a crate sale is settled. **Money-Track** = the customer paid a
+deposit for the crates (`deposit_paid_kobo > 0`); the crates are settled in
+*money* — the deposit is held on the wallet and later refunded / forfeited /
+shortfall-charged, and **no** crate balance is issued. **Crate-Track** = no
+deposit paid (`deposit_paid_kobo == 0`); the crates are tracked as a *count* — an
+`issued` ledger row raises the customer's crate debt, a later `returned` row nets
+it back toward zero. A walk-in (no registered customer) holds neither.
+_Avoid_: issuing a crate balance for a money-track sale (that double-counts the
+deposit as both money held and crates owed); netting a money-track return against
+the crate ledger.
+
 ### Industry
 
 **Industry**:

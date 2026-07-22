@@ -77,53 +77,19 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
     }
   }
 
+  /// Manually set a manufacturer's empty-crate count (management dialog).
+  /// Delegates to the Crate Pool seam (#157), which records the correction as a
+  /// reconciling ledger delta and maintains the scalar + per-store caches.
   Future<void> updateManufacturerStock(
     String id,
     int newStock, {
     String? storeId,
   }) async {
-    final now = DateTime.now();
-
-    if (storeId != null) {
-      // Per-store path (§16.8.1): set this store's balance and bump the
-      // business total by the delta so manufacturers.empty_crate_stock stays
-      // equal to the sum of all store balances.
-      final currentBalance = await db.storeCrateBalancesDao.getBalance(
-        storeId: storeId,
-        manufacturerId: id,
-      );
-      final delta = newStock - currentBalance;
-
-      await db.storeCrateBalancesDao.setBalance(
-        storeId: storeId,
-        manufacturerId: id,
-        newBalance: newStock,
-      );
-
-      // Bump business total by the same delta.
-      final mfr = await (select(
-        manufacturers,
-      )..where((t) => t.id.equals(id) & whereBusiness(t))).getSingle();
-      final comp = ManufacturersCompanion(
-        id: Value(id),
-        emptyCrateStock: Value(mfr.emptyCrateStock + delta),
-        lastUpdatedAt: Value(now),
-      );
-      await (update(
-        manufacturers,
-      )..where((t) => t.id.equals(id) & whereBusiness(t))).write(comp);
-    } else {
-      // Legacy path (no store dimension): absolute set on business total.
-      final comp = ManufacturersCompanion(
-        id: Value(id),
-        emptyCrateStock: Value(newStock),
-        lastUpdatedAt: Value(now),
-      );
-      await (update(
-        manufacturers,
-      )..where((t) => t.id.equals(id) & whereBusiness(t))).write(comp);
-    }
-    await _enqueueFullManufacturer(id);
+    await db.cratePoolDao.recordManualCountCorrection(
+      id,
+      newStock,
+      storeId: storeId,
+    );
   }
 
   Future<void> updateManufacturerDeposit(String id, int depositKobo) async {
@@ -451,102 +417,36 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
 
   /// Increment a manufacturer's empty-crate stock counter. Used by the
   /// receive-delivery and crate-return flows to credit the physical pool of
-  /// returnable crates held against a manufacturer.
+  /// returnable crates held against a manufacturer. Delegates to the Crate Pool
+  /// seam (#157).
   Future<void> addEmptyCrates(
     String manufacturerId,
     int quantity, {
     String? storeId,
   }) async {
-    if (quantity == 0) return;
-    await customUpdate(
-      'UPDATE manufacturers SET empty_crate_stock = empty_crate_stock + ?, '
-      'last_updated_at = CAST(strftime(\'%s\', CURRENT_TIMESTAMP) AS INTEGER) '
-      'WHERE id = ? AND business_id = ?',
-      variables: [
-        Variable(quantity),
-        Variable(manufacturerId),
-        Variable(requireBusinessId()),
-      ],
-      updates: {manufacturers},
+    await db.cratePoolDao.addEmptiesToPool(
+      manufacturerId,
+      quantity,
+      storeId: storeId,
     );
-    final mfrRow =
-        await (select(manufacturers)
-              ..where((t) => t.id.equals(manufacturerId) & whereBusiness(t)))
-            .getSingle();
-    await db.syncDao.enqueueUpsert('manufacturers', mfrRow);
-
-    // Per-store tracking (§16.8.1): if a store is provided, stamp the balance
-    // and write a store-scoped crate_ledger row.
-    if (storeId != null) {
-      await db.storeCrateBalancesDao.applyDelta(
-        storeId: storeId,
-        manufacturerId: manufacturerId,
-        delta: quantity,
-      );
-      final ledgerComp = CrateLedgerCompanion.insert(
-        id: Value(UuidV7.generate()),
-        businessId: requireBusinessId(),
-        manufacturerId: Value(manufacturerId),
-        storeId: Value(storeId),
-        quantityDelta: quantity,
-        movementType: 'adjusted',
-        lastUpdatedAt: Value(DateTime.now()),
-      );
-      await into(crateLedger).insert(ledgerComp);
-      await db.syncDao.enqueueUpsert('crate_ledger', ledgerComp);
-    }
   }
 
   /// Debit a manufacturer's empty-crate pool because STORED empties were
-  /// damaged/lost (§17.2 crate-aware damages, the `+crateempty` fate). Mirrors
-  /// [addEmptyCrates] but subtracts and stamps a `damaged` crate_ledger
-  /// movement. The pool is clamped at zero. Note: the "full crate lost"
-  /// (`+cratelost`) fate does NOT call this — that container was never in the
-  /// returned-empties pool, so it only forfeits the deposit on the Statement
-  /// (derived from the damage reason in `computeReconData`).
+  /// damaged/lost (§17.2 crate-aware damages, the `+crateempty` fate). The pool
+  /// is clamped at zero. Note: the "full crate lost" (`+cratelost`) fate does
+  /// NOT call this — that container was never in the returned-empties pool, so
+  /// it only forfeits the deposit on the Statement (derived from the damage
+  /// reason in `computeReconData`). Delegates to the Crate Pool seam (#157).
   Future<void> recordEmptyCrateDamage(
     String manufacturerId,
     int quantity, {
     String? storeId,
   }) async {
-    if (quantity <= 0) return;
-    await customUpdate(
-      'UPDATE manufacturers SET empty_crate_stock = MAX(0, empty_crate_stock - ?), '
-      'last_updated_at = CAST(strftime(\'%s\', CURRENT_TIMESTAMP) AS INTEGER) '
-      'WHERE id = ? AND business_id = ?',
-      variables: [
-        Variable(quantity),
-        Variable(manufacturerId),
-        Variable(requireBusinessId()),
-      ],
-      updates: {manufacturers},
+    await db.cratePoolDao.recordDamage(
+      manufacturerId,
+      quantity,
+      storeId: storeId,
     );
-    final mfrRow =
-        await (select(manufacturers)
-              ..where((t) => t.id.equals(manufacturerId) & whereBusiness(t)))
-            .getSingle();
-    await db.syncDao.enqueueUpsert('manufacturers', mfrRow);
-
-    // Per-store tracking (§16.8.1): mirror the balance + a store-scoped
-    // crate_ledger row tagged `damaged`.
-    if (storeId != null) {
-      await db.storeCrateBalancesDao.applyDelta(
-        storeId: storeId,
-        manufacturerId: manufacturerId,
-        delta: -quantity,
-      );
-      final ledgerComp = CrateLedgerCompanion.insert(
-        id: Value(UuidV7.generate()),
-        businessId: requireBusinessId(),
-        manufacturerId: Value(manufacturerId),
-        storeId: Value(storeId),
-        quantityDelta: -quantity,
-        movementType: 'damaged',
-        lastUpdatedAt: Value(DateTime.now()),
-      );
-      await into(crateLedger).insert(ledgerComp);
-      await db.syncDao.enqueueUpsert('crate_ledger', ledgerComp);
-    }
   }
 
   /// Stream the per-manufacturer count of full bottles in stock, derived
@@ -1455,116 +1355,8 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
   /// Moves [quantity] empty crates of [manufacturerId] from [fromStoreId] to
   /// [toStoreId] atomically (Phase 3, §16.9). Executed at dispatch time — no
   /// separate confirm step for crates (they travel with the product shipment).
-  ///
-  /// Local: writes two store-stamped crate_ledger rows and updates
-  /// store_crate_balances for immediate UI feedback. Cloud: a single atomic
-  /// `domain:pos_transfer_crates` envelope (idempotent via ledger IDs).
-  /// store_crate_balances is NOT separately enqueued — the domain RPC is the
-  /// sole cloud writer (prevents double-count).
-  Future<void> _writeCrateTransferLegs({
-    required String transferId,
-    required String fromStoreId,
-    required String toStoreId,
-    required String manufacturerId,
-    required int quantity,
-    required String performedBy,
-  }) async {
-    final bizId = requireBusinessId();
-    final outLedgerId = UuidV7.generate();
-    final inLedgerId = UuidV7.generate();
-    final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-
-    // 1. Local crate_ledger rows (append-only; store-stamped §v44).
-    await customStatement(
-      'INSERT INTO crate_ledger '
-      '  (id, business_id, manufacturer_id, store_id, '
-      '   quantity_delta, movement_type, performed_by, created_at, last_updated_at) '
-      'VALUES (?,?,?,?,?,?,?,?,?)',
-      [
-        outLedgerId,
-        bizId,
-        manufacturerId,
-        fromStoreId,
-        -quantity,
-        'transferred_out',
-        performedBy,
-        nowSec,
-        nowSec,
-      ],
-    );
-    await customStatement(
-      'INSERT INTO crate_ledger '
-      '  (id, business_id, manufacturer_id, store_id, '
-      '   quantity_delta, movement_type, performed_by, created_at, last_updated_at) '
-      'VALUES (?,?,?,?,?,?,?,?,?)',
-      [
-        inLedgerId,
-        bizId,
-        manufacturerId,
-        toStoreId,
-        quantity,
-        'transferred_in',
-        performedBy,
-        nowSec,
-        nowSec,
-      ],
-    );
-
-    // 2. Local store_crate_balances — immediate UI feedback only.
-    //    NOT enqueued directly; the domain RPC is the sole cloud writer.
-    await customStatement(
-      'INSERT INTO store_crate_balances '
-      '  (id, business_id, store_id, manufacturer_id, balance, last_updated_at) '
-      'VALUES (?,?,?,?,?,?) '
-      'ON CONFLICT(business_id, store_id, manufacturer_id) DO UPDATE SET '
-      '  balance = balance + excluded.balance, '
-      '  last_updated_at = excluded.last_updated_at',
-      [
-        UuidV7.generate(),
-        bizId,
-        fromStoreId,
-        manufacturerId,
-        -quantity,
-        nowSec,
-      ],
-    );
-    await customStatement(
-      'INSERT INTO store_crate_balances '
-      '  (id, business_id, store_id, manufacturer_id, balance, last_updated_at) '
-      'VALUES (?,?,?,?,?,?) '
-      'ON CONFLICT(business_id, store_id, manufacturer_id) DO UPDATE SET '
-      '  balance = balance + excluded.balance, '
-      '  last_updated_at = excluded.last_updated_at',
-      [UuidV7.generate(), bizId, toStoreId, manufacturerId, quantity, nowSec],
-    );
-
-    // 3. Enqueue the domain RPC (handles cloud crate_ledger + store_crate_balances atomically).
-    final payload = <String, dynamic>{
-      'p_business_id': bizId,
-      'p_actor_id': performedBy,
-      'p_transfer_id': transferId,
-      'p_from_store_id': fromStoreId,
-      'p_to_store_id': toStoreId,
-      'p_manufacturer_id': manufacturerId,
-      'p_quantity': quantity,
-      'p_out_ledger_id': outLedgerId,
-      'p_in_ledger_id': inLedgerId,
-    };
-    await db.syncDao.enqueue(
-      'domain:pos_transfer_crates',
-      jsonEncode(payload),
-    );
-  }
-
-  /// Moves [quantity] empty crates of [manufacturerId] from [fromStoreId] to
-  /// [toStoreId] atomically (Phase 3, §16.9). Executed at dispatch time — no
-  /// separate confirm step for crates (they travel with the product shipment).
-  ///
-  /// Local: writes two store-stamped crate_ledger rows and updates
-  /// store_crate_balances for immediate UI feedback. Cloud: a single atomic
-  /// `domain:pos_transfer_crates` envelope (idempotent via ledger IDs).
-  /// store_crate_balances is NOT separately enqueued — the domain RPC is the
-  /// sole cloud writer (prevents double-count).
+  /// Delegates to the Crate Pool seam (#157), which owns the crate_ledger +
+  /// store_crate_balances writes and the `domain:pos_transfer_crates` envelope.
   Future<void> transferCrates({
     required String transferId,
     required String fromStoreId,
@@ -1574,7 +1366,7 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
     required String performedBy,
   }) async {
     await transaction(() async {
-      await _writeCrateTransferLegs(
+      await db.cratePoolDao.transferBetweenStores(
         transferId: transferId,
         fromStoreId: fromStoreId,
         toStoreId: toStoreId,
@@ -1749,7 +1541,7 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
           throw StateError('Product ${product.name} does not have a manufacturerId.');
         }
 
-        await _writeCrateTransferLegs(
+        await db.cratePoolDao.transferBetweenStores(
           transferId: transferId,
           fromStoreId: fromStoreId!,
           toStoreId: toStoreId!,

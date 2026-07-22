@@ -350,7 +350,7 @@ class SupplierCrateBalanceWithManufacturer {
 }
 
 /// §3.13 — append-only ledger of empty-crate movements between the store and a
-/// supplier. The supplier-side mirror of [CrateLedgerDao]'s customer methods.
+/// supplier. The supplier-side mirror of [CratePoolDao]'s customer methods.
 /// `received` (+) = full crates arrived from the supplier (we now owe N
 /// empties); `returned` (−) = empties handed back to the supplier. Both append
 /// one [SupplierCrateLedger] row, upsert the [SupplierCrateBalances] cache, and
@@ -364,7 +364,8 @@ class SupplierCrateLedgerDao extends DatabaseAccessor<AppDatabase>
 
   /// Record full crates RECEIVED from a supplier (we now owe N empties).
   /// [depositPaidKobo] is the refundable deposit money paid on this receipt
-  /// (>= 0); pass 0 when no deposit changed hands.
+  /// (>= 0); pass 0 when no deposit changed hands. Delegates to the Crate Pool
+  /// seam (#157), the sole writer of supplier_crate_ledger / _balances.
   Future<void> recordCrateReceiptFromSupplier({
     required String supplierId,
     required String manufacturerId,
@@ -374,15 +375,13 @@ class SupplierCrateLedgerDao extends DatabaseAccessor<AppDatabase>
     int depositPaidKobo = 0,
     String? note,
   }) async {
-    if (quantity <= 0) return;
-    await _appendMovement(
+    await db.cratePoolDao.recordReceiveFromSupplier(
       supplierId: supplierId,
       manufacturerId: manufacturerId,
-      quantityDelta: quantity,
-      movementType: 'received',
+      quantity: quantity,
       performedBy: performedBy,
       storeId: storeId,
-      depositPaidKobo: depositPaidKobo < 0 ? 0 : depositPaidKobo,
+      depositPaidKobo: depositPaidKobo,
       note: note,
     );
   }
@@ -390,6 +389,7 @@ class SupplierCrateLedgerDao extends DatabaseAccessor<AppDatabase>
   /// Record empties RETURNED to a supplier (reduces what we owe them).
   /// [depositRefundedKobo] is the deposit money refunded back to us on this
   /// return (>= 0), recorded so the net deposit held by the supplier nets out.
+  /// Delegates to the Crate Pool seam (#157).
   Future<void> recordCrateReturnToSupplier({
     required String supplierId,
     required String manufacturerId,
@@ -399,80 +399,15 @@ class SupplierCrateLedgerDao extends DatabaseAccessor<AppDatabase>
     int depositRefundedKobo = 0,
     String? note,
   }) async {
-    if (quantity <= 0) return;
-    await _appendMovement(
+    await db.cratePoolDao.recordReturnToSupplier(
       supplierId: supplierId,
       manufacturerId: manufacturerId,
-      quantityDelta: -quantity,
-      movementType: 'returned',
+      quantity: quantity,
       performedBy: performedBy,
       storeId: storeId,
-      depositPaidKobo: depositRefundedKobo < 0 ? 0 : depositRefundedKobo,
+      depositRefundedKobo: depositRefundedKobo,
       note: note,
     );
-  }
-
-  Future<void> _appendMovement({
-    required String supplierId,
-    required String manufacturerId,
-    required int quantityDelta,
-    required String movementType,
-    required String performedBy,
-    required int depositPaidKobo,
-    String? storeId,
-    String? note,
-  }) async {
-    await transaction(() async {
-      final ledgerComp = SupplierCrateLedgerCompanion.insert(
-        id: Value(UuidV7.generate()),
-        businessId: requireBusinessId(),
-        supplierId: supplierId,
-        manufacturerId: manufacturerId,
-        storeId: Value(storeId),
-        quantityDelta: quantityDelta,
-        movementType: movementType,
-        depositPaidKobo: Value(depositPaidKobo),
-        note: Value(note),
-        performedBy: Value(performedBy),
-        lastUpdatedAt: Value(DateTime.now()),
-      );
-      await into(supplierCrateLedger).insert(ledgerComp);
-
-      // customInsert (not customStatement) so the watching streams refresh on
-      // commit — a raw customStatement write is invisible to Drift's tracker.
-      await customInsert(
-        'INSERT INTO supplier_crate_balances '
-        '  (id, business_id, supplier_id, manufacturer_id, balance) '
-        'VALUES (?, ?, ?, ?, ?) '
-        'ON CONFLICT(business_id, supplier_id, manufacturer_id) DO UPDATE SET '
-        '  balance = balance + excluded.balance, '
-        "  last_updated_at = CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)",
-        variables: [
-          Variable(UuidV7.generate()),
-          Variable(requireBusinessId()),
-          Variable(supplierId),
-          Variable(manufacturerId),
-          Variable(quantityDelta),
-        ],
-        updates: {supplierCrateBalances},
-      );
-
-      await db.syncDao.enqueueUpsert('supplier_crate_ledger', ledgerComp);
-      final updatedBalance =
-          await (select(supplierCrateBalances)
-                ..where(
-                  (t) =>
-                      whereBusiness(t) &
-                      t.supplierId.equals(supplierId) &
-                      t.manufacturerId.equals(manufacturerId),
-                )
-                ..limit(1))
-              .getSingle();
-      await db.syncDao.enqueueUpsert(
-        'supplier_crate_balances',
-        updatedBalance,
-      );
-    });
   }
 
   /// Full ledger history for one supplier, newest first.

@@ -958,7 +958,7 @@ class StoreCrateBalancesDaoManager {
       );
 }
 
-mixin _$CrateLedgerDaoMixin on DatabaseAccessor<AppDatabase> {
+mixin _$CratePoolDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
   $StoresTable get stores => attachedDatabase.stores;
   $CustomersTable get customers => attachedDatabase.customers;
@@ -973,12 +973,19 @@ mixin _$CrateLedgerDaoMixin on DatabaseAccessor<AppDatabase> {
       attachedDatabase.customerCrateBalances;
   $ManufacturerCrateBalancesTable get manufacturerCrateBalances =>
       attachedDatabase.manufacturerCrateBalances;
-  CrateLedgerDaoManager get managers => CrateLedgerDaoManager(this);
+  $StoreCrateBalancesTable get storeCrateBalances =>
+      attachedDatabase.storeCrateBalances;
+  $SuppliersTable get suppliers => attachedDatabase.suppliers;
+  $SupplierCrateLedgerTable get supplierCrateLedger =>
+      attachedDatabase.supplierCrateLedger;
+  $SupplierCrateBalancesTable get supplierCrateBalances =>
+      attachedDatabase.supplierCrateBalances;
+  CratePoolDaoManager get managers => CratePoolDaoManager(this);
 }
 
-class CrateLedgerDaoManager {
-  final _$CrateLedgerDaoMixin _db;
-  CrateLedgerDaoManager(this._db);
+class CratePoolDaoManager {
+  final _$CratePoolDaoMixin _db;
+  CratePoolDaoManager(this._db);
   $$BusinessesTableTableManager get businesses =>
       $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
   $$StoresTableTableManager get stores =>
@@ -1012,6 +1019,23 @@ class CrateLedgerDaoManager {
       $$ManufacturerCrateBalancesTableTableManager(
         _db.attachedDatabase,
         _db.manufacturerCrateBalances,
+      );
+  $$StoreCrateBalancesTableTableManager get storeCrateBalances =>
+      $$StoreCrateBalancesTableTableManager(
+        _db.attachedDatabase,
+        _db.storeCrateBalances,
+      );
+  $$SuppliersTableTableManager get suppliers =>
+      $$SuppliersTableTableManager(_db.attachedDatabase, _db.suppliers);
+  $$SupplierCrateLedgerTableTableManager get supplierCrateLedger =>
+      $$SupplierCrateLedgerTableTableManager(
+        _db.attachedDatabase,
+        _db.supplierCrateLedger,
+      );
+  $$SupplierCrateBalancesTableTableManager get supplierCrateBalances =>
+      $$SupplierCrateBalancesTableTableManager(
+        _db.attachedDatabase,
+        _db.supplierCrateBalances,
       );
 }
 

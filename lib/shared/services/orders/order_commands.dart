@@ -260,7 +260,7 @@ class OrderCommands {
         } else if (line.returnedCrates > 0) {
           // crate-track (no deposit): net the issued balance. Leftover (taken −
           // returned) stays as crate debt on the crates tab.
-          await _db.crateLedgerDao.recordCrateReturnByCustomer(
+          await _db.cratePoolDao.recordCrateReturnByCustomer(
             customerId: customerId,
             manufacturerId: line.manufacturerId,
             quantity: line.returnedCrates,

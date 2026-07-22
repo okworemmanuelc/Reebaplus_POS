@@ -135,14 +135,14 @@ void main() {
       final (storeId, staffId, customerId) = await seedBase();
       final (mfrId, _) = await seedCrateProduct(storeId);
 
-      await db.crateLedgerDao.recordCrateIssueByCustomer(
+      await db.cratePoolDao.recordCrateIssueByCustomer(
           customerId: customerId,
           manufacturerId: mfrId,
           quantity: 10,
           performedBy: staffId);
       expect(await crateBalance(customerId, mfrId), 10, reason: '10 owed');
 
-      await db.crateLedgerDao.recordCrateReturnByCustomer(
+      await db.cratePoolDao.recordCrateReturnByCustomer(
           customerId: customerId,
           manufacturerId: mfrId,
           quantity: 10,
@@ -155,12 +155,12 @@ void main() {
       final (storeId, staffId, customerId) = await seedBase();
       final (mfrId, _) = await seedCrateProduct(storeId);
 
-      await db.crateLedgerDao.recordCrateIssueByCustomer(
+      await db.cratePoolDao.recordCrateIssueByCustomer(
           customerId: customerId,
           manufacturerId: mfrId,
           quantity: 10,
           performedBy: staffId);
-      await db.crateLedgerDao.recordCrateReturnByCustomer(
+      await db.cratePoolDao.recordCrateReturnByCustomer(
           customerId: customerId,
           manufacturerId: mfrId,
           quantity: 7,
@@ -190,7 +190,7 @@ void main() {
       expect(issued.first.manufacturerId, mfrId);
 
       // Returning all 5 nets to "not owing".
-      await db.crateLedgerDao.recordCrateReturnByCustomer(
+      await db.cratePoolDao.recordCrateReturnByCustomer(
           customerId: customerId,
           manufacturerId: mfrId,
           quantity: 5,

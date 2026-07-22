@@ -2,6 +2,52 @@
 
 ---
 
+## 2026-07-22 — Feature: #157 Crate Pool seam + complete ledger (prefactor)
+
+First slice of the crate-pool ledger-as-truth refactor (PRD #156, ADR **0020**).
+Branch `feat/crate-pool-seam-prefactor` off `main`. **Behavior-preserving** — the
+balance caches are still written exactly as before; this slice only centralizes
+the writes, completes the ledger, and seeds opening balances so the later derive
+slices (#158–#160) don't zero existing counts.
+
+- **Seam.** `CrateLedgerDao` → **`CratePoolDao`** (`daos_crates.dart`) is now the
+  SOLE writer of the six crate tables (`crate_ledger`, `supplier_crate_ledger`,
+  the four `*_crate_balances`) **and** the `manufacturers.empty_crate_stock`
+  scalar. Absorbed the supplier-crate write path, the physical-pool verbs
+  (`addEmptiesToPool` / `recordDamage` / `recordManualCountCorrection`, moved from
+  `InventoryDao`) and the store-transfer legs (`transferBetweenStores`, moved from
+  `StockTransferDao`). Former writers (Inventory, `SupplierCrateLedgerDao`,
+  `StockTransferDao`, `CrateReturnApprovalService.approve`, checkout / confirm /
+  receive / customer-return callers) are now thin delegators — public method names
+  kept, so callers + the existing crate test suite are unchanged. Accessor
+  `crateLedgerDao` → `cratePoolDao` (~21 mechanical sites; codegen regenerated).
+- **Ledger completeness.** A manual "set to N" records a reconciling **delta** row
+  (N − current); a store-less `addEmptyCrates`/damage now writes a row too.
+- **Migration (Drift v62→v63).** Data-only `_seedCrateOpeningLedger()` appends one
+  reconciling `adjusted` opening row per non-zero cache balance (delta = cache −
+  current SUM under that cache's filter) so `SUM(quantity_delta)` == the displayed
+  count at cutover. **LOCAL-ONLY** (a migration write never enqueues; every device
+  seeds from its own caches — pushing would double-count). No cloud migration.
+- **Guard.** `test/crates/crate_seam_ban_test.dart` fails the build if any
+  crate-table write or `empty_crate_stock` mutation (raw-SQL **or** the
+  `ManufacturersCompanion` builder form) appears outside the seam; the sync engine
+  + `app_database.dart` carry `// crate-seam-exempt-file:` markers.
+- **Docs.** ADR `0020-crate-pool-ledger-as-truth`; CONTEXT.md `### Crates` glossary
+  (Empties Pool, Crate Ledger, Crate Deposit, Held Deposit, Money-Track vs
+  Crate-Track). Lexicon intentionally untouched (crate nouns stay out by design).
+- **Verify.** `flutter analyze` 0/0; new `crate_pool_seam_test` (5, incl. the real
+  v62→v63 seed SUM==cache) + `crate_seam_ban_test` green; full suite 979 pass / 110
+  skip (the 1 failure — `who_is_working_screen_test` — is pre-existing, confirmed at
+  base with changes stashed). Two-axis `/review`: no hard standards violations;
+  spec-faithful (all 8 verbs routed, seed filters correct) — the one finding (ban
+  test missed the builder-form scalar mutation) is fixed here. Commit `f1e4f02`.
+- **Noted, not fixed (out of scope):** `StockTransferDao.cancelTransfer` restores
+  product stock but not crate legs (pre-existing); `recordCrateReceiveFromManufacturer`
+  is dead; `manufacturer_crate_balances` and the scalar remain two disjoint
+  business-side tallies — unifying + deriving the pool is #159.
+
+---
+
 ## 2026-07-21 — QA: #116 receipt paper size manual 58/80mm (default 58mm) PASSED
 
 **Context.** #116 = a device-local paper-size setting (58mm default, 80mm option) near the printer picker, and

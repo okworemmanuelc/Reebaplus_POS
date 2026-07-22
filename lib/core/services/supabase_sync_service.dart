@@ -1,3 +1,6 @@
+// crate-seam-exempt-file: the sync engine restores cloud-authoritative crate
+// rows (pull/reconcile), not user-initiated movements — it is not a crate write
+// path (ADR 0020 / crate_seam_ban_test).
 import 'dart:async';
 import 'dart:convert';
 import 'package:drift/drift.dart';

@@ -2366,7 +2366,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                         qty,
                         storeId: creditStoreId,
                       );
-                      await db.crateLedgerDao.recordCrateReturnByCustomer(
+                      await db.cratePoolDao.recordCrateReturnByCustomer(
                         customerId: id,
                         manufacturerId: mfrId,
                         quantity: qty,
