@@ -10,6 +10,55 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### Crate pool #1 (#157) — the Crate Pool seam + a complete ledger (prefactor) — CODE-COMPLETE (2026-07-22)
+First slice of the crate-pool ledger-as-truth refactor (PRD #156, ADR **0020**).
+Branch `feat/crate-pool-seam-prefactor` off `main`. **Behavior-preserving**: the
+balance caches are still written exactly as before, so nothing the user sees
+changes — this slice only introduces the seam, completes the ledger, and seeds
+opening balances so the later derive slices (#158–#160) don't zero existing
+counts.
+- **The seam.** `CrateLedgerDao` → **`CratePoolDao`** (`daos_crates.dart`), now the
+  SOLE writer of the six crate tables (`crate_ledger`, `supplier_crate_ledger`,
+  the four `*_crate_balances`) **and** the `manufacturers.empty_crate_stock`
+  scalar. Absorbed the supplier-crate write path (`_appendSupplierMovement`), the
+  physical-pool verbs (`addEmptiesToPool` / `recordDamage` /
+  `recordManualCountCorrection`, moved from `InventoryDao`), and the store-transfer
+  legs (`transferBetweenStores`, moved from `StockTransferDao`). Every former
+  writer is now a thin delegator (InventoryDao add/damage/manual-set + transfer,
+  `SupplierCrateLedgerDao` receipt/return, `CrateReturnApprovalService.approve`,
+  Checkout/Confirm/Receive/customer-return callers) — public method names kept, so
+  callers and the existing crate test-suite assertions are unchanged. Accessor
+  renamed `crateLedgerDao` → `cratePoolDao` (~21 mechanical sites; codegen
+  regenerated).
+- **Ledger completeness.** The two paths that skipped the ledger now write a row:
+  a manual "set to N" records a reconciling **delta** row (N − current); a
+  store-less `addEmptyCrates`/damage writes a store-less row.
+- **Migration (Drift v62→**v63**).** Data-only `_seedCrateOpeningLedger()` appends
+  one reconciling `adjusted` opening row per non-zero cache balance (delta = cache
+  − current SUM under that cache's filter), so `SUM(quantity_delta)` == the
+  displayed count at cutover. **LOCAL-ONLY** (a migration write never enqueues;
+  pushing would double-count across devices). No cloud migration — client-only
+  data seed.
+- **Guard.** New `test/crates/crate_seam_ban_test.dart` (models
+  `sync_raw_write_leak_test`) fails the build if any crate-table write or
+  `empty_crate_stock` mutation appears outside the seam; the sync engine +
+  `app_database.dart` carry `// crate-seam-exempt-file:` markers (restore /
+  DDL-triggers-seed-wipe, not movements).
+- **Docs.** ADR `0020-crate-pool-ledger-as-truth.md`; CONTEXT.md gained a
+  `### Crates` glossary (Empties Pool, Crate Ledger, Crate Deposit, Held Deposit,
+  Money-Track vs Crate-Track). **Lexicon intentionally untouched** — its docstring
+  keeps crate/empties nouns out by design (gated by `isCrateBusiness`), so the PRD's
+  "keep beverage nouns in the Lexicon" reconciles to "leave them out, as they
+  already are."
+- **Verification.** `flutter analyze` 0/0; new `crate_pool_seam_test` (5, incl. the
+  real v62→v63 migration-seed SUM==cache) + `crate_seam_ban_test` green; the
+  existing crate/wallet/supplier/sync-dispatch suites (77) pass unchanged.
+- **Noted, not fixed here (out of #157 scope):** `StockTransferDao.cancelTransfer`
+  restores product stock but does NOT reverse crate legs (pre-existing gap);
+  `recordCrateReceiveFromManufacturer` is dead (no callers); the
+  `manufacturer_crate_balances` cache and the `empty_crate_stock` scalar remain two
+  disjoint business-side tallies — unifying them and deriving the pool is #159.
+
 ### #153 provider-lifecycle crash (re-login) — FIXED (2026-07-20)
 QA of the closed batch (during #117 offboarding) surfaced a re-login crash: four
 `ChangeNotifierProvider`s returned a **service-owned** `ValueNotifier`, so Riverpod

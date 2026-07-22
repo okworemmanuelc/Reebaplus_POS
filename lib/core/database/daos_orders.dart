@@ -695,7 +695,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
           );
 
           if (depositPaid == 0) {
-            await db.crateLedgerDao.recordCrateIssueByCustomer(
+            await db.cratePoolDao.recordCrateIssueByCustomer(
               customerId: customerId,
               manufacturerId: mfrId,
               quantity: crates,
@@ -1411,7 +1411,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       // customer_crate_balances is an LWW cache that won't self-heal on pull —
       // so undo the "issued" balance here. Walk-in / money-track sales issue no
       // customer crate balance, so this is a no-op for them.
-      await db.crateLedgerDao.reverseIssuedByCustomerLocal(
+      await db.cratePoolDao.reverseIssuedByCustomerLocal(
         orderId: orderId,
         staffId: staffId,
       );

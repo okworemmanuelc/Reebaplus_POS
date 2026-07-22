@@ -127,7 +127,7 @@ class ReceiveStockService {
       };
       for (final entry in emptiesReturnedByManufacturer.entries) {
         if (entry.value > 0 && eligibleManufacturerIds.contains(entry.key)) {
-          await _db.crateLedgerDao.recordCrateReturnByManufacturer(
+          await _db.cratePoolDao.recordCrateReturnByManufacturer(
             manufacturerId: entry.key,
             quantity: entry.value,
             performedBy: staffId,

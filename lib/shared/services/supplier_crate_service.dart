@@ -2,12 +2,12 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 
 /// §3.13 — records empty-crate activity against a SUPPLIER. The supplier-side
-/// mirror of the customer crate flow (`CrateLedgerDao.recordCrateReturnByCustomer`),
+/// mirror of the customer crate flow (`CratePoolDao.recordCrateReturnByCustomer`),
 /// wrapped with Activity-Log writes. A *receipt* means full crates arrived from
 /// the supplier (we now owe them N empties); a *return* means we handed empties
 /// back (reduces what we owe). Each appends one append-only
 /// [SupplierCrateLedger] row and upserts the [SupplierCrateBalances] cache via
-/// [SupplierCrateLedgerDao]; this layer adds the audit trail.
+/// the Crate Pool seam ([CratePoolDao]); this layer adds the audit trail.
 class SupplierCrateService {
   final AppDatabase _db;
 

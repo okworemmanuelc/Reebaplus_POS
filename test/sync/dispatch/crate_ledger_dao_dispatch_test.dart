@@ -68,7 +68,7 @@ void main() {
           on: false);
       final fx = await _seedCrateFixtures(db, businessId);
 
-      await db.crateLedgerDao.recordCrateReturnByCustomer(
+      await db.cratePoolDao.recordCrateReturnByCustomer(
         customerId: fx.customerId,
         manufacturerId: fx.manufacturerId,
         quantity: 5,
@@ -95,7 +95,7 @@ void main() {
       await setFlag(db, 'feature.domain_rpcs_v2.record_crate_return', on: true);
       final fx = await _seedCrateFixtures(db, businessId);
 
-      await db.crateLedgerDao.recordCrateReturnByCustomer(
+      await db.cratePoolDao.recordCrateReturnByCustomer(
         customerId: fx.customerId,
         manufacturerId: fx.manufacturerId,
         quantity: 3,
@@ -150,7 +150,7 @@ void main() {
             ),
           );
 
-      await db.crateLedgerDao.recordCrateReturnByCustomer(
+      await db.cratePoolDao.recordCrateReturnByCustomer(
         customerId: fx.customerId,
         manufacturerId: fx.manufacturerId,
         quantity: 1,
@@ -170,7 +170,7 @@ void main() {
           on: false);
       final fx = await _seedCrateFixtures(db, businessId);
 
-      await db.crateLedgerDao.recordCrateReturnByManufacturer(
+      await db.cratePoolDao.recordCrateReturnByManufacturer(
         manufacturerId: fx.manufacturerId,
         quantity: 7,
         performedBy: fx.staffId,
@@ -192,7 +192,7 @@ void main() {
       await setFlag(db, 'feature.domain_rpcs_v2.record_crate_return', on: true);
       final fx = await _seedCrateFixtures(db, businessId);
 
-      await db.crateLedgerDao.recordCrateReturnByManufacturer(
+      await db.cratePoolDao.recordCrateReturnByManufacturer(
         manufacturerId: fx.manufacturerId,
         quantity: 4,
         performedBy: fx.staffId,

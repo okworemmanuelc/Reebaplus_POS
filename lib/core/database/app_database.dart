@@ -1,3 +1,7 @@
+// crate-seam-exempt-file: schema/DDL, append-only triggers, the v63 opening-
+// balance seed migration, and clearAllData — table lifecycle, not user-initiated
+// crate movements (ADR 0020 / crate_seam_ban_test). Movement writes live in the
+// CratePoolDao seam (daos_crates.dart).
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -1806,7 +1810,7 @@ class MigrationEvents extends Table {
     ManufacturerCrateBalancesDao,
     StoreCrateBalancesDao,
     OrderCrateLinesDao,
-    CrateLedgerDao,
+    CratePoolDao,
     SettingsDao,
     BusinessesDao,
     SystemConfigDao,
@@ -1853,7 +1857,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 62;
+  int get schemaVersion => 63;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4052,6 +4056,16 @@ class AppDatabase extends _$AppDatabase {
         // supabase/migrations/0151_products_unit_nullable.sql.
         await m.alterTable(TableMigration(products));
       }
+      if (from < 63) {
+        // v63 (#157 crate-pool prefactor): seed one reconciling opening-balance
+        // ledger row per non-zero crate cache so SUM(quantity_delta) == the
+        // existing displayed count at cutover. No schema change — data only.
+        // Without this, the later derive slices (#158–#160) would zero out every
+        // existing business's crate counts. LOCAL-ONLY (never enqueued): every
+        // device seeds from its own caches, so pushing these would double-count
+        // across devices (ADR 0020).
+        await _seedCrateOpeningLedger();
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -4097,6 +4111,135 @@ class AppDatabase extends _$AppDatabase {
         await customStatement(stmt);
       }
     });
+  }
+
+  /// #157 opening-balance seed (v62→v63). Appends one reconciling `adjusted`
+  /// ledger row per non-zero crate cache so `SUM(quantity_delta)` equals the
+  /// existing cache value at cutover, per cache's own filter:
+  ///   • customer_crate_balances   ← crate_ledger by (customer, manufacturer)
+  ///   • store_crate_balances       ← crate_ledger by (store, manufacturer), customer-less
+  ///   • manufacturer_crate_balances← crate_ledger by manufacturer, store-less + customer-less
+  ///   • supplier_crate_balances    ← supplier_crate_ledger by (supplier, manufacturer)
+  /// The delta form (cache − current SUM) makes SUM==cache hold regardless of any
+  /// messy historical ledger rows, and skips zero-deltas. LOCAL-ONLY: a migration
+  /// write never enqueues, so these opening rows never sync (pushing them would
+  /// double-count across devices — see ADR 0020). Runs once, at v62→v63.
+  Future<void> _seedCrateOpeningLedger() async {
+    final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
+    // 1. Customer crate debt.
+    final customerRows = await customSelect(
+      'SELECT b.business_id AS business_id, b.customer_id AS customer_id, '
+      '       b.manufacturer_id AS manufacturer_id, '
+      '       b.balance - COALESCE((SELECT SUM(l.quantity_delta) FROM crate_ledger l '
+      '         WHERE l.business_id = b.business_id AND l.customer_id = b.customer_id '
+      '           AND l.manufacturer_id = b.manufacturer_id), 0) AS delta '
+      'FROM customer_crate_balances b',
+    ).get();
+    for (final r in customerRows) {
+      final delta = r.read<int>('delta');
+      if (delta == 0) continue;
+      await customStatement(
+        'INSERT INTO crate_ledger (id, business_id, customer_id, manufacturer_id, '
+        '  quantity_delta, movement_type, created_at, last_updated_at) '
+        'VALUES (?,?,?,?,?,?,?,?)',
+        [
+          UuidV7.generate(),
+          r.read<String>('business_id'),
+          r.read<String>('customer_id'),
+          r.read<String>('manufacturer_id'),
+          delta,
+          'adjusted',
+          nowSec,
+          nowSec,
+        ],
+      );
+    }
+
+    // 2. Per-store business pool (store-stamped, customer-less).
+    final storeRows = await customSelect(
+      'SELECT b.business_id AS business_id, b.store_id AS store_id, '
+      '       b.manufacturer_id AS manufacturer_id, '
+      '       b.balance - COALESCE((SELECT SUM(l.quantity_delta) FROM crate_ledger l '
+      '         WHERE l.business_id = b.business_id AND l.store_id = b.store_id '
+      '           AND l.manufacturer_id = b.manufacturer_id AND l.customer_id IS NULL), 0) AS delta '
+      'FROM store_crate_balances b',
+    ).get();
+    for (final r in storeRows) {
+      final delta = r.read<int>('delta');
+      if (delta == 0) continue;
+      await customStatement(
+        'INSERT INTO crate_ledger (id, business_id, manufacturer_id, store_id, '
+        '  quantity_delta, movement_type, created_at, last_updated_at) '
+        'VALUES (?,?,?,?,?,?,?,?)',
+        [
+          UuidV7.generate(),
+          r.read<String>('business_id'),
+          r.read<String>('manufacturer_id'),
+          r.read<String>('store_id'),
+          delta,
+          'adjusted',
+          nowSec,
+          nowSec,
+        ],
+      );
+    }
+
+    // 3. Business pool per manufacturer (store-less, customer-less).
+    final mfrRows = await customSelect(
+      'SELECT b.business_id AS business_id, b.manufacturer_id AS manufacturer_id, '
+      '       b.balance - COALESCE((SELECT SUM(l.quantity_delta) FROM crate_ledger l '
+      '         WHERE l.business_id = b.business_id AND l.manufacturer_id = b.manufacturer_id '
+      '           AND l.customer_id IS NULL AND l.store_id IS NULL), 0) AS delta '
+      'FROM manufacturer_crate_balances b',
+    ).get();
+    for (final r in mfrRows) {
+      final delta = r.read<int>('delta');
+      if (delta == 0) continue;
+      await customStatement(
+        'INSERT INTO crate_ledger (id, business_id, manufacturer_id, '
+        '  quantity_delta, movement_type, created_at, last_updated_at) '
+        'VALUES (?,?,?,?,?,?,?)',
+        [
+          UuidV7.generate(),
+          r.read<String>('business_id'),
+          r.read<String>('manufacturer_id'),
+          delta,
+          'adjusted',
+          nowSec,
+          nowSec,
+        ],
+      );
+    }
+
+    // 4. Supplier crate debt.
+    final supplierRows = await customSelect(
+      'SELECT b.business_id AS business_id, b.supplier_id AS supplier_id, '
+      '       b.manufacturer_id AS manufacturer_id, '
+      '       b.balance - COALESCE((SELECT SUM(l.quantity_delta) FROM supplier_crate_ledger l '
+      '         WHERE l.business_id = b.business_id AND l.supplier_id = b.supplier_id '
+      '           AND l.manufacturer_id = b.manufacturer_id), 0) AS delta '
+      'FROM supplier_crate_balances b',
+    ).get();
+    for (final r in supplierRows) {
+      final delta = r.read<int>('delta');
+      if (delta == 0) continue;
+      await customStatement(
+        'INSERT INTO supplier_crate_ledger (id, business_id, supplier_id, manufacturer_id, '
+        '  quantity_delta, movement_type, created_at, last_updated_at) '
+        'VALUES (?,?,?,?,?,?,?,?)',
+        [
+          UuidV7.generate(),
+          r.read<String>('business_id'),
+          r.read<String>('supplier_id'),
+          r.read<String>('manufacturer_id'),
+          delta,
+          'adjusted',
+          nowSec,
+          nowSec,
+        ],
+      );
+    }
   }
 
   Future<void> clearAllData() async {

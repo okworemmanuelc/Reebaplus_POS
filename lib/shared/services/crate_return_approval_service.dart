@@ -31,9 +31,6 @@ class CrateReturnApprovalService {
     await db.transaction(() async {
       final now = DateTime.now();
       final ledgerId = UuidV7.generate();
-      // Returning crates reduces what the customer owes. pending.quantity
-      // is positive; negate for the ledger + balance increment.
-      final delta = -pending.quantity;
 
       final pcrComp = PendingCrateReturnsCompanion(
         id: Value(returnId),
@@ -46,37 +43,22 @@ class CrateReturnApprovalService {
         db.pendingCrateReturns,
       )..where((t) => t.id.equals(returnId))).write(pcrComp);
 
-      // v29: a customer crate row sets both customer_id (owner) and
-      // manufacturer_id (whose crates); keyed by manufacturer.
-      final ledgerComp = CrateLedgerCompanion.insert(
-        id: Value(ledgerId),
-        businessId: pending.businessId,
-        customerId: Value(pending.customerId),
-        manufacturerId: Value(pending.manufacturerId),
-        quantityDelta: delta,
-        movementType: 'returned',
-        referenceReturnId: Value(returnId),
-        performedBy: Value(approvedBy),
-        lastUpdatedAt: Value(now),
-      );
-      await db.into(db.crateLedger).insert(ledgerComp);
-
-      await db.customStatement(
-        'INSERT INTO customer_crate_balances (id, business_id, customer_id, manufacturer_id, balance) '
-        'VALUES (?, ?, ?, ?, ?) '
-        'ON CONFLICT(business_id, customer_id, manufacturer_id) DO UPDATE SET '
-        'balance = balance + excluded.balance, '
-        'last_updated_at = CAST(strftime(\'%s\', CURRENT_TIMESTAMP) AS INTEGER)',
-        [
-          UuidV7.generate(),
-          pending.businessId,
-          pending.customerId,
-          pending.manufacturerId,
-          delta,
-        ],
+      // Crate legs (crate_ledger + customer_crate_balances) go through the Crate
+      // Pool seam (#157) — the sole writer of the crate tables. It records the
+      // return stamped with referenceReturnId and, on the flag-off path,
+      // enqueues the per-table rows.
+      await db.cratePoolDao.recordApprovedCustomerReturn(
+        customerId: pending.customerId,
+        manufacturerId: pending.manufacturerId,
+        returnId: returnId,
+        ledgerId: ledgerId,
+        quantity: pending.quantity,
+        approvedBy: approvedBy,
+        useDomainRpc: useDomainRpc,
       );
 
       if (useDomainRpc) {
+        // One envelope settles the ledger + pending row server-side.
         final payload = <String, dynamic>{
           'p_business_id': pending.businessId,
           'p_actor_id': approvedBy,
@@ -101,16 +83,6 @@ class CrateReturnApprovalService {
                 lastUpdatedAt: Value(now),
               ),
         );
-        await db.syncDao.enqueueUpsert('crate_ledger', ledgerComp);
-        final balRow =
-            await (db.select(db.customerCrateBalances)..where(
-                  (t) =>
-                      t.businessId.equals(pending.businessId) &
-                      t.customerId.equals(pending.customerId) &
-                      t.manufacturerId.equals(pending.manufacturerId),
-                ))
-                .getSingle();
-        await db.syncDao.enqueueUpsert('customer_crate_balances', balRow);
       }
     });
   }

@@ -47,7 +47,7 @@ void main() {
       final fkStatus = await db.customSelect('PRAGMA foreign_keys').getSingle();
       expect(fkStatus.read<int>('foreign_keys'), 1);
 
-      await db.crateLedgerDao.recordCrateReturnByManufacturer(
+      await db.cratePoolDao.recordCrateReturnByManufacturer(
         manufacturerId: manufacturerId,
         quantity: 10,
         performedBy: userId,
@@ -75,7 +75,7 @@ void main() {
   group('recordCrateReturnByCustomer', () {
     test('customer row carries both owner + manufacturer; balance per mfr',
         () async {
-      await db.crateLedgerDao.recordCrateReturnByCustomer(
+      await db.cratePoolDao.recordCrateReturnByCustomer(
         customerId: customerId,
         manufacturerId: manufacturerId,
         quantity: 3,
@@ -114,7 +114,7 @@ void main() {
       await pumpEventQueue();
       expect(emissions.last, isEmpty, reason: 'no crate activity yet');
 
-      await db.crateLedgerDao.recordCrateReturnByCustomer(
+      await db.cratePoolDao.recordCrateReturnByCustomer(
         customerId: customerId,
         manufacturerId: manufacturerId,
         quantity: 4,
@@ -430,7 +430,7 @@ void main() {
     test('second customer return hits ON CONFLICT path and re-reads cleanly',
         () async {
       // First return: INSERT path (uses the integer column default).
-      await db.crateLedgerDao.recordCrateReturnByCustomer(
+      await db.cratePoolDao.recordCrateReturnByCustomer(
         customerId: customerId,
         manufacturerId: manufacturerId,
         quantity: 2,
@@ -439,7 +439,7 @@ void main() {
       // Second return for the SAME (customer, manufacturer): the DO UPDATE SET
       // branch ran `last_updated_at = CURRENT_TIMESTAMP` before the fix and
       // corrupted the row; the read-back inside the method threw.
-      await db.crateLedgerDao.recordCrateReturnByCustomer(
+      await db.cratePoolDao.recordCrateReturnByCustomer(
         customerId: customerId,
         manufacturerId: manufacturerId,
         quantity: 3,

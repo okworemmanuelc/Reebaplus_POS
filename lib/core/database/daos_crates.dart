@@ -204,12 +204,36 @@ class StoreCrateBalancesDao extends DatabaseAccessor<AppDatabase>
   }
 }
 
+/// The **Crate Pool seam** (#156 / ADR 0020) — the single module every empty-
+/// crate movement routes through. It is the *sole* writer of the crate tables
+/// (`crate_ledger`, `supplier_crate_ledger`, and the four `*_crate_balances`
+/// caches) and of the `manufacturers.empty_crate_stock` scalar; every other DAO
+/// or service that used to write those tables now delegates here (a
+/// `crate_seam_ban_test` fails the build if a crate write appears anywhere
+/// else). Each operation is a domain verb (issue-to-customer, return-from-
+/// customer, receive/return-supplier, record-damage, transfer-between-stores,
+/// reverse-order-issuance, record-manual-count-correction, add-empties-to-pool)
+/// that appends a correctly-signed, store-stamped, append-only ledger row in one
+/// transaction and enqueues it to the Outbox.
+///
+/// This slice (#157) is behavior-preserving: the balance caches are still
+/// written exactly as before. Later slices (#158–#163) derive the balances from
+/// `SUM(quantity_delta)` and demote the caches. The working name in the PRD is
+/// `CratePoolDao`; it absorbs the former `CrateLedgerDao`.
 @DriftAccessor(
-  tables: [CrateLedger, CustomerCrateBalances, ManufacturerCrateBalances],
+  tables: [
+    CrateLedger,
+    CustomerCrateBalances,
+    ManufacturerCrateBalances,
+    StoreCrateBalances,
+    SupplierCrateLedger,
+    SupplierCrateBalances,
+    Manufacturers,
+  ],
 )
-class CrateLedgerDao extends DatabaseAccessor<AppDatabase>
-    with _$CrateLedgerDaoMixin, BusinessScopedDao<AppDatabase> {
-  CrateLedgerDao(super.db);
+class CratePoolDao extends DatabaseAccessor<AppDatabase>
+    with _$CratePoolDaoMixin, BusinessScopedDao<AppDatabase> {
+  CratePoolDao(super.db);
 
   Future<void> recordCrateReceiveFromManufacturer({
     required String manufacturerId,
@@ -527,6 +551,68 @@ class CrateLedgerDao extends DatabaseAccessor<AppDatabase>
     await db.syncDao.enqueueUpsert('customer_crate_balances', updatedBalance);
   }
 
+  /// The crate legs of an APPROVED pending crate return (the approval-queue
+  /// flow). Same customer-return movement as [recordCrateReturnByCustomer] but
+  /// stamped with [returnId] (`referenceReturnId`). Runs inside the approval
+  /// service's transaction, which also flips `pending_crate_returns` → approved.
+  /// On the flagged path the caller dispatches the `pos_approve_crate_return`
+  /// envelope (which settles the ledger + pending row server-side), so this only
+  /// enqueues the per-table rows on the flag-off path.
+  Future<void> recordApprovedCustomerReturn({
+    required String customerId,
+    required String manufacturerId,
+    required String returnId,
+    required String ledgerId,
+    required int quantity,
+    required String approvedBy,
+    required bool useDomainRpc,
+  }) async {
+    final delta = -quantity; // returning reduces what the customer owes
+    final ledgerComp = CrateLedgerCompanion.insert(
+      id: Value(ledgerId),
+      businessId: requireBusinessId(),
+      customerId: Value(customerId),
+      manufacturerId: Value(manufacturerId),
+      quantityDelta: delta,
+      movementType: 'returned',
+      referenceReturnId: Value(returnId),
+      performedBy: Value(approvedBy),
+      lastUpdatedAt: Value(DateTime.now()),
+    );
+    await into(crateLedger).insert(ledgerComp);
+
+    await customInsert(
+      'INSERT INTO customer_crate_balances (id, business_id, customer_id, manufacturer_id, balance) '
+      'VALUES (?, ?, ?, ?, ?) '
+      'ON CONFLICT(business_id, customer_id, manufacturer_id) DO UPDATE SET '
+      'balance = balance + excluded.balance, '
+      "last_updated_at = CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)",
+      variables: [
+        Variable(UuidV7.generate()),
+        Variable(requireBusinessId()),
+        Variable(customerId),
+        Variable(manufacturerId),
+        Variable(delta),
+      ],
+      updates: {customerCrateBalances},
+    );
+
+    if (!useDomainRpc) {
+      await db.syncDao.enqueueUpsert('crate_ledger', ledgerComp);
+      final updatedBalance =
+          await (select(customerCrateBalances)
+                ..where(
+                  (t) =>
+                      whereBusiness(t) &
+                      t.customerId.equals(customerId) &
+                      t.manufacturerId.equals(manufacturerId),
+                )
+                ..limit(1))
+              .getSingle();
+      await db.syncDao.enqueueUpsert('customer_crate_balances', updatedBalance);
+    }
+  }
+
   /// Oversell recovery — LOCAL reversal of the crates a REJECTED sale "issued".
   /// A rejected v2 sale never happened: its `+quantity` 'issued' crate_ledger
   /// rows and the `customer_crate_balances` increment were HELD then discarded
@@ -704,6 +790,405 @@ class CrateLedgerDao extends DatabaseAccessor<AppDatabase>
           'CRATE MISMATCH [Store]: store=$sid, mfr=$mfrId, Ledger: $sum, Cache: $cacheBalance',
         );
       }
+    }
+  }
+
+  // ───────────────────────────────────────────────────────────────────────
+  // Physical business pool (manufacturers.empty_crate_stock scalar + per-store)
+  // Moved here from InventoryDao (#157) so the pool has one writer.
+  // ───────────────────────────────────────────────────────────────────────
+
+  /// Credit the physical empty-crate pool for [manufacturerId] by [quantity]
+  /// (receive-delivery / customer-return physical crates). Bumps the business
+  /// scalar and, when a store is active, the per-store cache. #157: now ALWAYS
+  /// appends a store-stamped `adjusted` crate_ledger row — including the
+  /// store-less case, which previously skipped the ledger entirely.
+  Future<void> addEmptiesToPool(
+    String manufacturerId,
+    int quantity, {
+    String? storeId,
+  }) async {
+    if (quantity == 0) return;
+    await transaction(() async {
+      await customUpdate(
+        'UPDATE manufacturers SET empty_crate_stock = empty_crate_stock + ?, '
+        "last_updated_at = CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER) "
+        'WHERE id = ? AND business_id = ?',
+        variables: [
+          Variable(quantity),
+          Variable(manufacturerId),
+          Variable(requireBusinessId()),
+        ],
+        updates: {manufacturers},
+      );
+      await _enqueueFullManufacturer(manufacturerId);
+      if (storeId != null) {
+        await db.storeCrateBalancesDao.applyDelta(
+          storeId: storeId,
+          manufacturerId: manufacturerId,
+          delta: quantity,
+        );
+      }
+      await _appendPoolLedgerRow(
+        manufacturerId: manufacturerId,
+        storeId: storeId,
+        quantityDelta: quantity,
+        movementType: 'adjusted',
+      );
+    });
+  }
+
+  /// Debit the physical pool because STORED empties were damaged/lost (§17.2).
+  /// The scalar is clamped at zero. #157: appends a `damaged` crate_ledger row
+  /// even when no store is locked.
+  Future<void> recordDamage(
+    String manufacturerId,
+    int quantity, {
+    String? storeId,
+  }) async {
+    if (quantity <= 0) return;
+    await transaction(() async {
+      await customUpdate(
+        'UPDATE manufacturers SET empty_crate_stock = MAX(0, empty_crate_stock - ?), '
+        "last_updated_at = CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER) "
+        'WHERE id = ? AND business_id = ?',
+        variables: [
+          Variable(quantity),
+          Variable(manufacturerId),
+          Variable(requireBusinessId()),
+        ],
+        updates: {manufacturers},
+      );
+      await _enqueueFullManufacturer(manufacturerId);
+      if (storeId != null) {
+        await db.storeCrateBalancesDao.applyDelta(
+          storeId: storeId,
+          manufacturerId: manufacturerId,
+          delta: -quantity,
+        );
+      }
+      await _appendPoolLedgerRow(
+        manufacturerId: manufacturerId,
+        storeId: storeId,
+        quantityDelta: -quantity,
+        movementType: 'damaged',
+      );
+    });
+  }
+
+  /// Manually set a manufacturer's empty-crate count (management dialog). #157:
+  /// a manual "set to N" is recorded as a reconciling **delta** row (N − current)
+  /// so the correction has a traceable history instead of an off-ledger
+  /// overwrite. With a store active, the per-store cache is set absolutely and
+  /// the business total bumped by the same delta; the legacy (no-store) path
+  /// sets the business scalar absolutely.
+  Future<void> recordManualCountCorrection(
+    String manufacturerId,
+    int newStock, {
+    String? storeId,
+  }) async {
+    await transaction(() async {
+      final now = DateTime.now();
+      if (storeId != null) {
+        final currentBalance = await db.storeCrateBalancesDao.getBalance(
+          storeId: storeId,
+          manufacturerId: manufacturerId,
+        );
+        final delta = newStock - currentBalance;
+        await db.storeCrateBalancesDao.setBalance(
+          storeId: storeId,
+          manufacturerId: manufacturerId,
+          newBalance: newStock,
+        );
+        await customUpdate(
+          'UPDATE manufacturers SET empty_crate_stock = empty_crate_stock + ?, '
+          "last_updated_at = CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER) "
+          'WHERE id = ? AND business_id = ?',
+          variables: [
+            Variable(delta),
+            Variable(manufacturerId),
+            Variable(requireBusinessId()),
+          ],
+          updates: {manufacturers},
+        );
+        await _enqueueFullManufacturer(manufacturerId);
+        if (delta != 0) {
+          await _appendPoolLedgerRow(
+            manufacturerId: manufacturerId,
+            storeId: storeId,
+            quantityDelta: delta,
+            movementType: 'adjusted',
+          );
+        }
+      } else {
+        final mfr = await (select(
+          manufacturers,
+        )..where((t) => t.id.equals(manufacturerId) & whereBusiness(t))).getSingle();
+        final delta = newStock - mfr.emptyCrateStock;
+        await (update(manufacturers)
+              ..where((t) => t.id.equals(manufacturerId) & whereBusiness(t)))
+            .write(
+          ManufacturersCompanion(
+            id: Value(manufacturerId),
+            emptyCrateStock: Value(newStock),
+            lastUpdatedAt: Value(now),
+          ),
+        );
+        await _enqueueFullManufacturer(manufacturerId);
+        if (delta != 0) {
+          await _appendPoolLedgerRow(
+            manufacturerId: manufacturerId,
+            storeId: null,
+            quantityDelta: delta,
+            movementType: 'adjusted',
+          );
+        }
+      }
+    });
+  }
+
+  /// Move [quantity] empties of [manufacturerId] between two stores (§16.9),
+  /// executed at dispatch. Writes two store-stamped crate_ledger legs and
+  /// updates store_crate_balances locally; the cloud side is the single atomic
+  /// `domain:pos_transfer_crates` envelope (store_crate_balances is NOT
+  /// separately enqueued — the RPC is the sole cloud writer, preventing a
+  /// double-count). Moved verbatim from StockTransferDao (#157).
+  Future<void> transferBetweenStores({
+    required String transferId,
+    required String fromStoreId,
+    required String toStoreId,
+    required String manufacturerId,
+    required int quantity,
+    required String performedBy,
+  }) async {
+    final bizId = requireBusinessId();
+    final outLedgerId = UuidV7.generate();
+    final inLedgerId = UuidV7.generate();
+    final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
+    await customStatement(
+      'INSERT INTO crate_ledger '
+      '  (id, business_id, manufacturer_id, store_id, '
+      '   quantity_delta, movement_type, performed_by, created_at, last_updated_at) '
+      'VALUES (?,?,?,?,?,?,?,?,?)',
+      [
+        outLedgerId,
+        bizId,
+        manufacturerId,
+        fromStoreId,
+        -quantity,
+        'transferred_out',
+        performedBy,
+        nowSec,
+        nowSec,
+      ],
+    );
+    await customStatement(
+      'INSERT INTO crate_ledger '
+      '  (id, business_id, manufacturer_id, store_id, '
+      '   quantity_delta, movement_type, performed_by, created_at, last_updated_at) '
+      'VALUES (?,?,?,?,?,?,?,?,?)',
+      [
+        inLedgerId,
+        bizId,
+        manufacturerId,
+        toStoreId,
+        quantity,
+        'transferred_in',
+        performedBy,
+        nowSec,
+        nowSec,
+      ],
+    );
+
+    await customStatement(
+      'INSERT INTO store_crate_balances '
+      '  (id, business_id, store_id, manufacturer_id, balance, last_updated_at) '
+      'VALUES (?,?,?,?,?,?) '
+      'ON CONFLICT(business_id, store_id, manufacturer_id) DO UPDATE SET '
+      '  balance = balance + excluded.balance, '
+      '  last_updated_at = excluded.last_updated_at',
+      [
+        UuidV7.generate(),
+        bizId,
+        fromStoreId,
+        manufacturerId,
+        -quantity,
+        nowSec,
+      ],
+    );
+    await customStatement(
+      'INSERT INTO store_crate_balances '
+      '  (id, business_id, store_id, manufacturer_id, balance, last_updated_at) '
+      'VALUES (?,?,?,?,?,?) '
+      'ON CONFLICT(business_id, store_id, manufacturer_id) DO UPDATE SET '
+      '  balance = balance + excluded.balance, '
+      '  last_updated_at = excluded.last_updated_at',
+      [UuidV7.generate(), bizId, toStoreId, manufacturerId, quantity, nowSec],
+    );
+
+    final payload = <String, dynamic>{
+      'p_business_id': bizId,
+      'p_actor_id': performedBy,
+      'p_transfer_id': transferId,
+      'p_from_store_id': fromStoreId,
+      'p_to_store_id': toStoreId,
+      'p_manufacturer_id': manufacturerId,
+      'p_quantity': quantity,
+      'p_out_ledger_id': outLedgerId,
+      'p_in_ledger_id': inLedgerId,
+    };
+    await db.syncDao.enqueue(
+      'domain:pos_transfer_crates',
+      jsonEncode(payload),
+    );
+  }
+
+  // ───────────────────────────────────────────────────────────────────────
+  // Supplier crate movements (supplier_crate_ledger + supplier_crate_balances)
+  // Moved here from SupplierCrateLedgerDao (#157) so the seam owns every write.
+  // ───────────────────────────────────────────────────────────────────────
+
+  /// Full crates RECEIVED from a supplier (we now owe N empties), with an
+  /// optional refundable [depositPaidKobo] paid on the receipt.
+  Future<void> recordReceiveFromSupplier({
+    required String supplierId,
+    required String manufacturerId,
+    required int quantity,
+    required String performedBy,
+    String? storeId,
+    int depositPaidKobo = 0,
+    String? note,
+  }) async {
+    if (quantity <= 0) return;
+    await _appendSupplierMovement(
+      supplierId: supplierId,
+      manufacturerId: manufacturerId,
+      quantityDelta: quantity,
+      movementType: 'received',
+      performedBy: performedBy,
+      storeId: storeId,
+      depositPaidKobo: depositPaidKobo < 0 ? 0 : depositPaidKobo,
+      note: note,
+    );
+  }
+
+  /// Empties RETURNED to a supplier (reduces what we owe), with an optional
+  /// [depositRefundedKobo] refunded back to us on the return.
+  Future<void> recordReturnToSupplier({
+    required String supplierId,
+    required String manufacturerId,
+    required int quantity,
+    required String performedBy,
+    String? storeId,
+    int depositRefundedKobo = 0,
+    String? note,
+  }) async {
+    if (quantity <= 0) return;
+    await _appendSupplierMovement(
+      supplierId: supplierId,
+      manufacturerId: manufacturerId,
+      quantityDelta: -quantity,
+      movementType: 'returned',
+      performedBy: performedBy,
+      storeId: storeId,
+      depositPaidKobo: depositRefundedKobo < 0 ? 0 : depositRefundedKobo,
+      note: note,
+    );
+  }
+
+  Future<void> _appendSupplierMovement({
+    required String supplierId,
+    required String manufacturerId,
+    required int quantityDelta,
+    required String movementType,
+    required String performedBy,
+    required int depositPaidKobo,
+    String? storeId,
+    String? note,
+  }) async {
+    await transaction(() async {
+      final ledgerComp = SupplierCrateLedgerCompanion.insert(
+        id: Value(UuidV7.generate()),
+        businessId: requireBusinessId(),
+        supplierId: supplierId,
+        manufacturerId: manufacturerId,
+        storeId: Value(storeId),
+        quantityDelta: quantityDelta,
+        movementType: movementType,
+        depositPaidKobo: Value(depositPaidKobo),
+        note: Value(note),
+        performedBy: Value(performedBy),
+        lastUpdatedAt: Value(DateTime.now()),
+      );
+      await into(supplierCrateLedger).insert(ledgerComp);
+
+      await customInsert(
+        'INSERT INTO supplier_crate_balances '
+        '  (id, business_id, supplier_id, manufacturer_id, balance) '
+        'VALUES (?, ?, ?, ?, ?) '
+        'ON CONFLICT(business_id, supplier_id, manufacturer_id) DO UPDATE SET '
+        '  balance = balance + excluded.balance, '
+        "  last_updated_at = CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)",
+        variables: [
+          Variable(UuidV7.generate()),
+          Variable(requireBusinessId()),
+          Variable(supplierId),
+          Variable(manufacturerId),
+          Variable(quantityDelta),
+        ],
+        updates: {supplierCrateBalances},
+      );
+
+      await db.syncDao.enqueueUpsert('supplier_crate_ledger', ledgerComp);
+      final updatedBalance =
+          await (select(supplierCrateBalances)
+                ..where(
+                  (t) =>
+                      whereBusiness(t) &
+                      t.supplierId.equals(supplierId) &
+                      t.manufacturerId.equals(manufacturerId),
+                )
+                ..limit(1))
+              .getSingle();
+      await db.syncDao.enqueueUpsert(
+        'supplier_crate_balances',
+        updatedBalance,
+      );
+    });
+  }
+
+  // ── Shared helpers ─────────────────────────────────────────────────────
+
+  /// Append an append-only, store-stamped business-pool ledger row and enqueue
+  /// it. Used by the physical-pool verbs above.
+  Future<void> _appendPoolLedgerRow({
+    required String manufacturerId,
+    String? storeId,
+    required int quantityDelta,
+    required String movementType,
+    String? performedBy,
+  }) async {
+    final ledgerComp = CrateLedgerCompanion.insert(
+      id: Value(UuidV7.generate()),
+      businessId: requireBusinessId(),
+      manufacturerId: Value(manufacturerId),
+      storeId: Value(storeId),
+      quantityDelta: quantityDelta,
+      movementType: movementType,
+      performedBy: Value(performedBy),
+      lastUpdatedAt: Value(DateTime.now()),
+    );
+    await into(crateLedger).insert(ledgerComp);
+    await db.syncDao.enqueueUpsert('crate_ledger', ledgerComp);
+  }
+
+  Future<void> _enqueueFullManufacturer(String id) async {
+    final row = await (select(
+      manufacturers,
+    )..where((t) => t.id.equals(id) & whereBusiness(t))).getSingleOrNull();
+    if (row != null) {
+      await db.syncDao.enqueueUpsert('manufacturers', row.toCompanion(true));
     }
   }
 }
