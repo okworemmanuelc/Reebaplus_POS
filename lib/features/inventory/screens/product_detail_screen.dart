@@ -227,15 +227,19 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   }
 
   Future<void> _loadEmptyCrateStock(String manufacturerId) async {
-    final manufacturers = await ref
+    // #159: the manufacturer's business-wide empties total is DERIVED from the
+    // append-only crate_ledger (not the demoted empty_crate_stock scalar), so
+    // this read-only figure agrees with the Crates tab.
+    final pool = await ref
         .read(databaseProvider)
-        .inventoryDao
-        .getAllManufacturers();
-    final mfr = manufacturers.where((m) => m.id == manufacturerId).firstOrNull;
-    if (mfr != null && mounted) {
+        .cratePoolDao
+        .watchEmptiesPoolByManufacturer()
+        .first;
+    if (mounted) {
+      final count = pool[manufacturerId] ?? 0;
       setState(() {
-        _emptyCrateStock = mfr.emptyCrateStock;
-        _emptyCratesController.text = mfr.emptyCrateStock.toString();
+        _emptyCrateStock = count;
+        _emptyCratesController.text = count.toString();
       });
     }
   }

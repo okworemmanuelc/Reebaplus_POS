@@ -9,6 +9,7 @@
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 
 import '../../helpers/dispatch_test_utils.dart';
 
@@ -49,11 +50,22 @@ void main() {
     expect(p['business_id'], businessId);
   });
 
-  test('updateManufacturerStock enqueues a full row incl. name', () async {
+  test('updateManufacturerStock enqueues a full row incl. name, but the pushed '
+      'payload OMITS empty_crate_stock (#159 demote)', () async {
     await db.inventoryDao.updateManufacturerStock(manufacturerId, 42);
     final p = await latestManufacturerUpsert();
+    // The enqueued row is still full (NOT NULL `name` present, avoids the
+    // 23502), and the local projection carries the new count…
     expect(p['name'], 'Coca-Cola');
     expect(p['empty_crate_stock'], 42);
+    // …but #159 DEMOTES the scalar: the push-column whitelist scrubs
+    // `empty_crate_stock` out of what actually crosses the wire. The physical
+    // pool is derived from the append-only crate_ledger, never pushed absolute.
+    final pushed = SupabaseSyncService.scrubForTesting('manufacturers', p);
+    expect(pushed.containsKey('empty_crate_stock'), isFalse,
+        reason: 'the absolute empties scalar must never be pushed (#159)');
+    expect(pushed['name'], 'Coca-Cola',
+        reason: 'other columns still sync');
   });
 
   test('updateManufacturerDeposit enqueues a full row incl. name', () async {

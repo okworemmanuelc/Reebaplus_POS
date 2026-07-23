@@ -508,6 +508,21 @@ final List<SyncedTable> kSyncRegistry = [
   SyncedTable(
     name: 'manufacturers',
     tenantScoped: true,
+    // #159: `empty_crate_stock` is DEMOTED off the push set — the physical
+    // empties pool is DERIVED from the append-only `crate_ledger` (store-stamped,
+    // customer-less rows), so the absolute scalar is never pushed. It is
+    // deliberately absent from this whitelist; the local column is a now-unread
+    // projection that restores harmlessly on pull. Every OTHER column still
+    // syncs (name / deposit edits are unaffected).
+    pushColumns: {
+      'id',
+      'business_id',
+      'name',
+      'deposit_amount_kobo',
+      'is_deleted',
+      'created_at',
+      'last_updated_at',
+    },
     restore: Restore.plain(
       (db) => db.manufacturers,
       ManufacturerData.fromJson,

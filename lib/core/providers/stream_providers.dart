@@ -1789,25 +1789,27 @@ final allCrateDamagesProvider = businessScopedStream<List<CrateLedgerData>>(
   whenAbsent: const [],
 );
 
-/// Per-store empty-crate balances for the currently locked store (§16.8.1 Phase 2).
-/// Returns an empty list when no store is locked. Crate businesses only.
-final storeCrateBalancesProvider =
-    businessScopedStream<List<StoreCrateBalanceData>>(
+/// Per-store empty-crate pool for the currently locked store (§16.8.1 Phase 2),
+/// mapped as manufacturerId -> balance. Returns an empty map when no store is
+/// locked. #159: DERIVED from the append-only `crate_ledger` via the Crate Pool
+/// seam (not the demoted `store_crate_balances` cache), so a locked store's view
+/// and the business-wide view agree. Crate businesses only.
+final storeCrateBalancesProvider = businessScopedStream<Map<String, int>>(
   (ref, db, businessId) {
     final storeId = ref.watch(lockedStoreProvider).value;
-    if (storeId == null) return Stream.value(const []);
-    return db.storeCrateBalancesDao.watchForStore(storeId);
+    if (storeId == null) return Stream.value(const {});
+    return db.cratePoolDao.watchEmptiesPoolByManufacturer(storeId: storeId);
   },
-  whenAbsent: const [],
+  whenAbsent: const {},
 );
 
 /// Current empty-crate balance per manufacturer for a given store, mapped as
-/// manufacturerId -> balance. Scoped to [storeId] (§16.8.1).
+/// manufacturerId -> balance. Scoped to [storeId] (§16.8.1). #159: DERIVED from
+/// the ledger via the Crate Pool seam.
 final storeEmptiesByManufacturerProvider =
     businessScopedStreamFamily<Map<String, int>, String>(
-  (ref, db, businessId, storeId) => db.storeCrateBalancesDao
-      .watchForStore(storeId)
-      .map((rows) => {for (final row in rows) row.manufacturerId: row.balance}),
+  (ref, db, businessId, storeId) =>
+      db.cratePoolDao.watchEmptiesPoolByManufacturer(storeId: storeId),
   whenAbsent: const {},
 );
 

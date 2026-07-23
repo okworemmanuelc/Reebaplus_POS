@@ -148,21 +148,12 @@ class StoreCrateBalancesDao extends DatabaseAccessor<AppDatabase>
       ],
       updates: {storeCrateBalances},
     );
-    // Enqueue the updated cache row for cloud push.
-    final row =
-        await (select(storeCrateBalances)..where(
-              (t) =>
-                  whereBusiness(t) &
-                  t.storeId.equals(storeId) &
-                  t.manufacturerId.equals(manufacturerId),
-            ))
-            .getSingleOrNull();
-    if (row != null) {
-      await db.syncDao.enqueueUpsert(
-        'store_crate_balances',
-        row.toCompanion(true),
-      );
-    }
+    // #159: `store_crate_balances` is a LOCAL-ONLY projection — the per-store
+    // empties pool is DERIVED from the append-only `crate_ledger` (see
+    // [CratePoolDao.watchEmptiesPoolByManufacturer]), so the absolute cache
+    // value is NOT enqueued. Only the store-stamped ledger row (appended by the
+    // pool verb / transfer leg) crosses the wire; pushing the absolute cache is
+    // exactly the last-write-wins clobber this slice removes.
   }
 
   /// Absolute set — used by the per-store management dialog.
@@ -187,20 +178,9 @@ class StoreCrateBalancesDao extends DatabaseAccessor<AppDatabase>
       ],
       updates: {storeCrateBalances},
     );
-    final row =
-        await (select(storeCrateBalances)..where(
-              (t) =>
-                  whereBusiness(t) &
-                  t.storeId.equals(storeId) &
-                  t.manufacturerId.equals(manufacturerId),
-            ))
-            .getSingleOrNull();
-    if (row != null) {
-      await db.syncDao.enqueueUpsert(
-        'store_crate_balances',
-        row.toCompanion(true),
-      );
-    }
+    // #159: local-only projection — not enqueued. The per-store empties pool is
+    // derived from the ledger; see [applyDelta] above and
+    // [CratePoolDao.watchEmptiesPoolByManufacturer].
   }
 }
 
@@ -572,6 +552,43 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     );
   }
 
+  /// #159 — the PHYSICAL empties pool per manufacturer, DERIVED from the append-
+  /// only ledger the way [watchCustomerCrateDebt] derives a customer's crate
+  /// debt. The pool is `SUM(quantity_delta)` over the business's manufacturer-
+  /// owned PHYSICAL-pool `crate_ledger` rows — the store-stamped, customer-less
+  /// rows (`store_id IS NOT NULL AND customer_id IS NULL`) — never the demoted
+  /// `manufacturers.empty_crate_stock` scalar or the `store_crate_balances`
+  /// cache. With [storeId] null the sum spans every store (business-wide "All
+  /// Stores"); with a store it confines to that store. Because the SAME store-
+  /// stamped set grouped by store gives the per-store figure, the business total
+  /// always equals Σ store totals by construction (PRD #156 store-stamp
+  /// invariant). Returning empties to a supplier (a `returned` store-stamped,
+  /// customer-less row) reduces the total automatically — the old
+  /// counter-only-grows asymmetry is gone. Live-refreshing (the `crate_ledger`
+  /// insert is a Drift builder write the stream tracker observes). One entry per
+  /// manufacturer that has a physical-pool movement (a map miss reads as 0).
+  Stream<Map<String, int>> watchEmptiesPoolByManufacturer({String? storeId}) {
+    final sumExpr = crateLedger.quantityDelta.sum();
+    var predicate =
+        whereBusiness(crateLedger) &
+        crateLedger.customerId.isNull() &
+        crateLedger.storeId.isNotNull() &
+        crateLedger.manufacturerId.isNotNull();
+    if (storeId != null) {
+      predicate = predicate & crateLedger.storeId.equals(storeId);
+    }
+    final query = selectOnly(crateLedger)
+      ..addColumns([crateLedger.manufacturerId, sumExpr])
+      ..where(predicate)
+      ..groupBy([crateLedger.manufacturerId]);
+    return query.watch().map(
+      (rows) => {
+        for (final r in rows)
+          r.read(crateLedger.manufacturerId)!: r.read(sumExpr) ?? 0,
+      },
+    );
+  }
+
   /// The crate legs of an APPROVED pending crate return (the approval-queue
   /// flow). Same customer-return movement as [recordCrateReturnByCustomer] but
   /// stamped with [returnId] (`referenceReturnId`). Runs inside the approval
@@ -634,8 +651,8 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
   /// post-sale value carries the newest timestamp and would win. So undo both
   /// here, append-only and LOCAL-ONLY:
   ///   • append a compensating `-quantity` 'adjusted' ledger row (a system
-  ///     correction, not a phantom customer 'returned') so the ledger↔cache
-  ///     sums stay consistent for [verifyCrateReconciliation]; and
+  ///     correction, not a phantom customer 'returned') so the ledger-derived
+  ///     debt nets back to its pre-sale value; and
   ///   • decrement the cache back to its pre-sale value.
   /// NOTHING is enqueued — the cloud never saw the issue, so a compensation
   /// pushed there would wrongly decrement a balance it never held (or FK-fail
@@ -696,114 +713,10 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     }
   }
 
-  /// Verification logic to ensure cache tables match ledger sums.
-  /// To be scheduled nightly or run on-demand.
-  Future<void> verifyCrateReconciliation() async {
-    // v29: crate balances are keyed by manufacturer. A customer crate row sets
-    // BOTH customer_id and manufacturer_id; a business/manufacturer-stock row
-    // sets only manufacturer_id (customer_id null).
-    //
-    // 1. Reconcile Customers — rows with a customer owner, by (customer,
-    // manufacturer).
-    final customerLedgerSums =
-        await (selectOnly(crateLedger)
-              ..addColumns([
-                crateLedger.customerId,
-                crateLedger.manufacturerId,
-                crateLedger.quantityDelta.sum(),
-              ])
-              ..where(
-                whereBusiness(crateLedger) & crateLedger.customerId.isNotNull(),
-              )
-              ..groupBy([crateLedger.customerId, crateLedger.manufacturerId]))
-            .get();
-
-    for (final row in customerLedgerSums) {
-      final custId = row.read(crateLedger.customerId)!;
-      final mfrId = row.read(crateLedger.manufacturerId);
-      final sum = row.read(crateLedger.quantityDelta.sum()) ?? 0;
-      if (mfrId == null) continue; // legacy pre-v29 row without a manufacturer
-
-      final cache =
-          await (select(customerCrateBalances)..where(
-                (t) =>
-                    whereBusiness(t) &
-                    t.customerId.equals(custId) &
-                    t.manufacturerId.equals(mfrId),
-              ))
-              .getSingleOrNull();
-
-      if (cache == null || cache.balance != sum.toInt()) {
-        // Log mismatch or trigger auto-fix (logging for now)
-        // ignore: avoid_print
-        print(
-          'CRATE MISMATCH [Customer]: $custId, Manufacturer: $mfrId, Ledger: $sum, Cache: ${cache?.balance}',
-        );
-      }
-    }
-
-    // 2. Reconcile Manufacturers — business-side stock rows only (no customer
-    // owner), by manufacturer.
-    final manufacturerLedgerSums =
-        await (selectOnly(crateLedger)
-              ..addColumns([
-                crateLedger.manufacturerId,
-                crateLedger.quantityDelta.sum(),
-              ])
-              ..where(
-                whereBusiness(crateLedger) &
-                    crateLedger.manufacturerId.isNotNull() &
-                    crateLedger.customerId.isNull(),
-              )
-              ..groupBy([crateLedger.manufacturerId]))
-            .get();
-
-    for (final row in manufacturerLedgerSums) {
-      final mfrId = row.read(crateLedger.manufacturerId)!;
-      final sum = row.read(crateLedger.quantityDelta.sum()) ?? 0;
-
-      final cache =
-          await (select(manufacturerCrateBalances)..where(
-                (t) => whereBusiness(t) & t.manufacturerId.equals(mfrId),
-              ))
-              .getSingleOrNull();
-
-      if (cache == null || cache.balance != sum.toInt()) {
-        // ignore: avoid_print
-        print(
-          'CRATE MISMATCH [Manufacturer]: $mfrId, Ledger: $sum, Cache: ${cache?.balance}',
-        );
-      }
-    }
-
-    // 3. Reconcile per-store balances (§16.8.1) — store-stamped business-side
-    // ledger rows (store_id NOT NULL, customer_id NULL) vs store_crate_balances.
-    final storeLedgerSums = await customSelect(
-      'SELECT store_id, manufacturer_id, SUM(quantity_delta) AS ledger_sum '
-      'FROM crate_ledger '
-      'WHERE business_id = ? '
-      '  AND store_id IS NOT NULL '
-      '  AND customer_id IS NULL '
-      'GROUP BY store_id, manufacturer_id',
-      variables: [Variable(requireBusinessId())],
-    ).get();
-
-    for (final row in storeLedgerSums) {
-      final sid = row.read<String>('store_id');
-      final mfrId = row.read<String>('manufacturer_id');
-      final sum = row.read<int>('ledger_sum');
-      final cacheBalance = await db.storeCrateBalancesDao.getBalance(
-        storeId: sid,
-        manufacturerId: mfrId,
-      );
-      if (cacheBalance != sum) {
-        // ignore: avoid_print
-        print(
-          'CRATE MISMATCH [Store]: store=$sid, mfr=$mfrId, Ledger: $sum, Cache: $cacheBalance',
-        );
-      }
-    }
-  }
+  // #159: `verifyCrateReconciliation` (dead, print-only) was DELETED. With every
+  // balance now DERIVED from the ledger (`SUM(quantity_delta)`), there is no
+  // longer a cache to reconcile the ledger against — the ledger IS the truth
+  // (ADR 0020 "retire the dead reconciler").
 
   // ───────────────────────────────────────────────────────────────────────
   // Physical business pool (manufacturers.empty_crate_stock scalar + per-store)

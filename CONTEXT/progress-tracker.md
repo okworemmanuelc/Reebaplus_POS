@@ -10,6 +10,62 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### Crate pool #3 (#159) — physical empties pool derived from the ledger — CODE-COMPLETE (2026-07-23)
+Third slice of the crate-pool ledger-as-truth refactor (PRD #156, ADR 0020).
+Branch `feat/crate-pool-empties-derived` off `main` (post-#158 merge, HEAD
+9d2576e). Flips the **physical empties pool** (business-wide + per-store) from the
+`manufacturers.empty_crate_stock` scalar + `store_crate_balances` cache to a live
+ledger sum, mirroring #158 exactly.
+- **Derived read (the seam owns it).** New
+  `CratePoolDao.watchEmptiesPoolByManufacturer({String? storeId})` =
+  `SUM(quantity_delta)` over the business's **physical-pool** `crate_ledger` rows
+  — the store-stamped, customer-less rows (`store_id IS NOT NULL AND
+  customer_id IS NULL`), grouped by manufacturer. With `storeId` null it spans
+  every store (business-wide); with a store it confines to it — the SAME set at
+  two grouping levels, so **business total == Σ store totals by construction**.
+  `InventoryDao.watchEmptyCratesByManufacturer` / `watchTotalCrateAssets`,
+  `storeCrateBalancesProvider` (now `Map<String,int>`), `storeEmptiesByManufacturerProvider`,
+  the Inventory Crates tab (business + locked-store), and product-detail's
+  read-only empties row all forward to it, so the SUM logic lives in one place and
+  every surface agrees.
+- **Caches demoted to local-only projections.** `manufacturers.empty_crate_stock`
+  is removed from the push set via a new `manufacturers` push-column whitelist that
+  excludes it (the pool verbs still enqueue the full manufacturer row for the
+  NOT-NULL `name`, but the scalar is scrubbed off the wire). `store_crate_balances`
+  stops enqueuing in `applyDelta` / `setBalance`. Both keep their local writes
+  (crate_pool_seam_test still green) and their `SyncedTable` restore entries
+  (restore-on-pull retained, values unread). Only append-only `crate_ledger` rows
+  sync for the pool. This kills the counter-only-grows asymmetry (a `returned`
+  store-stamped row now pulls the pool down) and the cross-store clamp drift on a
+  damaged-empty.
+- **Dead reconciler deleted.** `verifyCrateReconciliation` (no callers,
+  print-only) removed — the ledger IS the truth (ADR 0020 "retire the dead
+  reconciler").
+- **Tests.** New `test/crates/empties_pool_derived_test.dart` (10): derived pool
+  == store-stamped ledger sum; business == Σ stores after every op; return-to-
+  supplier reduces the business total; damaged-empty reduces the right store and
+  can't push another store negative; store_crate_balances never enqueued;
+  empty_crate_stock scrubbed off the manufacturers push; multi-device convergence
+  (two offline tills → merge → derived == combined sum). Updated
+  `manufacturer_partial_upsert_test` (updateManufacturerStock scrubs the scalar),
+  `sync_registry_golden_test` (manufacturers push whitelist added — both sides in
+  one commit), `crate_logic_test` (the business-wide live-refresh case now uses a
+  store-stamped credit, matching the store-partitioned pool).
+- **Verification.** `flutter analyze` 0/0 on the changed files; full `flutter test`
+  = 993 pass, 110 skipped (Tier-2), 1 fail (`who_is_working_screen_test`, the same
+  pre-existing environmental network flake as #158 — `PostgrestException 400`
+  hitting placeholder Supabase, unrelated to crates). No migration (behavior-
+  preserving on the read; the v63 opening seed from #157 already made
+  SUM(store-stamped) == the store caches at cutover).
+- **Known limitations / left for #160:** a store-LESS `addEmptyCrates` / `recordDamage`
+  / manual-set writes a store-less ledger row that the store-partitioned pool
+  excludes by design (in practice callers resolve a store); a manufacturer created
+  with an opening `emptyCrateStock` (Add Manufacturer dialog) writes no ledger row,
+  so the derived pool reads it as 0 (already inconsistent pre-#159); `recordManualCountCorrection`
+  still computes its delta from the local store cache (single-device-correct).
+  `manufacturer_crate_balances` + `supplier_crate_balances` are still pushed absolute
+  (#160). `StoreCrateBalancesDao.watchForStore` is now dead (kept for the restore DAO).
+
 ### Crate pool #2 (#158) — customer crate debt derived from the ledger — CODE-COMPLETE (2026-07-23)
 Second slice of the crate-pool ledger-as-truth refactor (PRD #156, ADR 0020).
 Branch `feat/crate-pool-customer-derived` off `main` (post-#157 merge, HEAD

@@ -488,21 +488,22 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
-  /// Stream per-manufacturer empty-crate stock from the manufacturers cache.
+  /// Stream the business-wide physical empties pool per manufacturer. #159:
+  /// DERIVED from the append-only `crate_ledger` (the store-stamped, customer-
+  /// less rows) via the Crate Pool seam, not the demoted
+  /// `manufacturers.empty_crate_stock` scalar — so the business figure and a
+  /// locked store's figure agree (both derive from the same ledger).
   Stream<Map<String, int>> watchEmptyCratesByManufacturer() {
-    return (select(manufacturers)
-          ..where((t) => whereBusiness(t) & t.isDeleted.not()))
-        .watch()
-        .map((rows) => {for (final m in rows) m.id: m.emptyCrateStock});
+    return db.cratePoolDao.watchEmptiesPoolByManufacturer();
   }
 
   /// Stream the total empty-crate assets across all manufacturers — used by
-  /// the inventory dashboard summary card.
+  /// the inventory dashboard summary card. #159: the sum of the ledger-derived
+  /// per-manufacturer pool (business total == Σ store totals by construction).
   Stream<int> watchTotalCrateAssets() {
-    return (select(manufacturers)
-          ..where((t) => whereBusiness(t) & t.isDeleted.not()))
-        .watch()
-        .map((rows) => rows.fold<int>(0, (sum, m) => sum + m.emptyCrateStock));
+    return db.cratePoolDao
+        .watchEmptiesPoolByManufacturer()
+        .map((m) => m.values.fold<int>(0, (sum, v) => sum + v));
   }
 
   Future<List<ProductStockWithStore>> getProductsStockPerStore({

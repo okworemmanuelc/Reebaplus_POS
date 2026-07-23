@@ -76,8 +76,23 @@ one place to call and cannot reintroduce the drift.
   `customer_crate_balances` cache is demoted to a **local-only projection** (still
   written by the seam, no longer enqueued), so only append-only ledger rows sync
   for customer crates and two offline tills converge instead of clobbering.
-- **#159 / #160** — derive physical-pool (business + per-store) and supplier
-  balances from the ledger; demote those caches; unify the scalar.
+- **#159 (DONE 2026-07-23)** — the PHYSICAL empties pool (business-wide +
+  per-store) derived from the ledger. New `CratePoolDao.watchEmptiesPoolByManufacturer({storeId})`
+  is `SUM(quantity_delta)` over the store-stamped, customer-less physical-pool
+  rows (`store_id IS NOT NULL AND customer_id IS NULL`); grouping by store gives
+  the per-store figure, so the business total always equals Σ store totals by
+  construction. `InventoryDao.watchEmptyCratesByManufacturer` / `watchTotalCrateAssets`,
+  `storeCrateBalancesProvider` / `storeEmptiesByManufacturerProvider`, the
+  Inventory Crates tab, and the product-detail read all forward to it. The
+  `manufacturers.empty_crate_stock` scalar is DEMOTED off the push set (a new
+  `manufacturers` push-column whitelist that excludes it), and `store_crate_balances`
+  stops enqueuing — both become local-only projections (restore-on-pull retained,
+  values unread). This kills the counter-only-grows asymmetry (a `returned`
+  store-stamped row now pulls the pool down) and the cross-store clamp drift on a
+  damaged-empty. The dead `verifyCrateReconciliation` (no callers, print-only) is
+  removed — the ledger IS the truth, nothing left to reconcile.
+- **#160** — derive supplier + `manufacturer_crate_balances` from the ledger;
+  demote those remaining caches.
 - **#162** — Cancel appends compensating rows (no phantom debt; deposit reversed
   with a deposit-family reference type).
 - **#163** — `businessNetPositionKobo` subtracts held customer crate deposits and

@@ -3780,11 +3780,13 @@ class SupabaseSyncService {
         'expense_categories',
         (row) => row.id,
       );
-      // #158: `customer_crate_balances` is a LOCAL-ONLY projection — customer
-      // crate debt is derived from the append-only `crate_ledger`, so the
-      // absolute cache value is never pushed (not by the DAO write paths and not
-      // by this recovery backfill). Re-enqueuing it here would reintroduce the
-      // last-write-wins clobber the derive-from-ledger model removes.
+      // #158/#159: the crate BALANCE caches (`customer_crate_balances`,
+      // `store_crate_balances`, and the `manufacturers.empty_crate_stock`
+      // scalar) are LOCAL-ONLY projections — every crate balance is DERIVED from
+      // the append-only `crate_ledger`, so no absolute cache value is ever
+      // pushed (not by the DAO write paths and not by a recovery backfill).
+      // There is deliberately NO `_backfillTable` for them here; re-enqueuing
+      // one would reintroduce the last-write-wins clobber the model removes.
       await _backfillTable(
         _db.deliveryReceipts,
         'delivery_receipts',

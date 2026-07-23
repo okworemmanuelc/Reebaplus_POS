@@ -129,6 +129,12 @@ void main() {
     });
 
     test('watchEmptyCratesByManufacturer emits after addEmptyCrates', () async {
+      // #159: the business-wide pool is DERIVED from the store-stamped ledger,
+      // so a physical-pool credit carries a store; the derived read re-emits
+      // live because the underlying crate_ledger insert invalidates the stream.
+      final storeId = UuidV7.generate();
+      await db.into(db.stores).insert(StoresCompanion.insert(
+          id: Value(storeId), businessId: businessId, name: 'Main'));
       final emissions = <int>[];
       final sub = db.inventoryDao
           .watchEmptyCratesByManufacturer()
@@ -138,7 +144,7 @@ void main() {
       await pumpEventQueue();
       expect(emissions.last, 0);
 
-      await db.inventoryDao.addEmptyCrates(manufacturerId, 6);
+      await db.inventoryDao.addEmptyCrates(manufacturerId, 6, storeId: storeId);
       await pumpEventQueue();
 
       expect(emissions.last, 6);

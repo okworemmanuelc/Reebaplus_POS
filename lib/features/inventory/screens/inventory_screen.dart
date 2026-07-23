@@ -1415,21 +1415,23 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   Widget _buildCratesTab(BuildContext context) {
     // §16.8.1 Phase 2: crate figures are PER-STORE when a store is active and
     // business-wide in "All Stores". Full bottles come from the active store's
-    // inventory (fullCratesByManufacturerProvider); empties come from that
-    // store's store_crate_balances, falling back to the business-wide
-    // manufacturers.empty_crate_stock when no store is locked.
+    // inventory (fullCratesByManufacturerProvider). #159: empties are DERIVED
+    // from the append-only crate_ledger for BOTH views — the per-store pool when
+    // a store is locked (storeCrateBalancesProvider) and the business-wide pool
+    // otherwise (emptyCratesByManufacturerProvider) — so the two views agree.
     final lockedStoreId = ref.watch(lockedStoreProvider).value;
     final fullByMfr =
         ref.watch(fullCratesByManufacturerProvider).valueOrNull ??
         const <String, int>{};
     final Map<String, int> emptyByMfr;
     if (lockedStoreId == null) {
-      emptyByMfr = {for (final m in _dbManufacturers) m.id: m.emptyCrateStock};
+      emptyByMfr =
+          ref.watch(emptyCratesByManufacturerProvider).valueOrNull ??
+          const <String, int>{};
     } else {
-      final balances =
+      emptyByMfr =
           ref.watch(storeCrateBalancesProvider).valueOrNull ??
-          const <StoreCrateBalanceData>[];
-      emptyByMfr = {for (final b in balances) b.manufacturerId: b.balance};
+          const <String, int>{};
     }
 
     final stats = _computeCrateStats(fullByMfr, emptyByMfr);

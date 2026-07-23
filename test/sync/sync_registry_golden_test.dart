@@ -155,6 +155,19 @@ void main() {
 
   // 4) The push-column whitelist — only the tables that diverge from cloud.
   const goldenPushColumns = <String, Set<String>>{
+    // #159: `empty_crate_stock` is DEMOTED off the push set — the physical
+    // empties pool is derived from the append-only `crate_ledger`, so the
+    // absolute scalar never crosses the wire. This whitelist is every
+    // manufacturers column EXCEPT `empty_crate_stock`.
+    'manufacturers': {
+      'id',
+      'business_id',
+      'name',
+      'deposit_amount_kobo',
+      'is_deleted',
+      'created_at',
+      'last_updated_at',
+    },
     'profiles': {
       'id',
       'business_id',
