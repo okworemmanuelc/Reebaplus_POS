@@ -493,10 +493,11 @@ class SupabaseSyncService {
     'crate_ledger': 33,
     'manufacturer_crate_balances': 34,
     'store_crate_balances': 35,
-    // v53 (§3.13) — supplier crate ledger + balance cache push after their
-    // parents (suppliers=5, manufacturers=3) so the FK targets land first.
+    // v53 (§3.13) — supplier crate ledger pushes after its parents (suppliers=5,
+    // manufacturers=3) so the FK targets land first. #160: the
+    // `supplier_crate_balances` cache is OFF the push set (supplier crate debt is
+    // derived from the ledger — ADR 0020), so it has no push-priority entry.
     'supplier_crate_ledger': 36,
-    'supplier_crate_balances': 37,
     'system_config': 50,
   };
 
@@ -517,12 +518,9 @@ class SupabaseSyncService {
   /// plain-enqueued — so they don't need an entry.)
   static const Map<String, String> _naturalKeyPushConflictTargets = {
     'store_crate_balances': 'business_id,store_id,manufacturer_id',
-    // v53 (§3.13) — supplier crate balance cache is plain-enqueued by
-    // SupplierCrateLedgerDao (no domain RPC), so two devices can independently
-    // mint different ids for the same (business, supplier, manufacturer) before
-    // syncing. Key the cloud upsert on the natural key so they merge instead of
-    // tripping the cloud UNIQUE (2067).
-    'supplier_crate_balances': 'business_id,supplier_id,manufacturer_id',
+    // #160: the `supplier_crate_balances` cache is OFF the push set (supplier
+    // crate debt is derived from the append-only `supplier_crate_ledger` — ADR
+    // 0020), so it is never enqueued and needs no natural-key conflict target.
   };
 
   /// Per-table whitelist of cloud-pushable columns, DERIVED from the

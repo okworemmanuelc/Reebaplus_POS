@@ -91,8 +91,27 @@ one place to call and cannot reintroduce the drift.
   store-stamped row now pulls the pool down) and the cross-store clamp drift on a
   damaged-empty. The dead `verifyCrateReconciliation` (no callers, print-only) is
   removed — the ledger IS the truth, nothing left to reconcile.
-- **#160** — derive supplier + `manufacturer_crate_balances` from the ledger;
-  demote those remaining caches.
+- **#160 (DONE 2026-07-23)** — supplier crate debt derived from the ledger + a
+  one-step supplier delivery. The Supplier Detail → Empty Crates read
+  (`CratePoolDao.watchSupplierCrateDebt`, forwarded from
+  `SupplierCrateBalancesDao.watchBySupplier`) is `SUM(quantity_delta)` over the
+  supplier's `supplier_crate_ledger` rows grouped by manufacturer, wallet-style
+  (inner-joined for the name + per-manufacturer deposit rate). The
+  `supplier_crate_balances` cache is demoted to a **local-only projection** (still
+  written by the seam, no longer enqueued, and off the push-priority /
+  natural-key maps), so only append-only ledger rows sync for supplier crates and
+  two offline tills converge instead of clobbering. **Receive Stock posts both
+  sides in one step (B3):** a delivery that returns empties appends, in its own
+  transaction through the seam, BOTH the physical-pool `crate_ledger` movement AND
+  the `supplier_crate_ledger` movement — one physical event, one operation — so
+  the yard count and the supplier balance can no longer disagree and the stock
+  keeper never enters the return a second time on the supplier screen.
+- **`manufacturer_crate_balances` (not yet scheduled)** — the business-wide
+  per-manufacturer physical-pool cache is the one crate balance still pushed as an
+  absolute value. Its READ already derives from the ledger (#159's business-wide
+  pool), but its write/push has not been demoted (`daos_crates.dart` still enqueues
+  it; it remains in the push-priority map). A follow-up slice should demote it for
+  full ledger-as-truth parity — after which no crate balance is pushed at all.
 - **#162** — Cancel appends compensating rows (no phantom debt; deposit reversed
   with a deposit-family reference type).
 - **#163** — `businessNetPositionKobo` subtracts held customer crate deposits and

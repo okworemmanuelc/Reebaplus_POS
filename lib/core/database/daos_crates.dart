@@ -1048,6 +1048,10 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
       );
       await into(supplierCrateLedger).insert(ledgerComp);
 
+      // #160: the `supplier_crate_balances` cache is a LOCAL-ONLY projection —
+      // still written here so any local reader stays live and a legacy/RPC-
+      // authored cloud row restores harmlessly on pull, but it is NOT enqueued.
+      // customInsert (not customStatement) so the watching streams refresh.
       await customInsert(
         'INSERT INTO supplier_crate_balances '
         '  (id, business_id, supplier_id, manufacturer_id, balance) '
@@ -1065,22 +1069,63 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
         updates: {supplierCrateBalances},
       );
 
+      // #160: only the append-only ledger row crosses the wire; supplier crate
+      // debt is DERIVED from it (see [watchSupplierCrateDebt]). Pushing the
+      // absolute cache value is exactly the last-write-wins clobber this slice
+      // removes — two offline tills' movements both survive a merge instead.
       await db.syncDao.enqueueUpsert('supplier_crate_ledger', ledgerComp);
-      final updatedBalance =
-          await (select(supplierCrateBalances)
-                ..where(
-                  (t) =>
-                      whereBusiness(t) &
-                      t.supplierId.equals(supplierId) &
-                      t.manufacturerId.equals(manufacturerId),
-                )
-                ..limit(1))
-              .getSingle();
-      await db.syncDao.enqueueUpsert(
-        'supplier_crate_balances',
-        updatedBalance,
-      );
     });
+  }
+
+  /// #160 — a supplier's crate debt per manufacturer, DERIVED from the append-
+  /// only `supplier_crate_ledger` the way the wallet balance derives from
+  /// `wallet_transactions` ([WalletTransactionsDao.watchAllBalancesKobo]): the
+  /// balance is `SUM(quantity_delta)` over the supplier's ledger rows grouped by
+  /// manufacturer — never the demoted `supplier_crate_balances` total. Positive =
+  /// WE owe the supplier that many empties (for the full crates they delivered);
+  /// negative = the supplier owes us (a crate credit); zero = clear (a fully-
+  /// settled brand nets to 0, still shown as Clear). Because the underlying
+  /// `supplier_crate_ledger` insert is a Drift builder write the stream tracker
+  /// observes, this re-emits live on every new movement. One row per manufacturer
+  /// the supplier has ever moved a crate for, inner-joined for the display name +
+  /// current per-manufacturer deposit rate so the UI can value the crates owed.
+  Stream<List<SupplierCrateBalanceWithManufacturer>> watchSupplierCrateDebt(
+    String supplierId,
+  ) {
+    final sumExpr = supplierCrateLedger.quantityDelta.sum();
+    final query = selectOnly(supplierCrateLedger).join([
+      innerJoin(
+        manufacturers,
+        manufacturers.id.equalsExp(supplierCrateLedger.manufacturerId),
+      ),
+    ])
+      ..addColumns([
+        supplierCrateLedger.manufacturerId,
+        manufacturers.name,
+        manufacturers.depositAmountKobo,
+        sumExpr,
+      ])
+      ..where(
+        whereBusiness(supplierCrateLedger) &
+            supplierCrateLedger.supplierId.equals(supplierId),
+      )
+      ..groupBy([
+        supplierCrateLedger.manufacturerId,
+        manufacturers.name,
+        manufacturers.depositAmountKobo,
+      ]);
+    return query.watch().map(
+      (rows) => rows
+          .map(
+            (r) => SupplierCrateBalanceWithManufacturer(
+              manufacturerId: r.read(supplierCrateLedger.manufacturerId)!,
+              manufacturerName: r.read(manufacturers.name)!,
+              balance: r.read(sumExpr) ?? 0,
+              depositRateKobo: r.read(manufacturers.depositAmountKobo)!,
+            ),
+          )
+          .toList(),
+    );
   }
 
   // ── Shared helpers ─────────────────────────────────────────────────────

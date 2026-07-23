@@ -66,6 +66,58 @@ ledger sum, mirroring #158 exactly.
   `manufacturer_crate_balances` + `supplier_crate_balances` are still pushed absolute
   (#160). `StoreCrateBalancesDao.watchForStore` is now dead (kept for the restore DAO).
 
+### Crate pool #4 (#160) — supplier crate debt derived + Receive Stock posts both legs — CODE-COMPLETE (2026-07-23)
+Fourth slice of the crate-pool ledger-as-truth refactor (PRD #156, ADR 0020).
+Branch `feat/crate-pool-supplier-derived` off `main` (post-#158, HEAD 9d2576e).
+Flips the **supplier** crate-debt balance from the stored cache to a live ledger
+sum (the wallet model), and makes a supplier delivery a one-step operation.
+- **Derived read (the seam owns it).** New
+  `CratePoolDao.watchSupplierCrateDebt(supplierId)` = `SUM(quantity_delta)` over
+  the supplier's `supplier_crate_ledger` rows grouped by manufacturer, inner-
+  joined for the display name + current per-manufacturer deposit rate — the exact
+  analogue of #158's `watchCustomerCrateDebt`. Returns the existing
+  `SupplierCrateBalanceWithManufacturer` type so the Supplier Detail → Empty
+  Crates tab is unchanged. `SupplierCrateBalancesDao.watchBySupplier` now just
+  forwards to it; the UI (`supplierCrateBalancesProvider`) is untouched.
+- **Receive Stock posts BOTH legs in one transaction (B3).** When a delivery
+  returns empties, `ReceiveStockService.confirmReceipt` now appends, through the
+  seam and inside its existing txn, the physical-pool `crate_ledger` movement
+  (`recordCrateReturnByManufacturer`) AND the `supplier_crate_ledger` movement
+  (`recordReturnToSupplier`) for the same manufacturer + quantity. One physical
+  event → one operation; the stock keeper no longer opens the supplier screen to
+  enter the return a second time, so the yard count and the supplier balance can
+  no longer disagree.
+- **Cache demoted to a local-only projection.** `_appendSupplierMovement` still
+  writes `supplier_crate_balances` locally (a legacy/RPC pull row restores
+  harmlessly; any local reader stays live) but **no longer `enqueueUpsert`s it** —
+  only the append-only `supplier_crate_ledger` row crosses the wire. Also removed
+  `supplier_crate_balances` from the sync service's `_tablePushPriority` and
+  `_naturalKeyPushConflictTargets` maps (it is now genuinely off the push set).
+  The `SyncedTable` registry entry (isCache) is retained — restore-on-pull kept,
+  value unread — matching how #158 left `customer_crate_balances`. (There was no
+  `_backfillTable(supplierCrateBalances,…)` recovery call to remove — only the
+  customer one ever existed.)
+- **Tests.** New `test/crates/supplier_crate_debt_derived_test.dart` (9): derived
+  debt == ledger sum, fully-settled brand nets to 0, per-(supplier,manufacturer)
+  scoping, the Empty-Crates read re-emits live with the deposit rate, the **B3
+  regression** (one confirmReceipt updates BOTH the physical pool — summed off
+  `crate_ledger` directly, not #159's method — and the supplier balance, one
+  supplier ledger row), the cache is never enqueued (receipt + return), the cache
+  is still written locally, and the headline **multi-device convergence** (two
+  offline tills → merge both supplier ledgers → derived == combined sum). Existing
+  `receive_stock_test` + `supplier_crate_test` stay green unchanged (the derived
+  read is a drop-in; the supplier leg is additive).
+- **Verification.** `flutter analyze` 0 issues on the changed files; full
+  `flutter test` = 995 pass, 110 skipped (Tier-2), 1 fail — the lone failure
+  `who_is_working_screen_test` is the pre-existing environmental
+  Supabase/shared_preferences plugin flake (fails identically in isolation, no
+  auth code touched here). No migration — the #157 v63 opening seed already made
+  each supplier's ledger sum equal its pre-existing cache value at cutover.
+- **Coordinate with #159 (parallel):** expected merge conflicts in
+  `daos_crates.dart`, `supabase_sync_service.dart`, and the docs; edits kept
+  localized + additive. The physical leg is posted as a manufacturer-owned,
+  store-stamped `crate_ledger` row (the rows #159 sums), so the two slices compose.
+
 ### Crate pool #2 (#158) — customer crate debt derived from the ledger — CODE-COMPLETE (2026-07-23)
 Second slice of the crate-pool ledger-as-truth refactor (PRD #156, ADR 0020).
 Branch `feat/crate-pool-customer-derived` off `main` (post-#157 merge, HEAD

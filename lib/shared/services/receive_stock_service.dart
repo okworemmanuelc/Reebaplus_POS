@@ -14,8 +14,11 @@ import 'package:reebaplus_pos/shared/services/supplier_account_service.dart';
 /// 2. Each line increments on-hand stock for the active store (which also appends
 ///    the `stock_transactions` row that IS the Inventory → History entry).
 /// 3. For each bottle line that tracks empties, any empty crates handed back to
-///    the supplier on this receipt are recorded as a crate return against the
-///    product's manufacturer (reduces what we hold/owe for that manufacturer).
+///    the supplier on this receipt post BOTH crate legs through the Crate Pool
+///    seam, in this transaction (#160 / B3): the physical-pool movement (our
+///    yard count drops) AND the supplier crate movement (what we owe THIS
+///    supplier drops). One physical event → one operation; the stock keeper no
+///    longer opens the supplier screen to enter the return a second time.
 /// 4. A single summary "stock received" Activity Log row is written.
 ///
 /// Every write above goes through a DAO/service that enqueues to the sync outbox,
@@ -24,9 +27,11 @@ import 'package:reebaplus_pos/shared/services/supplier_account_service.dart';
 /// Crate movements are tracked per-manufacturer on this build (the canonical
 /// crate-debt owner is the manufacturer; the deposit rate is
 /// `Manufacturers.depositAmountKobo`). The supplier on the receipt owns the
-/// invoice; empties returned are attributed to each line's manufacturer. (A
-/// supplier-side "full crates received increases what we owe" ledger is the
-/// separate §3.13 supplier-crate feature, not present on this build.)
+/// invoice; empties returned are attributed to each line's manufacturer AND to
+/// the supplier's `supplier_crate_ledger` (§3.13), whose balance is DERIVED from
+/// the ledger (ADR 0020). A supplier-side "full crates received increases what
+/// we owe" entry is still made separately on the supplier screen (not captured
+/// on the receive cart).
 class ReceiveStockService {
   final AppDatabase _db;
   final SupplierAccountService _supplierAccounts;
@@ -120,6 +125,12 @@ class ReceiveStockService {
       // 3. Empty crates handed back to the supplier on this receipt, recorded
       //    once per manufacturer (not per product). Only manufacturers carried
       //    by a bottle + trackEmpties line on this receipt are consulted.
+      //    #160 (B3): one physical event → BOTH legs, in this transaction,
+      //    through the Crate Pool seam — the physical-pool movement (yard count
+      //    drops) AND the supplier crate movement (what we owe the supplier
+      //    drops). The stock keeper no longer opens the supplier screen to enter
+      //    the return a second time; the supplier balance is then DERIVED from
+      //    `supplier_crate_ledger` like every other crate balance.
       final eligibleManufacturerIds = <String>{
         for (final line in lines)
           if (line.trackEmpties && line.manufacturerId != null)
@@ -127,7 +138,16 @@ class ReceiveStockService {
       };
       for (final entry in emptiesReturnedByManufacturer.entries) {
         if (entry.value > 0 && eligibleManufacturerIds.contains(entry.key)) {
+          // Leg 1 — physical empties pool (manufacturer-owned, store-stamped).
           await _db.cratePoolDao.recordCrateReturnByManufacturer(
+            manufacturerId: entry.key,
+            quantity: entry.value,
+            performedBy: staffId,
+            storeId: storeId,
+          );
+          // Leg 2 — supplier crate debt (what we owe THIS supplier drops).
+          await _db.cratePoolDao.recordReturnToSupplier(
+            supplierId: supplierId,
             manufacturerId: entry.key,
             quantity: entry.value,
             performedBy: staffId,

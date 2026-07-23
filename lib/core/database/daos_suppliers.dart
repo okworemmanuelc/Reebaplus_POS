@@ -485,33 +485,15 @@ class SupplierCrateBalancesDao extends DatabaseAccessor<AppDatabase>
     with _$SupplierCrateBalancesDaoMixin, BusinessScopedDao<AppDatabase> {
   SupplierCrateBalancesDao(super.db);
 
-  /// Live per-manufacturer balances for one supplier. Clear (0) rows are
-  /// included so a fully-settled brand can still show "Clear".
+  /// #160 — the Supplier Detail → Empty Crates tab read. Balance is DERIVED
+  /// from the append-only `supplier_crate_ledger` (the wallet model), not the
+  /// demoted `supplier_crate_balances` cache; forwards to the Crate Pool seam so
+  /// the SUM logic lives in one place. Clear (0) rows are still included so a
+  /// fully-settled brand can show "Clear".
   Stream<List<SupplierCrateBalanceWithManufacturer>> watchBySupplier(
     String supplierId,
   ) {
-    final query = select(supplierCrateBalances).join([
-      innerJoin(
-        manufacturers,
-        manufacturers.id.equalsExp(supplierCrateBalances.manufacturerId),
-      ),
-    ]);
-    query.where(
-      whereBusiness(supplierCrateBalances) &
-          supplierCrateBalances.supplierId.equals(supplierId),
-    );
-    return query.watch().map((rows) {
-      return rows.map((row) {
-        final bal = row.readTable(supplierCrateBalances);
-        final mfr = row.readTable(manufacturers);
-        return SupplierCrateBalanceWithManufacturer(
-          manufacturerId: bal.manufacturerId,
-          manufacturerName: mfr.name,
-          balance: bal.balance,
-          depositRateKobo: mfr.depositAmountKobo,
-        );
-      }).toList();
-    });
+    return attachedDatabase.cratePoolDao.watchSupplierCrateDebt(supplierId);
   }
 
   /// Net crates we owe this supplier across all manufacturers (positive = owed).
