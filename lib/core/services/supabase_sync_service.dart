@@ -491,8 +491,11 @@ class SupabaseSyncService {
     'order_items': 31,
     'wallet_transactions': 32,
     'crate_ledger': 33,
-    'manufacturer_crate_balances': 34,
     'store_crate_balances': 35,
+    // #166: the `manufacturer_crate_balances` cache is OFF the push set (the
+    // business-wide empties pool is derived from the ledger — ADR 0020), so it
+    // has no push-priority entry. After this slice NO crate balance is pushed —
+    // only the append-only ledgers sync.
     // v53 (§3.13) — supplier crate ledger pushes after its parents (suppliers=5,
     // manufacturers=3) so the FK targets land first. #160: the
     // `supplier_crate_balances` cache is OFF the push set (supplier crate debt is
@@ -513,9 +516,9 @@ class SupabaseSyncService {
   /// the cloud domain RPC pos_transfer_crates (gen_random_uuid). A PK-keyed
   /// cloud upsert of a client-minted id would INSERT a duplicate and trip the
   /// cloud UNIQUE(business_id, store_id, manufacturer_id); keying the push on
-  /// the natural key merges into the existing row instead. (manufacturer/customer
-  /// crate caches don't mix authorities — in domain-RPC mode they're never
-  /// plain-enqueued — so they don't need an entry.)
+  /// the natural key merges into the existing row instead. (The manufacturer and
+  /// customer crate caches are OFF the push set entirely — #166 / #158, ADR 0020
+  /// — so they are never enqueued and need no natural-key entry.)
   static const Map<String, String> _naturalKeyPushConflictTargets = {
     'store_crate_balances': 'business_id,store_id,manufacturer_id',
     // #160: the `supplier_crate_balances` cache is OFF the push set (supplier
@@ -3778,13 +3781,15 @@ class SupabaseSyncService {
         'expense_categories',
         (row) => row.id,
       );
-      // #158/#159: the crate BALANCE caches (`customer_crate_balances`,
-      // `store_crate_balances`, and the `manufacturers.empty_crate_stock`
+      // #158/#159/#160/#166: the crate BALANCE caches (`customer_crate_balances`,
+      // `manufacturer_crate_balances`, `store_crate_balances`,
+      // `supplier_crate_balances`, and the `manufacturers.empty_crate_stock`
       // scalar) are LOCAL-ONLY projections — every crate balance is DERIVED from
-      // the append-only `crate_ledger`, so no absolute cache value is ever
-      // pushed (not by the DAO write paths and not by a recovery backfill).
-      // There is deliberately NO `_backfillTable` for them here; re-enqueuing
-      // one would reintroduce the last-write-wins clobber the model removes.
+      // the append-only `crate_ledger` / `supplier_crate_ledger`, so no absolute
+      // cache value is ever pushed (not by the DAO write paths and not by a
+      // recovery backfill). There is deliberately NO `_backfillTable` for them
+      // here; re-enqueuing one would reintroduce the last-write-wins clobber the
+      // model removes.
       await _backfillTable(
         _db.deliveryReceipts,
         'delivery_receipts',

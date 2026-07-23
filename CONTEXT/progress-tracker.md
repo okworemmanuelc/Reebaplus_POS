@@ -10,6 +10,37 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### Crate pool #7 (#166) — demote `manufacturer_crate_balances` off the push set — CODE-COMPLETE (2026-07-24)
+Follow-up slice of the crate-pool ledger-as-truth refactor (PRD #156, ADR 0020).
+Branch `feat/crate-pool-manufacturer-demote` off `main` (HEAD 6793ce5, post-#160).
+Closes the LAST leak: the business-wide per-manufacturer physical-pool cache was
+the one crate balance still pushed as an absolute "balance is now N" row. Its READ
+already derived from the ledger (#159's business-wide `watchEmptiesPoolByManufacturer`);
+this slice demotes its write/push so it becomes a local-only projection like the
+other three caches.
+- **The only enqueue removed.** `CratePoolDao.recordCrateReturnByManufacturer`
+  (`daos_crates.dart`) was the SOLE site that pushed `manufacturer_crate_balances`
+  — it re-read the updated balance and `enqueueUpsert`ed it. That block is gone;
+  it now enqueues only the append-only `crate_ledger` row. The local cache
+  `customInsert` is untouched (the Crates tab still reads a fresh value).
+- **Off the push set.** Removed `'manufacturer_crate_balances': 34` from
+  `_tablePushPriority` in `supabase_sync_service.dart`. It was never in
+  `_naturalKeyPushConflictTargets` and had no `_backfillTable` call, so no other
+  push path remained — comments in both spots updated to say so.
+- **Restore-on-pull retained.** The `SyncedTable` isCache entry in
+  `sync_registry.dart` stays (a legacy/web/RPC-authored cloud row still restores
+  harmlessly into the now-unread projection). The golden test's cache-membership
+  set is unchanged — same as `customer_crate_balances` stayed listed after #158.
+- **Tests (TDD).** Updated `crate_ledger_dao_dispatch_test.dart` (flag-OFF now
+  expects a single `crate_ledger:upsert`, cache still written locally) and added a
+  "supplier return never enqueues `manufacturer_crate_balances`" case to
+  `empties_pool_derived_test.dart`'s no-absolute-push group. Both red before the
+  code change, green after. Full `test/crates/` + `test/sync/` green (+296);
+  analyzer clean.
+- **Result:** after this slice **no crate balance is pushed to the cloud at all** —
+  only the append-only `crate_ledger` / `supplier_crate_ledger` sync. ADR 0020's
+  hard contract now holds for all four caches plus the `empty_crate_stock` scalar.
+
 ### Crate pool #3 (#159) — physical empties pool derived from the ledger — CODE-COMPLETE (2026-07-23)
 Third slice of the crate-pool ledger-as-truth refactor (PRD #156, ADR 0020).
 Branch `feat/crate-pool-empties-derived` off `main` (post-#158 merge, HEAD

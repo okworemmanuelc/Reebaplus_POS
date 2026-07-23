@@ -106,12 +106,17 @@ one place to call and cannot reintroduce the drift.
   the `supplier_crate_ledger` movement — one physical event, one operation — so
   the yard count and the supplier balance can no longer disagree and the stock
   keeper never enters the return a second time on the supplier screen.
-- **`manufacturer_crate_balances` (not yet scheduled)** — the business-wide
-  per-manufacturer physical-pool cache is the one crate balance still pushed as an
-  absolute value. Its READ already derives from the ledger (#159's business-wide
-  pool), but its write/push has not been demoted (`daos_crates.dart` still enqueues
-  it; it remains in the push-priority map). A follow-up slice should demote it for
-  full ledger-as-truth parity — after which no crate balance is pushed at all.
+- **#166 (DONE 2026-07-24)** — the business-wide per-manufacturer physical-pool
+  cache (`manufacturer_crate_balances`) is demoted, closing the last leak. Its
+  READ already derived from the ledger (#159's business-wide pool); this slice
+  removes the only write-path enqueue (`recordCrateReturnByManufacturer` in
+  `daos_crates.dart` no longer pushes an absolute "balance is now N" row — it just
+  writes the local cache and enqueues the `crate_ledger` row) and drops the table
+  from the `_tablePushPriority` map. The `SyncedTable` restore-on-pull entry is
+  retained (local-only projection, values unread). **After this slice no crate
+  balance is ever pushed to the cloud — only append-only ledger rows sync — so
+  the ADR's hard contract now holds for every one of the four caches plus the
+  scalar.**
 - **#162** — Cancel appends compensating rows (no phantom debt; deposit reversed
   with a deposit-family reference type).
 - **#163** — `businessNetPositionKobo` subtracts held customer crate deposits and

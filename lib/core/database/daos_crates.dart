@@ -360,20 +360,13 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
           jsonEncode(payload),
         );
       } else {
+        // #166 (ADR 0020): the manufacturer_crate_balances cache is a LOCAL-ONLY
+        // projection — it is written above so the Crates tab reads a fresh value,
+        // but it is NEVER enqueued. Only the append-only crate_ledger row syncs;
+        // pushing an absolute "balance is now N" row would reintroduce the
+        // last-write-wins clobber the ledger model removes. This was the last
+        // crate balance still pushed — after this slice none is.
         await db.syncDao.enqueueUpsert('crate_ledger', ledgerComp);
-        final updatedBalance =
-            await (select(manufacturerCrateBalances)
-                  ..where(
-                    (t) =>
-                        whereBusiness(t) &
-                        t.manufacturerId.equals(manufacturerId),
-                  )
-                  ..limit(1))
-                .getSingle();
-        await db.syncDao.enqueueUpsert(
-          'manufacturer_crate_balances',
-          updatedBalance,
-        );
       }
     });
   }

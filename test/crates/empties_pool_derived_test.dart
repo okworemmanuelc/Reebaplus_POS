@@ -233,6 +233,29 @@ void main() {
       expect(types, isNot(contains('store_crate_balances:upsert')));
     });
 
+    test('a pool return enqueues the ledger row, never '
+        'manufacturer_crate_balances (#166 — last absolute cache demoted)',
+        () async {
+      await db.cratePoolDao.addEmptiesToPool(manufacturerA, 10, storeId: storeA);
+      await db.customStatement('DELETE FROM sync_queue');
+
+      // recordCrateReturnByManufacturer was the SOLE remaining site that pushed
+      // an absolute "balance is now N" row (the business-wide per-manufacturer
+      // cache). It is demoted to a local-only projection.
+      await db.cratePoolDao.recordCrateReturnByManufacturer(
+        manufacturerId: manufacturerA,
+        quantity: 4,
+        performedBy: userId,
+        storeId: storeA,
+      );
+
+      final types = await queuedActionTypes();
+      expect(types, contains('crate_ledger:upsert'));
+      expect(types, isNot(contains('manufacturer_crate_balances:upsert')),
+          reason: 'the business-wide cache is a local-only projection (#166) — '
+              'after this slice NO crate balance is ever pushed');
+    });
+
     test('the manufacturers push scrubs empty_crate_stock (demoted scalar)',
         () async {
       await db.cratePoolDao.addEmptiesToPool(manufacturerA, 7, storeId: storeA);
