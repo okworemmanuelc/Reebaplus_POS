@@ -55,30 +55,13 @@ class CustomersDao extends DatabaseAccessor<AppDatabase>
         .watchSingleOrNull();
   }
 
+  /// #158 — the Crates-tab read. Balance is DERIVED from the append-only
+  /// `crate_ledger` (the wallet model), not the demoted `customer_crate_balances`
+  /// cache; forwards to the Crate Pool seam so the SUM logic lives in one place.
   Stream<List<CrateBalanceEntry>> watchCrateBalancesWithGroups(
     String customerId,
   ) {
-    final query =
-        select(customerCrateBalances).join([
-          innerJoin(
-            manufacturers,
-            manufacturers.id.equalsExp(customerCrateBalances.manufacturerId),
-          ),
-        ])..where(
-          whereBusiness(customerCrateBalances) &
-              customerCrateBalances.customerId.equals(customerId),
-        );
-    return query.watch().map(
-      (rows) => rows
-          .map(
-            (r) => CrateBalanceEntry(
-              manufacturerId: r.readTable(customerCrateBalances).manufacturerId,
-              manufacturerName: r.readTable(manufacturers).name,
-              balance: r.readTable(customerCrateBalances).balance,
-            ),
-          )
-          .toList(),
-    );
+    return attachedDatabase.cratePoolDao.watchCustomerCrateDebt(customerId);
   }
 
   Future<String> addCustomer(CustomersCompanion customer) async {

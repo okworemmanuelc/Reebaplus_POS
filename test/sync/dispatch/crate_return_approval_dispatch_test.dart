@@ -74,7 +74,7 @@ void main() {
 
   group('CrateReturnApprovalService.approve dispatch', () {
     test(
-        'flag OFF: enqueues pending + ledger + balance upserts, no domain envelope',
+        'flag OFF: enqueues pending + ledger upserts (no cache), no domain envelope',
         () async {
       await setFlag(db, 'feature.domain_rpcs_v2.approve_crate_return',
           on: false);
@@ -94,6 +94,8 @@ void main() {
       expect(ledgerRows, hasLength(1));
       expect(ledgerRows.first.quantityDelta, -fx.quantity);
 
+      // Cache still written locally (local-only projection) but NOT enqueued —
+      // #158 derives customer crate debt from the ledger.
       final balanceRows = await db.select(db.customerCrateBalances).get();
       expect(balanceRows, hasLength(1));
       expect(balanceRows.first.balance, -fx.quantity);
@@ -102,7 +104,6 @@ void main() {
       final actionTypes = pending.map((r) => r.actionType).toList()..sort();
       expect(actionTypes, [
         'crate_ledger:upsert',
-        'customer_crate_balances:upsert',
         'pending_crate_returns:upsert',
       ]);
     });

@@ -69,8 +69,15 @@ one place to call and cannot reintroduce the drift.
   the later derive slices would zero out every existing business's counts. Opening
   rows are **local-only** (every device seeds from its own caches; pushing them
   would double-count).
-- **#158 / #159 / #160** — derive customer, physical-pool (business + per-store),
-  and supplier balances from the ledger; demote the caches; unify the scalar.
+- **#158 (DONE 2026-07-23)** — customer crate debt derived from the ledger. The
+  Crates-tab read (`CratePoolDao.watchCustomerCrateDebt`, forwarded from
+  `CustomersDao.watchCrateBalancesWithGroups`) is `SUM(quantity_delta)` over the
+  customer's `crate_ledger` rows grouped by manufacturer, wallet-style. The
+  `customer_crate_balances` cache is demoted to a **local-only projection** (still
+  written by the seam, no longer enqueued), so only append-only ledger rows sync
+  for customer crates and two offline tills converge instead of clobbering.
+- **#159 / #160** — derive physical-pool (business + per-store) and supplier
+  balances from the ledger; demote those caches; unify the scalar.
 - **#162** — Cancel appends compensating rows (no phantom debt; deposit reversed
   with a deposit-family reference type).
 - **#163** — `businessNetPositionKobo` subtracts held customer crate deposits and

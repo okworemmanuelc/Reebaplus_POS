@@ -2,6 +2,40 @@
 
 ---
 
+## 2026-07-23 — Feature: #158 Customer crate debt derived from the ledger
+
+Second slice of the crate-pool ledger-as-truth refactor (PRD #156, ADR **0020**).
+Branch `feat/crate-pool-customer-derived` off `main` (post-#157). Flips the
+**customer** crate-debt balance from the stored `customer_crate_balances` cache to
+a live ledger sum — exactly how the customer wallet already works.
+
+- **Derived read.** New `CratePoolDao.watchCustomerCrateDebt(customerId)` =
+  `SUM(quantity_delta)` over the customer's `crate_ledger` rows grouped by
+  manufacturer (inner-joined for the display name) — the analogue of
+  `WalletTransactionsDao.watchAllBalancesKobo`. Re-emits live (the `crate_ledger`
+  insert is a Drift builder write the stream tracker observes).
+  `CustomersDao.watchCrateBalancesWithGroups` (Crates tab + crate-debt notifier)
+  now forwards to it; both UI consumers unchanged (`CrateBalanceEntry` kept).
+- **Cache demoted → local-only projection.** The three customer write paths still
+  write `customer_crate_balances` locally but **no longer `enqueueUpsert` it** —
+  only the append-only `crate_ledger` row syncs. This removes the last-write-wins
+  clobber: two offline tills' movements both survive a merge and the derived
+  balance is their sum.
+- **Tests.** New `customer_crate_debt_derived_test.dart` (6, incl. the headline
+  multi-device convergence — two independent ledgers merge, derived == combined
+  sum, nothing lost). Updated `crate_ledger_dao_dispatch_test` +
+  `crate_return_approval_dispatch_test` to assert the customer cache is no longer
+  enqueued (AC #2). Golden suite (Dart DAO == `pos_record_crate_return` RPC ledger
+  rows) unchanged/green.
+- **Verify.** `flutter analyze` 0/0 on changed files; full suite green for
+  crate/sync/orders/golden (the one failing `who_is_working_screen_test` is a
+  pre-existing environmental network flake, identical on clean `main`).
+- **No migration** — the #157 v63 opening seed already made each customer's ledger
+  sum equal their pre-existing cache value, so the derived read matches the old
+  displayed number at cutover.
+
+---
+
 ## 2026-07-22 — Feature: #157 Crate Pool seam + complete ledger (prefactor)
 
 First slice of the crate-pool ledger-as-truth refactor (PRD #156, ADR **0020**).

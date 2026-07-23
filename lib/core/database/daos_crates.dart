@@ -464,21 +464,10 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
           jsonEncode(payload),
         );
       } else {
+        // #158: only the append-only ledger row syncs; the
+        // `customer_crate_balances` cache is a local-only projection and is not
+        // enqueued (the balance is derived — see [watchCustomerCrateDebt]).
         await db.syncDao.enqueueUpsert('crate_ledger', ledgerComp);
-        final updatedBalance =
-            await (select(customerCrateBalances)
-                  ..where(
-                    (t) =>
-                        whereBusiness(t) &
-                        t.customerId.equals(customerId) &
-                        t.manufacturerId.equals(manufacturerId),
-                  )
-                  ..limit(1))
-                .getSingle();
-        await db.syncDao.enqueueUpsert(
-          'customer_crate_balances',
-          updatedBalance,
-        );
       }
     });
   }
@@ -538,17 +527,49 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     );
 
     await db.syncDao.enqueueUpsert('crate_ledger', ledgerComp);
-    final updatedBalance =
-        await (select(customerCrateBalances)
-              ..where(
-                (t) =>
-                    whereBusiness(t) &
-                    t.customerId.equals(customerId) &
-                    t.manufacturerId.equals(manufacturerId),
-              )
-              ..limit(1))
-            .getSingle();
-    await db.syncDao.enqueueUpsert('customer_crate_balances', updatedBalance);
+    // #158: the `customer_crate_balances` cache is a LOCAL-ONLY projection — it
+    // is NOT enqueued. Only the append-only ledger row above crosses the wire;
+    // the balance is DERIVED from it (see [watchCustomerCrateDebt]). Pushing the
+    // absolute cache value is exactly the last-write-wins clobber this slice
+    // removes.
+  }
+
+  /// #158 — a customer's crate debt per manufacturer, DERIVED from the append-
+  /// only ledger the way the wallet balance derives from `wallet_transactions`
+  /// ([WalletTransactionsDao.watchAllBalancesKobo]): the balance is
+  /// `SUM(quantity_delta)` over the customer's `crate_ledger` rows grouped by
+  /// manufacturer — never the stored `customer_crate_balances` total. Positive =
+  /// the customer owes us empties; negative = a credit; zero = clear (a fully-
+  /// returned brand nets to 0, not a phantom debt). Because the underlying
+  /// `crate_ledger` insert is a Drift builder write the stream tracker observes,
+  /// this re-emits live on every new movement. One row per manufacturer the
+  /// customer has ever moved a crate for (inner-joined for the display name).
+  Stream<List<CrateBalanceEntry>> watchCustomerCrateDebt(String customerId) {
+    final sumExpr = crateLedger.quantityDelta.sum();
+    final query = selectOnly(crateLedger).join([
+      innerJoin(
+        manufacturers,
+        manufacturers.id.equalsExp(crateLedger.manufacturerId),
+      ),
+    ])
+      ..addColumns([crateLedger.manufacturerId, manufacturers.name, sumExpr])
+      ..where(
+        whereBusiness(crateLedger) &
+            crateLedger.customerId.equals(customerId) &
+            crateLedger.manufacturerId.isNotNull(),
+      )
+      ..groupBy([crateLedger.manufacturerId, manufacturers.name]);
+    return query.watch().map(
+      (rows) => rows
+          .map(
+            (r) => CrateBalanceEntry(
+              manufacturerId: r.read(crateLedger.manufacturerId)!,
+              manufacturerName: r.read(manufacturers.name)!,
+              balance: r.read(sumExpr) ?? 0,
+            ),
+          )
+          .toList(),
+    );
   }
 
   /// The crate legs of an APPROVED pending crate return (the approval-queue
@@ -598,18 +619,9 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     );
 
     if (!useDomainRpc) {
+      // #158: customer crate debt is derived from the ledger; the cache is a
+      // local-only projection and is not enqueued.
       await db.syncDao.enqueueUpsert('crate_ledger', ledgerComp);
-      final updatedBalance =
-          await (select(customerCrateBalances)
-                ..where(
-                  (t) =>
-                      whereBusiness(t) &
-                      t.customerId.equals(customerId) &
-                      t.manufacturerId.equals(manufacturerId),
-                )
-                ..limit(1))
-              .getSingle();
-      await db.syncDao.enqueueUpsert('customer_crate_balances', updatedBalance);
     }
   }
 

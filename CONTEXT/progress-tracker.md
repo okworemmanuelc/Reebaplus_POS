@@ -10,6 +10,50 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### Crate pool #2 (#158) — customer crate debt derived from the ledger — CODE-COMPLETE (2026-07-23)
+Second slice of the crate-pool ledger-as-truth refactor (PRD #156, ADR 0020).
+Branch `feat/crate-pool-customer-derived` off `main` (post-#157 merge, HEAD
+7d40fa7). Flips the **customer** crate-debt balance from the stored cache to a
+live ledger sum, the way the wallet already works.
+- **Derived read (the seam owns it).** New
+  `CratePoolDao.watchCustomerCrateDebt(customerId)` = `SUM(quantity_delta)` over
+  the customer's `crate_ledger` rows, grouped by manufacturer, inner-joined for
+  the display name — the exact analogue of
+  `WalletTransactionsDao.watchAllBalancesKobo`. Re-emits live because the
+  underlying `crate_ledger` insert is a Drift builder write the stream tracker
+  observes. `CustomersDao.watchCrateBalancesWithGroups` (the Crates-tab + the
+  crate-debt notifier read) now just forwards to it — the two UI consumers are
+  unchanged (`CrateBalanceEntry` type kept).
+- **Cache demoted to a local-only projection.** The three customer write paths
+  (`recordCrateIssueByCustomer`, `recordCrateReturnByCustomer` flag-off,
+  `recordApprovedCustomerReturn` flag-off) still write `customer_crate_balances`
+  locally but **no longer `enqueueUpsert` it** — only the append-only
+  `crate_ledger` row crosses the wire. This removes the last-write-wins clobber:
+  two offline tills' movements both survive the merge and the derived balance is
+  their sum. (Registry entry + local writes kept — minimal blast radius; the
+  fuller cache removal rides #159/#160 which demote the other three caches.)
+- **Tests.** New `test/crates/customer_crate_debt_derived_test.dart` (6): derived
+  read == ledger sum, fully-returned brand nets to 0 (not phantom debt), the
+  Crates-tab read re-emits live, the cache is never enqueued (both issue + return
+  paths), and the headline **multi-device convergence** (two offline tills → merge
+  both ledgers → derived == combined sum, nothing clobbered). Updated the two
+  dispatch tests (`crate_ledger_dao_dispatch_test`,
+  `crate_return_approval_dispatch_test`) to assert the customer cache is no longer
+  enqueued — the proof of AC #2. Golden suite (Dart DAO == `pos_record_crate_return`
+  RPC ledger rows) unchanged/green — the ledger writes were untouched.
+- **Verification.** `flutter analyze` 0/0 on the changed files; full `flutter test`
+  = all crate/sync/orders/golden green (985 pass, 110 skipped Tier-2; the lone
+  failure `who_is_working_screen_test` is a pre-existing environmental network
+  flake, fails identically on clean `main`, unrelated to crates).
+- **Docs.** ADR 0020 rollout marks #158 DONE; architecture.md storage row notes
+  the customer cache is now local-only (not pushed). No migration (behavior-
+  preserving on the read; the v63 opening seed from #157 already made each
+  customer's ledger sum equal their pre-existing cache value at cutover).
+- **Left for later slices:** `CustomerCrateBalancesDao.watchByCustomer` is dead
+  (no consumers) and still reads the cache — left untouched (out of scope; delete
+  when the cache is fully retired in #159/#160). The manufacturer/store/supplier
+  caches are still pushed absolute (#159/#160).
+
 ### Crate pool #1 (#157) — the Crate Pool seam + a complete ledger (prefactor) — CODE-COMPLETE (2026-07-22)
 First slice of the crate-pool ledger-as-truth refactor (PRD #156, ADR **0020**).
 Branch `feat/crate-pool-seam-prefactor` off `main`. **Behavior-preserving**: the

@@ -63,7 +63,8 @@ void main() {
   tearDown(() => db.close());
 
   group('CrateLedgerDao.recordCrateReturnByCustomer dispatch', () {
-    test('flag OFF: enqueues two upsert rows, no domain envelope', () async {
+    test('flag OFF: enqueues only the ledger row, no cache, no envelope',
+        () async {
       await setFlag(db, 'feature.domain_rpcs_v2.record_crate_return',
           on: false);
       final fx = await _seedCrateFixtures(db, businessId);
@@ -77,6 +78,9 @@ void main() {
 
       final ledgerRows = await db.select(db.crateLedger).get();
       expect(ledgerRows, hasLength(1));
+      // The cache is still written locally (a local-only projection) but is NOT
+      // enqueued: #158 derives customer crate debt from the ledger, so only the
+      // append-only ledger row crosses the wire.
       final balRows = await db.select(db.customerCrateBalances).get();
       expect(balRows, hasLength(1));
       expect(balRows.first.balance, -5,
@@ -84,10 +88,7 @@ void main() {
 
       final pending = await getPendingQueue(db);
       final actionTypes = pending.map((r) => r.actionType).toList()..sort();
-      expect(
-        actionTypes,
-        ['crate_ledger:upsert', 'customer_crate_balances:upsert'],
-      );
+      expect(actionTypes, ['crate_ledger:upsert']);
     });
 
     test('flag ON: one envelope with owner_kind=customer + thin payload',
