@@ -4102,19 +4102,30 @@ class AppDatabase extends _$AppDatabase {
         }
 
         // (2) payment_transactions.store_id (nullable) + widen the type CHECK to
-        //     admit the deposit-distinct `crate_deposit` type. SQLite can't ALTER
-        //     a CHECK in place, so rebuild the table from the current Drift schema
-        //     (which now carries store_id AND the 6-value type CHECK) and copy
+        //     admit the deposit-distinct `crate_deposit` type.
+        //
+        //     First ADD the store_id column (guarded), so the rebuild below can
+        //     copy it 1:1 — drift's TableMigration needs a new column to already
+        //     exist on the old table (or a columnTransformer), else it fills the
+        //     column with the literal column name. Legacy rows get NULL.
+        final hasPayStore = await customSelect(
+          "SELECT 1 FROM pragma_table_info('payment_transactions') "
+          "WHERE name = 'store_id'",
+        ).get();
+        if (hasPayStore.isEmpty) {
+          await m.addColumn(paymentTransactions, paymentTransactions.storeId);
+        }
+        //     SQLite can't ALTER a CHECK in place, so rebuild the table from the
+        //     current Drift schema (store_id + the 6-value type CHECK) and copy
         //     every row 1:1. WIDENING the CHECK keeps every existing sale/refund/
-        //     expense/wallet_topup row valid, and store_id is a new NULLABLE
-        //     column, so the copy never fails — no backfill, legacy rows stay
-        //     null. drift's alterTable re-applies the table's EXISTING indexes;
-        //     DROP-then-CREATE each AFTER the rebuild to stay idempotent (same
-        //     fix as the v29/v61 rebuilds). Triggers are NOT re-applied by
-        //     alterTable, so DROP IF EXISTS + CREATE the two append-only ledger
-        //     triggers (immutable + no-delete, now guarding store_id too) and the
-        //     last_updated_at bump trigger — emitting the immutable trigger from
-        //     the single `_ledgerTables` source so it can't drift from onCreate.
+        //     expense/wallet_topup row valid, so the copy never fails. drift's
+        //     alterTable re-applies the table's EXISTING indexes; DROP-then-CREATE
+        //     each AFTER the rebuild to stay idempotent (same fix as the v29/v61
+        //     rebuilds). Triggers are NOT re-applied by alterTable, so DROP IF
+        //     EXISTS + CREATE the two append-only ledger triggers (immutable +
+        //     no-delete, now guarding store_id too) and the last_updated_at bump
+        //     trigger — emitting the immutable trigger from the single
+        //     `_ledgerTables` source so it can't drift from onCreate.
         await m.alterTable(TableMigration(paymentTransactions));
         await customStatement(
           'DROP INDEX IF EXISTS idx_payment_transactions_business_lua',
