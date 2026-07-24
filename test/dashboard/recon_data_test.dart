@@ -693,10 +693,13 @@ void main() {
       expect(isProductDeleteReason('Daily stock count adjustment'), isFalse);
     });
 
-    test('daily-count reconciliation reason matches "count"', () {
+    test('daily-count reconciliation reason matches the "stock count" phrase, '
+        'not a bare "count" (avoids dis*count*/ac*count*)', () {
       expect(isCountReconciliationReason('Daily stock count adjustment'),
           isTrue);
-      expect(isCountReconciliationReason('COUNT fix'), isTrue);
+      expect(isCountReconciliationReason('STOCK COUNT fix'), isTrue);
+      expect(isCountReconciliationReason('discount correction'), isFalse);
+      expect(isCountReconciliationReason('account transfer'), isFalse);
       expect(isCountReconciliationReason('Damage'), isFalse);
       expect(isCountReconciliationReason('product_deleted'), isFalse);
     });

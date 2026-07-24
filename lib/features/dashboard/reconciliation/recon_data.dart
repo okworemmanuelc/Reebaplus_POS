@@ -153,9 +153,10 @@ bool isProductDeleteReason(String reason) => reason == kProductDeletedReason;
 /// A daily-stock-count reconciliation adjustment ("Daily stock count
 /// adjustment", `stock_count_screen`) — the count-correction class #176 breaks
 /// out of the stock card's "Other movements" residual as its own line ("Count
-/// corrections"). Matches case-insensitively on "count".
+/// corrections"). Matches the "stock count" phrase (not a bare "count", which
+/// would also catch "dis**count**"/"ac**count**" in a free-text removal reason).
 bool isCountReconciliationReason(String reason) =>
-    reason.toLowerCase().contains('count');
+    reason.toLowerCase().contains('stock count');
 
 /// §17.2 crate-aware damages — FULL crate lost. When a damaged tracked-bottle
 /// product also forfeits its refundable crate deposit because the full crate
