@@ -10,6 +10,52 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### Money integrity #5 (#175) — tender picker + cash-card honesty (deposit out of Cash sales) — CODE-COMPLETE (2026-07-24)
+Fifth slice of the #155 money-integrity PRD (ADR 0021). **CODE-ONLY — no
+migration** (the `transfer` method, the `crate_deposit`/`wallet_topup` types, and
+`payment_transactions.store_id` all already exist from #169; `amount_kobo` has no
+`>=0` CHECK, so negative compensating rows are legal). Branch
+`feat/money-integrity-5-tender-cash-card` off `main` (HEAD 5d0df86, includes merged
+#169/#171/#172/#173).
+- **Checkout tender picker (Cash / Transfer)** — `checkout_page.dart` gains a
+  `_tender` toggle inside the Cash/Transfer amount input; the choice flows through
+  `paymentSubType` → `_resolvePaymentMethod` → `payment_transactions.method`, so a
+  transfer sale is written `method: 'transfer'` and EXCLUDED from the cash-drawer
+  figure, a cash sale included. The receipt label reflects the specific tender.
+- **Checkout payment-row split** (`OrdersDao.createOrder`, v1 path). The single
+  bundled `sale` row is retired for up to THREE rows via a new
+  `_insertCheckoutPaymentRow` helper, all carrying the chosen `method` + the
+  sale-level `store_id`: a goods-only `sale` (= amountPaid − deposit, capped at the
+  goods total), a `crate_deposit` for the refundable held deposit (out of Cash sales
+  AND headline Total Sales), and a `wallet_topup` for any OVERPAYMENT beyond
+  goods+deposit (the customer's credit, counted as debts collected — not a sale). The
+  three always sum to amountPaid. Total Sales already reads order LINES (goods), so it
+  was already deposit-exclusive; the split fixes the CASH card. **v2
+  `pos_record_sale_v2` still mints one bundled `sale` row server-side — flagged; it
+  and the web `checkout_order` RPC must mirror the split (cloud, out of scope).**
+- **markCancelled updated for the split (⚠️ #172 interaction).** The old refund calc
+  `sale.amountKobo − orderRow.crateDepositPaidKobo` DOUBLE-counted once the `sale` row
+  became goods-only, so it is retired: the `sale` row now refunds AS-IS (goods), the
+  `crate_deposit` row reverses as a NEGATIVE `crate_deposit` (held line nets to zero,
+  never a second cash-out), and any `wallet_topup` reverses as a NEGATIVE
+  `wallet_topup` (mirrors CreditLedgerService's top-up void). Legacy pre-#175 bundled
+  `sale` rows refund their full amount, matching how they were counted, so they stay
+  honest too.
+- **Recon held-money line.** `ReconData.cashCrateDepositsKobo` sums cash
+  `crate_deposit` rows in the period (net of cancels), rendered as a "Crate deposits
+  held (cash)" line in the cash-flow card + CSV — deliberately OUTSIDE
+  cashIn/cashOut/net (refundable customer money, never earnings). `cashSalesKobo`
+  needed NO change: it already filters `type=='sale'` && `method=='cash'`, so the
+  split keeps transfers and deposits out automatically.
+- **Tests.** `test/orders/checkout_payment_rows_test.dart` (4: cash-drawer inclusion,
+  transfer exclusion, deposit split, overpayment split); `test/orders/
+  cancel_cashout_test.dart` deposit case updated (goods refunded once + deposit nets
+  to zero via a negative crate_deposit); `recon_data_test` helper gains the new field.
+  **Golden fixtures (ADR 0009)** extended additively — a per-checkout deposit map, an
+  `extra_payments` multiset, and a `dart_arm_only` flag; 2 new dart-arm-only scenarios
+  (overpayment; money-track deposit) skipped by the web RPC arm until it implements the
+  split. `flutter analyze` clean; full suite green (see session log).
+
 ### Money integrity #4 (#173) — expense reject/delete + wallet top-up void post reversal rows — CODE-COMPLETE (2026-07-24)
 Second correction slice on the #169 seam (parent PRD #155). CODE-ONLY — **no
 schema/migration, no new permission key**. Branch
