@@ -588,6 +588,17 @@ class OrderCommands {
           final buyingPriceKobo = (item['buyingPriceKobo'] as int?) ?? 0;
           final totalKobo = unitPriceKobo * qty;
           final version = item['version'] as int?;
+          // #176 — capture the catalogue (tier list) price so a custom-price
+          // concession is derivable in margin review. The cart keeps
+          // `catalogPriceKobo` as the immutable designated price while
+          // `unitPriceKobo` becomes the CHARGED (possibly custom) price. Store it
+          // only when the two differ (an actual concession); NULL otherwise so a
+          // full-price line records no phantom concession.
+          final catalogPriceKobo = item['catalogPriceKobo'] as int?;
+          final cataloguePriceKobo =
+              (catalogPriceKobo != null && catalogPriceKobo != unitPriceKobo)
+              ? catalogPriceKobo
+              : null;
 
           final snapshot = jsonEncode({
             'name': item['name'],
@@ -604,6 +615,7 @@ class OrderCommands {
             unitPriceKobo: unitPriceKobo,
             buyingPriceKobo: Value(buyingPriceKobo),
             totalKobo: totalKobo,
+            cataloguePriceKobo: Value(cataloguePriceKobo),
             priceSnapshot: Value(snapshot),
           );
         })

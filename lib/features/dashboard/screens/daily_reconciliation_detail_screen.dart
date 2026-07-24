@@ -257,9 +257,25 @@ class _DailyReconciliationDetailScreenState
           context,
           theme,
           'Total sales',
-          formatCurrency(d.totalRevenueKobo / 100.0),
+          formatCurrency(d.totalSalesKobo / 100.0),
           strong: true,
         ),
+        // #176 — paid-now vs on-credit split so the drawer isn't over-expected
+        // by the credit amount. Shown only when some sale was on credit.
+        if (d.salesOnCreditKobo != 0) ...[
+          _line(
+            context,
+            theme,
+            'Paid now',
+            formatCurrency(d.salesPaidNowKobo / 100.0),
+          ),
+          _line(
+            context,
+            theme,
+            'On credit',
+            formatCurrency(d.salesOnCreditKobo / 100.0),
+          ),
+        ],
         if (d.refundsKobo > 0)
           _line(
             context,
@@ -271,7 +287,7 @@ class _DailyReconciliationDetailScreenState
           _line(
             context,
             theme,
-            'VAT due (${d.vatRateLabel}%)',
+            'VAT due (${d.vatRateLabel}%, ${d.vatBasisLabel})',
             formatCurrency(d.vatKobo / 100.0),
           ),
         _line(
@@ -346,6 +362,22 @@ class _DailyReconciliationDetailScreenState
           formatCurrency(d.grossProfitKobo / 100.0),
           strong: true,
         ),
+        // #176 — earnings the P&L used to hide: quick-sale takings (no recorded
+        // cost, so pure margin — see the footnote) and kept crate deposits.
+        if (d.uncostedTakingsKobo != 0)
+          _line(
+            context,
+            theme,
+            'Quick-sale takings (no recorded cost)',
+            '+ ${formatCurrency(d.uncostedTakingsKobo / 100.0)}',
+          ),
+        if (d.forfeitIncomeKobo != 0)
+          _line(
+            context,
+            theme,
+            'Forfeit income (kept crate deposits)',
+            '+ ${formatCurrency(d.forfeitIncomeKobo / 100.0)}',
+          ),
         _line(
           context,
           theme,
@@ -377,8 +409,10 @@ class _DailyReconciliationDetailScreenState
         if (d.uncostedItems > 0) ...[
           const SizedBox(height: 6),
           Text(
-            'Excludes ${fmtNumber(d.uncostedItems)} item(s) sold with no recorded '
-            'buying price (e.g. quick sales).',
+            'Includes ${fmtNumber(d.uncostedItems)} item(s) sold with no recorded '
+            'buying price (e.g. quick sales) as takings — counted in full above '
+            'because no cost was recorded to deduct, so they carry no COGS or '
+            'gross margin.',
             style: context.bodySmall.copyWith(color: theme.hintColor),
           ),
         ],
@@ -563,14 +597,19 @@ class _DailyReconciliationDetailScreenState
               '− ${formatCurrency(d.stockDamagesKobo / 100.0)}'),
           _line(context, theme, 'Expired',
               '− ${formatCurrency(d.stockExpiredKobo / 100.0)}'),
+          // #176 — the former single "Other movements" residual, broken out by
+          // cause so a delete / transfer / count-fix can't hide unlabeled.
+          if (d.stockTransfersKobo != 0)
+            _signedLine(context, theme, 'Store transfers', d.stockTransfersKobo),
+          if (d.stockCountAdjustmentsKobo != 0)
+            _signedLine(context, theme, 'Count corrections',
+                d.stockCountAdjustmentsKobo),
+          if (d.stockDeletionsKobo != 0)
+            _signedLine(context, theme, 'Product deletions',
+                d.stockDeletionsKobo),
           if (d.stockOtherMovementsKobo != 0)
-            _line(
-              context,
-              theme,
-              'Other movements',
-              '${d.stockOtherMovementsKobo >= 0 ? '+ ' : '− '}'
-                  '${formatCurrency(d.stockOtherMovementsKobo.abs() / 100.0)}',
-            ),
+            _signedLine(context, theme, 'Other movements',
+                d.stockOtherMovementsKobo),
           _divider(theme),
           _line(context, theme, 'Expected closing',
               formatCurrency(d.stockExpectedClosingKobo / 100.0),
@@ -637,6 +676,11 @@ class _DailyReconciliationDetailScreenState
       positionColor,
       [
         _line(context, theme, 'Inventory on hand (at cost)', '+ ${formatCurrency(d.inventoryOnHandKobo / 100.0)}'),
+        // #176 / #170 #7b — stock dispatched between stores but not yet received.
+        // Value that used to vanish between dispatch and receipt; now its own
+        // line in worth. Shown only when something is in transit.
+        if (d.inTransitValueKobo != 0)
+          _line(context, theme, 'In-transit stock (dispatched, not received)', '+ ${formatCurrency(d.inTransitValueKobo / 100.0)}'),
         if (d.showCrates)
           _line(context, theme, 'Empty crates held (now)', '+ ${formatCurrency(d.crateDepositKobo / 100.0)}'),
         _line(context, theme, 'Outstanding customer debt (at risk)', '+ ${formatCurrency(d.totalOwedKobo / 100.0)}', color: d.totalOwedKobo > 0 ? dangerColor : null),
@@ -1013,6 +1057,22 @@ class _DailyReconciliationDetailScreenState
     );
   }
 
+  /// A stock-flow line whose value is signed: a positive delta reads `+ ₦x`, a
+  /// negative one `− ₦x`. Keeps the broken-out movement classes (#176) readable
+  /// without repeating the sign ternary at every call site.
+  Widget _signedLine(
+    BuildContext context,
+    ThemeData theme,
+    String label,
+    int kobo,
+  ) =>
+      _line(
+        context,
+        theme,
+        label,
+        '${kobo >= 0 ? '+ ' : '− '}${formatCurrency(kobo.abs() / 100.0)}',
+      );
+
   Widget _divider(ThemeData theme) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 4),
     child: Divider(
@@ -1031,8 +1091,13 @@ class _DailyReconciliationDetailScreenState
     final rows = <List<String>>[
       ['Items sold', '${d.itemsSold}'],
       ['Products (SKUs) sold', '${d.skus}'],
-      ['Total sales', money(d.totalRevenueKobo)],
-      if (d.vatEnabled) ['VAT due (${d.vatRateLabel}%)', money(d.vatKobo)],
+      ['Total sales', money(d.totalSalesKobo)],
+      if (d.salesOnCreditKobo != 0) ...[
+        ['Total sales — paid now', money(d.salesPaidNowKobo)],
+        ['Total sales — on credit', money(d.salesOnCreditKobo)],
+      ],
+      if (d.vatEnabled)
+        ['VAT due (${d.vatRateLabel}%, ${d.vatBasisLabel})', money(d.vatKobo)],
       if (isCeo) ...[
         // Net result for this period (flow) — mirrors _netResultCard.
         ['Inventory on hand (at cost)', money(d.inventoryOnHandKobo)],
@@ -1052,10 +1117,18 @@ class _DailyReconciliationDetailScreenState
         ['Cost of goods sold', money(d.cogsKobo)],
         ['Gross profit', money(d.grossProfitKobo)],
         ['Gross margin %', d.grossMarginPct],
+        if (d.uncostedTakingsKobo != 0)
+          ['Quick-sale takings (no recorded cost)',
+            money(d.uncostedTakingsKobo)],
+        if (d.forfeitIncomeKobo != 0)
+          ['Forfeit income (kept crate deposits)', money(d.forfeitIncomeKobo)],
         ['Net profit', money(d.netProfitKobo)],
         // Business worth right now (point-in-time) — mirrors _businessWorthCard.
         // Supplier account position: negative = a debt we owe for unpaid goods,
         // positive = money we paid the supplier in advance (a prepayment).
+        if (d.inTransitValueKobo != 0)
+          ['In-transit stock (dispatched, not received)',
+            money(d.inTransitValueKobo)],
         ['Supplier account balance (now)', money(d.supplierAccountBalanceKobo)],
         // #163 — crate liabilities netted into the position below.
         if (d.showCrates)
@@ -1079,6 +1152,9 @@ class _DailyReconciliationDetailScreenState
         ['COGS (at current cost)', money(d.stockCogsKobo)],
         ['Damages (stock, at cost)', money(d.stockDamagesKobo)],
         ['Expired (at cost)', money(d.stockExpiredKobo)],
+        ['Store transfers (at cost)', money(d.stockTransfersKobo)],
+        ['Count corrections (at cost)', money(d.stockCountAdjustmentsKobo)],
+        ['Product deletions (at cost)', money(d.stockDeletionsKobo)],
         ['Other stock movements (at cost)', money(d.stockOtherMovementsKobo)],
         ['Expected closing (at cost)', money(d.stockExpectedClosingKobo)],
         ['Stock variance (counted − expected)', money(d.stockVarianceKobo)],

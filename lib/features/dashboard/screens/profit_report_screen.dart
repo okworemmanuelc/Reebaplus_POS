@@ -9,6 +9,7 @@ import 'package:reebaplus_pos/core/utils/csv_export.dart';
 import 'package:reebaplus_pos/core/utils/date_period.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/dashboard/reconciliation/report_revenue.dart';
 import 'package:reebaplus_pos/shared/models/order_status.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
@@ -107,6 +108,14 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
       cogsKobo: cogsKobo,
       products: products,
       uncostedItems: uncostedItems,
+      // #176 — the single "Total Sales" definition shared with the Home
+      // dashboard and the Daily Reconciliation (deposit-exclusive item lines
+      // minus discounts, ALL lines incl. quick sales). Distinct from
+      // [revenueKobo], which is costed-only so Revenue − COGS == Gross Profit.
+      totalSalesKobo: computeTotalSalesKobo(
+        orders,
+        inSpan: (createdAt) => isDateInPeriod(createdAt, period),
+      ),
     );
   }
 
@@ -364,7 +373,19 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
             spacing: context.spacingS,
             runSpacing: context.spacingS,
             children: [
-              _chip(theme, 'Revenue', formatCurrency(data.revenueKobo / 100.0)),
+              // #176 — the shared "Total Sales" (all lines − discounts,
+              // deposit-exclusive), identical to the Home dashboard and the
+              // Daily Reconciliation for the same period.
+              _chip(
+                theme,
+                'Total sales',
+                formatCurrency(data.totalSalesKobo / 100.0),
+              ),
+              _chip(
+                theme,
+                'Costed revenue',
+                formatCurrency(data.revenueKobo / 100.0),
+              ),
               if (canSeeCost)
                 _chip(
                   theme,
@@ -469,6 +490,7 @@ class _ProfitData {
     required this.cogsKobo,
     required this.products,
     required this.uncostedItems,
+    required this.totalSalesKobo,
   });
 
   /// Revenue of the cost-known lines only (matches [cogsKobo]'s line set so the
@@ -480,6 +502,12 @@ class _ProfitData {
   /// Quantity of sold items excluded from the profit math because their captured
   /// buying price was 0 (cost never recorded). Surfaced as a transparency note.
   final int uncostedItems;
+
+  /// The single "Total Sales" for the period (#176) — deposit-exclusive item
+  /// lines minus discounts over ALL sold lines (including quick sales), shared
+  /// with the Home dashboard and Daily Reconciliation. Distinct from
+  /// [revenueKobo] (costed-only) which drives the margin.
+  final int totalSalesKobo;
 
   int get profitKobo => revenueKobo - cogsKobo;
   double get marginPct => revenueKobo > 0 ? profitKobo / revenueKobo * 100 : 0;

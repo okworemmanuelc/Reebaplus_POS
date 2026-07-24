@@ -20,6 +20,7 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/shared/models/order_status.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
+import 'package:reebaplus_pos/features/dashboard/reconciliation/report_revenue.dart';
 import 'package:reebaplus_pos/features/dashboard/widgets/get_started_card.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/sales_detail_screen.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/reports_hub_screen.dart';
@@ -276,10 +277,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               .where((o) => o.order.staffId == userId)
               .toList()
         : filteredOrdersWithItems;
-    final totalSales = salesOrders.fold<double>(
-      0,
-      (sum, o) => sum + o.order.totalAmountKobo / 100.0,
-    );
+    // #176 — the single "Total Sales" definition, shared with the Daily
+    // Reconciliation and the Profit report (deposit-exclusive item lines minus
+    // discounts). `salesOrders` is already store/period/cashier-filtered, so the
+    // helper's default (always-true) predicates apply; it still excludes any
+    // cancelled order via `orderCountsAsSale`. Replaces the old
+    // Σ`totalAmountKobo` (deposit-IN, so a crate shop's headline was overstated
+    // by every deposit taken and disagreed with the other two surfaces).
+    final totalSales = computeTotalSalesKobo(salesOrders) / 100.0;
     final totalExpenses = filteredExpenses.fold<double>(
       0,
       (sum, e) => sum + e.expense.amountKobo / 100.0,

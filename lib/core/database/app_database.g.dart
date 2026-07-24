@@ -22066,6 +22066,16 @@ class $OrderItemsTable extends OrderItems
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _cataloguePriceKoboMeta =
+      const VerificationMeta('cataloguePriceKobo');
+  @override
+  late final GeneratedColumn<int> cataloguePriceKobo = GeneratedColumn<int>(
+    'catalogue_price_kobo',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _priceSnapshotMeta = const VerificationMeta(
     'priceSnapshot',
   );
@@ -22113,6 +22123,7 @@ class $OrderItemsTable extends OrderItems
     unitPriceKobo,
     buyingPriceKobo,
     totalKobo,
+    cataloguePriceKobo,
     priceSnapshot,
     createdAt,
     lastUpdatedAt,
@@ -22198,6 +22209,15 @@ class $OrderItemsTable extends OrderItems
     } else if (isInserting) {
       context.missing(_totalKoboMeta);
     }
+    if (data.containsKey('catalogue_price_kobo')) {
+      context.handle(
+        _cataloguePriceKoboMeta,
+        cataloguePriceKobo.isAcceptableOrUnknown(
+          data['catalogue_price_kobo']!,
+          _cataloguePriceKoboMeta,
+        ),
+      );
+    }
     if (data.containsKey('price_snapshot')) {
       context.handle(
         _priceSnapshotMeta,
@@ -22267,6 +22287,10 @@ class $OrderItemsTable extends OrderItems
         DriftSqlType.int,
         data['${effectivePrefix}total_kobo'],
       )!,
+      cataloguePriceKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}catalogue_price_kobo'],
+      ),
       priceSnapshot: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}price_snapshot'],
@@ -22298,6 +22322,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
   final int unitPriceKobo;
   final int buyingPriceKobo;
   final int totalKobo;
+  final int? cataloguePriceKobo;
   final String? priceSnapshot;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
@@ -22311,6 +22336,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
     required this.unitPriceKobo,
     required this.buyingPriceKobo,
     required this.totalKobo,
+    this.cataloguePriceKobo,
     this.priceSnapshot,
     required this.createdAt,
     required this.lastUpdatedAt,
@@ -22329,6 +22355,9 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
     map['unit_price_kobo'] = Variable<int>(unitPriceKobo);
     map['buying_price_kobo'] = Variable<int>(buyingPriceKobo);
     map['total_kobo'] = Variable<int>(totalKobo);
+    if (!nullToAbsent || cataloguePriceKobo != null) {
+      map['catalogue_price_kobo'] = Variable<int>(cataloguePriceKobo);
+    }
     if (!nullToAbsent || priceSnapshot != null) {
       map['price_snapshot'] = Variable<String>(priceSnapshot);
     }
@@ -22350,6 +22379,9 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
       unitPriceKobo: Value(unitPriceKobo),
       buyingPriceKobo: Value(buyingPriceKobo),
       totalKobo: Value(totalKobo),
+      cataloguePriceKobo: cataloguePriceKobo == null && nullToAbsent
+          ? const Value.absent()
+          : Value(cataloguePriceKobo),
       priceSnapshot: priceSnapshot == null && nullToAbsent
           ? const Value.absent()
           : Value(priceSnapshot),
@@ -22373,6 +22405,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
       unitPriceKobo: serializer.fromJson<int>(json['unitPriceKobo']),
       buyingPriceKobo: serializer.fromJson<int>(json['buyingPriceKobo']),
       totalKobo: serializer.fromJson<int>(json['totalKobo']),
+      cataloguePriceKobo: serializer.fromJson<int?>(json['cataloguePriceKobo']),
       priceSnapshot: serializer.fromJson<String?>(json['priceSnapshot']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
@@ -22391,6 +22424,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
       'unitPriceKobo': serializer.toJson<int>(unitPriceKobo),
       'buyingPriceKobo': serializer.toJson<int>(buyingPriceKobo),
       'totalKobo': serializer.toJson<int>(totalKobo),
+      'cataloguePriceKobo': serializer.toJson<int?>(cataloguePriceKobo),
       'priceSnapshot': serializer.toJson<String?>(priceSnapshot),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
@@ -22407,6 +22441,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
     int? unitPriceKobo,
     int? buyingPriceKobo,
     int? totalKobo,
+    Value<int?> cataloguePriceKobo = const Value.absent(),
     Value<String?> priceSnapshot = const Value.absent(),
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
@@ -22420,6 +22455,9 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
     unitPriceKobo: unitPriceKobo ?? this.unitPriceKobo,
     buyingPriceKobo: buyingPriceKobo ?? this.buyingPriceKobo,
     totalKobo: totalKobo ?? this.totalKobo,
+    cataloguePriceKobo: cataloguePriceKobo.present
+        ? cataloguePriceKobo.value
+        : this.cataloguePriceKobo,
     priceSnapshot: priceSnapshot.present
         ? priceSnapshot.value
         : this.priceSnapshot,
@@ -22443,6 +22481,9 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
           ? data.buyingPriceKobo.value
           : this.buyingPriceKobo,
       totalKobo: data.totalKobo.present ? data.totalKobo.value : this.totalKobo,
+      cataloguePriceKobo: data.cataloguePriceKobo.present
+          ? data.cataloguePriceKobo.value
+          : this.cataloguePriceKobo,
       priceSnapshot: data.priceSnapshot.present
           ? data.priceSnapshot.value
           : this.priceSnapshot,
@@ -22465,6 +22506,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
           ..write('unitPriceKobo: $unitPriceKobo, ')
           ..write('buyingPriceKobo: $buyingPriceKobo, ')
           ..write('totalKobo: $totalKobo, ')
+          ..write('cataloguePriceKobo: $cataloguePriceKobo, ')
           ..write('priceSnapshot: $priceSnapshot, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt')
@@ -22483,6 +22525,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
     unitPriceKobo,
     buyingPriceKobo,
     totalKobo,
+    cataloguePriceKobo,
     priceSnapshot,
     createdAt,
     lastUpdatedAt,
@@ -22500,6 +22543,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
           other.unitPriceKobo == this.unitPriceKobo &&
           other.buyingPriceKobo == this.buyingPriceKobo &&
           other.totalKobo == this.totalKobo &&
+          other.cataloguePriceKobo == this.cataloguePriceKobo &&
           other.priceSnapshot == this.priceSnapshot &&
           other.createdAt == this.createdAt &&
           other.lastUpdatedAt == this.lastUpdatedAt);
@@ -22515,6 +22559,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
   final Value<int> unitPriceKobo;
   final Value<int> buyingPriceKobo;
   final Value<int> totalKobo;
+  final Value<int?> cataloguePriceKobo;
   final Value<String?> priceSnapshot;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
@@ -22529,6 +22574,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
     this.unitPriceKobo = const Value.absent(),
     this.buyingPriceKobo = const Value.absent(),
     this.totalKobo = const Value.absent(),
+    this.cataloguePriceKobo = const Value.absent(),
     this.priceSnapshot = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -22544,6 +22590,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
     required int unitPriceKobo,
     this.buyingPriceKobo = const Value.absent(),
     required int totalKobo,
+    this.cataloguePriceKobo = const Value.absent(),
     this.priceSnapshot = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -22564,6 +22611,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
     Expression<int>? unitPriceKobo,
     Expression<int>? buyingPriceKobo,
     Expression<int>? totalKobo,
+    Expression<int>? cataloguePriceKobo,
     Expression<String>? priceSnapshot,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
@@ -22579,6 +22627,8 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
       if (unitPriceKobo != null) 'unit_price_kobo': unitPriceKobo,
       if (buyingPriceKobo != null) 'buying_price_kobo': buyingPriceKobo,
       if (totalKobo != null) 'total_kobo': totalKobo,
+      if (cataloguePriceKobo != null)
+        'catalogue_price_kobo': cataloguePriceKobo,
       if (priceSnapshot != null) 'price_snapshot': priceSnapshot,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
@@ -22596,6 +22646,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
     Value<int>? unitPriceKobo,
     Value<int>? buyingPriceKobo,
     Value<int>? totalKobo,
+    Value<int?>? cataloguePriceKobo,
     Value<String?>? priceSnapshot,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
@@ -22611,6 +22662,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
       unitPriceKobo: unitPriceKobo ?? this.unitPriceKobo,
       buyingPriceKobo: buyingPriceKobo ?? this.buyingPriceKobo,
       totalKobo: totalKobo ?? this.totalKobo,
+      cataloguePriceKobo: cataloguePriceKobo ?? this.cataloguePriceKobo,
       priceSnapshot: priceSnapshot ?? this.priceSnapshot,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -22648,6 +22700,9 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
     if (totalKobo.present) {
       map['total_kobo'] = Variable<int>(totalKobo.value);
     }
+    if (cataloguePriceKobo.present) {
+      map['catalogue_price_kobo'] = Variable<int>(cataloguePriceKobo.value);
+    }
     if (priceSnapshot.present) {
       map['price_snapshot'] = Variable<String>(priceSnapshot.value);
     }
@@ -22675,6 +22730,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
           ..write('unitPriceKobo: $unitPriceKobo, ')
           ..write('buyingPriceKobo: $buyingPriceKobo, ')
           ..write('totalKobo: $totalKobo, ')
+          ..write('cataloguePriceKobo: $cataloguePriceKobo, ')
           ..write('priceSnapshot: $priceSnapshot, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
@@ -75125,6 +75181,7 @@ typedef $$OrderItemsTableCreateCompanionBuilder =
       required int unitPriceKobo,
       Value<int> buyingPriceKobo,
       required int totalKobo,
+      Value<int?> cataloguePriceKobo,
       Value<String?> priceSnapshot,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -75141,6 +75198,7 @@ typedef $$OrderItemsTableUpdateCompanionBuilder =
       Value<int> unitPriceKobo,
       Value<int> buyingPriceKobo,
       Value<int> totalKobo,
+      Value<int?> cataloguePriceKobo,
       Value<String?> priceSnapshot,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -75257,6 +75315,11 @@ class $$OrderItemsTableFilterComposer
 
   ColumnFilters<int> get totalKobo => $composableBuilder(
     column: $table.totalKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get cataloguePriceKobo => $composableBuilder(
+    column: $table.cataloguePriceKobo,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -75402,6 +75465,11 @@ class $$OrderItemsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get cataloguePriceKobo => $composableBuilder(
+    column: $table.cataloguePriceKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get priceSnapshot => $composableBuilder(
     column: $table.priceSnapshot,
     builder: (column) => ColumnOrderings(column),
@@ -75537,6 +75605,11 @@ class $$OrderItemsTableAnnotationComposer
 
   GeneratedColumn<int> get totalKobo =>
       $composableBuilder(column: $table.totalKobo, builder: (column) => column);
+
+  GeneratedColumn<int> get cataloguePriceKobo => $composableBuilder(
+    column: $table.cataloguePriceKobo,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get priceSnapshot => $composableBuilder(
     column: $table.priceSnapshot,
@@ -75686,6 +75759,7 @@ class $$OrderItemsTableTableManager
                 Value<int> unitPriceKobo = const Value.absent(),
                 Value<int> buyingPriceKobo = const Value.absent(),
                 Value<int> totalKobo = const Value.absent(),
+                Value<int?> cataloguePriceKobo = const Value.absent(),
                 Value<String?> priceSnapshot = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -75700,6 +75774,7 @@ class $$OrderItemsTableTableManager
                 unitPriceKobo: unitPriceKobo,
                 buyingPriceKobo: buyingPriceKobo,
                 totalKobo: totalKobo,
+                cataloguePriceKobo: cataloguePriceKobo,
                 priceSnapshot: priceSnapshot,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
@@ -75716,6 +75791,7 @@ class $$OrderItemsTableTableManager
                 required int unitPriceKobo,
                 Value<int> buyingPriceKobo = const Value.absent(),
                 required int totalKobo,
+                Value<int?> cataloguePriceKobo = const Value.absent(),
                 Value<String?> priceSnapshot = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -75730,6 +75806,7 @@ class $$OrderItemsTableTableManager
                 unitPriceKobo: unitPriceKobo,
                 buyingPriceKobo: buyingPriceKobo,
                 totalKobo: totalKobo,
+                cataloguePriceKobo: cataloguePriceKobo,
                 priceSnapshot: priceSnapshot,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,

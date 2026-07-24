@@ -468,6 +468,29 @@ class WalletTransactionsDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
+  /// Every non-voided `crate_deposit_forfeited` wallet row, business-wide, newest
+  /// first (#176 report-truth). Kept deliberately narrow — the Daily
+  /// Reconciliation sums these IN PERIOD as forfeit income (a kept deposit is
+  /// money legitimately earned, PRD #155 story 7), so streaming the whole wallet
+  /// ledger would be wasteful. Each row's `signedAmountKobo` is a negative debit
+  /// (mirroring `keptKobo`); the report takes the absolute value in span. Wallet
+  /// rows carry no `storeId`, so this is business-wide like the held-deposit
+  /// figure.
+  Stream<List<WalletTransactionData>> watchForfeitRows() {
+    return (select(walletTransactions)
+          ..where(
+            (t) =>
+                whereBusiness(t) &
+                t.referenceType.equals('crate_deposit_forfeited') &
+                t.voidedAt.isNull(),
+          )
+          ..orderBy([
+            (t) =>
+                OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc),
+          ]))
+        .watch();
+  }
+
   Stream<List<WalletTransactionData>> watchHistory(String customerId) {
     return (select(walletTransactions)
           ..where((t) => whereBusiness(t) & t.customerId.equals(customerId))

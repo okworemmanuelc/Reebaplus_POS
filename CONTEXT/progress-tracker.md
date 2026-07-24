@@ -10,6 +10,75 @@ The human updates it when resolving open questions or making architectural decis
 
 152 sessions logged. Codebase is live and being verified on-device.
 
+### Money integrity #8 (#176) — report-truth patches (single revenue definition) — CODE-COMPLETE (2026-07-25)
+Eighth/final slice of the #155 money-integrity PRD. Branch
+`feat/money-report-truth-176` off `main` (HEAD e2e2b92 — includes merged
+#169–#175 + #170 + #174). Makes the three report surfaces agree and stops hiding
+legitimately-earned/-owed money. Builds on #170 (`ReconData.inTransitValueKobo`,
+`lossValueKobo`) and #174 (`daily_closings`).
+- **One revenue helper** — `computeTotalSalesKobo` (new pure file
+  `lib/features/dashboard/reconciliation/report_revenue.dart`): item-line gross
+  MINUS discounts, DEPOSIT-EXCLUSIVE. Consumed by the **Home dashboard**
+  (replaces `Σ orders.totalAmountKobo`, which was deposit-IN and disagreed), the
+  **Profit report** (new "Total sales" chip beside the costed-revenue margin
+  math), AND the **Daily Reconciliation** (`ReconData.totalSalesKobo` getter =
+  `totalRevenueKobo − discountsKobo`, shown as the Sales-card headline). AC test
+  `report_revenue_test.dart` proves all three resolve the SAME figure for one
+  order set. The #174 day-close snapshot + delta badge now freeze/compare the
+  NET headline (mapper + comparison updated; the one #174 mapping-test expectation
+  updated 100k→95k).
+- **Forfeit income line** — new `crateForfeitRowsProvider` +
+  `WalletTransactionsDao.watchForfeitRows()` (narrow: live `crate_deposit_forfeited`
+  rows). `ReconData.forfeitIncomeKobo` sums them in-period (business-wide, gated
+  on showCrates); ADDED to `netProfitKobo` + a P&L card line + CSV. Kept deposits
+  are income again (were invisible while crate losses were subtracted).
+- **Quick-sale (Uncosted) takings** — `ReconData.uncostedTakingsKobo` =
+  `totalRevenueKobo − costedRevenueKobo`; ADDED to `netProfitKobo` (pure margin,
+  no COGS) with the footnote reworded to "included as takings, no COGS/margin".
+  `grossProfitKobo`/`grossMarginPct` stay costed-only.
+- **Paid-now vs on-credit** — pure `splitPaidNowOnCredit` helper (goods paid =
+  clamp(amountPaid − depositHeld, 0, goodsNet); rest is credit; sum == Total
+  Sales). `ReconData.salesPaidNowKobo`/`salesOnCreditKobo` + two Sales-card lines
+  (shown when any credit) + CSV.
+- **Stock "Other movements" broken out** — new classifiers
+  `isProductDeleteReason` (exact `product_deleted`, #170 #7c) +
+  `isCountReconciliationReason` (contains "count"); movementType `transfer*` →
+  transfers. `ReconData.stockTransfersKobo`/`stockCountAdjustmentsKobo`/
+  `stockDeletionsKobo` partition the old residual (sum preserved →
+  `stockDerivedClosingKobo` still ties). Card + CSV render each when non-zero.
+- **In-transit line in Business worth** — consumes #170's `inTransitValueKobo`
+  (already in `businessNetPositionKobo`); now its OWN card + CSV line.
+- **VAT inclusive/exclusive basis toggle (INCLUSIVE default)** — `vat_settings`
+  gains `VatBasis` + `kVatBasisKey` + `parseVatBasis` + basis-aware
+  `computeVatKobo` (inclusive = `base×rate/(10000+rate)`, no longer overstating by
+  (1+r)). `vatConfigProvider` reads `vat_basis`; Business Info gets a switch
+  ("Prices already include VAT", default on); recon passes `basis:` + labels the
+  card/CSV.
+- **Catalogue-price snapshot** — new nullable `order_items.catalogue_price_kobo`
+  (Drift **v69** + cloud **`0158_money_integrity_catalogue_price.sql`**, bigint,
+  no sync_registry change — Restore.plain). `OrderCommands._buildOrderItems`
+  captures the cart's `catalogPriceKobo` when it differs from the charged
+  `unitPriceKobo` (a concession), else NULL; `catalogue − charged` is now
+  derivable. (v2 RPC + web `checkout_order` must mirror — flagged, cloud, out of
+  scope.)
+- **Reprints** — both reprint sites in `orders_screen` now pass the real split
+  (`subtotal = totalAmount − deposit`, `crateDeposit = crateDepositPaidKobo`,
+  `total = totalAmountKobo`), mirroring the correct customer_detail receipt —
+  they no longer inflate the printed Subtotal by the deposit nor hide it.
+- **Schema/migration lane consumed:** Drift **v69** (v68→v69); cloud
+  **`0158_money_integrity_catalogue_price.sql`**. All `*_kobo` bigint. No new
+  synced tables, no new permission keys, no ADR (extends ADR 0021 report-truth).
+- **Tests:** `report_revenue_test.dart` (helper + 3-surface agreement + split, 9),
+  `vat_basis_test.dart` (inclusive/exclusive + default, 10), `recon_data_test.dart`
+  (+totalSalesKobo/forfeit/uncosted/stock-breakout/classifiers), `migration_upgrade_test.dart`
+  (v68→v69, 1), `catalogue_price_capture_test.dart` (real checkout seam, 2),
+  `forfeit_income_source_test.dart` (DAO source, 2). Golden fixtures UNCHANGED
+  (scenarios use full-price carts → catalogue column null on both arms; the P&L
+  read changes touch no money-WRITE rule). `flutter analyze` clean (0/0).
+- **Known partial (documented, not forced):** the #170 count-shortage VARIANCE
+  card still values at current cost (audit #30) — correlating the count session
+  snapshot carries double-count risk; deferred as #170 already flagged.
+
 ### Money integrity #7 (#170) — full cost-batch coverage (hook the central mutator) — MERGED to main (2026-07-24)
 Seventh slice of the #155 money-integrity PRD (ADR 0021 family). Branch
 `feat/money-cost-batch-coverage-170` off `main`. Independent costing track (runs

@@ -6,6 +6,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/vat_settings.dart';
+import 'package:reebaplus_pos/features/dashboard/reconciliation/report_revenue.dart';
 import 'package:reebaplus_pos/shared/models/order_status.dart';
 
 /// Shared aggregation engine for the Daily Reconciliation (§25.9).
@@ -136,6 +137,26 @@ bool isReceiptReason(String reason) {
       r.contains('opening') ||
       r.contains('initial');
 }
+
+/// The machine reason a product-delete write-off stamps (#170 #7c) — matches
+/// `InventoryDao.productDeletedReason` verbatim, kept as a local const so the
+/// pure recon compute needn't reach into the DAO layer. #176 breaks these rows
+/// out of the stock card's "Other movements" residual as their own labelled
+/// line ("Product deletions") so a delete can't hide a loss unlabeled.
+const String kProductDeletedReason = 'product_deleted';
+
+/// A product-delete write-off adjustment (#170 #7c / #176). Exact match on the
+/// machine reason — never a substring, so a free-text "deleted extra" removal
+/// stays in the residual.
+bool isProductDeleteReason(String reason) => reason == kProductDeletedReason;
+
+/// A daily-stock-count reconciliation adjustment ("Daily stock count
+/// adjustment", `stock_count_screen`) — the count-correction class #176 breaks
+/// out of the stock card's "Other movements" residual as its own line ("Count
+/// corrections"). Matches the "stock count" phrase (not a bare "count", which
+/// would also catch "dis**count**"/"ac**count**" in a free-text removal reason).
+bool isCountReconciliationReason(String reason) =>
+    reason.toLowerCase().contains('stock count');
 
 /// §17.2 crate-aware damages — FULL crate lost. When a damaged tracked-bottle
 /// product also forfeits its refundable crate deposit because the full crate
@@ -337,6 +358,16 @@ class ReconData {
     required this.stockExpectedClosingKobo,
     required this.topItems,
     required this.manufacturerEmpties,
+    // #176 report-truth additions — all optional-defaulted (like
+    // inTransitValueKobo) so the pure-getter test harness stays source-compatible.
+    this.salesPaidNowKobo = 0,
+    this.salesOnCreditKobo = 0,
+    this.forfeitIncomeKobo = 0,
+    this.uncostedTakingsKobo = 0,
+    this.stockTransfersKobo = 0,
+    this.stockCountAdjustmentsKobo = 0,
+    this.stockDeletionsKobo = 0,
+    this.vatBasis = VatBasis.inclusive,
   });
 
   final int totalRevenueKobo;
@@ -359,6 +390,10 @@ class ReconData {
   final bool vatEnabled;
   final int vatRateBps; // basis points (750 = 7.5%)
   final int vatKobo; // VAT due on net sales this period (0 when disabled)
+  /// The basis the VAT figure was computed on (inclusive/exclusive, #176).
+  /// Inclusive by default: most SME prices already include VAT, and the
+  /// exclusive formula overstated the liability by (1+r).
+  final VatBasis vatBasis;
 
   final int itemsSold;
   final int skus;
@@ -454,6 +489,44 @@ class ReconData {
   final int stockOtherMovementsKobo;
   final int stockExpectedClosingKobo; // system stock at period end × current cost
 
+  // ── #176 report-truth additions ──────────────────────────────────────────
+  /// The goods portion of Total Sales actually paid at checkout this period
+  /// (amountPaid − deposit, capped at the order's goods net). Split from
+  /// [salesOnCreditKobo] on the sales card so a Manager stops over-expecting the
+  /// drawer by the credit amount (PRD #155 story 29). `salesPaidNow +
+  /// salesOnCredit == totalSalesKobo` by construction.
+  final int salesPaidNowKobo;
+
+  /// The goods portion of Total Sales left UNPAID this period (booked as customer
+  /// debt) — the credit the drawer will never see today. See [salesPaidNowKobo].
+  final int salesOnCreditKobo;
+
+  /// Forfeit income (#176 / PRD #155 story 7): crate deposits the business kept
+  /// this period because the customer never returned the crates — money
+  /// legitimately earned. Summed from `crate_deposit_forfeited` wallet rows on
+  /// their own `created_at` day, business-wide (wallet rows have no store),
+  /// gated on [showCrates]. Added to [netProfitKobo] — previously invisible in
+  /// the P&L while crate LOSSES were subtracted.
+  final int forfeitIncomeKobo;
+
+  /// Quick-sale (Uncosted) takings included in the profit picture (#176 / PRD
+  /// #155 story 27): revenue on lines with no recorded buying price
+  /// (`totalRevenueKobo − costedRevenueKobo`). Added to [netProfitKobo] as pure
+  /// margin (no COGS is recorded for them — the transparency footnote counts the
+  /// items) so money in the drawer is never missing from the result. It does NOT
+  /// enter [grossProfitKobo]/[grossMarginPct] (those stay costed-only so the
+  /// margin reads true).
+  final int uncostedTakingsKobo;
+
+  // Stock card "Other movements" broken out by cause (#176 / PRD #155 story 30)
+  // so an unlabeled residual can't hide a loss. Each is the signed value (at
+  // current cost) of that movement class within the period; together with the
+  // true residual [stockOtherMovementsKobo] they partition what used to be one
+  // "Other movements" line, and still fold into [stockDerivedClosingKobo].
+  final int stockTransfersKobo; // transfer_in / transfer_out legs
+  final int stockCountAdjustmentsKobo; // daily-count reconciliation adjustments
+  final int stockDeletionsKobo; // product-delete write-offs (#170 #7c)
+
   final List<({String name, int qty})> topItems;
   final List<({String manufacturerName, int count, int valueKobo})> manufacturerEmpties;
 
@@ -461,13 +534,37 @@ class ReconData {
   String get vatRateLabel =>
       VatConfig(enabled: vatEnabled, rateBps: vatRateBps).ratePercentLabel;
 
+  /// The active VAT basis label ("inclusive"/"exclusive"), for card labels.
+  String get vatBasisLabel =>
+      vatBasis == VatBasis.inclusive ? 'inclusive' : 'exclusive';
+
+  /// The single headline **Total Sales** for the period (#176 / PRD #155 story
+  /// 28): item-line gross MINUS discounts, deposit-exclusive. Equal to
+  /// `computeTotalSalesKobo(orders, …)` by construction (this is the net figure
+  /// the Home dashboard and Profit report also derive from that one helper), so
+  /// all three surfaces report the SAME number for a day. `totalRevenueKobo`
+  /// stays the gross intermediate the P&L card keeps beside its discount line.
+  int get totalSalesKobo => totalRevenueKobo - discountsKobo;
+
   /// Costed revenue net of discounts given — the real money earned on costed
   /// lines. `costedRevenueKobo` is gross (Σ qty × gross unitPrice), so we
   /// subtract the period's discounts to get what was actually charged.
   int get netRevenueKobo => costedRevenueKobo - discountsKobo;
   int get grossProfitKobo => netRevenueKobo - cogsKobo;
+
+  /// Net profit for the period. Starts from the costed [grossProfitKobo], then
+  /// ADDS the two earnings the audit found invisible — quick-sale
+  /// [uncostedTakingsKobo] (money in the drawer with no recorded cost, PRD #155
+  /// story 27) and [forfeitIncomeKobo] (kept crate deposits, story 7) — before
+  /// netting out expenses and losses. Quick-sale takings are excluded from COGS
+  /// (none is recorded) and from gross margin, per the transparency footnote.
   int get netProfitKobo =>
-      grossProfitKobo - expensesKobo - damageCostKobo - crateDamageDepositKobo;
+      grossProfitKobo +
+      uncostedTakingsKobo +
+      forfeitIncomeKobo -
+      expensesKobo -
+      damageCostKobo -
+      crateDamageDepositKobo;
 
   // ── Cash-flow summary getters (ADR 0014) ─────────────────────────────────
   int get cashInKobo => cashSalesKobo + cashDebtsCollectedKobo;
@@ -489,6 +586,13 @@ class ReconData {
       stockCogsKobo -
       stockDamagesKobo -
       stockExpiredKobo +
+      // #176 — the former single "Other movements" residual, now partitioned by
+      // cause (transfers / count corrections / product deletions) plus whatever
+      // remains truly unclassified. Their sum equals the old residual, so the
+      // equation still ties to the perpetual system figure by construction.
+      stockTransfersKobo +
+      stockCountAdjustmentsKobo +
+      stockDeletionsKobo +
       stockOtherMovementsKobo;
 
   /// Variance = Physical count − Expected closing, valued at current cost:
@@ -528,6 +632,9 @@ class ReconData {
       stockCogsKobo != 0 ||
       stockDamagesKobo != 0 ||
       stockExpiredKobo != 0 ||
+      stockTransfersKobo != 0 ||
+      stockCountAdjustmentsKobo != 0 ||
+      stockDeletionsKobo != 0 ||
       stockOtherMovementsKobo != 0;
 
   /// Net result for the period (flow). Folds the inventory-on-hand asset and the
@@ -649,6 +756,10 @@ ReconData computeReconData(
   var discountsKobo = 0;
   var itemsSold = 0;
   var uncostedItems = 0;
+  // #176 — split Total Sales into the goods actually paid now vs left on credit,
+  // so the sales card stops over-expecting the drawer by the credit amount.
+  var salesPaidNowKobo = 0;
+  var salesOnCreditKobo = 0;
   final skuSet = <String>{};
   final byStaff = <String?, int>{};
   final byProduct = <String, ({String name, int qty})>{};
@@ -661,7 +772,8 @@ ReconData computeReconData(
     }
     // Order-level discount (contra-revenue). Scoped by the order's store to
     // match the sales lines; lines carry the same storeId in practice.
-    if (inScope(o.order.storeId)) discountsKobo += o.order.discountKobo;
+    final orderInScope = inScope(o.order.storeId);
+    if (orderInScope) discountsKobo += o.order.discountKobo;
     var orderRevenue = 0;
     for (final i in o.items) {
       if (!inScope(i.item.storeId)) continue;
@@ -695,6 +807,20 @@ ReconData computeReconData(
         ifAbsent: () => orderRevenue,
       );
     }
+    // #176 — paid-now vs on-credit split of this order's contribution to Total
+    // Sales. `goodsNet` is exactly the order's Total-Sales share (scoped lines −
+    // scoped discount), so `paidNow + onCredit == totalSalesKobo` by
+    // construction. `goodsPaid` = what was tendered toward the GOODS
+    // (amountPaid − deposit held, capped at the goods net); the rest is debt.
+    final goodsNet =
+        orderRevenue - (orderInScope ? o.order.discountKobo : 0);
+    final split = splitPaidNowOnCredit(
+      goodsNet: goodsNet,
+      amountPaid: o.order.amountPaidKobo,
+      depositHeld: orderInScope ? o.order.crateDepositPaidKobo : 0,
+    );
+    salesPaidNowKobo += split.paidNow;
+    salesOnCreditKobo += split.onCredit;
   }
   String? bestStaff;
   var bestStaffKobo = 0;
@@ -717,7 +843,11 @@ ReconData computeReconData(
   // pass-through liability computed on recorded sales; it does not affect the
   // P&L profit lines.
   final vatKobo = vat.enabled
-      ? computeVatKobo(totalRevenueKobo - discountsKobo, vat.rateBps)
+      ? computeVatKobo(
+          totalRevenueKobo - discountsKobo,
+          vat.rateBps,
+          basis: vat.basis,
+        )
       : 0;
 
   // ── Inventory on hand at cost (point-in-time) ────────────────────────────
@@ -772,6 +902,13 @@ ReconData computeReconData(
   final soldUnits = <String, int>{};
   final damagedUnits = <String, int>{};
   final expiredUnits = <String, int>{};
+  // #176 — the former single "other movements" residual, split by cause so an
+  // unlabeled residual can't hide a loss: store transfers, daily-count
+  // reconciliations, and product-delete write-offs each get their own bucket,
+  // with `otherDelta` keeping only genuinely unclassified movement.
+  final transfersDelta = <String, int>{};
+  final countAdjDelta = <String, int>{};
+  final deletionsDelta = <String, int>{};
   final otherDelta = <String, int>{}; // signed residual within the period
   void add(Map<String, int> m, String k, int v) => m[k] = (m[k] ?? 0) + v;
   for (final t in stockTxns) {
@@ -799,11 +936,18 @@ ReconData computeReconData(
         add(damagedUnits, pid, -delta);
       } else if (isReceiptReason(reason)) {
         add(receivedUnits, pid, delta);
+      } else if (isProductDeleteReason(reason)) {
+        add(deletionsDelta, pid, delta);
+      } else if (isCountReconciliationReason(reason)) {
+        add(countAdjDelta, pid, delta);
       } else {
         add(otherDelta, pid, delta);
       }
+    } else if (mt.startsWith('transfer')) {
+      // transfer_in / transfer_out legs — quantity moving between stores.
+      add(transfersDelta, pid, delta);
     } else {
-      // transfer_in / transfer_out / anything unclassified
+      // Anything genuinely unclassified stays in the residual.
       add(otherDelta, pid, delta);
     }
   }
@@ -812,6 +956,9 @@ ReconData computeReconData(
   var stockCogsKobo = 0;
   var stockDamagesKobo = 0;
   var stockExpiredKobo = 0;
+  var stockTransfersKobo = 0;
+  var stockCountAdjustmentsKobo = 0;
+  var stockDeletionsKobo = 0;
   var stockOtherMovementsKobo = 0;
   var stockExpectedClosingKobo = 0;
   final flowPids = <String>{
@@ -830,6 +977,9 @@ ReconData computeReconData(
     stockCogsKobo += (soldUnits[pid] ?? 0) * cost;
     stockDamagesKobo += (damagedUnits[pid] ?? 0) * cost;
     stockExpiredKobo += (expiredUnits[pid] ?? 0) * cost;
+    stockTransfersKobo += (transfersDelta[pid] ?? 0) * cost;
+    stockCountAdjustmentsKobo += (countAdjDelta[pid] ?? 0) * cost;
+    stockDeletionsKobo += (deletionsDelta[pid] ?? 0) * cost;
     stockOtherMovementsKobo += (otherDelta[pid] ?? 0) * cost;
   }
 
@@ -1076,6 +1226,31 @@ ReconData computeReconData(
         ref.watch(supplierCrateDebtValueKoboProvider).valueOrNull ?? 0;
   }
 
+  // ── Forfeit income (#176 / PRD #155 story 7) ─────────────────────────────
+  // Crate deposits KEPT this period because the customer never returned the
+  // crates — money legitimately earned that the P&L never counted (while crate
+  // LOSSES were subtracted). Summed from `crate_deposit_forfeited` wallet rows
+  // on their OWN `created_at` day (each row is a negative debit, so take the
+  // absolute value), business-wide (wallet rows have no store), gated on
+  // showCrates. Added to netProfitKobo below.
+  var forfeitIncomeKobo = 0;
+  if (showCrates) {
+    final forfeitRows =
+        ref.watch(crateForfeitRowsProvider).valueOrNull ?? const [];
+    for (final w in forfeitRows) {
+      if (w.voidedAt != null || !inSpan(w.createdAt)) continue;
+      forfeitIncomeKobo += -w.signedAmountKobo; // debit → positive income
+    }
+  }
+
+  // ── Quick-sale (Uncosted) takings (#176 / PRD #155 story 27) ─────────────
+  // Revenue on lines with no recorded buying price — money in the drawer that
+  // the profit picture excluded entirely. Included in netProfitKobo as pure
+  // margin (no COGS is recorded; the transparency footnote counts the items),
+  // but NOT in grossProfit/margin (those stay costed-only). By construction
+  // this is Total (gross) revenue minus the costed-line revenue.
+  final uncostedTakingsKobo = totalRevenueKobo - costedRevenueKobo;
+
   return ReconData(
     totalRevenueKobo: totalRevenueKobo,
     costedRevenueKobo: costedRevenueKobo,
@@ -1084,6 +1259,7 @@ ReconData computeReconData(
     vatEnabled: vat.enabled,
     vatRateBps: vat.rateBps,
     vatKobo: vatKobo,
+    vatBasis: vat.basis,
     itemsSold: itemsSold,
     skus: skuSet.length,
     uncostedItems: uncostedItems,
@@ -1133,6 +1309,14 @@ ReconData computeReconData(
     stockExpectedClosingKobo: stockExpectedClosingKobo,
     topItems: topItems,
     manufacturerEmpties: manufacturerEmpties,
+    // #176 report-truth additions.
+    salesPaidNowKobo: salesPaidNowKobo,
+    salesOnCreditKobo: salesOnCreditKobo,
+    forfeitIncomeKobo: forfeitIncomeKobo,
+    uncostedTakingsKobo: uncostedTakingsKobo,
+    stockTransfersKobo: stockTransfersKobo,
+    stockCountAdjustmentsKobo: stockCountAdjustmentsKobo,
+    stockDeletionsKobo: stockDeletionsKobo,
   );
 }
 
@@ -1146,7 +1330,9 @@ ReconData computeReconData(
 /// on-hand) are deliberately excluded: they are meant to reflect the present, so
 /// badging them against a past review would be noise, not signal.
 DailyClosingFigures dailyClosingFiguresFrom(ReconData d) => DailyClosingFigures(
-  totalSalesKobo: d.totalRevenueKobo,
+  // #176 — freeze the unified NET headline (item lines − discounts), so the
+  // Sales-card delta badge compares the SAME "Total Sales" the card displays.
+  totalSalesKobo: d.totalSalesKobo,
   refundsKobo: d.refundsKobo,
   discountsKobo: d.discountsKobo,
   cogsKobo: d.cogsKobo,
@@ -1223,7 +1409,7 @@ ReconClosingComparison reconClosingComparison(
   reviewedBy: snapshot.reviewedBy,
   totalSales: ReconFigureDelta(
     reviewed: snapshot.totalSalesKobo,
-    current: live.totalRevenueKobo,
+    current: live.totalSalesKobo, // #176 — net headline, matches the frozen basis
   ),
   netProfit: ReconFigureDelta(
     reviewed: snapshot.netProfitKobo,
