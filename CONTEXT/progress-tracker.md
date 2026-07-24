@@ -106,6 +106,24 @@ columns: `stock_adjustments.unit_cost_kobo` + `value_kobo` (7a),
 `stock_transfers.cost_kobo` (7b) — all nullable bigint, no sync_registry change.
 No new permission keys. No ADR needed (extends ADR 0005 costing).
 
+**/review outcome (both axes):** Standards — clean pass (kobo=bigint on both
+migrations, `formatCurrency` used, business-scoping honored, pass-through sync
+correct). Spec — snapshot-at-write honored; v2-RPC-out-of-scope acceptable; all
+core ACs met. Known partials (documented, not fixed here):
+- **Count-shortage VARIANCE-CARD valuation still uses current cost.** The write
+  side snapshots correctly (a count decrement flows through `adjustStock` →
+  `value_kobo`), but `recon_data.dart`'s `shortageCostKobo` derives from the
+  count session's `linesJson` (an independent record), not the snapshot — so a
+  later cost edit can still restate a past count-shortage in the *variance card*.
+  The P&L net-result loss (damages/expiry) IS immutable. Correlating the two
+  subsystems is a report-truth refactor (PRD "Report truth" §, audit #30) with
+  double-count risk — deferred, not attempted at the end of this slice.
+- **Sub-naira transfer-batch rounding.** Receipt/cancel rebuild the destination
+  batch at `round(cost_kobo/qty)` per unit, so the batch total can drift <₦1 from
+  the carried total — the same per-unit rounding `drawDownSale` uses for COGS.
+  In-transit WORTH uses the exact `cost_kobo` (no drift). Accepted as consistent
+  with the existing per-unit-kobo COGS convention.
+
 ### Money integrity #5 (#175) — tender picker + cash-card honesty (deposit out of Cash sales) — CODE-COMPLETE (2026-07-24)
 Fifth slice of the #155 money-integrity PRD (ADR 0021). **CODE-ONLY — no
 migration** (the `transfer` method, the `crate_deposit`/`wallet_topup` types, and
