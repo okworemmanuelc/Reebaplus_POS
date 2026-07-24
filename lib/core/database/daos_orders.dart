@@ -837,45 +837,52 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       //                       a sale.
       // The three always sum to amountPaidKobo (no cash created or lost). The
       // checkout guards paid ≥ deposit, so `depositHeld ≤ paid`; clamp anyway.
+      // Guarded on paid > 0: a pure credit / pay-with-wallet sale settles no
+      // cash, so no row is written (and `depositHeld ≤ paid` ⇒ all three are 0
+      // anyway) — matching the pre-#175 single-row behaviour and never touching
+      // `items.first` on an item-less ledger-only order.
       // (v2's pos_record_sale_v2 mints one bundled `sale` row server-side and
       // must mirror this split when it goes live — flagged to the RPC owners.)
-      final payStoreId = storeId ?? items.first.storeId.value;
-      final depositHeldKobo = crateDepositPaidByManufacturer.values
-          .fold<int>(0, (s, v) => s + v)
-          .clamp(0, amountPaidKobo);
-      final goodsGrandKobo = (totalAmountKobo - depositHeldKobo).clamp(
-        0,
-        totalAmountKobo,
-      );
-      final goodsPaidKobo = (amountPaidKobo - depositHeldKobo).clamp(
-        0,
-        goodsGrandKobo,
-      );
-      final walletTopupKobo = amountPaidKobo - depositHeldKobo - goodsPaidKobo;
-      await _insertCheckoutPaymentRow(
-        orderId: orderId,
-        storeId: payStoreId,
-        amountKobo: goodsPaidKobo,
-        method: paymentMethod,
-        type: 'sale',
-        staffId: staffId,
-      );
-      await _insertCheckoutPaymentRow(
-        orderId: orderId,
-        storeId: payStoreId,
-        amountKobo: depositHeldKobo,
-        method: paymentMethod,
-        type: 'crate_deposit',
-        staffId: staffId,
-      );
-      await _insertCheckoutPaymentRow(
-        orderId: orderId,
-        storeId: payStoreId,
-        amountKobo: walletTopupKobo,
-        method: paymentMethod,
-        type: 'wallet_topup',
-        staffId: staffId,
-      );
+      if (amountPaidKobo > 0) {
+        final payStoreId = storeId ?? items.first.storeId.value;
+        final depositHeldKobo = crateDepositPaidByManufacturer.values
+            .fold<int>(0, (s, v) => s + v)
+            .clamp(0, amountPaidKobo);
+        final goodsGrandKobo = (totalAmountKobo - depositHeldKobo).clamp(
+          0,
+          totalAmountKobo,
+        );
+        final goodsPaidKobo = (amountPaidKobo - depositHeldKobo).clamp(
+          0,
+          goodsGrandKobo,
+        );
+        final walletTopupKobo =
+            amountPaidKobo - depositHeldKobo - goodsPaidKobo;
+        await _insertCheckoutPaymentRow(
+          orderId: orderId,
+          storeId: payStoreId,
+          amountKobo: goodsPaidKobo,
+          method: paymentMethod,
+          type: 'sale',
+          staffId: staffId,
+        );
+        await _insertCheckoutPaymentRow(
+          orderId: orderId,
+          storeId: payStoreId,
+          amountKobo: depositHeldKobo,
+          method: paymentMethod,
+          type: 'crate_deposit',
+          staffId: staffId,
+        );
+        await _insertCheckoutPaymentRow(
+          orderId: orderId,
+          storeId: payStoreId,
+          amountKobo: walletTopupKobo,
+          method: paymentMethod,
+          type: 'wallet_topup',
+          staffId: staffId,
+        );
+      }
 
       // NOTE: the wallet double-entry was posted by _postSaleWalletLegs above,
       // before the v1/v2 split — client-authored on both paths (invariant #3).
