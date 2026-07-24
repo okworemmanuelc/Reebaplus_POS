@@ -215,6 +215,16 @@ class OrderCommands {
   }) async {
     if (crateReturns.isEmpty) return;
 
+    // Idempotency (#171): a prior Confirm already flipped this order to
+    // `completed` and settled its crate returns once. Re-read the status and
+    // skip the WHOLE settlement (physical empties, crate-track netting, AND
+    // money-track deposit settlement) when the order is no longer pending — so a
+    // second Confirm from another device never double-credits the empties pool or
+    // double-settles the deposit. `markCompleted` re-checks the same precondition
+    // inside its own transaction; `settleCrateDepositReturn` guards itself too.
+    final order = await _ordersDao.findById(orderId);
+    if (order == null || order.status != 'pending') return;
+
     // Walk-in customer: just record physical stock returns (no wallet/ledger).
     if (customerId == null || customerId.isEmpty) {
       for (final line in crateReturns) {

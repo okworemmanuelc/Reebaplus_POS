@@ -639,6 +639,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     }
 
     final canRefund = Gates.refundOrder.allows(ref);
+    // #171: Confirm is gated Cashier-tier and above (sales.confirm). Hide the
+    // Confirm button entirely without it (hide-don't-block, hard rule #7).
+    final canConfirm = Gates.confirmOrder.allows(ref);
 
     // We add 1 to the child count if we are loading more to render the spinner.
     final childCount = list.length + (isLoadingMore ? 1 : 0);
@@ -675,7 +678,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
             return _OrderCard(
               orderWithItems: item,
               status: status,
-              onMarkAsDelivered: status == 'pending'
+              onMarkAsDelivered: (status == 'pending' && canConfirm)
                   ? () => _markAsDelivered(item)
                   : null,
               onRefund: (status == 'pending' && canRefund)
@@ -746,6 +749,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
 
     // §19.7: the Pending-tab Refund is gated to CEO + Manager (sales.cancel).
     final canRefund = Gates.refundOrder.allows(ref);
+    // #171: Confirm is gated Cashier-tier and above (sales.confirm).
+    final canConfirm = Gates.confirmOrder.allows(ref);
 
     return [
       SliverPadding(
@@ -761,7 +766,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
             return _OrderCard(
               orderWithItems: item,
               status: status,
-              onMarkAsDelivered: status == 'pending'
+              onMarkAsDelivered: (status == 'pending' && canConfirm)
                   ? () => _markAsDelivered(item)
                   : null,
               // §19.7: Refund replaces the old Cancel button on the Pending
@@ -792,6 +797,18 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
   void _executeMarkDelivered(OrderWithItems orderWithItems) async {
     final order = orderWithItems.order;
 
+    // ── Write-boundary gate (#171, ADR 0002) ────────────────────────────────
+    // Confirm runs the crate-deposit settlement (real money) before the status
+    // flip, so re-check the sales.confirm grant here with the throwing form. The
+    // Confirm button already hides without it, but a grant revoked mid-session —
+    // or a stale back-stack — must not reach the settlement.
+    try {
+      Gates.confirmOrder.require(ref);
+    } on GateDeniedError {
+      showGateDenied(context, Gates.confirmOrder);
+      return;
+    }
+
     if (!mounted) return;
     // The modal only COLLECTS the counted-back empties now (ADR 0004); the
     // settlement runs inside Confirm (markAsCompleted). null = cashier dismissed.
@@ -803,6 +820,18 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     if (crateResult == null) return;
 
     if (!mounted) return;
+
+    // #171: paying the deposit refund AS CASH out of the till additionally
+    // requires the wallet-withdraw permission on top of sales.confirm. The modal
+    // hides the Cash chip without it, but re-check at the write boundary.
+    if (crateResult.refundAsCash) {
+      try {
+        Gates.confirmOrderCashRefund.require(ref);
+      } on GateDeniedError {
+        showGateDenied(context, Gates.confirmOrderCashRefund);
+        return;
+      }
+    }
 
     try {
       await ref
