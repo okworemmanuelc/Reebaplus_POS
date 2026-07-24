@@ -1131,4 +1131,37 @@ void main() {
       );
     });
   });
+
+  group('onUpgrade v64 → v65 (sales.confirm permission, #171 Confirm gate)', () {
+    Future<bool> permissionExists(AppDatabase db, String key) async {
+      final rows = await db
+          .customSelect(
+            'SELECT 1 FROM permissions WHERE key = ?',
+            variables: [Variable<String>(key)],
+          )
+          .get();
+      return rows.isNotEmpty;
+    }
+
+    test('re-seeds sales.confirm into the local catalog', () async {
+      // Fresh v65 DB already seeds the key in onCreate (it's in
+      // _defaultPermissionRows). Delete it + revert to v64 so the re-open's v65
+      // block has work to do. Every other table is untouched.
+      final db1 = await openAndInit();
+      expect(await permissionExists(db1, 'sales.confirm'), isTrue,
+          reason: 'onCreate should seed the key');
+      await db1.customStatement(
+        "DELETE FROM permissions WHERE key = 'sales.confirm'",
+      );
+      expect(await permissionExists(db1, 'sales.confirm'), isFalse);
+      await db1.customStatement('PRAGMA user_version = 64');
+      await db1.close();
+
+      // Re-open → onUpgrade(64 → 65) re-inserts the key via INSERT OR IGNORE.
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+      expect(await permissionExists(db2, 'sales.confirm'), isTrue,
+          reason: 'v65 block must seed sales.confirm');
+    });
+  });
 }

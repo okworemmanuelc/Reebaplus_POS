@@ -5,6 +5,8 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
+import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/services/orders/crate_return_input.dart';
@@ -34,6 +36,18 @@ List<int> allocateLegacyDeposit(int totalDeposit, List<int> weights) {
   }
   return out;
 }
+
+/// A2 (#171) — parse a returned-crate count field. A blank / non-numeric field
+/// means **0 returned** (NEVER "all crates came back"): an untouched blank must
+/// not silently trigger a full deposit refund plus a pool credit for crates that
+/// never arrived. Visible for testing.
+int parseReturnedCrateCount(String raw) => int.tryParse(raw.trim()) ?? 0;
+
+/// A2 (#171) — whether every crate-count field has been filled. Confirm is
+/// blocked until this is true, so a blank field can only ever be a deliberate 0
+/// the cashier typed, never an accidental "all returned". Visible for testing.
+bool allCrateCountsFilled(Iterable<String> rawCounts) =>
+    rawCounts.every((t) => t.trim().isNotEmpty);
 
 class CrateReturnModal extends ConsumerStatefulWidget {
   final OrderWithItems orderWithItems;
@@ -224,6 +238,22 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
   /// matching the old write loop.
   void _confirm() {
     if (_saving) return;
+
+    // A2 (#171): block Confirm until every crate-count field is filled. A blank
+    // field must NEVER fall back to "all crates returned" (a full refund + a pool
+    // credit for crates that never arrived), so force a count — 0 is valid, blank
+    // is not.
+    final counts = _rows
+        .where((r) => r.manufacturerId.isNotEmpty)
+        .map((r) => r.controller.text);
+    if (!allCrateCountsFilled(counts)) {
+      AppNotification.showError(
+        context,
+        'Enter the returned crate count for every manufacturer (0 is allowed).',
+      );
+      return;
+    }
+
     setState(() => _saving = true);
 
     final lines = _rows
@@ -232,7 +262,8 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
           (r) => CrateReturnLine(
             manufacturerId: r.manufacturerId,
             takenCrates: r.expectedQty,
-            returnedCrates: int.tryParse(r.controller.text) ?? r.expectedQty,
+            // A2 (#171): a blank count parses to 0, never r.expectedQty.
+            returnedCrates: parseReturnedCrateCount(r.controller.text),
             rateKobo: r.rateKobo,
             paidKobo: r.paidKobo,
           ),
@@ -320,13 +351,20 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
                 !_refundAsCash,
                 () => setState(() => _refundAsCash = false),
               ),
-              SizedBox(width: context.getRSize(10)),
-              chip(
-                'Cash',
-                FontAwesomeIcons.moneyBill.data,
-                _refundAsCash,
-                () => setState(() => _refundAsCash = true),
-              ),
+              // #171: paying a deposit refund AS CASH out of the till
+              // additionally requires the wallet-withdraw permission. Hide the
+              // Cash option otherwise (hide-don't-block, hard rule #7) — the
+              // refund then always goes to the credit balance, and the Confirm
+              // write boundary re-checks Gates.confirmOrderCashRefund.
+              if (Gates.refundCustomerWallet.allows(ref)) ...[
+                SizedBox(width: context.getRSize(10)),
+                chip(
+                  'Cash',
+                  FontAwesomeIcons.moneyBill.data,
+                  _refundAsCash,
+                  () => setState(() => _refundAsCash = true),
+                ),
+              ],
             ],
           ),
         ],

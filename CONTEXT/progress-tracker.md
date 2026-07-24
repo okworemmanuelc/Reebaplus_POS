@@ -99,6 +99,66 @@ with NO user-visible flow change. Branch `feat/money-integrity-1-payments-seam` 
   slice threads store context — a feature-layer change out of this prefactor's scope.
   DO NOT push/deploy the cloud migration; the orchestrator sequences merge/deploy.
 
+### Money integrity #2 (#171) — Confirm safety (gate + idempotency + blank-part-deposit→0 + seller attribution) — CODE-COMPLETE (2026-07-24)
+First active till-leak fix of the #155 money-integrity PRD. Branch
+`feat/money-integrity-2-confirm-safety` off `main` (HEAD b99400f — includes the
+merged #169 prefactor, so `orders.confirmed_by` already exists). Stops Confirm
+(`OrdersDao.markCompleted` + the crate-deposit settlement in `OrderCommands.confirm`)
+from leaking till cash.
+- **Gate (new key `sales.confirm`, category Sales).** Two named gates added to the
+  Gate Registry: `Gates.confirmOrder` = `Gate.key('sales.confirm')`, and
+  `Gates.confirmOrderCashRefund` = `Gate.allKeys(['sales.confirm',
+  'customers.wallet.withdraw'])`. Tier lives in the SEEDED GRANTS (Cashier-tier and
+  above: CEO + Manager + Cashier; NOT Stock keeper), not a tier atom, so the key stays
+  the canonical axis (invariant #6). Enforced at the Confirm write boundary in
+  `orders_screen._executeMarkDelivered` with `.require()` (confirmOrder always; the
+  additional `confirmOrderCashRefund` only when the confirmer picked Cash), and the
+  Confirm button + the modal's Cash refund-destination chip render-gate (hide-don't-
+  block).
+- **Idempotency.** `markCompleted` re-reads the order status INSIDE its transaction
+  and aborts unless `pending` (also stops overwriting `staffId` — see below).
+  `OrderCommands._settleCrateReturns` re-reads status via `OrdersDao.findById` and
+  skips the WHOLE settlement (physical empties + crate-track netting + money-track
+  deposit) on a non-pending order — so two devices confirming the same order settle it
+  exactly once, while a single Confirm still settles every manufacturer (status stays
+  `pending` across the loop). NOTE: the guard is at the WHOLE-settlement seam, NOT
+  inside `settleCrateDepositReturn` (that primitive is exercised directly on already-
+  `completed` orders by the Ring 5 crate tests, so it settles unconditionally).
+- **Blank part-deposit → 0.** `crate_return_modal._confirm` now parses a blank count as
+  0 (`parseReturnedCrateCount`, was `?? r.expectedQty` = full refund) and BLOCKS
+  Confirm until every field is filled (`allCrateCountsFilled`) — both extracted as
+  pure top-level helpers for testing.
+- **Seller attribution.** Confirm records `orders.confirmed_by` (the confirmer) and
+  NEVER overwrites `orders.staffId` (the seller stays credited). `markCompleted`'s
+  second param renamed `staffId`→`confirmedBy`.
+- **Schema (Drift v64→**v65**, cloud `0154_money_integrity_confirm_gate.sql`).** Local:
+  `sales.confirm` added to `_defaultPermissionRows` (so `ensurePermissionsSeeded`
+  re-seeds it after `clearAllData` when COUNT==0) + a v65 onUpgrade `INSERT OR IGNORE`.
+  Cloud (DO NOT APPLY — orchestrator sequences deploy, MUST land before any grant syncs
+  for the role_permissions FK): catalogue insert + `seed_default_roles_for_business`
+  CREATE-OR-REPLACE (same signature, no overload) granting Manager + Cashier + backfill
+  for existing CEO/Manager/Cashier roles. No new synced table; no `*_kobo` columns.
+- **Tests (TDD).** `test/permissions/confirm_gate_test.dart` (pure gate algebra +
+  `.require()` guard: without `sales.confirm` denied; cash-refund needs wallet.withdraw
+  too); `test/orders/confirm_safety_test.dart` (double-Confirm two devices settles the
+  deposit + restocks empties ONCE; `markCompleted` status re-read no-op; staff_id
+  preserved + confirmed_by recorded); `test/orders/crate_return_blank_test.dart` (blank
+  →0, block until filled); `test/database/migration_upgrade_test.dart` v64→v65 re-seed.
+  Touched counts: `roles_v13_seed_test` catalogue 39→40; `roles_permissions_screen_test`
+  + `role_permissions_detail_test` visible-toggle 36→37; the CEO denominator fallback
+  `39`→`40` in `roles_permissions_screen.dart`.
+- **Verification.** `flutter analyze` clean (0/0 project-wide). Full `flutter test` =
+  **1042 pass / 110 skip / 1 fail** — the lone failure `who_is_working_screen_test`
+  (staff-card render, line 133) is the pre-existing environmental flake (staff/auth code
+  untouched here).
+- **Deviations / open questions.** Idempotency is implemented via the order-status
+  re-read (a settlement row for (order, manufacturer) exists iff a prior Confirm ran =
+  status `completed`), NOT a per-row wallet-table probe — a per-order wallet-row probe
+  would wrongly skip the 2nd+ manufacturer within a single multi-manufacturer Confirm,
+  and wallet_transactions carries no manufacturer_id. The simultaneous-both-offline
+  partition still double-posts until convergence (unavoidable; the audit's row-skip
+  can't prevent it either). DO NOT push/deploy the cloud migration.
+
 ### Crate pool #6 (#163) — net-position honesty (subtract held deposits + supplier debt) — CODE-COMPLETE (2026-07-24)
 Sixth slice of the crate-pool ledger-as-truth refactor (PRD #156, ADR 0020).
 Branch `feat/crate-pool-net-position-honesty` off `feat/crate-pool-cancel-completes-ledger`

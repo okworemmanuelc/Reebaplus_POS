@@ -1048,6 +1048,15 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     final extraDebt = forfeitValue > paidKobo ? forfeitValue - paidKobo : 0;
 
     await transaction(() async {
+      // NOTE (#171): this is the low-level money primitive — it settles the
+      // deposit unconditionally so it can be exercised directly (Ring 5 tests
+      // settle already-`completed` orders). Confirm idempotency lives one layer
+      // up, at the WHOLE-settlement seam: `OrderCommands._settleCrateReturns`
+      // re-reads the order status and skips the entire settlement (physical +
+      // deposit) on a non-pending order, and `markCompleted` re-reads it again
+      // inside its own transaction — so two devices confirming the same order
+      // settle it exactly once, while a single Confirm still settles every
+      // manufacturer (status stays `pending` across the loop).
       final wallet =
           await (select(customerWallets)
                 ..where(
@@ -1145,12 +1154,32 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
-  Future<void> markCompleted(String orderId, [String? staffId]) {
+  /// **Confirm** the order (§19.5 ceremony): flip `pending → completed` and
+  /// stamp who confirmed it. [confirmedBy] is recorded on `orders.confirmed_by`
+  /// (#169's column) — the SELLER's `staff_id` is left UNTOUCHED so the sale
+  /// stays credited to who sold it (#171; the old behaviour overwrote `staff_id`
+  /// with the confirmer and silently re-attributed the sale, corrupting
+  /// best-staff / commission figures).
+  ///
+  /// **Idempotent across devices (#171):** re-reads the order status INSIDE the
+  /// transaction and aborts unless it is still `pending`. Once any device's
+  /// Confirm has flipped the order to `completed` (and that state has converged),
+  /// a second Confirm is a no-op — two devices confirming the same order complete
+  /// it exactly once.
+  Future<void> markCompleted(String orderId, [String? confirmedBy]) {
     return db.transaction(() async {
+      final existing =
+          await (select(orders)
+                ..where((o) => o.id.equals(orderId) & whereBusiness(o)))
+              .getSingleOrNull();
+      if (existing == null || existing.status != 'pending') return;
       final comp = OrdersCompanion(
         id: Value(orderId),
         status: const Value('completed'),
-        staffId: staffId != null ? Value(staffId) : const Value.absent(),
+        // Record the confirmer separately; NEVER overwrite staffId (the seller).
+        confirmedBy: confirmedBy != null
+            ? Value(confirmedBy)
+            : const Value.absent(),
         completedAt: Value(DateTime.now().toUtc()),
         lastUpdatedAt: Value(DateTime.now()),
       );

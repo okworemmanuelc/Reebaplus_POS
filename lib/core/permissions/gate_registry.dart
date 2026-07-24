@@ -509,6 +509,34 @@ abstract final class Gates {
     rule: Gate.key('sales.cancel'),
   );
 
+  /// Confirm a pending order — the "Confirm" ("Mark as delivered") action on the
+  /// Orders Pending tab (#171 / PRD #155). Confirm is a real money boundary: it
+  /// runs the crate-deposit settlement (forfeit / refund / shortfall) before the
+  /// `pending → completed` flip, so it is gated on the dedicated `sales.confirm`
+  /// key. Seeded Cashier-tier and above (CEO + Manager + Cashier grant it by
+  /// default; a Stock keeper does NOT) — the tier lives in the seeded grants, not
+  /// a tier atom, so `sales.confirm` stays the canonical axis (invariant #6).
+  /// Cited by the Confirm button's render gate and re-checked with `.require()`
+  /// at the Confirm write boundary.
+  static const NamedGate confirmOrder = NamedGate(
+    name: 'confirmOrder',
+    action: 'Confirm Order',
+    rule: Gate.key('sales.confirm'),
+  );
+
+  /// Confirm an order whose crate-deposit refund is paid **as cash out of the
+  /// till** (#171). The cash-refund branch of deposit settlement additionally
+  /// requires the existing wallet-withdraw key on top of `sales.confirm`, so a
+  /// user who may Confirm (and refund to the credit balance) still cannot pay a
+  /// deposit refund out of the drawer unless they also hold
+  /// `customers.wallet.withdraw`. Cited by the Cash refund-destination chip's
+  /// render gate and re-checked with `.require()` when the confirmer picked Cash.
+  static const NamedGate confirmOrderCashRefund = NamedGate(
+    name: 'confirmOrderCashRefund',
+    action: 'Refund Deposit as Cash',
+    rule: Gate.allKeys(['sales.confirm', 'customers.wallet.withdraw']),
+  );
+
   /// See monetary values on Orders (§19.3): the per-order line prices / total /
   /// paid / discount, and the per-tab money summary stats (Total Value, Revenue,
   /// Collected, Crate Deposits). Roles below Manager see items + quantities only.
@@ -606,6 +634,8 @@ abstract final class Gates {
     suspendStaff,
     staffRemove,
     refundOrder,
+    confirmOrder,
+    confirmOrderCashRefund,
     seeOrderMoney,
     seeExtendedDateRanges,
     viewApprovals,

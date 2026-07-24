@@ -1875,7 +1875,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 64;
+  int get schemaVersion => 65;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4165,6 +4165,22 @@ class AppDatabase extends _$AppDatabase {
           await customStatement(stmt);
         }
       }
+      if (from < 65) {
+        // v65 (#171 Confirm safety, PRD #155). Seed the new `sales.confirm`
+        // permission key into the local catalogue so Roles & Permissions lists
+        // it and the Confirm gate can resolve. Confirm (the crate-deposit
+        // settlement + pending→completed flip) is gated on this key; it is
+        // granted Cashier-tier and above by default. The ROLE GRANTS arrive from
+        // the cloud via sync pull — the cloud catalogue + role_permissions
+        // backfill live in supabase/migrations/0154_money_integrity_confirm_gate.sql,
+        // which must deploy BEFORE any grant syncs (role_permissions FK). This
+        // step only adds the catalogue key. Idempotent — key is the PK.
+        await customStatement(
+          "INSERT OR IGNORE INTO permissions (key, description, category) "
+          "VALUES ('sales.confirm', "
+          "'Confirm an order and settle crate deposits', 'Sales')",
+        );
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -4514,7 +4530,7 @@ const List<String> _v13HotPathIndexStatements = [
 // Identical on every device and on the cloud (mirror this list in
 // supabase/migrations/0043_seed_permissions_and_backfill_businesses.sql).
 // Each row: (key, description, category). Category groups toggles in
-// the CEO Settings > Roles & Permissions sub-page. 39 keys total.
+// the CEO Settings > Roles & Permissions sub-page. 40 keys total.
 const List<List<String>> _defaultPermissionRows = [
   // Stores — rendered first on the role page (§10.2). CEO-only by default.
   ['stores.manage', 'Add, edit, and remove stores', 'Stores'],
@@ -4536,6 +4552,8 @@ const List<List<String>> _defaultPermissionRows = [
   // Sales
   ['sales.make', 'Make a sale', 'Sales'],
   ['sales.cancel', 'Cancel a sale', 'Sales'],
+  // #171 — Confirm an order (settles crate deposits + flips pending→completed).
+  ['sales.confirm', 'Confirm an order and settle crate deposits', 'Sales'],
   ['sales.discount.give', 'Give a discount on a sale', 'Sales'],
   ['sales.set_custom_price', 'Set a custom price on a cart item', 'Sales'],
   // Products
